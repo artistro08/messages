@@ -173,6 +173,7 @@ func TestExportGolden(t *testing.T) {
 	exportLongPollRequest(t, out)
 	exportSignIn(t, out)
 	exportPairing(t, out)
+	exportConnect(t, out)
 }
 
 // checkGoldenHelpers sanity-checks the client and capture transport; writes no file.
@@ -1601,5 +1602,108 @@ func exportPairing(t *testing.T, out string) {
 		"serverInitErrors": serverInitErrors,
 		"requests":         requests,
 		"finishErrors":     finishErrors,
+	})
+}
+
+// gatedReader returns head, blocks until gate closes, then returns tail. It stands in for a long poll that stays open.
+type gatedReader struct {
+	head, tail []byte
+	gate       <-chan struct{}
+	opened     bool
+}
+
+func (gr *gatedReader) Read(p []byte) (int, error) {
+	if len(gr.head) > 0 {
+		n := copy(p, gr.head)
+		gr.head = gr.head[n:]
+		return n, nil
+	}
+	if !gr.opened {
+		<-gr.gate
+		gr.opened = true
+	}
+	if len(gr.tail) > 0 {
+		n := copy(p, gr.tail)
+		gr.tail = gr.tail[n:]
+		return n, nil
+	}
+	return 0, io.EOF
+}
+
+func (gr *gatedReader) Close() error { return nil }
+
+// exportConnect writes connect.json: every request Connect() sends on a logged-in client whose token has 30 minutes
+// left, in order, up to postConnect's GET_UPDATES (10 s guard). The canned responses are written too, so the C# test
+// can serve the same ones. Random values (refresh request ID, timestamp and signature, listen ID, session ID) are
+// left as Go produced them; the C# test copies them over before comparing.
+func exportConnect(t *testing.T, out string) {
+	c, ct := newGoldenClient(t)
+	c.AuthData.TachyonExpiry = time.Now().Add(30 * time.Minute)
+
+	// Canned Responses
+	refreshBody, err := pblite.Marshal(&gmproto.RegisterRefreshResponse{TokenData: &gmproto.TokenData{TachyonAuthToken: []byte("new-tachyon"), TTL: 86400000000}})
+	if err != nil {
+		t.Fatalf("pblite marshal refresh: %v", err)
+	}
+	ackPayload, err := pblite.Marshal(&gmproto.LongPollingPayload{Ack: &gmproto.StartAckMessage{Count: proto.Int32(0)}})
+	if err != nil {
+		t.Fatalf("pblite marshal ack: %v", err)
+	}
+	longPollHead := append([]byte("[["), ackPayload...)
+	emptyBody := []byte("[]")
+
+	// Answer By Path; The Long Poll Stays Open Until Capture Ends
+	gate := make(chan struct{})
+	sentUpdates := make(chan int, 1)
+	ct.Respond = func(req *http.Request) *http.Response {
+		switch path := req.URL.Path; {
+		case strings.HasSuffix(path, "/RegisterRefresh"):
+			return httpResponse(200, "application/json+protobuf", refreshBody, nil)
+		case strings.HasSuffix(path, "/ReceiveMessages"):
+			return &http.Response{
+				StatusCode: 200,
+				Header:     http.Header{"Content-Type": {"application/json+protobuf"}},
+				Body:       &gatedReader{head: longPollHead, tail: []byte("]]"), gate: gate},
+			}
+		case strings.HasSuffix(path, "/SendMessage"):
+			// The First SendMessage Is GET_UPDATES; Capture Ends With It (Go Sends IS_BUGLE_DEFAULT Next)
+			select {
+			case sentUpdates <- len(ct.Requests):
+			default:
+			}
+			return httpResponse(200, "application/json+protobuf", emptyBody, nil)
+		default:
+			return httpResponse(200, "application/json+protobuf", emptyBody, nil)
+		}
+	}
+
+	// Connect And Wait For GET_UPDATES
+	if err = c.Connect(context.Background()); err != nil {
+		t.Fatalf("Connect: %v", err)
+	}
+	var captureEnd int
+	select {
+	case captureEnd = <-sentUpdates:
+	case <-time.After(10 * time.Second):
+		t.Fatalf("Connect did not send GET_UPDATES within 10 s")
+	}
+	captured := append([]capturedRequest(nil), ct.Requests[:captureEnd]...)
+	sessionID := c.sessionHandler.sessionID
+	c.Disconnect()
+	close(gate)
+
+	var requests []map[string]any
+	for _, r := range captured {
+		requests = append(requests, map[string]any{"method": r.Method, "url": r.URL, "bodyText": r.BodyText})
+	}
+	writeGolden(t, out, "connect", map[string]any{
+		"responses": map[string]any{
+			"refresh":  string(refreshBody),
+			"longPoll": string(longPollHead),
+			"ack":      string(emptyBody),
+			"send":     string(emptyBody),
+		},
+		"sessionId": sessionID,
+		"requests":  requests,
 	})
 }

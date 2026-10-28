@@ -1,0 +1,26 @@
+{
+  "requests": [
+    {
+      "bodyText": "[[\"d8de8390-7c1c-41ad-927e-b8aba8ab9054\",null,\"GDitto\",null,null,\"ZmFrZS10YWNoeW9u\",[null,null,2026,9,2,null,4,null,6]],[1,\"golden-src\",\"GDitto\"],1793206725213000,\"MEQCIFPX/bIKomyB7w9oOaqSvlOpaaX6Sb0NIYhDW5YcxnHoAiAgXOL4Hcv6j72+wn/nHViEzSv0T2Q/GvPtYYtdd6XKRg==\",null,null,null,null,null,null,null,null,[null,null,null,null,null,null,null,null,[],null,null,null,null,null,null,null,null,null,null,null,null,null,null],null,null,2]",
+      "method": "POST",
+      "url": "https://instantmessaging-pa.clients6.google.com/$rpc/google.internal.communications.instantmessaging.v1.Registration/RegisterRefresh"
+    },
+    {
+      "bodyText": "[[\"fe03f561-360a-47b2-822a-58e063c36035\",null,\"GDitto\",null,null,\"bmV3LXRhY2h5b24=\",[null,null,2026,9,2,null,4,null,6]],null,null,[null,[]]]",
+      "method": "POST",
+      "url": "https://instantmessaging-pa.clients6.google.com/$rpc/google.internal.communications.instantmessaging.v1.Messaging/ReceiveMessages"
+    },
+    {
+      "bodyText": "[[1,\"golden-src\",\"GDitto\"],[\"6055f3ae-b56b-430d-a825-f8c9098e3cde\",19,null,null,null,null,null,null,null,null,null,\"CiQ2MDU1ZjNhZS1iNTZiLTQzMGQtYTgyNS1mOGM5MDk4ZTNjZGUQEDIkNjA1NWYzYWUtYjU2Yi00MzBkLWE4MjUtZjhjOTA5OGUzY2Rl\",null,null,null,null,null,null,null,null,null,null,[[],2]],[\"6055f3ae-b56b-430d-a825-f8c9098e3cde\",null,null,null,null,\"bmV3LXRhY2h5b24=\",[null,null,2026,9,2,null,4,null,6]],null,null,null,null,null,[\"ZmZlZWRkY2MtYmJhYS05OTg4LTc3NjYtNTU0NDMzMjIxMTAw\"]]",
+      "method": "POST",
+      "url": "https://instantmessaging-pa.clients6.google.com/$rpc/google.internal.communications.instantmessaging.v1.Messaging/SendMessage"
+    }
+  ],
+  "responses": {
+    "ack": "[]",
+    "longPoll": "[[[null,null,null,[0],null]",
+    "refresh": "[null,[\"bmV3LXRhY2h5b24=\",86400000000]]",
+    "send": "[]"
+  },
+  "sessionId": "6055f3ae-b56b-430d-a825-f8c9098e3cde"
+}
