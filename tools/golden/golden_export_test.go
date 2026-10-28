@@ -170,6 +170,7 @@ func TestExportGolden(t *testing.T) {
 	exportDispatch(t, out)
 	exportRefresh(t, out)
 	exportLongPollRequest(t, out)
+	exportSignIn(t, out)
 }
 
 // checkGoldenHelpers sanity-checks the client and capture transport; writes no file.
@@ -1247,5 +1248,115 @@ func exportLongPollRequest(t *testing.T, out string) {
 	writeGolden(t, out, "longpoll-request", map[string]any{
 		"receiveMessages":  map[string]any{"url": receive.URL, "bodyText": receive.BodyText},
 		"setActiveSession": map[string]any{"url": active.URL, "bodyText": active.BodyText, "sessionId": c.sessionHandler.sessionID},
+	})
+}
+
+// exportSignIn writes signin.json: the device ID, the SignInGaia request and the devices and auth data Go derives from
+// a canned response, and the session ID and parsed version Go derives from a canned config.
+func exportSignIn(t *testing.T, out string) {
+	// Canned Response: Mixed-Case Source ID, Three Items (Two Primary), Matching Timestamps
+	const (
+		uuidA = "aaaaaaaa-1111-2222-3333-444444444444"
+		uuidB = "bbbbbbbb-1111-2222-3333-444444444444"
+		uuidC = "cccccccc-1111-2222-3333-444444444444"
+	)
+	type item1 = gmproto.RPCGaiaData_UnknownContainer_Item2_Item1
+	type item4 = gmproto.RPCGaiaData_UnknownContainer_Item4
+	type item8 = gmproto.RPCGaiaData_UnknownContainer_Item4_Item8
+	canned := &gmproto.SignInGaiaResponse{
+		Header:           &gmproto.SignInGaiaResponse_Header{UnknownInt2: 2, UnknownTimestamp: 1700000000},
+		MaybeBrowserUUID: uuidC,
+		DeviceData: &gmproto.SignInGaiaResponse_DeviceData{
+			DeviceWrapper: &gmproto.SignInGaiaResponse_DeviceData_DeviceWrapper{
+				Device: &gmproto.Device{UserID: 42, SourceID: "Mixed-Case-SRC", Network: "GDitto"},
+			},
+			UnknownItems2: []*item1{
+				{DestOrSourceUUID: uuidA, UnknownInt4: 1, UnknownBigInt7: 777},
+				{DestOrSourceUUID: uuidB, UnknownInt4: 6, UnknownBigInt7: 888},
+				{DestOrSourceUUID: uuidC, UnknownInt4: 1, UnknownBigInt7: 999},
+			},
+			UnknownItems3: []*item4{
+				{DestOrSourceUUID: uuidA, UnknownTimestampMicroseconds: 1700000001234567, Item8: &item8{UnknownTimestamp: 5551},},
+				{DestOrSourceUUID: uuidB, UnknownTimestampMicroseconds: 1700000002000000, Item8: &item8{UnknownTimestamp: 5552}},
+				{DestOrSourceUUID: uuidC, UnknownTimestampMicroseconds: 1700000003000000},
+			},
+		},
+		TokenData: &gmproto.TokenData{TachyonAuthToken: []byte("signin-tachyon"), TTL: 7200000000},
+	}
+	cannedBody, err := pblite.Marshal(canned)
+	if err != nil {
+		t.Fatalf("pblite marshal: %v", err)
+	}
+
+	// Device ID
+	c, ct := newGoldenClient(t)
+	deviceID := c.baseSignInGaiaPayload().Inner.DeviceID.DeviceID
+
+	// Sign In
+	ct.Respond = func(*http.Request) *http.Response {
+		return httpResponse(200, "application/json+protobuf", cannedBody, nil)
+	}
+	before := time.Now().UTC()
+	devices, err := c.getGaiaPrimaryDevices(context.Background())
+	if err != nil {
+		t.Fatalf("getGaiaPrimaryDevices: %v", err)
+	}
+	request := ct.Requests[0]
+	var primary []map[string]any
+	for _, d := range devices {
+		primary = append(primary, map[string]any{
+			"regId":      d.RegID,
+			"unknownInt": d.UnknownInt,
+			"unknownTs":  d.UnknownTS,
+			"lastSeenUs": d.LastSeen.UnixMicro(),
+		})
+	}
+	deviceJSON := func(d *gmproto.Device) string {
+		b, mErr := pblite.Marshal(d)
+		if mErr != nil {
+			t.Fatalf("pblite marshal device: %v", mErr)
+		}
+		return string(b)
+	}
+
+	// Config
+	cfg := &gmproto.Config{
+		ClientVersion: "20260902",
+		DeviceInfo:    &gmproto.Config_DeviceInfo{DeviceID: "11223344-5566-7788-99aa-bbccddeeff00"},
+	}
+	cfgBody, err := pblite.Marshal(cfg)
+	if err != nil {
+		t.Fatalf("pblite marshal config: %v", err)
+	}
+	c2, ct2 := newGoldenClient(t)
+	ct2.Respond = func(*http.Request) *http.Response {
+		return httpResponse(200, "application/json+protobuf", cfgBody, nil)
+	}
+	if err = c2.FetchConfig(context.Background()); err != nil {
+		t.Fatalf("FetchConfig: %v", err)
+	}
+	parsed, err := cfg.ParsedClientVersion()
+	if err != nil {
+		t.Fatalf("ParsedClientVersion: %v", err)
+	}
+
+	writeGolden(t, out, "signin", map[string]any{
+		"deviceId": deviceID,
+		"request":  map[string]any{"url": request.URL, "bodyText": request.BodyText},
+		"response": map[string]any{
+			"bodyText":            string(cannedBody),
+			"primaryDevices":      primary,
+			"mobile":              deviceJSON(c.AuthData.Mobile),
+			"browser":             deviceJSON(c.AuthData.Browser),
+			"tokenHex":            hex.EncodeToString(c.AuthData.TachyonAuthToken),
+			"tachyonTTL":          c.AuthData.TachyonTTL,
+			"expiryOffsetSeconds": c.AuthData.TachyonExpiry.Sub(before).Round(time.Second).Seconds(),
+		},
+		"config": map[string]any{
+			"bodyText": string(cfgBody),
+			"url":      ct2.Requests[0].URL,
+			"sessionId": c2.AuthData.SessionID.String(),
+			"version":  map[string]any{"year": parsed.Year, "month": parsed.Month, "day": parsed.Day, "v1": parsed.V1, "v2": parsed.V2},
+		},
 	})
 }

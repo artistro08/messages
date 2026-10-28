@@ -106,6 +106,23 @@ public sealed partial class TokenRefresher(GmHttpClient http, AuthData auth, GmE
     /// <param name="data">The token and its TTL in microseconds.</param>
     public void Update(TokenData data)
     {
+        Apply(auth, data, time);
+        LogUpdated(log, auth.TachyonExpiry, data.TTL);
+    }
+
+    /// <summary>
+    /// Stores a token with its expiry and TTL on an account; the shared core of <see cref="Update"/>.
+    /// </summary>
+    /// <remarks>
+    /// Ported from <c>updateTachyonAuthToken</c>. A TTL of 0 means 24 hours. Kept static so sign-in can store its
+    /// first token without a refresher.
+    /// </remarks>
+    /// <param name="auth">The account to update.</param>
+    /// <param name="data">The token and its TTL in microseconds.</param>
+    /// <param name="time">The clock for the new expiry.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="data"/> is null.</exception>
+    internal static void Apply(AuthData auth, TokenData data, TimeProvider time)
+    {
         ArgumentNullException.ThrowIfNull(data);
 
         TimeSpan valid_for = data.TTL == 0 ? DefaultValidFor : TimeSpan.FromMicroseconds(data.TTL);
@@ -113,7 +130,6 @@ public sealed partial class TokenRefresher(GmHttpClient http, AuthData auth, GmE
         auth.TachyonAuthToken = data.TachyonAuthToken.ToByteArray();
         auth.TachyonExpiry    = time.GetUtcNow() + valid_for;
         auth.TachyonTtlMicros = (long)valid_for.TotalMicroseconds;
-        LogUpdated(log, auth.TachyonExpiry, data.TTL);
     }
 
     /// <summary>

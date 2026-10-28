@@ -1,0 +1,41 @@
+{
+  "config": {
+    "bodyText": "[\"20260902\",null,null,null,[null,null,null,\"11223344-5566-7788-99aa-bbccddeeff00\"],null,null,null,null]",
+    "sessionId": "11223344-5566-7788-99aa-bbccddeeff00",
+    "url": "https://messages.google.com/web/config",
+    "version": {
+      "day": 2,
+      "month": 9,
+      "v1": 4,
+      "v2": 6,
+      "year": 2026
+    }
+  },
+  "deviceId": "messages-web-00112233445566778899aabbccddeeff",
+  "request": {
+    "bodyText": "[[\"61cc6d4f-0280-42c0-b109-8ae66180a481\",null,\"GDitto\",null,null,null,[null,null,2026,9,2,null,4,null,6]],[[3,\"messages-web-00112233445566778899aabbccddeeff\"],null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,\"GlswWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAARRXD1uueOWuQTT/sp/VP3NDMHpl783XcpRWtCmw7QDX0U2vjpQ8xj7+aVHWQKiIVAr7w1X4IxTsswKVvF9n5NU\"],null,\"GDitto\"]",
+    "url": "https://instantmessaging-pa.clients6.google.com/$rpc/google.internal.communications.instantmessaging.v1.Registration/SignInGaia"
+  },
+  "response": {
+    "bodyText": "[[null,2,null,1700000000],\"Y2NjY2NjY2MtMTExMS0yMjIyLTMzMzMtNDQ0NDQ0NDQ0NDQ0\",[[[42,\"Mixed-Case-SRC\",\"GDitto\"]],[[\"YWFhYWFhYWEtMTExMS0yMjIyLTMzMzMtNDQ0NDQ0NDQ0NDQ0\",null,null,1,null,null,777],[\"YmJiYmJiYmItMTExMS0yMjIyLTMzMzMtNDQ0NDQ0NDQ0NDQ0\",null,null,6,null,null,888],[\"Y2NjY2NjY2MtMTExMS0yMjIyLTMzMzMtNDQ0NDQ0NDQ0NDQ0\",null,null,1,null,null,999]],[[\"YWFhYWFhYWEtMTExMS0yMjIyLTMzMzMtNDQ0NDQ0NDQ0NDQ0\",null,null,null,null,null,1700000001234567,\"EK8r\"],[\"YmJiYmJiYmItMTExMS0yMjIyLTMzMzMtNDQ0NDQ0NDQ0NDQ0\",null,null,null,null,null,1700000002000000,\"ELAr\"],[\"Y2NjY2NjY2MtMTExMS0yMjIyLTMzMzMtNDQ0NDQ0NDQ0NDQ0\",null,null,null,null,null,1700000003000000,null]]],[\"c2lnbmluLXRhY2h5b24=\",7200000000]]",
+    "browser": "[42,\"Mixed-Case-SRC\",\"GDitto\"]",
+    "expiryOffsetSeconds": 7200,
+    "mobile": "[42,\"mixed-case-src\",\"GDitto\"]",
+    "primaryDevices": [
+      {
+        "lastSeenUs": 1700000001234567,
+        "regId": "aaaaaaaa-1111-2222-3333-444444444444",
+        "unknownInt": 777,
+        "unknownTs": 5551
+      },
+      {
+        "lastSeenUs": 1700000003000000,
+        "regId": "cccccccc-1111-2222-3333-444444444444",
+        "unknownInt": 999,
+        "unknownTs": 0
+      }
+    ],
+    "tachyonTTL": 7200000000,
+    "tokenHex": "7369676e696e2d74616368796f6e"
+  }
+}
