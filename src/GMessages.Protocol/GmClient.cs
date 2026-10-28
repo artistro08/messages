@@ -1,5 +1,4 @@
 using System.Net;
-using System.Security.Cryptography;
 using GMessages.Protocol.Auth;
 using GMessages.Protocol.Events;
 using GMessages.Protocol.Http;
@@ -23,13 +22,18 @@ namespace GMessages.Protocol;
 /// credentials show up right away, then starts the long poll; once it opens, the client waits 2 seconds (longer while
 /// the startup skip count is above zero), flushes acks, waits 1 more second and asks the phone for updates
 /// (<c>GET_UPDATES</c> with a new session ID). Go then checks whether Google Messages is the default SMS app; that
-/// check is not ported, because nothing here uses its answer. The session is saved after every token refresh and
-/// every cookie change, at most once every 5 seconds, one save at a time, and once more on dispose if a save is still
-/// pending. Tokens, keys and cookie values are never logged.
+/// check is not ported, because nothing here uses its answer.
+/// <para>
+/// Connect, disconnect, pairing and unpairing run one at a time. The session is saved after every token refresh and
+/// every cookie change: right away when the last save started more than 5 seconds ago, otherwise once at the end of
+/// that 5 second window. Saves are paused while pairing, so a half-finished pairing never reaches the disk. After
+/// <see cref="UnpairAsync"/> or <see cref="DisposeAsync"/> the client is finished. Tokens, keys and cookie values are
+/// never logged.
+/// </para>
 /// </remarks>
 public sealed partial class GmClient : IAsyncDisposable
 {
-    /// <summary>The quiet time between a change and the session save it triggers.</summary>
+    /// <summary>The shortest time between two automatic session saves.</summary>
     public static readonly TimeSpan SaveDebounce = TimeSpan.FromSeconds(5);
 
     // Post-Connect Waits (Go: postConnect's time.Sleep Calls)
@@ -50,17 +54,26 @@ public sealed partial class GmClient : IAsyncDisposable
     private readonly GaiaSignIn _signIn;
     private readonly GaiaPairing _pairing;
 
-    // Long Poll Run
+    // One Connect, Disconnect, Pair Or Unpair At A Time
+    private readonly SemaphoreSlim _gate = new(1, 1);
+    private CancellationTokenSource? _pairCts;
+    private int _finished;
+    private int _disposed;
+
+    // Long Poll Run (Changed Under _gate; _runLock Also Guards _postConnect, Set From The Loop)
     private readonly Lock _runLock = new();
     private CancellationTokenSource? _runCts;
-    private Task _run = Task.CompletedTask;
+    private Task _run         = Task.CompletedTask;
+    private Task _postConnect = Task.CompletedTask;
 
-    // Session Saves: _saveLock Guards The Timer, _writeLock Keeps Saves (And The Delete) One At A Time
+    // Session Saves: _saveLock Guards The Timer And Flags, _writeLock Keeps Writes (And The Delete) One At A Time
     private readonly Lock _saveLock  = new();
     private readonly Lock _writeLock = new();
     private ITimer? _saveTimer;
+    private DateTimeOffset _lastSaveStart = DateTimeOffset.MinValue;
     private bool _savesStopped;
-    private int _disposed;
+    private bool _savesSuspended;
+    private int _saveCount;
 
     private GmClient(AuthData auth, SessionStore store, GmEndpoints endpoints, TimeProvider time, ILoggerFactory logs, HttpMessageHandler handler, bool ownsHandler)
     {
@@ -114,6 +127,12 @@ public sealed partial class GmClient : IAsyncDisposable
     /// <remarks>Ported from <c>IsConnected</c>; briefly false while the long poll reconnects, as in Go.</remarks>
     public bool IsConnected => _loop.IsConnected;
 
+    /// <summary>Gets how many session writes have finished (test hook).</summary>
+    internal int SaveCount => Volatile.Read(ref _saveCount);
+
+    /// <summary>Runs inside each session write, before the file is written (test hook).</summary>
+    internal Action? OnWritingForTests { get; set; }
+
     /// <summary>
     /// Creates a client for an account.
     /// </summary>
@@ -126,7 +145,7 @@ public sealed partial class GmClient : IAsyncDisposable
     /// <param name="auth">The account; a fresh <see cref="AuthData.CreateNew"/> with cookies set for pairing.</param>
     /// <param name="store">Where the session is saved.</param>
     /// <param name="endpoints">The server addresses.</param>
-    /// <param name="time">The clock for every wait and the save debounce.</param>
+    /// <param name="time">The clock for every wait and the save window.</param>
     /// <param name="logs">Creates the loggers.</param>
     /// <param name="handler">The HTTP handler to send through, for tests; null for the real network.</param>
     /// <returns>The client; dispose it when done.</returns>
@@ -162,38 +181,53 @@ public sealed partial class GmClient : IAsyncDisposable
     /// <remarks>
     /// Ported from <c>Connect</c>. The refresh happens here, not only in the long poll, so bad credentials fail the
     /// call. A refresh error that can be retried (network, 5xx) is logged and left to the long poll. Returns once the
-    /// long poll is started; it opens and sends <c>GET_UPDATES</c> in the background. A previous long poll is stopped
-    /// first, so there is never more than one.
+    /// long poll is started; it opens and sends <c>GET_UPDATES</c> in the background. Unlike Go, a call while the long
+    /// poll is already running does nothing, so there is never more than one.
     /// </remarks>
-    /// <param name="ct">Cancels the token refresh. The long poll runs until <see cref="DisconnectAsync"/>.</param>
+    /// <param name="ct">Cancels the wait for another operation and the token refresh. The long poll runs until <see cref="DisconnectAsync"/>.</param>
     /// <returns>A task that completes when the long poll is started.</returns>
+    /// <exception cref="ObjectDisposedException">The client was unpaired or disposed.</exception>
     /// <exception cref="InvalidOperationException">Not paired: no token or no browser device.</exception>
     /// <exception cref="SessionExpiredException">The server refused the token refresh for good; pair again.</exception>
     /// <exception cref="OperationCanceledException"><paramref name="ct"/> was canceled.</exception>
     public async Task ConnectAsync(CancellationToken ct)
     {
-        ThrowIfNotLoggedIn();
-
-        // Refresh The Token (Its Event Goes Out Here; The Long Poll Isn't Relaying Yet)
-        _refresher.EventRaised += Raise;
+        ThrowIfFinished();
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            await _refresher.RefreshIfNeededAsync(ct).ConfigureAwait(false);
-        }
-        catch (Exception ex) when (!ct.IsCancellationRequested && TokenRefresher.IsFatal(ex))
-        {
-            throw new SessionExpiredException("Failed to refresh auth token.", ex);
-        }
-        catch (Exception ex) when (!ct.IsCancellationRequested)
-        {
-            LogTransientRefreshError(_log, ex);
+            ThrowIfFinished();
+            ThrowIfNotLoggedIn();
+            if (IsRunning)
+            {
+                return;
+            }
+
+            // Refresh The Token (Its Event Goes Out Here; No Long Poll Is Relaying Refresher Events Now)
+            _refresher.EventRaised += Raise;
+            try
+            {
+                await _refresher.RefreshIfNeededAsync(ct).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested && TokenRefresher.IsFatal(ex))
+            {
+                throw new SessionExpiredException("Failed to refresh auth token.", ex);
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested)
+            {
+                LogTransientRefreshError(_log, ex);
+            }
+            finally
+            {
+                _refresher.EventRaised -= Raise;
+            }
+
+            await StartLongPollingAsync().ConfigureAwait(false);
         }
         finally
         {
-            _refresher.EventRaised -= Raise;
+            _gate.Release();
         }
-
-        await StartLongPollingAsync().ConfigureAwait(false);
     }
 
     /// <summary>
@@ -202,13 +236,21 @@ public sealed partial class GmClient : IAsyncDisposable
     /// <remarks>
     /// Ported from <c>Disconnect</c>: closes the long poll and fails the waiters, since their answers could only
     /// arrive over the long poll. Go also closes idle HTTP connections; .NET has no such call short of disposing the
-    /// handler, and idle connections close by themselves after a while. Safe to call when not connected.
+    /// handler, and idle connections close by themselves after a while. Safe to call when not connected. Waits for a
+    /// running pairing to end first (cancel it through its token).
     /// </remarks>
     /// <returns>A task that completes when the long poll has ended.</returns>
     public async Task DisconnectAsync()
     {
-        await StopLongPollingAsync().ConfigureAwait(false);
-        Rpc.FailAllWaiters();
+        await _gate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            await DisconnectCoreAsync().ConfigureAwait(false);
+        }
+        finally
+        {
+            _gate.Release();
+        }
     }
 
     // =========================================================================
@@ -221,84 +263,122 @@ public sealed partial class GmClient : IAsyncDisposable
     /// <remarks>
     /// Ported from <c>DoGaiaPairing</c>, with the config fetch the bridge's Google login does first (it sets the
     /// session ID that the sign-in sends). <paramref name="showEmoji"/> is called with the emoji the user must tap on
-    /// the phone; the call then waits for the tap. Once paired, the pairing long poll is stopped and awaited, the
-    /// session is saved, <see cref="PairSuccessful"/> is raised and the client reconnects logged in (Go's
-    /// <c>Reconnect</c>, without a token refresh).
+    /// the phone; the call then waits for the tap. Session saves are paused throughout. Once paired, the pairing long
+    /// poll is stopped and awaited, the session is saved, <see cref="PairSuccessful"/> is raised and the client
+    /// reconnects logged in (Go's <c>Reconnect</c>, without a token refresh). On any failure the half-set pairing
+    /// data is cleared (<see cref="AuthData.ClearPairing"/>) and nothing is saved. Pairing a connected client throws:
+    /// disconnect first.
     /// </remarks>
     /// <param name="showEmoji">Shows the emoji to the user.</param>
     /// <param name="ct">Cancels the pairing.</param>
     /// <returns>A task that completes when the phone confirmed and the long poll is restarted.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="showEmoji"/> is null.</exception>
+    /// <exception cref="ObjectDisposedException">The client was unpaired or disposed.</exception>
+    /// <exception cref="InvalidOperationException">The client is connected, or the pairing long poll stopped before connecting.</exception>
     /// <exception cref="PairingException">No cookies, no phone, a timeout, or the user declined or chose wrong.</exception>
     /// <exception cref="InvalidDataException">The server or phone sent something invalid.</exception>
     /// <exception cref="GmRequestException">The server refused a request.</exception>
-    /// <exception cref="InvalidOperationException">The pairing long poll stopped before connecting.</exception>
     /// <exception cref="ConnectionClosedException">The connection closed while waiting.</exception>
-    /// <exception cref="OperationCanceledException"><paramref name="ct"/> was canceled.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="ct"/> was canceled, or the client was disposed.</exception>
     public async Task PairAsync(Action<string> showEmoji, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(showEmoji);
 
-        await _signIn.FetchConfigAsync(ct).ConfigureAwait(false);
-        (string emoji, PairingSession session) = await _pairing.StartAsync(ct).ConfigureAwait(false);
-
-        // Show The Emoji And Wait For The Tap; The Pairing Long Poll Always Ends Here
-        string phone_id;
+        ThrowIfFinished();
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            showEmoji(emoji);
-            phone_id = await _pairing.FinishAsync(session, ct).ConfigureAwait(false);
+            ThrowIfFinished();
+            if (IsRunning)
+            {
+                throw new InvalidOperationException("Disconnect before pairing.");
+            }
+
+            // Pair With Saves Paused; Dispose Can Cancel It
+            string phone_id;
+            using var pair_cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            Volatile.Write(ref _pairCts, pair_cts);
+            SetSavesSuspended(true);
+            try
+            {
+                phone_id = await PairCoreAsync(showEmoji, pair_cts.Token).ConfigureAwait(false);
+            }
+            catch
+            {
+                _auth.ClearPairing();
+                throw;
+            }
+            finally
+            {
+                Volatile.Write(ref _pairCts, null);
+                SetSavesSuspended(false);
+            }
+
+            // Save, Announce, Reconnect
+            LogPaired(_log, phone_id);
+            SaveNow();
+            Raise(new PairSuccessful(phone_id));
+            await ReconnectAsync().ConfigureAwait(false);
         }
         finally
         {
-            await StopPairingLongPollAsync().ConfigureAwait(false);
+            _gate.Release();
         }
-
-        // Save, Announce, Reconnect
-        LogPaired(_log, phone_id);
-        SaveNow();
-        Raise(new PairSuccessful(phone_id));
-        await ReconnectAsync().ConfigureAwait(false);
     }
 
     /// <summary>
-    /// Tells the phone to forget this browser, disconnects, and deletes the saved session.
+    /// Tells the phone to forget this browser, disconnects, clears the pairing and deletes the saved session.
     /// </summary>
     /// <remarks>
     /// Ported from <c>Unpair</c>: a Google account that never finished pairing has nothing to revoke; otherwise an
     /// <c>UNPAIR_GAIA_PAIRING</c> is sent. Go's QR-code (Bugle) unpair is not ported, since this app only pairs
     /// through Google accounts; that case is logged and skipped. Unlike Go, the local session is removed even when
-    /// the request fails (the error is still thrown), so the user is never stuck signed in.
+    /// the request fails (the error is still thrown), so the user is never stuck signed in. Afterwards the client is
+    /// finished: create a new one to pair again.
     /// </remarks>
-    /// <param name="ct">Cancels the request.</param>
+    /// <param name="ct">Cancels the wait for another operation and the request.</param>
     /// <returns>A task that completes when the session file is gone.</returns>
+    /// <exception cref="ObjectDisposedException">The client was already unpaired or disposed.</exception>
     /// <exception cref="GmRequestException">The server refused the request.</exception>
     /// <exception cref="OperationCanceledException"><paramref name="ct"/> was canceled.</exception>
     public async Task UnpairAsync(CancellationToken ct)
     {
+        ThrowIfFinished();
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            if (_auth.IsGoogleAccount && _auth.PairingId == Guid.Empty)
+            ThrowIfFinished();
+            try
             {
-                LogNothingToUnpair(_log);
+                if (_auth.IsGoogleAccount && _auth.PairingId == Guid.Empty)
+                {
+                    LogNothingToUnpair(_log);
+                }
+                else if (_auth.HasCookies)
+                {
+                    await _pairing.UnpairAsync(ct).ConfigureAwait(false);
+                }
+                else
+                {
+                    LogBugleUnpairSkipped(_log);
+                }
             }
-            else if (_auth.HasCookies)
+            finally
             {
-                await _pairing.UnpairAsync(ct).ConfigureAwait(false);
-            }
-            else
-            {
-                LogBugleUnpairSkipped(_log);
+                Volatile.Write(ref _finished, 1);
+                await DisconnectCoreAsync().ConfigureAwait(false);
+                StopSaves();
+                lock (_writeLock)
+                {
+                    _store.Delete();
+                }
+
+                _auth.ClearPairing();
             }
         }
         finally
         {
-            await DisconnectAsync().ConfigureAwait(false);
-            StopSaves();
-            lock (_writeLock)
-            {
-                _store.Delete();
-            }
+            _gate.Release();
         }
     }
 
@@ -307,9 +387,9 @@ public sealed partial class GmClient : IAsyncDisposable
     // =========================================================================
 
     /// <summary>
-    /// Disconnects, writes a pending session save, and releases the HTTP clients.
+    /// Cancels a running pairing, disconnects, writes a pending session save, and releases the HTTP clients.
     /// </summary>
-    /// <remarks>Safe to call more than once.</remarks>
+    /// <remarks>Safe to call more than once. Afterwards the client is finished.</remarks>
     /// <returns>A task that completes when everything is released.</returns>
     public async ValueTask DisposeAsync()
     {
@@ -318,32 +398,70 @@ public sealed partial class GmClient : IAsyncDisposable
             return;
         }
 
-        await DisconnectAsync().ConfigureAwait(false);
+        Volatile.Write(ref _finished, 1);
 
-        // Flush A Pending Save
-        bool pending;
-        lock (_saveLock)
+        // Cancel A Running Pairing So It Gives Up The Gate
+        try
         {
-            pending = _saveTimer is not null;
+            Volatile.Read(ref _pairCts)?.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // It Just Ended
         }
 
-        if (pending)
+        await _gate.WaitAsync().ConfigureAwait(false);
+        try
         {
-            SaveNow();
-        }
+            await DisconnectCoreAsync().ConfigureAwait(false);
 
-        StopSaves();
-        _auth.Cookies.Changed  -= OnCookiesChanged;
-        _refresher.EventRaised -= OnRefresherEvent;
-        _loop.EventRaised      -= Raise;
-        _httpClient.Dispose();
-        _longPollClient.Dispose();
-        _ownedHandler?.Dispose();
+            // Write A Pending Save, Then Wait Out Any Write In Progress
+            bool pending;
+            lock (_saveLock)
+            {
+                pending = _saveTimer is not null;
+            }
+
+            if (pending)
+            {
+                SaveNow();
+            }
+
+            StopSaves();
+            lock (_writeLock)
+            {
+                // Nothing; Entering Waits For An In-Flight Timer Save
+            }
+
+            _auth.Cookies.Changed  -= OnCookiesChanged;
+            _refresher.EventRaised -= OnRefresherEvent;
+            _loop.EventRaised      -= Raise;
+            _httpClient.Dispose();
+            _longPollClient.Dispose();
+            _ownedHandler?.Dispose();
+        }
+        finally
+        {
+            _gate.Release();
+        }
     }
 
     // =========================================================================
     // LONG POLL
     // =========================================================================
+
+    private bool IsRunning
+    {
+        get
+        {
+            lock (_runLock)
+            {
+                return _runCts is not null && !_run.IsCompleted;
+            }
+        }
+    }
+
+    private void ThrowIfFinished() => ObjectDisposedException.ThrowIf(Volatile.Read(ref _finished) != 0, this);
 
     // Port Of checkLoggedIn
     private void ThrowIfNotLoggedIn()
@@ -359,7 +477,14 @@ public sealed partial class GmClient : IAsyncDisposable
         }
     }
 
-    // Port Of startLongPolling: The Loop Runs The Pinger And Ack Timer; postConnect Runs Once It Opens
+    // Port Of Disconnect; Caller Holds _gate
+    private async Task DisconnectCoreAsync()
+    {
+        await StopLongPollingAsync().ConfigureAwait(false);
+        Rpc.FailAllWaiters();
+    }
+
+    // Port Of startLongPolling: The Loop Runs The Pinger And Ack Timer; postConnect Runs Once It Opens; Caller Holds _gate
     private async Task StartLongPollingAsync()
     {
         await StopLongPollingAsync().ConfigureAwait(false);
@@ -376,7 +501,7 @@ public sealed partial class GmClient : IAsyncDisposable
     {
         try
         {
-            await _loop.RunAsync(true, () => _ = PostConnectAsync(ct), ct).ConfigureAwait(false);
+            await _loop.RunAsync(true, () => TrackPostConnect(PostConnectAsync(ct)), ct).ConfigureAwait(false);
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {
@@ -384,7 +509,16 @@ public sealed partial class GmClient : IAsyncDisposable
         }
     }
 
-    // Port Of closeLongPolling Plus Waiting For The Run To End
+    // Keeps Every postConnect Run So Stopping Can Wait For It
+    private void TrackPostConnect(Task postConnect)
+    {
+        lock (_runLock)
+        {
+            _postConnect = _postConnect.IsCompleted ? postConnect : Task.WhenAll(_postConnect, postConnect);
+        }
+    }
+
+    // Port Of closeLongPolling Plus Waiting For The Run And postConnect To End; Caller Holds _gate
     private async Task StopLongPollingAsync()
     {
         CancellationTokenSource? cts;
@@ -405,10 +539,19 @@ public sealed partial class GmClient : IAsyncDisposable
         _loop.Stop();
         await cts.CancelAsync().ConfigureAwait(false);
         await run.ConfigureAwait(false);
+
+        Task post_connect;
+        lock (_runLock)
+        {
+            post_connect = _postConnect;
+            _postConnect = Task.CompletedTask;
+        }
+
+        await post_connect.ConfigureAwait(false);
         cts.Dispose();
     }
 
-    // Port Of Reconnect: Close, Check, Start (No Token Refresh)
+    // Port Of Reconnect: Close, Check, Start (No Token Refresh); Caller Holds _gate
     private async Task ReconnectAsync()
     {
         await StopLongPollingAsync().ConfigureAwait(false);
@@ -426,7 +569,7 @@ public sealed partial class GmClient : IAsyncDisposable
         await StartLongPollingAsync().ConfigureAwait(false);
     }
 
-    // Port Of postConnect (Without The Bugle Default Check)
+    // Port Of postConnect (Without The Bugle Default Check); Never Throws
     private async Task PostConnectAsync(CancellationToken ct)
     {
         try
@@ -470,6 +613,26 @@ public sealed partial class GmClient : IAsyncDisposable
         {
             // Disconnected Before It Finished
         }
+        catch (Exception ex)
+        {
+            LogPostConnectFailed(_log, ex);
+        }
+    }
+
+    // Config, Start, Emoji, Finish; The Pairing Long Poll Always Ends Here
+    private async Task<string> PairCoreAsync(Action<string> showEmoji, CancellationToken ct)
+    {
+        await _signIn.FetchConfigAsync(ct).ConfigureAwait(false);
+        (string emoji, PairingSession session) = await _pairing.StartAsync(ct).ConfigureAwait(false);
+        try
+        {
+            showEmoji(emoji);
+            return await _pairing.FinishAsync(session, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            await StopPairingLongPollAsync().ConfigureAwait(false);
+        }
     }
 
     // Stops And Awaits The Pairing Long Poll; Its Late Error Is Logged So It Can't Hide The Pairing Result
@@ -499,29 +662,63 @@ public sealed partial class GmClient : IAsyncDisposable
         }
     }
 
-    // Starts The 5 s Window Unless One Is Already Open
+    // Saves Now When The Last Save Started 5 s Ago Or More; Otherwise Once At The End Of That Window
     private void RequestSave()
     {
         lock (_saveLock)
         {
-            if (_saveTimer is not null || _savesStopped)
+            if (_savesStopped || _savesSuspended || _saveTimer is not null)
             {
                 return;
             }
 
-            _saveTimer = _time.CreateTimer(_ => SaveNow(), null, SaveDebounce, Timeout.InfiniteTimeSpan);
+            DateTimeOffset now = _time.GetUtcNow();
+            TimeSpan wait      = _lastSaveStart + SaveDebounce - now;
+            if (wait > TimeSpan.Zero)
+            {
+                _saveTimer = _time.CreateTimer(_ => SaveFromTimer(), null, wait, Timeout.InfiniteTimeSpan);
+                return;
+            }
+
+            _lastSaveStart = now;
         }
+
+        WriteSession();
     }
 
-    // Saves Right Away, Closing Any Open Window; One Writer At A Time
-    private void SaveNow()
+    private void SaveFromTimer()
     {
         lock (_saveLock)
         {
             _saveTimer?.Dispose();
             _saveTimer = null;
+            if (_savesStopped || _savesSuspended)
+            {
+                return;
+            }
+
+            _lastSaveStart = _time.GetUtcNow();
         }
 
+        WriteSession();
+    }
+
+    // Saves Right Away, Closing Any Open Window (After Pairing, And The Flush On Dispose)
+    private void SaveNow()
+    {
+        lock (_saveLock)
+        {
+            _saveTimer?.Dispose();
+            _saveTimer     = null;
+            _lastSaveStart = _time.GetUtcNow();
+        }
+
+        WriteSession();
+    }
+
+    // One Writer At A Time; Any Failure Is Logged, Never Thrown (It May Run On A Timer Thread)
+    private void WriteSession()
+    {
         lock (_writeLock)
         {
             if (Volatile.Read(ref _savesStopped))
@@ -531,12 +728,25 @@ public sealed partial class GmClient : IAsyncDisposable
 
             try
             {
+                OnWritingForTests?.Invoke();
                 _store.Save(_auth);
+                Interlocked.Increment(ref _saveCount);
             }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or CryptographicException)
+            catch (Exception ex)
             {
                 LogSaveFailed(_log, ex);
             }
+        }
+    }
+
+    // Pausing Also Drops An Open Window, So Nothing Saved Before Pairing Is Written Mid-Pairing
+    private void SetSavesSuspended(bool suspended)
+    {
+        lock (_saveLock)
+        {
+            _savesSuspended = suspended;
+            _saveTimer?.Dispose();
+            _saveTimer = null;
         }
     }
 
@@ -586,6 +796,9 @@ public sealed partial class GmClient : IAsyncDisposable
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Sent set active session/get updates request")]
     private static partial void LogSetActiveSessionSent(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Post-connect steps failed")]
+    private static partial void LogPostConnectFailed(ILogger logger, Exception exception);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Paired with phone {PhoneId}")]
     private static partial void LogPaired(ILogger logger, string phoneId);

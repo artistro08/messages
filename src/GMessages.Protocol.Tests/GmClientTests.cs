@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using GMessages.Protocol.Events;
 using GMessages.Protocol.Http;
+using GMessages.Protocol.Pairing;
 using GMessages.Protocol.PbLite;
 using GMessages.Protocol.Proto;
 using GMessages.Protocol.Session;
@@ -216,13 +217,48 @@ public class GmClientTests
         Assert.IsFalse(rig.Client.IsConnected);
     }
 
+    /// <summary>
+    /// Two connects at once start exactly one long poll.
+    /// </summary>
+    [TestMethod]
+    public async Task Connect_Concurrent_StartsOneLongPoll()
+    {
+        await using Rig rig = CreateRig();
+
+        await Task.WhenAll(rig.Client.ConnectAsync(CancellationToken.None), rig.Client.ConnectAsync(CancellationToken.None)).WaitAsync(HangGuard);
+        WaitUntil(() => rig.Client.IsConnected, "connected");
+
+        Assert.AreEqual(1, rig.Requests("/ReceiveMessages").Length);
+    }
+
+    /// <summary>
+    /// Connect, disconnect, connect again opens a second long poll; after dispose, connect throws.
+    /// </summary>
+    [TestMethod]
+    public async Task Connect_Disconnect_Connect_Reconnects()
+    {
+        await using Rig rig = CreateRig();
+
+        await rig.Client.ConnectAsync(CancellationToken.None).WaitAsync(HangGuard);
+        WaitUntil(() => rig.Client.IsConnected, "first connect");
+        await rig.Client.DisconnectAsync().WaitAsync(HangGuard);
+        Assert.IsFalse(rig.Client.IsConnected);
+
+        await rig.Client.ConnectAsync(CancellationToken.None).WaitAsync(HangGuard);
+        WaitUntil(() => rig.Client.IsConnected, "second connect");
+        Assert.AreEqual(2, rig.Requests("/ReceiveMessages").Length);
+
+        await rig.Client.DisposeAsync();
+        await Assert.ThrowsExactlyAsync<ObjectDisposedException>(() => rig.Client.ConnectAsync(CancellationToken.None));
+    }
+
     // =========================================================================
     // SESSION SAVING (C#-ONLY)
     // =========================================================================
 
     /// <summary>
-    /// Cookie changes save the session once, 5 s after the first change; a second change inside that window rides
-    /// along instead of starting another timer.
+    /// The first cookie change saves right away; changes inside the next 5 s are saved once, at the end of that
+    /// window; a change right after that save waits for a new window and is flushed on dispose.
     /// </summary>
     [TestMethod]
     public async Task CookieChange_SavesSessionDebounced()
@@ -230,20 +266,49 @@ public class GmClientTests
         await using Rig rig = CreateRig();
 
         rig.Auth.Cookies.UpdateFrom(FakeHttpHandler.Response(HttpStatusCode.OK, setCookies: "SID=new-sid; Path=/"));
-        rig.Auth.Cookies.UpdateFrom(FakeHttpHandler.Response(HttpStatusCode.OK, setCookies: "SID=newer-sid; Path=/"));
+        Assert.AreEqual("new-sid", rig.Store.Load()!.Cookies.Snapshot()["SID"], "saved right away");
 
-        Assert.AreEqual(1, rig.Time.CountTimers(GmClient.SaveDebounce), "one debounce timer");
+        rig.Auth.Cookies.UpdateFrom(FakeHttpHandler.Response(HttpStatusCode.OK, setCookies: "SID=newer-sid; Path=/"));
+        rig.Auth.Cookies.UpdateFrom(FakeHttpHandler.Response(HttpStatusCode.OK, setCookies: "SID=newest-sid; Path=/"));
+        Assert.AreEqual(1, rig.Time.CountTimers(GmClient.SaveDebounce), "one window timer");
         rig.Time.Advance(GmClient.SaveDebounce - TimeSpan.FromMilliseconds(1));
-        Assert.IsFalse(File.Exists(rig.SessionPath), "not saved before 5 s");
+        Assert.AreEqual("new-sid", rig.Store.Load()!.Cookies.Snapshot()["SID"], "not saved again inside the window");
 
         rig.Time.Advance(TimeSpan.FromMilliseconds(1));
-        WaitUntil(() => File.Exists(rig.SessionPath), "saved after 5 s");
-        Assert.AreEqual("newer-sid", rig.Store.Load()!.Cookies.Snapshot()["SID"]);
+        Assert.AreEqual("newest-sid", rig.Store.Load()!.Cookies.Snapshot()["SID"], "saved at the end of the window");
+        Assert.AreEqual(2, rig.Client.SaveCount);
 
-        // A Later Change Starts A New Window, Flushed On Dispose
+        // A Change Right After That Save Waits For A New Window; Dispose Flushes It
         rig.Auth.Cookies.UpdateFrom(FakeHttpHandler.Response(HttpStatusCode.OK, setCookies: "SID=final-sid; Path=/"));
+        Assert.AreEqual(2, rig.Client.SaveCount);
         await rig.Client.DisposeAsync();
         Assert.AreEqual("final-sid", rig.Store.Load()!.Cookies.Snapshot()["SID"]);
+    }
+
+    /// <summary>
+    /// A change that arrives while a save is being written leads to a second save at the end of the window.
+    /// </summary>
+    [TestMethod]
+    public async Task ChangeDuringInFlightSave_SavesAgain()
+    {
+        await using Rig rig = CreateRig();
+        bool changed_once   = false;
+        rig.Client.OnWritingForTests = () =>
+        {
+            if (!changed_once)
+            {
+                changed_once = true;
+                rig.Auth.Cookies.UpdateFrom(FakeHttpHandler.Response(HttpStatusCode.OK, setCookies: "SID=during-sid; Path=/"));
+            }
+        };
+
+        rig.Auth.Cookies.UpdateFrom(FakeHttpHandler.Response(HttpStatusCode.OK, setCookies: "SID=first-sid; Path=/"));
+        Assert.AreEqual(1, rig.Client.SaveCount, "first save");
+        Assert.AreEqual(1, rig.Time.CountTimers(GmClient.SaveDebounce), "the change during the write opened a window");
+
+        rig.Time.Advance(GmClient.SaveDebounce);
+        Assert.AreEqual(2, rig.Client.SaveCount, "second save");
+        Assert.AreEqual("during-sid", rig.Store.Load()!.Cookies.Snapshot()["SID"]);
     }
 
     // =========================================================================
@@ -264,6 +329,34 @@ public class GmClientTests
         RecordedRequest sent = rig.Requests("/SendMessage").Single();
         Assert.AreEqual(ActionType.UnpairGaiaPairing, ActionOf(sent));
         Assert.IsFalse(File.Exists(rig.SessionPath));
+        Assert.IsFalse(rig.Client.IsLoggedIn, "pairing cleared in memory");
+
+        // The Client Is Finished
+        await Assert.ThrowsExactlyAsync<ObjectDisposedException>(() => rig.Client.ConnectAsync(CancellationToken.None));
+        await Assert.ThrowsExactlyAsync<ObjectDisposedException>(() => rig.Client.PairAsync(_ => { }, CancellationToken.None));
+        await Assert.ThrowsExactlyAsync<ObjectDisposedException>(() => rig.Client.UnpairAsync(CancellationToken.None));
+
+        // No Later Change Brings The File Back
+        rig.Auth.Cookies.UpdateFrom(FakeHttpHandler.Response(HttpStatusCode.OK, setCookies: "SID=late-sid; Path=/"));
+        rig.Time.Advance(GmClient.SaveDebounce);
+        Assert.IsFalse(File.Exists(rig.SessionPath));
+    }
+
+    /// <summary>
+    /// When the server refuses the unpair request, the local session is still removed and the error is rethrown.
+    /// </summary>
+    [TestMethod]
+    public async Task Unpair_ServerFails_StillDeletesSessionAndRethrows()
+    {
+        await using Rig rig = CreateRig();
+        rig.Store.Save(rig.Auth);
+        rig.Respond = req => req.Url.EndsWith("/SendMessage", StringComparison.Ordinal) ? FakeHttpHandler.Response(HttpStatusCode.Forbidden) : null;
+
+        await Assert.ThrowsExactlyAsync<GmRequestException>(() => rig.Client.UnpairAsync(CancellationToken.None).WaitAsync(HangGuard));
+
+        Assert.IsFalse(File.Exists(rig.SessionPath));
+        Assert.IsFalse(rig.Client.IsLoggedIn);
+        await Assert.ThrowsExactlyAsync<ObjectDisposedException>(() => rig.Client.ConnectAsync(CancellationToken.None));
     }
 
     /// <summary>
@@ -325,5 +418,64 @@ public class GmClientTests
         WaitUntil(() => rig.Requests("/ReceiveMessages").Length == 2, "reconnected logged in");
         WaitUntil(() => rig.Client.IsConnected, "connected");
         Assert.IsTrue(rig.Client.IsLoggedIn);
+    }
+
+    /// <summary>
+    /// A wrong emoji fails the pairing: the half-set pairing is cleared, nothing is saved (not even the cookie change
+    /// that came with the sign-in), and no long poll is left running.
+    /// </summary>
+    [TestMethod]
+    public async Task Pair_WrongEmoji_ClearsPairingAndSavesNothing()
+    {
+        JsonElement sign_in = Golden.Load("signin");
+        AuthData auth       = AuthDataGoldenTests.BuildGolden();
+        auth.DestPhoneId    = 0;
+        await using Rig rig = CreateRig(auth);
+
+        byte[] config_body  = Encoding.UTF8.GetBytes(sign_in.GetProperty("config").GetProperty("bodyText").GetString()!);
+        byte[] sign_in_body = Encoding.UTF8.GetBytes(sign_in.GetProperty("response").GetProperty("bodyText").GetString()!);
+        byte[] server_init  = GaiaPairingTests.ServerInit(1, 1);
+        byte[] wrong_emoji  = new GaiaPairingResponseContainer { FinishErrorType = 1, FinishErrorCode = GaiaPairingErrorCode.WrongVerificationCodeSelected }.ToByteArray();
+        rig.Respond = req =>
+        {
+            if (req.Url.EndsWith("/web/config", StringComparison.Ordinal))
+            {
+                return FakeHttpHandler.Response(HttpStatusCode.OK, PbLiteMime, config_body);
+            }
+
+            if (req.Url.EndsWith("/SignInGaia", StringComparison.Ordinal))
+            {
+                return FakeHttpHandler.Response(HttpStatusCode.OK, PbLiteMime, sign_in_body, "SID=pairing-sid; Path=/");
+            }
+
+            if (req.Url.EndsWith("/SendMessage", StringComparison.Ordinal))
+            {
+                ActionType action = ActionOf(req);
+                if (action == ActionType.CreateGaiaPairingClientInit)
+                {
+                    GaiaPairingTests.Deliver(rig.Client.Rpc, req, server_init);
+                }
+                else if (action == ActionType.CreateGaiaPairingClientFinished)
+                {
+                    GaiaPairingTests.Deliver(rig.Client.Rpc, req, wrong_emoji);
+                }
+            }
+
+            return null;
+        };
+
+        var ex = await Assert.ThrowsExactlyAsync<PairingException>(() => rig.Client.PairAsync(_ => { }, CancellationToken.None).WaitAsync(HangGuard));
+        Assert.AreEqual(PairingFailure.IncorrectEmoji, ex.Failure);
+
+        rig.Time.Advance(GmClient.SaveDebounce);
+        Assert.IsFalse(File.Exists(rig.SessionPath), "nothing saved");
+        Assert.AreEqual(0, rig.Client.SaveCount);
+        Assert.IsFalse(rig.Client.IsLoggedIn, "pairing cleared");
+        Assert.IsFalse(rig.Client.IsConnected, "pairing poll stopped");
+        Assert.AreEqual(1, rig.Requests("/ReceiveMessages").Length, "no reconnect");
+        lock (rig.Events)
+        {
+            Assert.AreEqual(0, rig.Events.OfType<PairSuccessful>().Count());
+        }
     }
 }
