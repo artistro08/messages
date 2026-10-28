@@ -31,17 +31,17 @@ namespace GMessages.Presentation.Tests.Connection;
 [TestClass]
 public sealed class ConnectionControllerTests
 {
-    private static readonly TimeSpan HangGuard = TimeSpan.FromSeconds(10);
+    internal static readonly TimeSpan HangGuard = TimeSpan.FromSeconds(10);
 
     private const string PbLiteMime = "application/json+protobuf";
 
-    private static readonly Dictionary<string, string> PairCookies = new() { ["SAPISID"] = "fake-sapisid", ["SID"] = "fake-sid" };
+    internal static readonly Dictionary<string, string> PairCookies = new() { ["SAPISID"] = "fake-sapisid", ["SID"] = "fake-sid" };
 
     // =========================================================================
     // RIG
     // =========================================================================
 
-    private sealed class Rig : IAsyncDisposable
+    internal sealed class Rig : IAsyncDisposable
     {
         private readonly Lock _postLock = new();
         private bool _inPost;
@@ -168,7 +168,7 @@ public sealed class ConnectionControllerTests
         return ad;
     }
 
-    private static void WaitUntil(Func<bool> condition, string what) => Assert.IsTrue(SpinWait.SpinUntil(condition, HangGuard), what);
+    internal static void WaitUntil(Func<bool> condition, string what) => Assert.IsTrue(SpinWait.SpinUntil(condition, HangGuard), what);
 
     // =========================================================================
     // FAKE PHONE (SMALL COPIES OF THE PROTOCOL TESTS' PAIRING HELPERS)
@@ -211,7 +211,7 @@ public sealed class ConnectionControllerTests
     }
 
     // Scripts The Config, Sign-In And Phone Answers; The Finish Answer Decides Success Or Failure (Null: Never Tapped)
-    private static void ScriptPairing(Rig rig, byte[]? finished)
+    internal static void ScriptPairing(Rig rig, byte[]? finished)
     {
         using JsonDocument doc = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Golden", "signin.json")));
         JsonElement sign_in    = doc.RootElement;

@@ -1,6 +1,10 @@
+using GMessages.App.Views;
 using GMessages.Presentation;
+using GMessages.Presentation.Connection;
 using GMessages.Presentation.Logging;
+using GMessages.Presentation.Pairing;
 using GMessages.Presentation.Settings;
+using GMessages.Protocol.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
@@ -36,6 +40,9 @@ public partial class App : Application, IDisposable
     private TrayIcon? _trayIcon;
     private TrayMenuWindow? _trayMenu;
     private MemoryTrim? _memoryTrim;
+    private ConnectionController? _connection;
+    private PairingWindow? _pairingWindow;
+    private bool _connectionStarted;
     private EventWaitHandle? _quitRequest;
     private RegisteredWaitHandle? _quitWait;
     private RegisteredWaitHandle? _showWait;
@@ -82,10 +89,25 @@ public partial class App : Application, IDisposable
 
         // Memory Trim
         var dispatcher = DispatcherQueue.GetForCurrentThread();
-        _memoryTrim    = new MemoryTrim(dispatcher, () => _trayMenu?.AppWindow.IsVisible != true);
+        _memoryTrim    = new MemoryTrim(dispatcher, () => _trayMenu?.AppWindow.IsVisible != true && _pairingWindow is null);
+
+        // Connection: every controller event comes back on the UI thread
+        // TODO: Task 8 passes the --test-endpoints fake server here; until then always production
+        _connection = new ConnectionController(paths, GmEndpoints.Production, TimeProvider.System, new SingleProviderLoggerFactory(_logProvider), a => dispatcher.TryEnqueue(() => a()));
+        _connection.StateChanged += (_, _) => OnConnectionStateChanged();
+        _ = StartConnectionAsync();
 
         // Tray Icon
-        ShowMainWindowRequested += (_, source) => AppLog.OpenRequested(_logger, source);
+        ShowMainWindowRequested += (_, source) =>
+        {
+            AppLog.OpenRequested(_logger, source);
+
+            // Not paired yet: the way in is the pairing window
+            if (_connectionStarted && NeedsPairing())
+            {
+                ShowPairingWindow();
+            }
+        };
         _trayIcon = new TrayIcon(AppInfo.DisplayName, SelectTrayGuid());
         _trayIcon.Invoked              += (_, _) => ShowMainWindowRequested?.Invoke(this, "tray");
         _trayIcon.ContextMenuRequested += (_, point) => ShowTrayMenu(point.X, point.Y);
@@ -102,6 +124,76 @@ public partial class App : Application, IDisposable
 
         // Startup itself leaves a lot behind that the idle tray app never needs
         _memoryTrim.Schedule();
+    }
+
+    // =========================================================================
+    // CONNECTION AND PAIRING
+    // =========================================================================
+
+    // Loads the saved session; no session (or a dead one) opens the pairing window
+    private async Task StartConnectionAsync()
+    {
+        try
+        {
+            await _connection!.StartAsync();
+        }
+#pragma warning disable CA1031 // Start-up must not take the tray down; the failure is logged
+        catch (Exception ex)
+#pragma warning restore CA1031
+        {
+            AppLog.ConnectionStartFailed(_logger, ex);
+            return;
+        }
+
+        // NotPaired is the starting state, so StartAsync raises nothing for it
+        _connectionStarted = true;
+        OnConnectionStateChanged();
+    }
+
+    private bool NeedsPairing() => _connection?.State is ConnectionState.NotPaired or ConnectionState.SignedOut;
+
+    // NotPaired or SignedOut (also a later sign-out) opens the pairing window; pairing closes it itself on Done
+    private void OnConnectionStateChanged()
+    {
+        if (_quitting || _connection is null || !_connectionStarted)
+        {
+            return;
+        }
+
+        AppLog.ConnectionStateChanged(_logger, _connection.State);
+        if (NeedsPairing())
+        {
+            ShowPairingWindow();
+        }
+    }
+
+    // Made when needed and destroyed on close, then the memory it used goes back to Windows
+    private void ShowPairingWindow()
+    {
+        if (_quitting || _connection is null)
+        {
+            return;
+        }
+
+        if (_pairingWindow is not null)
+        {
+            _pairingWindow.Activate();
+            return;
+        }
+
+        var dispatcher = DispatcherQueue.GetForCurrentThread();
+        var viewModel  = new PairingViewModel(_connection, a => dispatcher.TryEnqueue(() => a()));
+        _pairingWindow = new PairingWindow(viewModel, GmEndpoints.Production, _logger);
+        _pairingWindow.ApplyTheme(_settings?.Theme ?? AppTheme.System);
+        _pairingWindow.Closed += (_, _) =>
+        {
+            _pairingWindow = null;
+            if (!_quitting)
+            {
+                _memoryTrim?.Schedule();
+            }
+        };
+        _pairingWindow.Activate();
     }
 
     private static Guid SelectTrayGuid()
@@ -155,8 +247,11 @@ public partial class App : Application, IDisposable
     }
 
     /// <summary>
-    /// Stops the watchers and timer, removes the tray icon and closes the menu and the log.
+    /// Stops the watchers and timer, removes the tray icon and closes the windows and the log.
     /// </summary>
+    /// <remarks>
+    /// The connection controller is disposed by Quit before this, since that needs an await.
+    /// </remarks>
     public void Dispose()
     {
         // A show request already queued must not open windows that are shutting down
@@ -168,11 +263,13 @@ public partial class App : Application, IDisposable
         _quitRequest?.Dispose();
         _trayIcon?.Dispose();
         _trayMenu?.Close();
+        _pairingWindow?.Close();
         _logProvider?.Dispose();
         GC.SuppressFinalize(this);
     }
 
-    private void Quit()
+    // Async void: called from event handlers; it always ends in Exit
+    private async void Quit()
     {
         if (_quitting)
         {
@@ -180,7 +277,44 @@ public partial class App : Application, IDisposable
         }
 
         AppLog.Quit(_logger);
-        Dispose();
-        Exit();
+        _quitting = true;
+        _pairingWindow?.Close();
+
+        // Let the client close its long poll and flush a save (while the log is still open), but never hang the quit on it
+        try
+        {
+            if (_connection is not null)
+            {
+                await _connection.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+            }
+        }
+#pragma warning disable CA1031 // Quitting regardless
+        catch (Exception)
+#pragma warning restore CA1031
+        {
+            // Nothing left to do but exit
+        }
+        finally
+        {
+            Dispose();
+            Exit();
+        }
+    }
+
+    // =========================================================================
+    // LOGGER FACTORY
+    // =========================================================================
+
+    // The controller wants a factory; the app has one file provider, so a full LoggerFactory isn't needed
+    private sealed class SingleProviderLoggerFactory(ILoggerProvider provider) : ILoggerFactory
+    {
+        public ILogger CreateLogger(string categoryName) => provider.CreateLogger(categoryName);
+
+        public void AddProvider(ILoggerProvider provider) => throw new NotSupportedException();
+
+        public void Dispose()
+        {
+            // The App owns and disposes the provider
+        }
     }
 }

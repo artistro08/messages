@@ -1,3 +1,4 @@
+using GMessages.Presentation.Connection;
 using Microsoft.Extensions.Logging;
 
 namespace GMessages.App;
@@ -21,4 +22,22 @@ internal static partial class AppLog
 
     [LoggerMessage(EventId = 905, Level = LogLevel.Information, Message = "Settings requested")]
     public static partial void SettingsRequested(ILogger logger);
+
+    [LoggerMessage(EventId = 906, Level = LogLevel.Error, Message = "Sign-in page could not start ({ErrorType})")]
+    public static partial void SignInStartFailed(ILogger logger, string errorType);
+
+    [LoggerMessage(EventId = 907, Level = LogLevel.Warning, Message = "Sign-in cookies could not be read ({ErrorType})")]
+    public static partial void CookieReadFailed(ILogger logger, string errorType);
+
+    [LoggerMessage(EventId = 908, Level = LogLevel.Information, Message = "Sign-in cookies captured: {Names}")]
+    public static partial void CookiesCaptured(ILogger logger, IEnumerable<string> names);
+
+    [LoggerMessage(EventId = 909, Level = LogLevel.Warning, Message = "Sign-in profile folder could not be deleted; it holds a live Google session: {Folder}")]
+    public static partial void ProfileNotDeleted(ILogger logger, string folder);
+
+    [LoggerMessage(EventId = 910, Level = LogLevel.Error, Message = "Connection start failed")]
+    public static partial void ConnectionStartFailed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 911, Level = LogLevel.Information, Message = "Connection state: {State}")]
+    public static partial void ConnectionStateChanged(ILogger logger, ConnectionState state);
 }
