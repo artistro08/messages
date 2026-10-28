@@ -1,0 +1,19 @@
+# Superpowers Plans and Scratch
+docs/superpowers/
+.superpowers/
+
+# Build Output
+bin/
+obj/
+AppPackages/
+BundleArtifacts/
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+
+# Golden Vector Upstream Checkout
+tools/golden/.upstream/
