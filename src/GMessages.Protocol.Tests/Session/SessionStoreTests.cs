@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text;
 using GMessages.Protocol.Session;
 
@@ -114,5 +115,86 @@ public class SessionStoreTests
         store.Save(second);
 
         Assert.AreEqual(second.SessionId, store.Load()!.SessionId);
+    }
+
+    private void WriteProtected(string text) =>
+        File.WriteAllBytes(FilePath, ProtectedData.Protect(Encoding.UTF8.GetBytes(text), null, DataProtectionScope.CurrentUser));
+
+    /// <summary>Valid DPAPI data holding bad JSON gives null.</summary>
+    [TestMethod]
+    public void Load_DpapiWithBadJson_ReturnsNull()
+    {
+        WriteProtected("{not json");
+
+        Assert.IsNull(new SessionStore(FilePath).Load());
+    }
+
+    /// <summary>Valid JSON without the key fields gives null.</summary>
+    [TestMethod]
+    public void Load_DpapiJsonMissingKeys_ReturnsNull()
+    {
+        WriteProtected("{\"version\":1}");
+
+        Assert.IsNull(new SessionStore(FilePath).Load());
+    }
+
+    /// <summary>Keys that are not 32 bytes give null.</summary>
+    [TestMethod]
+    public void Load_WrongKeyLength_ReturnsNull()
+    {
+        string b = Convert.ToBase64String(new byte[16]);
+        WriteProtected($"{{\"aesKey\":\"{b}\",\"hmacKey\":\"{b}\",\"refreshD\":\"{b}\",\"refreshX\":\"{b}\",\"refreshY\":\"{b}\"}}");
+
+        Assert.IsNull(new SessionStore(FilePath).Load());
+    }
+
+    /// <summary>A zero-byte file gives null.</summary>
+    [TestMethod]
+    public void Load_ZeroByteFile_ReturnsNull()
+    {
+        File.WriteAllBytes(FilePath, []);
+
+        Assert.IsNull(new SessionStore(FilePath).Load());
+    }
+
+    /// <summary>An empty cookie map stays empty (not "no cookies").</summary>
+    [TestMethod]
+    public void SaveThenLoad_EmptyCookieMap_StaysEmpty()
+    {
+        AuthData a = AuthData.CreateNew();
+        a.Cookies.Set(new Dictionary<string, string>());
+        SessionStore store = new(FilePath);
+
+        store.Save(a);
+        AuthData? b = store.Load();
+
+        Assert.IsTrue(b!.Cookies.HasCookies);
+        Assert.AreEqual(0, b.Cookies.Snapshot().Count);
+    }
+
+    /// <summary>The largest DestPhoneId survives a round trip.</summary>
+    [TestMethod]
+    public void SaveThenLoad_MaxDestPhoneId_Survives()
+    {
+        AuthData a = AuthData.CreateNew();
+        a.DestPhoneId = ulong.MaxValue;
+        SessionStore store = new(FilePath);
+
+        store.Save(a);
+
+        Assert.AreEqual(ulong.MaxValue, store.Load()!.DestPhoneId);
+    }
+
+    /// <summary>A leftover .tmp from a crash does not break Save.</summary>
+    [TestMethod]
+    public void Save_LeftoverTmp_StillSaves()
+    {
+        File.WriteAllText(FilePath + ".tmp", "junk");
+        SessionStore store = new(FilePath);
+
+        store.Save(AuthDataGoldenTests.BuildGolden());
+
+        Assert.IsNotNull(store.Load());
+        Assert.IsFalse(File.Exists(FilePath + ".tmp"));
     }
 }

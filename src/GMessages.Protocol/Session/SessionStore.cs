@@ -66,7 +66,13 @@ public sealed partial class SessionStore(string filePath, ILogger? logger = null
         }
 
         string tmp = filePath + ".tmp";
-        File.WriteAllBytes(tmp, encrypted);
+        // ponytail: single writer assumed; GmClient serializes saves
+        using (FileStream fs = new(tmp, FileMode.Create, FileAccess.Write, FileShare.None))
+        {
+            fs.Write(encrypted);
+            fs.Flush(true);
+        }
+
         File.Move(tmp, filePath, overwrite: true);
     }
 
@@ -94,6 +100,11 @@ public sealed partial class SessionStore(string filePath, ILogger? logger = null
             if (f.AesKey is null || f.HmacKey is null || f.RefreshD is null || f.RefreshX is null || f.RefreshY is null)
             {
                 throw new InvalidDataException("Missing keys.");
+            }
+
+            if (f.AesKey.Length != 32 || f.HmacKey.Length != 32)
+            {
+                throw new InvalidDataException("Bad key length.");
             }
 
             AuthData data = new()
