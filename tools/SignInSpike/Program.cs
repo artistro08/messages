@@ -14,7 +14,7 @@ namespace SignInSpike;
 /// </remarks>
 internal static class Program
 {
-    private const string ChromeUa = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36";
+    private const string ChromeUa = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36";
 
     private static readonly string[] WantedNames =
         ["SID", "HSID", "SSID", "OSID", "APISID", "SAPISID", "__Secure-1PSIDTS"];
@@ -39,6 +39,10 @@ internal static class Program
         string cookie_file  = Path.Combine(root_dir, "spike-cookies.bin");
         Directory.CreateDirectory(root_dir);
 
+        // Clear Stale State
+        File.Delete(cookie_file);
+        if (Directory.Exists(profile_dir)) { Directory.Delete(profile_dir, true); }
+
         // Run Form
         ApplicationConfiguration.Initialize();
         Application.Run(new SpikeForm(profile_dir, cookie_file, use_chrome_ua, no_dbsc));
@@ -49,6 +53,18 @@ internal static class Program
             try { Directory.Delete(profile_dir, true); }
             catch (IOException) { Thread.Sleep(500); }
             catch (UnauthorizedAccessException) { Thread.Sleep(500); }
+        }
+
+        if (Directory.Exists(profile_dir))
+        {
+            Console.WriteLine($"WARNING: could not delete profile folder, it holds a live Google session: {profile_dir}");
+        }
+
+        // Report Result
+        if (!File.Exists(cookie_file))
+        {
+            Console.WriteLine("No cookies captured");
+            Environment.Exit(1);
         }
     }
 
@@ -119,30 +135,39 @@ internal static class Program
             // Guard
             if (done) { return; }
 
-            // Collect Cookies
-            var jar = new Dictionary<string, string>();
-            foreach (string url in new[] { "https://messages.google.com", "https://google.com" })
+            try
             {
-                var cookies = await web_view.CoreWebView2.CookieManager.GetCookiesAsync(url);
-                foreach (var cookie in cookies)
+                // Collect Cookies
+                var jar = new Dictionary<string, string>();
+                foreach (string url in new[] { "https://messages.google.com", "https://google.com" })
                 {
-                    if (WantedNames.Contains(cookie.Name)) { jar.TryAdd(cookie.Name, cookie.Value); }
+                    var cookies = await web_view.CoreWebView2.CookieManager.GetCookiesAsync(url);
+                    foreach (var cookie in cookies)
+                    {
+                        if (WantedNames.Contains(cookie.Name)) { jar.TryAdd(cookie.Name, cookie.Value); }
+                    }
                 }
+
+                // Re-check After Awaits (another navigation may have finished first)
+                if (done || !jar.ContainsKey("SAPISID")) { return; }
+                done = true;
+
+                // Save Cookies (DPAPI, current user)
+                byte[] json = JsonSerializer.SerializeToUtf8Bytes(jar);
+                File.WriteAllBytes(cookie_file, ProtectedData.Protect(json, null, DataProtectionScope.CurrentUser));
+
+                // Print Names Only
+                Console.WriteLine("Cookies saved: " + string.Join(" ", jar.Keys));
+
+                // Dispose And Exit
+                web_view.Dispose();
+                Close();
             }
-
-            if (!jar.ContainsKey("SAPISID")) { return; }
-            done = true;
-
-            // Save Cookies (DPAPI, current user)
-            byte[] json = JsonSerializer.SerializeToUtf8Bytes(jar);
-            File.WriteAllBytes(cookie_file, ProtectedData.Protect(json, null, DataProtectionScope.CurrentUser));
-
-            // Print Names Only
-            Console.WriteLine("Cookies saved: " + string.Join(" ", jar.Keys));
-
-            // Dispose And Exit
-            web_view.Dispose();
-            Close();
+            catch (Exception ex)
+            {
+                // A late failure after a successful save must not crash the process
+                if (!done) { Console.WriteLine($"Cookie check failed: {ex.GetType().Name}"); }
+            }
         }
     }
 }
