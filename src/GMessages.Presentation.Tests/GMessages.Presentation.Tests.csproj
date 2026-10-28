@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <!-- Test Names Use Underscores -->
+    <NoWarn>$(NoWarn);CA1707</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\GMessages.Presentation\GMessages.Presentation.csproj" />
+    <ProjectReference Include="..\GMessages.Protocol\GMessages.Protocol.csproj" />
+  </ItemGroup>
+
+  <!-- Shared Fakes: linked from the Protocol tests for later tasks -->
+  <ItemGroup>
+    <Compile Include="..\GMessages.Protocol.Tests\Fakes\*.cs" Link="Fakes\%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.11.0" />
+    <PackageReference Include="MSTest" Version="3.11.1" />
+  </ItemGroup>
+</Project>
