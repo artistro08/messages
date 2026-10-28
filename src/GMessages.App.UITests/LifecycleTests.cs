@@ -26,9 +26,24 @@ public sealed class LifecycleTests : UiTest
         // Second Copy Hands Over And Exits
         using (Process second = AppDriver.StartExe(App.TestArguments))
         {
-            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-            await second.WaitForExitAsync(timeout.Token);
-            Assert.AreEqual(0, second.ExitCode, "The second launch did not exit cleanly.");
+            // A Broken Hand-Off Must Not Leave A Second Copy Running Into Later Tests
+            try
+            {
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                await second.WaitForExitAsync(timeout.Token);
+                Assert.AreEqual(0, second.ExitCode, "The second launch did not exit cleanly.");
+            }
+            catch (OperationCanceledException)
+            {
+                Assert.Fail("The second launch was still running 10 s later; it should hand off and exit.");
+            }
+            finally
+            {
+                if (!second.HasExited)
+                {
+                    second.Kill(entireProcessTree: true);
+                }
+            }
         }
 
         // The First Copy Shows Its Main Window; Still One Process

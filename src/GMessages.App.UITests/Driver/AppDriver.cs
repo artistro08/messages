@@ -30,13 +30,13 @@ public sealed class AppDriver : IAsyncDisposable
     private static readonly TimeSpan QuitTimeout  = TimeSpan.FromSeconds(10);
 
     private readonly FakeGoogleServer _server;
-    private Process _process;
+    private readonly DateTime _startedUtc = DateTime.UtcNow;
+    private Process _process = null!;
 
     private AppDriver(FakeGoogleServer server, string dataDir)
     {
-        _server  = server;
-        DataDir  = dataDir;
-        _process = Launch();
+        _server = server;
+        DataDir = dataDir;
     }
 
     /// <summary>
@@ -78,7 +78,20 @@ public sealed class AppDriver : IAsyncDisposable
 
         string data_dir = Path.Combine(Path.GetTempPath(), "Messages-uitest-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(data_dir);
-        return new AppDriver(server, data_dir);
+
+        // A Refused Start Leaves Nothing Behind: No UIA Client, No Temp Folder
+        var driver = new AppDriver(server, data_dir);
+        try
+        {
+            driver._process = driver.Launch();
+            return driver;
+        }
+        catch (Exception)
+        {
+            driver.Automation.Dispose();
+            Directory.Delete(data_dir, recursive: true);
+            throw;
+        }
     }
 
     // =========================================================================
@@ -234,9 +247,24 @@ public sealed class AppDriver : IAsyncDisposable
             return;
         }
 
+        // The --quit Helper Must Never Outlive The Call; A Refused Flag Exits 2 With Its Reason In The Error File
         using (Process quit = StartExe(["--quit", .. TestArguments]))
         {
-            await quit.WaitForExitAsync().WaitAsync(QuitTimeout);
+            try
+            {
+                await quit.WaitForExitAsync().WaitAsync(QuitTimeout);
+                if (quit.ExitCode == 2)
+                {
+                    Assert.Fail($"Messages.exe --quit refused its flags: {TestHookError()}");
+                }
+            }
+            finally
+            {
+                if (!quit.HasExited)
+                {
+                    quit.Kill(entireProcessTree: true);
+                }
+            }
         }
 
         using var timeout = new CancellationTokenSource(QuitTimeout);
@@ -350,6 +378,7 @@ public sealed class AppDriver : IAsyncDisposable
 
         _process.Dispose();
         Automation.Dispose();
+        await DeleteLeftoverSignInProfilesAsync();
 
         // Temp Data Folder: The Log File May Still Be Closing, So Retry Briefly
         for (int attempt = 0; attempt < 20 && Directory.Exists(DataDir); attempt++)
@@ -373,16 +402,54 @@ public sealed class AppDriver : IAsyncDisposable
     private Process Launch()
     {
         Process process = StartExe(TestArguments);
+
+        // Refused Flags Exit Before Any UI, Well Within 500 ms; Catching That Here Fails With The Reason Instead Of A
+        // 20 s "No Window" Timeout. A Healthy Start Keeps Running, So This Only Adds Half A Second Per Launch
         if (process.WaitForExit(TimeSpan.FromMilliseconds(500)))
         {
-            string error_file = Path.Combine(Path.GetTempPath(), $"{AppInfo.DisplayName}-testhooks-error.txt");
-            string reason     = File.Exists(error_file) ? File.ReadAllText(error_file) : "(no error file)";
-            int code          = process.ExitCode;
+            int code = process.ExitCode;
             process.Dispose();
-            Assert.Fail($"Messages.exe exited at once with code {code}: {reason}");
+            Assert.Fail($"Messages.exe exited at once with code {code}: {TestHookError()}");
         }
 
         return process;
+    }
+
+    // The Reason The App Wrote When It Refused Its Test Flags
+    private static string TestHookError()
+    {
+        string error_file = Path.Combine(Path.GetTempPath(), $"{AppInfo.DisplayName}-testhooks-error.txt");
+        return File.Exists(error_file) ? File.ReadAllText(error_file) : "(no error file)";
+    }
+
+    // Sign-In Profiles Made During This Test That The App Couldn't Delete (A Quit Mid-Sign-In, A Kill); Older Ones
+    // Aren't Ours. The WebView2 Browser Processes Outlive The App Briefly, So Locked Folders Are Retried For Up To 5 s
+    private async Task DeleteLeftoverSignInProfilesAsync()
+    {
+        string pattern = $"{AppInfo.DisplayName}.Test-signin-*";
+        DateTime until = DateTime.UtcNow.AddSeconds(5);
+        while (true)
+        {
+            string[] ours = [.. Directory.EnumerateDirectories(Path.GetTempPath(), pattern).Where(f => Directory.GetCreationTimeUtc(f) >= _startedUtc)];
+            foreach (string folder in ours)
+            {
+                try
+                {
+                    Directory.Delete(folder, recursive: true);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    // Still Locked; Retried Below
+                }
+            }
+
+            if (ours.All(f => !Directory.Exists(f)) || DateTime.UtcNow >= until)
+            {
+                return;
+            }
+
+            await Task.Delay(PollInterval);
+        }
     }
 
     // Top-Level Windows Of The App Process, Including Its Popup Windows (Menus)

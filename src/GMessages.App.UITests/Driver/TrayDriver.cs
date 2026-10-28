@@ -89,12 +89,19 @@ public sealed class TrayDriver
     /// </summary>
     public void CloseOverflow()
     {
+        if (FindTopLevel(OverflowClass) is null || Chevron()?.Patterns.Invoke.PatternOrDefault is not { } toggle)
+        {
+            return;
+        }
+
+        // The Chevron Toggles: Check Again Right Before Pressing, So A Just-Closed Overflow Isn't Reopened
         if (FindTopLevel(OverflowClass) is null)
         {
             return;
         }
 
-        Chevron()?.Patterns.Invoke.PatternOrDefault?.Invoke();
+        toggle.Invoke();
+        Wait.Until(() => FindTopLevel(OverflowClass) is null, TimeSpan.FromSeconds(5), () => $"The overflow ({OverflowClass}) did not close.");
     }
 
     // =========================================================================
@@ -129,6 +136,13 @@ public sealed class TrayDriver
             if (matches.Length > 1)
             {
                 Assert.Fail($"{matches.Length} tray icons are named '{AppInfo.DisplayName}'. Quit any other copy of the app before running the UI tests.");
+            }
+
+            // A Just-Opened Overflow Lays Out After Its Buttons Exist; Until Then The Icon Has An Empty Rectangle To Click
+            if (matches.Length == 1 && matches[0].BoundingRectangle.IsEmpty)
+            {
+                seen = string.Join(", ", names);
+                return null;
             }
 
             if (matches.Length == 1)

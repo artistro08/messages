@@ -19,9 +19,16 @@ public static partial class DpiSetup
     /// </summary>
     /// <param name="context">The MSTest context (unused).</param>
     [AssemblyInitialize]
-    public static void MakeDpiAware(TestContext context) => SetProcessDpiAwarenessContext(PerMonitorAwareV2);
+    /// <exception cref="AssertFailedException">Windows refused, so captures and clicks could miss.</exception>
+    public static void MakeDpiAware(TestContext context)
+    {
+        if (!SetProcessDpiAwarenessContext(PerMonitorAwareV2))
+        {
+            Assert.Fail($"Could not make the test host per-monitor DPI aware (Win32 error {Marshal.GetLastPInvokeError()}); screen captures and clicks would miss their elements.");
+        }
+    }
 
-    [LibraryImport("user32.dll")]
+    [LibraryImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool SetProcessDpiAwarenessContext(IntPtr value);
 }

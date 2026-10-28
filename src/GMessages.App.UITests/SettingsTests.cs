@@ -2,6 +2,8 @@ using System.Drawing;
 using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Capturing;
 using FlaUI.Core.Definitions;
+using Keyboard = FlaUI.Core.Input.Keyboard;
+using FlaUI.Core.WindowsAPI;
 using GMessages.App.UITests.Driver;
 
 namespace GMessages.App.UITests;
@@ -135,8 +137,9 @@ public sealed class SettingsTests : UiTest
             return Math.Abs(current - last) < 1;
         }, TimeSpan.FromSeconds(5), () => "The tray menu never stopped changing.");
 
-        // Settings Is Already Open, So This Only Closes The Menu
-        App.Find("TrayMenu.Settings").Patterns.Invoke.Pattern.Invoke();
+        // Escape Closes The Menu (Its Host Window Has The Foreground)
+        Keyboard.Type(VirtualKeyShort.ESCAPE);
+        Wait.Until(() => App.TryFind("TrayMenu.Open") is null, AppDriver.DefaultTimeout, () => "Escape did not close the tray menu.");
         Tray.CloseOverflow();
         TestContext.WriteLine($"Tray menu brightness: {current:0}");
         return current;
