@@ -6,8 +6,11 @@ package libgm
 
 import (
 	"bytes"
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/ecdsa"
 	"crypto/elliptic"
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/x509"
@@ -219,6 +222,26 @@ func exportCrypto(t *testing.T, out string) {
 			t.Fatalf("encrypt %d: %v", n, err)
 		}
 		aesCases = append(aesCases, map[string]any{"plaintextHex": hex.EncodeToString(plain), "encryptedHex": hex.EncodeToString(enc)})
+	}
+
+	// Counter Carry (stdlib CTR with IVs that overflow into higher bytes; layout ct || iv || hmac)
+	block, err := aes.NewCipher(helper.AESKey)
+	if err != nil {
+		t.Fatalf("carry cipher: %v", err)
+	}
+	for _, iv := range [][]byte{bytes.Repeat([]byte{0xff}, 16), append(make([]byte, 8), bytes.Repeat([]byte{0xff}, 8)...)} {
+		plain := goldenSeq(0x10, 50)
+		ct := make([]byte, len(plain))
+		cipher.NewCTR(block, iv).XORKeyStream(ct, plain)
+		ct = append(ct, iv...)
+		mac := hmac.New(sha256.New, helper.HMACKey)
+		mac.Write(ct)
+		ct = append(ct, mac.Sum(nil)...)
+		got, err := helper.Decrypt(append([]byte(nil), ct...))
+		if err != nil || !bytes.Equal(got, plain) {
+			t.Fatalf("carry decrypt mismatch: %v", err)
+		}
+		aesCases = append(aesCases, map[string]any{"plaintextHex": hex.EncodeToString(plain), "encryptedHex": hex.EncodeToString(ct)})
 	}
 
 	// Byte Hash

@@ -34,7 +34,8 @@ public class CryptoGoldenTests
             count++;
         }
 
-        Assert.AreEqual(6, count);
+        // 6 Go-encrypted cases plus 2 stdlib-CTR counter-carry cases
+        Assert.AreEqual(8, count);
     }
 
     /// <summary>
@@ -151,5 +152,35 @@ public class CryptoGoldenTests
         using ECDsa goPublic = ECDsa.Create();
         goPublic.ImportSubjectPublicKeyInfo(Golden.Hex(jwk.GetProperty("spkiHex")), out _);
         Assert.IsTrue(goPublic.VerifyData(signed, key.SignSha256Der(signed), HashAlgorithmName.SHA256, DSASignatureFormat.Rfc3279DerSequence));
+    }
+
+    /// <summary>
+    /// Short JWK parts are left-padded to 32 bytes.
+    /// </summary>
+    /// <remarks>
+    /// C#-only behavior (Go pads the same way); hand-written expectation.
+    /// </remarks>
+    [TestMethod]
+    public void FromJwk_ShortParts_AreLeftPaddedTo32()
+    {
+        byte[] full = Enumerable.Range(1, 32).Select(i => (byte)i).ToArray();
+        byte[] shortPart = full[1..];
+
+        var key = RefreshKey.FromJwk(shortPart, shortPart, shortPart);
+
+        byte[] expected = [0, .. shortPart];
+        CollectionAssert.AreEqual(expected, key.D);
+        CollectionAssert.AreEqual(expected, key.X);
+        CollectionAssert.AreEqual(expected, key.Y);
+    }
+
+    /// <summary>
+    /// A part longer than 32 bytes is rejected.
+    /// </summary>
+    [TestMethod]
+    public void FromJwk_33BytePart_Throws()
+    {
+        byte[] ok = new byte[32];
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => RefreshKey.FromJwk(new byte[33], ok, ok));
     }
 }
