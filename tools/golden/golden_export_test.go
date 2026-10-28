@@ -9,6 +9,7 @@ import (
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/ecdh"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/hmac"
@@ -171,6 +172,7 @@ func TestExportGolden(t *testing.T) {
 	exportRefresh(t, out)
 	exportLongPollRequest(t, out)
 	exportSignIn(t, out)
+	exportPairing(t, out)
 }
 
 // checkGoldenHelpers sanity-checks the client and capture transport; writes no file.
@@ -1358,5 +1360,242 @@ func exportSignIn(t *testing.T, out string) {
 			"sessionId": c2.AuthData.SessionID.String(),
 			"version":  map[string]any{"year": parsed.Year, "month": parsed.Month, "day": parsed.Day, "v1": parsed.V1, "v2": parsed.V2},
 		},
+	})
+}
+
+// exportPairing writes pairing.json: both emoji lists, the UKEY2 payloads of a fixed-key PairingSession, four
+// server init cases (verification version × key derivation version) with Go's emoji, next key and request keys,
+// the ProcessServerInit errors, the requests sendGaiaPairingMessage, cancelGaiaPairing and UnpairGaia send, and
+// how FinishGaiaPairing maps every GaiaPairingErrorCode.
+//
+// The request keys come from running the real FinishGaiaPairing (pair_google.go:455-511) against a canned finish
+// response delivered through receiveResponse, so the derivation block runs as upstream wrote it instead of a copy.
+func exportPairing(t *testing.T, out string) {
+	marshal := func(m proto.Message) []byte {
+		b, err := proto.Marshal(m)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		return b
+	}
+	pbliteString := func(m proto.Message) string {
+		b, err := pblite.Marshal(m)
+		if err != nil {
+			t.Fatalf("pblite marshal: %v", err)
+		}
+		return string(b)
+	}
+
+	// Fixed Session (Client Scalar 0x41..0x60)
+	sessionUUID := uuid.MustParse("5e551011-2233-4455-6677-8899aabbccdd")
+	sessionStart := time.UnixMilli(1700000000123)
+	destDevice := primaryDeviceID{RegID: "aaaaaaaa-1111-2222-3333-444444444444", UnknownInt: 777, UnknownTS: 5551}
+	newSession := func() *PairingSession {
+		priv, err := ecdh.P256().NewPrivateKey(goldenSeq(0x41, 32))
+		if err != nil {
+			t.Fatalf("client key: %v", err)
+		}
+		return &PairingSession{UUID: sessionUUID, Start: sessionStart, PairingKeyDSA: priv, DestRegDevice: destDevice}
+	}
+	ps := newSession()
+	initPayload, finishPayload, err := ps.PreparePayloads()
+	if err != nil {
+		t.Fatalf("PreparePayloads: %v", err)
+	}
+	var initMsg gmproto.Ukey2Message
+	var clientInit gmproto.Ukey2ClientInit
+	if err = proto.Unmarshal(initPayload, &initMsg); err != nil {
+		t.Fatalf("unmarshal init: %v", err)
+	}
+	if err = proto.Unmarshal(initMsg.MessageData, &clientInit); err != nil {
+		t.Fatalf("unmarshal client init: %v", err)
+	}
+
+	// Server Init Builder: Fixed Scalar And Random, X/Y With A Leading 0x00 Like Go's Client
+	serverInit := func(scalar, random []byte, verification, derivation int32, tweak func(*gmproto.Ukey2Message, *gmproto.Ukey2ServerInit)) *gmproto.GaiaPairingResponseContainer {
+		priv, kErr := ecdh.P256().NewPrivateKey(scalar)
+		if kErr != nil {
+			t.Fatalf("server key: %v", kErr)
+		}
+		pub := priv.PublicKey().Bytes()
+		si := &gmproto.Ukey2ServerInit{
+			Version:         1,
+			Random:          random,
+			HandshakeCipher: gmproto.Ukey2HandshakeCipher_P256_SHA512,
+			PublicKey: &gmproto.GenericPublicKey{
+				Type: gmproto.PublicKeyType_EC_P256,
+				PublicKey: &gmproto.GenericPublicKey_EcP256PublicKey{EcP256PublicKey: &gmproto.EcP256PublicKey{
+					X: append([]byte{0}, pub[1:33]...),
+					Y: append([]byte{0}, pub[33:]...),
+				}},
+			},
+		}
+		msg := &gmproto.Ukey2Message{MessageType: gmproto.Ukey2Message_SERVER_INIT}
+		if tweak != nil {
+			tweak(msg, si)
+		}
+		msg.MessageData = marshal(si)
+		return &gmproto.GaiaPairingResponseContainer{
+			UnknownInt3:                      1,
+			SessionUUID:                      sessionUUID.String(),
+			Data:                             marshal(msg),
+			ConfirmedVerificationCodeVersion: verification,
+			ConfirmedKeyDerivationVersion:    derivation,
+		}
+	}
+
+	// Client Whose Send Requests Get A Canned Response Through receiveResponse
+	respondingClient := func(response *gmproto.GaiaPairingResponseContainer) (*Client, *captureTransport) {
+		c, ct := newGoldenClient(t)
+		ct.Respond = func(*http.Request) *http.Response {
+			last := ct.Requests[len(ct.Requests)-1]
+			body, _ := hex.DecodeString(last.BodyHex)
+			var outgoing gmproto.OutgoingRPCMessage
+			if uErr := pblite.Unmarshal(body, &outgoing); uErr == nil && response != nil {
+				var data gmproto.OutgoingRPCData
+				if uErr = proto.Unmarshal(outgoing.GetData().GetMessageData(), &data); uErr == nil {
+					c.sessionHandler.receiveResponse(&IncomingRPCMessage{
+						IncomingRPCMessage: &gmproto.IncomingRPCMessage{ResponseID: "golden-resp"},
+						Message: &gmproto.RPCMessageData{
+							SessionID:       outgoing.GetData().GetRequestID(),
+							Action:          data.Action,
+							UnencryptedData: marshal(response),
+						},
+					})
+				}
+			}
+			return httpResponse(200, "application/json+protobuf", []byte("[]"), nil)
+		}
+		return c, ct
+	}
+
+	// Server Init Cases: Emoji, Next Key And Request Keys
+	var cases []map[string]any
+	for i, v := range []struct{ verification, derivation int32 }{{0, 0}, {0, 1}, {1, 0}, {1, 1}} {
+		scalar := goldenSeq(0x10+i*0x20, 32)
+		random := goldenSeq(0x80+i*0x10, 32)
+		container := serverInit(scalar, random, v.verification, v.derivation, nil)
+		cps := newSession()
+		cps.InitPayload = initPayload
+		emoji, pErr := cps.ProcessServerInit(container)
+		if pErr != nil {
+			t.Fatalf("ProcessServerInit case %d: %v", i, pErr)
+		}
+		c, _ := respondingClient(&gmproto.GaiaPairingResponseContainer{})
+		phoneID, fErr := c.FinishGaiaPairing(context.Background(), cps)
+		if fErr != nil {
+			t.Fatalf("FinishGaiaPairing case %d: %v", i, fErr)
+		}
+		cases = append(cases, map[string]any{
+			"verificationVersion":  v.verification,
+			"keyDerivationVersion": v.derivation,
+			"serverScalarHex":      hex.EncodeToString(scalar),
+			"serverRandomHex":      hex.EncodeToString(random),
+			"containerHex":         hex.EncodeToString(marshal(container)),
+			"containerPblite":      pbliteString(container),
+			"emoji":                emoji,
+			"nextKeyHex":           hex.EncodeToString(cps.NextKey),
+			"aesKeyHex":            hex.EncodeToString(c.AuthData.RequestCrypto.AESKey),
+			"hmacKeyHex":           hex.EncodeToString(c.AuthData.RequestCrypto.HMACKey),
+			"pairingId":            c.AuthData.PairingID.String(),
+			"destPhoneId":          c.AuthData.DestPhoneID,
+			"phoneId":              phoneID,
+		})
+	}
+
+	// ProcessServerInit Errors
+	validScalar, validRandom := goldenSeq(0x10, 32), goldenSeq(0x80, 32)
+	errorCases := map[string]*gmproto.GaiaPairingResponseContainer{
+		"wrongMessageType": serverInit(validScalar, validRandom, 0, 0, func(m *gmproto.Ukey2Message, _ *gmproto.Ukey2ServerInit) {
+			m.MessageType = gmproto.Ukey2Message_CLIENT_INIT
+		}),
+		"version2": serverInit(validScalar, validRandom, 0, 0, func(_ *gmproto.Ukey2Message, si *gmproto.Ukey2ServerInit) { si.Version = 2 }),
+		"wrongCipher": serverInit(validScalar, validRandom, 0, 0, func(_ *gmproto.Ukey2Message, si *gmproto.Ukey2ServerInit) {
+			si.HandshakeCipher = gmproto.Ukey2HandshakeCipher_CURVE25519_SHA512
+		}),
+		"random31": serverInit(validScalar, goldenSeq(0x80, 31), 0, 0, nil),
+		"xPrefix": serverInit(validScalar, validRandom, 0, 0, func(_ *gmproto.Ukey2Message, si *gmproto.Ukey2ServerInit) {
+			si.PublicKey.GetEcP256PublicKey().X[0] = 1
+		}),
+		"verificationVersion2": serverInit(validScalar, validRandom, 2, 0, nil),
+	}
+	serverInitErrors := map[string]any{}
+	for name, container := range errorCases {
+		eps := newSession()
+		eps.InitPayload = initPayload
+		_, pErr := eps.ProcessServerInit(container)
+		if pErr == nil {
+			t.Fatalf("ProcessServerInit %s: expected an error", name)
+		}
+		serverInitErrors[name] = map[string]any{"containerHex": hex.EncodeToString(marshal(container)), "error": pErr.Error()}
+	}
+
+	// Requests: Client Init, Client Finished, Cancel, Unpair
+	requests := map[string]any{}
+	c, ct := respondingClient(errorCases["version2"])
+	if _, err = c.sendGaiaPairingMessage(context.Background(), ps, gmproto.ActionType_CREATE_GAIA_PAIRING_CLIENT_INIT, initPayload); err != nil {
+		t.Fatalf("sendGaiaPairingMessage init: %v", err)
+	}
+	if _, err = c.sendGaiaPairingMessage(context.Background(), ps, gmproto.ActionType_CREATE_GAIA_PAIRING_CLIENT_FINISHED, finishPayload); err != nil {
+		t.Fatalf("sendGaiaPairingMessage finish: %v", err)
+	}
+	if err = c.cancelGaiaPairing(context.Background(), ps); err != nil {
+		t.Fatalf("cancelGaiaPairing: %v", err)
+	}
+	c.AuthData.PairingID = uuid.MustParse("01020304-0506-0708-090a-0b0c0d0e0f10")
+	if err = c.UnpairGaia(context.Background()); err != nil {
+		t.Fatalf("UnpairGaia: %v", err)
+	}
+	for i, name := range []string{"clientInit", "clientFinished", "cancel", "unpair"} {
+		requests[name] = map[string]any{"url": ct.Requests[i].URL, "bodyText": ct.Requests[i].BodyText}
+	}
+
+	// Finish Error Codes: Every Code With FinishErrorType 1
+	var finishErrors []map[string]any
+	for code := int32(0); code < int32(len(gmproto.GaiaPairingErrorCode_name)); code++ {
+		fps := newSession()
+		fps.InitPayload = initPayload
+		fc, _ := respondingClient(&gmproto.GaiaPairingResponseContainer{FinishErrorType: 1, FinishErrorCode: gmproto.GaiaPairingErrorCode(code)})
+		_, fErr := fc.FinishGaiaPairing(context.Background(), fps)
+		if fErr == nil {
+			t.Fatalf("FinishGaiaPairing code %d: expected an error", code)
+		}
+		name := "Unknown"
+		switch {
+		case errors.Is(fErr, ErrIncorrectEmoji):
+			name = "IncorrectEmoji"
+		case errors.Is(fErr, ErrPairingCancelled) && strings.Contains(fErr.Error(), "not me"):
+			name = "NotMe"
+		case errors.Is(fErr, ErrPairingCancelled):
+			name = "Canceled"
+		case errors.Is(fErr, ErrPairingTimeout):
+			name = "Timeout"
+		}
+		finishErrors = append(finishErrors, map[string]any{
+			"code":     code,
+			"codeName": gmproto.GaiaPairingErrorCode(code).String(),
+			"failure":  name,
+			"error":    fErr.Error(),
+		})
+	}
+
+	writeGolden(t, out, "pairing", map[string]any{
+		"emojisV0": pairingEmojisV0,
+		"emojisV1": pairingEmojisV1,
+		"session": map[string]any{
+			"uuid":             sessionUUID.String(),
+			"startUnixMilli":   sessionStart.UnixMilli(),
+			"clientScalarHex":  hex.EncodeToString(goldenSeq(0x41, 32)),
+			"initPayloadHex":   hex.EncodeToString(initPayload),
+			"initRandomHex":    hex.EncodeToString(clientInit.Random),
+			"finishPayloadHex": hex.EncodeToString(finishPayload),
+			"destRegId":        destDevice.RegID,
+			"destUnknownInt":   destDevice.UnknownInt,
+			"destUnknownTs":    destDevice.UnknownTS,
+		},
+		"serverInit":       cases,
+		"serverInitErrors": serverInitErrors,
+		"requests":         requests,
+		"finishErrors":     finishErrors,
 	})
 }
