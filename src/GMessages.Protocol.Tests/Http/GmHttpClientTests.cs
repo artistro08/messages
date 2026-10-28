@@ -27,18 +27,6 @@ public class GmHttpClientTests
 {
     private static readonly Dictionary<string, string> GoCookies = new() { ["SAPISID"] = "fake-sapisid", ["SID"] = "fake-sid" };
 
-    // Fake clock that signals whenever a timer (a retry wait) is created, so tests advance only once the wait exists.
-    private sealed class SignalingTimeProvider : FakeTimeProvider
-    {
-        public SemaphoreSlim TimerCreated { get; } = new(0);
-
-        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
-        {
-            ITimer timer = base.CreateTimer(callback, state, dueTime, period);
-            TimerCreated.Release();
-            return timer;
-        }
-    }
 
     // Response that remembers whether it was disposed.
     private sealed class TrackingResponse(HttpStatusCode status) : HttpResponseMessage(status)

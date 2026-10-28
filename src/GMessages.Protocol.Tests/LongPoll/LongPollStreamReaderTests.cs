@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using GMessages.Protocol.LongPoll;
 using GMessages.Protocol.Proto;
+using GMessages.Protocol.Tests.Fakes;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
 
@@ -46,18 +47,6 @@ public class LongPollStreamReaderTests
         }
     }
 
-    // Fake clock that signals when a timer is created, so tests advance only once the wait exists
-    private sealed class SignalingTimeProvider : FakeTimeProvider
-    {
-        public SemaphoreSlim TimerCreated { get; } = new(0);
-
-        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
-        {
-            ITimer timer = base.CreateTimer(callback, state, dueTime, period);
-            TimerCreated.Release();
-            return timer;
-        }
-    }
 
     private sealed class CollectingLogger : ILogger
     {

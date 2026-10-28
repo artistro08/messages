@@ -24,18 +24,6 @@ namespace GMessages.Protocol.Tests.Rpc;
 [TestClass]
 public class RpcSessionTimingTests
 {
-    // Fake clock that signals whenever a timer is created, so tests advance only once the wait exists.
-    private sealed class SignalingTimeProvider : FakeTimeProvider
-    {
-        public SemaphoreSlim TimerCreated { get; } = new(0);
-
-        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
-        {
-            ITimer timer = base.CreateTimer(callback, state, dueTime, period);
-            TimerCreated.Release();
-            return timer;
-        }
-    }
 
     private static readonly string[] ExpectedAckOrder = ["a1", "a2", "a3"];
 

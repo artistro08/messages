@@ -21,7 +21,7 @@ internal sealed record RecordedRequest(HttpMethod Method, string Url, Dictionary
 /// </remarks>
 internal sealed class FakeHttpHandler : HttpMessageHandler
 {
-    /// <summary>Requests received so far.</summary>
+    /// <summary>Requests received so far; lock on the list when reading it while requests may still arrive.</summary>
     public List<RecordedRequest> Requests { get; } = [];
 
     /// <summary>Builds the answer for a request; defaults to an empty 200.</summary>
@@ -78,8 +78,13 @@ internal sealed class FakeHttpHandler : HttpMessageHandler
 
         // Record And Answer
         var recorded = new RecordedRequest(request.Method, request.RequestUri!.AbsoluteUri, headers, body, Time.GetUtcNow());
-        int index = Requests.Count;
-        Requests.Add(recorded);
+        int index;
+        lock (Requests)
+        {
+            index = Requests.Count;
+            Requests.Add(recorded);
+        }
+
         return Respond(index, recorded);
     }
 }
