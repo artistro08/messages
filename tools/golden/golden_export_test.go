@@ -6,6 +6,7 @@ package libgm
 
 import (
 	"bytes"
+	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/ecdsa"
@@ -16,11 +17,14 @@ import (
 	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
@@ -29,6 +33,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"go.mau.fi/mautrix-gmessages/pkg/libgm/crypto"
+	"go.mau.fi/mautrix-gmessages/pkg/libgm/events"
 	"go.mau.fi/mautrix-gmessages/pkg/libgm/gmproto"
 	"go.mau.fi/mautrix-gmessages/pkg/libgm/util"
 )
@@ -56,10 +61,10 @@ func (ct *captureTransport) RoundTrip(req *http.Request) (*http.Response, error)
 		_ = req.Body.Close()
 	}
 
-	// Flatten Headers (first value only; Cookie is joined by net/http already)
+	// Flatten Headers (multiple values joined with ", ")
 	headers := map[string]string{}
 	for name, values := range req.Header {
-		headers[name] = values[0]
+		headers[name] = strings.Join(values, ", ")
 	}
 	ct.Requests = append(ct.Requests, capturedRequest{
 		Method:   req.Method,
@@ -157,6 +162,7 @@ func TestExportGolden(t *testing.T) {
 	exportProtoBinary(t, out)
 	exportCrypto(t, out)
 	exportPbLite(t, out)
+	exportHttp(t, out)
 }
 
 // checkGoldenHelpers sanity-checks the client and capture transport; writes no file.
@@ -475,4 +481,207 @@ func exportPbLite(t *testing.T, out string) {
 	}
 
 	writeGolden(t, out, "pblite", map[string]any{"encode": encodeCases, "decode": decodeCases})
+}
+
+// httpResponse builds a canned response with the given status, content type and body.
+func httpResponse(status int, contentType string, body []byte, extra http.Header) *http.Response {
+	h := http.Header{}
+	if contentType != "" {
+		h.Set("Content-Type", contentType)
+	}
+	for name, values := range extra {
+		for _, v := range values {
+			h.Add(name, v)
+		}
+	}
+	return &http.Response{StatusCode: status, Header: h, Body: io.NopCloser(bytes.NewReader(body))}
+}
+
+// exportHttp writes http.json: constants, paths, captured relay and config requests, SAPISIDHASH
+// outputs, Set-Cookie handling, 5xx retry behavior and decoded error bodies.
+func exportHttp(t *testing.T, out string) {
+	pbliteString := func(m proto.Message) string {
+		b, err := pblite.Marshal(m)
+		if err != nil {
+			t.Fatalf("pblite marshal: %v", err)
+		}
+		return string(b)
+	}
+
+	// Constants
+	constants := map[string]any{
+		"googleApiKey":         util.GoogleAPIKey,
+		"userAgent":            util.UserAgent,
+		"secUA":                util.SecUA,
+		"uaPlatform":           util.UAPlatform,
+		"xUserAgent":           util.XUserAgent,
+		"qrCodeUrlBase":        util.QRCodeURLBase,
+		"secUAMobile":          util.SecUAMobile,
+		"qrNetwork":            util.QRNetwork,
+		"googleNetwork":        util.GoogleNetwork,
+		"configMessagePblite":  pbliteString(util.ConfigMessage),
+		"browserDetailsPblite": pbliteString(util.BrowserDetailsMessage),
+	}
+
+	// Paths
+	paths := map[string]string{
+		"messagesBase":          util.MessagesBaseURL,
+		"googleAuthentication":  util.GoogleAuthenticationURL,
+		"googleTimesource":      util.GoogleTimesourceURL,
+		"uploadMedia":           util.UploadMediaURL,
+		"registerPhoneRelay":    util.RegisterPhoneRelayURL,
+		"refreshPhoneRelay":     util.RefreshPhoneRelayURL,
+		"getWebEncryptionKey":   util.GetWebEncryptionKeyURL,
+		"revokeRelayPairing":    util.RevokeRelayPairingURL,
+		"receiveMessages":       util.ReceiveMessagesURL,
+		"sendMessage":           util.SendMessageURL,
+		"ackMessages":           util.AckMessagesURL,
+		"receiveMessagesGoogle": util.ReceiveMessagesURLGoogle,
+		"sendMessageGoogle":     util.SendMessageURLGoogle,
+		"ackMessagesGoogle":     util.AckMessagesURLGoogle,
+		"signInGaia":            util.SignInGaiaURL,
+		"registerRefresh":       util.RegisterRefreshURL,
+		"config":                util.ConfigURL,
+	}
+
+	// Relay Request
+	c, ct := newGoldenClient(t)
+	resp, err := c.makeProtobufHTTPRequest(util.SignInGaiaURL, &gmproto.AuthMessage{RequestID: "r1"}, ContentTypePBLite)
+	if err != nil {
+		t.Fatalf("relay request: %v", err)
+	}
+	_ = resp.Body.Close()
+	relayRequest := ct.Requests[0]
+
+	// Config Request
+	c, ct = newGoldenClient(t)
+	configMsg := &gmproto.Config{ClientVersion: "20260902_00_RC00", CountryCode: "US"}
+	ct.Respond = func(*http.Request) *http.Response {
+		return httpResponse(200, ContentTypePBLite, []byte(pbliteString(configMsg)), nil)
+	}
+	if _, err = c.fetchConfig(context.Background()); err != nil {
+		t.Fatalf("fetch config: %v", err)
+	}
+	configRequest := ct.Requests[0]
+
+	// SAPISIDHASH (Time-Based; Spread Across Seconds)
+	sapisid := []string{}
+	for i := 0; i < 3; i++ {
+		if i > 0 {
+			time.Sleep(1100 * time.Millisecond)
+		}
+		sapisid = append(sapisid, SAPISIDHash("https://messages.google.com", "fake-sapisid"))
+	}
+
+	// Set-Cookie
+	c, ct = newGoldenClient(t)
+	ct.Respond = func(*http.Request) *http.Response {
+		return httpResponse(200, "", nil, http.Header{"Set-Cookie": {"SIDCC=new; Path=/", "SID=rotated"}})
+	}
+	resp, err = c.makeProtobufHTTPRequest(util.SignInGaiaURL, &gmproto.AuthMessage{RequestID: "r1"}, ContentTypePBLite)
+	if err != nil {
+		t.Fatalf("set-cookie request: %v", err)
+	}
+	_ = resp.Body.Close()
+	setCookie := map[string]any{"cookiesAfter": c.AuthData.Cookies}
+
+	// Set-Cookie With Nil Cookie Map (Stays Nil, No Cookie Or Authorization Header)
+	c, ct = newGoldenClient(t)
+	c.AuthData.Cookies = nil
+	ct.Respond = func(*http.Request) *http.Response {
+		return httpResponse(200, "", nil, http.Header{"Set-Cookie": {"SIDCC=new; Path=/"}})
+	}
+	resp, err = c.makeProtobufHTTPRequest(util.SignInGaiaURL, &gmproto.AuthMessage{RequestID: "r1"}, ContentTypePBLite)
+	if err != nil {
+		t.Fatalf("nil cookie request: %v", err)
+	}
+	_ = resp.Body.Close()
+	setCookie["nilCookiesStayNil"] = c.AuthData.Cookies == nil
+	setCookie["nilCookiesRequestHeaders"] = ct.Requests[0].Headers
+
+	// Retry
+	runRetry := func(statuses []int, longPoll bool) map[string]any {
+		c, ct := newGoldenClient(t)
+		n := 0
+		ct.Respond = func(*http.Request) *http.Response {
+			status := statuses[len(statuses)-1]
+			if n < len(statuses) {
+				status = statuses[n]
+			}
+			n++
+			return httpResponse(status, "", nil, nil)
+		}
+		start := time.Now()
+		resp, err := c.makeProtobufHTTPRequestContext(context.Background(), util.SignInGaiaURL, &gmproto.AuthMessage{RequestID: "r1"}, ContentTypePBLite, longPoll)
+		if err != nil {
+			t.Fatalf("retry request: %v", err)
+		}
+		_ = resp.Body.Close()
+		return map[string]any{
+			"statuses":    statuses,
+			"longPoll":    longPoll,
+			"attempts":    len(ct.Requests),
+			"finalStatus": resp.StatusCode,
+			"elapsedMs":   time.Since(start).Milliseconds(),
+		}
+	}
+	retry := []map[string]any{
+		runRetry([]int{503, 503, 200}, false),
+		runRetry([]int{503, 503, 503}, false),
+		runRetry([]int{401}, false),
+		runRetry([]int{503}, true),
+	}
+
+	// Error Bodies
+	errMsg := &gmproto.ErrorResponse{
+		Type:    5,
+		Message: "Requested entity was not found.",
+		Class:   []*gmproto.ErrorResponse_ErrorClass{{Class: "type.googleapis.com/google.internal.communications.instantmessaging.v1.TachyonError"}},
+	}
+	errBody := []byte(pbliteString(errMsg))
+	errBinary, _ := proto.Marshal(errMsg)
+	errCase := func(name string, status int, contentType string, body []byte) map[string]any {
+		r := httpResponse(status, contentType, body, nil)
+		r.Request, _ = http.NewRequest(http.MethodGet, util.ConfigURL, nil)
+		_, err := typedHTTPResponse[*gmproto.Config](r, nil)
+		result := map[string]any{
+			"name":        name,
+			"status":      status,
+			"contentType": contentType,
+			"bodyHex":     hex.EncodeToString(body),
+		}
+		var reqErr events.RequestError
+		if errors.As(err, &reqErr) {
+			classes := []string{}
+			for _, cl := range reqErr.Data.Class {
+				classes = append(classes, cl.Class)
+			}
+			result["decoded"] = true
+			result["type"] = reqErr.Data.Type
+			result["message"] = reqErr.Data.Message
+			result["classes"] = classes
+		} else {
+			result["decoded"] = false
+		}
+		return result
+	}
+	errorBody := []map[string]any{
+		errCase("pblite", 400, ContentTypePBLite, errBody),
+		errCase("pbliteWithCharset", 400, "application/json+protobuf; charset=UTF-8", errBody),
+		errCase("textPlain", 400, "text/plain", errBody),
+		errCase("protobuf", 400, ContentTypeProtobuf, errBinary),
+		errCase("garbage", 500, "text/html", []byte("<html>oops</html>")),
+		errCase("emptyMessage", 400, ContentTypePBLite, []byte("[]")),
+	}
+
+	writeGolden(t, out, "http", map[string]any{
+		"constants":     constants,
+		"paths":         paths,
+		"relayRequest":  relayRequest,
+		"configRequest": configRequest,
+		"sapisid":       sapisid,
+		"setCookie":     setCookie,
+		"retry":         retry,
+		"errorBody":     errorBody,
+	})
 }

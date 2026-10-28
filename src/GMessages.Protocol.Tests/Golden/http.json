@@ -1,0 +1,214 @@
+{
+  "configRequest": {
+    "method": "GET",
+    "url": "https://messages.google.com/web/config",
+    "headers": {
+      "Accept": "*/*",
+      "Accept-Language": "en-US,en;q=0.9",
+      "Authorization": "SAPISIDHASH 1793199762_63d62e3ba6f86abbe5897de52e0a723e3d4cb6c3",
+      "Cookie": "SAPISID=fake-sapisid; SID=fake-sid",
+      "Referer": "https://messages.google.com/",
+      "Sec-Ch-Ua": "\"Google Chrome\";v=\"152\", \"Chromium\";v=\"152\", \"Not-A.Brand\";v=\"24\"",
+      "Sec-Ch-Ua-Mobile": "?1",
+      "Sec-Ch-Ua-Platform": "\"Android\"",
+      "Sec-Fetch-Dest": "empty",
+      "Sec-Fetch-Mode": "cors",
+      "Sec-Fetch-Site": "same-origin",
+      "User-Agent": "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36",
+      "X-Goog-Api-Key": "AIzaSyCA4RsOZUFrm9whhtGosPlJLmVPnfSHKz8"
+    },
+    "bodyHex": "",
+    "bodyText": ""
+  },
+  "constants": {
+    "browserDetailsPblite": "[\"Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36\",1,\"libgm\",null,null,2]",
+    "configMessagePblite": "[null,null,2026,9,2,null,4,null,6]",
+    "googleApiKey": "AIzaSyCA4RsOZUFrm9whhtGosPlJLmVPnfSHKz8",
+    "googleNetwork": "GDitto",
+    "qrCodeUrlBase": "https://support.google.com/messages/?p=web_computer#?c=",
+    "qrNetwork": "Bugle",
+    "secUA": "\"Google Chrome\";v=\"152\", \"Chromium\";v=\"152\", \"Not-A.Brand\";v=\"24\"",
+    "secUAMobile": "?1",
+    "uaPlatform": "Android",
+    "userAgent": "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36",
+    "xUserAgent": "grpc-web-javascript/0.1"
+  },
+  "errorBody": [
+    {
+      "bodyHex": "5b352c2252657175657374656420656e7469747920776173206e6f7420666f756e642e222c5b5b22747970652e676f6f676c65617069732e636f6d2f676f6f676c652e696e7465726e616c2e636f6d6d756e69636174696f6e732e696e7374616e746d6573736167696e672e76312e54616368796f6e4572726f72225d5d5d",
+      "classes": [
+        "type.googleapis.com/google.internal.communications.instantmessaging.v1.TachyonError"
+      ],
+      "contentType": "application/json+protobuf",
+      "decoded": true,
+      "message": "Requested entity was not found.",
+      "name": "pblite",
+      "status": 400,
+      "type": 5
+    },
+    {
+      "bodyHex": "5b352c2252657175657374656420656e7469747920776173206e6f7420666f756e642e222c5b5b22747970652e676f6f676c65617069732e636f6d2f676f6f676c652e696e7465726e616c2e636f6d6d756e69636174696f6e732e696e7374616e746d6573736167696e672e76312e54616368796f6e4572726f72225d5d5d",
+      "classes": [
+        "type.googleapis.com/google.internal.communications.instantmessaging.v1.TachyonError"
+      ],
+      "contentType": "application/json+protobuf; charset=UTF-8",
+      "decoded": true,
+      "message": "Requested entity was not found.",
+      "name": "pbliteWithCharset",
+      "status": 400,
+      "type": 5
+    },
+    {
+      "bodyHex": "5b352c2252657175657374656420656e7469747920776173206e6f7420666f756e642e222c5b5b22747970652e676f6f676c65617069732e636f6d2f676f6f676c652e696e7465726e616c2e636f6d6d756e69636174696f6e732e696e7374616e746d6573736167696e672e76312e54616368796f6e4572726f72225d5d5d",
+      "classes": [
+        "type.googleapis.com/google.internal.communications.instantmessaging.v1.TachyonError"
+      ],
+      "contentType": "text/plain",
+      "decoded": true,
+      "message": "Requested entity was not found.",
+      "name": "textPlain",
+      "status": 400,
+      "type": 5
+    },
+    {
+      "bodyHex": "0805121f52657175657374656420656e7469747920776173206e6f7420666f756e642e1a550a53747970652e676f6f676c65617069732e636f6d2f676f6f676c652e696e7465726e616c2e636f6d6d756e69636174696f6e732e696e7374616e746d6573736167696e672e76312e54616368796f6e4572726f72",
+      "classes": [
+        "type.googleapis.com/google.internal.communications.instantmessaging.v1.TachyonError"
+      ],
+      "contentType": "application/x-protobuf",
+      "decoded": true,
+      "message": "Requested entity was not found.",
+      "name": "protobuf",
+      "status": 400,
+      "type": 5
+    },
+    {
+      "bodyHex": "3c68746d6c3e6f6f70733c2f68746d6c3e",
+      "contentType": "text/html",
+      "decoded": false,
+      "name": "garbage",
+      "status": 500
+    },
+    {
+      "bodyHex": "5b5d",
+      "contentType": "application/json+protobuf",
+      "decoded": false,
+      "name": "emptyMessage",
+      "status": 400
+    }
+  ],
+  "paths": {
+    "ackMessages": "https://instantmessaging-pa.googleapis.com/$rpc/google.internal.communications.instantmessaging.v1.Messaging/AckMessages",
+    "ackMessagesGoogle": "https://instantmessaging-pa.clients6.google.com/$rpc/google.internal.communications.instantmessaging.v1.Messaging/AckMessages",
+    "config": "https://messages.google.com/web/config",
+    "getWebEncryptionKey": "https://instantmessaging-pa.googleapis.com/$rpc/google.internal.communications.instantmessaging.v1.Pairing/GetWebEncryptionKey",
+    "googleAuthentication": "https://messages.google.com/web/authentication",
+    "googleTimesource": "https://messages.google.com/web/timesource",
+    "messagesBase": "https://messages.google.com",
+    "receiveMessages": "https://instantmessaging-pa.googleapis.com/$rpc/google.internal.communications.instantmessaging.v1.Messaging/ReceiveMessages",
+    "receiveMessagesGoogle": "https://instantmessaging-pa.clients6.google.com/$rpc/google.internal.communications.instantmessaging.v1.Messaging/ReceiveMessages",
+    "refreshPhoneRelay": "https://instantmessaging-pa.googleapis.com/$rpc/google.internal.communications.instantmessaging.v1.Pairing/RefreshPhoneRelay",
+    "registerPhoneRelay": "https://instantmessaging-pa.googleapis.com/$rpc/google.internal.communications.instantmessaging.v1.Pairing/RegisterPhoneRelay",
+    "registerRefresh": "https://instantmessaging-pa.clients6.google.com/$rpc/google.internal.communications.instantmessaging.v1.Registration/RegisterRefresh",
+    "revokeRelayPairing": "https://instantmessaging-pa.googleapis.com/$rpc/google.internal.communications.instantmessaging.v1.Pairing/RevokeRelayPairing",
+    "sendMessage": "https://instantmessaging-pa.googleapis.com/$rpc/google.internal.communications.instantmessaging.v1.Messaging/SendMessage",
+    "sendMessageGoogle": "https://instantmessaging-pa.clients6.google.com/$rpc/google.internal.communications.instantmessaging.v1.Messaging/SendMessage",
+    "signInGaia": "https://instantmessaging-pa.clients6.google.com/$rpc/google.internal.communications.instantmessaging.v1.Registration/SignInGaia",
+    "uploadMedia": "https://instantmessaging-pa.googleapis.com/upload"
+  },
+  "relayRequest": {
+    "method": "POST",
+    "url": "https://instantmessaging-pa.clients6.google.com/$rpc/google.internal.communications.instantmessaging.v1.Registration/SignInGaia",
+    "headers": {
+      "Accept": "*/*",
+      "Accept-Language": "en-US,en;q=0.9",
+      "Authorization": "SAPISIDHASH 1793199762_63d62e3ba6f86abbe5897de52e0a723e3d4cb6c3",
+      "Content-Type": "application/json+protobuf",
+      "Cookie": "SAPISID=fake-sapisid; SID=fake-sid",
+      "Origin": "https://messages.google.com",
+      "Referer": "https://messages.google.com/",
+      "Sec-Ch-Ua": "\"Google Chrome\";v=\"152\", \"Chromium\";v=\"152\", \"Not-A.Brand\";v=\"24\"",
+      "Sec-Ch-Ua-Mobile": "?1",
+      "Sec-Ch-Ua-Platform": "\"Android\"",
+      "Sec-Fetch-Dest": "empty",
+      "Sec-Fetch-Mode": "cors",
+      "Sec-Fetch-Site": "cross-site",
+      "User-Agent": "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36",
+      "X-Goog-Api-Key": "AIzaSyCA4RsOZUFrm9whhtGosPlJLmVPnfSHKz8",
+      "X-User-Agent": "grpc-web-javascript/0.1"
+    },
+    "bodyHex": "5b227231222c6e756c6c2c6e756c6c2c6e756c6c2c6e756c6c2c6e756c6c2c6e756c6c5d",
+    "bodyText": "[\"r1\",null,null,null,null,null,null]"
+  },
+  "retry": [
+    {
+      "attempts": 3,
+      "elapsedMs": 3000,
+      "finalStatus": 200,
+      "longPoll": false,
+      "statuses": [
+        503,
+        503,
+        200
+      ]
+    },
+    {
+      "attempts": 3,
+      "elapsedMs": 3001,
+      "finalStatus": 503,
+      "longPoll": false,
+      "statuses": [
+        503,
+        503,
+        503
+      ]
+    },
+    {
+      "attempts": 1,
+      "elapsedMs": 0,
+      "finalStatus": 401,
+      "longPoll": false,
+      "statuses": [
+        401
+      ]
+    },
+    {
+      "attempts": 1,
+      "elapsedMs": 0,
+      "finalStatus": 503,
+      "longPoll": true,
+      "statuses": [
+        503
+      ]
+    }
+  ],
+  "sapisid": [
+    "SAPISIDHASH 1793199762_63d62e3ba6f86abbe5897de52e0a723e3d4cb6c3",
+    "SAPISIDHASH 1793199763_83a139857a376e5d18338a5276ae9f34d26b10f7",
+    "SAPISIDHASH 1793199764_0947dc0f8c07240ec968774f07b90c199e5ad592"
+  ],
+  "setCookie": {
+    "cookiesAfter": {
+      "SAPISID": "fake-sapisid",
+      "SID": "rotated",
+      "SIDCC": "new"
+    },
+    "nilCookiesRequestHeaders": {
+      "Accept": "*/*",
+      "Accept-Language": "en-US,en;q=0.9",
+      "Content-Type": "application/json+protobuf",
+      "Origin": "https://messages.google.com",
+      "Referer": "https://messages.google.com/",
+      "Sec-Ch-Ua": "\"Google Chrome\";v=\"152\", \"Chromium\";v=\"152\", \"Not-A.Brand\";v=\"24\"",
+      "Sec-Ch-Ua-Mobile": "?1",
+      "Sec-Ch-Ua-Platform": "\"Android\"",
+      "Sec-Fetch-Dest": "empty",
+      "Sec-Fetch-Mode": "cors",
+      "Sec-Fetch-Site": "cross-site",
+      "User-Agent": "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36",
+      "X-Goog-Api-Key": "AIzaSyCA4RsOZUFrm9whhtGosPlJLmVPnfSHKz8",
+      "X-User-Agent": "grpc-web-javascript/0.1"
+    },
+    "nilCookiesStayNil": true
+  }
+}
