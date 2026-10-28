@@ -40,9 +40,9 @@ public sealed class AuthData
     public Device? Mobile { get; set; }
 
     /// <summary>
-    /// Gets or sets the token used to authenticate with the server, or null when not paired.
+    /// Gets the token used to authenticate with the server, or null when not paired.
     /// </summary>
-    /// <remarks>Part of <see cref="Tachyon"/>; setting it alone keeps the expiry and TTL.</remarks>
+    /// <remarks>Part of <see cref="Tachyon"/>.</remarks>
     public byte[]? TachyonAuthToken
     {
         get => Tachyon.Token;
@@ -50,9 +50,9 @@ public sealed class AuthData
     }
 
     /// <summary>
-    /// Gets or sets when the Tachyon token expires; <c>default</c> means unset.
+    /// Gets when the Tachyon token expires; <c>default</c> means unset.
     /// </summary>
-    /// <remarks>Part of <see cref="Tachyon"/>; setting it alone keeps the token and TTL.</remarks>
+    /// <remarks>Part of <see cref="Tachyon"/>.</remarks>
     public DateTimeOffset TachyonExpiry
     {
         get => Tachyon.Expiry;
@@ -60,9 +60,9 @@ public sealed class AuthData
     }
 
     /// <summary>
-    /// Gets or sets the Tachyon token lifetime in microseconds.
+    /// Gets the Tachyon token lifetime in microseconds.
     /// </summary>
-    /// <remarks>Part of <see cref="Tachyon"/>; setting it alone keeps the token and expiry.</remarks>
+    /// <remarks>Part of <see cref="Tachyon"/>.</remarks>
     public long TachyonTtlMicros
     {
         get => Tachyon.TtlMicros;
@@ -74,8 +74,8 @@ public sealed class AuthData
     /// </summary>
     /// <remarks>
     /// C#-only. The three parts are swapped in a single write with a memory barrier, so a save or request running on
-    /// another thread at the same time sees either the old token or the new one, never a mix (ARM64 included). Use
-    /// this, not the three single-part properties, when a refresh stores a new token.
+    /// another thread at the same time sees either the old token or the new one, never a mix (ARM64 included). Write
+    /// tokens through this property; it swaps all three parts at once.
     /// </remarks>
     public TachyonToken Tachyon
     {
