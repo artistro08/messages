@@ -18,6 +18,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -166,6 +167,9 @@ func TestExportGolden(t *testing.T) {
 	exportAuthData(t, out)
 	exportRpc(t, out)
 	exportLongPollStream(t, out)
+	exportDispatch(t, out)
+	exportRefresh(t, out)
+	exportLongPollRequest(t, out)
 }
 
 // checkGoldenHelpers sanity-checks the client and capture transport; writes no file.
@@ -939,5 +943,281 @@ func exportLongPollStream(t *testing.T, out string) {
 		"body":     body.String(),
 		"chunks":   chunkStrings,
 		"sequence": sequence,
+	})
+}
+
+// goldenEventName maps a Go event value to the C# event record name.
+func goldenEventName(t *testing.T, evt any) (name string, isOld bool, id string) {
+	switch e := evt.(type) {
+	case *WrappedMessage:
+		return "MessageReceived", e.IsOld, e.GetMessageID()
+	case *gmproto.Conversation:
+		return "ConversationUpdated", false, e.GetConversationID()
+	case *gmproto.TypingData:
+		return "TypingChanged", false, e.GetConversationID()
+	case *gmproto.Settings:
+		return "SettingsChanged", false, ""
+	case *gmproto.UserAlertEvent:
+		return "UserAlert", false, e.GetAlertType().String()
+	case *events.AccountChange:
+		return "AccountChanged", e.IsFake, e.GetAccount()
+	case *events.GaiaLoggedOut:
+		return "GaiaLoggedOut", false, ""
+	case *events.AuthTokenRefreshed:
+		return "AuthTokenRefreshed", false, ""
+	}
+	t.Fatalf("unexpected event type %T", evt)
+	return "", false, ""
+}
+
+// exportDispatch writes dispatch.json: Go-encrypted incoming messages fed through HandleRPCMsg with a skip
+// count, plus the events Go raised (in order), the final skip count and the ack batches it sent.
+func exportDispatch(t *testing.T, out string) {
+	c, ct := newGoldenClient(t)
+	ct.Respond = func(*http.Request) *http.Response {
+		return httpResponse(200, "application/json+protobuf", []byte("[]"), nil)
+	}
+	var recorded []map[string]any
+	c.SetEventHandler(func(evt any) {
+		name, isOld, id := goldenEventName(t, evt)
+		recorded = append(recorded, map[string]any{"type": name, "isOld": isOld, "id": id})
+	})
+
+	// Incoming Message Builders
+	encrypt := func(m proto.Message) []byte {
+		plain, err := proto.Marshal(m)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		enc, err := c.AuthData.RequestCrypto.Encrypt(plain)
+		if err != nil {
+			t.Fatalf("encrypt: %v", err)
+		}
+		return enc
+	}
+	incoming := func(n int, data *gmproto.RPCMessageData) *gmproto.IncomingRPCMessage {
+		data.SessionID = fmt.Sprintf("golden-dispatch-session-%d", n)
+		inner, err := proto.Marshal(data)
+		if err != nil {
+			t.Fatalf("marshal inner: %v", err)
+		}
+		return &gmproto.IncomingRPCMessage{ResponseID: fmt.Sprintf("golden-dispatch-resp-%d", n), BugleRoute: gmproto.BugleRoute_DataEvent, MessageData: inner}
+	}
+	updates := func(n int, evt *gmproto.UpdateEvents) *gmproto.IncomingRPCMessage {
+		return incoming(n, &gmproto.RPCMessageData{Action: gmproto.ActionType_GET_UPDATES, EncryptedData: encrypt(evt)})
+	}
+	message := func(n int, id string, ts int64) *gmproto.IncomingRPCMessage {
+		return updates(n, &gmproto.UpdateEvents{Event: &gmproto.UpdateEvents_MessageEvent{MessageEvent: &gmproto.MessageEvent{
+			Data: []*gmproto.Message{{MessageID: id, ConversationID: "golden-conv", Timestamp: ts}},
+		}}})
+	}
+
+	// Steps: Either A Skip Count To Set Or A Message To Handle
+	type step struct {
+		skipCount *int
+		msg       *gmproto.IncomingRPCMessage
+	}
+	two, one := 2, 1
+	steps := []step{
+		{skipCount: &two},
+		{msg: message(1, "msg-a", 1000)},
+		{msg: message(2, "msg-b", 2000)},
+		{msg: message(3, "msg-c", 3000)},
+		{msg: message(4, "msg-c", 3000)},
+		{msg: message(5, "msg-c", 3001)},
+		{skipCount: &one},
+		{msg: updates(6, &gmproto.UpdateEvents{Event: &gmproto.UpdateEvents_ConversationEvent{ConversationEvent: &gmproto.ConversationEvent{
+			Data: []*gmproto.Conversation{{ConversationID: "golden-conv", Name: "Golden"}},
+		}}})},
+		{msg: updates(7, &gmproto.UpdateEvents{Event: &gmproto.UpdateEvents_TypingEvent{TypingEvent: &gmproto.TypingEvent{
+			Data: &gmproto.TypingData{ConversationID: "golden-conv"},
+		}}})},
+		{msg: incoming(8, &gmproto.RPCMessageData{Action: gmproto.ActionType_GET_UPDATES, UnencryptedData: []byte{0x72, 0x00}})},
+		{msg: incoming(9, &gmproto.RPCMessageData{Action: gmproto.ActionType_GET_UPDATES, EncryptedData2: encrypt(&gmproto.EncryptedData2Container{
+			AccountChange: &gmproto.AccountChangeOrSomethingEvent{Account: "golden@example.com", Enabled: true},
+		})})},
+		{msg: updates(10, &gmproto.UpdateEvents{Event: &gmproto.UpdateEvents_UserAlertEvent{UserAlertEvent: &gmproto.UserAlertEvent{
+			AlertType: gmproto.AlertType_BROWSER_ACTIVE,
+		}}})},
+	}
+
+	// Run Them Through Go
+	var stepsOut []map[string]any
+	for _, s := range steps {
+		if s.skipCount != nil {
+			c.skipCount = *s.skipCount
+			stepsOut = append(stepsOut, map[string]any{"skipCount": *s.skipCount})
+			continue
+		}
+		raw, err := pblite.Marshal(s.msg)
+		if err != nil {
+			t.Fatalf("pblite marshal: %v", err)
+		}
+		stepsOut = append(stepsOut, map[string]any{"pblite": string(raw)})
+		c.HandleRPCMsg(s.msg)
+	}
+	finalSkip := c.skipCount
+	c.sessionHandler.sendAckRequest()
+
+	// Ack Batches Sent
+	var ackBatches [][]string
+	for _, req := range ct.Requests {
+		if !strings.HasSuffix(req.URL, "/AckMessages") {
+			continue
+		}
+		var ack gmproto.AckMessageRequest
+		if err := pblite.Unmarshal([]byte(req.BodyText), &ack); err != nil {
+			t.Fatalf("unmarshal ack: %v", err)
+		}
+		var ids []string
+		for _, m := range ack.GetAcks() {
+			ids = append(ids, m.GetRequestID())
+		}
+		ackBatches = append(ackBatches, ids)
+	}
+
+	writeGolden(t, out, "dispatch", map[string]any{
+		"steps":          stepsOut,
+		"events":         recorded,
+		"finalSkipCount": finalSkip,
+		"ackBatches":     ackBatches,
+	})
+}
+
+// errTransport fails every request with a network error.
+type errTransport struct{}
+
+func (errTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, errors.New("golden network error")
+}
+
+// exportRefresh writes refresh.json: the RegisterRefresh request at 30 minutes left, no request at 2 hours left,
+// the expiry and TTL Go stores for two response TTLs, and isFatalRefreshError for several failures.
+func exportRefresh(t *testing.T, out string) {
+	tokenResponse := func(ttl int64) func(*http.Request) *http.Response {
+		return func(*http.Request) *http.Response {
+			body, err := pblite.Marshal(&gmproto.RegisterRefreshResponse{TokenData: &gmproto.TokenData{TachyonAuthToken: []byte("new-tachyon"), TTL: ttl}})
+			if err != nil {
+				t.Fatalf("pblite marshal: %v", err)
+			}
+			return httpResponse(200, "application/json+protobuf", body, nil)
+		}
+	}
+
+	// Request At 30 Minutes Left
+	c, ct := newGoldenClient(t)
+	ct.Respond = tokenResponse(3600000000)
+	c.AuthData.TachyonExpiry = time.Now().Add(30 * time.Minute)
+	if err := c.refreshAuthToken(nil); err != nil {
+		t.Fatalf("refreshAuthToken: %v", err)
+	}
+	request := ct.Requests[0]
+
+	// No Request At 2 Hours Left
+	c, ct = newGoldenClient(t)
+	c.AuthData.TachyonExpiry = time.Now().Add(2 * time.Hour)
+	if err := c.refreshAuthToken(nil); err != nil {
+		t.Fatalf("refreshAuthToken 2h: %v", err)
+	}
+	requestsAt2h := len(ct.Requests)
+
+	// TTL Handling
+	ttlCases := map[string]any{}
+	for _, ttl := range []int64{0, 3600000000} {
+		c, ct = newGoldenClient(t)
+		ct.Respond = tokenResponse(ttl)
+		var raised []string
+		c.SetEventHandler(func(evt any) {
+			name, _, _ := goldenEventName(t, evt)
+			raised = append(raised, name)
+		})
+		before := time.Now().UTC()
+		if err := c.refreshAuthToken(nil); err != nil {
+			t.Fatalf("refreshAuthToken ttl %d: %v", ttl, err)
+		}
+		ttlCases[fmt.Sprint(ttl)] = map[string]any{
+			"expiryOffsetSeconds": c.AuthData.TachyonExpiry.Sub(before).Round(time.Second).Seconds(),
+			"tachyonTTL":          c.AuthData.TachyonTTL,
+			"tokenHex":            hex.EncodeToString(c.AuthData.TachyonAuthToken),
+			"events":              raised,
+		}
+	}
+
+	// isFatalRefreshError
+	invalidCreds, err := pblite.Marshal(events.ErrInvalidCredentials.Data)
+	if err != nil {
+		t.Fatalf("pblite marshal: %v", err)
+	}
+	fatalCases := []struct {
+		name        string
+		status      int
+		contentType string
+		body        []byte
+	}{
+		{"401", 401, "", nil},
+		{"403", 403, "", nil},
+		{"404", 404, "", nil},
+		{"500", 500, "", nil},
+		{"400InvalidCredentials", 400, "application/json+protobuf", invalidCreds},
+		{"network", 0, "", nil},
+	}
+	var fatal []map[string]any
+	for _, fc := range fatalCases {
+		c, ct = newGoldenClient(t)
+		if fc.status == 0 {
+			c.http = &http.Client{Transport: errTransport{}}
+		} else {
+			ct.Respond = func(*http.Request) *http.Response { return httpResponse(fc.status, fc.contentType, fc.body, nil) }
+		}
+		err := c.refreshAuthToken(nil)
+		if err == nil {
+			t.Fatalf("refreshAuthToken %s: expected error", fc.name)
+		}
+		fatal = append(fatal, map[string]any{
+			"name":        fc.name,
+			"status":      fc.status,
+			"contentType": fc.contentType,
+			"bodyHex":     hex.EncodeToString(fc.body),
+			"fatal":       isFatalRefreshError(err),
+		})
+	}
+
+	writeGolden(t, out, "refresh", map[string]any{
+		"request":      map[string]any{"url": request.URL, "bodyText": request.BodyText},
+		"requestsAt2h": requestsAt2h,
+		"ttl":          ttlCases,
+		"isFatal":      fatal,
+	})
+}
+
+// exportLongPollRequest writes longpoll-request.json: the ReceiveMessages request from one doLongPoll
+// iteration and the GET_UPDATES request SetActiveSession sends.
+func exportLongPollRequest(t *testing.T, out string) {
+	// One Long Poll Iteration (Stopped From Inside The Request)
+	c, ct := newGoldenClient(t)
+	c.AuthData.TachyonExpiry = time.Now().Add(24 * time.Hour)
+	ct.Respond = func(*http.Request) *http.Response {
+		c.closeLongPolling()
+		return httpResponse(200, "application/json+protobuf", []byte("]]"), nil)
+	}
+	c.doLongPoll(context.Background(), false, false, nil)
+	if len(ct.Requests) != 1 {
+		t.Fatalf("doLongPoll made %d requests, want 1", len(ct.Requests))
+	}
+	receive := ct.Requests[0]
+
+	// SetActiveSession
+	c, ct = newGoldenClient(t)
+	ct.Respond = func(*http.Request) *http.Response {
+		return httpResponse(200, "application/json+protobuf", []byte("[]"), nil)
+	}
+	if err := c.SetActiveSession(context.Background()); err != nil {
+		t.Fatalf("SetActiveSession: %v", err)
+	}
+	active := ct.Requests[0]
+
+	writeGolden(t, out, "longpoll-request", map[string]any{
+		"receiveMessages":  map[string]any{"url": receive.URL, "bodyText": receive.BodyText},
+		"setActiveSession": map[string]any{"url": active.URL, "bodyText": active.BodyText, "sessionId": c.sessionHandler.sessionID},
 	})
 }

@@ -1,0 +1,99 @@
+{
+  "ackBatches": [
+    [
+      "golden-dispatch-resp-1",
+      "golden-dispatch-resp-2",
+      "golden-dispatch-resp-3",
+      "golden-dispatch-resp-4",
+      "golden-dispatch-resp-5",
+      "golden-dispatch-resp-6",
+      "golden-dispatch-resp-7",
+      "golden-dispatch-resp-8"
+    ],
+    [
+      "golden-dispatch-resp-9",
+      "golden-dispatch-resp-10"
+    ]
+  ],
+  "events": [
+    {
+      "id": "msg-a",
+      "isOld": true,
+      "type": "MessageReceived"
+    },
+    {
+      "id": "msg-b",
+      "isOld": true,
+      "type": "MessageReceived"
+    },
+    {
+      "id": "msg-c",
+      "isOld": false,
+      "type": "MessageReceived"
+    },
+    {
+      "id": "msg-c",
+      "isOld": false,
+      "type": "MessageReceived"
+    },
+    {
+      "id": "golden-conv",
+      "isOld": false,
+      "type": "TypingChanged"
+    },
+    {
+      "id": "",
+      "isOld": false,
+      "type": "GaiaLoggedOut"
+    },
+    {
+      "id": "golden@example.com",
+      "isOld": true,
+      "type": "AccountChanged"
+    },
+    {
+      "id": "BROWSER_ACTIVE",
+      "isOld": false,
+      "type": "UserAlert"
+    }
+  ],
+  "finalSkipCount": 0,
+  "steps": [
+    {
+      "skipCount": 2
+    },
+    {
+      "pblite": "[\"golden-dispatch-resp-1\",19,null,null,null,null,null,null,null,null,null,\"Chlnb2xkZW4tZGlzcGF0Y2gtc2Vzc2lvbi0xIBBCS7Isd4NTutmDgzEtjuo+At7dfhjMUHd0FOqANIyC+yHxXWT80gBd/32dD33Qy2Ox56EpkMNX4ZpcVbgyRexuYrI8zTslYSMVQXbKog==\",null,null,null,null,null,null,null,null,null,null,null]"
+    },
+    {
+      "pblite": "[\"golden-dispatch-resp-2\",19,null,null,null,null,null,null,null,null,null,\"Chlnb2xkZW4tZGlzcGF0Y2gtc2Vzc2lvbi0yIBBCS5eniW2jAvfZfx+dGJIf3O0Xzd/CvtBrXXXzFzTYjOZiT8vlIChsCyF2cx/YebSrs98lf5jvKhE1jofYwxTEomf2E7AAt2N7BpqJJg==\",null,null,null,null,null,null,null,null,null,null,null]"
+    },
+    {
+      "pblite": "[\"golden-dispatch-resp-3\",19,null,null,null,null,null,null,null,null,null,\"Chlnb2xkZW4tZGlzcGF0Y2gtc2Vzc2lvbi0zIBBCS9tl0e3Nm6ZqpDY4OgzQZXwIZ1/jEx4aE+6Tch+cqQuuIURfiBeyz7LZ8PZ0FIvpvg7lBd0GltIlqzm+XsXmwxqErC+aGKb9m7YvkA==\",null,null,null,null,null,null,null,null,null,null,null]"
+    },
+    {
+      "pblite": "[\"golden-dispatch-resp-4\",19,null,null,null,null,null,null,null,null,null,\"Chlnb2xkZW4tZGlzcGF0Y2gtc2Vzc2lvbi00IBBCS5Cd4RBidk2xuvgu5MyFLdNJ0rRPQ8Ih7tPQ9sPFtXIpTu4dDJPH3QGwmCT32wJf0E1rxd+AhsXDf8WeAukRllvOL+jQXzHvtMxXTw==\",null,null,null,null,null,null,null,null,null,null,null]"
+    },
+    {
+      "pblite": "[\"golden-dispatch-resp-5\",19,null,null,null,null,null,null,null,null,null,\"Chlnb2xkZW4tZGlzcGF0Y2gtc2Vzc2lvbi01IBBCSxenUQZ8uDg5PJLeaWm/zJZzP8lj5AsIgwookDy5NaSEhA03CXedfKktPQH0dFyK93PvaeDJ51FCdpzX+u6Cu6I1WIyCTvVvZvRAEw==\",null,null,null,null,null,null,null,null,null,null,null]"
+    },
+    {
+      "skipCount": 1
+    },
+    {
+      "pblite": "[\"golden-dispatch-resp-6\",19,null,null,null,null,null,null,null,null,null,\"Chlnb2xkZW4tZGlzcGF0Y2gtc2Vzc2lvbi02IBBCST9q9XixyT5IEAjyUvdmvxKXrryxXyBNwKESVyVwPmigT9n2s+jDz9a4zeCAf3Z+g3R2rbLCYD3uCRfz9On1HDdQI07nXTFXxjk=\",null,null,null,null,null,null,null,null,null,null,null]"
+    },
+    {
+      "pblite": "[\"golden-dispatch-resp-7\",19,null,null,null,null,null,null,null,null,null,\"Chlnb2xkZW4tZGlzcGF0Y2gtc2Vzc2lvbi03IBBCQcxHpGRmYg1iUmmGzfk7LJarntJKkLmgybro2CvT7W31WnpSvg3bYrLLSEvIv+HqiXwKr0VQPdAPUDVvyMYaNAIn\",null,null,null,null,null,null,null,null,null,null,null]"
+    },
+    {
+      "pblite": "[\"golden-dispatch-resp-8\",19,null,null,null,null,null,null,null,null,null,\"Chlnb2xkZW4tZGlzcGF0Y2gtc2Vzc2lvbi04IBAqAnIA\",null,null,null,null,null,null,null,null,null,null,null]"
+    },
+    {
+      "pblite": "[\"golden-dispatch-resp-9\",19,null,null,null,null,null,null,null,null,null,\"Chlnb2xkZW4tZGlzcGF0Y2gtc2Vzc2lvbi05IBBaSMRDK1V6K7m7g9ROrQ8YjjyeePUA8cRDKBx19YHcIpm0r9rIR30oKDqvVzySbBsh+PUei2bwb9wGO8pZQRnZnF/WpRJcs+amdw==\",null,null,null,null,null,null,null,null,null,null,null]"
+    },
+    {
+      "pblite": "[\"golden-dispatch-resp-10\",19,null,null,null,null,null,null,null,null,null,\"Chpnb2xkZW4tZGlzcGF0Y2gtc2Vzc2lvbi0xMCAQQjTWN8FlPpk2JYPohPQJlVkufaqdeD7FarIQjL1jY8ZjEpYiSc5dfZO06KVJzQ34qHrfINjJ\",null,null,null,null,null,null,null,null,null,null,null]"
+    }
+  ]
+}

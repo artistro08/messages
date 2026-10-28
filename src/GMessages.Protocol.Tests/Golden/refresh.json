@@ -1,0 +1,69 @@
+{
+  "isFatal": [
+    {
+      "bodyHex": "",
+      "contentType": "",
+      "fatal": true,
+      "name": "401",
+      "status": 401
+    },
+    {
+      "bodyHex": "",
+      "contentType": "",
+      "fatal": true,
+      "name": "403",
+      "status": 403
+    },
+    {
+      "bodyHex": "",
+      "contentType": "",
+      "fatal": true,
+      "name": "404",
+      "status": 404
+    },
+    {
+      "bodyHex": "",
+      "contentType": "",
+      "fatal": false,
+      "name": "500",
+      "status": 500
+    },
+    {
+      "bodyHex": "5b31362c22526571756573742068616420696e76616c69642061757468656e7469636174696f6e2063726564656e7469616c732e204578706563746564204f4175746820322061636365737320746f6b656e2c206c6f67696e20636f6f6b6965206f72206f746865722076616c69642061757468656e7469636174696f6e2063726564656e7469616c2e205365652068747470733a2f2f646576656c6f706572732e676f6f676c652e636f6d2f6964656e746974792f7369676e2d696e2f7765622f646576636f6e736f6c652d70726f6a6563742e222c6e756c6c5d",
+      "contentType": "application/json+protobuf",
+      "fatal": true,
+      "name": "400InvalidCredentials",
+      "status": 400
+    },
+    {
+      "bodyHex": "",
+      "contentType": "",
+      "fatal": false,
+      "name": "network",
+      "status": 0
+    }
+  ],
+  "request": {
+    "bodyText": "[[\"5047c231-6c7d-4d54-a6fe-385c0e96765e\",null,\"GDitto\",null,null,\"ZmFrZS10YWNoeW9u\",[null,null,2026,9,2,null,4,null,6]],[1,\"golden-src\",\"GDitto\"],1793202654976000,\"MEUCIC7eXs6RYTBEujs//ZxIsId8a8iq8lsfRJNn0j7gq3mIAiEAoai7S30iVR0O6eRWPGfZkb7kK36VrXS2miRVePKjQmo=\",null,null,null,null,null,null,null,null,[null,null,null,null,null,null,null,null,[],null,null,null,null,null,null,null,null,null,null,null,null,null,null],null,null,2]",
+    "url": "https://instantmessaging-pa.clients6.google.com/$rpc/google.internal.communications.instantmessaging.v1.Registration/RegisterRefresh"
+  },
+  "requestsAt2h": 0,
+  "ttl": {
+    "0": {
+      "events": [
+        "AuthTokenRefreshed"
+      ],
+      "expiryOffsetSeconds": 86400,
+      "tachyonTTL": 86400000000,
+      "tokenHex": "6e65772d74616368796f6e"
+    },
+    "3600000000": {
+      "events": [
+        "AuthTokenRefreshed"
+      ],
+      "expiryOffsetSeconds": 3600,
+      "tachyonTTL": 3600000000,
+      "tokenHex": "6e65772d74616368796f6e"
+    }
+  }
+}
