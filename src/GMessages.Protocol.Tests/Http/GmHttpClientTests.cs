@@ -27,11 +27,36 @@ public class GmHttpClientTests
 {
     private static readonly Dictionary<string, string> GoCookies = new() { ["SAPISID"] = "fake-sapisid", ["SID"] = "fake-sid" };
 
-    private sealed record Rig(GmHttpClient Client, FakeHttpHandler Handler, FakeHttpHandler LongPollHandler, CookieJar Jar, FakeTimeProvider Time);
+    // Fake clock that signals whenever a timer (a retry wait) is created, so tests advance only once the wait exists.
+    private sealed class SignalingTimeProvider : FakeTimeProvider
+    {
+        public SemaphoreSlim TimerCreated { get; } = new(0);
+
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
+        {
+            ITimer timer = base.CreateTimer(callback, state, dueTime, period);
+            TimerCreated.Release();
+            return timer;
+        }
+    }
+
+    // Response that remembers whether it was disposed.
+    private sealed class TrackingResponse(HttpStatusCode status) : HttpResponseMessage(status)
+    {
+        public bool IsDisposed { get; private set; }
+
+        protected override void Dispose(bool disposing)
+        {
+            IsDisposed = true;
+            base.Dispose(disposing);
+        }
+    }
+
+    private sealed record Rig(GmHttpClient Client, FakeHttpHandler Handler, FakeHttpHandler LongPollHandler, CookieJar Jar, SignalingTimeProvider Time);
 
     private static Rig CreateRig(Dictionary<string, string>? cookies = null)
     {
-        var time = new FakeTimeProvider();
+        var time = new SignalingTimeProvider();
         var handler = new FakeHttpHandler { Time = time };
         var long_poll_handler = new FakeHttpHandler { Time = time };
         var jar = new CookieJar();
@@ -48,18 +73,6 @@ public class GmHttpClientTests
         long.Parse(authorization["SAPISIDHASH ".Length..authorization.IndexOf('_', StringComparison.Ordinal)], CultureInfo.InvariantCulture);
 
     private static AuthMessage RelayBody => new() { RequestID = "r1" };
-
-    // Drives the fake clock in small steps until the task finishes.
-    private static async Task<T> RunWithClock<T>(Task<T> task, FakeTimeProvider time)
-    {
-        for (int i = 0; i < 2000 && !task.IsCompleted; i++)
-        {
-            time.Advance(TimeSpan.FromMilliseconds(10));
-            await Task.Delay(1);
-        }
-
-        return await task;
-    }
 
     private static void AssertHeadersMatchGo(JsonElement go_request, RecordedRequest actual)
     {
@@ -223,32 +236,56 @@ public class GmHttpClientTests
     }
 
     /// <summary>
-    /// Attempt counts and final statuses match Go for every scripted case; waits are 1 s then 2 s.
+    /// Attempt counts and final statuses match Go for every scripted case; waits are exactly 1 s then 2 s.
     /// </summary>
+    /// <remarks>
+    /// The waits and the disposal of retried responses are C#-only checks. No real sleeping: the test waits for the
+    /// client to create its retry timer, advances the fake clock by exactly the expected delay, and repeats. The
+    /// 10 s real timeout is only a hang guard.
+    /// </remarks>
     [TestMethod]
     public async Task Retry_AttemptCountsMatchGo_DelaysAre1sThen2s()
     {
+        using var guard = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         int checked_cases = 0;
         foreach (var go in Golden.Load("http").GetProperty("retry").EnumerateArray().Where(c => !c.GetProperty("longPoll").GetBoolean()))
         {
             int[] statuses = go.GetProperty("statuses").EnumerateArray().Select(s => s.GetInt32()).ToArray();
+            int expected_attempts = go.GetProperty("attempts").GetInt32();
             Rig rig = CreateRig(GoCookies);
-            rig.Handler.Respond = (i, _) => FakeHttpHandler.Response((HttpStatusCode)statuses[Math.Min(i, statuses.Length - 1)]);
+            var responses = new List<TrackingResponse>();
+            rig.Handler.Respond = (i, _) =>
+            {
+                var response = new TrackingResponse((HttpStatusCode)statuses[Math.Min(i, statuses.Length - 1)]);
+                responses.Add(response);
+                return response;
+            };
 
-            using var res = await RunWithClock(
-                rig.Client.PostAsync(GmEndpoints.Production.SignInGaia, RelayBody, GmContentType.PbLite, false, CancellationToken.None),
-                rig.Time);
+            Task<HttpResponseMessage> task = rig.Client.PostAsync(GmEndpoints.Production.SignInGaia, RelayBody, GmContentType.PbLite, false, CancellationToken.None);
 
-            Assert.AreEqual(go.GetProperty("attempts").GetInt32(), rig.Handler.Requests.Count);
+            // One Wait Per Retry: Timer Appears, Then Advance Exactly Attempt x 1 s
+            for (int attempt = 1; attempt < expected_attempts; attempt++)
+            {
+                await rig.Time.TimerCreated.WaitAsync(guard.Token);
+                Assert.AreEqual(attempt, rig.Handler.Requests.Count, "no early retry");
+                rig.Time.Advance(TimeSpan.FromSeconds(attempt));
+            }
+
+            using HttpResponseMessage res = await task.WaitAsync(guard.Token);
+
+            Assert.AreEqual(expected_attempts, rig.Handler.Requests.Count);
             Assert.AreEqual(go.GetProperty("finalStatus").GetInt32(), (int)res.StatusCode);
 
-            // Gaps Between Attempts (10 ms Clock Step Tolerance)
-            var gaps = rig.Handler.Requests.Zip(rig.Handler.Requests.Skip(1), (a, b) => (b.At - a.At).TotalMilliseconds).ToList();
-            for (int i = 0; i < gaps.Count; i++)
+            // Exact Gaps Between Attempts
+            for (int i = 1; i < rig.Handler.Requests.Count; i++)
             {
-                double wanted = 1000 * (i + 1);
-                Assert.IsTrue(gaps[i] >= wanted && gaps[i] <= wanted + 100, $"gap {i} was {gaps[i]} ms");
+                Assert.AreEqual(TimeSpan.FromSeconds(i), rig.Handler.Requests[i].At - rig.Handler.Requests[i - 1].At, $"gap {i}");
             }
+
+            // Every Retried Response Was Disposed; The Returned One Was Not
+            Assert.AreEqual(expected_attempts, responses.Count);
+            Assert.IsTrue(responses.Take(expected_attempts - 1).All(r => r.IsDisposed), "retried responses disposed");
+            Assert.IsFalse(responses[^1].IsDisposed);
 
             checked_cases++;
         }
