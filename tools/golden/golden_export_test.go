@@ -164,6 +164,7 @@ func TestExportGolden(t *testing.T) {
 	exportPbLite(t, out)
 	exportHttp(t, out)
 	exportAuthData(t, out)
+	exportRpc(t, out)
 }
 
 // checkGoldenHelpers sanity-checks the client and capture transport; writes no file.
@@ -735,5 +736,123 @@ func exportAuthData(t *testing.T, out string) {
 			"withDestRegIdNoCookies":    network(withReg),
 			"withDestRegIdEmptyCookies": network(withRegCookies),
 		},
+	})
+}
+
+// exportRpc writes rpc.json: buildMessage output, the SendMessage URL choice, the AckMessages request,
+// Go-encrypted incoming messages with their decrypt results, and the responseType table.
+func exportRpc(t *testing.T, out string) {
+	pbliteString := func(m proto.Message) string {
+		b, err := pblite.Marshal(m)
+		if err != nil {
+			t.Fatalf("pblite marshal: %v", err)
+		}
+		return string(b)
+	}
+	okResponse := func(*http.Request) *http.Response {
+		return httpResponse(200, "application/json+protobuf", []byte("[]"), nil)
+	}
+	data := &gmproto.ListConversationsRequest{Count: 25}
+
+	// Build
+	c, _ := newGoldenClient(t)
+	c.sessionHandler.sessionID = "golden-session"
+	buildCases := []struct {
+		name   string
+		params SendMessageParams
+	}{
+		{"dontEncrypt", SendMessageParams{Action: gmproto.ActionType_LIST_CONVERSATIONS, Data: data, RequestID: "golden-req-1", DontEncrypt: true}},
+		{"encrypted", SendMessageParams{Action: gmproto.ActionType_LIST_CONVERSATIONS, Data: data, RequestID: "golden-req-2"}},
+		{"customTtl", SendMessageParams{Action: gmproto.ActionType_GET_UPDATES, RequestID: "golden-req-3", CustomTTL: 123456789}},
+		{"omitTtl", SendMessageParams{Action: gmproto.ActionType_GET_UPDATES, RequestID: "golden-req-4", OmitTTL: true}},
+		{"gaia2", SendMessageParams{Action: gmproto.ActionType_CREATE_GAIA_PAIRING_CLIENT_INIT, Data: data, RequestID: "golden-req-5", DontEncrypt: true, MessageType: gmproto.MessageType_GAIA_2}},
+	}
+	build := map[string]any{}
+	for _, bc := range buildCases {
+		requestID, payload, err := c.sessionHandler.buildMessage(bc.params)
+		if err != nil {
+			t.Fatalf("buildMessage %s: %v", bc.name, err)
+		}
+		build[bc.name] = map[string]any{"requestId": requestID, "pblite": pbliteString(payload)}
+	}
+
+	// Send URL
+	sendUrl := map[string]any{}
+	urlCases := []struct {
+		name  string
+		tweak func(*Client)
+	}{
+		{"withCookies", func(*Client) {}},
+		{"googleNoCookies", func(c *Client) { c.AuthData.Cookies = nil }},
+		{"nonGoogle", func(c *Client) { c.AuthData.DestRegID = uuid.Nil; c.AuthData.Cookies = nil }},
+	}
+	for _, uc := range urlCases {
+		uc2, ct := newGoldenClient(t)
+		ct.Respond = okResponse
+		uc.tweak(uc2)
+		if err := uc2.sessionHandler.sendMessageNoResponse(context.Background(), SendMessageParams{Action: gmproto.ActionType_GET_UPDATES, RequestID: "golden-req-6", DontEncrypt: true}); err != nil {
+			t.Fatalf("sendMessageNoResponse %s: %v", uc.name, err)
+		}
+		sendUrl[uc.name] = ct.Requests[0].URL
+	}
+
+	// Acks
+	c, ct := newGoldenClient(t)
+	ct.Respond = okResponse
+	for _, id := range []string{"a1", "a2", "a1"} {
+		c.sessionHandler.queueMessageAck(id)
+	}
+	c.sessionHandler.sendAckRequest()
+	acks := ct.Requests[0]
+
+	// Decode
+	c, _ = newGoldenClient(t)
+	decodeCases := []struct {
+		action  gmproto.ActionType
+		message proto.Message
+	}{
+		{gmproto.ActionType_GET_UPDATES, &gmproto.UpdateEvents{Event: &gmproto.UpdateEvents_TypingEvent{TypingEvent: &gmproto.TypingEvent{}}}},
+		{gmproto.ActionType_LIST_CONVERSATIONS, &gmproto.ListConversationsResponse{Conversations: []*gmproto.Conversation{{ConversationID: "c1", Name: "Golden"}}}},
+		{gmproto.ActionType_NOTIFY_DITTO_ACTIVITY, &gmproto.NotifyDittoActivityResponse{}},
+	}
+	var decode []map[string]any
+	for i, dc := range decodeCases {
+		plain, err := proto.Marshal(dc.message)
+		if err != nil {
+			t.Fatalf("marshal decode case: %v", err)
+		}
+		encrypted, err := c.AuthData.RequestCrypto.Encrypt(plain)
+		if err != nil {
+			t.Fatalf("encrypt decode case: %v", err)
+		}
+		inner, err := proto.Marshal(&gmproto.RPCMessageData{SessionID: "golden-req-" + string(rune('a'+i)), Action: dc.action, EncryptedData: encrypted})
+		if err != nil {
+			t.Fatalf("marshal inner: %v", err)
+		}
+		raw := &gmproto.IncomingRPCMessage{ResponseID: "golden-resp-" + string(rune('a'+i)), BugleRoute: gmproto.BugleRoute_DataEvent, MessageData: inner}
+		res, err := c.decryptInternalMessage(raw)
+		if err != nil {
+			t.Fatalf("decryptInternalMessage: %v", err)
+		}
+		decode = append(decode, map[string]any{
+			"action":           dc.action.String(),
+			"pblite":           pbliteString(raw),
+			"decryptedDataHex": hex.EncodeToString(res.DecryptedData),
+			"messageName":      string(res.DecryptedMessage.ProtoReflect().Descriptor().FullName()),
+		})
+	}
+
+	// Response Table
+	table := map[string]string{}
+	for action, msg := range responseType {
+		table[action.String()] = string(msg.ProtoReflect().Descriptor().FullName())
+	}
+
+	writeGolden(t, out, "rpc", map[string]any{
+		"build":         build,
+		"sendUrl":       sendUrl,
+		"acks":          map[string]any{"url": acks.URL, "bodyHex": acks.BodyHex, "bodyText": acks.BodyText},
+		"decode":        decode,
+		"responseTable": table,
 	})
 }

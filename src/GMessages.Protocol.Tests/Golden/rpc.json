@@ -1,0 +1,75 @@
+{
+  "acks": {
+    "bodyHex": "5b5b2233326464383363392d336333332d343662392d626464342d393961653137663836613838222c6e756c6c2c2247446974746f222c6e756c6c2c6e756c6c2c225a6d46725a53313059574e6f65573975222c5b6e756c6c2c6e756c6c2c323032362c392c322c6e756c6c2c342c6e756c6c2c365d5d2c5b5d2c6e756c6c2c5b5b226131222c5b312c22676f6c64656e2d737263222c2247446974746f225d5d2c5b226132222c5b312c22676f6c64656e2d737263222c2247446974746f225d5d5d5d",
+    "bodyText": "[[\"32dd83c9-3c33-46b9-bdd4-99ae17f86a88\",null,\"GDitto\",null,null,\"ZmFrZS10YWNoeW9u\",[null,null,2026,9,2,null,4,null,6]],[],null,[[\"a1\",[1,\"golden-src\",\"GDitto\"]],[\"a2\",[1,\"golden-src\",\"GDitto\"]]]]",
+    "url": "https://instantmessaging-pa.clients6.google.com/$rpc/google.internal.communications.instantmessaging.v1.Messaging/AckMessages"
+  },
+  "build": {
+    "customTtl": {
+      "pblite": "[[1,\"golden-src\",\"GDitto\"],[\"golden-req-3\",19,null,null,null,null,null,null,null,null,null,\"Cgxnb2xkZW4tcmVxLTMQEDIOZ29sZGVuLXNlc3Npb24=\",null,null,null,null,null,null,null,null,null,null,[[],2]],[\"golden-req-3\",null,null,null,null,\"ZmFrZS10YWNoeW9u\",[null,null,2026,9,2,null,4,null,6]],null,123456789,null,null,null,[\"ZmZlZWRkY2MtYmJhYS05OTg4LTc3NjYtNTU0NDMzMjIxMTAw\"]]",
+      "requestId": "golden-req-3"
+    },
+    "dontEncrypt": {
+      "pblite": "[[1,\"golden-src\",\"GDitto\"],[\"golden-req-1\",19,null,null,null,null,null,null,null,null,null,\"Cgxnb2xkZW4tcmVxLTEQARoCEBkyDmdvbGRlbi1zZXNzaW9u\",null,null,null,null,null,null,null,null,null,null,[[],2]],[\"golden-req-1\",null,null,null,null,\"ZmFrZS10YWNoeW9u\",[null,null,2026,9,2,null,4,null,6]],null,86400000000,null,null,null,[\"ZmZlZWRkY2MtYmJhYS05OTg4LTc3NjYtNTU0NDMzMjIxMTAw\"]]",
+      "requestId": "golden-req-1"
+    },
+    "encrypted": {
+      "pblite": "[[1,\"golden-src\",\"GDitto\"],[\"golden-req-2\",19,null,null,null,null,null,null,null,null,null,\"Cgxnb2xkZW4tcmVxLTIQASoyaY1H3pkKC4uTBVNxzv0hXocI/RvLGfADflRAOst2tn/G4Qh84keMb/eDr/1BDQHRow8yDmdvbGRlbi1zZXNzaW9u\",null,null,null,null,null,null,null,null,null,null,[[],2]],[\"golden-req-2\",null,null,null,null,\"ZmFrZS10YWNoeW9u\",[null,null,2026,9,2,null,4,null,6]],null,86400000000,null,null,null,[\"ZmZlZWRkY2MtYmJhYS05OTg4LTc3NjYtNTU0NDMzMjIxMTAw\"]]",
+      "requestId": "golden-req-2"
+    },
+    "gaia2": {
+      "pblite": "[[1,\"golden-src\",\"GDitto\"],[\"golden-req-5\",19,null,null,null,null,null,null,null,null,null,\"Cgxnb2xkZW4tcmVxLTUQLBoCEBkyDmdvbGRlbi1zZXNzaW9u\",null,null,null,null,null,null,null,null,null,null,[[],20]],[\"golden-req-5\",null,null,null,null,\"ZmFrZS10YWNoeW9u\",[null,null,2026,9,2,null,4,null,6]],null,86400000000,null,null,null,[\"ZmZlZWRkY2MtYmJhYS05OTg4LTc3NjYtNTU0NDMzMjIxMTAw\"]]",
+      "requestId": "golden-req-5"
+    },
+    "omitTtl": {
+      "pblite": "[[1,\"golden-src\",\"GDitto\"],[\"golden-req-4\",19,null,null,null,null,null,null,null,null,null,\"Cgxnb2xkZW4tcmVxLTQQEDIOZ29sZGVuLXNlc3Npb24=\",null,null,null,null,null,null,null,null,null,null,[[],2]],[\"golden-req-4\",null,null,null,null,\"ZmFrZS10YWNoeW9u\",[null,null,2026,9,2,null,4,null,6]],null,null,null,null,null,[\"ZmZlZWRkY2MtYmJhYS05OTg4LTc3NjYtNTU0NDMzMjIxMTAw\"]]",
+      "requestId": "golden-req-4"
+    }
+  },
+  "decode": [
+    {
+      "action": "GET_UPDATES",
+      "decryptedDataHex": "2200",
+      "messageName": "events.UpdateEvents",
+      "pblite": "[\"golden-resp-a\",19,null,null,null,null,null,null,null,null,null,\"Cgxnb2xkZW4tcmVxLWEgEEIy/432Yg4vgnD6UVvR3Gqx/lpSynyp69GHYWa3Ueo7XeKxXXklSSUOjCcZ83eyD8KGNpo=\",null,null,null,null,null,null,null,null,null,null,null]"
+    },
+    {
+      "action": "LIST_CONVERSATIONS",
+      "decryptedDataHex": "120c0a0263311206476f6c64656e",
+      "messageName": "client.ListConversationsResponse",
+      "pblite": "[\"golden-resp-b\",19,null,null,null,null,null,null,null,null,null,\"Cgxnb2xkZW4tcmVxLWIgAUI+AMdP6MxcamTzjhBlpOhP2ExQuhmOULJL5P0Mi62MSgBCZi6XW0IgaYwZoubLikVt8EnMJK1QdGylptoAhHw=\",null,null,null,null,null,null,null,null,null,null,null]"
+    },
+    {
+      "action": "NOTIFY_DITTO_ACTIVITY",
+      "decryptedDataHex": "",
+      "messageName": "client.NotifyDittoActivityResponse",
+      "pblite": "[\"golden-resp-c\",19,null,null,null,null,null,null,null,null,null,\"Cgxnb2xkZW4tcmVxLWMgFkIw4wXw7T3+72QPUgtQE4YL+fDr1+KtMyd4TOmix6JzIVaouQcrc5MgUdopVbsafyaY\",null,null,null,null,null,null,null,null,null,null,null]"
+    }
+  ],
+  "responseTable": {
+    "DELETE_MESSAGE": "client.DeleteMessageResponse",
+    "FETCH_BLOCKED_CONTACTS": "client.ListContactsResponse",
+    "GET_CONTACTS_THUMBNAIL": "client.GetThumbnailResponse",
+    "GET_CONVERSATION": "client.GetConversationResponse",
+    "GET_CONVERSATION_TYPE": "client.GetConversationTypeResponse",
+    "GET_FULL_SIZE_IMAGE": "client.GetFullSizeImageResponse",
+    "GET_OR_CREATE_CONVERSATION": "client.GetOrCreateConversationResponse",
+    "GET_PARTICIPANTS_THUMBNAIL": "client.GetThumbnailResponse",
+    "GET_UPDATES": "events.UpdateEvents",
+    "IS_BUGLE_DEFAULT": "client.IsBugleDefaultResponse",
+    "LIST_CONTACTS": "client.ListContactsResponse",
+    "LIST_CONVERSATIONS": "client.ListConversationsResponse",
+    "LIST_MESSAGES": "client.ListMessagesResponse",
+    "LIST_TOP_CONTACTS": "client.ListTopContactsResponse",
+    "NOTIFY_DITTO_ACTIVITY": "client.NotifyDittoActivityResponse",
+    "PRE_FETCH_CONTACTS": "client.ListContactsResponse",
+    "SEND_MESSAGE": "client.SendMessageResponse",
+    "SEND_REACTION": "client.SendReactionResponse",
+    "UPDATE_CONVERSATION": "client.UpdateConversationResponse"
+  },
+  "sendUrl": {
+    "googleNoCookies": "https://instantmessaging-pa.googleapis.com/$rpc/google.internal.communications.instantmessaging.v1.Messaging/SendMessage",
+    "nonGoogle": "https://instantmessaging-pa.clients6.google.com/$rpc/google.internal.communications.instantmessaging.v1.Messaging/SendMessage",
+    "withCookies": "https://instantmessaging-pa.clients6.google.com/$rpc/google.internal.communications.instantmessaging.v1.Messaging/SendMessage"
+  }
+}
