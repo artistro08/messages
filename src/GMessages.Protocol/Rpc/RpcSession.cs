@@ -132,9 +132,10 @@ public sealed partial class RpcSession(GmHttpClient http, AuthData auth, GmEndpo
         // Timers: Hard Timeout, Plus The Early Notice For User Requests
         using var hard   = new CancellationTokenSource(ResponseHardTimeout, time);
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, hard.Token);
+        using var slow   = new CancellationTokenSource();
         if (p.UserInitiated)
         {
-            _ = RaisePhoneSlowAsync(linked.Token);
+            _ = RaisePhoneSlowAsync(slow.Token);
         }
 
         try
@@ -150,6 +151,11 @@ public sealed partial class RpcSession(GmHttpClient http, AuthData auth, GmEndpo
         {
             CancelWaiter(request_id);
             throw;
+        }
+        finally
+        {
+            // Stop The Slow Notice Timer Whenever The Request Ends (Go: defer shortCircuitTimer.Stop())
+            await slow.CancelAsync().ConfigureAwait(false);
         }
     }
 
@@ -295,6 +301,8 @@ public sealed partial class RpcSession(GmHttpClient http, AuthData auth, GmEndpo
         }
 
         // Ignore Odd Messages That Come Before Real Responses
+        // Note: Length > 0 stands in for Go's != nil on bytes fields. A field that is present on the wire with zero
+        // length is nil-vs-empty in Go (non-nil) but indistinguishable from absent here; real payloads are never empty.
         bool is_pairing_action = data.Action is ActionType.CreateGaiaPairingClientInit or ActionType.CreateGaiaPairingClientFinished;
         if (auth.HasCookies && !is_pairing_action && data.UnencryptedData.Length > 0 && data.EncryptedData.Length == 0)
         {
@@ -512,7 +520,14 @@ public sealed partial class RpcSession(GmHttpClient http, AuthData auth, GmEndpo
             return;
         }
 
-        PhoneSlow?.Invoke(this, EventArgs.Empty);
+        try
+        {
+            PhoneSlow?.Invoke(this, EventArgs.Empty);
+        }
+        catch (Exception ex)
+        {
+            LogPhoneSlowHandlerFailed(log, ex);
+        }
     }
 
     private IncomingRpc DecodeDataEvent(IncomingRPCMessage raw)
@@ -581,6 +596,9 @@ public sealed partial class RpcSession(GmHttpClient http, AuthData auth, GmEndpo
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Received response. Request id {RequestId}, response id {ResponseId}, action {Action}")]
     private static partial void LogReceived(ILogger logger, string requestId, string responseId, ActionType action);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "A PhoneSlow subscriber threw")]
+    private static partial void LogPhoneSlowHandlerFailed(ILogger logger, Exception exception);
 
     [LoggerMessage(Level = LogLevel.Trace, Message = "Sent {Count} acks")]
     private static partial void LogAcksSent(ILogger logger, int count);

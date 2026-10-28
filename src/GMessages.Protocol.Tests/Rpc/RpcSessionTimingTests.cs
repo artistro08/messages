@@ -55,7 +55,7 @@ public class RpcSessionTimingTests
     {
         for (int i = 0; i < count; i++)
         {
-            await time.TimerCreated.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.IsTrue(await time.TimerCreated.WaitAsync(TimeSpan.FromSeconds(10)), "timer was not created");
         }
     }
 
@@ -127,6 +127,47 @@ public class RpcSessionTimingTests
         Assert.IsFalse(send.IsCompleted);
         Assert.IsTrue(rig.Session.TryDeliverResponse(Response("req-1")));
         await send.WaitAsync(TimeSpan.FromSeconds(10));
+    }
+
+    /// <summary>
+    /// A user-initiated send answered in time never raises the slow notice later.
+    /// </summary>
+    [TestMethod]
+    public async Task Send_UserInitiated_AnsweredEarly_NeverRaisesPhoneSlow()
+    {
+        Rig rig = CreateRig();
+        int count = 0;
+        rig.Session.PhoneSlow += (_, _) => Interlocked.Increment(ref count);
+        Task<IncomingRpc> send = rig.Session.SendAsync(new SendParams(ActionType.GetUpdates, RequestId: "req-1", UserInitiated: true), CancellationToken.None);
+        await WaitForTimersAsync(rig.Time, 2);
+
+        rig.Time.Advance(TimeSpan.FromSeconds(1));
+        Assert.IsTrue(rig.Session.TryDeliverResponse(Response("req-1")));
+        await send.WaitAsync(TimeSpan.FromSeconds(10));
+        rig.Time.Advance(TimeSpan.FromSeconds(9));
+        await Task.Yield();
+
+        Assert.AreEqual(0, Volatile.Read(ref count));
+    }
+
+    /// <summary>
+    /// A user-initiated send ended by FailAllWaiters never raises the slow notice later.
+    /// </summary>
+    [TestMethod]
+    public async Task Send_UserInitiated_ConnectionClosedEarly_NeverRaisesPhoneSlow()
+    {
+        Rig rig = CreateRig();
+        int count = 0;
+        rig.Session.PhoneSlow += (_, _) => Interlocked.Increment(ref count);
+        Task<IncomingRpc> send = rig.Session.SendAsync(new SendParams(ActionType.GetUpdates, RequestId: "req-1", UserInitiated: true), CancellationToken.None);
+        await WaitForTimersAsync(rig.Time, 2);
+
+        rig.Session.FailAllWaiters();
+        await Assert.ThrowsExactlyAsync<ConnectionClosedException>(() => send.WaitAsync(TimeSpan.FromSeconds(10)));
+        rig.Time.Advance(TimeSpan.FromSeconds(10));
+        await Task.Yield();
+
+        Assert.AreEqual(0, Volatile.Read(ref count));
     }
 
     /// <summary>
