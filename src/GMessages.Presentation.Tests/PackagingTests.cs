@@ -33,6 +33,16 @@ public sealed class PackagingTests
         StringAssert.Contains(text, $"TaskId=\"{AppInfo.DisplayName}\"");
     }
 
+    [TestMethod]
+    [TestCategory("RequiresBuild")]
+    public void GeneratedManifest_IdentityVersionMatchesTheAppVersion()
+    {
+        // AppInfo.Version (log, settings page) must agree with the package version
+        var text = File.ReadAllText(FindGeneratedManifest());
+
+        StringAssert.Matches(text, new System.Text.RegularExpressions.Regex($"<Identity[^>]*\\sVersion=\"{System.Text.RegularExpressions.Regex.Escape(AppInfo.Version)}[.\"]"));
+    }
+
     // Generated Manifest: the newest copy under src/GMessages.App/obj, whichever configuration and platform built it
     private static string FindGeneratedManifest()
     {
