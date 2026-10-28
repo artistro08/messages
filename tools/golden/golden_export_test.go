@@ -18,6 +18,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
+	"google.golang.org/protobuf/proto"
 	"go.mau.fi/util/exhttp"
 	"go.mau.fi/util/pblite"
 
@@ -147,6 +148,7 @@ func TestExportGolden(t *testing.T) {
 
 	checkGoldenHelpers(t)
 	exportSmoke(t, out)
+	exportProtoBinary(t, out)
 }
 
 // checkGoldenHelpers sanity-checks the client and capture transport; writes no file.
@@ -175,4 +177,24 @@ func exportSmoke(t *testing.T, out string) {
 		t.Fatalf("pblite: %v", err)
 	}
 	writeGolden(t, out, "smoke", map[string]any{"pblite": string(data)})
+}
+
+// exportProtoBinary writes proto.json: binary protobuf of ConfigVersion and Device, as lowercase hex.
+func exportProtoBinary(t *testing.T, out string) {
+	// Config Version
+	version, err := proto.Marshal(&gmproto.ConfigVersion{Year: 2026, Month: 9, Day: 2, V1: 4, V2: 6})
+	if err != nil {
+		t.Fatalf("marshal config version: %v", err)
+	}
+
+	// Device
+	device, err := proto.Marshal(&gmproto.Device{UserID: 1, SourceID: "abc", Network: "GDitto"})
+	if err != nil {
+		t.Fatalf("marshal device: %v", err)
+	}
+
+	writeGolden(t, out, "proto", map[string]any{
+		"configVersionHex": hex.EncodeToString(version),
+		"deviceHex":        hex.EncodeToString(device),
+	})
 }

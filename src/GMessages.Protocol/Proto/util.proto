@@ -1,0 +1,9 @@
+syntax = "proto3";
+package util;
+
+option go_package = "../gmproto";
+option csharp_namespace = "GMessages.Protocol.Proto";
+
+message EmptyArr {
+
+}
