@@ -61,6 +61,19 @@ static int SelfTest()
         return 1;
     }
 
+    // PBLite With An Enum, Bools, Repeated Message And Repeated String (golden Conversation case)
+    var conversation = new Conversation { ConversationID = "c1", Unread = true, Status = ConversationStatus.Archived, Pinned = true };
+    conversation.OtherParticipants.Add(["p1", "p2"]);
+    conversation.Participants.Add(new Participant { FullName = "A", IsMe = true });
+    const string conversation_pblite = """["c1",null,null,null,null,true,null,null,null,null,null,2,null,null,null,null,null,null,null,[[null,null,"A",null,null,true,null,null,null,null,null,null,null,null,null,null,null,null,null,null]],["p1","p2"],null,null,null,null,true,null,null,null,null,null,null,null,null,null]""";
+
+    if (Encoding.UTF8.GetString(PbLiteSerializer.Serialize(conversation)) != conversation_pblite
+        || !PbLiteSerializer.Deserialize<Conversation>(Encoding.UTF8.GetBytes(conversation_pblite)).Equals(conversation))
+    {
+        Console.Error.WriteLine("selftest failed: pblite enum/bool/repeated");
+        return 1;
+    }
+
     Console.WriteLine("selftest ok");
     return 0;
 }

@@ -39,6 +39,25 @@ public class PbLiteErrorTests
     }
 
     /// <summary>
+    /// A lone-surrogate escape or an out-of-range number throws PbLiteException, not a raw .NET exception.
+    /// </summary>
+    [TestMethod]
+    public void Deserialize_BadStringOrNumber_ThrowsPbLiteException()
+    {
+        // Lone Surrogate In A String Field (Device.sourceID) And In A Base64 Field
+        var text = Assert.ThrowsExactly<PbLiteException>(() => PbLiteSerializer.Deserialize<Device>(Utf8("""[null,"\ud800"]""")));
+        StringAssert.Contains(text.Message, "authentication.Device.sourceID");
+        var base64 = Assert.ThrowsExactly<PbLiteException>(() => PbLiteSerializer.Deserialize<AuthMessage>(Utf8("""[null,null,null,null,null,"\ud800"]""")));
+        StringAssert.Contains(base64.Message, "authentication.AuthMessage.tachyonAuthToken");
+
+        // 1e400 In A Double Field (DoubleValue.value) And In An Int Field Via The Double Path
+        var number = Assert.ThrowsExactly<PbLiteException>(() => PbLiteSerializer.Deserialize<Google.Protobuf.WellKnownTypes.DoubleValue>(Utf8("[1e400]")));
+        StringAssert.Contains(number.Message, "google.protobuf.DoubleValue.value");
+        var integer = Assert.ThrowsExactly<PbLiteException>(() => PbLiteSerializer.Deserialize<Device>(Utf8("[1e400]")));
+        StringAssert.Contains(integer.Message, "authentication.Device.userID");
+    }
+
+    /// <summary>
     /// Invalid base64 in a bytes field throws and the message names the field.
     /// </summary>
     [TestMethod]

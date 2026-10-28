@@ -108,6 +108,16 @@
       "type": "authentication.Device"
     },
     {
+      "binaryHex": "1a002000",
+      "pblite": "[null,null,\"\",false]",
+      "type": "client.GetOrCreateConversationRequest"
+    },
+    {
+      "binaryHex": "0a0263393800",
+      "pblite": "[\"c9\",null,null,null,null,null,0,null,null,null,null,null]",
+      "type": "client.UpdateConversationData"
+    },
+    {
       "binaryHex": "",
       "pblite": "[null,null,null]",
       "type": "authentication.Device"

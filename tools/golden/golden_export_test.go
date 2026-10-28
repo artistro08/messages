@@ -424,6 +424,10 @@ func exportPbLite(t *testing.T, out string) {
 		},
 		// JSON String Escaping (HTML, quotes, control chars, U+2028, non-BMP)
 		&gmproto.Device{UserID: 2, SourceID: "a<b>&\"\\n\t é\U0001F600\x01", Network: "n"},
+		// Optional Fields At Their Zero Value (still set)
+		&gmproto.GetOrCreateConversationRequest{CreateRCSGroup: proto.Bool(false), RCSGroupName: proto.String("")},
+		// Oneof Member Set To Its Zero Value (still set)
+		&gmproto.UpdateConversationData{ConversationID: "c9", Data: &gmproto.UpdateConversationData_Mute{Mute: gmproto.ConversationMuteStatus_UNMUTE}},
 		// Every Field At Its Zero Value
 		&gmproto.Device{},
 		&gmproto.AuthMessage{},

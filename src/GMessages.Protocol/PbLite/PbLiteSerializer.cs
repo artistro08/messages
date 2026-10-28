@@ -19,6 +19,8 @@ namespace GMessages.Protocol.PbLite;
 /// <c>encoding/json</c> output byte for byte, including its string escaping and number formatting, so requests look
 /// identical to the original library's. The reader is as lenient as Go's: integers may be JSON strings, bools may be
 /// numbers, a trailing JSON object overrides slots by field number, and short arrays or extra slots are fine.
+/// One deliberate difference: Go decodes JSON numbers through float64, so integers above 2^53 lose precision there;
+/// this reader parses whole numbers from their exact text, so big int64 and uint64 values decode exactly.
 /// Fields are reached through <see cref="FieldDescriptor.Accessor"/> and never through reflection on type names, which
 /// keeps it Native AOT safe. Ported from
 /// <see href="https://github.com/mautrix/go-util/tree/main/pblite">go-util pblite</see> (<c>serialize.go</c> and
@@ -538,14 +540,14 @@ public static class PbLiteSerializer
 
                 return IsPbliteBinary(field)
                     ? Encoding.UTF8.GetString(ReadBase64(value, index, field))
-                    : value.GetString()!;
+                    : ReadText(value, index, field);
 
             case FieldType.Bool:
                 return value.ValueKind switch
                 {
                     JsonValueKind.True   => true,
                     JsonValueKind.False  => false,
-                    JsonValueKind.Number => value.GetDouble() != 0,
+                    JsonValueKind.Number => ReadDouble(value, index, field) != 0,
                     _                    => throw Fail(field, index, "bool or float", value),
                 };
 
@@ -606,7 +608,7 @@ public static class PbLiteSerializer
 
         try
         {
-            return Convert.FromBase64String(value.GetString()!);
+            return Convert.FromBase64String(ReadText(value, index, field));
         }
         catch (FormatException ex)
         {
@@ -635,7 +637,7 @@ public static class PbLiteSerializer
         switch (value.ValueKind)
         {
             case JsonValueKind.String when allow_string:
-                if (T.TryParse(value.GetString(), styles, CultureInfo.InvariantCulture, out T? parsed))
+                if (T.TryParse(ReadText(value, index, field), styles, CultureInfo.InvariantCulture, out T? parsed))
                 {
                     return parsed;
                 }
@@ -648,7 +650,7 @@ public static class PbLiteSerializer
                     return exact;
                 }
 
-                return T.CreateTruncating(value.GetDouble());
+                return T.CreateTruncating(ReadDouble(value, index, field));
 
             default:
                 throw Fail(field, index, allow_string ? "float64 or string" : "float64", value);
@@ -670,7 +672,42 @@ public static class PbLiteSerializer
             throw Fail(field, index, "float64", value);
         }
 
-        return value.GetDouble();
+        // Out Of Range (1e400) Is An Error In Go's json.Unmarshal Too
+        if (!value.TryGetDouble(out double number) || !double.IsFinite(number))
+        {
+            throw new PbLiteException($"number out of range at index {index} for field {field.FullName}");
+        }
+
+        return number;
+    }
+
+    /// <summary>
+    /// Reads a JSON string value.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="JsonElement.GetString"/> throws <see cref="InvalidOperationException"/> on escapes that are not valid
+    /// UTF-16 (a lone surrogate such as <c>"\ud800"</c>); that is reported as a field error instead.
+    /// </remarks>
+    /// <param name="value">The JSON value.</param>
+    /// <param name="index">The slot or list index, for errors.</param>
+    /// <param name="field">The field, for errors.</param>
+    /// <returns>The string.</returns>
+    /// <exception cref="PbLiteException">The value is not a string or is not valid UTF-16.</exception>
+    private static string ReadText(JsonElement value, int index, FieldDescriptor field)
+    {
+        if (value.ValueKind != JsonValueKind.String)
+        {
+            throw Fail(field, index, "string", value);
+        }
+
+        try
+        {
+            return value.GetString()!;
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new PbLiteException($"invalid string at index {index} for field {field.FullName}", ex);
+        }
     }
 
     // =========================================================================

@@ -59,6 +59,8 @@ public class PbLiteGoldenTests
         "rpc.OutgoingRPCMessage"                    => OutgoingRPCMessage.Parser,
         "client.AckMessageRequest"                  => AckMessageRequest.Parser,
         "client.ReceiveMessagesRequest"             => ReceiveMessagesRequest.Parser,
+        "client.GetOrCreateConversationRequest"     => GetOrCreateConversationRequest.Parser,
+        "client.UpdateConversationData"             => UpdateConversationData.Parser,
         "conversations.Conversation"                => Conversation.Parser,
         _                                           => throw new AssertFailedException("unknown type " + type),
     };
@@ -77,6 +79,8 @@ public class PbLiteGoldenTests
         "rpc.OutgoingRPCMessage"                    => PbLiteSerializer.Deserialize<OutgoingRPCMessage>(json),
         "client.AckMessageRequest"                  => PbLiteSerializer.Deserialize<AckMessageRequest>(json),
         "client.ReceiveMessagesRequest"             => PbLiteSerializer.Deserialize<ReceiveMessagesRequest>(json),
+        "client.GetOrCreateConversationRequest"     => PbLiteSerializer.Deserialize<GetOrCreateConversationRequest>(json),
+        "client.UpdateConversationData"             => PbLiteSerializer.Deserialize<UpdateConversationData>(json),
         "conversations.Conversation"                => PbLiteSerializer.Deserialize<Conversation>(json),
         _                                           => throw new AssertFailedException("unknown type " + type),
     };
@@ -84,6 +88,16 @@ public class PbLiteGoldenTests
     // =========================================================================
     // TESTS
     // =========================================================================
+
+    /// <summary>
+    /// A silently dropped case must fail: the exporter currently writes 15 encode and 10 decode cases.
+    /// </summary>
+    [TestMethod]
+    public void GoldenFile_HasEveryCase()
+    {
+        Assert.AreEqual(15, EncodeCases().Count());
+        Assert.AreEqual(10, DecodeCases().Count());
+    }
 
     /// <summary>
     /// Serializing the message Go marshalled gives Go's exact PBLite text.
