@@ -46,7 +46,7 @@ public sealed class AuthData
     public byte[]? TachyonAuthToken
     {
         get => Tachyon.Token;
-        set => Tachyon = Tachyon with { Token = value };
+        internal set => Tachyon = Tachyon with { Token = value };
     }
 
     /// <summary>
@@ -56,7 +56,7 @@ public sealed class AuthData
     public DateTimeOffset TachyonExpiry
     {
         get => Tachyon.Expiry;
-        set => Tachyon = Tachyon with { Expiry = value };
+        internal set => Tachyon = Tachyon with { Expiry = value };
     }
 
     /// <summary>
@@ -66,7 +66,7 @@ public sealed class AuthData
     public long TachyonTtlMicros
     {
         get => Tachyon.TtlMicros;
-        set => Tachyon = Tachyon with { TtlMicros = value };
+        internal set => Tachyon = Tachyon with { TtlMicros = value };
     }
 
     /// <summary>
