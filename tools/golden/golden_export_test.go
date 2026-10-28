@@ -24,9 +24,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
-	"google.golang.org/protobuf/proto"
 	"go.mau.fi/util/exhttp"
 	"go.mau.fi/util/pblite"
+	"google.golang.org/protobuf/proto"
 
 	"go.mau.fi/mautrix-gmessages/pkg/libgm/crypto"
 	"go.mau.fi/mautrix-gmessages/pkg/libgm/gmproto"
@@ -156,6 +156,7 @@ func TestExportGolden(t *testing.T) {
 	exportSmoke(t, out)
 	exportProtoBinary(t, out)
 	exportCrypto(t, out)
+	exportPbLite(t, out)
 }
 
 // checkGoldenHelpers sanity-checks the client and capture transport; writes no file.
@@ -313,4 +314,161 @@ func exportCrypto(t *testing.T, out string) {
 			"signatureHex": hex.EncodeToString(sig),
 		},
 	})
+}
+
+// pbliteMessage builds an empty gmproto message for a proto full name (decode cases).
+func pbliteMessage(t *testing.T, name string) proto.Message {
+	switch name {
+	case "authentication.Device":
+		return &gmproto.Device{}
+	case "authentication.ConfigVersion":
+		return &gmproto.ConfigVersion{}
+	case "conversations.Conversation":
+		return &gmproto.Conversation{}
+	case "authentication.AuthMessage":
+		return &gmproto.AuthMessage{}
+	}
+	t.Fatalf("unknown pblite type %s", name)
+	return nil
+}
+
+// exportPbLite writes pblite.json: encode cases (binary + PBLite from real messages) and
+// decode cases (hand-written lenient PBLite inputs + Go's binary result).
+func exportPbLite(t *testing.T, out string) {
+	// Shared Pieces
+	auth := &gmproto.AuthMessage{
+		RequestID:        "req-1",
+		Network:          "GDitto",
+		TachyonAuthToken: []byte{1, 2, 3, 0xfe, 0xff},
+		ConfigVersion:    util.ConfigMessage,
+	}
+	device := &gmproto.Device{UserID: 1, SourceID: "golden-src", Network: "GDitto"}
+
+	// Encode Cases
+	encodeMessages := []proto.Message{
+		// Every Field Set
+		auth,
+		// pblite_binary Message Field
+		&gmproto.SignInGaiaRequest{
+			AuthMessage: &gmproto.AuthMessage{RequestID: "r2", Network: "Bugle", ConfigVersion: util.ConfigMessage},
+			Inner: &gmproto.SignInGaiaRequest_Inner{
+				DeviceID: &gmproto.SignInGaiaRequest_Inner_DeviceID{UnknownInt1: 3, DeviceID: "messages-web-00112233445566778899aabbccddeeff"},
+				SomeData: &gmproto.SignInGaiaRequest_Inner_Data{SomeData: goldenSeq(0x10, 33)},
+			},
+			Network: "Bugle",
+		},
+		// Repeated pblite_binary String
+		&gmproto.OutgoingRPCMessage{
+			Mobile: device,
+			Data: &gmproto.OutgoingRPCMessage_Data{
+				RequestID:   "rpc-1",
+				BugleRoute:  gmproto.BugleRoute_DataEvent,
+				MessageData: goldenSeq(0, 20),
+				MessageTypeData: &gmproto.OutgoingRPCMessage_Data_Type{
+					EmptyArr:    &gmproto.EmptyArr{},
+					MessageType: gmproto.MessageType_BUGLE_MESSAGE,
+				},
+			},
+			Auth:                &gmproto.OutgoingRPCMessage_Auth{RequestID: "rpc-1", TachyonAuthToken: []byte("fake-tachyon"), ConfigVersion: util.ConfigMessage},
+			TTL:                 86400000000,
+			DestRegistrationIDs: []string{"ffeeddcc-bbaa-9988-7766-554433221100", "00112233-4455-6677-8899-aabbccddeeff"},
+		},
+		// Repeated Message
+		&gmproto.AckMessageRequest{
+			AuthData: auth,
+			EmptyArr: &gmproto.EmptyArr{},
+			Acks: []*gmproto.AckMessageRequest_Message{
+				{RequestID: "ack-1", Device: device},
+				{RequestID: "ack-2", Device: device},
+			},
+		},
+		// As doLongPoll Builds It (Nested Empty Messages)
+		&gmproto.ReceiveMessagesRequest{
+			Auth: auth,
+			Unknown: &gmproto.ReceiveMessagesRequest_UnknownEmptyObject2{
+				Unknown: &gmproto.ReceiveMessagesRequest_UnknownEmptyObject1{},
+			},
+		},
+		// Optional Message With MoreParameters Nil
+		&gmproto.RegisterRefreshRequest{
+			MessageAuth:       auth,
+			CurrBrowserDevice: device,
+			UnixTimestamp:     1700000000000000,
+			Signature:         goldenSeq(0x30, 70),
+			Parameters:        &gmproto.RegisterRefreshRequest_Parameters{EmptyArr: &gmproto.EmptyArr{}},
+			MessageType:       2,
+		},
+		// Optional Message With MoreParameters Set (Sparse Index 102)
+		&gmproto.RegisterRefreshRequest{
+			MessageAuth: auth,
+			Parameters: &gmproto.RegisterRefreshRequest_Parameters{
+				EmptyArr: &gmproto.EmptyArr{},
+				MoreParameters: &gmproto.RegisterRefreshRequest_MoreParameters{
+					Three:   3,
+					PushReg: &gmproto.RegisterRefreshRequest_PushRegistration{Type: "messages_web", Url: "https://push.example/x", P256Dh: "p", Auth: "a"},
+				},
+			},
+		},
+		// Int64 Above 2^53
+		&gmproto.Device{UserID: 9007199254740993, SourceID: "big", Network: "GDitto"},
+		// Uint64 Above 2^53
+		&gmproto.SignInGaiaResponse_Header{UnknownInt2: 18446744073709551615, UnknownTimestamp: -1700000000000000},
+		// Enum And Bool Set (Plus Repeated Message And Repeated String)
+		&gmproto.Conversation{
+			ConversationID:    "c1",
+			Unread:            true,
+			Status:            gmproto.ConversationStatus_ARCHIVED,
+			Pinned:            true,
+			OtherParticipants: []string{"p1", "p2"},
+			Participants:      []*gmproto.Participant{{FullName: "A", IsMe: true}},
+		},
+		// JSON String Escaping (HTML, quotes, control chars, U+2028, non-BMP)
+		&gmproto.Device{UserID: 2, SourceID: "a<b>&\"\\n\t é\U0001F600\x01", Network: "n"},
+		// Every Field At Its Zero Value
+		&gmproto.Device{},
+		&gmproto.AuthMessage{},
+	}
+	var encodeCases []map[string]any
+	for _, m := range encodeMessages {
+		binary, err := proto.Marshal(m)
+		if err != nil {
+			t.Fatalf("pblite binary: %v", err)
+		}
+		text, err := pblite.Marshal(m)
+		if err != nil {
+			t.Fatalf("pblite marshal: %v", err)
+		}
+		encodeCases = append(encodeCases, map[string]any{
+			"type":      string(m.ProtoReflect().Descriptor().FullName()),
+			"binaryHex": hex.EncodeToString(binary),
+			"pblite":    string(text),
+		})
+	}
+
+	// Decode Cases (leniency)
+	var decodeCases []map[string]any
+	for _, c := range []struct{ typ, input string }{
+		{"authentication.Device", `["9007199254740993","src","net"]`},                            // int as string
+		{"authentication.Device", `["12","src","net"]`},                                          // small int as string
+		{"conversations.Conversation", `["c1",null,null,null,null,1,null,null,null,1]`},          // bool as 1
+		{"conversations.Conversation", `["c1",null,null,null,null,0]`},                           // bool as 0
+		{"authentication.ConfigVersion", `[null,null,2026,9,2,null,4,null,6,{"4":11}]`},          // override object
+		{"authentication.ConfigVersion", `[null,null,2026,9,2,null,4,null,6,{"10":1,"3":2025}]`}, // override plus unknown key
+		{"authentication.Device", `["1","src","net",null,null,null,null]`},                       // extra trailing nulls
+		{"conversations.Conversation", `["c1","name"]`},                                          // shorter than max field
+		{"authentication.Device", `["1","src","net","x",5,[1,2],{"a":1}]`},                       // unknown extra slots
+		{"authentication.AuthMessage", `[]`},                                                     // empty array
+	} {
+		msg := pbliteMessage(t, c.typ)
+		if err := pblite.Unmarshal([]byte(c.input), msg); err != nil {
+			t.Fatalf("pblite unmarshal %s: %v", c.input, err)
+		}
+		binary, err := proto.Marshal(msg)
+		if err != nil {
+			t.Fatalf("decode binary: %v", err)
+		}
+		decodeCases = append(decodeCases, map[string]any{"type": c.typ, "input": c.input, "binaryHex": hex.EncodeToString(binary)})
+	}
+
+	writeGolden(t, out, "pblite", map[string]any{"encode": encodeCases, "decode": decodeCases})
 }

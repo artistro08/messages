@@ -1,0 +1,121 @@
+{
+  "decode": [
+    {
+      "binaryHex": "08818080808080801012037372631a036e6574",
+      "input": "[\"9007199254740993\",\"src\",\"net\"]",
+      "type": "authentication.Device"
+    },
+    {
+      "binaryHex": "080c12037372631a036e6574",
+      "input": "[\"12\",\"src\",\"net\"]",
+      "type": "authentication.Device"
+    },
+    {
+      "binaryHex": "0a02633130015001",
+      "input": "[\"c1\",null,null,null,null,1,null,null,null,1]",
+      "type": "conversations.Conversation"
+    },
+    {
+      "binaryHex": "0a026331",
+      "input": "[\"c1\",null,null,null,null,0]",
+      "type": "conversations.Conversation"
+    },
+    {
+      "binaryHex": "18ea0f200b280238044806",
+      "input": "[null,null,2026,9,2,null,4,null,6,{\"4\":11}]",
+      "type": "authentication.ConfigVersion"
+    },
+    {
+      "binaryHex": "18e90f2009280238044806",
+      "input": "[null,null,2026,9,2,null,4,null,6,{\"10\":1,\"3\":2025}]",
+      "type": "authentication.ConfigVersion"
+    },
+    {
+      "binaryHex": "080112037372631a036e6574",
+      "input": "[\"1\",\"src\",\"net\",null,null,null,null]",
+      "type": "authentication.Device"
+    },
+    {
+      "binaryHex": "0a02633112046e616d65",
+      "input": "[\"c1\",\"name\"]",
+      "type": "conversations.Conversation"
+    },
+    {
+      "binaryHex": "080112037372631a036e6574",
+      "input": "[\"1\",\"src\",\"net\",\"x\",5,[1,2],{\"a\":1}]",
+      "type": "authentication.Device"
+    },
+    {
+      "binaryHex": "",
+      "input": "[]",
+      "type": "authentication.AuthMessage"
+    }
+  ],
+  "encode": [
+    {
+      "binaryHex": "0a057265712d311a0647446974746f3205010203feff3a0b18ea0f2009280238044806",
+      "pblite": "[\"req-1\",null,\"GDitto\",null,null,\"AQID/v8=\",[null,null,2026,9,2,null,4,null,6]]",
+      "type": "authentication.AuthMessage"
+    },
+    {
+      "binaryHex": "0a180a0272321a054275676c653a0b18ea0f200928023804480612590a310803122d6d657373616765732d7765622d3030313132323333343435353636373738383939616162626363646465656666a202231a21101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f3022054275676c65",
+      "pblite": "[[\"r2\",null,\"Bugle\",null,null,null,[null,null,2026,9,2,null,4,null,6]],[[3,\"messages-web-00112233445566778899aabbccddeeff\"],null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,\"GiEQERITFBUWFxgZGhscHR4fICEiIyQlJicoKSorLC0uLzA=\"],null,\"Bugle\"]",
+      "type": "authentication.SignInGaiaRequest"
+    },
+    {
+      "binaryHex": "0a160801120a676f6c64656e2d7372631a0647446974746f12260a057270632d3110136214000102030405060708090a0b0c0d0e0f10111213ba01040a0010021a220a057270632d31320c66616b652d74616368796f6e3a0b18ea0f20092802380448062880c0ddeec1024a2466666565646463632d626261612d393938382d373736362d3535343433333232313130304a2430303131323233332d343435352d363637372d383839392d616162626363646465656666",
+      "pblite": "[[1,\"golden-src\",\"GDitto\"],[\"rpc-1\",19,null,null,null,null,null,null,null,null,null,\"AAECAwQFBgcICQoLDA0ODxAREhM=\",null,null,null,null,null,null,null,null,null,null,[[],2]],[\"rpc-1\",null,null,null,null,\"ZmFrZS10YWNoeW9u\",[null,null,2026,9,2,null,4,null,6]],null,86400000000,null,null,null,[\"ZmZlZWRkY2MtYmJhYS05OTg4LTc3NjYtNTU0NDMzMjIxMTAw\",\"MDAxMTIyMzMtNDQ1NS02Njc3LTg4OTktYWFiYmNjZGRlZWZm\"]]",
+      "type": "rpc.OutgoingRPCMessage"
+    },
+    {
+      "binaryHex": "0a230a057265712d311a0647446974746f3205010203feff3a0b18ea0f20092802380448061200221f0a0561636b2d3112160801120a676f6c64656e2d7372631a0647446974746f221f0a0561636b2d3212160801120a676f6c64656e2d7372631a0647446974746f",
+      "pblite": "[[\"req-1\",null,\"GDitto\",null,null,\"AQID/v8=\",[null,null,2026,9,2,null,4,null,6]],[],null,[[\"ack-1\",[1,\"golden-src\",\"GDitto\"]],[\"ack-2\",[1,\"golden-src\",\"GDitto\"]]]]",
+      "type": "client.AckMessageRequest"
+    },
+    {
+      "binaryHex": "0a230a057265712d311a0647446974746f3205010203feff3a0b18ea0f200928023804480622021200",
+      "pblite": "[[\"req-1\",null,\"GDitto\",null,null,\"AQID/v8=\",[null,null,2026,9,2,null,4,null,6]],null,null,[null,[]]]",
+      "type": "client.ReceiveMessagesRequest"
+    },
+    {
+      "binaryHex": "0a230a057265712d311a0647446974746f3205010203feff3a0b18ea0f200928023804480612160801120a676f6c64656e2d7372631a0647446974746f188080f9c0c1c482032246303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f7071727374756a024a00800102",
+      "pblite": "[[\"req-1\",null,\"GDitto\",null,null,\"AQID/v8=\",[null,null,2026,9,2,null,4,null,6]],[1,\"golden-src\",\"GDitto\"],1700000000000000,\"MDEyMzQ1Njc4OTo7PD0+P0BBQkNERUZHSElKS0xNTk9QUVJTVFVWV1hZWltcXV5fYGFiY2RlZmdoaWprbG1ub3BxcnN0dQ==\",null,null,null,null,null,null,null,null,[null,null,null,null,null,null,null,null,[],null,null,null,null,null,null,null,null,null,null,null,null,null,null],null,null,2]",
+      "type": "authentication.RegisterRefreshRequest"
+    },
+    {
+      "binaryHex": "0a230a057265712d311a0647446974746f3205010203feff3a0b18ea0f20092802380448066a364a00ba01310803b2062c0a0c6d657373616765735f776562121668747470733a2f2f707573682e6578616d706c652f781a0170220161",
+      "pblite": "[[\"req-1\",null,\"GDitto\",null,null,\"AQID/v8=\",[null,null,2026,9,2,null,4,null,6]],null,null,null,null,null,null,null,null,null,null,null,[null,null,null,null,null,null,null,null,[],null,null,null,null,null,null,null,null,null,null,null,null,null,[3,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,[\"messages_web\",\"https://push.example/x\",\"p\",\"a\"]]],null,null,null]",
+      "type": "authentication.RegisterRefreshRequest"
+    },
+    {
+      "binaryHex": "08818080808080801012036269671a0647446974746f",
+      "pblite": "[9007199254740993,\"big\",\"GDitto\"]",
+      "type": "authentication.Device"
+    },
+    {
+      "binaryHex": "10ffffffffffffffffff0120808087bfbebbfdfcff01",
+      "pblite": "[null,18446744073709551615,null,-1700000000000000]",
+      "type": "authentication.SignInGaiaResponse.Header"
+    },
+    {
+      "binaryHex": "0a02633130016002a201051a01413001aa01027031aa01027032d00101",
+      "pblite": "[\"c1\",null,null,null,null,true,null,null,null,null,null,2,null,null,null,null,null,null,null,[[null,null,\"A\",null,null,true,null,null,null,null,null,null,null,null,null,null,null,null,null,null]],[\"p1\",\"p2\"],null,null,null,null,true,null,null,null,null,null,null,null,null,null]",
+      "type": "conversations.Conversation"
+    },
+    {
+      "binaryHex": "08021213613c623e26225c6e09e280a8c3a9f09f9880011a016e",
+      "pblite": "[2,\"a\\u003cb\\u003e\\u0026\\\"\\\\n\\t\\u2028é😀\\u0001\",\"n\"]",
+      "type": "authentication.Device"
+    },
+    {
+      "binaryHex": "",
+      "pblite": "[null,null,null]",
+      "type": "authentication.Device"
+    },
+    {
+      "binaryHex": "",
+      "pblite": "[null,null,null,null,null,null,null]",
+      "type": "authentication.AuthMessage"
+    }
+  ]
+}
