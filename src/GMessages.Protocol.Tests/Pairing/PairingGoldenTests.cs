@@ -263,7 +263,9 @@ public class PairingGoldenTests
 
             string code = f.GetProperty("codeName").GetString()!;
             Assert.AreEqual(Enum.Parse<PairingFailure>(f.GetProperty("failure").GetString()!), ex.Failure, code);
-            Assert.AreEqual(f.GetProperty("error").GetString(), ex.Message, code);
+            // Owner Wording: the two phone-cancel messages deliberately differ from Go's text
+            string expected = f.GetProperty("error").GetString()!.Replace("user cancelled pairing on phone", GaiaPairing.CanceledOnPhoneMessage, StringComparison.Ordinal);
+            Assert.AreEqual(expected, ex.Message, code);
         }
     }
 }

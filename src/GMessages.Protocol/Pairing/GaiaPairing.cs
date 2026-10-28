@@ -267,10 +267,16 @@ public sealed partial class GaiaPairing(GaiaSignIn signIn, RpcSession rpc, LongP
     // HELPERS
     // =========================================================================
 
+    // Owner Wording: replaces Go's "user cancelled pairing on phone" (owner's choice, kept verbatim)
+    internal const string CanceledOnPhoneMessage = "Pairing on phone was cancelled";
+
     /// <summary>
     /// Maps a finish answer with an error to Go's error.
     /// </summary>
-    /// <remarks>Ported from the error switch of <c>FinishGaiaPairing</c>; the message is Go's error text.</remarks>
+    /// <remarks>
+    /// Ported from the error switch of <c>FinishGaiaPairing</c>. The message is Go's error text, except the
+    /// two phone-cancel cases, which use the owner's wording in <see cref="CanceledOnPhoneMessage"/>.
+    /// </remarks>
     /// <param name="response">The finish answer, with a non-zero error type.</param>
     /// <returns>The exception to throw.</returns>
     internal static PairingException MapFinishError(GaiaPairingResponseContainer response)
@@ -279,11 +285,11 @@ public sealed partial class GaiaPairing(GaiaSignIn signIn, RpcSession rpc, LongP
         return response.FinishErrorCode switch
         {
             GaiaPairingErrorCode.WrongVerificationCodeSelected => new PairingException(PairingFailure.IncorrectEmoji, "user chose incorrect emoji on phone"),
-            GaiaPairingErrorCode.UserCanceledVerification      => new PairingException(PairingFailure.Canceled, "user cancelled pairing on phone"),
+            GaiaPairingErrorCode.UserCanceledVerification      => new PairingException(PairingFailure.Canceled, CanceledOnPhoneMessage),
             GaiaPairingErrorCode.RequestOutOfDate
                 or GaiaPairingErrorCode.RequestNotReceivedQuickly
                 or GaiaPairingErrorCode.VerificationTimedOut   => new PairingException(PairingFailure.Timeout, $"pairing timed out (code: {type}/{(int)response.FinishErrorCode})"),
-            GaiaPairingErrorCode.UserDeniedVerificationNotMe   => new PairingException(PairingFailure.NotMe, "user cancelled pairing on phone (user chose 'this is not me' option)"),
+            GaiaPairingErrorCode.UserDeniedVerificationNotMe   => new PairingException(PairingFailure.NotMe, CanceledOnPhoneMessage + " (user chose 'this is not me' option)"),
             _                                                  => new PairingException(PairingFailure.Unknown, $"unknown error pairing: {type}/{ErrorCodeName(response.FinishErrorCode)}"),
         };
     }
