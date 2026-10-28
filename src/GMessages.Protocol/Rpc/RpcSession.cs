@@ -443,9 +443,10 @@ public sealed partial class RpcSession(GmHttpClient http, AuthData auth, GmEndpo
                 }
             }
 
+            // Canceled: Throw The Documented Cancel, Not The Aborted Socket's Error
             if (ct.IsCancellationRequested)
             {
-                throw;
+                throw new OperationCanceledException("The ack flush was canceled.", ex, ct);
             }
 
             LogAckFailed(log, ex, batch.Length, requeued);

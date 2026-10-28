@@ -131,14 +131,23 @@ public sealed partial class LongPollLoop(
                 throw fatal;
             }
         }
-        catch (OperationCanceledException) when (stop.IsCancellationRequested)
+        catch (Exception ex) when (stop.IsCancellationRequested)
         {
-            // Stopped Or Canceled: A Normal End
+            // Stopped Or Canceled: A Normal End, Whatever The Aborted Socket Threw
+            LogStopError(log, ex);
         }
         finally
         {
             await stop_cts.CancelAsync().ConfigureAwait(false);
-            await background.ConfigureAwait(false);
+            try
+            {
+                await background.ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                LogStopError(log, ex);
+            }
+
             dispatcher.EventRaised -= Raise;
             refresher.EventRaised  -= Raise;
             rpc.PhoneSlow          -= OnPhoneSlow;
@@ -429,7 +438,7 @@ public sealed partial class LongPollLoop(
                 await rpc.FlushAcksAsync(stop).ConfigureAwait(false);
             }
         }
-        catch (OperationCanceledException) when (stop.IsCancellationRequested)
+        catch (Exception) when (stop.IsCancellationRequested)
         {
             // Stopped
         }
@@ -499,6 +508,9 @@ public sealed partial class LongPollLoop(
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Stopped reading data from server")]
     private static partial void LogReadStopped(ILogger logger, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Long polling ended with an error while stopping")]
+    private static partial void LogStopError(ILogger logger, Exception exception);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "An event subscriber threw for {EventType}")]
     private static partial void LogHandlerFailed(ILogger logger, Exception exception, string eventType);

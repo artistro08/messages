@@ -313,6 +313,84 @@ public class GmClientTests
     }
 
     /// <summary>
+    /// Dispose still writes a pending debounced save when the background ack flush fails with a non-cancel error
+    /// (the aborted socket) while the long poll stops, and does not throw.
+    /// </summary>
+    [TestMethod]
+    public async Task Dispose_BackgroundFlushThrowsDuringStop_StillWritesPendingSave()
+    {
+        await using Rig rig = CreateRig();
+        rig.Respond = req => req.Url.EndsWith("/AckMessages", StringComparison.Ordinal)
+            ? new HttpResponseMessage(HttpStatusCode.OK) { Content = new StreamContent(new FailOnCancelStream()) }
+            : null;
+
+        // Connect And Let postConnect Finish (2 s, 1 s, GET_UPDATES)
+        await rig.Client.ConnectAsync(CancellationToken.None).WaitAsync(HangGuard);
+        WaitUntil(() => rig.Time.CountTimers(TimeSpan.FromSeconds(2)) > 0, "2 s post-connect wait");
+        rig.Time.Advance(TimeSpan.FromSeconds(2));
+        WaitUntil(() => rig.Time.CountTimers(TimeSpan.FromSeconds(1)) > 0, "1 s post-connect wait");
+        rig.Time.Advance(TimeSpan.FromSeconds(1));
+        WaitUntil(() => rig.Requests("/SendMessage").Length > 0, "GET_UPDATES");
+
+        // The Ack Timer's Flush Hangs Until Canceled, Then Fails With An IOException
+        rig.Client.Rpc.QueueAck("ack-1");
+        rig.Time.Advance(TimeSpan.FromSeconds(2));
+        WaitUntil(() => rig.Requests("/AckMessages").Length == 1, "ack flush in flight");
+
+        // A Pending Debounced Save
+        rig.Auth.Cookies.UpdateFrom(FakeHttpHandler.Response(HttpStatusCode.OK, setCookies: "SID=first-sid; Path=/"));
+        rig.Auth.Cookies.UpdateFrom(FakeHttpHandler.Response(HttpStatusCode.OK, setCookies: "SID=pending-sid; Path=/"));
+        Assert.AreEqual(1, rig.Client.SaveCount);
+
+        await rig.Client.DisposeAsync().AsTask().WaitAsync(HangGuard);
+
+        Assert.AreEqual("pending-sid", rig.Store.Load()!.Cookies.Snapshot()["SID"], "pending save written");
+        Assert.IsFalse(rig.Client.IsConnected);
+    }
+
+    // A Body That Waits Until The Read Is Canceled, Then Fails Like An Aborted Socket
+    private sealed class FailOnCancelStream : Stream
+    {
+        public override bool CanRead => true;
+
+        public override bool CanSeek => false;
+
+        public override bool CanWrite => false;
+
+        public override long Length => throw new NotSupportedException();
+
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                await Task.Delay(Timeout.Infinite, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+
+            throw new IOException("The socket was aborted.");
+        }
+
+        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
+            ReadAsync(buffer.AsMemory(offset, count), cancellationToken).AsTask();
+
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        public override void Flush()
+        {
+        }
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    }
+
+    /// <summary>
     /// A change that arrives while a save is being written leads to a second save at the end of the window.
     /// </summary>
     [TestMethod]
@@ -384,6 +462,24 @@ public class GmClientTests
         Assert.IsFalse(File.Exists(rig.SessionPath));
         Assert.IsFalse(rig.Client.IsLoggedIn);
         await Assert.ThrowsExactlyAsync<ObjectDisposedException>(() => rig.Client.ConnectAsync(CancellationToken.None));
+    }
+
+    /// <summary>
+    /// A session file that can't be deleted (locked) does not hide the server's error or skip clearing the pairing.
+    /// </summary>
+    [TestMethod]
+    public async Task Unpair_DeleteFails_StillRethrowsServerErrorAndClearsPairing()
+    {
+        await using Rig rig = CreateRig();
+        rig.Store.Save(rig.Auth);
+        rig.Respond = req => req.Url.EndsWith("/SendMessage", StringComparison.Ordinal) ? FakeHttpHandler.Response(HttpStatusCode.Forbidden) : null;
+
+        using (new FileStream(rig.SessionPath, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            await Assert.ThrowsExactlyAsync<GmRequestException>(() => rig.Client.UnpairAsync(CancellationToken.None).WaitAsync(HangGuard));
+        }
+
+        Assert.IsFalse(rig.Client.IsLoggedIn, "pairing cleared");
     }
 
     /// <summary>

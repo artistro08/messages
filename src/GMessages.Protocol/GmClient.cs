@@ -378,14 +378,28 @@ public sealed partial class GmClient : IAsyncDisposable
             finally
             {
                 Volatile.Write(ref _finished, 1);
-                await DisconnectCoreAsync().ConfigureAwait(false);
-                StopSaves();
-                lock (_writeLock)
+                try
                 {
-                    _store.Delete();
+                    await DisconnectCoreAsync().ConfigureAwait(false);
                 }
+                finally
+                {
+                    // Always Remove The Local Session; A Failed Delete Must Not Hide The Server's Error
+                    StopSaves();
+                    try
+                    {
+                        lock (_writeLock)
+                        {
+                            _store.Delete();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        LogDeleteFailed(_log, ex);
+                    }
 
-                _auth.ClearPairing();
+                    _auth.ClearPairing();
+                }
             }
         }
         finally
@@ -401,7 +415,11 @@ public sealed partial class GmClient : IAsyncDisposable
     /// <summary>
     /// Cancels a running pairing, disconnects, writes a pending session save, and releases the HTTP clients.
     /// </summary>
-    /// <remarks>Safe to call more than once. Afterwards the client is finished.</remarks>
+    /// <remarks>
+    /// Safe to call more than once. Afterwards the client is finished. Errors from the stopping long poll (such as
+    /// an aborted socket) are logged, not thrown, and the pending save and the release run even if disconnecting
+    /// fails, so a rotated cookie or refreshed token is never lost on exit.
+    /// </remarks>
     /// <returns>A task that completes when everything is released.</returns>
     public async ValueTask DisposeAsync()
     {
@@ -417,8 +435,19 @@ public sealed partial class GmClient : IAsyncDisposable
         try
         {
             await DisconnectCoreAsync().ConfigureAwait(false);
+        }
+        finally
+        {
+            ReleaseAfterDisconnect();
+            _gate.Release();
+        }
+    }
 
-            // Write A Pending Save, Then Wait Out Any Write In Progress
+    // Writes A Pending Save, Waits Out Any Write In Progress, Then Unsubscribes And Releases The HTTP Clients
+    private void ReleaseAfterDisconnect()
+    {
+        try
+        {
             bool pending;
             lock (_saveLock)
             {
@@ -435,17 +464,15 @@ public sealed partial class GmClient : IAsyncDisposable
             {
                 // Nothing; Entering Waits For An In-Flight Timer Save
             }
-
+        }
+        finally
+        {
             _auth.Cookies.Changed  -= OnCookiesChanged;
             _refresher.EventRaised -= OnRefresherEvent;
             _loop.EventRaised      -= Raise;
             _httpClient.Dispose();
             _longPollClient.Dispose();
             _ownedHandler?.Dispose();
-        }
-        finally
-        {
-            _gate.Release();
         }
     }
 
@@ -554,7 +581,7 @@ public sealed partial class GmClient : IAsyncDisposable
 
         _loop.Stop();
         await cts.CancelAsync().ConfigureAwait(false);
-        await run.ConfigureAwait(false);
+        await AwaitStoppingAsync(run).ConfigureAwait(false);
 
         Task post_connect;
         lock (_runLock)
@@ -563,8 +590,21 @@ public sealed partial class GmClient : IAsyncDisposable
             _postConnect = Task.CompletedTask;
         }
 
-        await post_connect.ConfigureAwait(false);
+        await AwaitStoppingAsync(post_connect).ConfigureAwait(false);
         cts.Dispose();
+    }
+
+    // While Stopping, Any Error (Such As An Aborted Socket's IOException) Is Expected: Logged, Never Thrown
+    private async Task AwaitStoppingAsync(Task task)
+    {
+        try
+        {
+            await task.ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            LogStopError(_log, ex);
+        }
     }
 
     // Port Of Reconnect: Close, Check, Start (No Token Refresh); Caller Holds _gate
@@ -831,6 +871,12 @@ public sealed partial class GmClient : IAsyncDisposable
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Failed to save the session")]
     private static partial void LogSaveFailed(ILogger logger, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to delete the saved session")]
+    private static partial void LogDeleteFailed(ILogger logger, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Long polling ended with an error while stopping")]
+    private static partial void LogStopError(ILogger logger, Exception exception);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "An event subscriber threw for {EventType}")]
     private static partial void LogHandlerFailed(ILogger logger, Exception exception, string eventType);
