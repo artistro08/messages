@@ -81,6 +81,27 @@ public class TokenRefresherTests
     }
 
     /// <summary>
+    /// A refresh stores the token, expiry and TTL as one new value (C#-only: one swap, so a concurrent save can't
+    /// tear them), and that value's text never shows the token.
+    /// </summary>
+    [TestMethod]
+    public async Task Refresh_SwapsTokenExpiryAndTtlAsOneValue()
+    {
+        Rig rig              = CreateRig(TimeSpan.FromMinutes(30));
+        TachyonToken before  = rig.Auth.Tachyon;
+
+        await rig.Refresher.RefreshIfNeededAsync(CancellationToken.None);
+
+        TachyonToken after = rig.Auth.Tachyon;
+        Assert.AreNotSame(before, after);
+        CollectionAssert.AreEqual("new-tachyon"u8.ToArray(), after.Token);
+        Assert.AreEqual(rig.Time.GetUtcNow() + TimeSpan.FromHours(1), after.Expiry);
+        Assert.AreEqual(3600000000, after.TtlMicros);
+        Assert.IsFalse(after.ToString().Contains("new-tachyon", StringComparison.Ordinal));
+        Assert.IsFalse(after.ToString().Contains("Byte", StringComparison.Ordinal), "no array type name either");
+    }
+
+    /// <summary>
     /// At 2 hours left nothing is sent, as in Go.
     /// </summary>
     [TestMethod]

@@ -211,6 +211,7 @@ public sealed partial class RpcSession(GmHttpClient http, AuthData auth, GmEndpo
     {
         requestId = string.IsNullOrEmpty(p.RequestId) ? Guid.NewGuid().ToString() : p.RequestId;
         MessageType message_type = p.MessageType == MessageType.UnknownMessageType ? MessageType.BugleMessage : p.MessageType;
+        TachyonToken tachyon     = auth.Tachyon;
 
         var message = new OutgoingRPCMessage
         {
@@ -224,7 +225,7 @@ public sealed partial class RpcSession(GmHttpClient http, AuthData auth, GmEndpo
             Auth = new OutgoingRPCMessage.Types.Auth
             {
                 RequestID        = requestId,
-                TachyonAuthToken = ByteString.CopyFrom(auth.TachyonAuthToken ?? []),
+                TachyonAuthToken = ByteString.CopyFrom(tachyon.Token ?? []),
                 ConfigVersion    = GmConstants.ConfigVersion,
             },
         };
@@ -240,7 +241,7 @@ public sealed partial class RpcSession(GmHttpClient http, AuthData auth, GmEndpo
         }
         else if (!p.OmitTtl)
         {
-            message.TTL = auth.TachyonTtlMicros;
+            message.TTL = tachyon.TtlMicros;
         }
 
         // Payload

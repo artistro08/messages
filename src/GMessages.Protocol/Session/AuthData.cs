@@ -17,6 +17,8 @@ public sealed class AuthData
 {
     private const string GoogleNetwork = "GDitto";
 
+    private TachyonToken _tachyon = TachyonToken.None;
+
     /// <summary>
     /// Gets or sets the keys used to encrypt communication with the phone.
     /// </summary>
@@ -40,17 +42,46 @@ public sealed class AuthData
     /// <summary>
     /// Gets or sets the token used to authenticate with the server, or null when not paired.
     /// </summary>
-    public byte[]? TachyonAuthToken { get; set; }
+    /// <remarks>Part of <see cref="Tachyon"/>; setting it alone keeps the expiry and TTL.</remarks>
+    public byte[]? TachyonAuthToken
+    {
+        get => Tachyon.Token;
+        set => Tachyon = Tachyon with { Token = value };
+    }
 
     /// <summary>
     /// Gets or sets when the Tachyon token expires; <c>default</c> means unset.
     /// </summary>
-    public DateTimeOffset TachyonExpiry { get; set; }
+    /// <remarks>Part of <see cref="Tachyon"/>; setting it alone keeps the token and TTL.</remarks>
+    public DateTimeOffset TachyonExpiry
+    {
+        get => Tachyon.Expiry;
+        set => Tachyon = Tachyon with { Expiry = value };
+    }
 
     /// <summary>
     /// Gets or sets the Tachyon token lifetime in microseconds.
     /// </summary>
-    public long TachyonTtlMicros { get; set; }
+    /// <remarks>Part of <see cref="Tachyon"/>; setting it alone keeps the token and expiry.</remarks>
+    public long TachyonTtlMicros
+    {
+        get => Tachyon.TtlMicros;
+        set => Tachyon = Tachyon with { TtlMicros = value };
+    }
+
+    /// <summary>
+    /// Gets or sets the Tachyon token, its expiry and its TTL as one value.
+    /// </summary>
+    /// <remarks>
+    /// C#-only. The three parts are swapped in a single write with a memory barrier, so a save or request running on
+    /// another thread at the same time sees either the old token or the new one, never a mix (ARM64 included). Use
+    /// this, not the three single-part properties, when a refresh stores a new token.
+    /// </remarks>
+    public TachyonToken Tachyon
+    {
+        get => Volatile.Read(ref _tachyon);
+        set => Volatile.Write(ref _tachyon, value ?? throw new ArgumentNullException(nameof(value)));
+    }
 
     /// <summary>
     /// Gets or sets an unknown encryption key the server sends; Go keeps it but never uses it.
@@ -139,10 +170,32 @@ public sealed class AuthData
     {
         Browser          = null;
         Mobile           = null;
-        TachyonAuthToken = null;
-        TachyonExpiry    = default;
-        TachyonTtlMicros = 0;
+        Tachyon          = TachyonToken.None;
         WebEncryptionKey = null;
         PairingId        = Guid.Empty;
     }
+}
+
+/// <summary>
+/// The Tachyon auth token with its expiry and lifetime, kept together so they always match.
+/// </summary>
+/// <remarks>
+/// C#-only: Go stores the three as separate <c>AuthData</c> fields in
+/// <see href="https://github.com/mautrix/gmessages/blob/ba33f4875a491f5cb47db8a6baf42a8869f5f383/pkg/libgm/client.go">client.go</see>
+/// and guards them with the client's lock. Here one immutable value is swapped instead. The token is secret and must
+/// never be logged; the record's generated <c>ToString</c> is overridden to leave it out.
+/// </remarks>
+/// <param name="Token">The token, or null when not paired.</param>
+/// <param name="Expiry">When the token expires; <c>default</c> means unset.</param>
+/// <param name="TtlMicros">The token lifetime in microseconds.</param>
+public sealed record TachyonToken(byte[]? Token, DateTimeOffset Expiry, long TtlMicros)
+{
+    /// <summary>Gets the empty value: no token, no expiry, no TTL.</summary>
+    public static TachyonToken None { get; } = new(null, default, 0);
+
+    /// <summary>
+    /// Describes the value without the token.
+    /// </summary>
+    /// <returns>The expiry and TTL, and whether a token is set.</returns>
+    public override string ToString() => $"TachyonToken {{ HasToken = {Token is not null}, Expiry = {Expiry:O}, TtlMicros = {TtlMicros} }}";
 }

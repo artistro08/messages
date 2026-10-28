@@ -33,8 +33,9 @@ public sealed partial class SessionStore(string filePath, ILogger? logger = null
     {
         ArgumentNullException.ThrowIfNull(data);
 
-        // Map To Stored Shape
-        SessionFile file = new()
+        // Map To Stored Shape (One Token Snapshot, So A Refresh Running Now Can't Tear It)
+        TachyonToken tachyon = data.Tachyon;
+        SessionFile file     = new()
         {
             AesKey           = data.RequestCrypto.AesKey,
             HmacKey          = data.RequestCrypto.HmacKey,
@@ -43,9 +44,9 @@ public sealed partial class SessionStore(string filePath, ILogger? logger = null
             RefreshY         = data.RefreshKey.Y,
             Browser          = data.Browser?.ToByteArray(),
             Mobile           = data.Mobile?.ToByteArray(),
-            TachyonToken     = data.TachyonAuthToken,
-            TachyonExpiry    = data.TachyonExpiry,
-            TachyonTtlMicros = data.TachyonTtlMicros,
+            TachyonToken     = tachyon.Token,
+            TachyonExpiry    = tachyon.Expiry,
+            TachyonTtlMicros = tachyon.TtlMicros,
             WebEncryptionKey = data.WebEncryptionKey,
             SessionId        = data.SessionId,
             DestRegId        = data.DestRegId,
@@ -113,9 +114,7 @@ public sealed partial class SessionStore(string filePath, ILogger? logger = null
                 RefreshKey       = RefreshKey.FromJwk(f.RefreshD, f.RefreshX, f.RefreshY),
                 Browser          = f.Browser is null ? null : Device.Parser.ParseFrom(f.Browser),
                 Mobile           = f.Mobile is null ? null : Device.Parser.ParseFrom(f.Mobile),
-                TachyonAuthToken = f.TachyonToken,
-                TachyonExpiry    = f.TachyonExpiry,
-                TachyonTtlMicros = f.TachyonTtlMicros,
+                Tachyon          = new TachyonToken(f.TachyonToken, f.TachyonExpiry, f.TachyonTtlMicros),
                 WebEncryptionKey = f.WebEncryptionKey,
                 SessionId        = f.SessionId,
                 DestRegId        = f.DestRegId,

@@ -115,7 +115,8 @@ public sealed partial class TokenRefresher(GmHttpClient http, AuthData auth, GmE
     /// </summary>
     /// <remarks>
     /// Ported from <c>updateTachyonAuthToken</c>. A TTL of 0 means 24 hours. Kept static so sign-in can store its
-    /// first token without a refresher.
+    /// first token without a refresher. The token, expiry and TTL are stored as one <see cref="TachyonToken"/> in a
+    /// single write, so they never tear.
     /// </remarks>
     /// <param name="auth">The account to update.</param>
     /// <param name="data">The token and its TTL in microseconds.</param>
@@ -127,9 +128,8 @@ public sealed partial class TokenRefresher(GmHttpClient http, AuthData auth, GmE
 
         TimeSpan valid_for = data.TTL == 0 ? DefaultValidFor : TimeSpan.FromMicroseconds(data.TTL);
 
-        auth.TachyonAuthToken = data.TachyonAuthToken.ToByteArray();
-        auth.TachyonExpiry    = time.GetUtcNow() + valid_for;
-        auth.TachyonTtlMicros = (long)valid_for.TotalMicroseconds;
+        // One Swap, So A Concurrent Save Never Sees A New Token With An Old Expiry
+        auth.Tachyon = new TachyonToken(data.TachyonAuthToken.ToByteArray(), time.GetUtcNow() + valid_for, (long)valid_for.TotalMicroseconds);
     }
 
     /// <summary>
