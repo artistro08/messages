@@ -18,7 +18,9 @@ namespace GMessages.App.UITests.FakeGoogle;
 /// it (with the client and server init messages as info) gives the auth key, whose first four bytes pick
 /// <see cref="ShownEmoji"/>, and the next key, which gives the request keys. The finish answer waits for
 /// <see cref="Tap"/>. Answers go onto the open long poll as data events whose session ID is the request ID, which is
-/// how the client matches them. Unknown actions are only acked by the HTTP reply; the phone sends nothing back.
+/// how the client matches them. Once paired, <c>NOTIFY_DITTO_ACTIVITY</c> pings are answered (encrypted), as a real
+/// phone does, so the app never reports the phone as not responding. Unknown actions are only acked by the HTTP
+/// reply; the phone sends nothing back.
 /// Plan 3 extends it with conversations and messages.
 /// </remarks>
 public sealed class FakePhone

@@ -82,6 +82,7 @@ public sealed class FakeGoogleServer : IAsyncDisposable
     private readonly CancellationTokenSource _stop = new();
     private readonly Task _acceptLoop;
     private readonly ConcurrentQueue<string> _paths = new();
+    private readonly ConcurrentQueue<Exception> _errors = new();
     private readonly ConcurrentDictionary<Task, byte> _handlers = new();
     private readonly Lock _lock = new();
     private readonly List<byte[]> _pending = [];
@@ -146,6 +147,11 @@ public sealed class FakeGoogleServer : IAsyncDisposable
     public IReadOnlyList<string> RequestedPaths => [.. _paths];
 
     /// <summary>
+    /// Gets every unexpected server error so far: failed accepts and requests answered with 500.
+    /// </summary>
+    public IReadOnlyList<Exception> Errors => [.. _errors];
+
+    /// <summary>
     /// Queues a payload for the open long poll, or for the next one when none is open.
     /// </summary>
     /// <param name="payload">The payload.</param>
@@ -208,9 +214,16 @@ public sealed class FakeGoogleServer : IAsyncDisposable
             {
                 context = await _listener.GetContextAsync();
             }
-            catch (Exception) when (_stop.IsCancellationRequested)
+            catch (Exception) when (_stop.IsCancellationRequested || !_listener.IsListening)
             {
+                // Stopping Or Disposed
                 return;
+            }
+            catch (Exception ex)
+            {
+                // One Bad Accept Must Not Kill The Server; Keep It Visible And Keep Listening
+                _errors.Enqueue(ex);
+                continue;
             }
 
             Task handler = Task.Run(() => HandleAsync(context));
@@ -279,6 +292,7 @@ public sealed class FakeGoogleServer : IAsyncDisposable
         }
         catch (Exception ex) when (!_stop.IsCancellationRequested)
         {
+            _errors.Enqueue(ex);
             try
             {
                 await RespondAsync(context.Response, 500, "text/plain", Encoding.UTF8.GetBytes(ex.ToString()));
@@ -308,8 +322,16 @@ public sealed class FakeGoogleServer : IAsyncDisposable
             kill = _killStatus;
             if (kill <= 0)
             {
-                // The Newest Long Poll Takes Over, With Anything Queued While None Was Open
-                _stream?.Writer.TryComplete();
+                // The Newest Long Poll Takes Over: The Old One's Unread Payloads, Then Anything Queued While None Was Open
+                if (_stream is { } old)
+                {
+                    old.Writer.TryComplete();
+                    while (old.Reader.TryRead(out byte[]? unread))
+                    {
+                        channel.Writer.TryWrite(unread);
+                    }
+                }
+
                 _stream = channel;
                 foreach (byte[] queued in _pending)
                 {
@@ -377,11 +399,14 @@ public sealed class FakeGoogleServer : IAsyncDisposable
                     _stream = null;
                 }
 
-                // Unsent Payloads Wait For The Next Long Poll
+                // Unsent Payloads Go To The Live Long Poll, Or Wait For The Next One
                 channel.Writer.TryComplete();
                 while (channel.Reader.TryRead(out byte[]? left))
                 {
-                    _pending.Add(left);
+                    if (_stream is null || !_stream.Writer.TryWrite(left))
+                    {
+                        _pending.Add(left);
+                    }
                 }
             }
 

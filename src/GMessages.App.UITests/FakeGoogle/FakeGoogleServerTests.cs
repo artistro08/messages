@@ -1,8 +1,11 @@
+using System.Globalization;
 using System.Net;
 using GMessages.Protocol;
 using GMessages.Protocol.Events;
 using GMessages.Protocol.Http;
+using GMessages.Protocol.LongPoll;
 using GMessages.Protocol.Pairing;
+using GMessages.Protocol.Proto;
 using GMessages.Protocol.Session;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -59,9 +62,21 @@ public sealed class FakeGoogleServerTests
 
         public async ValueTask DisposeAsync()
         {
-            await Client.DisposeAsync();
-            await Server.DisposeAsync();
-            File.Delete(SessionPath);
+            try
+            {
+                await Client.DisposeAsync();
+            }
+            finally
+            {
+                try
+                {
+                    await Server.DisposeAsync();
+                }
+                finally
+                {
+                    File.Delete(SessionPath);
+                }
+            }
         }
     }
 
@@ -187,6 +202,68 @@ public sealed class FakeGoogleServerTests
         rig.Server.KillLongPoll(401);
         await rig.Fatal.Task.WaitAsync(HangGuard);
         Assert.IsFalse(rig.Client.IsConnected);
+    }
+
+    /// <summary>
+    /// Payloads still unread when a second long poll takes over arrive exactly once, in order: a prefix on the old
+    /// poll, the rest on the new one.
+    /// </summary>
+    /// <remarks>
+    /// The old poll is not read until after the takeover, and each payload is 64 KB, so the server's write to it
+    /// stalls and most payloads are still queued for it when the new poll opens.
+    /// </remarks>
+    [TestMethod]
+    public async Task LongPoll_Takeover_DeliversEveryPayloadOnceInOrder()
+    {
+        const int Total = 100;
+        await using var server = new FakeGoogleServer();
+        using var http         = new HttpClient();
+        Uri url                = new(server.BaseUrl, "/$rpc/google.internal.communications.instantmessaging.v1.Messaging/ReceiveMessages");
+        string padding         = new('x', 64 * 1024);
+
+        // Old Poll Open But Not Read, Payloads Pushed, New Poll Takes Over (Its Headers Come After The Takeover)
+        using HttpResponseMessage old_poll = await OpenPollAsync(http, url);
+        for (int i = 0; i < Total; i++)
+        {
+            server.Push(new LongPollingPayload { Data = new IncomingRPCMessage { ResponseID = i.ToString(CultureInfo.InvariantCulture), Mobile = new Device { SourceID = padding } } });
+        }
+
+        using HttpResponseMessage new_poll = await OpenPollAsync(http, url);
+        server.Push(new LongPollingPayload { Data = new IncomingRPCMessage { ResponseID = "end" } });
+
+        // Read Both
+        List<string> first  = await ReadIdsAsync(old_poll).WaitAsync(HangGuard);
+        List<string> second = await ReadIdsAsync(new_poll).WaitAsync(HangGuard);
+
+        string[] expected = [.. Enumerable.Range(0, Total).Select(i => i.ToString(CultureInfo.InvariantCulture)), "end"];
+        CollectionAssert.AreEqual(expected, first.Concat(second).ToArray());
+        Assert.IsGreaterThan(1, second.Count, "some payloads moved to the new poll");
+        Assert.IsEmpty(server.Errors);
+    }
+
+    private static Task<HttpResponseMessage> OpenPollAsync(HttpClient http, Uri url) =>
+        http.SendAsync(new HttpRequestMessage(HttpMethod.Post, url) { Content = new ByteArrayContent([]) }, HttpCompletionOption.ResponseHeadersRead).WaitAsync(HangGuard);
+
+    // Reads One Long Poll's Data Payload IDs Until The Stream Ends Or The "end" Payload
+    private static async Task<List<string>> ReadIdsAsync(HttpResponseMessage poll)
+    {
+        Stream body = await poll.Content.ReadAsStreamAsync();
+        var ids     = new List<string>();
+        await foreach (LongPollingPayload payload in LongPollStreamReader.ReadAsync(body, HangGuard, TimeProvider.System, CancellationToken.None))
+        {
+            if (payload.Data is null)
+            {
+                continue;
+            }
+
+            ids.Add(payload.Data.ResponseID);
+            if (payload.Data.ResponseID == "end")
+            {
+                break;
+            }
+        }
+
+        return ids;
     }
 
     // =========================================================================
