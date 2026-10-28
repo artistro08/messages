@@ -117,6 +117,12 @@ internal static class Program
                 options.AdditionalBrowserArguments = "--disable-features=DeviceBoundSessionCredentials";
             }
 
+            // Stealth: no client hints (they name "WebView2") and the Chrome UA at the browser level too
+            if (Environment.GetCommandLineArgs().Contains("--stealth"))
+            {
+                options.AdditionalBrowserArguments = $"--disable-features=UserAgentClientHint,DeviceBoundSessionCredentials --user-agent=\"{ChromeUa}\"";
+            }
+
             // Create Environment
             var env = await CoreWebView2Environment.CreateAsync(null, profile_dir, options);
             await web_view.EnsureCoreWebView2Async(env);
@@ -125,6 +131,13 @@ internal static class Program
             if (use_chrome_ua)
             {
                 web_view.CoreWebView2.Settings.UserAgent = ChromeUa;
+            }
+
+            // Stealth: hide the window.chrome.webview host bridge pages can detect
+            if (Environment.GetCommandLineArgs().Contains("--stealth"))
+            {
+                web_view.CoreWebView2.Settings.IsWebMessageEnabled  = false;
+                web_view.CoreWebView2.Settings.AreHostObjectsAllowed = false;
             }
 
             // Navigate
