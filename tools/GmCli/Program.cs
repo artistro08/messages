@@ -1,16 +1,192 @@
+using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
+using GMessages.Protocol;
+using GMessages.Protocol.Auth;
+using GMessages.Protocol.Events;
+using GMessages.Protocol.Http;
+using GMessages.Protocol.Pairing;
 using GMessages.Protocol.PbLite;
 using GMessages.Protocol.Proto;
+using GMessages.Protocol.Session;
 using Google.Protobuf;
+using Microsoft.Extensions.Logging;
 
 // Commands
-if (args.Length == 1 && args[0] == "selftest")
+Console.OutputEncoding = Encoding.UTF8;
+
+bool verbose   = args.Contains("--verbose");
+string[] words = args.Where(a => a != "--verbose").ToArray();
+
+if (words.Length == 1)
 {
-    return SelfTest();
+    switch (words[0])
+    {
+        case "selftest": return SelfTest();
+        case "pair":     return await PairAsync(verbose);
+        case "listen":   return await ListenAsync(verbose);
+        case "unpair":   return await UnpairAsync(verbose);
+    }
 }
 
-Console.Error.WriteLine("usage: GmCli selftest");
+Console.Error.WriteLine("usage: GmCli selftest | pair | listen | unpair [--verbose]");
 return 2;
+
+// Paths
+static string DevDir() => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "GMessages.Dev");
+
+// Logger Factory (simple console formatter is AOT-safe)
+static ILoggerFactory CreateLogs(bool verbose) => LoggerFactory.Create(b => b
+    .SetMinimumLevel(verbose ? LogLevel.Debug : LogLevel.Information)
+    .AddSimpleConsole(o => o.SingleLine = true));
+
+// Loads The Saved Session, Or Null
+static AuthData? LoadSession() => new SessionStore(Path.Combine(DevDir(), "session.bin")).Load();
+
+/// <summary>
+/// Pairs with the phone using the cookies the sign-in spike saved, showing the emoji to tap.
+/// </summary>
+/// <param name="verbose">Debug-level logging.</param>
+/// <returns>The exit code.</returns>
+static async Task<int> PairAsync(bool verbose)
+{
+    // Guard: Spike Cookies Must Exist
+    string cookie_file = Path.Combine(DevDir(), "spike-cookies.bin");
+    if (!File.Exists(cookie_file))
+    {
+        Console.Error.WriteLine("No spike cookies. Run SignInSpike first.");
+        return 1;
+    }
+
+    // Load Cookies (DPAPI JSON {name: value}; values are never printed)
+    var cookies = new Dictionary<string, string>();
+    using (var doc = JsonDocument.Parse(ProtectedData.Unprotect(File.ReadAllBytes(cookie_file), null, DataProtectionScope.CurrentUser)))
+    {
+        foreach (var prop in doc.RootElement.EnumerateObject())
+        {
+            cookies[prop.Name] = prop.Value.GetString() ?? "";
+        }
+    }
+
+    var auth = AuthData.CreateNew();
+    auth.Cookies.Set(cookies);
+
+    using var logs = CreateLogs(verbose);
+    using var stop = new CancellationTokenSource(TimeSpan.FromMinutes(10));
+    Console.CancelKeyPress += (_, e) => { e.Cancel = true; stop.Cancel(); };
+
+    await using var client = GmClient.Create(auth, new SessionStore(Path.Combine(DevDir(), "session.bin")), GmEndpoints.Production, TimeProvider.System, logs);
+    try
+    {
+        await client.PairAsync(emoji => Console.WriteLine($"\n    Tap this on your phone:  {emoji}\n"), stop.Token);
+    }
+    catch (PairingException ex)
+    {
+        Console.Error.WriteLine($"pairing failed: {ex.Failure}: {ex.Message}");
+        return 1;
+    }
+    catch (OperationCanceledException)
+    {
+        Console.Error.WriteLine("pairing failed: canceled or timed out");
+        return 1;
+    }
+
+    Console.WriteLine("paired");
+    return 0;
+}
+
+/// <summary>
+/// Connects from the saved session and prints one line per message until Ctrl+C.
+/// </summary>
+/// <param name="verbose">Debug-level logging.</param>
+/// <returns>The exit code.</returns>
+static async Task<int> ListenAsync(bool verbose)
+{
+    var auth = LoadSession();
+    if (auth is null)
+    {
+        Console.Error.WriteLine("No session. Run 'GmCli pair' first.");
+        return 1;
+    }
+
+    using var logs = CreateLogs(verbose);
+    using var stop = new CancellationTokenSource();
+    Console.CancelKeyPress += (_, e) => { e.Cancel = true; stop.Cancel(); };
+
+    await using var client = GmClient.Create(auth, new SessionStore(Path.Combine(DevDir(), "session.bin")), GmEndpoints.Production, TimeProvider.System, logs);
+    client.EventRaised += PrintEvent;
+
+    try
+    {
+        await client.ConnectAsync(stop.Token);
+        Console.WriteLine("listening (Ctrl+C to stop)");
+        await Task.Delay(Timeout.Infinite, stop.Token);
+    }
+    catch (SessionExpiredException)
+    {
+        Console.Error.WriteLine("Session expired. Run 'GmCli pair' again.");
+        return 1;
+    }
+    catch (OperationCanceledException)
+    {
+        // Ctrl+C: Fall Through To Disconnect
+    }
+
+    await client.DisconnectAsync();
+    Console.WriteLine("stopped");
+    return 0;
+}
+
+/// <summary>
+/// Tells the phone to forget this PC and deletes the saved session.
+/// </summary>
+/// <param name="verbose">Debug-level logging.</param>
+/// <returns>The exit code.</returns>
+static async Task<int> UnpairAsync(bool verbose)
+{
+    var auth = LoadSession();
+    if (auth is null)
+    {
+        Console.Error.WriteLine("No session. Run 'GmCli pair' first.");
+        return 1;
+    }
+
+    using var logs = CreateLogs(verbose);
+    await using var client = GmClient.Create(auth, new SessionStore(Path.Combine(DevDir(), "session.bin")), GmEndpoints.Production, TimeProvider.System, logs);
+    try
+    {
+        await client.UnpairAsync(CancellationToken.None);
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"unpair request failed (local session removed anyway): {ex.Message}");
+        return 1;
+    }
+
+    Console.WriteLine("unpaired");
+    return 0;
+}
+
+/// <summary>
+/// Prints a message as one line, and connection-health events as status lines.
+/// </summary>
+/// <param name="evt">The event.</param>
+static void PrintEvent(object evt)
+{
+    switch (evt)
+    {
+        case MessageReceived m:
+            string text = string.Join(" ", m.Message.MessageInfo.Select(i => i.MessageContent?.Content).Where(c => !string.IsNullOrEmpty(c)));
+            Console.WriteLine($"[{(m.IsOld ? "old" : "live")}] {m.Message.ConversationID} {m.Message.ParticipantID} {text}");
+            break;
+        case ListenFatalError e:     Console.WriteLine($"status: listen fatal error: {e.Error.Message}"); break;
+        case ListenTemporaryError e: Console.WriteLine($"status: listen temporary error: {e.Error.Message}"); break;
+        case ListenRecovered:        Console.WriteLine("status: listen recovered"); break;
+        case PhoneNotResponding:     Console.WriteLine("status: phone not responding"); break;
+        case PhoneRespondingAgain:   Console.WriteLine("status: phone responding again"); break;
+        case GaiaLoggedOut:          Console.WriteLine("status: Google account logged out"); break;
+    }
+}
 
 // Self Test
 static int SelfTest()
