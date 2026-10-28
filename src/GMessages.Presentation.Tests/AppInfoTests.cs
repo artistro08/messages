@@ -48,7 +48,7 @@ public sealed class AppInfoTests
     }
 
     // Repo Root: the folder above src that holds GMessages.sln
-    private static string FindRepoRoot()
+    internal static string FindRepoRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "GMessages.sln")))

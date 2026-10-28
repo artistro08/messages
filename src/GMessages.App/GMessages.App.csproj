@@ -8,6 +8,7 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
     <UseWinUI>true</UseWinUI>
+    <EnableMsixTooling>true</EnableMsixTooling>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <SelfContained>true</SelfContained>
     <PublishAot>true</PublishAot>
@@ -16,7 +17,6 @@
     <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
     <!-- Exe icon, drawn by scripts/New-AppAssets.ps1 -->
     <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
-    <!-- TODO: Task 11 turns on EnableMsixTooling and the Msix project capability for packaging -->
   </PropertyGroup>
 
   <!-- Debug: unpackaged, with the test hooks compiled in -->
@@ -52,5 +52,41 @@
   <ItemGroup>
     <ProjectReference Include="..\GMessages.Presentation\GMessages.Presentation.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <ProjectCapability Include="Msix" />
+  </ItemGroup>
+
+  <!-- MSIX Manifest: packaged builds read the generated copy in obj, not the Package.appxmanifest template.
+       An item, so IntermediateOutputPath is already final when it's evaluated. -->
+  <ItemGroup Condition="'$(WindowsPackageType)' != 'None'">
+    <AppxManifest Include="$(IntermediateOutputPath)Package.generated.appxmanifest" />
+  </ItemGroup>
+
+  <!-- Generate The MSIX Manifest: fills every $AppDisplayName$ in the template from the AppDisplayName property.
+       Runs on every build (packaged or not) before the MSIX tooling reads the manifest, and only rewrites the
+       file when the result changes. -->
+  <Target Name="GenerateAppxManifest" BeforeTargets="_CheckForInvalidConfigurationAndPlatform;_ValidatePresenceOfAppxManifestItems">
+    <PropertyGroup>
+      <GeneratedAppxManifest>$(IntermediateOutputPath)Package.generated.appxmanifest</GeneratedAppxManifest>
+      <_AppxManifestTemplate>$([System.IO.File]::ReadAllText('$(MSBuildProjectDirectory)\Package.appxmanifest'))</_AppxManifestTemplate>
+      <_AppxManifestText>$(_AppxManifestTemplate.Replace('$AppDisplayName$', '$(AppDisplayName)'))</_AppxManifestText>
+    </PropertyGroup>
+    <MakeDir Directories="$(IntermediateOutputPath)" />
+    <WriteLinesToFile File="$(GeneratedAppxManifest)" Lines="$([MSBuild]::Escape($(_AppxManifestText)))" Overwrite="true" WriteOnlyWhenDifferent="true" />
+    <ItemGroup>
+      <FileWrites Include="$(GeneratedAppxManifest)" />
+    </ItemGroup>
+  </Target>
+
+  <!-- Sign The Exe: signs the Native AOT exe itself (not just the package), so Windows keeps the tray icon's
+       placement across updates. Signs it in obj right after the native link, since the publish folder and the
+       package both copy it from there. Runs only when scripts/Build-Package.ps1 passes the certificate. -->
+  <Target Name="SignAppExecutable" AfterTargets="LinkNative" Condition="'$(AppExeSigningThumbprint)' != '' And '$(AppExeSignTool)' != '' And Exists('$(NativeBinary)')">
+    <PropertyGroup>
+      <AppExeTimestampArguments Condition="'$(AppExeTimestampUrl)' != ''">/tr $(AppExeTimestampUrl) /td SHA256</AppExeTimestampArguments>
+    </PropertyGroup>
+    <Exec Command="&quot;$(AppExeSignTool)&quot; sign /q /fd SHA256 /sha1 $(AppExeSigningThumbprint) $(AppExeTimestampArguments) &quot;$(NativeBinary)&quot;" />
+  </Target>
 
 </Project>

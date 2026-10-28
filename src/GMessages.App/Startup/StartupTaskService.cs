@@ -15,8 +15,6 @@ namespace GMessages.App.Startup;
 /// </remarks>
 internal sealed class StartupTaskService : IStartupService
 {
-    // TODO: Task 11 declares the uap5:StartupTask with this ID in Package.appxmanifest; until then GetAsync throws and the switch stays off
-
     /// <inheritdoc />
     public async Task<bool> IsEnabledAsync()
     {
