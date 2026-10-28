@@ -187,6 +187,22 @@ public class GmClientTests
     }
 
     /// <summary>
+    /// A session with a browser and cookies but no Tachyon token fails with "No auth token." before sending anything.
+    /// </summary>
+    [TestMethod]
+    public async Task Connect_NoToken_Throws()
+    {
+        AuthData auth = AuthDataGoldenTests.BuildGolden();
+        auth.Tachyon  = TachyonToken.None;
+        await using Rig rig = CreateRig(auth);
+
+        InvalidOperationException ex = await Assert.ThrowsExactlyAsync<InvalidOperationException>(() => rig.Client.ConnectAsync(CancellationToken.None).WaitAsync(HangGuard));
+
+        Assert.AreEqual("No auth token.", ex.Message);
+        Assert.AreEqual(0, rig.Handler.Requests.Count);
+    }
+
+    /// <summary>
     /// Without a browser device (never paired), connect fails before sending anything, as Go's checkLoggedIn does.
     /// </summary>
     [TestMethod]

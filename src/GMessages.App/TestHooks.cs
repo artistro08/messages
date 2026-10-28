@@ -9,13 +9,12 @@ namespace GMessages.App;
 /// <remarks>
 /// Compiled only when <c>EnableTestHooks</c> is defined, which is Debug builds only. Release builds get the stub
 /// below that always answers null, so the flags are ignored. Flags: <c>--test-endpoints &lt;base url&gt;</c> and
-/// <c>--test-data-dir &lt;path&gt;</c>. A flag with no value, or whose value starts with <c>--</c>, is rejected.
+/// <c>--test-data-dir &lt;path&gt;</c>. If either flag is present both must be valid, or the app refuses to start.
 /// </remarks>
 internal static class TestHooks
 {
-    private static readonly string[] CommandLine = Environment.GetCommandLineArgs();
-
-    private static readonly (Uri? EndpointBase, string? DataDir) Parsed = GMessages.Presentation.TestHookArgs.Parse(CommandLine);
+    private static readonly (Uri? EndpointBase, string? DataDir, string? Error) Parsed =
+        GMessages.Presentation.TestHookArgs.Validate(Environment.GetCommandLineArgs());
 
     /// <summary>
     /// The fake server base address from <c>--test-endpoints</c>, else null.
@@ -28,11 +27,9 @@ internal static class TestHooks
     public static string? DataDir { get; } = Parsed.DataDir;
 
     /// <summary>
-    /// True when a test flag was given with a missing or flag-like value. The app then runs as a normal (non-test) run.
+    /// A one-line reason when the test flags are unusable, else null. The app must then refuse to start.
     /// </summary>
-    public static bool HasBadFlag { get; } =
-        GMessages.Presentation.TestHookArgs.IsMalformed(CommandLine, "--test-data-dir")
-        || GMessages.Presentation.TestHookArgs.IsMalformed(CommandLine, "--test-endpoints");
+    public static string? Error { get; } = Parsed.Error;
 
     /// <summary>
     /// Every server address pointed at <see cref="EndpointBase"/>, else null (use the real servers).
@@ -52,8 +49,8 @@ internal static class TestHooks
     /// <summary>Always null in Release.</summary>
     public static string? DataDir => null;
 
-    /// <summary>Always false in Release.</summary>
-    public static bool HasBadFlag => false;
+    /// <summary>Always null in Release.</summary>
+    public static string? Error => null;
 
     /// <summary>Always null in Release: the app uses the real servers.</summary>
     public static GmEndpoints? Endpoints => null;

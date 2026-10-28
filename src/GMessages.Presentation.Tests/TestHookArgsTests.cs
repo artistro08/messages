@@ -1,53 +1,62 @@
 namespace GMessages.Presentation.Tests;
 
 /// <summary>
-/// Tests the test-hook command line parser.
+/// Tests the test-hook command line checks.
 /// </summary>
 [TestClass]
 public sealed class TestHookArgsTests
 {
-    /// <summary>No flags gives nothing.</summary>
+    /// <summary>No flags is a normal run.</summary>
     [TestMethod]
-    public void Parse_NoFlags_GivesNulls()
+    public void Validate_NoFlags_IsNormalRun()
     {
-        var (endpoint, dir) = TestHookArgs.Parse(["Messages.exe"]);
+        var (endpoint, dir, error) = TestHookArgs.Validate(["Messages.exe"]);
 
         Assert.IsNull(endpoint);
         Assert.IsNull(dir);
+        Assert.IsNull(error);
     }
 
-    /// <summary>Both flags are read, in any case and order.</summary>
+    /// <summary>Both flags valid: read in any case and order, data folder made a full path.</summary>
     [TestMethod]
-    public void Parse_BothFlags_ReadsValues()
+    public void Validate_BothValid_ReadsValues()
     {
-        var (endpoint, dir) = TestHookArgs.Parse(["x.exe", "--TEST-DATA-DIR", @"C:\t\d", "--test-endpoints", "http://127.0.0.1:9"]);
+        var (endpoint, dir, error) = TestHookArgs.Validate(["x.exe", "--TEST-DATA-DIR", @"C:\t\d", "--test-endpoints", "http://127.0.0.1:9"]);
 
+        Assert.IsNull(error);
         Assert.AreEqual(new Uri("http://127.0.0.1:9"), endpoint);
         Assert.AreEqual(@"C:\t\d", dir);
     }
 
-    /// <summary>A flag with no value, or whose value is another flag, is rejected.</summary>
+    /// <summary>A relative data folder becomes a full path.</summary>
     [TestMethod]
-    [DataRow("--test-data-dir")]
-    [DataRow("--test-data-dir", "--quit")]
-    [DataRow("--test-data-dir", "")]
-    public void Parse_BadDataDir_IsRejected(params string[] tail)
+    public void Validate_RelativeDir_IsMadeFull()
     {
-        var (_, dir) = TestHookArgs.Parse(["x.exe", .. tail]);
+        var (_, dir, error) = TestHookArgs.Validate(["x.exe", "--test-endpoints", "https://h", "--test-data-dir", "rel"]);
 
-        Assert.IsNull(dir);
+        Assert.IsNull(error);
+        Assert.IsTrue(Path.IsPathFullyQualified(dir!));
     }
 
-    /// <summary>A bad or non-absolute endpoint is rejected.</summary>
+    /// <summary>Every bad combination is refused with a reason and no values.</summary>
     [TestMethod]
-    [DataRow("--test-endpoints")]
-    [DataRow("--test-endpoints", "--quit")]
-    [DataRow("--test-endpoints", "not a url")]
-    [DataRow("--test-endpoints", "ftp://host")]
-    public void Parse_BadEndpoint_IsRejected(params string[] tail)
+    [DataRow("--test-data-dir", @"C:\d")]
+    [DataRow("--test-endpoints", "http://h")]
+    [DataRow("--test-endpoints", "not a url", "--test-data-dir", @"C:\d")]
+    [DataRow("--test-endpoints", "ftp://h", "--test-data-dir", @"C:\d")]
+    [DataRow("--test-endpoints", "/relative", "--test-data-dir", @"C:\d")]
+    [DataRow("--test-endpoints", "http://h", "--test-data-dir")]
+    [DataRow("--test-endpoints", "http://h", "--test-data-dir", "--quit")]
+    [DataRow("--test-endpoints", "http://h", "--test-data-dir", "")]
+    [DataRow("--test-endpoints", "--quit", "--test-data-dir", @"C:\d")]
+    [DataRow("--test-endpoints", "http://h", "--test-endpoints", "http://h2", "--test-data-dir", @"C:\d")]
+    [DataRow("--test-endpoints", "http://h", "--test-data-dir", @"C:\a", "--test-data-dir", @"C:\b")]
+    public void Validate_Bad_IsRefused(params string[] tail)
     {
-        var (endpoint, _) = TestHookArgs.Parse(["x.exe", .. tail]);
+        var (endpoint, dir, error) = TestHookArgs.Validate(["x.exe", .. tail]);
 
+        Assert.IsFalse(string.IsNullOrEmpty(error));
         Assert.IsNull(endpoint);
+        Assert.IsNull(dir);
     }
 }

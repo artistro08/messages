@@ -104,11 +104,6 @@ public partial class App : Application, IDisposable
         _logProvider    = new RollingFileLoggerProvider(paths.LogsFolder, levelSwitch, TimeProvider.System);
         _logger         = _logProvider.CreateLogger("GMessages.App");
         AppLog.Started(_logger, AppInfo.DisplayName, AppInfo.Version, AppIdentity.IsPackaged, Program.IsTestRun);
-        if (TestHooks.HasBadFlag)
-        {
-            AppLog.TestFlagIgnored(_logger);
-        }
-
         if (TestHooks.Endpoints is { } fake)
         {
             var baseUrl = fake.MessagesBase.ToString();

@@ -56,6 +56,22 @@ public static class Program
     {
         WinRT.ComWrappersSupport.InitializeComWrappers();
 
+        // Unusable Test Flags: refuse to start (no UI, no network) and leave the reason where a UI test can read it
+        if (TestHooks.Error is { } testHookError)
+        {
+            try
+            {
+                File.WriteAllText(Path.Combine(Path.GetTempPath(), $"{AppInfo.DisplayName}-testhooks-error.txt"), testHookError);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Nothing more to do; the exit code still says it failed
+            }
+
+            Environment.Exit(2);
+            return;
+        }
+
         // Quit Request
         if (args.Contains("--quit", StringComparer.OrdinalIgnoreCase))
         {

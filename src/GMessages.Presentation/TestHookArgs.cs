@@ -1,48 +1,66 @@
 namespace GMessages.Presentation;
 
 /// <summary>
-/// Reads the UI-test command line flags <c>--test-endpoints</c> and <c>--test-data-dir</c>.
+/// Reads and checks the UI-test command line flags <c>--test-endpoints</c> and <c>--test-data-dir</c>.
 /// </summary>
 /// <remarks>
 /// Pure parsing, so it can be unit tested. The App only calls it in Debug builds with test hooks; Release builds
-/// never look at these flags. A flag with no value, or whose value starts with <c>--</c> (another flag), counts as not given.
+/// never look at these flags. The two flags are all or nothing: if either is present, both must be valid, or the app
+/// refuses to start. That way a half-set test run can never reach production Google or the real data folder.
 /// </remarks>
 public static class TestHookArgs
 {
+    private const string EndpointFlag = "--test-endpoints";
+    private const string DataDirFlag  = "--test-data-dir";
+
     /// <summary>
-    /// Parses the flags.
+    /// Checks the flags.
     /// </summary>
     /// <param name="args">The full command line (the first item may be the exe path).</param>
-    /// <returns>The fake server base address (http or https only) and the data folder; each is null when missing or bad.</returns>
-    public static (Uri? EndpointBase, string? DataDir) Parse(string[] args)
+    /// <returns>
+    /// Neither flag: all null (a normal run). Both valid: the fake server base address (absolute http or https) and the
+    /// full data folder path. Anything else: <c>Error</c> holds a one-line reason and the app must not start.
+    /// </returns>
+    public static (Uri? EndpointBase, string? DataDir, string? Error) Validate(string[] args)
     {
         ArgumentNullException.ThrowIfNull(args);
 
-        var endpoint = ValueOf(args, "--test-endpoints");
-        Uri? endpointBase = null;
-        if (endpoint is not null
-            && Uri.TryCreate(endpoint, UriKind.Absolute, out var uri)
-            && uri.Scheme is "http" or "https")
+        var endpointCount = Count(args, EndpointFlag);
+        var dataDirCount  = Count(args, DataDirFlag);
+
+        // Normal Run
+        if (endpointCount == 0 && dataDirCount == 0)
         {
-            endpointBase = uri;
+            return (null, null, null);
         }
 
-        return (endpointBase, ValueOf(args, "--test-data-dir"));
+        // All Or Nothing, Each Exactly Once
+        if (endpointCount != 1 || dataDirCount != 1)
+        {
+            return (null, null, $"{EndpointFlag} and {DataDirFlag} must each be given exactly once.");
+        }
+
+        // Endpoint
+        var endpoint = ValueOf(args, EndpointFlag);
+        if (endpoint is null
+            || !Uri.TryCreate(endpoint, UriKind.Absolute, out var uri)
+            || uri.Scheme is not ("http" or "https"))
+        {
+            return (null, null, $"{EndpointFlag} needs an absolute http or https address.");
+        }
+
+        // Data Folder
+        var dataDir = ValueOf(args, DataDirFlag);
+        if (dataDir is null)
+        {
+            return (null, null, $"{DataDirFlag} needs a folder path.");
+        }
+
+        return (uri, Path.GetFullPath(dataDir), null);
     }
 
-    /// <summary>
-    /// True when a flag is present but its value is missing or looks like another flag.
-    /// </summary>
-    /// <param name="args">The full command line.</param>
-    /// <param name="flag">The flag name.</param>
-    /// <returns>True for a malformed flag.</returns>
-    public static bool IsMalformed(string[] args, string flag)
-    {
-        ArgumentNullException.ThrowIfNull(args);
-
-        var index = Array.FindIndex(args, a => string.Equals(a, flag, StringComparison.OrdinalIgnoreCase));
-        return index >= 0 && ValueOf(args, flag) is null;
-    }
+    private static int Count(string[] args, string flag) =>
+        args.Count(a => string.Equals(a, flag, StringComparison.OrdinalIgnoreCase));
 
     private static string? ValueOf(string[] args, string flag)
     {
