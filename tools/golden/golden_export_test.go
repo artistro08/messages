@@ -163,6 +163,7 @@ func TestExportGolden(t *testing.T) {
 	exportCrypto(t, out)
 	exportPbLite(t, out)
 	exportHttp(t, out)
+	exportAuthData(t, out)
 }
 
 // checkGoldenHelpers sanity-checks the client and capture transport; writes no file.
@@ -683,5 +684,56 @@ func exportHttp(t *testing.T, out string) {
 		"setCookie":     setCookie,
 		"retry":         retry,
 		"errorBody":     errorBody,
+	})
+}
+
+// exportAuthData writes authdata.json: the fixed AuthData after ClearPairing and CopyForRepair, plus the
+// IsGoogleAccount / AuthNetwork / HasCookies results with and without DestRegID.
+func exportAuthData(t *testing.T, out string) {
+	// Flatten One AuthData To Plain Values
+	flat := func(ad *AuthData) map[string]any {
+		return map[string]any{
+			"hasBrowser":          ad.Browser != nil,
+			"hasMobile":           ad.Mobile != nil,
+			"tachyonTokenHex":     hex.EncodeToString(ad.TachyonAuthToken),
+			"tachyonExpiryZero":   ad.TachyonExpiry.IsZero(),
+			"tachyonTTL":          ad.TachyonTTL,
+			"pairingIdHex":        hex.EncodeToString(ad.PairingID[:]),
+			"sessionIdHex":        hex.EncodeToString(ad.SessionID[:]),
+			"destRegIdHex":        hex.EncodeToString(ad.DestRegID[:]),
+			"destPhoneId":         ad.DestPhoneID,
+			"cookies":             ad.Cookies,
+			"cookiesNil":          ad.Cookies == nil,
+			"requestCryptoAesHex": hex.EncodeToString(ad.RequestCrypto.AESKey),
+			"hasRefreshKey":       ad.RefreshKey != nil,
+		}
+	}
+
+	// Cleared Pairing
+	c, _ := newGoldenClient(t)
+	ad := c.AuthData
+	ad.DestPhoneID = 42
+	ad.PairingID = uuid.MustParse("01020304-0506-0708-090a-0b0c0d0e0f10")
+	ad.TachyonExpiry = time.Unix(1700000000, 0)
+	ad.WebEncryptionKey = []byte{1, 2, 3}
+	repaired := ad.CopyForRepair()
+	ad.ClearPairing()
+
+	// Network Cases
+	network := func(ad *AuthData) map[string]any {
+		return map[string]any{"isGoogleAccount": ad.IsGoogleAccount(), "authNetwork": ad.AuthNetwork(), "hasCookies": ad.HasCookies()}
+	}
+	noReg := &AuthData{}
+	withReg := &AuthData{DestRegID: uuid.MustParse("ffeeddcc-bbaa-9988-7766-554433221100")}
+	withRegCookies := &AuthData{DestRegID: withReg.DestRegID, Cookies: map[string]string{}}
+
+	writeGolden(t, out, "authdata", map[string]any{
+		"cleared":  flat(ad),
+		"repaired": flat(repaired),
+		"network": map[string]any{
+			"withoutDestRegId":          network(noReg),
+			"withDestRegIdNoCookies":    network(withReg),
+			"withDestRegIdEmptyCookies": network(withRegCookies),
+		},
 	})
 }

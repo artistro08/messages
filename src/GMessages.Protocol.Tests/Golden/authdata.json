@@ -1,0 +1,55 @@
+{
+  "cleared": {
+    "cookies": {
+      "SAPISID": "fake-sapisid",
+      "SID": "fake-sid"
+    },
+    "cookiesNil": false,
+    "destPhoneId": 42,
+    "destRegIdHex": "ffeeddccbbaa99887766554433221100",
+    "hasBrowser": false,
+    "hasMobile": false,
+    "hasRefreshKey": true,
+    "pairingIdHex": "00000000000000000000000000000000",
+    "requestCryptoAesHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "sessionIdHex": "00112233445566778899aabbccddeeff",
+    "tachyonExpiryZero": true,
+    "tachyonTTL": 0,
+    "tachyonTokenHex": ""
+  },
+  "network": {
+    "withDestRegIdEmptyCookies": {
+      "authNetwork": "GDitto",
+      "hasCookies": true,
+      "isGoogleAccount": true
+    },
+    "withDestRegIdNoCookies": {
+      "authNetwork": "GDitto",
+      "hasCookies": false,
+      "isGoogleAccount": true
+    },
+    "withoutDestRegId": {
+      "authNetwork": "",
+      "hasCookies": true,
+      "isGoogleAccount": false
+    }
+  },
+  "repaired": {
+    "cookies": {
+      "SAPISID": "fake-sapisid",
+      "SID": "fake-sid"
+    },
+    "cookiesNil": false,
+    "destPhoneId": 42,
+    "destRegIdHex": "00000000000000000000000000000000",
+    "hasBrowser": false,
+    "hasMobile": false,
+    "hasRefreshKey": true,
+    "pairingIdHex": "00000000000000000000000000000000",
+    "requestCryptoAesHex": "c3c9021d5cafeb5713c98dae52780b9836528dde72d369c35ef8a4dcae38e3c6",
+    "sessionIdHex": "00000000000000000000000000000000",
+    "tachyonExpiryZero": true,
+    "tachyonTTL": 0,
+    "tachyonTokenHex": ""
+  }
+}
