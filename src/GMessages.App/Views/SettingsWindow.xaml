@@ -68,7 +68,7 @@
             </StackPanel>
         </ScrollViewer>
 
-        <!-- Unpair Confirm -->
+        <!-- Unpair Confirm: keep DefaultButton="Close". Primary would replace PrimaryButtonStyle and drop the Settings.UnpairConfirm AutomationId -->
         <ContentDialog
             x:Name="UnpairDialog"
             Title="Unpair this PC?"

@@ -52,7 +52,7 @@ public partial class App : Application, IDisposable
     private IStartupService? _startup;
     private AppPaths? _paths;
     private DispatcherQueue? _dispatcher;
-    private bool _hasInternet;
+    private DispatcherQueueTimer? _networkDebounce;
     private bool _connectionStarted;
     private EventWaitHandle? _quitRequest;
     private RegisteredWaitHandle? _quitWait;
@@ -113,7 +113,10 @@ public partial class App : Application, IDisposable
         _ = StartConnectionAsync();
 
         // Resume And Network: reconnect right away instead of waiting out the long poll's retry
-        _hasInternet                             = HasInternet();
+        _networkDebounce                         = dispatcher.CreateTimer();
+        _networkDebounce.Interval                = TimeSpan.FromSeconds(3);
+        _networkDebounce.IsRepeating             = false;
+        _networkDebounce.Tick                   += (_, _) => RunOnUi("network", c => c.NotifyNetworkAvailableAsync());
         PowerManager.SystemSuspendStatusChanged += OnSystemSuspendStatusChanged;
         NetworkInformation.NetworkStatusChanged += OnNetworkStatusChanged;
 
@@ -174,6 +177,8 @@ public partial class App : Application, IDisposable
         AppLog.ConnectionStateChanged(_logger, _connection.State);
         if (NeedsPairing())
         {
+            // No "Not paired" main window left behind the pairing window after an unpair or sign-out
+            _mainWindow?.Close();
             ShowPairingWindow();
         }
     }
@@ -337,10 +342,13 @@ public partial class App : Application, IDisposable
     // =========================================================================
 
     // PowerManager (WinAppSDK) rather than SystemEvents: it's a CsWinRT projection the app already ships, so it's
-    // AOT-clean and needs no extra package or hidden window thread. Raised on a background thread
+    // AOT-clean and needs no extra package or hidden window thread. Raised on a background thread.
+    // AutoResume only: a normal wake raises AutoResume then ManualResume, and a second "reconnect now" would tear down
+    // the first. On Modern Standby laptops suspend/resume often isn't raised at all; network-back and the long poll's
+    // own retry cover those
     private void OnSystemSuspendStatusChanged(object? sender, object e)
     {
-        if (PowerManager.SystemSuspendStatus is not (SystemSuspendStatus.AutoResume or SystemSuspendStatus.ManualResume))
+        if (PowerManager.SystemSuspendStatus != SystemSuspendStatus.AutoResume)
         {
             return;
         }
@@ -348,18 +356,20 @@ public partial class App : Application, IDisposable
         RunOnUi("resume", c => c.NotifyResumedAsync());
     }
 
-    // Raised on a background thread for any change; only a move from no internet to internet reconnects
+    // Raised on a background thread for any change. Any change with internet (including a Wi-Fi to Ethernet switch
+    // with no gap) restarts a 3 s debounce, so a burst of changes gives one reconnect
     private void OnNetworkStatusChanged(object? sender)
     {
-        bool hasInternet = HasInternet();
-        bool cameBack    = hasInternet && !_hasInternet;
-        _hasInternet     = hasInternet;
-        if (!cameBack)
+        if (!HasInternet())
         {
             return;
         }
 
-        RunOnUi("network", c => c.NotifyNetworkAvailableAsync());
+        _dispatcher?.TryEnqueue(() =>
+        {
+            _networkDebounce?.Stop();
+            _networkDebounce?.Start();
+        });
     }
 
     private static bool HasInternet() =>
@@ -454,6 +464,7 @@ public partial class App : Application, IDisposable
         _quitRequest?.Dispose();
         PowerManager.SystemSuspendStatusChanged -= OnSystemSuspendStatusChanged;
         NetworkInformation.NetworkStatusChanged -= OnNetworkStatusChanged;
+        _networkDebounce?.Stop();
         _trayIcon?.Dispose();
         _trayMenu?.Close();
         CloseWindows();
