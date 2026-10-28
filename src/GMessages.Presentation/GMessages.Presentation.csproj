@@ -8,6 +8,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\GMessages.Protocol\GMessages.Protocol.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <InternalsVisibleTo Include="GMessages.Presentation.Tests" />
   </ItemGroup>
 </Project>

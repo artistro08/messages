@@ -13,6 +13,7 @@
   <!-- Shared Fakes: linked from the Protocol tests for later tasks -->
   <ItemGroup>
     <Compile Include="..\GMessages.Protocol.Tests\Fakes\*.cs" Link="Fakes\%(Filename)%(Extension)" />
+    <None Include="..\GMessages.Protocol.Tests\Golden\signin.json" Link="Golden\signin.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

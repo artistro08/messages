@@ -5,6 +5,8 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="GMessages.Protocol.Tests" />
+    <!-- Presentation Tests Hand Fake Phone Answers To RpcSession While Pairing -->
+    <InternalsVisibleTo Include="GMessages.Presentation.Tests" />
   </ItemGroup>
 
   <ItemGroup>
