@@ -1012,6 +1012,14 @@ func exportDispatch(t *testing.T, out string) {
 		}}})
 	}
 
+	multiMessage := func(n int, ids ...string) *gmproto.IncomingRPCMessage {
+		var parts []*gmproto.Message
+		for _, id := range ids {
+			parts = append(parts, &gmproto.Message{MessageID: id, ConversationID: "golden-conv"})
+		}
+		return updates(n, &gmproto.UpdateEvents{Event: &gmproto.UpdateEvents_MessageEvent{MessageEvent: &gmproto.MessageEvent{Data: parts}}})
+	}
+
 	// Steps: Either A Skip Count To Set Or A Message To Handle
 	type step struct {
 		skipCount *int
@@ -1039,7 +1047,27 @@ func exportDispatch(t *testing.T, out string) {
 		{msg: updates(10, &gmproto.UpdateEvents{Event: &gmproto.UpdateEvents_UserAlertEvent{UserAlertEvent: &gmproto.UserAlertEvent{
 			AlertType: gmproto.AlertType_BROWSER_ACTIVE,
 		}}})},
+		{msg: updates(11, &gmproto.UpdateEvents{Event: &gmproto.UpdateEvents_ConversationEvent{ConversationEvent: &gmproto.ConversationEvent{
+			Data: []*gmproto.Conversation{{ConversationID: "golden-conv-2", Name: "Live"}},
+		}}})},
+		{msg: multiMessage(12, "msg-d", "msg-e")},
+		{msg: multiMessage(13, "msg-d", "msg-e")},
+		{msg: multiMessage(14, "msg-f", "msg-f")},
+		{msg: updates(15, &gmproto.UpdateEvents{Event: &gmproto.UpdateEvents_SettingsEvent{SettingsEvent: &gmproto.Settings{}}})},
+		{msg: updates(16, &gmproto.UpdateEvents{Event: &gmproto.UpdateEvents_AccountChange{AccountChange: &gmproto.AccountChangeOrSomethingEvent{
+			Account: "real@example.com", Enabled: true,
+		}}})},
+		{skipCount: &one},
+		{msg: updates(17, &gmproto.UpdateEvents{Event: &gmproto.UpdateEvents_TypingEvent{TypingEvent: &gmproto.TypingEvent{
+			Data: &gmproto.TypingData{ConversationID: "golden-conv-old"},
+		}}})},
 	}
+
+	// Dedup Ring Wrap-Around: 9 Distinct IDs, Then The First Again (Evicted, So Raised) And The Last (Still Held, So Dropped)
+	for i := 1; i <= 9; i++ {
+		steps = append(steps, step{msg: message(17+i, fmt.Sprintf("ring-%d", i), int64(i))})
+	}
+	steps = append(steps, step{msg: message(27, "ring-1", 1)}, step{msg: message(28, "ring-9", 9)})
 
 	// Run Them Through Go
 	var stepsOut []map[string]any

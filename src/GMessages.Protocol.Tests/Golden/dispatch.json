@@ -12,7 +12,25 @@
     ],
     [
       "golden-dispatch-resp-9",
-      "golden-dispatch-resp-10"
+      "golden-dispatch-resp-10",
+      "golden-dispatch-resp-11",
+      "golden-dispatch-resp-12",
+      "golden-dispatch-resp-13",
+      "golden-dispatch-resp-14",
+      "golden-dispatch-resp-15",
+      "golden-dispatch-resp-16",
+      "golden-dispatch-resp-17",
+      "golden-dispatch-resp-18",
+      "golden-dispatch-resp-19",
+      "golden-dispatch-resp-20",
+      "golden-dispatch-resp-21",
+      "golden-dispatch-resp-22",
+      "golden-dispatch-resp-23",
+      "golden-dispatch-resp-24",
+      "golden-dispatch-resp-25",
+      "golden-dispatch-resp-26",
+      "golden-dispatch-resp-27",
+      "golden-dispatch-resp-28"
     ]
   ],
   "events": [
@@ -55,6 +73,86 @@
       "id": "BROWSER_ACTIVE",
       "isOld": false,
       "type": "UserAlert"
+    },
+    {
+      "id": "golden-conv-2",
+      "isOld": false,
+      "type": "ConversationUpdated"
+    },
+    {
+      "id": "msg-d",
+      "isOld": false,
+      "type": "MessageReceived"
+    },
+    {
+      "id": "msg-e",
+      "isOld": false,
+      "type": "MessageReceived"
+    },
+    {
+      "id": "msg-f",
+      "isOld": false,
+      "type": "MessageReceived"
+    },
+    {
+      "id": "",
+      "isOld": false,
+      "type": "SettingsChanged"
+    },
+    {
+      "id": "real@example.com",
+      "isOld": false,
+      "type": "AccountChanged"
+    },
+    {
+      "id": "ring-1",
+      "isOld": false,
+      "type": "MessageReceived"
+    },
+    {
+      "id": "ring-2",
+      "isOld": false,
+      "type": "MessageReceived"
+    },
+    {
+      "id": "ring-3",
+      "isOld": false,
+      "type": "MessageReceived"
+    },
+    {
+      "id": "ring-4",
+      "isOld": false,
+      "type": "MessageReceived"
+    },
+    {
+      "id": "ring-5",
+      "isOld": false,
+      "type": "MessageReceived"
+    },
+    {
+      "id": "ring-6",
+      "isOld": false,
+      "type": "MessageReceived"
+    },
+    {
+      "id": "ring-7",
+      "isOld": false,
+      "type": "MessageReceived"
+    },
+    {
+      "id": "ring-8",
+      "isOld": false,
+      "type": "MessageReceived"
+    },
+    {
+      "id": "ring-9",
+      "isOld": false,
+      "type": "MessageReceived"
+    },
+    {
+      "id": "ring-1",
+      "isOld": false,
+      "type": "MessageReceived"
     }
   ],
   "finalSkipCount": 0,
@@ -63,37 +161,94 @@
       "skipCount": 2
     },
     {
-      "pblite": "[\"golden-dispatch-resp-1\",19,null,null,null,null,null,null,null,null,null,\"Chlnb2xkZW4tZGlzcGF0Y2gtc2Vzc2lvbi0xIBBCS7Isd4NTutmDgzEtjuo+At7dfhjMUHd0FOqANIyC+yHxXWT80gBd/32dD33Qy2Ox56EpkMNX4ZpcVbgyRexuYrI8zTslYSMVQXbKog==\",null,null,null,null,null,null,null,null,null,null,null]"
+      "pblite": "[\"golden-dispatch-resp-1\",19,null,null,null,null,null,null,null,null,null,\"Chlnb2xkZW4tZGlzcGF0Y2gtc2Vzc2lvbi0xIBBCS4kv6gr/UCGmv59zq7yOrNTWByuSZwzy0V+7PwRLID/4Zfh1wRY2IZHWQUB+yKKg/iNees+j2D8z8ureVQc0stMT9ivUgxb5zFmb8g==\",null,null,null,null,null,null,null,null,null,null,null]"
     },
     {
-      "pblite": "[\"golden-dispatch-resp-2\",19,null,null,null,null,null,null,null,null,null,\"Chlnb2xkZW4tZGlzcGF0Y2gtc2Vzc2lvbi0yIBBCS5eniW2jAvfZfx+dGJIf3O0Xzd/CvtBrXXXzFzTYjOZiT8vlIChsCyF2cx/YebSrs98lf5jvKhE1jofYwxTEomf2E7AAt2N7BpqJJg==\",null,null,null,null,null,null,null,null,null,null,null]"
+      "pblite": "[\"golden-dispatch-resp-2\",19,null,null,null,null,null,null,null,null,null,\"Chlnb2xkZW4tZGlzcGF0Y2gtc2Vzc2lvbi0yIBBCS6QGD3EFnFErPA40gB1M14tosquNgtLt0+mmGj7Z02UxXhd4UQX2al9aAvGmMcW20WANP907BuKXAI8TOyKTipqQ0Db7s+/TqpVc2w==\",null,null,null,null,null,null,null,null,null,null,null]"
     },
     {
-      "pblite": "[\"golden-dispatch-resp-3\",19,null,null,null,null,null,null,null,null,null,\"Chlnb2xkZW4tZGlzcGF0Y2gtc2Vzc2lvbi0zIBBCS9tl0e3Nm6ZqpDY4OgzQZXwIZ1/jEx4aE+6Tch+cqQuuIURfiBeyz7LZ8PZ0FIvpvg7lBd0GltIlqzm+XsXmwxqErC+aGKb9m7YvkA==\",null,null,null,null,null,null,null,null,null,null,null]"
+      "pblite": "[\"golden-dispatch-resp-3\",19,null,null,null,null,null,null,null,null,null,\"Chlnb2xkZW4tZGlzcGF0Y2gtc2Vzc2lvbi0zIBBCS/iurlzxkn2J5mqvY8Cmz/RRNZ6MZHK4X8wknDErY+8BAQCPOdYjSgqvRnYeaNLZj0NlTraD0z7QosMMjJsDjWpB8NlakBj6/EVIxQ==\",null,null,null,null,null,null,null,null,null,null,null]"
     },
     {
-      "pblite": "[\"golden-dispatch-resp-4\",19,null,null,null,null,null,null,null,null,null,\"Chlnb2xkZW4tZGlzcGF0Y2gtc2Vzc2lvbi00IBBCS5Cd4RBidk2xuvgu5MyFLdNJ0rRPQ8Ih7tPQ9sPFtXIpTu4dDJPH3QGwmCT32wJf0E1rxd+AhsXDf8WeAukRllvOL+jQXzHvtMxXTw==\",null,null,null,null,null,null,null,null,null,null,null]"
+      "pblite": "[\"golden-dispatch-resp-4\",19,null,null,null,null,null,null,null,null,null,\"Chlnb2xkZW4tZGlzcGF0Y2gtc2Vzc2lvbi00IBBCSyIvWVGQrx2+omD7DWHyAIHqQihvmtbkKyE9AypVaQupIRyrhyFguf02ICNlTxfE8nQqj5vQA/Yukv/gDXq7mAfb9PW/lEQ7crj2/g==\",null,null,null,null,null,null,null,null,null,null,null]"
     },
     {
-      "pblite": "[\"golden-dispatch-resp-5\",19,null,null,null,null,null,null,null,null,null,\"Chlnb2xkZW4tZGlzcGF0Y2gtc2Vzc2lvbi01IBBCSxenUQZ8uDg5PJLeaWm/zJZzP8lj5AsIgwookDy5NaSEhA03CXedfKktPQH0dFyK93PvaeDJ51FCdpzX+u6Cu6I1WIyCTvVvZvRAEw==\",null,null,null,null,null,null,null,null,null,null,null]"
+      "pblite": "[\"golden-dispatch-resp-5\",19,null,null,null,null,null,null,null,null,null,\"Chlnb2xkZW4tZGlzcGF0Y2gtc2Vzc2lvbi01IBBCS+pq8pxwATl92OsLhWupi9oQdbH0Q+6c8wgsW1gJy8Z4w8KCPuga039eF4+08aW8KhIqNcf2HL+DE7RW5gASd5CqzqogtdFZaQRrbg==\",null,null,null,null,null,null,null,null,null,null,null]"
     },
     {
       "skipCount": 1
     },
     {
-      "pblite": "[\"golden-dispatch-resp-6\",19,null,null,null,null,null,null,null,null,null,\"Chlnb2xkZW4tZGlzcGF0Y2gtc2Vzc2lvbi02IBBCST9q9XixyT5IEAjyUvdmvxKXrryxXyBNwKESVyVwPmigT9n2s+jDz9a4zeCAf3Z+g3R2rbLCYD3uCRfz9On1HDdQI07nXTFXxjk=\",null,null,null,null,null,null,null,null,null,null,null]"
+      "pblite": "[\"golden-dispatch-resp-6\",19,null,null,null,null,null,null,null,null,null,\"Chlnb2xkZW4tZGlzcGF0Y2gtc2Vzc2lvbi02IBBCSS/zf/d1PrTMRqSzq1mLut5amROzCZLCDeeCh52pKRQu/zMo+htxedoNfpU6s15oFkUzz5Ln1lR8wltLAUpcHVpBtC3wN9jwcJ8=\",null,null,null,null,null,null,null,null,null,null,null]"
     },
     {
-      "pblite": "[\"golden-dispatch-resp-7\",19,null,null,null,null,null,null,null,null,null,\"Chlnb2xkZW4tZGlzcGF0Y2gtc2Vzc2lvbi03IBBCQcxHpGRmYg1iUmmGzfk7LJarntJKkLmgybro2CvT7W31WnpSvg3bYrLLSEvIv+HqiXwKr0VQPdAPUDVvyMYaNAIn\",null,null,null,null,null,null,null,null,null,null,null]"
+      "pblite": "[\"golden-dispatch-resp-7\",19,null,null,null,null,null,null,null,null,null,\"Chlnb2xkZW4tZGlzcGF0Y2gtc2Vzc2lvbi03IBBCQXstsrxf8HcbopkM2sZaRzHP67a15EKexRCZ9kFteTfhHHGsFvjagIdUbvZbWNLVY/C2Ee9YqkT6Ds2nq/FKBgjt\",null,null,null,null,null,null,null,null,null,null,null]"
     },
     {
       "pblite": "[\"golden-dispatch-resp-8\",19,null,null,null,null,null,null,null,null,null,\"Chlnb2xkZW4tZGlzcGF0Y2gtc2Vzc2lvbi04IBAqAnIA\",null,null,null,null,null,null,null,null,null,null,null]"
     },
     {
-      "pblite": "[\"golden-dispatch-resp-9\",19,null,null,null,null,null,null,null,null,null,\"Chlnb2xkZW4tZGlzcGF0Y2gtc2Vzc2lvbi05IBBaSMRDK1V6K7m7g9ROrQ8YjjyeePUA8cRDKBx19YHcIpm0r9rIR30oKDqvVzySbBsh+PUei2bwb9wGO8pZQRnZnF/WpRJcs+amdw==\",null,null,null,null,null,null,null,null,null,null,null]"
+      "pblite": "[\"golden-dispatch-resp-9\",19,null,null,null,null,null,null,null,null,null,\"Chlnb2xkZW4tZGlzcGF0Y2gtc2Vzc2lvbi05IBBaSC4z5SnOqj+mx/6HVH+/Vmz8bWZKvaxm5LYmaRzsk4BNnTO6jK7V+vAoQ4t7sT9jDE8UFkyPuuDiAVbBgeABOSKgxb3x32RUBg==\",null,null,null,null,null,null,null,null,null,null,null]"
     },
     {
-      "pblite": "[\"golden-dispatch-resp-10\",19,null,null,null,null,null,null,null,null,null,\"Chpnb2xkZW4tZGlzcGF0Y2gtc2Vzc2lvbi0xMCAQQjTWN8FlPpk2JYPohPQJlVkufaqdeD7FarIQjL1jY8ZjEpYiSc5dfZO06KVJzQ34qHrfINjJ\",null,null,null,null,null,null,null,null,null,null,null]"
+      "pblite": "[\"golden-dispatch-resp-10\",19,null,null,null,null,null,null,null,null,null,\"Chpnb2xkZW4tZGlzcGF0Y2gtc2Vzc2lvbi0xMCAQQjSVz6ttj6roM+Bt1qp0ZRV8FHBRP2LF3VJmqlv8q/a/WNq/ZPUlzHffA9DHl2QvpY/5YM2d\",null,null,null,null,null,null,null,null,null,null,null]"
+    },
+    {
+      "pblite": "[\"golden-dispatch-resp-11\",19,null,null,null,null,null,null,null,null,null,\"Chpnb2xkZW4tZGlzcGF0Y2gtc2Vzc2lvbi0xMSAQQkmZsE5tLfjjpcXlbd6L9acusGkHBSfey3jC674jTtu0wh3u7wZJYiNPlbaFXzyOsX+hs6heY+VyIlgFyzi4UNsqjyN6jGCpRVh1\",null,null,null,null,null,null,null,null,null,null,null]"
+    },
+    {
+      "pblite": "[\"golden-dispatch-resp-12\",19,null,null,null,null,null,null,null,null,null,\"Chpnb2xkZW4tZGlzcGF0Y2gtc2Vzc2lvbi0xMiAQQl6EgUMtLjUsxrXPsCI95UbBv3yQ1Hk85Ric+o9XHAylkEznd8rTVq5ZNLr9qLsF8fbp7B43lYxsSpTfBqw1baIp+03k83roXRBfgyG0DtxPW9cbosd4UJPJhtXQd81p\",null,null,null,null,null,null,null,null,null,null,null]"
+    },
+    {
+      "pblite": "[\"golden-dispatch-resp-13\",19,null,null,null,null,null,null,null,null,null,\"Chpnb2xkZW4tZGlzcGF0Y2gtc2Vzc2lvbi0xMyAQQl5ERDwtPbuOxRXlWPMFixFOhCCozm/xP7+vDqVVmKv2OJ04tpPYsFO6FKUjKJ07Szz8ZUQWjCYo6NzMBRD5asFWkjd72KHk5UHX/BWL+Saz5LsQjGzDVgvKOCwtFYA+\",null,null,null,null,null,null,null,null,null,null,null]"
+    },
+    {
+      "pblite": "[\"golden-dispatch-resp-14\",19,null,null,null,null,null,null,null,null,null,\"Chpnb2xkZW4tZGlzcGF0Y2gtc2Vzc2lvbi0xNCAQQl4c7VKwtbnXgliUh6n1S3/EUwu0tEvff7bP4RARgDlZWgaLLB3+BT1iK1b8w/MOW2T2XwkvnPtoIKOyy4o02o0oeT7eIMe4KcVugJ1D6fJW7ZDlesUbV0Sjr+mV2geN\",null,null,null,null,null,null,null,null,null,null,null]"
+    },
+    {
+      "pblite": "[\"golden-dispatch-resp-15\",19,null,null,null,null,null,null,null,null,null,\"Chpnb2xkZW4tZGlzcGF0Y2gtc2Vzc2lvbi0xNSAQQjLhoXk9sUi750STYxqVhGU3MOldc2YznZ6Rtfd9L5sSrnNNsnLCPAlm8Ew0yDQwyVs+Uw==\",null,null,null,null,null,null,null,null,null,null,null]"
+    },
+    {
+      "pblite": "[\"golden-dispatch-resp-16\",19,null,null,null,null,null,null,null,null,null,\"Chpnb2xkZW4tZGlzcGF0Y2gtc2Vzc2lvbi0xNiAQQkZAhxUm+8lDLRPLliotZZ2StrfDg6hmbcerhGwQp4TJGEfZxTzAhaoLf7jStDosbYrPDwlJihpoWX0V5aRGQdFGbaozMd1J\",null,null,null,null,null,null,null,null,null,null,null]"
+    },
+    {
+      "skipCount": 1
+    },
+    {
+      "pblite": "[\"golden-dispatch-resp-17\",19,null,null,null,null,null,null,null,null,null,\"Chpnb2xkZW4tZGlzcGF0Y2gtc2Vzc2lvbi0xNyAQQkXUNwEc3dyUOfJfOcobb8CzEEaoVWF3WOTJOEWGopZz1XOmE4/+mz+IcKPHJdrXvHfXyPau4RAcXSs2ImC3+EL8inIS2Lk=\",null,null,null,null,null,null,null,null,null,null,null]"
+    },
+    {
+      "pblite": "[\"golden-dispatch-resp-18\",19,null,null,null,null,null,null,null,null,null,\"Chpnb2xkZW4tZGlzcGF0Y2gtc2Vzc2lvbi0xOCAQQkuclvLtjLbi9W4Oc9uJksC/C2p7ua6GnVf/5zVO0hsmocOJ6brYDwpyWWGYaXsfup9ErOBQYq/ao1o4eQJXLdztLHpugnypTwcnfKE=\",null,null,null,null,null,null,null,null,null,null,null]"
+    },
+    {
+      "pblite": "[\"golden-dispatch-resp-19\",19,null,null,null,null,null,null,null,null,null,\"Chpnb2xkZW4tZGlzcGF0Y2gtc2Vzc2lvbi0xOSAQQkujReTE49ufYPFtkIyux7t/IPMl6Wh5UY1PtHbIwoIqJgIR4vUv1SZMZ84/TIvD0cNdOpo4UONaH18T3Xew269wl3Rdre0W/v6pxNU=\",null,null,null,null,null,null,null,null,null,null,null]"
+    },
+    {
+      "pblite": "[\"golden-dispatch-resp-20\",19,null,null,null,null,null,null,null,null,null,\"Chpnb2xkZW4tZGlzcGF0Y2gtc2Vzc2lvbi0yMCAQQktk9T12FX+LiB/4J/TMiESNGcWDfqpi953XqcHJz3raigHU+Uqqh1TNb96ISslHIYhxeNc1Mvn3s3d5d3JxILTKVU/r6FJjB94t9fU=\",null,null,null,null,null,null,null,null,null,null,null]"
+    },
+    {
+      "pblite": "[\"golden-dispatch-resp-21\",19,null,null,null,null,null,null,null,null,null,\"Chpnb2xkZW4tZGlzcGF0Y2gtc2Vzc2lvbi0yMSAQQktrzMO88+wN5KodBZJ7rJTjW75UlUv53Hdqn4yO0OrZycQ6dGxK7F5eevarFUiBNrOYVwC9PbMFu0BxuJ3wSLzbV11Uq8plk5GDMdY=\",null,null,null,null,null,null,null,null,null,null,null]"
+    },
+    {
+      "pblite": "[\"golden-dispatch-resp-22\",19,null,null,null,null,null,null,null,null,null,\"Chpnb2xkZW4tZGlzcGF0Y2gtc2Vzc2lvbi0yMiAQQksdjiL8tH58vFyjPP57oQiHTMDOo3B3yoYvcL2y4EKTh3j01L7eSPzS6+GEFgeBPcFcyeYmwtrrR86PPnrJa4fbHjGwe/G76L+6jTA=\",null,null,null,null,null,null,null,null,null,null,null]"
+    },
+    {
+      "pblite": "[\"golden-dispatch-resp-23\",19,null,null,null,null,null,null,null,null,null,\"Chpnb2xkZW4tZGlzcGF0Y2gtc2Vzc2lvbi0yMyAQQks9lMfA/FsKbzrk17IbaiZ2ATugT061bUtMcnO5XpL9Xkg8I7dCDpaHV66qH4UeS5XqQT+3JEU49DwsTjUzY32haM9TFN4yyVZYYnE=\",null,null,null,null,null,null,null,null,null,null,null]"
+    },
+    {
+      "pblite": "[\"golden-dispatch-resp-24\",19,null,null,null,null,null,null,null,null,null,\"Chpnb2xkZW4tZGlzcGF0Y2gtc2Vzc2lvbi0yNCAQQkv8XKFURRjVx8p6IaiNZx0HCKaeoUnTAg43klesoxQbmTsc9X3KVIUmPT3eJYvgR9irmwKozhvSIndts1NfCPEFkclrXtCb85+5uQU=\",null,null,null,null,null,null,null,null,null,null,null]"
+    },
+    {
+      "pblite": "[\"golden-dispatch-resp-25\",19,null,null,null,null,null,null,null,null,null,\"Chpnb2xkZW4tZGlzcGF0Y2gtc2Vzc2lvbi0yNSAQQktlcsJqe67JBEIsdLaGXSIrispJm4yT+WZRVyRDYG3RrdzGvH4YzrDPyXp3n5H+4DMxHTLUZgxKvfi+MN90+lrz/kDIVV1+YSAUMnk=\",null,null,null,null,null,null,null,null,null,null,null]"
+    },
+    {
+      "pblite": "[\"golden-dispatch-resp-26\",19,null,null,null,null,null,null,null,null,null,\"Chpnb2xkZW4tZGlzcGF0Y2gtc2Vzc2lvbi0yNiAQQkvJAn7X2QbPCszzrcb526zgA9iBCa9tB3FOfE9GeHFrg82wTyOp8PbSV8yNTu/PKfzmItxCpIbIevzwC5MNirr8UAk+h4SFjKyiOIk=\",null,null,null,null,null,null,null,null,null,null,null]"
+    },
+    {
+      "pblite": "[\"golden-dispatch-resp-27\",19,null,null,null,null,null,null,null,null,null,\"Chpnb2xkZW4tZGlzcGF0Y2gtc2Vzc2lvbi0yNyAQQksOasASmdJxTKkZzaL65tLPPp8k0jz38QRxMStsdbFFatSncV9SJzfsrZQqhkOEU9yjKZafJra4mLInsmlGCNI6SKacW7GPWeE/cVc=\",null,null,null,null,null,null,null,null,null,null,null]"
+    },
+    {
+      "pblite": "[\"golden-dispatch-resp-28\",19,null,null,null,null,null,null,null,null,null,\"Chpnb2xkZW4tZGlzcGF0Y2gtc2Vzc2lvbi0yOCAQQkugFLe6xGmpwLJGzZChz+8PFtOw2BWFlUOnmw9mdDmvWHzlTmZNRUoBRON+H4Umy8aqhxS8kpojYeTIJJLNa3Bsx+b4+/+aroqFzeU=\",null,null,null,null,null,null,null,null,null,null,null]"
     }
   ]
 }
