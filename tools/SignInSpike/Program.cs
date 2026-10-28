@@ -41,7 +41,15 @@ internal static class Program
 
         // Clear Stale State
         File.Delete(cookie_file);
-        if (Directory.Exists(profile_dir)) { Directory.Delete(profile_dir, true); }
+        try
+        {
+            if (Directory.Exists(profile_dir)) { Directory.Delete(profile_dir, true); }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Console.WriteLine($"WARNING: could not remove old profile folder (is another instance running?): {profile_dir}");
+            Environment.Exit(1);
+        }
 
         // Run Form
         ApplicationConfiguration.Initialize();
@@ -150,11 +158,11 @@ internal static class Program
 
                 // Re-check After Awaits (another navigation may have finished first)
                 if (done || !jar.ContainsKey("SAPISID")) { return; }
-                done = true;
 
                 // Save Cookies (DPAPI, current user)
                 byte[] json = JsonSerializer.SerializeToUtf8Bytes(jar);
                 File.WriteAllBytes(cookie_file, ProtectedData.Protect(json, null, DataProtectionScope.CurrentUser));
+                done = true;
 
                 // Print Names Only
                 Console.WriteLine("Cookies saved: " + string.Join(" ", jar.Keys));
@@ -166,7 +174,7 @@ internal static class Program
             catch (Exception ex)
             {
                 // A late failure after a successful save must not crash the process
-                if (!done) { Console.WriteLine($"Cookie check failed: {ex.GetType().Name}"); }
+                if (!done) { Console.WriteLine($"Cookie check failed: {ex.Message}"); }
             }
         }
     }
