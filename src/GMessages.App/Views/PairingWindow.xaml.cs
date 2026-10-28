@@ -125,7 +125,7 @@ public sealed partial class PairingWindow : Window
 
         try
         {
-            var env = await CoreWebView2Environment.CreateWithOptionsAsync(null, _profileFolder, new CoreWebView2EnvironmentOptions());
+            var env = await CoreWebView2Environment.CreateWithOptionsAsync(null, _profileFolder, new CoreWebView2EnvironmentOptions { AdditionalBrowserArguments = SignIn.BrowserArguments });
             await web.EnsureCoreWebView2Async(env);
 
             // Closed While Starting
@@ -134,8 +134,12 @@ public sealed partial class PairingWindow : Window
                 return;
             }
 
-            // Desktop Chrome User Agent Before Navigating, Or Google Blocks The Sign-In
-            web.CoreWebView2.Settings.UserAgent = SignIn.ChromeUserAgent;
+            // Desktop Chrome User Agent Before Navigating, Or Google Blocks The Sign-In.
+            // Google Detects WebView2 Through Its Client Hints And The chrome.webview Bridge.
+            // All Three Changes (Browser Arguments, No Web Messages, No Host Objects) Are Needed Together; Verified On 2026-10-28
+            web.CoreWebView2.Settings.UserAgent             = SignIn.ChromeUserAgent;
+            web.CoreWebView2.Settings.IsWebMessageEnabled   = false;
+            web.CoreWebView2.Settings.AreHostObjectsAllowed = false;
             web.NavigationCompleted            += (_, _) => _ = CheckCookiesAsync(force: false);
             web.CoreWebView2.Navigate(_endpoints.Authentication.AbsoluteUri);
         }

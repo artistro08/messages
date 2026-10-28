@@ -13,6 +13,9 @@ internal static class SignIn
     /// <summary>The desktop Chrome user agent set on the sign-in WebView2.</summary>
     public const string ChromeUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36";
 
+    /// <summary>The browser arguments for the sign-in WebView2: hides client hints and device-bound sessions, and sets the user agent at browser level.</summary>
+    public const string BrowserArguments = "--disable-features=UserAgentClientHint,DeviceBoundSessionCredentials --user-agent=\"" + ChromeUserAgent + "\"";
+
     /// <summary>The Google origin that also holds the account cookies in production.</summary>
     public const string GoogleOrigin = "https://google.com";
 
