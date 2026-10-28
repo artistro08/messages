@@ -15,10 +15,9 @@
             x:Name="AppTitleBar"
             AutomationProperties.AutomationId="Pairing.TitleBar">
             <TitleBar.IconSource>
-                <ImageIconSource ImageSource="Assets/AppIcon.ico" />
+                <ImageIconSource ImageSource="ms-appx:///Assets/AppIcon.ico" />
             </TitleBar.IconSource>
         </TitleBar>
-
 
         <!-- Signed-Out Reason: only above the sign-in -->
         <InfoBar

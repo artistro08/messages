@@ -1,6 +1,7 @@
 using GMessages.Presentation;
 using GMessages.Presentation.Connection;
 using GMessages.Presentation.Settings;
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 
 namespace GMessages.App.Views;
@@ -45,12 +46,24 @@ public sealed partial class MainWindow : Window
     /// Sets the window's light or dark look from the app theme.
     /// </summary>
     /// <param name="theme">The app theme setting.</param>
-    public void ApplyTheme(AppTheme theme) => RootGrid.RequestedTheme = theme switch
+    public void ApplyTheme(AppTheme theme)
     {
-        AppTheme.Light => ElementTheme.Light,
-        AppTheme.Dark  => ElementTheme.Dark,
-        _              => ElementTheme.Default,
-    };
+        // Page Colors
+        RootGrid.RequestedTheme = theme switch
+        {
+            AppTheme.Light => ElementTheme.Light,
+            AppTheme.Dark  => ElementTheme.Dark,
+            _              => ElementTheme.Default,
+        };
+
+        // Caption Buttons: Drawn By The System, So Tell Them The App Theme (Or They Follow Windows' Instead)
+        AppWindow.TitleBar.PreferredTheme = theme switch
+        {
+            AppTheme.Light => TitleBarTheme.Light,
+            AppTheme.Dark  => TitleBarTheme.Dark,
+            _              => TitleBarTheme.UseDefaultAppMode,
+        };
+    }
 
     /// <summary>
     /// Gives the friendly text for a connection state.

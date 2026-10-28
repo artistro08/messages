@@ -4,6 +4,7 @@ using GMessages.Presentation.Pairing;
 using GMessages.Protocol.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Dispatching;
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -87,12 +88,24 @@ public sealed partial class PairingWindow : Window
     /// Sets the window's light or dark look from the app theme.
     /// </summary>
     /// <param name="theme">The app theme setting.</param>
-    public void ApplyTheme(Presentation.Settings.AppTheme theme) => RootGrid.RequestedTheme = theme switch
+    public void ApplyTheme(Presentation.Settings.AppTheme theme)
     {
-        Presentation.Settings.AppTheme.Light => ElementTheme.Light,
-        Presentation.Settings.AppTheme.Dark  => ElementTheme.Dark,
-        _                                    => ElementTheme.Default,
-    };
+        // Page Colors
+        RootGrid.RequestedTheme = theme switch
+        {
+            Presentation.Settings.AppTheme.Light => ElementTheme.Light,
+            Presentation.Settings.AppTheme.Dark  => ElementTheme.Dark,
+            _                                    => ElementTheme.Default,
+        };
+
+        // Caption Buttons: Drawn By The System, So Tell Them The App Theme (Or They Follow Windows' Instead)
+        AppWindow.TitleBar.PreferredTheme = theme switch
+        {
+            Presentation.Settings.AppTheme.Light => TitleBarTheme.Light,
+            Presentation.Settings.AppTheme.Dark  => TitleBarTheme.Dark,
+            _                                    => TitleBarTheme.UseDefaultAppMode,
+        };
+    }
 
     // =========================================================================
     // SIGN-IN

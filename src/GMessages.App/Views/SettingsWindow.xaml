@@ -15,7 +15,7 @@
             x:Name="AppTitleBar"
             AutomationProperties.AutomationId="Settings.TitleBar">
             <TitleBar.IconSource>
-                <ImageIconSource ImageSource="Assets/AppIcon.ico" />
+                <ImageIconSource ImageSource="ms-appx:///Assets/AppIcon.ico" />
             </TitleBar.IconSource>
         </TitleBar>
 

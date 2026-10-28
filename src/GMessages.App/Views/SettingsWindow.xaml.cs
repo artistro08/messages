@@ -1,5 +1,6 @@
 using GMessages.Presentation;
 using GMessages.Presentation.Settings;
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
@@ -52,12 +53,24 @@ public sealed partial class SettingsWindow : Window
     /// Sets the window's light or dark look from the app theme. The confirm dialog follows its parent grid.
     /// </summary>
     /// <param name="theme">The app theme setting.</param>
-    public void ApplyTheme(AppTheme theme) => RootGrid.RequestedTheme = theme switch
+    public void ApplyTheme(AppTheme theme)
     {
-        AppTheme.Light => ElementTheme.Light,
-        AppTheme.Dark  => ElementTheme.Dark,
-        _              => ElementTheme.Default,
-    };
+        // Page Colors
+        RootGrid.RequestedTheme = theme switch
+        {
+            AppTheme.Light => ElementTheme.Light,
+            AppTheme.Dark  => ElementTheme.Dark,
+            _              => ElementTheme.Default,
+        };
+
+        // Caption Buttons: Drawn By The System, So Tell Them The App Theme (Or They Follow Windows' Instead)
+        AppWindow.TitleBar.PreferredTheme = theme switch
+        {
+            AppTheme.Light => TitleBarTheme.Light,
+            AppTheme.Dark  => TitleBarTheme.Dark,
+            _              => TitleBarTheme.UseDefaultAppMode,
+        };
+    }
 
     // Confirm, Unpair, Then Close: The App Opens The Pairing Window On NotPaired
     private async void OnUnpairClick(object sender, RoutedEventArgs e)

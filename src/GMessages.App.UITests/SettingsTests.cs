@@ -41,8 +41,11 @@ public sealed class SettingsTests : UiTest
 
         // Theme Flips The Tray Menu Live, Both Ways (So It Doesn't Depend On The System Theme)
         SelectTheme(LightIndex);
+        AssertCloseGlyph(light: true);
+        AssertTitleBarIcon();
         Assert.IsTrue(TrayMenuBrightness() > 160, "The tray menu didn't turn light after choosing Light.");
         SelectTheme(DarkIndex);
+        AssertCloseGlyph(light: false);
         Assert.IsTrue(TrayMenuBrightness() < 96, "The tray menu didn't turn dark after choosing Dark.");
 
         // Switches; Start With Windows Writes The Test Marker
@@ -145,6 +148,78 @@ public sealed class SettingsTests : UiTest
         TestContext.WriteLine($"Tray menu brightness: {current:0}");
         return current;
     }
+
+    // The System-Drawn Close Button Must Contrast With Its Background In The App Theme: A Dark Glyph On Light, A Light
+    // Glyph On Dark (A Mismatch With The Windows Theme Would Leave It Invisible). The Button Is Found By Position,
+    // Since UIA Gives Pixels No Theme: A Strip Inside The Window's Top-Right, Clear Of The Invisible Resize Border
+    private void AssertCloseGlyph(bool light)
+    {
+        Window window = App.WaitForWindow(SettingsTitle, AppDriver.DefaultTimeout);
+        window.Focus();
+        double background = 0;
+        double glyph      = 0;
+        Wait.Until(() =>
+        {
+            Rectangle box = window.BoundingRectangle;
+            (background, glyph) = Extremes(new Rectangle(box.Right - 48, box.Top + 8, 34, 22), light);
+            return light ? background - glyph > 80 : glyph - background > 80;
+        }, TimeSpan.FromSeconds(5), () => $"The close glyph doesn't contrast in {(light ? "Light" : "Dark")}: background {background:0}, glyph {glyph:0}.");
+        TestContext.WriteLine($"Close glyph ({(light ? "Light" : "Dark")}): background {background:0}, glyph {glyph:0}");
+    }
+
+    // The Title Bar Icon Area Must Show An Icon: Its Brightness Varies Instead Of Being One Flat Background
+    private void AssertTitleBarIcon()
+    {
+        Window window = App.WaitForWindow(SettingsTitle, AppDriver.DefaultTimeout);
+        double spread = 0;
+        Wait.Until(() =>
+        {
+            Rectangle box = window.BoundingRectangle;
+            (double low, double high) = Range(new Rectangle(box.Left + 12, box.Top + 8, 30, 30));
+            spread = high - low;
+            return spread > 40;
+        }, TimeSpan.FromSeconds(5), () => $"The title bar icon area looks blank (brightness spread {spread:0}).");
+    }
+
+    // Background Is The Strip's Corner Pixel; Glyph Is Its Darkest (Light) Or Lightest (Dark) Pixel
+    private static (double Background, double Glyph) Extremes(Rectangle area, bool light)
+    {
+        using CaptureImage capture = Capture.Rectangle(area);
+        Bitmap bitmap     = capture.Bitmap;
+        double background = Luma(bitmap.GetPixel(0, 0));
+        double glyph      = background;
+        for (int y = 0; y < bitmap.Height; y++)
+        {
+            for (int x = 0; x < bitmap.Width; x++)
+            {
+                double value = Luma(bitmap.GetPixel(x, y));
+                glyph        = light ? Math.Min(glyph, value) : Math.Max(glyph, value);
+            }
+        }
+
+        return (background, glyph);
+    }
+
+    private static (double Low, double High) Range(Rectangle area)
+    {
+        using CaptureImage capture = Capture.Rectangle(area);
+        Bitmap bitmap = capture.Bitmap;
+        double low    = 255;
+        double high   = 0;
+        for (int y = 0; y < bitmap.Height; y++)
+        {
+            for (int x = 0; x < bitmap.Width; x++)
+            {
+                double value = Luma(bitmap.GetPixel(x, y));
+                low          = Math.Min(low, value);
+                high         = Math.Max(high, value);
+            }
+        }
+
+        return (low, high);
+    }
+
+    private static double Luma(Color pixel) => (0.299 * pixel.R) + (0.587 * pixel.G) + (0.114 * pixel.B);
 
     private static double Brightness(AutomationElement element)
     {
