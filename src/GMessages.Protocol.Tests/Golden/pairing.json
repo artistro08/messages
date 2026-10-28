@@ -840,28 +840,28 @@
       "url": "https://instantmessaging-pa.clients6.google.com/$rpc/google.internal.communications.instantmessaging.v1.Messaging/SendMessage"
     },
     "clientFinished": {
-      "bodyText": "[[1,\"golden-src\",\"GDitto\"],[\"7254d47c-d3ba-4fac-84c1-44876cac7189\",19,null,null,null,null,null,null,null,null,null,\"CiQ3MjU0ZDQ3Yy1kM2JhLTRmYWMtODRjMS00NDg3NmNhYzcxODkQLRqzAwokNWU1NTEwMTEtMjIzMy00NDU1LTY2NzctODg5OWFhYmJjY2RkEnIKZU1vemlsbGEvNS4wIChMaW51eDsgQW5kcm9pZCAxNCkgQXBwbGVXZWJLaXQvNTM3LjM2IChLSFRNTCwgbGlrZSBHZWNrbykgQ2hyb21lLzE1Mi4wLjAuMCBTYWZhcmkvNTM3LjM2EAEaBWxpYmdtMAIY+9CV/7wxIlAIBBJMCkoIARJGCiEAJh7701UM8GjvAT7XNmujL11v5Ve0sqvOit5Yy6FopV4SIQAXiKCymlamq+xAhMDJa9PcvKa1B/NdvqnphXCEedi9yUK9AVRoaXMgaXMgYW4gdW5kb2N1bWVudGVkIEFQSS4gVXNlIG9yIGFjY2VzcyBvZiB1bmRvY3VtZW50ZWQgR29vZ2xlIEFQSXMgd2l0aG91dCBleHByZXNzIGF1dGhvcml6YXRpb24gaXMgcHJvaGliaXRlZCBwZXIgdGhlIEdvb2dsZSBBUEkgVGVybXMgb2YgU2VydmljZSAoaHR0cHM6Ly9kZXZlbG9wZXJzLmdvb2dsZS5jb20vdGVybXMpLg==\",null,null,null,null,null,null,null,null,null,null,[[],2]],[\"7254d47c-d3ba-4fac-84c1-44876cac7189\",null,null,null,null,\"ZmFrZS10YWNoeW9u\",[null,null,2026,9,2,null,4,null,6]],null,300000000,null,null,null,[\"ZmZlZWRkY2MtYmJhYS05OTg4LTc3NjYtNTU0NDMzMjIxMTAw\"]]",
+      "bodyText": "[[1,\"golden-src\",\"GDitto\"],[\"da41a749-6934-4b3a-95f7-8d656b80b6aa\",19,null,null,null,null,null,null,null,null,null,\"CiRkYTQxYTc0OS02OTM0LTRiM2EtOTVmNy04ZDY1NmI4MGI2YWEQLRqzAwokNWU1NTEwMTEtMjIzMy00NDU1LTY2NzctODg5OWFhYmJjY2RkEnIKZU1vemlsbGEvNS4wIChMaW51eDsgQW5kcm9pZCAxNCkgQXBwbGVXZWJLaXQvNTM3LjM2IChLSFRNTCwgbGlrZSBHZWNrbykgQ2hyb21lLzE1Mi4wLjAuMCBTYWZhcmkvNTM3LjM2EAEaBWxpYmdtMAIY+9CV/7wxIlAIBBJMCkoIARJGCiEAJh7701UM8GjvAT7XNmujL11v5Ve0sqvOit5Yy6FopV4SIQAXiKCymlamq+xAhMDJa9PcvKa1B/NdvqnphXCEedi9yUK9AVRoaXMgaXMgYW4gdW5kb2N1bWVudGVkIEFQSS4gVXNlIG9yIGFjY2VzcyBvZiB1bmRvY3VtZW50ZWQgR29vZ2xlIEFQSXMgd2l0aG91dCBleHByZXNzIGF1dGhvcml6YXRpb24gaXMgcHJvaGliaXRlZCBwZXIgdGhlIEdvb2dsZSBBUEkgVGVybXMgb2YgU2VydmljZSAoaHR0cHM6Ly9kZXZlbG9wZXJzLmdvb2dsZS5jb20vdGVybXMpLg==\",null,null,null,null,null,null,null,null,null,null,[[],2]],[\"da41a749-6934-4b3a-95f7-8d656b80b6aa\",null,null,null,null,\"ZmFrZS10YWNoeW9u\",[null,null,2026,9,2,null,4,null,6]],null,300000000,null,null,null,[\"ZmZlZWRkY2MtYmJhYS05OTg4LTc3NjYtNTU0NDMzMjIxMTAw\"]]",
       "url": "https://instantmessaging-pa.clients6.google.com/$rpc/google.internal.communications.instantmessaging.v1.Messaging/SendMessage"
     },
     "clientInit": {
-      "bodyText": "[[1,\"golden-src\",\"GDitto\"],[\"6e861710-6042-4f47-a151-905200684775\",19,null,null,null,null,null,null,null,null,null,\"CiQ2ZTg2MTcxMC02MDQyLTRmNDctYTE1MS05MDUyMDA2ODQ3NzUQLBqwAgokNWU1NTEwMTEtMjIzMy00NDU1LTY2NzctODg5OWFhYmJjY2RkEnIKZU1vemlsbGEvNS4wIChMaW51eDsgQW5kcm9pZCAxNCkgQXBwbGVXZWJLaXQvNTM3LjM2IChLSFRNTCwgbGlrZSBHZWNrbykgQ2hyb21lLzE1Mi4wLjAuMCBTYWZhcmkvNTM3LjM2EAEaBWxpYmdtMAIY+9CV/7wxIogBCAISgwEIARIgDv5M/ABojzRolLUHd67UJwV6K+mF7PVDG58c8dLMBssaRAhkEkC5oANso58UvfKxc+SCuyNVi2kW5eqRyNdwF/Fc0/gvZVmX0tYh1HGnmHdbCVCFS7zU9CGcbSIIjHfafAbYS3VbIhdBRVNfMjU2X0NCQy1ITUFDX1NIQTI1NigBMAE=\",null,null,null,null,null,null,null,null,null,null,[[],20]],[\"6e861710-6042-4f47-a151-905200684775\",null,null,null,null,\"ZmFrZS10YWNoeW9u\",[null,null,2026,9,2,null,4,null,6]],null,300000000,null,null,null,[\"ZmZlZWRkY2MtYmJhYS05OTg4LTc3NjYtNTU0NDMzMjIxMTAw\"]]",
+      "bodyText": "[[1,\"golden-src\",\"GDitto\"],[\"51f7c657-9fa0-4234-9718-457d820d67e1\",19,null,null,null,null,null,null,null,null,null,\"CiQ1MWY3YzY1Ny05ZmEwLTQyMzQtOTcxOC00NTdkODIwZDY3ZTEQLBqwAgokNWU1NTEwMTEtMjIzMy00NDU1LTY2NzctODg5OWFhYmJjY2RkEnIKZU1vemlsbGEvNS4wIChMaW51eDsgQW5kcm9pZCAxNCkgQXBwbGVXZWJLaXQvNTM3LjM2IChLSFRNTCwgbGlrZSBHZWNrbykgQ2hyb21lLzE1Mi4wLjAuMCBTYWZhcmkvNTM3LjM2EAEaBWxpYmdtMAIY+9CV/7wxIogBCAISgwEIARIgxysp1D1/esN4raiR8BciXALz0vgmQG+Pmz2ShY8HIgwaRAhkEkC5oANso58UvfKxc+SCuyNVi2kW5eqRyNdwF/Fc0/gvZVmX0tYh1HGnmHdbCVCFS7zU9CGcbSIIjHfafAbYS3VbIhdBRVNfMjU2X0NCQy1ITUFDX1NIQTI1NigBMAE=\",null,null,null,null,null,null,null,null,null,null,[[],20]],[\"51f7c657-9fa0-4234-9718-457d820d67e1\",null,null,null,null,\"ZmFrZS10YWNoeW9u\",[null,null,2026,9,2,null,4,null,6]],null,300000000,null,null,null,[\"ZmZlZWRkY2MtYmJhYS05OTg4LTc3NjYtNTU0NDMzMjIxMTAw\"]]",
       "url": "https://instantmessaging-pa.clients6.google.com/$rpc/google.internal.communications.instantmessaging.v1.Messaging/SendMessage"
     },
     "unpair": {
-      "bodyText": "[[1,\"golden-src\",\"GDitto\"],[\"b21a4ead-346e-466c-b311-7ae3822db531\",19,null,null,null,null,null,null,null,null,null,\"CiRiMjFhNGVhZC0zNDZlLTQ2NmMtYjMxMS03YWUzODIyZGI1MzEQLipWTYxEg0BEZkm9b29x9zZR2pzIvsRiN0xYhP3pWcvShRF3PQN3L6UR6gyys3lXKEiCCJQDtpOJ9k/ua6E1tMYNqAetNBr75W/oKjNsYdZwBkONGGJViM0=\",null,null,null,null,null,null,null,null,null,null,[[],2]],[\"b21a4ead-346e-466c-b311-7ae3822db531\",null,null,null,null,\"ZmFrZS10YWNoeW9u\",[null,null,2026,9,2,null,4,null,6]],null,86400000000,null,null,null,[\"ZmZlZWRkY2MtYmJhYS05OTg4LTc3NjYtNTU0NDMzMjIxMTAw\"]]",
+      "bodyText": "[[1,\"golden-src\",\"GDitto\"],[\"e1a0c609-00d3-480e-b6a0-064d2497b375\",19,null,null,null,null,null,null,null,null,null,\"CiRlMWEwYzYwOS0wMGQzLTQ4MGUtYjZhMC0wNjRkMjQ5N2IzNzUQLipW/f9QQfyTGdDOOPGTc1u8k5fVXF0oIP7khOLZTC0ipp6VnJ7CFf6WReNpxZh+uZyfSSR/Yd8zlrZEQDOx/GtI4UumkDT4vqSPjkBHtMmsF4t1EqHgoTg=\",null,null,null,null,null,null,null,null,null,null,[[],2]],[\"e1a0c609-00d3-480e-b6a0-064d2497b375\",null,null,null,null,\"ZmFrZS10YWNoeW9u\",[null,null,2026,9,2,null,4,null,6]],null,86400000000,null,null,null,[\"ZmZlZWRkY2MtYmJhYS05OTg4LTc3NjYtNTU0NDMzMjIxMTAw\"]]",
       "url": "https://instantmessaging-pa.clients6.google.com/$rpc/google.internal.communications.instantmessaging.v1.Messaging/SendMessage"
     }
   },
   "serverInit": [
     {
-      "aesKeyHex": "8aac7cf77fe9b3164da021c96c955d51f4d51e4f82b226789bfa541f3406d0d2",
+      "aesKeyHex": "c9122ebafa033833dfecd6d0e8707799812318aa77452f47dd1a727ad378d3ac",
       "containerHex": "1801222435653535313031312d323233332d343435352d363637372d3838393961616262636364642a760803127208011220808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9f1864224a080112460a21008e71ca9d7a62917be7f0db9896b47bf9b91c8b86628eed55d47fe750e65e5bcb12210075937f2ef48092880eaa8335c33f344c181e9de1797f239955a0bb2d56f84099",
       "containerPblite": "[null,null,1,\"5e551011-2233-4455-6677-8899aabbccdd\",\"CAMScggBEiCAgYKDhIWGh4iJiouMjY6PkJGSk5SVlpeYmZqbnJ2enxhkIkoIARJGCiEAjnHKnXpikXvn8NuYlrR7+bkci4Ziju1V1H/nUOZeW8sSIQB1k38u9ICSiA6qgzXDPzRMGB6d4Xl/I5lVoLstVvhAmQ==\",null,null,null]",
       "destPhoneId": 5551,
-      "emoji": "🦓",
-      "hmacKeyHex": "9b6790b3dfcb345d66003ccf8264565d64f97fbaa29cb64717b5a65b38cd6ad6",
+      "emoji": "🥢",
+      "hmacKeyHex": "54544db6a1ea1c656db77810731db4c0df77b05f1816995ea40709b7cf47cf15",
       "keyDerivationVersion": 0,
-      "nextKeyHex": "cf9f91671bf7f0d4e869fb7b07d2716afcb5c46eecac6f1d77316b7be6063cda",
+      "nextKeyHex": "ef82f7890d60ca0ecf82eac9672cd26e639e2ce72b503851f1f5823f072ddbe7",
       "pairingId": "5e551011-2233-4455-6677-8899aabbccdd",
       "phoneId": "golden-src/5551",
       "serverRandomHex": "808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9f",
@@ -869,14 +869,14 @@
       "verificationVersion": 0
     },
     {
-      "aesKeyHex": "4b5e0cd9866cf6e4f8afe9cd851d0d9596c0f46882fb56070cfb38c5d4121ce6",
+      "aesKeyHex": "70503406c32a4918c0cf700c87020f548ed86d17dce7fce00229b9246e39135f",
       "containerHex": "1801222435653535313031312d323233332d343435352d363637372d3838393961616262636364642a760803127208011220909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeaf1864224a080112460a21008ed57ec2b8f5e75e9192327b51e5661c87c8e5db0170721309a517fc6e1046b11221005481e8ae3b39d323778e451cb1efeb541e1325a7667edd877c68faf7050075753801",
       "containerPblite": "[null,null,1,\"5e551011-2233-4455-6677-8899aabbccdd\",\"CAMScggBEiCQkZKTlJWWl5iZmpucnZ6foKGio6SlpqeoqaqrrK2urxhkIkoIARJGCiEAjtV+wrj1516RkjJ7UeVmHIfI5dsBcHITCaUX/G4QRrESIQBUgeiuOznTI3eORRyx7+tUHhMlp2Z+3Yd8aPr3BQB1dQ==\",null,1,null]",
       "destPhoneId": 5551,
-      "emoji": "🦥",
-      "hmacKeyHex": "abe2071d7a268653e7cebad6be03842f8ea349dc5583148b44276ab24b0b62a8",
+      "emoji": "🕊",
+      "hmacKeyHex": "ae4e45c593e7271f9ee9e825433fccbd735b7bcfe25d06788f61313c13c18535",
       "keyDerivationVersion": 1,
-      "nextKeyHex": "80affe2b2bd20e610bb34933f03af84185c3f877426a808bb13f0396e4b7e8f2",
+      "nextKeyHex": "7501036968853e8950ef7ab5c09994bc7a08785a3d9dde5790dc662fe2ed6e07",
       "pairingId": "5e551011-2233-4455-6677-8899aabbccdd",
       "phoneId": "golden-src/5551",
       "serverRandomHex": "909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
@@ -884,14 +884,14 @@
       "verificationVersion": 0
     },
     {
-      "aesKeyHex": "cbf49db3a78dbe40599893b474f60fbd2a387902fb169b2c6ab77b2f4fed347c",
+      "aesKeyHex": "a47369c3a9509eb02de58e002ebcc1241e9f78f36a0af5eb4ab4949188ac7a6a",
       "containerHex": "1801222435653535313031312d323233332d343435352d363637372d3838393961616262636364642a760803127208011220a0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebf1864224a080112460a2100b79e3d7dcfa3f11181f46f247af56c067b0ef53250fc18e9be82c23e6f833fee12210089247041637a86442f458b78a5c43960bbaccc3eb14c89e5ae9adaf4f79455303001",
       "containerPblite": "[null,null,1,\"5e551011-2233-4455-6677-8899aabbccdd\",\"CAMScggBEiCgoaKjpKWmp6ipqqusra6vsLGys7S1tre4ubq7vL2+vxhkIkoIARJGCiEAt549fc+j8RGB9G8kevVsBnsO9TJQ/BjpvoLCPm+DP+4SIQCJJHBBY3qGRC9Fi3ilxDlgu6zMPrFMieWumtr095RVMA==\",1,null,null]",
       "destPhoneId": 5551,
-      "emoji": "✍",
-      "hmacKeyHex": "7d3714fe5ddf73cce58347faa113326262be7fd840e618f26a0e7e5401738911",
+      "emoji": "⛳",
+      "hmacKeyHex": "107962b47aa4fa45455a9b71de91394513deda13441f9e8cc1be32d9b0015dc9",
       "keyDerivationVersion": 0,
-      "nextKeyHex": "e1b0335a2bff2d324cdeea8c15b8efc2c0825d028383088f39b3706189636610",
+      "nextKeyHex": "d62a36bd70a0a6a6f14acde09bf7ec1d125b73ced6e2214c86701d9aed653396",
       "pairingId": "5e551011-2233-4455-6677-8899aabbccdd",
       "phoneId": "golden-src/5551",
       "serverRandomHex": "a0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebf",
@@ -899,14 +899,14 @@
       "verificationVersion": 1
     },
     {
-      "aesKeyHex": "6f8ea6ee4a7eaa4c39693045cdf8f58cab5ff0169371e13ee73fd2e2af0d4ded",
+      "aesKeyHex": "7324f42ea9d125df6fe3cdc81487bea4cd85cadee0159c68e34e8f222774a583",
       "containerHex": "1801222435653535313031312d323233332d343435352d363637372d3838393961616262636364642a760803127208011220b0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecf1864224a080112460a2100544bffd77cb94e5707541feed75dea06e44a57751ce22d5a7a5a7af8cc2fefe7122100fc57c0024b03db164fe15e26b611b3fa74536561b6924c0660cc30dab7835c7030013801",
       "containerPblite": "[null,null,1,\"5e551011-2233-4455-6677-8899aabbccdd\",\"CAMScggBEiCwsbKztLW2t7i5uru8vb6/wMHCw8TFxsfIycrLzM3OzxhkIkoIARJGCiEAVEv/13y5TlcHVB/u113qBuRKV3Uc4i1aelp6+Mwv7+cSIQD8V8ACSwPbFk/hXia2EbP6dFNlYbaSTAZgzDDat4NccA==\",1,1,null]",
       "destPhoneId": 5551,
-      "emoji": "🎩",
-      "hmacKeyHex": "f210bd6763f8a2fd09510566f45b0d0490e057a0e68cce08fc1af02df3036887",
+      "emoji": "🐍",
+      "hmacKeyHex": "8ce1ed60dd564fa7a408ca4cfa9e54b1b1162da48f52ea0c65abf1377b2d270c",
       "keyDerivationVersion": 1,
-      "nextKeyHex": "3d52a10f096016d393c2472198667ad13ee96cb5d92808edb2db892332d0e960",
+      "nextKeyHex": "fb0a540916c17a841208094da375d29b45f2cfb9cecfda0d06d32baca02a2a5b",
       "pairingId": "5e551011-2233-4455-6677-8899aabbccdd",
       "phoneId": "golden-src/5551",
       "serverRandomHex": "b0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecf",
@@ -915,6 +915,10 @@
     }
   ],
   "serverInitErrors": {
+    "coordinateLengths": {
+      "containerHex": "1801222435653535313031312d323233332d343435352d363637372d3838393961616262636364642a740803127008011220808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9f18642248080112440a1f71ca9d7a62917be7f0db9896b47bf9b91c8b86628eed55d47fe750e65e5bcb12210075937f2ef48092880eaa8335c33f344c181e9de1797f239955a0bb2d56f84099",
+      "error": "invalid server key coordinate lengths: 31, 32"
+    },
     "random31": {
       "containerHex": "1801222435653535313031312d323233332d343435352d363637372d3838393961616262636364642a75080312710801121f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e1864224a080112460a21008e71ca9d7a62917be7f0db9896b47bf9b91c8b86628eed55d47fe750e65e5bcb12210075937f2ef48092880eaa8335c33f344c181e9de1797f239955a0bb2d56f84099",
       "error": "unexpected random length 31"
@@ -946,8 +950,8 @@
     "destUnknownInt": 777,
     "destUnknownTs": 5551,
     "finishPayloadHex": "0804124c0a4a080112460a2100261efbd3550cf068ef013ed7366ba32f5d6fe557b4b2abce8ade58cba168a55e1221001788a0b29a56a6abec4084c0c96bd3dcbca6b507f35dbea9e985708479d8bdc9",
-    "initPayloadHex": "0802128301080112200efe4cfc00688f346894b50777aed427057a2be985ecf5431b9f1cf1d2cc06cb1a4408641240b9a0036ca39f14bdf2b173e482bb23558b6916e5ea91c8d77017f15cd3f82f655997d2d621d471a798775b0950854bbcd4f4219c6d22088c77da7c06d84b755b22174145535f3235365f4342432d484d41435f534841323536",
-    "initRandomHex": "0efe4cfc00688f346894b50777aed427057a2be985ecf5431b9f1cf1d2cc06cb",
+    "initPayloadHex": "080212830108011220c72b29d43d7f7ac378ada891f017225c02f3d2f826406f8f9b3d92858f07220c1a4408641240b9a0036ca39f14bdf2b173e482bb23558b6916e5ea91c8d77017f15cd3f82f655997d2d621d471a798775b0950854bbcd4f4219c6d22088c77da7c06d84b755b22174145535f3235365f4342432d484d41435f534841323536",
+    "initRandomHex": "c72b29d43d7f7ac378ada891f017225c02f3d2f826406f8f9b3d92858f07220c",
     "startUnixMilli": 1700000000123,
     "uuid": "5e551011-2233-4455-6677-8899aabbccdd"
   }

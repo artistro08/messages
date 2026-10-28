@@ -44,6 +44,9 @@ public class GaiaPairingTests
 
         public required SignalingTimeProvider Time { get; init; }
 
+        // ReceiveMessages Answer; Null Means An Open Quiet Stream
+        public Func<HttpResponseMessage>? Receive { get; set; }
+
         // Response Bytes Delivered For Each Pairing Action; Missing Means The Phone Stays Quiet
         public Dictionary<ActionType, byte[]> Responses { get; } = [];
 
@@ -113,6 +116,11 @@ public class GaiaPairingTests
 
             if (req.Url.EndsWith("/ReceiveMessages", StringComparison.Ordinal))
             {
+                if (rig.Receive is not null)
+                {
+                    return rig.Receive();
+                }
+
                 return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StreamContent(new OpenStream("[["u8.ToArray())) };
             }
 
@@ -194,6 +202,23 @@ public class GaiaPairingTests
         (byte[] aes, byte[] hmac) = session.DeriveRequestKeys();
         CollectionAssert.AreEqual(aes, rig.Auth.RequestCrypto.AesKey);
         CollectionAssert.AreEqual(hmac, rig.Auth.RequestCrypto.HmacKey);
+    }
+
+    /// <summary>
+    /// A long poll that is refused before it connects makes the start fail with that refusal, not a generic error,
+    /// and sends no pairing message.
+    /// </summary>
+    [TestMethod]
+    public async Task Start_LongPollFailsBeforeConnecting_ThrowsItsError()
+    {
+        Rig rig              = CreateRig();
+        rig.Auth.DestPhoneId = 0;
+        rig.Receive          = () => FakeHttpHandler.Response(HttpStatusCode.Unauthorized);
+
+        var ex = await Assert.ThrowsExactlyAsync<GmRequestException>(() => rig.Pairing.StartAsync(CancellationToken.None).WaitAsync(HangGuard));
+
+        Assert.AreEqual(401, ex.StatusCode);
+        Assert.IsEmpty(rig.SentActions());
     }
 
     /// <summary>

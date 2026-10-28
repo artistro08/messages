@@ -1517,6 +1517,10 @@ func exportPairing(t *testing.T, out string) {
 		"xPrefix": serverInit(validScalar, validRandom, 0, 0, func(_ *gmproto.Ukey2Message, si *gmproto.Ukey2ServerInit) {
 			si.PublicKey.GetEcP256PublicKey().X[0] = 1
 		}),
+		"coordinateLengths": serverInit(validScalar, validRandom, 0, 0, func(_ *gmproto.Ukey2Message, si *gmproto.Ukey2ServerInit) {
+			key := si.PublicKey.GetEcP256PublicKey()
+			key.X = key.X[2:]
+		}),
 		"verificationVersion2": serverInit(validScalar, validRandom, 2, 0, nil),
 	}
 	serverInitErrors := map[string]any{}

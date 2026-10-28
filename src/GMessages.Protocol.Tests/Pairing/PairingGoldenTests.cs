@@ -138,6 +138,40 @@ public class PairingGoldenTests
     }
 
     /// <summary>
+    /// For all four version combinations, FinishAsync stores the keys, pairing ID and phone ID and returns the phone ID
+    /// Go's FinishGaiaPairing produced.
+    /// </summary>
+    [TestMethod]
+    public async Task FinishAsync_StoresKeysAndIds_MatchGo_AllFourCases()
+    {
+        foreach (JsonElement c in Go.GetProperty("serverInit").EnumerateArray())
+        {
+            // Rig: The Phone Accepts The Finish With An Empty Answer, Like The Export
+            AuthData auth   = AuthDataGoldenTests.BuildGolden();
+            var time        = new SignalingTimeProvider();
+            var handler     = new FakeHttpHandler { Time = time };
+            var http        = new GmHttpClient(new HttpClient(handler), new HttpClient(handler), auth.Cookies, time, NullLogger.Instance);
+            var rpc         = new RpcSession(http, auth, GmEndpoints.Production, time, NullLogger.Instance);
+            handler.Respond = (_, req) =>
+            {
+                GaiaPairingTests.Deliver(rpc, req, []);
+                return FakeHttpHandler.Response(HttpStatusCode.OK, "application/json+protobuf", "[]"u8.ToArray());
+            };
+            (GaiaPairing pairing, _) = GaiaPairingTests.CreatePairing(http, rpc, auth, time);
+            PairingSession session   = SessionWithGoInit();
+            session.ProcessServerInit(Container(c));
+
+            string phone_id = await pairing.FinishAsync(session, CancellationToken.None);
+
+            Assert.AreEqual(c.GetProperty("phoneId").GetString(), phone_id);
+            Assert.AreEqual(Guid.Parse(c.GetProperty("pairingId").GetString()!), auth.PairingId);
+            Assert.AreEqual(c.GetProperty("destPhoneId").GetUInt64(), auth.DestPhoneId);
+            Assert.AreEqual(c.GetProperty("aesKeyHex").GetString(), Convert.ToHexStringLower(auth.RequestCrypto.AesKey));
+            Assert.AreEqual(c.GetProperty("hmacKeyHex").GetString(), Convert.ToHexStringLower(auth.RequestCrypto.HmacKey));
+        }
+    }
+
+    /// <summary>
     /// Every invalid server init fails with Go's error text.
     /// </summary>
     [TestMethod]

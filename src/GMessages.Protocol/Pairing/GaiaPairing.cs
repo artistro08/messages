@@ -40,6 +40,9 @@ public sealed partial class GaiaPairing(GaiaSignIn signIn, RpcSession rpc, LongP
     // 300 s In Microseconds (Go: (300 * time.Second).Microseconds())
     private const long PairingTtlMicros = 300_000_000;
 
+    // Longest Wait For A Best-Effort Cancel Request (C#-Only; Go Has No Limit)
+    private static readonly TimeSpan CancelTimeout = TimeSpan.FromSeconds(10);
+
     /// <summary>
     /// Gets or sets which phone to use when there are several, as an index into the newest-first list.
     /// </summary>
@@ -65,8 +68,8 @@ public sealed partial class GaiaPairing(GaiaSignIn signIn, RpcSession rpc, LongP
     /// <returns>The emoji the user must tap on the phone, and the session to pass to <see cref="FinishAsync"/>.</returns>
     /// <exception cref="PairingException">No cookies, no phones, the paired phone is gone, or the init timed out.</exception>
     /// <exception cref="InvalidDataException">The phone's ID or answer is invalid.</exception>
-    /// <exception cref="InvalidOperationException">The long poll stopped before connecting.</exception>
-    /// <exception cref="GmRequestException">The server refused a request.</exception>
+    /// <exception cref="InvalidOperationException">The long poll stopped before connecting, or its token refresh failed fatally.</exception>
+    /// <exception cref="GmRequestException">The server refused a request, including the long poll's credentials (401/403).</exception>
     /// <exception cref="ConnectionClosedException">The connection closed while waiting.</exception>
     /// <exception cref="OperationCanceledException"><paramref name="ct"/> was canceled.</exception>
     public async Task<(string Emoji, PairingSession Session)> StartAsync(CancellationToken ct)
@@ -115,6 +118,8 @@ public sealed partial class GaiaPairing(GaiaSignIn signIn, RpcSession rpc, LongP
         {
             if (await Task.WhenAny(connected.Task, long_poll).WaitAsync(ct).ConfigureAwait(false) != connected.Task)
             {
+                // Surface The Long Poll's Own Error (Such As A 401) Before The Generic One
+                await long_poll.ConfigureAwait(false);
                 throw new InvalidOperationException("Long polling stopped before connecting.");
             }
 
@@ -122,7 +127,9 @@ public sealed partial class GaiaPairing(GaiaSignIn signIn, RpcSession rpc, LongP
         }
         catch
         {
+            // Wait For The Long Poll To End; Its Own Error Must Not Hide This One
             longPoll.Stop();
+            await long_poll.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
             throw;
         }
     }
@@ -309,12 +316,13 @@ public sealed partial class GaiaPairing(GaiaSignIn signIn, RpcSession rpc, LongP
         }
     }
 
-    // A Failed Cancel Is Only Logged, As In Go
+    // A Failed Cancel Is Only Logged, As In Go; 10 s At Most, So A Bad Network Can't Stall The User
     private async Task TryCancelAsync(PairingSession session)
     {
         try
         {
-            await CancelAsync(session, CancellationToken.None).ConfigureAwait(false);
+            using var limit = new CancellationTokenSource(CancelTimeout, time);
+            await CancelAsync(session, limit.Token).ConfigureAwait(false);
         }
         catch (Exception ex)
         {

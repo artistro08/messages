@@ -79,12 +79,16 @@ public sealed partial class LongPollLoop(
     /// <remarks>
     /// With <paramref name="loggedIn"/> false (pairing), no pinger or ack timer runs and no listen events are raised,
     /// as in Go. <paramref name="onFirstConnect"/> runs in the background once the first connection opens, and again
-    /// after a recovery reconnect (Go starts a new loop with <c>postConnect</c> then).
+    /// after a recovery reconnect (Go starts a new loop with <c>postConnect</c> then). When not logged in, a fatal
+    /// error (401/403 or a fatal refresh error) is thrown instead of returning quietly: no listen event carries it,
+    /// so pairing would otherwise never learn why the long poll stopped.
     /// </remarks>
     /// <param name="loggedIn">True once paired; turns on the pinger, the ack timer and listen events.</param>
     /// <param name="onFirstConnect">Runs after the first successful connect, or null.</param>
     /// <param name="ct">Stops the loop.</param>
     /// <returns>A task that completes when the loop ends; stopping or canceling ends it normally, without an exception.</returns>
+    /// <exception cref="GmRequestException">Not logged in, and the server refused the credentials (401/403).</exception>
+    /// <exception cref="InvalidOperationException">Not logged in, and the token refresh failed fatally.</exception>
     public async Task RunAsync(bool loggedIn, Action? onFirstConnect, CancellationToken ct)
     {
         using var stop_cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -111,7 +115,11 @@ public sealed partial class LongPollLoop(
         refresher.EventRaised  += Raise;
         try
         {
-            await ListenAsync(loggedIn, onFirstConnect, stop).ConfigureAwait(false);
+            Exception? fatal = await ListenAsync(loggedIn, onFirstConnect, stop).ConfigureAwait(false);
+            if (fatal is not null && !loggedIn)
+            {
+                throw fatal;
+            }
         }
         catch (OperationCanceledException) when (stop.IsCancellationRequested)
         {
@@ -125,9 +133,13 @@ public sealed partial class LongPollLoop(
             refresher.EventRaised  -= Raise;
             rpc.PhoneSlow          -= OnPhoneSlow;
             dispatcher.Pinger       = null;
+            // Only Clear Our Own CTS, So A Newer Run Started Meanwhile Stays Stoppable
             lock (_lock)
             {
-                _stopCts = null;
+                if (_stopCts == stop_cts)
+                {
+                    _stopCts = null;
+                }
             }
         }
     }
@@ -161,7 +173,8 @@ public sealed partial class LongPollLoop(
     // LOOP
     // =========================================================================
 
-    private async Task ListenAsync(bool loggedIn, Action? onFirstConnect, CancellationToken stop)
+    // Returns The Fatal Error That Ended The Loop, Or Null When It Was Stopped
+    private async Task<Exception?> ListenAsync(bool loggedIn, Action? onFirstConnect, CancellationToken stop)
     {
         Action? first_connect           = onFirstConnect;
         string listen_request_id        = Guid.NewGuid().ToString();
@@ -215,7 +228,7 @@ public sealed partial class LongPollLoop(
                     {
                         LogFatal(log, wrapped);
                         RaiseIf(loggedIn, new ListenFatalError(wrapped));
-                        return;
+                        return wrapped;
                     }
 
                     error = wrapped;
@@ -239,7 +252,7 @@ public sealed partial class LongPollLoop(
                             {
                                 LogFatal(log, failure);
                                 RaiseIf(loggedIn, new ListenFatalError(failure));
-                                return;
+                                return failure;
                             }
 
                             error = failure;
@@ -307,10 +320,15 @@ public sealed partial class LongPollLoop(
             {
                 lock (_lock)
                 {
-                    _connectionCts = null;
+                    if (_connectionCts == attempt_cts)
+                    {
+                        _connectionCts = null;
+                    }
                 }
             }
         }
+
+        return null;
     }
 
     // Reads A Failed Response's Body For Diagnosis, Always Disposing It; A Failed Read Gives An Empty Body

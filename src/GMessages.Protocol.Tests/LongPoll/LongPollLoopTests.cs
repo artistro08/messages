@@ -176,6 +176,40 @@ public class LongPollLoopTests
     }
 
     /// <summary>
+    /// When not logged in (pairing), a 401 has no event to carry it, so the run throws it instead.
+    /// </summary>
+    [TestMethod]
+    public async Task Status401_NotLoggedIn_ThrowsIt()
+    {
+        Rig rig = CreateRig();
+        rig.Script.Enqueue(() => Status(401));
+
+        var ex = await Assert.ThrowsExactlyAsync<GmRequestException>(() => rig.Loop.RunAsync(false, null, CancellationToken.None).WaitAsync(HangGuard));
+
+        Assert.AreEqual(401, ex.StatusCode);
+        Assert.AreEqual(0, rig.Count<ListenFatalError>());
+    }
+
+    /// <summary>
+    /// A run that ends after a newer run started leaves the newer one stoppable.
+    /// </summary>
+    [TestMethod]
+    public async Task OldRunEnding_KeepsNewerRunStoppable()
+    {
+        Rig rig        = CreateRig();
+        using var cts  = new CancellationTokenSource();
+        Task old_run   = rig.Loop.RunAsync(false, null, cts.Token);
+        WaitUntil(() => { lock (rig.Streams) { return rig.Streams.Count == 1; } }, "old run connected");
+
+        Task new_run = rig.Loop.RunAsync(false, null, CancellationToken.None);
+        await cts.CancelAsync();
+        await old_run.WaitAsync(HangGuard);
+
+        rig.Loop.Stop();
+        await new_run.WaitAsync(HangGuard);
+    }
+
+    /// <summary>
     /// After a working connection drops, a 500 raises <see cref="ListenTemporaryError"/>, the retry comes exactly
     /// 10 s later, and the next success raises <see cref="ListenRecovered"/> again.
     /// </summary>
