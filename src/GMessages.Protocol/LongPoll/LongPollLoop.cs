@@ -136,6 +136,7 @@ public sealed partial class LongPollLoop(
             background         = Task.WhenAll(pinger.RunAsync(stop), FlushAcksLoopAsync(stop));
         }
 
+        dispatcher.StopToken    = stop;
         dispatcher.EventRaised += Raise;
         refresher.EventRaised  += Raise;
         try

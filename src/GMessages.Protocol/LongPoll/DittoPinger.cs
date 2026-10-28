@@ -82,7 +82,10 @@ internal sealed partial class DittoPinger(
     /// <summary>
     /// Runs the ping loop until <paramref name="ct"/> is canceled.
     /// </summary>
-    /// <remarks>Ported from <c>dittoPinger.Loop</c>.</remarks>
+    /// <remarks>
+    /// Ported from <c>dittoPinger.Loop</c>. <paramref name="ct"/> also stops every request the pinger sends in the
+    /// background, such as <see cref="RequestUpdatesAfterGapAsync"/>.
+    /// </remarks>
     /// <param name="ct">Stops the loop, every pending ping wait and the recovery loop.</param>
     /// <returns>A task that completes when stopped; stopping is not an error.</returns>
     public async Task RunAsync(CancellationToken ct)
@@ -166,16 +169,24 @@ internal sealed partial class DittoPinger(
     /// <summary>
     /// Raises <see cref="NoDataReceived"/> and asks the phone to resend updates.
     /// </summary>
-    /// <remarks>Ported from <c>requestUpdatesAfterGap</c>. Failures are logged, never thrown.</remarks>
+    /// <remarks>
+    /// Ported from <c>requestUpdatesAfterGap</c>. Failures are logged, never thrown. The request uses the run's stop
+    /// token, so nothing is posted after a disconnect or dispose.
+    /// </remarks>
     /// <param name="reason">Why, for the log.</param>
-    /// <returns>A task that completes when the request was sent or failed.</returns>
+    /// <returns>A task that completes when the request was sent, failed or was stopped.</returns>
     public async Task RequestUpdatesAfterGapAsync(string reason)
     {
+        CancellationToken ct = _stopToken;
         Raise(new NoDataReceived());
         try
         {
-            await rpc.SendNoResponseAsync(new SendParams(ActionType.GetUpdates, RequestId: rpc.SessionId, OmitTtl: true), CancellationToken.None).ConfigureAwait(false);
+            await rpc.SendNoResponseAsync(new SendParams(ActionType.GetUpdates, RequestId: rpc.SessionId, OmitTtl: true), ct).ConfigureAwait(false);
             LogGapRequestSent(log, reason);
+        }
+        catch (Exception) when (ct.IsCancellationRequested)
+        {
+            // Stopped: Not A Failure
         }
         catch (Exception ex)
         {
@@ -235,6 +246,9 @@ internal sealed partial class DittoPinger(
 
             // Stop Waiting (Cancels The Waiter And The Timer); A Late Answer Still Counts Through OnPhoneActivity
             await waitCts.CancelAsync().ConfigureAwait(false);
+
+            // Observe A Faulted Wait (Connection Closed), Now Or Later, So It Is Never An Unobserved Task Exception
+            _ = wait.ContinueWith(static t => _ = t.Exception, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
             if (ct.IsCancellationRequested)
             {
                 return;

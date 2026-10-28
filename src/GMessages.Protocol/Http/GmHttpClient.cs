@@ -99,7 +99,8 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
 
         for (int attempt = 1; ; attempt++)
         {
-            // Build Request (A Fresh One Per Attempt)
+            // Build Request (A Fresh One Per Attempt); Nothing Leaves Once Canceled
+            ct.ThrowIfCancellationRequested();
             using var request = new HttpRequestMessage(HttpMethod.Post, url) { Content = new ByteArrayContent(bytes) };
             AddRelayHeaders(request, "*/*");
             request.Content.Headers.TryAddWithoutValidation("Content-Type", mime);

@@ -49,6 +49,12 @@ public sealed partial class UpdateDispatcher(RpcSession rpc, ILogger log)
     internal DittoPinger? Pinger { get; set; }
 
     /// <summary>
+    /// Gets or sets the stop token of the current long-poll run, used by the requests sent in the background.
+    /// </summary>
+    /// <remarks>Set by the loop at the start of each run, so nothing is posted after a disconnect or dispose.</remarks>
+    internal CancellationToken StopToken { get; set; }
+
+    /// <summary>
     /// Handles one incoming message.
     /// </summary>
     /// <remarks>
@@ -121,7 +127,7 @@ public sealed partial class UpdateDispatcher(RpcSession rpc, ILogger log)
         // Signed Out On The Phone
         if (msg.DecryptedData is null && data.UnencryptedData.Span.SequenceEqual(LoggedOutBytes))
         {
-            _ = rpc.FlushAcksAsync(CancellationToken.None);
+            _ = FlushAcksAsync();
             Raise(new GaiaLoggedOut());
             return;
         }
@@ -252,13 +258,31 @@ public sealed partial class UpdateDispatcher(RpcSession rpc, ILogger log)
     // Port Of ackBrowserPresence
     private async Task AckBrowserPresenceAsync()
     {
+        CancellationToken ct = StopToken;
         try
         {
-            await rpc.SendNoResponseAsync(new SendParams(ActionType.AckBrowserPresence), CancellationToken.None).ConfigureAwait(false);
+            await rpc.SendNoResponseAsync(new SendParams(ActionType.AckBrowserPresence), ct).ConfigureAwait(false);
+        }
+        catch (Exception) when (ct.IsCancellationRequested)
+        {
+            // Stopped: Not A Failure
         }
         catch (Exception ex)
         {
             LogBrowserPresenceFailed(log, ex);
+        }
+    }
+
+    // The Logged-Out Ack Flush (Go: sendAckRequest); Failures Are Logged By The Flush, Stopping Is Quiet
+    private async Task FlushAcksAsync()
+    {
+        try
+        {
+            await rpc.FlushAcksAsync(StopToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // Stopped
         }
     }
 

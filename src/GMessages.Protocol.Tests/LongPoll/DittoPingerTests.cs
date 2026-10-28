@@ -301,4 +301,22 @@ public class DittoPingerTests
         await cts.CancelAsync();
         await run.WaitAsync(HangGuard);
     }
+
+    /// <summary>
+    /// After the run stops, a gap update request posts nothing (C#-only: it uses the run's stop token, so nothing
+    /// is sent after a disconnect or dispose).
+    /// </summary>
+    [TestMethod]
+    public async Task RequestUpdatesAfterGap_AfterStop_PostsNothing()
+    {
+        Rig rig       = CreateRig(TimeSpan.FromMinutes(1));
+        using var cts = new CancellationTokenSource();
+        Task run      = rig.Pinger.RunAsync(cts.Token);
+        await cts.CancelAsync();
+        await run.WaitAsync(HangGuard);
+
+        await rig.Pinger.RequestUpdatesAfterGapAsync("test").WaitAsync(HangGuard);
+
+        Assert.IsEmpty(rig.Handler.Requests);
+    }
 }
