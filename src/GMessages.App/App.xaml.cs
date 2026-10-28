@@ -310,8 +310,18 @@ public partial class App : Application, IDisposable
             return;
         }
 
+        // Tray Menu: its popup keeps the backdrop of the theme it first opened with (a light theme set later gives dark
+        // text on a dark background), so a hidden menu is dropped and made fresh, with the new theme, on the next right-click
         var theme = _settings.Theme;
-        _trayMenu?.ApplyTheme(theme);
+        if (_trayMenu is { } menu && !menu.AppWindow.IsVisible)
+        {
+            _trayMenu = null;
+            menu.Close();
+        }
+        else
+        {
+            _trayMenu?.ApplyTheme(theme);
+        }
         _pairingWindow?.ApplyTheme(theme);
         _mainWindow?.ApplyTheme(theme);
         _settingsWindow?.ApplyTheme(theme);
