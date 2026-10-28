@@ -29,7 +29,13 @@ namespace GMessages.Presentation.Connection;
 /// (<see cref="Task.Run(Func{Task})"/>): the client raises some events under its own lifecycle lock, and its
 /// <see cref="GmClient.DisposeAsync"/> waits for the long poll that is raising the event, so disposing inline could
 /// deadlock. The pool task takes the gate, checks the client is still the current one (a stale or repeated event is
-/// ignored), disposes it (a finished client can't be reused) and moves to <see cref="ConnectionState.SignedOut"/>.
+/// ignored), disposes it (a finished client can't be reused), deletes the dead session file (after dispose, which may
+/// flush a save) and moves to <see cref="ConnectionState.SignedOut"/>.
+/// </para>
+/// <para>
+/// <b>Pairing cancel.</b> A running pairing's cancel source lives behind the state lock, so
+/// <see cref="DisposeAsync"/> and <see cref="UnpairAsync"/> cancel it before waiting on the gate instead of waiting
+/// out the emoji tap.
 /// </para>
 /// </remarks>
 public sealed partial class ConnectionController : IAsyncDisposable
@@ -52,7 +58,12 @@ public sealed partial class ConnectionController : IAsyncDisposable
     private readonly Lock _stateLock = new();
     private ConnectionState _state = ConnectionState.NotPaired;
     private GmClient? _client;
+    private bool _listenTrouble;
     private bool _disposed;
+
+    // Running Pairing's Cancel Source; Dispose And Unpair Cancel It Before Waiting On The Gate
+    private CancellationTokenSource? _pairCts;
+    private bool _closing;
 
     /// <summary>
     /// Creates the controller. Nothing runs until <see cref="StartAsync"/>.
@@ -148,7 +159,9 @@ public sealed partial class ConnectionController : IAsyncDisposable
     /// <remarks>
     /// No session (or a bad file, or one that isn't logged in) leaves <see cref="ConnectionState.NotPaired"/>.
     /// Otherwise the state goes to Connecting, then Connected once the long poll is started. A refresh the server
-    /// refuses for good ends in <see cref="ConnectionState.SignedOut"/>. A second call does nothing.
+    /// refuses for good, or any other connect error (such as a session with no token), means the session can't be
+    /// used: the client is dropped, the session file deleted, and the state is
+    /// <see cref="ConnectionState.SignedOut"/>. A second call does nothing.
     /// </remarks>
     /// <returns>A task that completes when the state is settled.</returns>
     /// <exception cref="ObjectDisposedException">The controller was disposed.</exception>
@@ -186,8 +199,9 @@ public sealed partial class ConnectionController : IAsyncDisposable
             {
                 await client.ConnectAsync(CancellationToken.None).ConfigureAwait(false);
             }
-            catch (SessionExpiredException)
+            catch (Exception ex)
             {
+                LogConnectFailed(_log, ex);
                 await DropAndSignOutAsync(client).ConfigureAwait(false);
                 return;
             }
@@ -239,10 +253,24 @@ public sealed partial class ConnectionController : IAsyncDisposable
             GmClient client = CreateClient(auth);
             SetCurrent(client);
 
+            // Cancel Source Dispose And Unpair Can Reach Without The Gate (Canceled At Once If Dispose Already Asked)
+            using var pair_cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            bool closing;
+            lock (_stateLock)
+            {
+                _pairCts = pair_cts;
+                closing  = _closing;
+            }
+
+            if (closing)
+            {
+                await pair_cts.CancelAsync().ConfigureAwait(false);
+            }
+
             // Pair; On Failure Drop This Client And Keep The State
             try
             {
-                await client.PairAsync(showEmoji, ct).ConfigureAwait(false);
+                await client.PairAsync(showEmoji, pair_cts.Token).ConfigureAwait(false);
             }
             catch
             {
@@ -250,12 +278,46 @@ public sealed partial class ConnectionController : IAsyncDisposable
                 await client.DisposeAsync().ConfigureAwait(false);
                 throw;
             }
+            finally
+            {
+                lock (_stateLock)
+                {
+                    _pairCts = null;
+                }
+            }
 
-            SetState(ConnectionState.Connected);
+            // The Post-Pair Reconnect May Already Have Hit A Temporary Error
+            bool trouble;
+            lock (_stateLock)
+            {
+                trouble = _listenTrouble;
+            }
+
+            SetState(trouble ? ConnectionState.Reconnecting : ConnectionState.Connected);
         }
         finally
         {
             _gate.Release();
+        }
+    }
+
+    // Cancels A Running Pairing So Dispose And Unpair Don't Wait Out The Emoji Tap
+    private void CancelPairing(bool closing)
+    {
+        CancellationTokenSource? cts;
+        lock (_stateLock)
+        {
+            _closing = _closing || closing;
+            cts      = _pairCts;
+        }
+
+        try
+        {
+            cts?.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // The Pairing Just Ended On Its Own
         }
     }
 
@@ -264,13 +326,14 @@ public sealed partial class ConnectionController : IAsyncDisposable
     /// </summary>
     /// <remarks>
     /// Ends in <see cref="ConnectionState.NotPaired"/> even when the server refuses the request; that error is then
-    /// rethrown. With no client (signed out), only the session file is deleted.
+    /// rethrown. With no client (signed out), only the session file is deleted. A running pairing is canceled first.
     /// </remarks>
     /// <returns>A task that completes when the session file is gone.</returns>
     /// <exception cref="ObjectDisposedException">The controller was disposed.</exception>
     /// <exception cref="GmRequestException">The server refused the unpair request.</exception>
     public async Task UnpairAsync()
     {
+        CancelPairing(closing: false);
         await _gate.WaitAsync().ConfigureAwait(false);
         try
         {
@@ -338,12 +401,14 @@ public sealed partial class ConnectionController : IAsyncDisposable
                 return;
             }
 
+            // Any Error Here Is Not Transient (ConnectAsync Swallows Those): The Session Can't Be Used
             try
             {
                 await client.ConnectAsync(CancellationToken.None).ConfigureAwait(false);
             }
-            catch (SessionExpiredException)
+            catch (Exception ex)
             {
+                LogConnectFailed(_log, ex);
                 await DropAndSignOutAsync(client).ConfigureAwait(false);
             }
         }
@@ -365,8 +430,8 @@ public sealed partial class ConnectionController : IAsyncDisposable
         return client;
     }
 
-    // Runs On The Client's Event Thread: Never Block, Never Call The Client
-    private void OnClientEvent(GmClient client, object e)
+    // Runs On The Client's Event Thread: Never Block, Never Call The Client (Internal So Tests Can Feed Rare Events)
+    internal void OnClientEvent(GmClient client, object e)
     {
         if (CurrentClient != client)
         {
@@ -383,9 +448,11 @@ public sealed partial class ConnectionController : IAsyncDisposable
 
             // Listen State
             case ListenTemporaryError:
+                SetListenTrouble(client, true);
                 SetStateIf(client, ConnectionState.Reconnecting, ConnectionState.Connecting, ConnectionState.Connected);
                 break;
             case ListenRecovered:
+                SetListenTrouble(client, false);
                 SetStateIf(client, ConnectionState.Connected, ConnectionState.Reconnecting);
                 break;
 
@@ -425,11 +492,20 @@ public sealed partial class ConnectionController : IAsyncDisposable
         }
     }
 
-    // Caller Holds The Gate
+    // Caller Holds The Gate. The Session Is Dead For Good, So Its File Goes Too (After Dispose, Which May Flush A Save)
     private async Task DropAndSignOutAsync(GmClient client)
     {
         SetCurrent(null);
         await client.DisposeAsync().ConfigureAwait(false);
+        try
+        {
+            new SessionStore(_paths.SessionFile, _log).Delete();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            LogDeleteFailed(_log, ex.GetType().Name);
+        }
+
         SetState(ConnectionState.SignedOut);
     }
 
@@ -441,7 +517,20 @@ public sealed partial class ConnectionController : IAsyncDisposable
     {
         lock (_stateLock)
         {
-            _client = client;
+            _client        = client;
+            _listenTrouble = false;
+        }
+    }
+
+    // Remembers Whether The Current Client's Long Poll Is Between A Temporary Error And Its Recovery
+    private void SetListenTrouble(GmClient client, bool trouble)
+    {
+        lock (_stateLock)
+        {
+            if (_client == client)
+            {
+                _listenTrouble = trouble;
+            }
         }
     }
 
@@ -485,10 +574,14 @@ public sealed partial class ConnectionController : IAsyncDisposable
     /// <summary>
     /// Disposes the client. Later calls other than dispose throw or do nothing.
     /// </summary>
-    /// <remarks>No state change is raised: the app is shutting down. Safe to call more than once.</remarks>
+    /// <remarks>
+    /// A running pairing is canceled first, so quitting during the emoji wait doesn't hang. No state change is raised:
+    /// the app is shutting down. Safe to call more than once.
+    /// </remarks>
     /// <returns>A task that completes when the client is released.</returns>
     public async ValueTask DisposeAsync()
     {
+        CancelPairing(closing: true);
         await _gate.WaitAsync().ConfigureAwait(false);
         try
         {
@@ -520,6 +613,12 @@ public sealed partial class ConnectionController : IAsyncDisposable
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Session could not be saved ({ErrorType})")]
     private static partial void LogSaveFailed(ILogger logger, string errorType);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Connect failed; the session can't be used")]
+    private static partial void LogConnectFailed(ILogger logger, Exception ex);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Dead session file could not be deleted ({ErrorType})")]
+    private static partial void LogDeleteFailed(ILogger logger, string errorType);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Sign-out cleanup failed")]
     private static partial void LogSignOutFailed(ILogger logger, Exception ex);

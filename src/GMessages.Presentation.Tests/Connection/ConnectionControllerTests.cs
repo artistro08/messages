@@ -8,6 +8,7 @@ using GMessages.Protocol;
 using GMessages.Protocol.Crypto;
 using GMessages.Protocol.Events;
 using GMessages.Protocol.Http;
+using GMessages.Protocol.LongPoll;
 using GMessages.Protocol.Pairing;
 using GMessages.Protocol.PbLite;
 using GMessages.Protocol.Proto;
@@ -209,8 +210,8 @@ public sealed class ConnectionControllerTests
         }.ToByteArray();
     }
 
-    // Scripts The Config, Sign-In And Phone Answers; The Finish Answer Decides Success Or Failure
-    private static void ScriptPairing(Rig rig, byte[] finished)
+    // Scripts The Config, Sign-In And Phone Answers; The Finish Answer Decides Success Or Failure (Null: Never Tapped)
+    private static void ScriptPairing(Rig rig, byte[]? finished)
     {
         using JsonDocument doc = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Golden", "signin.json")));
         JsonElement sign_in    = doc.RootElement;
@@ -238,7 +239,7 @@ public sealed class ConnectionControllerTests
                 {
                     Deliver(rpc, req, server_init);
                 }
-                else if (action == ActionType.CreateGaiaPairingClientFinished)
+                else if (action == ActionType.CreateGaiaPairingClientFinished && finished is not null)
                 {
                     Deliver(rpc, req, finished);
                 }
@@ -302,6 +303,7 @@ public sealed class ConnectionControllerTests
         Assert.AreEqual("You were signed out. Sign in again to keep getting texts.", rig.Controller.SignedOutReason);
         Assert.IsNull(rig.Controller.Client);
         Assert.IsEmpty(rig.Requests("/ReceiveMessages"));
+        Assert.IsFalse(File.Exists(rig.Paths.SessionFile), "dead session deleted");
         Assert.AreEqual(0, rig.NotPosted);
     }
 
@@ -317,16 +319,105 @@ public sealed class ConnectionControllerTests
     {
         await using var rig = new Rig();
         rig.SaveSession(TimeSpan.FromDays(1));
-        rig.Respond = req => req.Url.EndsWith("/ReceiveMessages", StringComparison.Ordinal) ? FakeHttpHandler.Response(HttpStatusCode.Unauthorized) : null;
+        GmClient? client = null;
+        rig.Respond = req =>
+        {
+            if (!req.Url.EndsWith("/ReceiveMessages", StringComparison.Ordinal))
+            {
+                return null;
+            }
+
+            // The Client Making The Long Poll Is Still Current Here
+            client ??= rig.Controller.CurrentClient;
+            return FakeHttpHandler.Response(HttpStatusCode.Unauthorized);
+        };
 
         await rig.Controller.StartAsync().WaitAsync(HangGuard);
-        GmClient client = rig.Controller.CurrentClient!;
         WaitUntil(() => rig.Controller.State == ConnectionState.SignedOut, "signed out");
 
         Assert.AreEqual("You were signed out. Sign in again to keep getting texts.", rig.Controller.SignedOutReason);
         Assert.IsNull(rig.Controller.Client);
+        Assert.IsNotNull(client);
+        Assert.IsFalse(File.Exists(rig.Paths.SessionFile), "dead session deleted");
         Assert.IsTrue(rig.Events.OfType<ListenFatalError>().Any(), "fatal error forwarded");
         await Assert.ThrowsExactlyAsync<ObjectDisposedException>(() => client.ConnectAsync(CancellationToken.None));
+        Assert.AreEqual(0, rig.NotPosted);
+    }
+
+    /// <summary>
+    /// GaiaLoggedOut (signed out on the phone) signs out, drops the client, deletes the session and is forwarded.
+    /// </summary>
+    [TestMethod]
+    public async Task GaiaLoggedOut_IsSignedOut_AndFileDeleted()
+    {
+        await using var rig = new Rig();
+        rig.SaveSession(TimeSpan.FromDays(1));
+        await rig.Controller.StartAsync().WaitAsync(HangGuard);
+
+        // Fed Straight In: Producing It Over The Wire Needs An Encrypted GET_UPDATES Stream
+        rig.Controller.OnClientEvent(rig.Controller.CurrentClient!, new GaiaLoggedOut());
+        WaitUntil(() => rig.Controller.State == ConnectionState.SignedOut, "signed out");
+
+        Assert.IsNull(rig.Controller.Client);
+        Assert.IsFalse(File.Exists(rig.Paths.SessionFile), "dead session deleted");
+        Assert.IsTrue(rig.Events.OfType<GaiaLoggedOut>().Any(), "forwarded");
+        Assert.AreEqual(0, rig.NotPosted);
+    }
+
+    /// <summary>
+    /// A failing long poll moves to Reconnecting; the next successful open moves back to Connected.
+    /// </summary>
+    [TestMethod]
+    public async Task TemporaryError_IsReconnecting_ThenRecoveredIsConnected()
+    {
+        await using var rig = new Rig();
+        rig.SaveSession(TimeSpan.FromDays(1));
+        int polls   = 0;
+        rig.Respond = req => req.Url.EndsWith("/ReceiveMessages", StringComparison.Ordinal) && Interlocked.Increment(ref polls) == 1
+            ? FakeHttpHandler.Response(HttpStatusCode.InternalServerError)
+            : null;
+
+        await rig.Controller.StartAsync().WaitAsync(HangGuard);
+        WaitUntil(() => rig.Controller.State == ConnectionState.Reconnecting, "reconnecting");
+        Assert.IsTrue(rig.Events.OfType<ListenTemporaryError>().Any());
+
+        // Wait Out The Backoff On The Fake Clock
+        TimeSpan backoff = LongPollLoop.RetryDelay(2);
+        WaitUntil(() => rig.Time.CountTimers(backoff) > 0, "backoff wait");
+        rig.Time.Advance(backoff);
+
+        WaitUntil(() => rig.Controller.State == ConnectionState.Connected, "recovered");
+        Assert.IsTrue(rig.Events.OfType<ListenRecovered>().Any());
+        Assert.AreEqual(ConnectionState.Connected, rig.States.Last());
+        Assert.AreEqual(0, rig.NotPosted);
+    }
+
+    /// <summary>
+    /// A session save that fails (its temp file path is a folder) is forwarded through ClientEvent.
+    /// </summary>
+    [TestMethod]
+    public async Task SessionSaveFailed_IsForwarded()
+    {
+        await using var rig = new Rig();
+        rig.SaveSession(TimeSpan.FromDays(1));
+        Directory.CreateDirectory(rig.Paths.SessionFile + ".tmp");
+        rig.Respond = req =>
+        {
+            if (!req.Url.EndsWith("/ReceiveMessages", StringComparison.Ordinal))
+            {
+                return null;
+            }
+
+            // A Rotated Cookie Triggers A Save Right Away
+            var res = new HttpResponseMessage(HttpStatusCode.OK) { Content = new StreamContent(new OpenStream("[["u8.ToArray())) };
+            res.Headers.TryAddWithoutValidation("Set-Cookie", "SID=rotated-sid; Path=/");
+            return res;
+        };
+
+        await rig.Controller.StartAsync().WaitAsync(HangGuard);
+
+        WaitUntil(() => rig.Events.OfType<SessionSaveFailed>().Any(), "save failure forwarded");
+        Assert.AreEqual(ConnectionState.Connected, rig.Controller.State, "still connected");
         Assert.AreEqual(0, rig.NotPosted);
     }
 
@@ -427,6 +518,27 @@ public sealed class ConnectionControllerTests
 
         Assert.AreEqual(ConnectionState.SignedOut, rig.Controller.State);
         Assert.IsNotNull(rig.Controller.SignedOutReason);
+    }
+
+    /// <summary>
+    /// Dispose during the emoji wait cancels the pairing at once instead of waiting out the tap: dispose finishes and
+    /// PairAsync throws a cancellation.
+    /// </summary>
+    [TestMethod]
+    public async Task Dispose_DuringEmojiWait_CancelsPairing()
+    {
+        await using var rig = new Rig();
+        await rig.Controller.StartAsync().WaitAsync(HangGuard);
+        ScriptPairing(rig, finished: null);
+
+        var shown = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        Task pair = rig.Controller.PairAsync(PairCookies, _ => shown.TrySetResult(), CancellationToken.None);
+        await shown.Task.WaitAsync(HangGuard);
+
+        await rig.Controller.DisposeAsync().AsTask().WaitAsync(HangGuard);
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() => pair.WaitAsync(HangGuard));
+        Assert.IsNull(rig.Controller.CurrentClient);
     }
 
     /// <summary>
