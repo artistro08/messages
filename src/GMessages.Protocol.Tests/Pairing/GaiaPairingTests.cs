@@ -237,6 +237,19 @@ public class GaiaPairingTests
     }
 
     /// <summary>
+    /// A negative device switcher is refused when set (C#-only: Go's modulo would pick no phone).
+    /// </summary>
+    [TestMethod]
+    public void HackyDeviceSwitcher_Negative_Throws()
+    {
+        Rig rig = CreateRig();
+
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => rig.Pairing.HackyDeviceSwitcher = -1);
+        rig.Pairing.HackyDeviceSwitcher = 1;
+        Assert.AreEqual(1, rig.Pairing.HackyDeviceSwitcher);
+    }
+
+    /// <summary>
     /// A Google account without cookies fails before any request.
     /// </summary>
     [TestMethod]

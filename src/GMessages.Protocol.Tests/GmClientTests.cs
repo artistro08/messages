@@ -7,6 +7,7 @@ using GMessages.Protocol.LongPoll;
 using GMessages.Protocol.Pairing;
 using GMessages.Protocol.PbLite;
 using GMessages.Protocol.Proto;
+using GMessages.Protocol.Rpc;
 using GMessages.Protocol.Session;
 using GMessages.Protocol.Tests.Fakes;
 using GMessages.Protocol.Tests.Pairing;
@@ -259,6 +260,22 @@ public class GmClientTests
     }
 
     /// <summary>
+    /// A request that waits for the phone fails at once with <see cref="ConnectionClosedException"/> when not
+    /// connected, instead of waiting 60 seconds and blaming the phone; nothing is sent (C#-only).
+    /// </summary>
+    [TestMethod]
+    public async Task SendWhileDisconnected_FailsFastWithConnectionClosed()
+    {
+        await using Rig rig = CreateRig();
+
+        await Assert.ThrowsExactlyAsync<ConnectionClosedException>(() => rig.Client.Rpc.SendAsync(new SendParams(ActionType.ListConversations), CancellationToken.None).WaitAsync(HangGuard));
+        await Assert.ThrowsExactlyAsync<ConnectionClosedException>(() => rig.Client.Rpc.SendAsyncNoWait(new SendParams(ActionType.ListConversations), CancellationToken.None).WaitAsync(HangGuard));
+
+        Assert.IsEmpty(rig.Requests("/SendMessage"));
+        Assert.AreEqual(0, rig.Time.CountTimers(RpcSession.ResponseHardTimeout));
+    }
+
+    /// <summary>
     /// Connect, disconnect, connect again opens a second long poll; after dispose, connect throws.
     /// </summary>
     [TestMethod]
@@ -388,6 +405,24 @@ public class GmClientTests
         public override void SetLength(long value) => throw new NotSupportedException();
 
         public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    }
+
+    /// <summary>
+    /// A failed save raises <see cref="SessionSaveFailed"/> with only the exception's type name, and is not thrown.
+    /// </summary>
+    [TestMethod]
+    public async Task SaveFails_RaisesSessionSaveFailed()
+    {
+        await using Rig rig          = CreateRig();
+        rig.Client.OnWritingForTests = () => throw new IOException("C:\\secret\\path is full");
+
+        rig.Auth.Cookies.UpdateFrom(FakeHttpHandler.Response(HttpStatusCode.OK, setCookies: "SID=new-sid; Path=/"));
+
+        Assert.AreEqual(0, rig.Client.SaveCount);
+        lock (rig.Events)
+        {
+            Assert.AreEqual("IOException", rig.Events.OfType<SessionSaveFailed>().Single().ErrorType);
+        }
     }
 
     /// <summary>

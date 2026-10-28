@@ -127,3 +127,13 @@ public sealed record PairSuccessful(string PhoneId);
 /// </summary>
 /// <remarks>Ported from <c>events.HackySetActiveMayFail</c>, raised by <c>postConnect</c>.</remarks>
 public sealed record HackySetActiveMayFail;
+
+/// <summary>
+/// The session could not be saved to disk, so the app should warn the user that a restart may need pairing again.
+/// </summary>
+/// <remarks>
+/// C#-only: Go keeps the session in the bridge database. Raised for every failed save, including the one right after
+/// pairing. Only the exception's type name is carried, never its message, which could hold a path or session data.
+/// </remarks>
+/// <param name="ErrorType">The exception's type name, such as <c>IOException</c>.</param>
+public sealed record SessionSaveFailed(string ErrorType);

@@ -100,6 +100,16 @@ public sealed partial class RpcSession(GmHttpClient http, AuthData auth, GmEndpo
     public string SessionId { get; internal set; } = "";
 
     /// <summary>
+    /// Gets or sets whether a long poll is running, so an answer can arrive; null skips the check.
+    /// </summary>
+    /// <remarks>
+    /// C#-only. <see cref="GmClient"/> points it at its long-poll loop. A request that waits for an answer fails at once
+    /// with <see cref="ConnectionClosedException"/> when it returns false, instead of waiting 60 seconds for an answer
+    /// that can never come. True while the loop reconnects, so a brief reconnect does not fail requests.
+    /// </remarks>
+    internal Func<bool>? IsListening { get; set; }
+
+    /// <summary>
     /// Gets the response types by action.
     /// </summary>
     /// <remarks>Used by tests to compare with Go's table.</remarks>
@@ -114,13 +124,14 @@ public sealed partial class RpcSession(GmHttpClient http, AuthData auth, GmEndpo
     /// </summary>
     /// <remarks>
     /// Gives up after 60 seconds with <see cref="PhoneNotRespondingException"/>. For user-initiated requests,
-    /// <see cref="PhoneSlow"/> is raised once after 5 seconds without an answer, and waiting continues.
+    /// <see cref="PhoneSlow"/> is raised once after 5 seconds without an answer, and waiting continues. Fails at once,
+    /// without sending, when no long poll is running (not connected).
     /// </remarks>
     /// <param name="p">What to send.</param>
     /// <param name="ct">Cancels the wait; the waiter is removed.</param>
     /// <returns>The phone's answer.</returns>
     /// <exception cref="PhoneNotRespondingException">No answer within 60 seconds.</exception>
-    /// <exception cref="ConnectionClosedException">The connection closed while waiting.</exception>
+    /// <exception cref="ConnectionClosedException">Not connected, or the connection closed while waiting.</exception>
     /// <exception cref="GmRequestException">The server refused the request.</exception>
     /// <exception cref="OperationCanceledException"><paramref name="ct"/> was cancelled.</exception>
     public async Task<IncomingRpc> SendAsync(SendParams p, CancellationToken ct)
@@ -164,11 +175,12 @@ public sealed partial class RpcSession(GmHttpClient http, AuthData auth, GmEndpo
     /// </summary>
     /// <remarks>
     /// The inner task has no timeout of its own, as in Go; it ends with the answer, <see cref="FailAllWaiters"/>, or
-    /// cancellation of <paramref name="ct"/>.
+    /// cancellation of <paramref name="ct"/>. Fails at once, without sending, when no long poll is running.
     /// </remarks>
     /// <param name="p">What to send.</param>
     /// <param name="ct">Cancels the send and, later, the wait.</param>
     /// <returns>A task that completes when the request is accepted, holding the task for the answer.</returns>
+    /// <exception cref="ConnectionClosedException">Not connected.</exception>
     /// <exception cref="GmRequestException">The server refused the request.</exception>
     /// <exception cref="OperationCanceledException"><paramref name="ct"/> was cancelled.</exception>
     public async Task<Task<IncomingRpc>> SendAsyncNoWait(SendParams p, CancellationToken ct)
@@ -463,6 +475,12 @@ public sealed partial class RpcSession(GmHttpClient http, AuthData auth, GmEndpo
     // Port Of sendAsyncMessageWithID: Register The Waiter Before Sending
     private async Task<(string RequestId, TaskCompletionSource<IncomingRpc> Waiter)> PostWithWaiterAsync(SendParams p, CancellationToken ct)
     {
+        // No Long Poll, No Answer: Fail Now Instead Of After 60 s
+        if (IsListening?.Invoke() == false)
+        {
+            throw new ConnectionClosedException("Not connected: no long poll is running to receive the answer.");
+        }
+
         OutgoingRPCMessage payload = Build(p, out string request_id);
 
         var waiter = new TaskCompletionSource<IncomingRpc>(TaskCreationOptions.RunContinuationsAsynchronously);

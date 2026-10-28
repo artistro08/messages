@@ -89,6 +89,20 @@ public sealed partial class LongPollLoop(
     public bool IsConnected => Volatile.Read(ref _connected) != 0;
 
     /// <summary>
+    /// Gets whether a run is active, from the start of <see cref="RunAsync"/> until it ends (reconnects included).
+    /// </summary>
+    internal bool IsRunning
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _stopCts is not null;
+            }
+        }
+    }
+
+    /// <summary>
     /// Gets the pinger of the current run, or null when not running logged in.
     /// </summary>
     internal DittoPinger? Pinger => _pinger;

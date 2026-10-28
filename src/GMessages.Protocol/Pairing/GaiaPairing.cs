@@ -52,8 +52,20 @@ public sealed partial class GaiaPairing(GaiaSignIn signIn, RpcSession rpc, LongP
     /// <summary>
     /// Gets or sets which phone to use when there are several, as an index into the newest-first list.
     /// </summary>
-    /// <remarks>Go's <c>GaiaHackyDeviceSwitcher</c>: a manual escape hatch; 0 picks the newest phone.</remarks>
-    public int HackyDeviceSwitcher { get; set; }
+    /// <remarks>
+    /// Go's <c>GaiaHackyDeviceSwitcher</c>: a manual escape hatch; 0 picks the newest phone. Values past the end wrap
+    /// around. A negative value is refused here, since it would pick no phone at all.
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">The value is negative.</exception>
+    public int HackyDeviceSwitcher
+    {
+        get;
+        set
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(value);
+            field = value;
+        }
+    }
 
     // =========================================================================
     // PAIRING

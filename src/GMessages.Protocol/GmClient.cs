@@ -26,7 +26,8 @@ namespace GMessages.Protocol;
 /// <para>
 /// Connect, disconnect, pairing and unpairing run one at a time. The session is saved after every token refresh and
 /// every cookie change: right away when the last save started more than 5 seconds ago, otherwise once at the end of
-/// that 5 second window. Saves are paused while pairing, so a half-finished pairing never reaches the disk. After
+/// that 5 second window. Saves are paused while pairing, so a half-finished pairing never reaches the disk. A failed
+/// save raises <see cref="SessionSaveFailed"/> so the app can warn the user. After
 /// <see cref="UnpairAsync"/> or <see cref="DisposeAsync"/> the client is finished. Tokens, keys and cookie values are
 /// never logged.
 /// </para>
@@ -93,6 +94,9 @@ public sealed partial class GmClient : IAsyncDisposable
         _loop       = new LongPollLoop(http, Rpc, auth, endpoints, _refresher, _dispatcher, time, logs.CreateLogger<LongPollLoop>());
         _signIn     = new GaiaSignIn(http, auth, endpoints, time, logs.CreateLogger<GaiaSignIn>());
         _pairing    = new GaiaPairing(_signIn, Rpc, _loop, auth, time, logs.CreateLogger<GaiaPairing>());
+
+        // Requests Waiting For An Answer Fail Fast While No Long Poll Runs (Pairing's Own Poll Counts)
+        Rpc.IsListening = () => _loop.IsRunning;
 
         // Events And Saves
         _loop.EventRaised      += Raise;
@@ -772,9 +776,10 @@ public sealed partial class GmClient : IAsyncDisposable
         WriteSession();
     }
 
-    // One Writer At A Time; Any Failure Is Logged, Never Thrown (It May Run On A Timer Thread)
+    // One Writer At A Time; A Failure Is Logged And Raised (Outside The Lock), Never Thrown (It May Run On A Timer Thread)
     private void WriteSession()
     {
+        Exception? failure = null;
         lock (_writeLock)
         {
             // An Immediate Save That Raced The Pairing Pause Must Not Write Mid-Pairing
@@ -791,8 +796,14 @@ public sealed partial class GmClient : IAsyncDisposable
             }
             catch (Exception ex)
             {
-                LogSaveFailed(_log, ex);
+                failure = ex;
             }
+        }
+
+        if (failure is not null)
+        {
+            LogSaveFailed(_log, failure);
+            Raise(new SessionSaveFailed(failure.GetType().Name));
         }
     }
 
