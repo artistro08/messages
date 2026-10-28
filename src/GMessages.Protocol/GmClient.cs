@@ -105,7 +105,8 @@ public sealed partial class GmClient : IAsyncDisposable
     /// </summary>
     /// <remarks>
     /// Go's event handler. Handlers run on background threads and must not block for long. A handler that throws is
-    /// logged and does not stop the client.
+    /// logged and does not stop the client. Handlers must not block synchronously on GmClient methods: some events,
+    /// such as <see cref="PairSuccessful"/>, are raised while the client's lifecycle lock is held.
     /// </remarks>
     public event Action<object>? EventRaised;
 
@@ -181,8 +182,9 @@ public sealed partial class GmClient : IAsyncDisposable
     /// <remarks>
     /// Ported from <c>Connect</c>. The refresh happens here, not only in the long poll, so bad credentials fail the
     /// call. A refresh error that can be retried (network, 5xx) is logged and left to the long poll. Returns once the
-    /// long poll is started; it opens and sends <c>GET_UPDATES</c> in the background. Unlike Go, a call while the long
-    /// poll is already running does nothing, so there is never more than one.
+    /// long poll is started; it opens and sends <c>GET_UPDATES</c> in the background. A call while the long poll is
+    /// already running makes it reconnect right away (dropping any backoff wait), the way Go's <c>Connect</c> retries
+    /// at once; there is still only one long poll. Call it when the network comes back or the PC wakes up.
     /// </remarks>
     /// <param name="ct">Cancels the wait for another operation and the token refresh. The long poll runs until <see cref="DisconnectAsync"/>.</param>
     /// <returns>A task that completes when the long poll is started.</returns>
@@ -198,8 +200,10 @@ public sealed partial class GmClient : IAsyncDisposable
         {
             ThrowIfFinished();
             ThrowIfNotLoggedIn();
+            // Already Running: Reconnect Now Instead Of Waiting Out A Backoff (The Loop Refreshes The Token Itself)
             if (IsRunning)
             {
+                _loop.RequestReconnect();
                 return;
             }
 
@@ -236,12 +240,14 @@ public sealed partial class GmClient : IAsyncDisposable
     /// <remarks>
     /// Ported from <c>Disconnect</c>: closes the long poll and fails the waiters, since their answers could only
     /// arrive over the long poll. Go also closes idle HTTP connections; .NET has no such call short of disposing the
-    /// handler, and idle connections close by themselves after a while. Safe to call when not connected. Waits for a
-    /// running pairing to end first (cancel it through its token).
+    /// handler, and idle connections close by themselves after a while. Safe to call when not connected. A running
+    /// pairing is canceled first, so its <see cref="PairAsync"/> fails at once, as in Go (the bridge cancels a login
+    /// this way).
     /// </remarks>
     /// <returns>A task that completes when the long poll has ended.</returns>
     public async Task DisconnectAsync()
     {
+        CancelPairing();
         await _gate.WaitAsync().ConfigureAwait(false);
         try
         {
@@ -279,7 +285,7 @@ public sealed partial class GmClient : IAsyncDisposable
     /// <exception cref="InvalidDataException">The server or phone sent something invalid.</exception>
     /// <exception cref="GmRequestException">The server refused a request.</exception>
     /// <exception cref="ConnectionClosedException">The connection closed while waiting.</exception>
-    /// <exception cref="OperationCanceledException"><paramref name="ct"/> was canceled, or the client was disposed.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="ct"/> was canceled, or the client was disconnected or disposed.</exception>
     public async Task PairAsync(Action<string> showEmoji, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(showEmoji);
@@ -294,10 +300,16 @@ public sealed partial class GmClient : IAsyncDisposable
                 throw new InvalidOperationException("Disconnect before pairing.");
             }
 
-            // Pair With Saves Paused; Dispose Can Cancel It
+            // Pair With Saves Paused; Disconnect And Dispose Cancel It
             string phone_id;
             using var pair_cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             Volatile.Write(ref _pairCts, pair_cts);
+            if (Volatile.Read(ref _finished) != 0)
+            {
+                // Dispose Ran Before _pairCts Was Visible
+                await pair_cts.CancelAsync().ConfigureAwait(false);
+            }
+
             SetSavesSuspended(true);
             try
             {
@@ -400,16 +412,7 @@ public sealed partial class GmClient : IAsyncDisposable
 
         Volatile.Write(ref _finished, 1);
 
-        // Cancel A Running Pairing So It Gives Up The Gate
-        try
-        {
-            Volatile.Read(ref _pairCts)?.Cancel();
-        }
-        catch (ObjectDisposedException)
-        {
-            // It Just Ended
-        }
-
+        CancelPairing();
         await _gate.WaitAsync().ConfigureAwait(false);
         try
         {
@@ -458,6 +461,19 @@ public sealed partial class GmClient : IAsyncDisposable
             {
                 return _runCts is not null && !_run.IsCompleted;
             }
+        }
+    }
+
+    // Cancels A Running Pairing So It Fails At Once And Gives Up The Gate
+    private void CancelPairing()
+    {
+        try
+        {
+            Volatile.Read(ref _pairCts)?.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // It Just Ended
         }
     }
 
@@ -721,7 +737,8 @@ public sealed partial class GmClient : IAsyncDisposable
     {
         lock (_writeLock)
         {
-            if (Volatile.Read(ref _savesStopped))
+            // An Immediate Save That Raced The Pairing Pause Must Not Write Mid-Pairing
+            if (Volatile.Read(ref _savesStopped) || Volatile.Read(ref _savesSuspended))
             {
                 return;
             }

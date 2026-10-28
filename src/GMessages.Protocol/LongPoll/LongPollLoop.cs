@@ -435,6 +435,16 @@ public sealed partial class LongPollLoop(
         }
     }
 
+    /// <summary>
+    /// Drops the current connection or backoff wait and starts over at once, as a fresh connect would.
+    /// </summary>
+    /// <remarks>
+    /// The same path the pinger uses (Go: <c>Reconnect</c>). The run keeps going, so there is still one long poll;
+    /// the next pass refreshes the token if needed and runs the first-connect callback again. Without an active run,
+    /// the request is consumed by the next run's first pass, which starts fresh anyway.
+    /// </remarks>
+    internal void RequestReconnect() => _ = RequestReconnectAsync();
+
     // Port Of Reconnect As Used By The Pinger: Drop The Connection, Then Start Over
     private Task RequestReconnectAsync()
     {

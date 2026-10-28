@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using GMessages.Protocol.Events;
 using GMessages.Protocol.Http;
+using GMessages.Protocol.LongPoll;
 using GMessages.Protocol.Pairing;
 using GMessages.Protocol.PbLite;
 using GMessages.Protocol.Proto;
@@ -218,7 +219,8 @@ public class GmClientTests
     }
 
     /// <summary>
-    /// Two connects at once start exactly one long poll.
+    /// Two connects at once start exactly one long poll run (one ack timer). The second may make that run reconnect
+    /// once, depending on whether it lands before or after the first stream opens.
     /// </summary>
     [TestMethod]
     public async Task Connect_Concurrent_StartsOneLongPoll()
@@ -228,7 +230,32 @@ public class GmClientTests
         await Task.WhenAll(rig.Client.ConnectAsync(CancellationToken.None), rig.Client.ConnectAsync(CancellationToken.None)).WaitAsync(HangGuard);
         WaitUntil(() => rig.Client.IsConnected, "connected");
 
-        Assert.AreEqual(1, rig.Requests("/ReceiveMessages").Length);
+        Assert.AreEqual(1, rig.Time.CountTimers(LongPollLoop.AckInterval), "one run");
+        Assert.IsTrue(rig.Requests("/ReceiveMessages").Length <= 2);
+    }
+
+    /// <summary>
+    /// Connect while the long poll is running makes that run reconnect once, right away, instead of starting a
+    /// second run; the token is not refreshed twice.
+    /// </summary>
+    [TestMethod]
+    public async Task Connect_WhileRunning_ReconnectsOnce()
+    {
+        await using Rig rig = CreateRig();
+
+        await rig.Client.ConnectAsync(CancellationToken.None).WaitAsync(HangGuard);
+        WaitUntil(() => rig.Client.IsConnected && rig.Requests("/ReceiveMessages").Length == 1, "first connect");
+
+        await rig.Client.ConnectAsync(CancellationToken.None).WaitAsync(HangGuard);
+        WaitUntil(() => rig.Requests("/ReceiveMessages").Length == 2, "reconnected");
+        WaitUntil(() => rig.Client.IsConnected, "connected again");
+
+        Assert.AreEqual(1, rig.Time.CountTimers(LongPollLoop.AckInterval), "still one run");
+        Assert.AreEqual(0, rig.Requests("/RegisterRefresh").Length);
+        lock (rig.Events)
+        {
+            Assert.AreEqual(0, rig.Events.OfType<AuthTokenRefreshed>().Count());
+        }
     }
 
     /// <summary>
@@ -477,5 +504,55 @@ public class GmClientTests
         {
             Assert.AreEqual(0, rig.Events.OfType<PairSuccessful>().Count());
         }
+    }
+
+    /// <summary>
+    /// Disconnect during the emoji wait cancels the pairing at once (Go: the bridge cancels a login with
+    /// Disconnect): PairAsync fails with a cancellation, the pairing is cleared and no long poll is left running.
+    /// </summary>
+    [TestMethod]
+    public async Task Disconnect_DuringEmojiWait_CancelsPairing()
+    {
+        JsonElement sign_in = Golden.Load("signin");
+        AuthData auth       = AuthDataGoldenTests.BuildGolden();
+        auth.DestPhoneId    = 0;
+        await using Rig rig = CreateRig(auth);
+
+        byte[] config_body  = Encoding.UTF8.GetBytes(sign_in.GetProperty("config").GetProperty("bodyText").GetString()!);
+        byte[] sign_in_body = Encoding.UTF8.GetBytes(sign_in.GetProperty("response").GetProperty("bodyText").GetString()!);
+        byte[] server_init  = GaiaPairingTests.ServerInit(1, 1);
+        rig.Respond = req =>
+        {
+            if (req.Url.EndsWith("/web/config", StringComparison.Ordinal))
+            {
+                return FakeHttpHandler.Response(HttpStatusCode.OK, PbLiteMime, config_body);
+            }
+
+            if (req.Url.EndsWith("/SignInGaia", StringComparison.Ordinal))
+            {
+                return FakeHttpHandler.Response(HttpStatusCode.OK, PbLiteMime, sign_in_body);
+            }
+
+            // The Phone Answers The Init, Then Stays Quiet (The User Never Taps)
+            if (req.Url.EndsWith("/SendMessage", StringComparison.Ordinal) && ActionOf(req) == ActionType.CreateGaiaPairingClientInit)
+            {
+                GaiaPairingTests.Deliver(rig.Client.Rpc, req, server_init);
+            }
+
+            return null;
+        };
+
+        bool shown = false;
+        Task pair  = rig.Client.PairAsync(_ => shown = true, CancellationToken.None);
+        WaitUntil(() => rig.Requests("/SendMessage").Any(r => ActionOf(r) == ActionType.CreateGaiaPairingClientFinished), "waiting for the tap");
+
+        await rig.Client.DisconnectAsync().WaitAsync(HangGuard);
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() => pair.WaitAsync(HangGuard));
+        Assert.IsTrue(shown);
+        Assert.IsFalse(rig.Client.IsLoggedIn, "pairing cleared");
+        Assert.IsFalse(rig.Client.IsConnected, "pairing poll stopped");
+        Assert.AreEqual(1, rig.Requests("/ReceiveMessages").Length, "no reconnect");
+        Assert.IsFalse(File.Exists(rig.SessionPath));
     }
 }
