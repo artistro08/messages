@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg width="100%" height="100%" viewBox="0 0 100 100" version="1.1" xmlns="http://www.w3.org/2000/svg">
+    <!-- Speech Bubble: a rounded rectangle with a tail at the bottom left -->
+    <path id="bubble" d="M22,10 L78,10 A14,14 0 0 1 92,24 L92,58 A14,14 0 0 1 78,72 L40,72 L16,90 L22,72 A14,14 0 0 1 8,58 L8,24 A14,14 0 0 1 22,10 Z" style="fill:white;fill-rule:nonzero;"/>
+</svg>
