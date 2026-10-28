@@ -165,6 +165,7 @@ func TestExportGolden(t *testing.T) {
 	exportHttp(t, out)
 	exportAuthData(t, out)
 	exportRpc(t, out)
+	exportLongPollStream(t, out)
 }
 
 // checkGoldenHelpers sanity-checks the client and capture transport; writes no file.
@@ -854,5 +855,89 @@ func exportRpc(t *testing.T, out string) {
 		"acks":          map[string]any{"url": acks.URL, "bodyHex": acks.BodyHex, "bodyText": acks.BodyText},
 		"decode":        decode,
 		"responseTable": table,
+	})
+}
+
+// chunkReader returns exactly one chunk per Read call, which is the read pattern readLongPoll assumes.
+type chunkReader struct {
+	chunks [][]byte
+}
+
+func (cr *chunkReader) Read(p []byte) (int, error) {
+	if len(cr.chunks) == 0 {
+		return 0, io.EOF
+	}
+	n := copy(p, cr.chunks[0])
+	cr.chunks = cr.chunks[1:]
+	return n, nil
+}
+
+func (cr *chunkReader) Close() error { return nil }
+
+// exportLongPollStream writes longpoll-stream.json: a full stream body fed through readLongPoll one payload
+// per read, plus the payload sequence Go decoded from it.
+func exportLongPollStream(t *testing.T, out string) {
+	payloads := []*gmproto.LongPollingPayload{
+		{Data: &gmproto.IncomingRPCMessage{ResponseID: "golden-resp-1", BugleRoute: gmproto.BugleRoute_DataEvent, MessageData: []byte("not-encrypted")}},
+		{Ack: &gmproto.StartAckMessage{Count: proto.Int32(2)}},
+		{Heartbeat: &gmproto.EmptyArr{}},
+		{StartRead: &gmproto.EmptyArr{}},
+	}
+
+	// Chunks (leading comma for every payload but the first)
+	chunks := [][]byte{[]byte("[[")}
+	var body strings.Builder
+	body.WriteString("[[")
+	for i, p := range payloads {
+		raw, err := pblite.Marshal(p)
+		if err != nil {
+			t.Fatalf("pblite marshal payload: %v", err)
+		}
+		if i > 0 {
+			raw = append([]byte(","), raw...)
+		}
+		chunks = append(chunks, raw)
+		body.Write(raw)
+	}
+	chunks = append(chunks, []byte("]]"))
+	body.WriteString("]]")
+
+	// Record What Go Decodes From Each Chunk
+	var sequence []map[string]any
+	for _, chunk := range chunks[1 : len(chunks)-1] {
+		msg := &gmproto.LongPollingPayload{}
+		if err := pblite.Unmarshal(bytes.TrimPrefix(chunk, []byte(",")), msg); err != nil {
+			t.Fatalf("pblite unmarshal chunk: %v", err)
+		}
+		switch {
+		case msg.GetData() != nil:
+			sequence = append(sequence, map[string]any{"kind": "data", "responseId": msg.GetData().GetResponseID()})
+		case msg.GetAck() != nil:
+			sequence = append(sequence, map[string]any{"kind": "ack", "count": msg.GetAck().GetCount()})
+		case msg.GetHeartbeat() != nil:
+			sequence = append(sequence, map[string]any{"kind": "heartbeat"})
+		case msg.GetStartRead() != nil:
+			sequence = append(sequence, map[string]any{"kind": "startRead"})
+		default:
+			t.Fatalf("unknown payload kind")
+		}
+	}
+
+	// Run Go's Reader And Confirm It Accepted The Ack
+	c, _ := newGoldenClient(t)
+	log := zerolog.Nop()
+	c.readLongPoll(&log, &chunkReader{chunks: chunks}, false, func() {})
+	if c.skipCount != 2 {
+		t.Fatalf("readLongPoll skipCount = %d, want 2", c.skipCount)
+	}
+
+	chunkStrings := make([]string, len(chunks))
+	for i, ch := range chunks {
+		chunkStrings[i] = string(ch)
+	}
+	writeGolden(t, out, "longpoll-stream", map[string]any{
+		"body":     body.String(),
+		"chunks":   chunkStrings,
+		"sequence": sequence,
 	})
 }

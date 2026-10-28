@@ -1,0 +1,27 @@
+{
+  "body": "[[[null,[\"golden-resp-1\",19,null,null,null,null,null,null,null,null,null,\"bm90LWVuY3J5cHRlZA==\",null,null,null,null,null,null,null,null,null,null,null],null,null,null],[null,null,null,[2],null],[null,null,[],null,null],[null,null,null,null,[]]]]",
+  "chunks": [
+    "[[",
+    "[null,[\"golden-resp-1\",19,null,null,null,null,null,null,null,null,null,\"bm90LWVuY3J5cHRlZA==\",null,null,null,null,null,null,null,null,null,null,null],null,null,null]",
+    ",[null,null,null,[2],null]",
+    ",[null,null,[],null,null]",
+    ",[null,null,null,null,[]]",
+    "]]"
+  ],
+  "sequence": [
+    {
+      "kind": "data",
+      "responseId": "golden-resp-1"
+    },
+    {
+      "count": 2,
+      "kind": "ack"
+    },
+    {
+      "kind": "heartbeat"
+    },
+    {
+      "kind": "startRead"
+    }
+  ]
+}
