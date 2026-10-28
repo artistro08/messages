@@ -138,6 +138,11 @@ internal sealed class TrayIcon : IDisposable
     {
         LoadIcon();
 
+        // A copy that crashed or was killed leaves its icon (same GUID) in the shell, and NIM_ADD then fails until the
+        // user hovers it away. Deleting by GUID first clears it; when there is nothing to delete this is a no-op
+        var stale = CreateData(0);
+        NativeMethods.Shell_NotifyIconW(NativeMethods.NIM_DELETE, ref stale);
+
         var data = CreateData(NativeMethods.NIF_MESSAGE | NativeMethods.NIF_ICON | NativeMethods.NIF_TIP | NativeMethods.NIF_SHOWTIP);
         if (!NativeMethods.Shell_NotifyIconW(NativeMethods.NIM_ADD, ref data))
         {
