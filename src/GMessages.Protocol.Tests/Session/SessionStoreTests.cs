@@ -66,6 +66,21 @@ public class SessionStoreTests
     }
 
     /// <summary>
+    /// A session with no Tachyon token stays token-less after a round trip (null, not an empty array).
+    /// </summary>
+    [TestMethod]
+    public void SaveThenLoad_NoToken_StaysNull()
+    {
+        SessionStore store = new(FilePath);
+        AuthData a         = AuthDataGoldenTests.BuildGolden();
+        a.Tachyon          = TachyonToken.None;
+
+        store.Save(a);
+
+        Assert.IsNull(store.Load()!.TachyonAuthToken);
+    }
+
+    /// <summary>
     /// The file is encrypted, so cookie values are not readable in it.
     /// </summary>
     [TestMethod]

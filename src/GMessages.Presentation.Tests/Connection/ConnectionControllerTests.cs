@@ -307,6 +307,24 @@ public sealed class ConnectionControllerTests
         Assert.AreEqual(0, rig.NotPosted);
     }
 
+    /// <summary>
+    /// A session with a browser and cookies but no Tachyon token is not logged in: signed out, session file deleted.
+    /// </summary>
+    [TestMethod]
+    public async Task Start_SessionWithoutToken_IsSignedOut()
+    {
+        await using var rig = new Rig();
+        AuthData session    = BuildSession(rig.Time.GetUtcNow() + TimeSpan.FromDays(1));
+        session.Tachyon     = TachyonToken.None;
+        new SessionStore(rig.Paths.SessionFile).Save(session);
+
+        await rig.Controller.StartAsync().WaitAsync(HangGuard);
+
+        Assert.AreEqual(ConnectionState.SignedOut, rig.Controller.State);
+        Assert.IsNull(rig.Controller.Client);
+        Assert.IsFalse(File.Exists(rig.Paths.SessionFile), "token-less session deleted");
+    }
+
     // =========================================================================
     // SIGN OUT AND RECONNECT
     // =========================================================================
