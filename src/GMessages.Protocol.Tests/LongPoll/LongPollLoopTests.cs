@@ -1,0 +1,249 @@
+using System.Net;
+using System.Text;
+using System.Text.Json;
+using GMessages.Protocol.Auth;
+using GMessages.Protocol.Events;
+using GMessages.Protocol.Http;
+using GMessages.Protocol.LongPoll;
+using GMessages.Protocol.PbLite;
+using GMessages.Protocol.Proto;
+using GMessages.Protocol.Rpc;
+using GMessages.Protocol.Session;
+using GMessages.Protocol.Tests.Fakes;
+using GMessages.Protocol.Tests.Session;
+using Microsoft.Extensions.Logging.Abstractions;
+
+namespace GMessages.Protocol.Tests.LongPoll;
+
+/// <summary>
+/// Checks the requests and the reconnect timing of <see cref="LongPollLoop"/>.
+/// </summary>
+/// <remarks>
+/// The two request tests compare with <c>longpoll-request.json</c> after copying Go's random request and session IDs.
+/// The timing tests are C#-only: the behavior was read from <c>doLongPoll</c> (401/403 fatal, other errors retried
+/// after <c>(errorCount + 1) × 5</c> s, recovered event, catch-up after a 1 minute gap, acks every 5 s) and is
+/// driven by a fake clock, not copied from a golden file.
+/// See <see href="https://github.com/mautrix/gmessages/blob/ba33f4875a491f5cb47db8a6baf42a8869f5f383/pkg/libgm/longpoll.go"/>.
+/// </remarks>
+[TestClass]
+public class LongPollLoopTests
+{
+    private static readonly TimeSpan HangGuard = TimeSpan.FromSeconds(10);
+
+    private sealed class Rig
+    {
+        public required LongPollLoop Loop { get; init; }
+
+        public required RpcSession Rpc { get; init; }
+
+        public required FakeHttpHandler Handler { get; init; }
+
+        public required SignalingTimeProvider Time { get; init; }
+
+        public List<object> Events { get; } = [];
+
+        // ReceiveMessages Answers In Order; After The Script, An Open Quiet Stream
+        public Queue<Func<HttpResponseMessage>> Script { get; } = new();
+
+        public int Count<T>() { lock (Events) { return Events.Count(e => e is T); } }
+
+        public RecordedRequest[] Requests(string suffix) { lock (Handler.Requests) { return [.. Handler.Requests.Where(r => r.Url.EndsWith(suffix, StringComparison.Ordinal))]; } }
+    }
+
+    private static Rig CreateRig()
+    {
+        AuthData auth      = AuthDataGoldenTests.BuildGolden();
+        var time           = new SignalingTimeProvider();
+        auth.TachyonExpiry = time.GetUtcNow() + TimeSpan.FromDays(1);
+
+        var handler   = new FakeHttpHandler { Time = time };
+        var http      = new GmHttpClient(new HttpClient(handler), new HttpClient(handler), auth.Cookies, time, NullLogger.Instance);
+        var rpc       = new RpcSession(http, auth, GmEndpoints.Production, time, NullLogger.Instance);
+        var refresher = new TokenRefresher(http, auth, GmEndpoints.Production, time, NullLogger.Instance);
+        var loop      = new LongPollLoop(http, rpc, auth, GmEndpoints.Production, refresher, new UpdateDispatcher(rpc, NullLogger.Instance), time, NullLogger.Instance);
+        var rig       = new Rig { Loop = loop, Rpc = rpc, Handler = handler, Time = time };
+
+        loop.EventRaised += e => { lock (rig.Events) { rig.Events.Add(e); } };
+        handler.Respond = (_, req) =>
+        {
+            if (!req.Url.EndsWith("/ReceiveMessages", StringComparison.Ordinal))
+            {
+                return FakeHttpHandler.Response(HttpStatusCode.OK, "application/json+protobuf", Encoding.UTF8.GetBytes("[]"));
+            }
+
+            return rig.Script.TryDequeue(out Func<HttpResponseMessage>? next) ? next() : Open();
+        };
+        return rig;
+    }
+
+    private static HttpResponseMessage Open() => new(HttpStatusCode.OK) { Content = new StreamContent(new OpenStream("[["u8.ToArray())) };
+
+    private static HttpResponseMessage Ended() => FakeHttpHandler.Response(HttpStatusCode.OK, "application/json+protobuf", "[[]]"u8.ToArray());
+
+    private static HttpResponseMessage Status(int code) => FakeHttpHandler.Response((HttpStatusCode)code);
+
+    private static void WaitUntil(Func<bool> condition, string what) => Assert.IsTrue(SpinWait.SpinUntil(condition, HangGuard), what);
+
+    private static ActionType ActionOf(RecordedRequest req) =>
+        OutgoingRPCData.Parser.ParseFrom(PbLiteSerializer.Deserialize<OutgoingRPCMessage>(req.Body).Data.MessageData).Action;
+
+    // =========================================================================
+    // REQUESTS (GOLDEN)
+    // =========================================================================
+
+    /// <summary>
+    /// The ReceiveMessages request matches Go's once the random listen request ID is copied.
+    /// </summary>
+    [TestMethod]
+    public async Task ReceiveMessagesRequest_MatchesGo()
+    {
+        JsonElement go = Golden.Load("longpoll-request").GetProperty("receiveMessages");
+        Rig rig        = CreateRig();
+        rig.Script.Enqueue(() =>
+        {
+            rig.Loop.Stop();
+            return Ended();
+        });
+
+        await rig.Loop.RunAsync(false, null, CancellationToken.None).WaitAsync(HangGuard);
+
+        RecordedRequest sent = rig.Requests("/ReceiveMessages").Single();
+        var go_req = PbLiteSerializer.Deserialize<ReceiveMessagesRequest>(Encoding.UTF8.GetBytes(go.GetProperty("bodyText").GetString()!));
+        var cs_req = PbLiteSerializer.Deserialize<ReceiveMessagesRequest>(sent.Body);
+        cs_req.Auth.RequestID = go_req.Auth.RequestID;
+        Assert.AreEqual(go.GetProperty("bodyText").GetString(), Encoding.UTF8.GetString(PbLiteSerializer.Serialize(cs_req)));
+        Assert.AreEqual(go.GetProperty("url").GetString(), sent.Url);
+    }
+
+    /// <summary>
+    /// SetActiveSession sends Go's GET_UPDATES request once the random session ID is copied.
+    /// </summary>
+    [TestMethod]
+    public async Task GetUpdatesRequest_MatchesGo()
+    {
+        JsonElement go = Golden.Load("longpoll-request").GetProperty("setActiveSession");
+        string go_id   = go.GetProperty("sessionId").GetString()!;
+        Rig rig        = CreateRig();
+
+        await rig.Loop.SetActiveSessionAsync(CancellationToken.None);
+
+        RecordedRequest sent = rig.Requests("/SendMessage").Single();
+        var cs_req           = PbLiteSerializer.Deserialize<OutgoingRPCMessage>(sent.Body);
+        var inner            = OutgoingRPCData.Parser.ParseFrom(cs_req.Data.MessageData);
+        Assert.AreEqual(rig.Rpc.SessionId, inner.RequestID, "request ID is the new session ID");
+        Assert.AreEqual(rig.Rpc.SessionId, inner.SessionID);
+
+        // Normalize The Random Session ID
+        inner.RequestID           = go_id;
+        inner.SessionID           = go_id;
+        cs_req.Data.MessageData   = Google.Protobuf.ByteString.CopyFrom(Google.Protobuf.MessageExtensions.ToByteArray(inner));
+        cs_req.Data.RequestID     = go_id;
+        cs_req.Auth.RequestID     = go_id;
+        Assert.AreEqual(go.GetProperty("bodyText").GetString(), Encoding.UTF8.GetString(PbLiteSerializer.Serialize(cs_req)));
+        Assert.AreEqual(go.GetProperty("url").GetString(), sent.Url);
+    }
+
+    // =========================================================================
+    // TIMING (C#-ONLY)
+    // =========================================================================
+
+    /// <summary>
+    /// A 401 on the long poll raises <see cref="ListenFatalError"/> and ends the loop.
+    /// </summary>
+    [TestMethod]
+    public async Task Status401_RaisesFatalAndStops()
+    {
+        Rig rig = CreateRig();
+        rig.Script.Enqueue(() => Status(401));
+
+        await rig.Loop.RunAsync(true, null, CancellationToken.None).WaitAsync(HangGuard);
+
+        Assert.AreEqual(1, rig.Count<ListenFatalError>());
+        Assert.AreEqual(0, rig.Count<ListenRecovered>());
+        Assert.AreEqual(1, rig.Requests("/ReceiveMessages").Length);
+    }
+
+    /// <summary>
+    /// After a working connection drops, a 500 raises <see cref="ListenTemporaryError"/>, the retry comes exactly
+    /// 10 s later, and the next success raises <see cref="ListenRecovered"/> again.
+    /// </summary>
+    [TestMethod]
+    public async Task Status500_RaisesTemporary_RetriesAfter10s_ThenRecovered()
+    {
+        Rig rig = CreateRig();
+        rig.Script.Enqueue(Ended);
+        rig.Script.Enqueue(() => Status(500));
+        using var cts = new CancellationTokenSource();
+        Task run      = rig.Loop.RunAsync(true, null, cts.Token);
+
+        WaitUntil(() => rig.Time.CountTimers(TimeSpan.FromSeconds(10)) == 1, "10 s retry wait");
+        Assert.AreEqual(1, rig.Count<ListenTemporaryError>());
+        Assert.AreEqual(1, rig.Count<ListenRecovered>(), "first connect counts as recovered, as in Go");
+
+        rig.Time.Advance(TimeSpan.FromSeconds(9));
+        Assert.AreEqual(2, rig.Requests("/ReceiveMessages").Length, "no retry before 10 s");
+        rig.Time.Advance(TimeSpan.FromSeconds(1));
+        WaitUntil(() => rig.Requests("/ReceiveMessages").Length == 3 && rig.Count<ListenRecovered>() == 2, "retry and recovered");
+
+        await cts.CancelAsync();
+        await run.WaitAsync(HangGuard);
+    }
+
+    /// <summary>
+    /// Reconnecting after more than a minute away sends GET_UPDATES with the session ID; a short gap does not.
+    /// </summary>
+    [TestMethod]
+    public async Task DisconnectedOver1Minute_SendsGetUpdatesOnReconnect()
+    {
+        Rig rig = CreateRig();
+        rig.Script.Enqueue(Ended);
+        int[] sleeps = [10, 15, 20, 25];
+        foreach (int _ in sleeps)
+        {
+            rig.Script.Enqueue(() => Status(500));
+        }
+
+        rig.Rpc.ResetSessionId();
+        using var cts = new CancellationTokenSource();
+        Task run      = rig.Loop.RunAsync(true, null, cts.Token);
+
+        // 70 s Of Failures
+        foreach (int sleep in sleeps)
+        {
+            WaitUntil(() => rig.Time.CountTimers(TimeSpan.FromSeconds(sleep)) == 1, $"{sleep} s wait");
+            Assert.IsFalse(rig.Requests("/SendMessage").Any(r => ActionOf(r) == ActionType.GetUpdates), "no catch-up yet");
+            rig.Time.Advance(TimeSpan.FromSeconds(sleep));
+        }
+
+        WaitUntil(() => rig.Requests("/SendMessage").Any(r => ActionOf(r) == ActionType.GetUpdates), "catch-up GET_UPDATES");
+        RecordedRequest get_updates = rig.Requests("/SendMessage").First(r => ActionOf(r) == ActionType.GetUpdates);
+        var outgoing = PbLiteSerializer.Deserialize<OutgoingRPCMessage>(get_updates.Body);
+        Assert.AreEqual(rig.Rpc.SessionId, outgoing.Data.RequestID);
+        Assert.AreEqual(0, outgoing.TTL, "TTL omitted");
+        Assert.AreEqual(1, rig.Count<NoDataReceived>());
+
+        await cts.CancelAsync();
+        await run.WaitAsync(HangGuard);
+    }
+
+    /// <summary>
+    /// Queued acks go out on the 5 second timer.
+    /// </summary>
+    [TestMethod]
+    public async Task Acks_FlushEvery5Seconds()
+    {
+        Rig rig = CreateRig();
+        using var cts = new CancellationTokenSource();
+        Task run      = rig.Loop.RunAsync(true, null, cts.Token);
+        WaitUntil(() => rig.Time.CountTimers(TimeSpan.FromSeconds(5)) >= 1 && rig.Requests("/ReceiveMessages").Length == 1, "ack timer and connection");
+
+        rig.Rpc.QueueAck("ack-1");
+        rig.Time.Advance(TimeSpan.FromSeconds(4));
+        Assert.AreEqual(0, rig.Requests("/AckMessages").Length);
+        rig.Time.Advance(TimeSpan.FromSeconds(1));
+        WaitUntil(() => rig.Requests("/AckMessages").Length == 1, "ack request");
+
+        await cts.CancelAsync();
+        await run.WaitAsync(HangGuard);
+    }
+}
