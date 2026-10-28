@@ -1,3 +1,6 @@
+using System.ComponentModel;
+using System.Diagnostics;
+using GMessages.App.Startup;
 using GMessages.App.Views;
 using GMessages.Presentation;
 using GMessages.Presentation.Connection;
@@ -8,6 +11,8 @@ using GMessages.Protocol.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
+using Microsoft.Windows.System.Power;
+using Windows.Networking.Connectivity;
 using Windows.Storage;
 
 namespace GMessages.App;
@@ -42,6 +47,12 @@ public partial class App : Application, IDisposable
     private MemoryTrim? _memoryTrim;
     private ConnectionController? _connection;
     private PairingWindow? _pairingWindow;
+    private MainWindow? _mainWindow;
+    private SettingsWindow? _settingsWindow;
+    private IStartupService? _startup;
+    private AppPaths? _paths;
+    private DispatcherQueue? _dispatcher;
+    private bool _hasInternet;
     private bool _connectionStarted;
     private EventWaitHandle? _quitRequest;
     private RegisteredWaitHandle? _quitWait;
@@ -59,8 +70,6 @@ public partial class App : Application, IDisposable
         DispatcherShutdownMode = DispatcherShutdownMode.OnExplicitShutdown;
     }
 
-    // TODO: Task 7 handles this by opening the main window; until then it's only logged
-
     /// <summary>
     /// Asks for the main window: tray left-click, the menu's Open, or a second launch. Carries what asked.
     /// </summary>
@@ -74,12 +83,17 @@ public partial class App : Application, IDisposable
     {
         // Paths
         var paths = AppPaths.Resolve(AppIdentity.IsPackaged ? ApplicationData.Current.LocalFolder.Path : null, Program.TestDataDir);
+        _paths    = paths;
 
         // Settings: MSIX keeps them in its package store, unpackaged uses a file
         ISettingsStore settingsStore = AppIdentity.IsPackaged
             ? new LocalSettingsStore()
             : new JsonFileSettingsStore(paths.SettingsFile);
-        _settings = new AppSettings(settingsStore);
+        _settings                  = new AppSettings(settingsStore);
+        _settings.PropertyChanged += OnSettingChanged;
+
+        // Start With Windows: the MSIX startup task when packaged, the Run key when not
+        _startup = SelectStartupService(paths);
 
         // Logging
         var levelSwitch = new LogLevelSwitch { MinimumLevel = _settings.LogLevel };
@@ -89,7 +103,8 @@ public partial class App : Application, IDisposable
 
         // Memory Trim
         var dispatcher = DispatcherQueue.GetForCurrentThread();
-        _memoryTrim    = new MemoryTrim(dispatcher, () => _trayMenu?.AppWindow.IsVisible != true && _pairingWindow is null);
+        _dispatcher    = dispatcher;
+        _memoryTrim    = new MemoryTrim(dispatcher, () => _trayMenu?.AppWindow.IsVisible != true && _pairingWindow is null && _mainWindow is null && _settingsWindow is null);
 
         // Connection: every controller event comes back on the UI thread
         // TODO: Task 8 passes the --test-endpoints fake server here; until then always production
@@ -97,17 +112,13 @@ public partial class App : Application, IDisposable
         _connection.StateChanged += (_, _) => OnConnectionStateChanged();
         _ = StartConnectionAsync();
 
-        // Tray Icon
-        ShowMainWindowRequested += (_, source) =>
-        {
-            AppLog.OpenRequested(_logger, source);
+        // Resume And Network: reconnect right away instead of waiting out the long poll's retry
+        _hasInternet                             = HasInternet();
+        PowerManager.SystemSuspendStatusChanged += OnSystemSuspendStatusChanged;
+        NetworkInformation.NetworkStatusChanged += OnNetworkStatusChanged;
 
-            // Not paired yet: the way in is the pairing window
-            if (_connectionStarted && NeedsPairing())
-            {
-                ShowPairingWindow();
-            }
-        };
+        // Tray Icon
+        ShowMainWindowRequested += (_, source) => OnShowMainWindowRequested(source);
         _trayIcon = new TrayIcon(AppInfo.DisplayName, SelectTrayGuid());
         _trayIcon.Invoked              += (_, _) => ShowMainWindowRequested?.Invoke(this, "tray");
         _trayIcon.ContextMenuRequested += (_, point) => ShowTrayMenu(point.X, point.Y);
@@ -196,6 +207,186 @@ public partial class App : Application, IDisposable
         _pairingWindow.Activate();
     }
 
+    // =========================================================================
+    // MAIN AND SETTINGS WINDOWS
+    // =========================================================================
+
+    // Tray left-click, the menu's Open, or a second launch. Unpaired, the way in is the pairing window
+    private void OnShowMainWindowRequested(string source)
+    {
+        if (_quitting)
+        {
+            return;
+        }
+
+        AppLog.OpenRequested(_logger, source);
+        if (!_connectionStarted)
+        {
+            return;
+        }
+
+        if (NeedsPairing())
+        {
+            ShowPairingWindow();
+            return;
+        }
+
+        ShowMainWindow();
+    }
+
+    // Made when needed and destroyed on close, then the memory it used goes back to Windows
+    private void ShowMainWindow()
+    {
+        if (_quitting || _connection is null)
+        {
+            return;
+        }
+
+        if (_mainWindow is not null)
+        {
+            _mainWindow.Activate();
+            return;
+        }
+
+        _mainWindow = new MainWindow(_connection);
+        _mainWindow.ApplyTheme(_settings?.Theme ?? AppTheme.System);
+        _mainWindow.Closed += (_, _) =>
+        {
+            _mainWindow = null;
+            ScheduleTrim();
+        };
+        _mainWindow.Activate();
+    }
+
+    // Made when needed and destroyed on close, then the memory it used goes back to Windows
+    private void ShowSettingsWindow()
+    {
+        if (_quitting || _connection is null || _settings is null || _startup is null || _paths is null)
+        {
+            return;
+        }
+
+        AppLog.SettingsRequested(_logger);
+        if (_settingsWindow is not null)
+        {
+            _settingsWindow.Activate();
+            return;
+        }
+
+        var viewModel   = new SettingsViewModel(_settings, _startup, _connection, OpenFolder, _paths.LogsFolder, _logger);
+        _settingsWindow = new SettingsWindow(viewModel);
+        _settingsWindow.ApplyTheme(_settings.Theme);
+        _settingsWindow.Closed += (_, _) =>
+        {
+            _settingsWindow = null;
+            ScheduleTrim();
+        };
+        _settingsWindow.Activate();
+    }
+
+    // Theme: every open window and the tray menu follow the setting live
+    private void OnSettingChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(AppSettings.Theme) || _settings is null)
+        {
+            return;
+        }
+
+        var theme = _settings.Theme;
+        _trayMenu?.ApplyTheme(theme);
+        _pairingWindow?.ApplyTheme(theme);
+        _mainWindow?.ApplyTheme(theme);
+        _settingsWindow?.ApplyTheme(theme);
+    }
+
+    private void ScheduleTrim()
+    {
+        if (!_quitting)
+        {
+            _memoryTrim?.Schedule();
+        }
+    }
+
+    private void CloseWindows()
+    {
+        _pairingWindow?.Close();
+        _mainWindow?.Close();
+        _settingsWindow?.Close();
+    }
+
+    // Explorer makes no folder, so a fresh install's empty logs folder is made first
+    private static void OpenFolder(string folder)
+    {
+        Directory.CreateDirectory(folder);
+        using var explorer = Process.Start(new ProcessStartInfo(folder) { UseShellExecute = true });
+    }
+
+    private static IStartupService SelectStartupService(AppPaths paths)
+    {
+#if EnableTestHooks
+        if (Program.IsTestRun)
+        {
+            return new MarkerFileStartupService(paths.DataFolder);
+        }
+#endif
+        return AppIdentity.IsPackaged ? new StartupTaskService() : new RegistryStartupService(Environment.ProcessPath!);
+    }
+
+    // =========================================================================
+    // RESUME AND NETWORK
+    // =========================================================================
+
+    // PowerManager (WinAppSDK) rather than SystemEvents: it's a CsWinRT projection the app already ships, so it's
+    // AOT-clean and needs no extra package or hidden window thread. Raised on a background thread
+    private void OnSystemSuspendStatusChanged(object? sender, object e)
+    {
+        if (PowerManager.SystemSuspendStatus is not (SystemSuspendStatus.AutoResume or SystemSuspendStatus.ManualResume))
+        {
+            return;
+        }
+
+        RunOnUi("resume", c => c.NotifyResumedAsync());
+    }
+
+    // Raised on a background thread for any change; only a move from no internet to internet reconnects
+    private void OnNetworkStatusChanged(object? sender)
+    {
+        bool hasInternet = HasInternet();
+        bool cameBack    = hasInternet && !_hasInternet;
+        _hasInternet     = hasInternet;
+        if (!cameBack)
+        {
+            return;
+        }
+
+        RunOnUi("network", c => c.NotifyNetworkAvailableAsync());
+    }
+
+    private static bool HasInternet() =>
+        NetworkInformation.GetInternetConnectionProfile()?.GetNetworkConnectivityLevel() == NetworkConnectivityLevel.InternetAccess;
+
+    // Marshals a controller call to the UI thread and logs its failure, so no task goes unobserved
+    private void RunOnUi(string reason, Func<ConnectionController, Task> call) =>
+        _dispatcher?.TryEnqueue(async () =>
+        {
+            if (_quitting || _connection is null)
+            {
+                return;
+            }
+
+            AppLog.Reconnecting(_logger, reason);
+            try
+            {
+                await call(_connection);
+            }
+#pragma warning disable CA1031 // A failed reconnect is retried by the client; it must not take the tray down
+            catch (Exception ex)
+#pragma warning restore CA1031
+            {
+                AppLog.ReconnectFailed(_logger, reason, ex);
+            }
+        });
+
     private static Guid SelectTrayGuid()
     {
 #if EnableTestHooks
@@ -229,7 +420,7 @@ public partial class App : Application, IDisposable
             _trayMenu = new TrayMenuWindow();
             _trayMenu.ApplyTheme(_settings?.Theme ?? AppTheme.System);
             _trayMenu.OpenRequested     += (_, _) => ShowMainWindowRequested?.Invoke(this, "menu");
-            _trayMenu.SettingsRequested += (_, _) => AppLog.SettingsRequested(_logger);
+            _trayMenu.SettingsRequested += (_, _) => ShowSettingsWindow();
             _trayMenu.QuitRequested     += (_, _) => Quit();
 
             // Memory Trim: once the menu is gone, hand what it used back to Windows
@@ -261,9 +452,11 @@ public partial class App : Application, IDisposable
         _quitWait?.Unregister(null);
         _showWait?.Unregister(null);
         _quitRequest?.Dispose();
+        PowerManager.SystemSuspendStatusChanged -= OnSystemSuspendStatusChanged;
+        NetworkInformation.NetworkStatusChanged -= OnNetworkStatusChanged;
         _trayIcon?.Dispose();
         _trayMenu?.Close();
-        _pairingWindow?.Close();
+        CloseWindows();
         _logProvider?.Dispose();
         GC.SuppressFinalize(this);
     }
@@ -278,7 +471,7 @@ public partial class App : Application, IDisposable
 
         AppLog.Quit(_logger);
         _quitting = true;
-        _pairingWindow?.Close();
+        CloseWindows();
 
         // Let the client close its long poll and flush a save (while the log is still open), but never hang the quit on it
         try

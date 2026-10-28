@@ -40,4 +40,10 @@ internal static partial class AppLog
 
     [LoggerMessage(EventId = 911, Level = LogLevel.Information, Message = "Connection state: {State}")]
     public static partial void ConnectionStateChanged(ILogger logger, ConnectionState state);
+
+    [LoggerMessage(EventId = 912, Level = LogLevel.Information, Message = "Reconnecting ({Reason})")]
+    public static partial void Reconnecting(ILogger logger, string reason);
+
+    [LoggerMessage(EventId = 913, Level = LogLevel.Warning, Message = "Reconnect failed ({Reason})")]
+    public static partial void ReconnectFailed(ILogger logger, string reason, Exception ex);
 }
