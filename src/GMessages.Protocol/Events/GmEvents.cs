@@ -114,3 +114,16 @@ public sealed record GaiaLoggedOut;
 /// </summary>
 /// <remarks>Ported from <c>events.AuthTokenRefreshed</c>.</remarks>
 public sealed record AuthTokenRefreshed;
+
+/// <summary>
+/// Pairing with the phone finished.
+/// </summary>
+/// <remarks>Ported from <c>events.PairSuccessful</c>, which Go's <c>DoGaiaPairing</c> raises before reconnecting.</remarks>
+/// <param name="PhoneId">The phone ID: the phone's source ID, a slash, and its timestamp (or unknown int).</param>
+public sealed record PairSuccessful(string PhoneId);
+
+/// <summary>
+/// The startup skip count was still above zero when the update request went out, so it may not take effect.
+/// </summary>
+/// <remarks>Ported from <c>events.HackySetActiveMayFail</c>, raised by <c>postConnect</c>.</remarks>
+public sealed record HackySetActiveMayFail;

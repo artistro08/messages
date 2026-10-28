@@ -135,7 +135,7 @@ public class GaiaPairingTests
     }
 
     // A Valid Server Init From A Fresh Server Key
-    private static byte[] ServerInit(int verificationVersion, int keyDerivationVersion)
+    internal static byte[] ServerInit(int verificationVersion, int keyDerivationVersion)
     {
         using var server = System.Security.Cryptography.ECDiffieHellman.Create(System.Security.Cryptography.ECCurve.NamedCurves.nistP256);
         var q            = server.ExportParameters(false).Q;

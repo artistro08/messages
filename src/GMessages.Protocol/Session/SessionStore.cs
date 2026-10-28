@@ -142,6 +142,18 @@ public sealed partial class SessionStore(string filePath, ILogger? logger = null
         }
     }
 
+    /// <summary>
+    /// Deletes the session file and any leftover temp file.
+    /// </summary>
+    /// <remarks>Used when unpairing. A missing file is not an error.</remarks>
+    /// <exception cref="IOException">The file is in use.</exception>
+    /// <exception cref="UnauthorizedAccessException">The file cannot be deleted.</exception>
+    public void Delete()
+    {
+        File.Delete(filePath + ".tmp");
+        File.Delete(filePath);
+    }
+
     [LoggerMessage(Level = LogLevel.Warning, Message = "Session file could not be loaded ({Reason})")]
     private static partial void LogLoadFailed(ILogger logger, string reason);
 }

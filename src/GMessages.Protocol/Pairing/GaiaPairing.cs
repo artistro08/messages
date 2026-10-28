@@ -19,7 +19,7 @@ namespace GMessages.Protocol.Pairing;
 /// <see href="https://github.com/mautrix/gmessages/blob/ba33f4875a491f5cb47db8a6baf42a8869f5f383/pkg/libgm/pair_google.go">pair_google.go</see>.
 /// The phone's answers arrive as data events on a long poll that is not logged in, so <see cref="StartAsync"/> starts
 /// one and waits for it to connect before sending the client init. That long poll keeps running after a successful
-/// start so the finish answer can arrive; the caller stops it with <see cref="LongPollLoop.Stop"/> (Go's
+/// start so the finish answer can arrive; the caller stops it with <see cref="StopLongPollAsync"/> (Go's
 /// <c>Reconnect</c> does the same) once pairing is over. Gaia events on the long poll are only logged by the
 /// dispatcher, as in Go; pairing needs nothing from them. Keys are never logged; device IDs and the emoji may be.
 /// </remarks>
@@ -39,6 +39,9 @@ public sealed partial class GaiaPairing(GaiaSignIn signIn, RpcSession rpc, LongP
 
     // 300 s In Microseconds (Go: (300 * time.Second).Microseconds())
     private const long PairingTtlMicros = 300_000_000;
+
+    // The Long Poll Started By A Successful StartAsync, Until StopLongPollAsync Takes It
+    private Task? _longPoll;
 
     // Longest Wait For A Best-Effort Cancel Request (C#-Only; Go Has No Limit)
     private static readonly TimeSpan CancelTimeout = TimeSpan.FromSeconds(10);
@@ -123,7 +126,9 @@ public sealed partial class GaiaPairing(GaiaSignIn signIn, RpcSession rpc, LongP
                 throw new InvalidOperationException("Long polling stopped before connecting.");
             }
 
-            return await HandshakeAsync(dest, devices.Count, ct).ConfigureAwait(false);
+            (string Emoji, PairingSession Session) started = await HandshakeAsync(dest, devices.Count, ct).ConfigureAwait(false);
+            _longPoll = long_poll;
+            return started;
         }
         catch
         {
@@ -180,6 +185,29 @@ public sealed partial class GaiaPairing(GaiaSignIn signIn, RpcSession rpc, LongP
 
         ulong phone_number = session.DestRegDevice.UnknownTs != 0 ? session.DestRegDevice.UnknownTs : session.DestRegDevice.UnknownInt;
         return $"{auth.Mobile?.SourceID}/{phone_number}";
+    }
+
+    /// <summary>
+    /// Stops the long poll a successful <see cref="StartAsync"/> left running, and waits for it to end.
+    /// </summary>
+    /// <remarks>
+    /// Go's <c>DoGaiaPairing</c> leaves this to <c>Reconnect</c>, which closes the long poll without waiting. Waiting
+    /// here means a late error from that long poll is observed by the caller instead of being lost. Does nothing when
+    /// no pairing long poll is running.
+    /// </remarks>
+    /// <returns>A task that completes when the long poll has ended.</returns>
+    /// <exception cref="GmRequestException">The long poll had ended on refused credentials (401/403).</exception>
+    /// <exception cref="InvalidOperationException">The long poll had ended on a fatal token refresh error.</exception>
+    public async Task StopLongPollAsync()
+    {
+        Task? running = Interlocked.Exchange(ref _longPoll, null);
+        if (running is null)
+        {
+            return;
+        }
+
+        longPoll.Stop();
+        await running.ConfigureAwait(false);
     }
 
     /// <summary>

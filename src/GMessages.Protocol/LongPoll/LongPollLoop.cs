@@ -57,11 +57,21 @@ public sealed partial class LongPollLoop(
     private CancellationTokenSource? _connectionCts;
     private bool _reconnectRequested;
     private DittoPinger? _pinger;
+    private int _connected;
 
     /// <summary>
     /// Raised for every event from the loop, the dispatcher, the token refresher and the pinger.
     /// </summary>
     public event Action<object>? EventRaised;
+
+    /// <summary>
+    /// Gets whether a long-poll stream is open right now.
+    /// </summary>
+    /// <remarks>
+    /// Ported from Go's <c>longPollingConn</c> check in <c>IsConnected</c>: true from the moment a stream opens until
+    /// it ends or <see cref="Stop"/> is called, so it is briefly false while the loop reconnects, as in Go.
+    /// </remarks>
+    public bool IsConnected => Volatile.Read(ref _connected) != 0;
 
     /// <summary>
     /// Gets the pinger of the current run, or null when not running logged in.
@@ -150,6 +160,7 @@ public sealed partial class LongPollLoop(
     /// <remarks>Ported from <c>closeLongPolling</c>.</remarks>
     public void Stop()
     {
+        Volatile.Write(ref _connected, 0);
         lock (_lock)
         {
             _stopCts?.Cancel();
@@ -300,6 +311,7 @@ public sealed partial class LongPollLoop(
                     }
 
                     LogOpened(log);
+                    Volatile.Write(ref _connected, 1);
                     if (loggedIn && disconnected_at is { } since && time.GetUtcNow() - since > GapCatchUp)
                     {
                         _ = _pinger!.RequestUpdatesAfterGapAsync("long polling was disconnected");
@@ -311,7 +323,14 @@ public sealed partial class LongPollLoop(
                         first_connect = null;
                     }
 
-                    await ReadAsync(res!, attempt_cts.Token, stop).ConfigureAwait(false);
+                    try
+                    {
+                        await ReadAsync(res!, attempt_cts.Token, stop).ConfigureAwait(false);
+                    }
+                    finally
+                    {
+                        Volatile.Write(ref _connected, 0);
+                    }
                 }
 
                 disconnected_at = time.GetUtcNow();
