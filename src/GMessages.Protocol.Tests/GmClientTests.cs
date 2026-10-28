@@ -651,4 +651,93 @@ public class GmClientTests
         Assert.AreEqual(1, rig.Requests("/ReceiveMessages").Length, "no reconnect");
         Assert.IsFalse(File.Exists(rig.SessionPath));
     }
+
+    /// <summary>
+    /// The pairing long poll dying during the emoji wait (its reconnect gets a 401) fails PairAsync at once with
+    /// that 401, instead of waiting forever for an answer that can no longer arrive.
+    /// </summary>
+    [TestMethod]
+    public async Task Pair_LongPollDiesDuringEmojiWait_FailsWithItsError()
+    {
+        AuthData auth       = AuthDataGoldenTests.BuildGolden();
+        auth.DestPhoneId    = 0;
+        await using Rig rig = CreateRig(auth);
+        var first_stream    = new OpenStream("[["u8.ToArray());
+        AnswerUntilEmoji(rig, receive: n => n == 1
+            ? new HttpResponseMessage(HttpStatusCode.OK) { Content = new StreamContent(first_stream) }
+            : FakeHttpHandler.Response(HttpStatusCode.Unauthorized));
+
+        Task pair = rig.Client.PairAsync(_ => { }, CancellationToken.None);
+        WaitUntil(() => rig.Requests("/SendMessage").Any(r => ActionOf(r) == ActionType.CreateGaiaPairingClientFinished), "waiting for the tap");
+
+        first_stream.End();
+
+        var ex = await Assert.ThrowsExactlyAsync<GmRequestException>(() => pair.WaitAsync(HangGuard));
+        Assert.AreEqual(401, ex.StatusCode);
+        AssertPairingCleanedUp(rig);
+    }
+
+    /// <summary>
+    /// With no answer for 300 seconds (the pairing messages' TTL), PairAsync fails with a timeout and sends a cancel.
+    /// </summary>
+    [TestMethod]
+    public async Task Pair_NoAnswerIn300s_FailsWithTimeout()
+    {
+        AuthData auth       = AuthDataGoldenTests.BuildGolden();
+        auth.DestPhoneId    = 0;
+        await using Rig rig = CreateRig(auth);
+        AnswerUntilEmoji(rig);
+
+        Task pair = rig.Client.PairAsync(_ => { }, CancellationToken.None);
+        WaitUntil(() => rig.Time.CountTimers(GaiaPairing.PairingTtl) > 0, "300 s ceiling");
+        rig.Time.Advance(GaiaPairing.PairingTtl);
+
+        var ex = await Assert.ThrowsExactlyAsync<PairingException>(() => pair.WaitAsync(HangGuard));
+        Assert.AreEqual(PairingFailure.Timeout, ex.Failure);
+        AssertPairingCleanedUp(rig);
+    }
+
+    // Config, Sign-In And The Init Answer; The Finish Gets No Answer (The User Never Taps)
+    private static void AnswerUntilEmoji(Rig rig, Func<int, HttpResponseMessage>? receive = null)
+    {
+        JsonElement sign_in = Golden.Load("signin");
+        byte[] config_body  = Encoding.UTF8.GetBytes(sign_in.GetProperty("config").GetProperty("bodyText").GetString()!);
+        byte[] sign_in_body = Encoding.UTF8.GetBytes(sign_in.GetProperty("response").GetProperty("bodyText").GetString()!);
+        byte[] server_init  = GaiaPairingTests.ServerInit(1, 1);
+        int receives        = 0;
+        rig.Respond = req =>
+        {
+            if (req.Url.EndsWith("/web/config", StringComparison.Ordinal))
+            {
+                return FakeHttpHandler.Response(HttpStatusCode.OK, PbLiteMime, config_body);
+            }
+
+            if (req.Url.EndsWith("/SignInGaia", StringComparison.Ordinal))
+            {
+                return FakeHttpHandler.Response(HttpStatusCode.OK, PbLiteMime, sign_in_body);
+            }
+
+            if (req.Url.EndsWith("/ReceiveMessages", StringComparison.Ordinal) && receive is not null)
+            {
+                return receive(Interlocked.Increment(ref receives));
+            }
+
+            if (req.Url.EndsWith("/SendMessage", StringComparison.Ordinal) && ActionOf(req) == ActionType.CreateGaiaPairingClientInit)
+            {
+                GaiaPairingTests.Deliver(rig.Client.Rpc, req, server_init);
+            }
+
+            return null;
+        };
+    }
+
+    // No Pairing Left Behind: Cleared, Not Connected, Nothing Saved, The Attempt Canceled On The Phone
+    private static void AssertPairingCleanedUp(Rig rig)
+    {
+        Assert.IsFalse(rig.Client.IsLoggedIn, "pairing cleared");
+        Assert.IsFalse(rig.Client.IsConnected, "pairing poll stopped");
+        Assert.IsFalse(File.Exists(rig.SessionPath), "nothing saved");
+        Assert.AreEqual(0, rig.Client.SaveCount);
+        Assert.IsTrue(rig.Requests("/SendMessage").Any(r => ActionOf(r) == ActionType.CancelGaiaPairing), "cancel sent");
+    }
 }

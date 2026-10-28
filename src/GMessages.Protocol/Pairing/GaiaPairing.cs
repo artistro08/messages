@@ -40,6 +40,9 @@ public sealed partial class GaiaPairing(GaiaSignIn signIn, RpcSession rpc, LongP
     // 300 s In Microseconds (Go: (300 * time.Second).Microseconds())
     private const long PairingTtlMicros = 300_000_000;
 
+    /// <summary>The longest wait for the finish answer: the pairing messages' 300 second TTL (C#-only ceiling).</summary>
+    public static readonly TimeSpan PairingTtl = TimeSpan.FromMicroseconds(PairingTtlMicros);
+
     // The Long Poll Started By A Successful StartAsync, Until StopLongPollAsync Takes It
     private Task? _longPoll;
 
@@ -143,17 +146,21 @@ public sealed partial class GaiaPairing(GaiaSignIn signIn, RpcSession rpc, LongP
     /// Sends the client finished message, waits for the user to tap an emoji, and stores the new keys.
     /// </summary>
     /// <remarks>
-    /// Ported from <c>FinishGaiaPairing</c>. There is no timeout of its own: the phone answers once the user taps.
-    /// On success the request keys, <see cref="AuthData.PairingId"/> and <see cref="AuthData.DestPhoneId"/> are set.
-    /// If <paramref name="ct"/> is canceled, a cancel request is sent. Go sends it with the already-canceled context,
-    /// so it never leaves; this port sends it without one, which is what Go meant.
+    /// Ported from <c>FinishGaiaPairing</c>. On success the request keys, <see cref="AuthData.PairingId"/> and
+    /// <see cref="AuthData.DestPhoneId"/> are set. If <paramref name="ct"/> is canceled, a cancel request is sent. Go
+    /// sends it with the already-canceled context, so it never leaves; this port sends it without one, which is what
+    /// Go meant. Unlike Go, which waits as long as its context allows, the wait has two more ends, both C#-only: the
+    /// long poll from <see cref="StartAsync"/> ending (the answer could never arrive; its error is thrown), and the
+    /// 300 second TTL of the finish message passing (the server drops the request then; a
+    /// <see cref="PairingFailure.Timeout"/>). Both also send the cancel request.
     /// </remarks>
     /// <param name="session">The session from <see cref="StartAsync"/>.</param>
     /// <param name="ct">Cancels the wait.</param>
     /// <returns>The phone ID: the phone's source ID, a slash, and its timestamp (or its unknown int when 0).</returns>
-    /// <exception cref="PairingException">The phone reported an error, such as the wrong emoji.</exception>
+    /// <exception cref="PairingException">The phone reported an error, such as the wrong emoji; no answer came within 300 seconds; or the long poll stopped while waiting.</exception>
     /// <exception cref="InvalidDataException">The answer or the key derivation version is invalid.</exception>
-    /// <exception cref="GmRequestException">The server refused the request.</exception>
+    /// <exception cref="GmRequestException">The server refused the request, including the long poll's credentials (401/403) while waiting.</exception>
+    /// <exception cref="InvalidOperationException">The long poll's token refresh failed fatally while waiting.</exception>
     /// <exception cref="ConnectionClosedException">The connection closed while waiting.</exception>
     /// <exception cref="OperationCanceledException"><paramref name="ct"/> was canceled.</exception>
     public async Task<string> FinishAsync(PairingSession session, CancellationToken ct)
@@ -161,15 +168,38 @@ public sealed partial class GaiaPairing(GaiaSignIn signIn, RpcSession rpc, LongP
         ArgumentNullException.ThrowIfNull(session);
 
         GaiaPairingResponseContainer response;
-        try
+        using (var ttl = new CancellationTokenSource(PairingTtl, time))
+        using (var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, ttl.Token))
         {
-            response = await SendGaiaPairingMessageAsync(session, ActionType.CreateGaiaPairingClientFinished, session.FinishPayload, ct).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
-        {
-            LogCancelAfterCanceled(log);
-            await TryCancelAsync(session).ConfigureAwait(false);
-            throw;
+            // Wait For The Answer, Unless The Long Poll It Arrives On Ends First
+            Task<GaiaPairingResponseContainer> send = SendGaiaPairingMessageAsync(session, ActionType.CreateGaiaPairingClientFinished, session.FinishPayload, linked.Token);
+            Task? poll                              = Volatile.Read(ref _longPoll);
+            if (poll is not null && await Task.WhenAny(send, poll).ConfigureAwait(false) == poll)
+            {
+                await linked.CancelAsync().ConfigureAwait(false);
+                await ((Task)send).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+                _ = send.Exception;
+                LogLongPollEndedWhileWaiting(log);
+                await TryCancelAsync(session).ConfigureAwait(false);
+                await poll.ConfigureAwait(false);
+                throw new PairingException(PairingFailure.Unknown, "long polling stopped while waiting for the phone");
+            }
+
+            try
+            {
+                response = await send.ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                LogCancelAfterCanceled(log);
+                await TryCancelAsync(session).ConfigureAwait(false);
+                throw;
+            }
+            catch (OperationCanceledException) when (ttl.IsCancellationRequested)
+            {
+                await TryCancelAsync(session).ConfigureAwait(false);
+                throw new PairingException(PairingFailure.Timeout, "pairing timed out (no answer within 300 seconds)");
+            }
         }
 
         if (response.FinishErrorType != 0)
@@ -377,6 +407,9 @@ public sealed partial class GaiaPairing(GaiaSignIn signIn, RpcSession rpc, LongP
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Sending gaia pairing cancel after the wait was canceled")]
     private static partial void LogCancelAfterCanceled(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Long polling stopped while waiting for the pairing answer")]
+    private static partial void LogLongPollEndedWhileWaiting(ILogger logger);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to send gaia pairing cancel request")]
     private static partial void LogCancelFailed(ILogger logger, Exception exception);
