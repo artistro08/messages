@@ -1,12 +1,16 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <IsPackable>false</IsPackable>
+    <!-- LibraryImport (DPI Awareness Setup) Generates Unsafe Code -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- Test Names Use Underscores -->
     <NoWarn>$(NoWarn);CA1707</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\GMessages.Protocol\GMessages.Protocol.csproj" />
+    <!-- AppInfo.DisplayName: Window Titles And The Tray Icon Name -->
+    <ProjectReference Include="..\GMessages.Presentation\GMessages.Presentation.csproj" />
   </ItemGroup>
 
   <ItemGroup>
