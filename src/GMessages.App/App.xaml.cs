@@ -110,6 +110,9 @@ public partial class App : Application, IDisposable
             AppLog.TestEndpoint(_logger, baseUrl, paths.DataFolder);
         }
 
+        // Sign-In Profiles A Quit Or Crash Mid-Sign-In Left Behind (They Can Hold A Live Google Session)
+        PairingWindow.DeleteLeftoverProfiles(_logger);
+
         // Memory Trim
         var dispatcher = DispatcherQueue.GetForCurrentThread();
         _dispatcher    = dispatcher;

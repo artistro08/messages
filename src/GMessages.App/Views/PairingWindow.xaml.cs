@@ -17,8 +17,9 @@ namespace GMessages.App.Views;
 /// <remarks>
 /// <para>
 /// <b>Sign-in.</b> Each attempt gets a fresh WebView2 with its own profile folder
-/// (<c>%TEMP%\{DisplayName}-signin-{guid}</c>) and the desktop Chrome user agent (<see cref="SignIn.ChromeUserAgent"/>),
-/// set before navigating to <see cref="GmEndpoints.Authentication"/>.
+/// (<c>%TEMP%\{InstanceKey}-signin-{guid}</c>, so a test copy and a real copy never share names) and the desktop
+/// Chrome user agent (<see cref="SignIn.ChromeUserAgent"/>), set before navigating to
+/// <see cref="GmEndpoints.Authentication"/>. Folders a quit or crash left behind are deleted at the next launch.
 /// </para>
 /// <para>
 /// <b>Cookie capture.</b> After every navigation the wanted cookies are read for the authentication page's origin
@@ -98,7 +99,7 @@ public sealed partial class PairingWindow : Window
     private async Task StartSignInAsync()
     {
         _captured      = false;
-        _profileFolder = Path.Combine(Path.GetTempPath(), $"{AppInfo.DisplayName}-signin-{Guid.NewGuid():N}");
+        _profileFolder = Path.Combine(Path.GetTempPath(), $"{ProfilePrefix}{Guid.NewGuid():N}");
 
         var web = new WebView2();
         AutomationProperties.SetAutomationId(web, "Pairing.SignIn");
@@ -232,8 +233,40 @@ public sealed partial class PairingWindow : Window
         }
     }
 
+    /// <summary>
+    /// Deletes sign-in profile folders an earlier run left behind (a quit or crash while signing in ends the process
+    /// before its delete finishes), in the background.
+    /// </summary>
+    /// <remarks>
+    /// Call at launch, before any pairing window opens. The single-instance check means no other running copy uses
+    /// these names, and the folders are listed now, so a sign-in started later is never touched.
+    /// </remarks>
+    /// <param name="log">Writes a warning for a folder that can't be deleted (never its contents).</param>
+    public static void DeleteLeftoverProfiles(ILogger log)
+    {
+        string[] leftovers;
+        try
+        {
+            leftovers = Directory.GetDirectories(Path.GetTempPath(), $"{ProfilePrefix}*");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return;
+        }
+
+        foreach (string folder in leftovers)
+        {
+            _ = Task.Run(() => DeleteProfileAsync(folder, log));
+        }
+    }
+
+    // Per Instance Key, So The .Test Copy Under UI Tests And A Real Copy Never Clean Up Each Other's Profiles
+    private static string ProfilePrefix => $"{Program.InstanceKey}-signin-";
+
     // The Browser Process May Hold Files Briefly After Close, So Retry (As The Spike Does)
-    private async Task DeleteProfileAsync(string folder)
+    private Task DeleteProfileAsync(string folder) => DeleteProfileAsync(folder, _log);
+
+    private static async Task DeleteProfileAsync(string folder, ILogger log)
     {
         for (int attempt = 0; attempt < 10 && Directory.Exists(folder); attempt++)
         {
@@ -249,7 +282,7 @@ public sealed partial class PairingWindow : Window
 
         if (Directory.Exists(folder))
         {
-            AppLog.ProfileNotDeleted(_log, folder);
+            AppLog.ProfileNotDeleted(log, folder);
         }
     }
 
