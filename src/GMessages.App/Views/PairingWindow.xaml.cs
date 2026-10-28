@@ -126,12 +126,15 @@ public sealed partial class PairingWindow : Window
         catch (Exception ex)
 #pragma warning restore CA1031
         {
+            // Closing During Start-Up Is Expected; An Older Attempt Must Not Tear Down A Newer One
+            if (_closed || _webView != web)
+            {
+                return;
+            }
+
             AppLog.SignInStartFailed(_log, ex.GetType().Name);
             CloseSignIn();
-            if (!_closed)
-            {
-                ViewModel.SignInFailed();
-            }
+            ViewModel.SignInFailed();
         }
     }
 
@@ -182,6 +185,12 @@ public sealed partial class PairingWindow : Window
 #pragma warning restore CA1031
         {
             AppLog.CookieReadFailed(_log, ex.GetType().Name);
+
+            // The Forced Read Failed: Try Again Later, Since No Navigation May Come To Retry It
+            if (force && !_captured && _webView == web)
+            {
+                _sessionCookieTimer.Start();
+            }
         }
     }
 
@@ -277,6 +286,7 @@ public sealed partial class PairingWindow : Window
     private void OnClosed(object sender, WindowEventArgs args)
     {
         _closed = true;
+        Bindings.StopTracking();
         ViewModel.PropertyChanged -= OnViewModelChanged;
         ViewModel.Cancel();
         CloseSignIn();

@@ -27,13 +27,27 @@
             Visibility="{x:Bind ViewModel.IsSigningIn, Mode=OneWay}" />
 
         <!-- Waiting For Phone -->
-        <ProgressRing
+        <StackPanel
             Grid.Row="1"
-            Width="48"
-            Height="48"
-            AutomationProperties.AutomationId="Pairing.Waiting"
-            IsActive="{x:Bind ViewModel.IsWaitingForPhone, Mode=OneWay}"
-            Visibility="{x:Bind ViewModel.IsWaitingForPhone, Mode=OneWay}" />
+            MaxWidth="440"
+            Padding="16"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center"
+            Spacing="16"
+            Visibility="{x:Bind ViewModel.IsWaitingForPhone, Mode=OneWay}">
+            <ProgressRing
+                Width="48"
+                Height="48"
+                AutomationProperties.AutomationId="Pairing.Waiting"
+                IsActive="{x:Bind ViewModel.IsWaitingForPhone, Mode=OneWay}" />
+            <TextBlock
+                HorizontalAlignment="Center"
+                AutomationProperties.AutomationId="Pairing.WaitingText"
+                Text="Check your phone. If nothing shows up, open Google Messages on your phone."
+                TextAlignment="Center"
+                TextWrapping="Wrap" />
+        </StackPanel>
+        <!-- /Waiting For Phone -->
 
         <!-- Emoji -->
         <StackPanel
