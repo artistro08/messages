@@ -8,6 +8,9 @@ import (
 	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/sha256"
+	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
 	"io"
@@ -149,6 +152,7 @@ func TestExportGolden(t *testing.T) {
 	checkGoldenHelpers(t)
 	exportSmoke(t, out)
 	exportProtoBinary(t, out)
+	exportCrypto(t, out)
 }
 
 // checkGoldenHelpers sanity-checks the client and capture transport; writes no file.
@@ -196,5 +200,94 @@ func exportProtoBinary(t *testing.T, out string) {
 	writeGolden(t, out, "proto", map[string]any{
 		"configVersionHex": hex.EncodeToString(version),
 		"deviceHex":        hex.EncodeToString(device),
+	})
+}
+
+// exportCrypto writes crypto.json: AES-CTR ciphertexts, byteHash, HKDF and refresh-key (JWK) vectors.
+// The JWK uses the fixed scalar 0x01..0x20 so the file is stable across regenerations; only the signature is random.
+func exportCrypto(t *testing.T, out string) {
+	// Aes Ctr (fixed keys, patterned plaintexts; the IV is random and sits inside each output)
+	helper := &crypto.AESCTRHelper{AESKey: goldenSeq(0x00, 32), HMACKey: goldenSeq(0x20, 32)}
+	var aesCases []map[string]any
+	for _, n := range []int{0, 1, 16, 17, 40, 1000} {
+		plain := make([]byte, n)
+		for i := range plain {
+			plain[i] = byte(i*7 + 3)
+		}
+		enc, err := helper.Encrypt(plain)
+		if err != nil {
+			t.Fatalf("encrypt %d: %v", n, err)
+		}
+		aesCases = append(aesCases, map[string]any{"plaintextHex": hex.EncodeToString(plain), "encryptedHex": hex.EncodeToString(enc)})
+	}
+
+	// Byte Hash
+	var hashCases []map[string]any
+	for _, in := range [][]byte{{}, {1, 2, 3}, {0xff}, encryptionKeyInfo, goldenSeq(0x80, 64)} {
+		hashCases = append(hashCases, map[string]any{"inputHex": hex.EncodeToString(in), "result": byteHash(in)})
+	}
+
+	// Hkdf
+	key32 := goldenSeq(0x40, 32)
+	var hkdfCases []map[string]any
+	for _, c := range []struct{ key, salt, info []byte }{
+		{[]byte("k"), []byte("s"), []byte("i")},
+		{[]byte("k"), []byte{}, []byte("i")},
+		{key32, encryptionKeyInfo, []byte("client")},
+		{key32, encryptionKeyInfo, []byte("server")},
+	} {
+		hkdfCases = append(hkdfCases, map[string]any{
+			"keyHex":    hex.EncodeToString(c.key),
+			"saltHex":   hex.EncodeToString(c.salt),
+			"infoHex":   hex.EncodeToString(c.info),
+			"resultHex": hex.EncodeToString(doHKDF(c.key, c.salt, c.info)),
+		})
+	}
+
+	// Jwk (fixed scalar 0x01..0x20)
+	priv, err := ecdsa.ParseRawPrivateKey(elliptic.P256(), goldenSeq(1, 32))
+	if err != nil {
+		t.Fatalf("jwk key: %v", err)
+	}
+	pubBytes, err := priv.PublicKey.Bytes()
+	if err != nil {
+		t.Fatalf("jwk public: %v", err)
+	}
+	jwk := &crypto.JWK{KeyType: "EC", Curve: "P-256", D: goldenSeq(1, 32), X: pubBytes[1:33], Y: pubBytes[33:]}
+	pub, err := jwk.GetPublicKey()
+	if err != nil {
+		t.Fatalf("jwk get public: %v", err)
+	}
+	spki, err := x509.MarshalPKIXPublicKey(pub)
+	if err != nil {
+		t.Fatalf("spki: %v", err)
+	}
+	signed := []byte("req-1:1700000000000000")
+	digest := sha256.Sum256(signed)
+	signing, err := jwk.GetPrivateKey()
+	if err != nil {
+		t.Fatalf("jwk get private: %v", err)
+	}
+	sig, err := ecdsa.SignASN1(rand.Reader, signing, digest[:])
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+
+	writeGolden(t, out, "crypto", map[string]any{
+		"aesctr": map[string]any{
+			"aesKeyHex":  hex.EncodeToString(helper.AESKey),
+			"hmacKeyHex": hex.EncodeToString(helper.HMACKey),
+			"cases":      aesCases,
+		},
+		"byteHash": hashCases,
+		"hkdf":     hkdfCases,
+		"jwk": map[string]any{
+			"dHex":         hex.EncodeToString(jwk.D),
+			"xHex":         hex.EncodeToString(jwk.X),
+			"yHex":         hex.EncodeToString(jwk.Y),
+			"spkiHex":      hex.EncodeToString(spki),
+			"signedText":   string(signed),
+			"signatureHex": hex.EncodeToString(sig),
+		},
 	})
 }
