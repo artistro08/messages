@@ -194,6 +194,127 @@ public class LongPollStreamReaderTests
         Assert.DoesNotContain("secret-text", logger.Messages[0]);
     }
 
+    // Hands out one queued chunk per release, so a test controls when each read completes
+    private sealed class GatedStream(IEnumerable<byte[]> chunks) : MemoryStream
+    {
+        private readonly Queue<byte[]> _chunks = new(chunks);
+
+        public SemaphoreSlim Gate { get; } = new(0);
+
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            await Gate.WaitAsync(cancellationToken);
+            if (_chunks.Count == 0)
+            {
+                return 0;
+            }
+
+            byte[] chunk = _chunks.Dequeue();
+            chunk.CopyTo(buffer);
+            return chunk.Length;
+        }
+    }
+
+    /// <summary>
+    /// C#-only: the idle timer restarts on every read, so slow reads that each beat the timeout never time out.
+    /// </summary>
+    [TestMethod]
+    public async Task IdleTimer_RestartsOnEveryRead()
+    {
+        var time      = new SignalingTimeProvider();
+        TimeSpan idle = TimeSpan.FromSeconds(30);
+        string body   = "[[[null,null,[]],[null,null,[]]]]";
+        var stream    = new GatedStream(Pieces(body, (body.Length + 3) / 4));
+        var result    = new List<LongPollingPayload>();
+
+        Task read = Task.Run(async () =>
+        {
+            await foreach (LongPollingPayload p in LongPollStreamReader.ReadAsync(stream, idle, time, CancellationToken.None))
+            {
+                result.Add(p);
+            }
+        });
+
+        // Four Reads, 20 s Each: 80 s Total, Over The 30 s Timeout
+        for (int i = 0; i < 4; i++)
+        {
+            Assert.IsTrue(await time.TimerCreated.WaitAsync(TimeSpan.FromSeconds(10)), "idle timer was not created");
+            time.Advance(TimeSpan.FromSeconds(20));
+            stream.Gate.Release();
+        }
+
+        await read;
+        Assert.HasCount(2, result);
+    }
+
+    /// <summary>
+    /// C#-only: a stray byte between payloads is rejected.
+    /// </summary>
+    [TestMethod]
+    public async Task JunkBetweenPayloads_Throws()
+    {
+        await Assert.ThrowsExactlyAsync<InvalidDataException>(
+            () => ReadAllAsync(new ChunkedStream([Encoding.UTF8.GetBytes("[[[null,null,[]]x[null,null,[]]]]")])));
+    }
+
+    /// <summary>
+    /// C#-only: whitespace between payloads is skipped and a trailing override object inside a payload wins.
+    /// </summary>
+    [TestMethod]
+    public async Task WhitespaceBetweenPayloads_AndTrailingObject_Decode()
+    {
+        string body = "[[ \r\n[null,null,null,[2],{\"4\":[7]}] \n ,\n [null,null,[]] \n]]";
+
+        List<LongPollingPayload> payloads = await ReadAllAsync(new ChunkedStream(Pieces(body, 2)));
+
+        Assert.HasCount(2, payloads);
+        Assert.AreEqual(7, payloads[0].Ack.Count);
+        Assert.IsNotNull(payloads[1].Heartbeat);
+    }
+
+    /// <summary>
+    /// C#-only: one payload past the cap throws; the cap is small here so the test stays light.
+    /// </summary>
+    [TestMethod]
+    public async Task OversizedPayload_Throws()
+    {
+        string body = "[[[null,[\"" + new string('x', 200) + "\"]]]]";
+        var stream  = new ChunkedStream(Pieces(body, 16));
+
+        await Assert.ThrowsExactlyAsync<InvalidDataException>(async () =>
+        {
+            await foreach (LongPollingPayload _ in LongPollStreamReader.ReadWithCapAsync(stream, TimeSpan.FromMinutes(1), TimeProvider.System, null, 64, CancellationToken.None))
+            {
+            }
+        });
+    }
+
+    /// <summary>
+    /// C#-only: ending mid-payload logs the dropped byte count (length only) and yields nothing.
+    /// </summary>
+    [TestMethod]
+    public async Task EofMidPayload_LogsDroppedLength()
+    {
+        var logger = new CollectingLogger();
+
+        List<LongPollingPayload> payloads = await ReadAllAsync(new ChunkedStream([Encoding.UTF8.GetBytes("[[[null,null,[]")]), logger);
+
+        Assert.IsEmpty(payloads);
+        Assert.HasCount(1, logger.Messages);
+        Assert.Contains("13", logger.Messages[0]);
+    }
+
+    /// <summary>
+    /// C#-only: a zero or negative idle timeout is rejected up front; infinite is allowed.
+    /// </summary>
+    [TestMethod]
+    public void IdleTimeout_MustBePositiveOrInfinite()
+    {
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => LongPollStreamReader.ReadAsync(new MemoryStream(), TimeSpan.Zero, TimeProvider.System, CancellationToken.None));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => LongPollStreamReader.ReadAsync(new MemoryStream(), TimeSpan.FromSeconds(-1), TimeProvider.System, CancellationToken.None));
+        Assert.IsNotNull(LongPollStreamReader.ReadAsync(new MemoryStream(), Timeout.InfiniteTimeSpan, TimeProvider.System, CancellationToken.None));
+    }
+
     /// <summary>
     /// C#-only: no bytes for the idle timeout throws <see cref="TimeoutException"/>; caller cancel stays a cancel.
     /// </summary>

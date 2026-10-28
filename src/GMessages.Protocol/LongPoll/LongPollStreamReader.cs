@@ -23,6 +23,9 @@ public static partial class LongPollStreamReader
     private const int InitialBufferSize = 8 * 1024;
     private const int ShrinkAboveSize   = 1024 * 1024;
 
+    // ponytail: fixed 32 MB cap on one in-progress payload (real ones are KBs); make it a setting if a legit payload ever exceeds it.
+    private const int MaxPayloadBytes = 32 * 1024 * 1024;
+
     /// <summary>
     /// Reads payloads from the response body until the end marker or end of stream.
     /// </summary>
@@ -38,7 +41,8 @@ public static partial class LongPollStreamReader
     /// <param name="logger">Where skipped payloads are logged; null logs nothing.</param>
     /// <returns>The decoded payloads in arrival order.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="body"/> or <paramref name="time"/> is null.</exception>
-    /// <exception cref="InvalidDataException">The body does not start with <c>[[</c> or has stray bytes between payloads.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="idleTimeout"/> is zero or negative (and not <see cref="Timeout.InfiniteTimeSpan"/>).</exception>
+    /// <exception cref="InvalidDataException">The body does not start with <c>[[</c>, has stray bytes between payloads, or one payload grows past 32 MB.</exception>
     /// <exception cref="TimeoutException">No bytes arrived within <paramref name="idleTimeout"/>.</exception>
     /// <exception cref="OperationCanceledException"><paramref name="ct"/> was cancelled.</exception>
     public static IAsyncEnumerable<LongPollingPayload> ReadAsync(
@@ -47,11 +51,25 @@ public static partial class LongPollStreamReader
         TimeProvider time,
         CancellationToken ct,
         ILogger? logger = null)
+        => ReadWithCapAsync(body, idleTimeout, time, logger, MaxPayloadBytes, ct);
+
+    // Same as the public method with a settable payload cap, so tests need not allocate 32 MB.
+    internal static IAsyncEnumerable<LongPollingPayload> ReadWithCapAsync(
+        Stream body,
+        TimeSpan idleTimeout,
+        TimeProvider time,
+        ILogger? logger,
+        int maxPayloadBytes,
+        CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(time);
+        if (idleTimeout <= TimeSpan.Zero && idleTimeout != Timeout.InfiniteTimeSpan)
+        {
+            throw new ArgumentOutOfRangeException(nameof(idleTimeout), "Idle timeout must be positive or infinite.");
+        }
 
-        return ReadCoreAsync(body, idleTimeout, time, logger ?? NullLogger.Instance, ct);
+        return ReadCoreAsync(body, idleTimeout, time, logger ?? NullLogger.Instance, maxPayloadBytes, ct);
     }
 
     private static async IAsyncEnumerable<LongPollingPayload> ReadCoreAsync(
@@ -59,6 +77,7 @@ public static partial class LongPollStreamReader
         TimeSpan idleTimeout,
         TimeProvider time,
         ILogger logger,
+        int maxPayloadBytes,
         [EnumeratorCancellation] CancellationToken ct)
     {
         // Scanner State (kept across reads)
@@ -154,6 +173,12 @@ public static partial class LongPollStreamReader
                 pos++;
             }
 
+            // Cap One In-Progress Payload
+            if (payload_start >= 0 && length - payload_start > maxPayloadBytes)
+            {
+                throw new InvalidDataException($"Long-poll payload is larger than {maxPayloadBytes} bytes.");
+            }
+
             // Compact Consumed Bytes
             int keep = payload_start >= 0 ? payload_start : pos;
             if (keep > 0)
@@ -194,7 +219,12 @@ public static partial class LongPollStreamReader
 
             if (read == 0)
             {
-                // Stream Ended
+                // Stream Ended (Log Any Half-Received Payload)
+                if (payload_start >= 0)
+                {
+                    LogDroppedPartial(logger, length - payload_start);
+                }
+
                 yield break;
             }
 
@@ -217,4 +247,7 @@ public static partial class LongPollStreamReader
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Skipped a long-poll payload that did not decode ({Length} bytes)")]
     private static partial void LogBadPayload(ILogger logger, int length);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Long-poll stream ended mid-payload; dropped {Length} bytes")]
+    private static partial void LogDroppedPartial(ILogger logger, int length);
 }
