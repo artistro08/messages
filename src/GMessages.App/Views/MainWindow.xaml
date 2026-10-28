@@ -9,8 +9,19 @@
     </Window.SystemBackdrop>
 
     <!-- Placeholder: Plan 3 replaces this with the conversations -->
-    <Grid x:Name="RootGrid">
+    <Grid x:Name="RootGrid" RowDefinitions="Auto,*">
+
+        <!-- Title Bar: the title is set from code; Plan 3 adds the menu button and profile picture here -->
+        <TitleBar
+            x:Name="AppTitleBar"
+            AutomationProperties.AutomationId="Main.TitleBar">
+            <TitleBar.IconSource>
+                <ImageIconSource ImageSource="Assets/AppIcon.ico" />
+            </TitleBar.IconSource>
+        </TitleBar>
+
         <StackPanel
+            Grid.Row="1"
             Padding="24"
             HorizontalAlignment="Center"
             VerticalAlignment="Center"

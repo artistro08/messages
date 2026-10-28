@@ -91,6 +91,13 @@ public abstract class UiTest
     // =========================================================================
 
     /// <summary>
+    /// Waits until the window's XAML title bar (found by AutomationId) shows the expected title.
+    /// </summary>
+    /// <param name="automationId">The title bar's AutomationId, such as <c>"Main.TitleBar"</c>.</param>
+    /// <param name="expectedTitle">The wanted title text.</param>
+    protected void AssertTitleBar(string automationId, string expectedTitle) => App.WaitForText(automationId, expectedTitle);
+
+    /// <summary>
     /// Waits for the fake sign-in page inside the pairing window's WebView2 and returns its "Sign in" button.
     /// </summary>
     /// <remarks>WebView2 content is exposed to UI Automation through the Chromium accessibility tree.</remarks>

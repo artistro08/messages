@@ -57,5 +57,6 @@ public sealed class TrayTests : UiTest
         Tray.LeftClick();
         App.WaitForText("Main.Status", "Connected");
         Assert.AreEqual(AppInfo.DisplayName, AppDriver.SafeName(App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout)));
+        AssertTitleBar("Main.TitleBar", AppInfo.DisplayName);
     }
 }

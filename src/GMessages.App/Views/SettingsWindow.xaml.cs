@@ -27,7 +27,10 @@ public sealed partial class SettingsWindow : Window
         InitializeComponent();
 
         // Window
-        Title = $"{AppInfo.DisplayName} Settings";
+        Title                      = $"{AppInfo.DisplayName} Settings";
+        AppTitleBar.Title          = Title;
+        ExtendsContentIntoTitleBar = true;
+        SetTitleBar(AppTitleBar);
         AppWindow.Resize(new Windows.Graphics.SizeInt32(560, 620));
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"));
 

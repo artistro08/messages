@@ -8,11 +8,21 @@
         <MicaBackdrop />
     </Window.SystemBackdrop>
 
-    <Grid x:Name="RootGrid" RowDefinitions="Auto,*,Auto">
+    <Grid x:Name="RootGrid" RowDefinitions="Auto,Auto,*,Auto">
+
+        <!-- Title Bar: the title is set from code; Plan 3 adds the menu button and profile picture here -->
+        <TitleBar
+            x:Name="AppTitleBar"
+            AutomationProperties.AutomationId="Pairing.TitleBar">
+            <TitleBar.IconSource>
+                <ImageIconSource ImageSource="Assets/AppIcon.ico" />
+            </TitleBar.IconSource>
+        </TitleBar>
+
 
         <!-- Signed-Out Reason: only above the sign-in -->
         <InfoBar
-            Grid.Row="0"
+            Grid.Row="1"
             Margin="16,16,16,0"
             IsClosable="False"
             IsOpen="{x:Bind ViewModel.ShowSignedOutReason, Mode=OneWay}"
@@ -22,13 +32,13 @@
         <!-- Sign-In: the WebView2 is added in code, fresh for each attempt -->
         <Border
             x:Name="SignInHost"
-            Grid.Row="1"
+            Grid.Row="2"
             Margin="0,8,0,0"
             Visibility="{x:Bind ViewModel.IsSigningIn, Mode=OneWay}" />
 
         <!-- Waiting For Phone -->
         <StackPanel
-            Grid.Row="1"
+            Grid.Row="2"
             MaxWidth="440"
             Padding="16"
             HorizontalAlignment="Center"
@@ -51,7 +61,7 @@
 
         <!-- Emoji -->
         <StackPanel
-            Grid.Row="1"
+            Grid.Row="2"
             HorizontalAlignment="Center"
             VerticalAlignment="Center"
             Spacing="16"
@@ -70,7 +80,7 @@
 
         <!-- Failure -->
         <StackPanel
-            Grid.Row="1"
+            Grid.Row="2"
             MaxWidth="440"
             Padding="16"
             HorizontalAlignment="Center"
@@ -95,7 +105,7 @@
 
         <!-- Footer -->
         <Button
-            Grid.Row="2"
+            Grid.Row="3"
             Margin="16"
             HorizontalAlignment="Right"
             AutomationProperties.AutomationId="Pairing.Cancel"

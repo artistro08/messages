@@ -31,6 +31,7 @@ public sealed class SettingsTests : UiTest
     {
         string marker = Path.Combine(App.DataDir, "startup-enabled");
         OpenSettings();
+        AssertTitleBar("Settings.TitleBar", SettingsTitle);
 
         // Defaults
         Assert.AreEqual(0, ThemeIndex(), "Theme should start at 'Use system setting'.");

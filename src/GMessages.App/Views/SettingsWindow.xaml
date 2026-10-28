@@ -8,8 +8,18 @@
         <MicaBackdrop />
     </Window.SystemBackdrop>
 
-    <Grid x:Name="RootGrid">
-        <ScrollViewer>
+    <Grid x:Name="RootGrid" RowDefinitions="Auto,*">
+
+        <!-- Title Bar: the title is set from code; Plan 3 adds the menu button and profile picture here -->
+        <TitleBar
+            x:Name="AppTitleBar"
+            AutomationProperties.AutomationId="Settings.TitleBar">
+            <TitleBar.IconSource>
+                <ImageIconSource ImageSource="Assets/AppIcon.ico" />
+            </TitleBar.IconSource>
+        </TitleBar>
+
+        <ScrollViewer Grid.Row="1">
             <StackPanel
                 MaxWidth="560"
                 Padding="24"
@@ -71,6 +81,7 @@
         <!-- Unpair Confirm: keep DefaultButton="Close". Primary would replace PrimaryButtonStyle and drop the Settings.UnpairConfirm AutomationId -->
         <ContentDialog
             x:Name="UnpairDialog"
+            Grid.Row="1"
             Title="Unpair this PC?"
             CloseButtonText="Cancel"
             Content="You'll stop getting texts here until you pair again."

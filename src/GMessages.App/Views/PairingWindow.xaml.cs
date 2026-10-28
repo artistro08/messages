@@ -59,7 +59,10 @@ public sealed partial class PairingWindow : Window
         InitializeComponent();
 
         // Window
-        Title = $"{AppInfo.DisplayName}: Pair your phone";
+        Title                      = $"{AppInfo.DisplayName}: Pair your phone";
+        AppTitleBar.Title          = Title;
+        ExtendsContentIntoTitleBar = true;
+        SetTitleBar(AppTitleBar);
         AppWindow.Resize(new Windows.Graphics.SizeInt32(560, 760));
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"));
 

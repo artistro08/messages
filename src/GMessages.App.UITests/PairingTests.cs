@@ -24,6 +24,7 @@ public sealed class PairingTests : UiTest
     {
         // Pairing Window With The Fake Sign-In Page
         App.WaitForWindow(PairingTitle, AppDriver.DefaultTimeout);
+        AssertTitleBar("Pairing.TitleBar", PairingTitle);
         WaitForSignInButton();
         CollectionAssert.Contains(Server.RequestedPaths.ToList(), "/web/authentication", "The WebView2 never asked the fake server for the sign-in page.");
 

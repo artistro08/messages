@@ -28,7 +28,10 @@ public sealed partial class MainWindow : Window
         InitializeComponent();
 
         // Window
-        Title = AppInfo.DisplayName;
+        Title                      = AppInfo.DisplayName;
+        AppTitleBar.Title          = Title;
+        ExtendsContentIntoTitleBar = true;
+        SetTitleBar(AppTitleBar);
         AppWindow.Resize(new Windows.Graphics.SizeInt32(480, 360));
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"));
 
