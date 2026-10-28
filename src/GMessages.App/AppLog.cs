@@ -46,4 +46,10 @@ internal static partial class AppLog
 
     [LoggerMessage(EventId = 913, Level = LogLevel.Warning, Message = "Reconnect failed ({Reason})")]
     public static partial void ReconnectFailed(ILogger logger, string reason, Exception ex);
+
+    [LoggerMessage(EventId = 950, Level = LogLevel.Warning, Message = "A --test-data-dir or --test-endpoints flag had no usable value and was ignored")]
+    public static partial void TestFlagIgnored(ILogger logger);
+
+    [LoggerMessage(EventId = 951, Level = LogLevel.Information, Message = "Test endpoint {Endpoint}, data folder {DataFolder}")]
+    public static partial void TestEndpoint(ILogger logger, string endpoint, string dataFolder);
 }

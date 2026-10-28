@@ -25,6 +25,11 @@
     <DefineConstants>$(DefineConstants);EnableTestHooks</DefineConstants>
   </PropertyGroup>
 
+  <!-- Release guard: the test hooks must never ship -->
+  <Target Name="GuardTestHooks" BeforeTargets="CoreCompile" Condition="'$(Configuration)' == 'Release'">
+    <Error Condition="$(DefineConstants.Contains('EnableTestHooks'))" Text="EnableTestHooks must not be defined in a Release build." />
+  </Target>
+
   <PropertyGroup Condition="'$(Platform)' == 'x64'">
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
   </PropertyGroup>

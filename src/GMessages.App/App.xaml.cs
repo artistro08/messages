@@ -29,6 +29,11 @@ public partial class App : Application, IDisposable
     // TRAY ICON GUIDS
     // =========================================================================
 
+    // Dev note: a plain Debug run (no --test-data-dir) often shows no tray icon. Windows binds the classic icon GUID
+    // to one exe path, so a build in another folder is refused. Clear it by deleting the IconStreams and
+    // PastIconsStream values under HKCU\Software\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\TrayNotify
+    // and restarting Explorer, or run with --test-data-dir (that uses the test GUID).
+    //
     // Fixed identities, so Windows keeps the icon's taskbar placement across updates. A GUID belongs
     // to one exe location, so the packaged and unpackaged installs each get their own, and UI test
     // runs get a third so they never disturb a real install's icon.
@@ -54,7 +59,6 @@ public partial class App : Application, IDisposable
     private DispatcherQueue? _dispatcher;
     private DispatcherQueueTimer? _networkDebounce;
     private bool _connectionStarted;
-    private EventWaitHandle? _quitRequest;
     private RegisteredWaitHandle? _quitWait;
     private RegisteredWaitHandle? _showWait;
     private bool _quitting;
@@ -82,7 +86,7 @@ public partial class App : Application, IDisposable
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
         // Paths
-        var paths = AppPaths.Resolve(AppIdentity.IsPackaged ? ApplicationData.Current.LocalFolder.Path : null, Program.TestDataDir);
+        var paths = AppPaths.Resolve(AppIdentity.IsPackaged ? ApplicationData.Current.LocalFolder.Path : null, TestHooks.DataDir);
         _paths    = paths;
 
         // Settings: MSIX keeps them in its package store, unpackaged uses a file
@@ -100,6 +104,16 @@ public partial class App : Application, IDisposable
         _logProvider    = new RollingFileLoggerProvider(paths.LogsFolder, levelSwitch, TimeProvider.System);
         _logger         = _logProvider.CreateLogger("GMessages.App");
         AppLog.Started(_logger, AppInfo.DisplayName, AppInfo.Version, AppIdentity.IsPackaged, Program.IsTestRun);
+        if (TestHooks.HasBadFlag)
+        {
+            AppLog.TestFlagIgnored(_logger);
+        }
+
+        if (TestHooks.Endpoints is { } fake)
+        {
+            var baseUrl = fake.MessagesBase.ToString();
+            AppLog.TestEndpoint(_logger, baseUrl, paths.DataFolder);
+        }
 
         // Memory Trim
         var dispatcher = DispatcherQueue.GetForCurrentThread();
@@ -107,8 +121,9 @@ public partial class App : Application, IDisposable
         _memoryTrim    = new MemoryTrim(dispatcher, () => _trayMenu?.AppWindow.IsVisible != true && _pairingWindow is null && _mainWindow is null && _settingsWindow is null);
 
         // Connection: every controller event comes back on the UI thread
-        // TODO: Task 8 passes the --test-endpoints fake server here; until then always production
-        _connection = new ConnectionController(paths, GmEndpoints.Production, TimeProvider.System, new SingleProviderLoggerFactory(_logProvider), a => dispatcher.TryEnqueue(() => a()));
+        // Debug test hooks can point it at a local fake server; Release is always production
+        var endpoints = TestHooks.Endpoints ?? GmEndpoints.Production;
+        _connection   = new ConnectionController(paths, endpoints, TimeProvider.System, new SingleProviderLoggerFactory(_logProvider), a => dispatcher.TryEnqueue(() => a()));
         _connection.StateChanged += (_, _) => OnConnectionStateChanged();
         _ = StartConnectionAsync();
 
@@ -129,8 +144,11 @@ public partial class App : Application, IDisposable
         AppLog.TrayAdded(_logger, trayAdded);
 
         // Quit and Show Requests
-        _quitRequest = new EventWaitHandle(false, EventResetMode.AutoReset, Program.QuitEventName);
-        _quitWait    = WatchEvent(dispatcher, _quitRequest, Quit, once: true);
+        if (Program.QuitRequest is not null)
+        {
+            _quitWait = WatchEvent(dispatcher, Program.QuitRequest, Quit, once: true);
+        }
+
         if (Program.ShowRequest is not null)
         {
             _showWait = WatchEvent(dispatcher, Program.ShowRequest, () => ShowMainWindowRequested?.Invoke(this, "second launch"), once: false);
@@ -199,7 +217,7 @@ public partial class App : Application, IDisposable
 
         var dispatcher = DispatcherQueue.GetForCurrentThread();
         var viewModel  = new PairingViewModel(_connection, a => dispatcher.TryEnqueue(() => a()));
-        _pairingWindow = new PairingWindow(viewModel, GmEndpoints.Production, _logger);
+        _pairingWindow = new PairingWindow(viewModel, TestHooks.Endpoints ?? GmEndpoints.Production, _logger);
         _pairingWindow.ApplyTheme(_settings?.Theme ?? AppTheme.System);
         _pairingWindow.Closed += (_, _) =>
         {
@@ -461,7 +479,6 @@ public partial class App : Application, IDisposable
         _memoryTrim?.Cancel();
         _quitWait?.Unregister(null);
         _showWait?.Unregister(null);
-        _quitRequest?.Dispose();
         PowerManager.SystemSuspendStatusChanged -= OnSystemSuspendStatusChanged;
         NetworkInformation.NetworkStatusChanged -= OnNetworkStatusChanged;
         _networkDebounce?.Stop();

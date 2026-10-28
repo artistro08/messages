@@ -19,17 +19,10 @@ public static class Program
     /// <summary>
     /// True when <c>--test-data-dir</c> was passed. Only Debug builds (with test hooks) honor it.
     /// </summary>
-    public static bool IsTestRun { get; } = DetectTestRun();
+    public static bool IsTestRun { get; } = TestHooks.DataDir is not null;
 
     // Declared after IsTestRun: static fields initialize in text order
     private static readonly string NameSuffix = IsTestRun ? ".Test" : "";
-
-    // TODO: Task 8 wires the full test argument parsing; this reads only the data folder
-
-    /// <summary>
-    /// The <c>--test-data-dir</c> value, else null. Always null without test hooks.
-    /// </summary>
-    public static string? TestDataDir { get; } = ReadTestDataDir();
 
     /// <summary>
     /// Single-instance key.
@@ -52,6 +45,12 @@ public static class Program
     /// </summary>
     public static EventWaitHandle? ShowRequest { get; private set; }
 
+    /// <summary>
+    /// The running copy's end of <see cref="QuitEventName"/>, made before the single-instance check so a
+    /// <c>--quit</c> sent while this copy is still starting isn't lost. Null when another process owns the name.
+    /// </summary>
+    public static EventWaitHandle? QuitRequest { get; private set; }
+
     [STAThread]
     private static void Main(string[] args)
     {
@@ -68,9 +67,10 @@ public static class Program
             return;
         }
 
-        // Every launch makes or opens the show event before checking for a running copy, so it
-        // always exists by the time a second launch looks for it
-        var showRequest = OpenShowEvent();
+        // Every launch makes or opens the show and quit events before checking for a running copy, so they
+        // always exist by the time a second launch or a --quit looks for them
+        var showRequest = OpenEvent(ShowEventName);
+        var quitRequest = OpenEvent(QuitEventName);
 
         // Second Launch: tell the running copy and let it take the foreground, then exit
         var instance = AppInstance.FindOrRegisterForKey(InstanceKey);
@@ -82,11 +82,13 @@ public static class Program
                 showRequest.Set();
             }
             showRequest?.Dispose();
+            quitRequest?.Dispose();
             return;
         }
 
         // First Launch
         ShowRequest = showRequest;
+        QuitRequest = quitRequest;
         Application.Start(callbackParams =>
         {
             var context = new DispatcherQueueSynchronizationContext(DispatcherQueue.GetForCurrentThread());
@@ -94,34 +96,15 @@ public static class Program
             _ = new App();
         });
         ShowRequest?.Dispose();
-    }
-
-    private static bool DetectTestRun()
-    {
-#if EnableTestHooks
-        return Environment.GetCommandLineArgs().Contains("--test-data-dir", StringComparer.OrdinalIgnoreCase);
-#else
-        return false;
-#endif
-    }
-
-    private static string? ReadTestDataDir()
-    {
-#if EnableTestHooks
-        var args  = Environment.GetCommandLineArgs();
-        var index = Array.FindIndex(args, arg => string.Equals(arg, "--test-data-dir", StringComparison.OrdinalIgnoreCase));
-        return index >= 0 && index + 1 < args.Length ? args[index + 1] : null;
-#else
-        return null;
-#endif
+        QuitRequest?.Dispose();
     }
 
     // Null when another process owns the name (an elevated copy, say); the app runs without it
-    private static EventWaitHandle? OpenShowEvent()
+    private static EventWaitHandle? OpenEvent(string name)
     {
         try
         {
-            return new EventWaitHandle(false, EventResetMode.AutoReset, ShowEventName);
+            return new EventWaitHandle(false, EventResetMode.AutoReset, name);
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or WaitHandleCannotBeOpenedException or IOException)
         {
