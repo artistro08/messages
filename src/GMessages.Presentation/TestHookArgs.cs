@@ -56,7 +56,20 @@ public static class TestHookArgs
             return (null, null, $"{DataDirFlag} needs a folder path.");
         }
 
-        return (uri, Path.GetFullPath(dataDir), null);
+        // A bad path (invalid characters, too long) is a refusal, not a crash. GetFullPath alone lets some through
+        if (dataDir.IndexOfAny([.. Path.GetInvalidPathChars(), '*', '?']) >= 0)
+        {
+            return (null, null, $"{DataDirFlag} is not a usable folder path.");
+        }
+
+        try
+        {
+            return (uri, Path.GetFullPath(dataDir), null);
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return (null, null, $"{DataDirFlag} is not a usable folder path.");
+        }
     }
 
     private static int Count(string[] args, string flag) =>

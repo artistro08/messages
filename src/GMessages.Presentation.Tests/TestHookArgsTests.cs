@@ -48,6 +48,7 @@ public sealed class TestHookArgsTests
     [DataRow("--test-endpoints", "http://h", "--test-data-dir")]
     [DataRow("--test-endpoints", "http://h", "--test-data-dir", "--quit")]
     [DataRow("--test-endpoints", "http://h", "--test-data-dir", "")]
+    [DataRow("--test-endpoints", "http://h", "--test-data-dir", "C:\\a|b")]
     [DataRow("--test-endpoints", "--quit", "--test-data-dir", @"C:\d")]
     [DataRow("--test-endpoints", "http://h", "--test-endpoints", "http://h2", "--test-data-dir", @"C:\d")]
     [DataRow("--test-endpoints", "http://h", "--test-data-dir", @"C:\a", "--test-data-dir", @"C:\b")]
