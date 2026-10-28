@@ -671,6 +671,8 @@ public class GmClientTests
         WaitUntil(() => rig.Requests("/SendMessage").Any(r => ActionOf(r) == ActionType.CreateGaiaPairingClientFinished), "waiting for the tap");
 
         first_stream.End();
+        WaitUntil(() => rig.Time.CountTimers(LongPollLoop.MinStreamLifetime) == 1, "5 s pause after the short stream");
+        rig.Time.Advance(LongPollLoop.MinStreamLifetime);
 
         var ex = await Assert.ThrowsExactlyAsync<GmRequestException>(() => pair.WaitAsync(HangGuard));
         Assert.AreEqual(401, ex.StatusCode);

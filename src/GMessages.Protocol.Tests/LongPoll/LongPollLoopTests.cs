@@ -96,6 +96,13 @@ public class LongPollLoopTests
 
     private static void WaitUntil(Func<bool> condition, string what) => Assert.IsTrue(SpinWait.SpinUntil(condition, HangGuard), what);
 
+    // The Stream That Ended At Once Is Followed By A 5 s Pause (Logged In, The Ack Timer Is The Other 5 s Timer)
+    private static void SkipShortStreamPause(Rig rig)
+    {
+        WaitUntil(() => rig.Time.CountTimers(LongPollLoop.MinStreamLifetime) == 2, "5 s pause after a short stream");
+        rig.Time.Advance(LongPollLoop.MinStreamLifetime);
+    }
+
     private static ActionType ActionOf(RecordedRequest req) =>
         OutgoingRPCData.Parser.ParseFrom(PbLiteSerializer.Deserialize<OutgoingRPCMessage>(req.Body).Data.MessageData).Action;
 
@@ -221,6 +228,7 @@ public class LongPollLoopTests
         rig.Script.Enqueue(() => Status(500));
         using var cts = new CancellationTokenSource();
         Task run      = rig.Loop.RunAsync(true, null, cts.Token);
+        SkipShortStreamPause(rig);
 
         WaitUntil(() => rig.Time.CountTimers(TimeSpan.FromSeconds(10)) == 1, "10 s retry wait");
         Assert.AreEqual(1, rig.Count<ListenTemporaryError>());
@@ -252,8 +260,9 @@ public class LongPollLoopTests
         rig.Rpc.ResetSessionId();
         using var cts = new CancellationTokenSource();
         Task run      = rig.Loop.RunAsync(true, null, cts.Token);
+        SkipShortStreamPause(rig);
 
-        // 70 s Of Failures
+        // 70 s Of Failures (75 s Away With The Pause)
         foreach (int sleep in sleeps)
         {
             WaitUntil(() => rig.Time.CountTimers(TimeSpan.FromSeconds(sleep)) == 1, $"{sleep} s wait");
@@ -283,6 +292,7 @@ public class LongPollLoopTests
         rig.Script.Enqueue(() => Status(500));
         using var cts = new CancellationTokenSource();
         Task run      = rig.Loop.RunAsync(true, null, cts.Token);
+        SkipShortStreamPause(rig);
 
         WaitUntil(() => rig.Time.CountTimers(TimeSpan.FromSeconds(10)) == 1, "10 s retry wait");
         rig.Time.Advance(TimeSpan.FromSeconds(10));
@@ -292,6 +302,88 @@ public class LongPollLoopTests
         await rig.Streams[0].Waiting.WaitAsync(HangGuard);
         Assert.AreEqual(0, rig.Count<NoDataReceived>());
         Assert.IsFalse(rig.Requests("/SendMessage").Any(r => ActionOf(r) == ActionType.GetUpdates));
+
+        await cts.CancelAsync();
+        await run.WaitAsync(HangGuard);
+    }
+
+    /// <summary>
+    /// The retry wait is Go's <c>(errorCount + 1) × 5</c> seconds, capped at 5 minutes (a C#-only limit).
+    /// </summary>
+    [TestMethod]
+    public void RetryDelay_GrowsLikeGo_CappedAt5Minutes()
+    {
+        Assert.AreEqual(TimeSpan.FromSeconds(10), LongPollLoop.RetryDelay(1));
+        Assert.AreEqual(TimeSpan.FromSeconds(15), LongPollLoop.RetryDelay(2));
+        Assert.AreEqual(TimeSpan.FromSeconds(295), LongPollLoop.RetryDelay(58));
+        Assert.AreEqual(LongPollLoop.MaxRetryDelay, LongPollLoop.RetryDelay(59));
+        Assert.AreEqual(LongPollLoop.MaxRetryDelay, LongPollLoop.RetryDelay(100_000));
+    }
+
+    /// <summary>
+    /// A stream that ends at once is followed by a 5 second pause before the next open (C#-only; Go reopens at
+    /// once), so a server that keeps closing right away can't spin the loop.
+    /// </summary>
+    [TestMethod]
+    public async Task ShortStream_PausesBeforeReopening()
+    {
+        Rig rig = CreateRig();
+        rig.Script.Enqueue(Ended);
+        using var cts = new CancellationTokenSource();
+        Task run      = rig.Loop.RunAsync(false, null, cts.Token);
+
+        WaitUntil(() => rig.Time.CountTimers(LongPollLoop.MinStreamLifetime) == 1, "5 s pause");
+        rig.Time.Advance(LongPollLoop.MinStreamLifetime - TimeSpan.FromMilliseconds(1));
+        Assert.AreEqual(1, rig.Requests("/ReceiveMessages").Length, "no reopen inside the pause");
+        rig.Time.Advance(TimeSpan.FromMilliseconds(1));
+        WaitUntil(() => rig.Requests("/ReceiveMessages").Length == 2, "reopened after the pause");
+
+        await cts.CancelAsync();
+        await run.WaitAsync(HangGuard);
+    }
+
+    /// <summary>
+    /// An open that gets no response headers within a minute (a dead socket) gives up and retries after the normal
+    /// backoff (C#-only; Go waits on the HTTP client's timeout).
+    /// </summary>
+    [TestMethod]
+    public async Task OpenStuck_GivesUpAfter1Minute_ThenRetries()
+    {
+        Rig rig          = CreateRig();
+        int receives     = 0;
+        rig.Handler.Hang = req => req.Url.EndsWith("/ReceiveMessages", StringComparison.Ordinal) && Interlocked.Increment(ref receives) == 1;
+        using var cts    = new CancellationTokenSource();
+        Task run         = rig.Loop.RunAsync(false, null, cts.Token);
+
+        WaitUntil(() => rig.Time.CountTimers(LongPollLoop.ReadIdleTimeout) == 1 && rig.Requests("/ReceiveMessages").Length == 1, "open waiting for headers");
+        rig.Time.Advance(LongPollLoop.ReadIdleTimeout);
+        WaitUntil(() => rig.Time.CountTimers(TimeSpan.FromSeconds(15)) == 1, "15 s retry wait");
+        rig.Time.Advance(TimeSpan.FromSeconds(15));
+        WaitUntil(() => rig.Requests("/ReceiveMessages").Length == 2 && rig.Loop.IsConnected, "reopened");
+
+        await cts.CancelAsync();
+        await run.WaitAsync(HangGuard);
+    }
+
+    /// <summary>
+    /// A reconnect request (resume, network back) interrupts an open stuck on a dead socket and starts over at once,
+    /// with no backoff and no temporary error.
+    /// </summary>
+    [TestMethod]
+    public async Task ReconnectDuringOpen_StartsOverAtOnce()
+    {
+        Rig rig          = CreateRig();
+        int receives     = 0;
+        rig.Handler.Hang = req => req.Url.EndsWith("/ReceiveMessages", StringComparison.Ordinal) && Interlocked.Increment(ref receives) == 1;
+        using var cts    = new CancellationTokenSource();
+        Task run         = rig.Loop.RunAsync(true, null, cts.Token);
+        WaitUntil(() => rig.Requests("/ReceiveMessages").Length == 1, "open in flight");
+
+        rig.Loop.RequestReconnect();
+
+        WaitUntil(() => rig.Requests("/ReceiveMessages").Length == 2 && rig.Loop.IsConnected, "reopened");
+        Assert.AreEqual(0, rig.Count<ListenTemporaryError>());
+        Assert.AreEqual(1, rig.Count<ListenRecovered>(), "only the first connect");
 
         await cts.CancelAsync();
         await run.WaitAsync(HangGuard);

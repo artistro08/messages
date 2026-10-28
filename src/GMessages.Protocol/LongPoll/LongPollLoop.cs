@@ -20,7 +20,16 @@ namespace GMessages.Protocol.LongPoll;
 /// <see cref="ListenTemporaryError"/> and retry after <c>(errorCount + 1) × 5</c> seconds. The first success after
 /// errors raises <see cref="ListenRecovered"/>; the error count starts at 1, so that also happens on the first
 /// connect, as in Go. Reopening after more than a minute away asks the phone to resend updates. A minute of silence
-/// on the stream drops the connection and reopens it. Go's background (push-woken) mode is not ported: this app has
+/// on the stream drops the connection and reopens it.
+/// <para>
+/// Three deliberate differences from Go keep an always-on tray app sane: the retry wait stops growing at
+/// <see cref="MaxRetryDelay"/> (5 minutes) instead of growing forever; a stream that ends within
+/// <see cref="MinStreamLifetime"/> (5 seconds) is followed by a 5 second pause, so a server that keeps closing at once
+/// can't cause a hot loop; and opening the stream gives up when no response headers arrive within
+/// <see cref="ReadIdleTimeout"/>, and can be interrupted by <see cref="RequestReconnect"/>, so a request stuck on a
+/// dead socket can't hold the loop. The wire requests are unchanged.
+/// </para>
+/// Go's background (push-woken) mode is not ported: this app has
 /// no push. The phone liveness state (<see cref="PhoneLiveness"/>) belongs to the loop, not to a run, so it survives
 /// restarts like Go's client-level state. Every wait uses the <see cref="TimeProvider"/>.
 /// </remarks>
@@ -50,6 +59,12 @@ public sealed partial class LongPollLoop(
 
     /// <summary>How often queued acks are sent (Go: <c>startAckInterval</c>).</summary>
     public static readonly TimeSpan AckInterval = TimeSpan.FromSeconds(5);
+
+    /// <summary>The longest wait between retries (C#-only; Go's <c>(errorCount + 1) × 5</c> seconds grows without limit).</summary>
+    public static readonly TimeSpan MaxRetryDelay = TimeSpan.FromMinutes(5);
+
+    /// <summary>A stream shorter than this is followed by this long a pause before reopening (C#-only; Go reopens at once).</summary>
+    public static readonly TimeSpan MinStreamLifetime = TimeSpan.FromSeconds(5);
 
     private readonly Lock _lock = new();
     private readonly PhoneLiveness _liveness = new(time);
@@ -170,10 +185,13 @@ public sealed partial class LongPollLoop(
     public void Stop()
     {
         Volatile.Write(ref _connected, 0);
+        CancellationTokenSource? stop_cts;
         lock (_lock)
         {
-            _stopCts?.Cancel();
+            stop_cts = _stopCts;
         }
+
+        CancelInBackground(stop_cts);
     }
 
     /// <summary>
@@ -254,13 +272,15 @@ public sealed partial class LongPollLoop(
                     error = wrapped;
                 }
 
-                // Open The Stream
+                // Open The Stream; A Reconnect Request Or 1 Minute Without Headers Interrupts It
                 HttpResponseMessage? res = null;
                 if (error is null)
                 {
+                    using var open_timeout = new CancellationTokenSource(ReadIdleTimeout, time);
+                    using var open_cts     = CancellationTokenSource.CreateLinkedTokenSource(attempt_cts.Token, open_timeout.Token);
                     try
                     {
-                        res = await http.PostAsync(auth.HasCookies ? endpoints.ReceiveMessagesGoogle : endpoints.ReceiveMessages, BuildReceiveRequest(listen_request_id), GmContentType.PbLite, true, stop).ConfigureAwait(false);
+                        res = await http.PostAsync(auth.HasCookies ? endpoints.ReceiveMessagesGoogle : endpoints.ReceiveMessages, BuildReceiveRequest(listen_request_id), GmContentType.PbLite, true, open_cts.Token).ConfigureAwait(false);
                         int status = (int)res.StatusCode;
                         if (status >= 400)
                         {
@@ -278,10 +298,18 @@ public sealed partial class LongPollLoop(
                             error = failure;
                         }
                     }
+                    catch (Exception) when (attempt_cts.IsCancellationRequested && !stop.IsCancellationRequested)
+                    {
+                        // Reconnect Requested While Opening: Start Over Right Away
+                        res?.Dispose();
+                        continue;
+                    }
                     catch (Exception ex) when (!stop.IsCancellationRequested)
                     {
                         res?.Dispose();
-                        error = ex;
+                        error = open_timeout.IsCancellationRequested
+                            ? new TimeoutException($"No response headers within {ReadIdleTimeout.TotalSeconds:0} seconds.", ex)
+                            : ex;
                     }
                 }
 
@@ -290,17 +318,9 @@ public sealed partial class LongPollLoop(
                 {
                     RaiseIf(loggedIn, new ListenTemporaryError(error));
                     error_count++;
-                    TimeSpan sleep = TimeSpan.FromSeconds((error_count + 1) * 5);
+                    TimeSpan sleep = RetryDelay(error_count);
                     LogRetrying(log, error, sleep);
-                    try
-                    {
-                        await Task.Delay(sleep, time, attempt_cts.Token).ConfigureAwait(false);
-                    }
-                    catch (OperationCanceledException) when (!stop.IsCancellationRequested)
-                    {
-                        // Reconnect Requested: Go Starts The New Loop Right Away
-                    }
-
+                    await PauseAsync(sleep, attempt_cts.Token, stop).ConfigureAwait(false);
                     continue;
                 }
 
@@ -332,6 +352,7 @@ public sealed partial class LongPollLoop(
                         first_connect = null;
                     }
 
+                    DateTimeOffset opened_at = time.GetUtcNow();
                     try
                     {
                         await ReadAsync(res!, attempt_cts.Token, stop).ConfigureAwait(false);
@@ -340,9 +361,14 @@ public sealed partial class LongPollLoop(
                     {
                         Volatile.Write(ref _connected, 0);
                     }
-                }
 
-                disconnected_at = time.GetUtcNow();
+                    // A Stream That Ended Almost At Once Gets A Pause, So A Server Closing Right Away Can't Spin The Loop
+                    disconnected_at = time.GetUtcNow();
+                    if (disconnected_at - opened_at < MinStreamLifetime)
+                    {
+                        await PauseAsync(MinStreamLifetime, attempt_cts.Token, stop).ConfigureAwait(false);
+                    }
+                }
             }
             finally
             {
@@ -357,6 +383,30 @@ public sealed partial class LongPollLoop(
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Gets the wait before the next retry: <c>(errorCount + 1) × 5</c> seconds as in Go, but at most 5 minutes.
+    /// </summary>
+    /// <param name="errorCount">The error count after this error.</param>
+    /// <returns>The wait.</returns>
+    internal static TimeSpan RetryDelay(int errorCount)
+    {
+        TimeSpan go_delay = TimeSpan.FromSeconds((errorCount + 1) * 5.0);
+        return go_delay < MaxRetryDelay ? go_delay : MaxRetryDelay;
+    }
+
+    // Waits Out A Backoff Or Pause; A Reconnect Request Ends It Early (Go Starts The New Loop Right Away)
+    private async Task PauseAsync(TimeSpan delay, CancellationToken attempt, CancellationToken stop)
+    {
+        try
+        {
+            await Task.Delay(delay, time, attempt).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!stop.IsCancellationRequested)
+        {
+            // Reconnect Requested
+        }
     }
 
     // Reads A Failed Response's Body For Diagnosis, Always Disposing It; A Failed Read Gives An Empty Body
@@ -457,13 +507,28 @@ public sealed partial class LongPollLoop(
     // Port Of Reconnect As Used By The Pinger: Drop The Connection, Then Start Over
     private Task RequestReconnectAsync()
     {
+        CancellationTokenSource? connection_cts;
         lock (_lock)
         {
             _reconnectRequested = true;
-            _connectionCts?.Cancel();
+            connection_cts      = _connectionCts;
         }
 
+        CancelInBackground(connection_cts);
         return Task.CompletedTask;
+    }
+
+    // Cancels Outside The Lock And Off The Caller's Thread, So Loop Code Never Runs On A UI Thread
+    private static void CancelInBackground(CancellationTokenSource? cts)
+    {
+        try
+        {
+            _ = cts?.CancelAsync();
+        }
+        catch (ObjectDisposedException)
+        {
+            // That Run Or Attempt Already Ended
+        }
     }
 
     private void OnPhoneSlow(object? sender, EventArgs e) => _pinger?.ShortCircuit();

@@ -27,6 +27,9 @@ internal sealed class FakeHttpHandler : HttpMessageHandler
     /// <summary>Builds the answer for a request; defaults to an empty 200.</summary>
     public Func<int, RecordedRequest, HttpResponseMessage> Respond { get; set; } = (_, _) => Response(HttpStatusCode.OK);
 
+    /// <summary>Requests this matches are recorded but never answered: they wait until canceled, like a dead socket.</summary>
+    public Func<RecordedRequest, bool>? Hang { get; set; }
+
     /// <summary>The clock stamped on <see cref="RecordedRequest.At"/>.</summary>
     public TimeProvider Time { get; set; } = TimeProvider.System;
 
@@ -83,6 +86,11 @@ internal sealed class FakeHttpHandler : HttpMessageHandler
         {
             index = Requests.Count;
             Requests.Add(recorded);
+        }
+
+        if (Hang?.Invoke(recorded) == true)
+        {
+            await Task.Delay(Timeout.Infinite, cancellationToken);
         }
 
         return Respond(index, recorded);
