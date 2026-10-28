@@ -14,6 +14,8 @@
     <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
     <!-- Tray app with a small heap: no background GC thread and its reserved memory -->
     <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+    <!-- Exe icon, drawn by scripts/New-AppAssets.ps1 -->
+    <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
     <!-- TODO: Task 11 turns on EnableMsixTooling and the Msix project capability for packaging -->
   </PropertyGroup>
 
@@ -32,6 +34,9 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Icons and logos: the tray loads its .ico files from the output folder at runtime -->
+    <Content Include="Assets\*.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="Assets\*.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Manifest Include="$(ApplicationManifest)" />
   </ItemGroup>
 
