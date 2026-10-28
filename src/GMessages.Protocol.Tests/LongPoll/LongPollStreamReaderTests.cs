@@ -37,7 +37,7 @@ public class LongPollStreamReaderTests
         }
     }
 
-    // Never has data; waits until the read is cancelled
+    // Never Has Data; Waits Until The Read Is Canceled
     private sealed class SilentStream : MemoryStream
     {
         public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
@@ -321,9 +321,9 @@ public class LongPollStreamReaderTests
 
         // Caller Cancellation
         using var cts = new CancellationTokenSource();
-        Task cancelled = DrainAsync(new SilentStream(), idle, time, cts.Token);
+        Task canceled = DrainAsync(new SilentStream(), idle, time, cts.Token);
         Assert.IsTrue(await time.TimerCreated.WaitAsync(TimeSpan.FromSeconds(10)), "idle timer was not created");
         await cts.CancelAsync();
-        await Assert.ThrowsAsync<OperationCanceledException>(() => cancelled);
+        await Assert.ThrowsAsync<OperationCanceledException>(() => canceled);
     }
 }

@@ -44,7 +44,7 @@ public static partial class LongPollStreamReader
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="idleTimeout"/> is zero or negative (and not <see cref="Timeout.InfiniteTimeSpan"/>).</exception>
     /// <exception cref="InvalidDataException">The body does not start with <c>[[</c>, has stray bytes between payloads, or one payload grows past 32 MB.</exception>
     /// <exception cref="TimeoutException">No bytes arrived within <paramref name="idleTimeout"/>.</exception>
-    /// <exception cref="OperationCanceledException"><paramref name="ct"/> was cancelled.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="ct"/> was canceled.</exception>
     public static IAsyncEnumerable<LongPollingPayload> ReadAsync(
         Stream body,
         TimeSpan idleTimeout,
@@ -80,7 +80,7 @@ public static partial class LongPollStreamReader
         int maxPayloadBytes,
         [EnumeratorCancellation] CancellationToken ct)
     {
-        // Scanner State (kept across reads)
+        // Scanner State (Kept Across Reads)
         byte[] buffer     = new byte[InitialBufferSize];
         int length        = 0;
         int pos           = 0;

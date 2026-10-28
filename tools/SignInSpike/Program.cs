@@ -55,7 +55,7 @@ internal static class Program
         ApplicationConfiguration.Initialize();
         Application.Run(new SpikeForm(profile_dir, cookie_file, use_chrome_ua, no_dbsc));
 
-        // Delete Profile (browser may hold files briefly after dispose)
+        // Delete Profile (The Browser May Hold Files Briefly After Dispose)
         for (int attempt = 0; attempt < 10 && Directory.Exists(profile_dir); attempt++)
         {
             try { Directory.Delete(profile_dir, true); }

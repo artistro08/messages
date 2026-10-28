@@ -133,7 +133,7 @@ public sealed partial class RpcSession(GmHttpClient http, AuthData auth, GmEndpo
     /// <exception cref="PhoneNotRespondingException">No answer within 60 seconds.</exception>
     /// <exception cref="ConnectionClosedException">Not connected, or the connection closed while waiting.</exception>
     /// <exception cref="GmRequestException">The server refused the request.</exception>
-    /// <exception cref="OperationCanceledException"><paramref name="ct"/> was cancelled.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="ct"/> was canceled.</exception>
     public async Task<IncomingRpc> SendAsync(SendParams p, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(p);
@@ -182,7 +182,7 @@ public sealed partial class RpcSession(GmHttpClient http, AuthData auth, GmEndpo
     /// <returns>A task that completes when the request is accepted, holding the task for the answer.</returns>
     /// <exception cref="ConnectionClosedException">Not connected.</exception>
     /// <exception cref="GmRequestException">The server refused the request.</exception>
-    /// <exception cref="OperationCanceledException"><paramref name="ct"/> was cancelled.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="ct"/> was canceled.</exception>
     public async Task<Task<IncomingRpc>> SendAsyncNoWait(SendParams p, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(p);
@@ -199,7 +199,7 @@ public sealed partial class RpcSession(GmHttpClient http, AuthData auth, GmEndpo
     /// <param name="ct">Cancels the request.</param>
     /// <returns>A task that completes when the server has accepted the request.</returns>
     /// <exception cref="GmRequestException">The server refused the request.</exception>
-    /// <exception cref="OperationCanceledException"><paramref name="ct"/> was cancelled.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="ct"/> was canceled.</exception>
     public async Task SendNoResponseAsync(SendParams p, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(p);
@@ -288,7 +288,7 @@ public sealed partial class RpcSession(GmHttpClient http, AuthData auth, GmEndpo
     /// Starts a new session ID.
     /// </summary>
     /// <remarks>Ported from <c>ResetSessionID</c>; called when a new connection starts.</remarks>
-    public void ResetSessionId() => SessionId = Guid.NewGuid().ToString();
+    internal void ResetSessionId() => SessionId = Guid.NewGuid().ToString();
 
     // =========================================================================
     // RECEIVING
@@ -304,7 +304,7 @@ public sealed partial class RpcSession(GmHttpClient http, AuthData auth, GmEndpo
     /// </remarks>
     /// <param name="msg">The decoded incoming message.</param>
     /// <returns>True when a waiting request took the message.</returns>
-    public bool TryDeliverResponse(IncomingRpc msg)
+    internal bool TryDeliverResponse(IncomingRpc msg)
     {
         ArgumentNullException.ThrowIfNull(msg);
 
@@ -340,7 +340,7 @@ public sealed partial class RpcSession(GmHttpClient http, AuthData auth, GmEndpo
     /// Fails every waiting request with <see cref="ConnectionClosedException"/>.
     /// </summary>
     /// <remarks>Ported from <c>cancelAllResponseWaiters</c>; called when the client disconnects.</remarks>
-    public void FailAllWaiters()
+    internal void FailAllWaiters()
     {
         TaskCompletionSource<IncomingRpc>[] pending;
         lock (_waitersLock)
@@ -366,7 +366,7 @@ public sealed partial class RpcSession(GmHttpClient http, AuthData auth, GmEndpo
     /// <param name="raw">The message from the long poll.</param>
     /// <returns>The decoded message.</returns>
     /// <exception cref="InvalidDataException">The route is unknown or a payload could not be decoded or decrypted.</exception>
-    public IncomingRpc Decode(IncomingRPCMessage raw)
+    internal IncomingRpc Decode(IncomingRPCMessage raw)
     {
         ArgumentNullException.ThrowIfNull(raw);
 
@@ -388,7 +388,7 @@ public sealed partial class RpcSession(GmHttpClient http, AuthData auth, GmEndpo
     /// </summary>
     /// <remarks>Ported from <c>queueMessageAck</c>.</remarks>
     /// <param name="responseId">The response ID of the message to ack.</param>
-    public void QueueAck(string responseId)
+    internal void QueueAck(string responseId)
     {
         lock (_acksLock)
         {
@@ -409,7 +409,7 @@ public sealed partial class RpcSession(GmHttpClient http, AuthData auth, GmEndpo
     /// </remarks>
     /// <param name="ct">Cancels the request.</param>
     /// <returns>A task that completes when the acks were sent or re-queued.</returns>
-    /// <exception cref="OperationCanceledException"><paramref name="ct"/> was cancelled.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="ct"/> was canceled.</exception>
     public async Task FlushAcksAsync(CancellationToken ct)
     {
         string[] batch;

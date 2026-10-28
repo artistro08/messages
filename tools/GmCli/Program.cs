@@ -35,7 +35,7 @@ return 2;
 // Paths
 static string DevDir() => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "GMessages.Dev");
 
-// Logger Factory (simple console formatter is AOT-safe)
+// Logger Factory (Simple Console Formatter Is AOT-Safe)
 static ILoggerFactory CreateLogs(bool verbose) => LoggerFactory.Create(b => b
     .SetMinimumLevel(verbose ? LogLevel.Debug : LogLevel.Information)
     .AddSimpleConsole(o => o.SingleLine = true));
@@ -262,7 +262,7 @@ static int SelfTest()
         return 1;
     }
 
-    // PBLite Through Descriptor Access (the AOT risk): strings copied from golden pblite.json
+    // PBLite Through Descriptor Access (The AOT Risk): Strings Copied From Golden pblite.json
     var auth = new AuthMessage
     {
         RequestID        = "req-1",

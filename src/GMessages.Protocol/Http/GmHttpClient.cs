@@ -82,7 +82,7 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
     /// <exception cref="ArgumentNullException"><paramref name="url"/> or <paramref name="body"/> is null.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="type"/> is not a known content type.</exception>
     /// <exception cref="HttpRequestException">The request failed before any response arrived.</exception>
-    /// <exception cref="OperationCanceledException"><paramref name="ct"/> was cancelled.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="ct"/> was canceled.</exception>
     public async Task<HttpResponseMessage> PostAsync(Uri url, IMessage body, GmContentType type, bool longPoll, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(url);
