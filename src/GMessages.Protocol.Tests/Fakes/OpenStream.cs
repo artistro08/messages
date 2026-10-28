@@ -7,7 +7,8 @@ namespace GMessages.Protocol.Tests.Fakes;
 /// <param name="initial">The bytes to return first.</param>
 internal sealed class OpenStream(byte[] initial) : Stream
 {
-    private readonly TaskCompletionSource _ended = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource _ended   = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource _reading = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private int _position;
 
     /// <inheritdoc/>
@@ -25,6 +26,9 @@ internal sealed class OpenStream(byte[] initial) : Stream
     /// <inheritdoc/>
     public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
 
+    /// <summary>Completes once the reader has taken the initial bytes and waits for more.</summary>
+    public Task Waiting => _reading.Task;
+
     /// <summary>Ends the stream: pending and later reads return 0.</summary>
     public void End() => _ended.TrySetResult();
 
@@ -39,6 +43,7 @@ internal sealed class OpenStream(byte[] initial) : Stream
             return n;
         }
 
+        _reading.TrySetResult();
         await _ended.Task.WaitAsync(cancellationToken);
         return 0;
     }

@@ -21,7 +21,8 @@ namespace GMessages.Protocol.LongPoll;
 /// errors raises <see cref="ListenRecovered"/>; the error count starts at 1, so that also happens on the first
 /// connect, as in Go. Reopening after more than a minute away asks the phone to resend updates. A minute of silence
 /// on the stream drops the connection and reopens it. Go's background (push-woken) mode is not ported: this app has
-/// no push. Every wait uses the <see cref="TimeProvider"/>.
+/// no push. The phone liveness state (<see cref="PhoneLiveness"/>) belongs to the loop, not to a run, so it survives
+/// restarts like Go's client-level state. Every wait uses the <see cref="TimeProvider"/>.
 /// </remarks>
 /// <param name="http">The HTTP client.</param>
 /// <param name="rpc">The RPC session (acks, update requests, pings).</param>
@@ -51,6 +52,7 @@ public sealed partial class LongPollLoop(
     public static readonly TimeSpan AckInterval = TimeSpan.FromSeconds(5);
 
     private readonly Lock _lock = new();
+    private readonly PhoneLiveness _liveness = new(time);
     private CancellationTokenSource? _stopCts;
     private CancellationTokenSource? _connectionCts;
     private bool _reconnectRequested;
@@ -65,6 +67,11 @@ public sealed partial class LongPollLoop(
     /// Gets the pinger of the current run, or null when not running logged in.
     /// </summary>
     internal DittoPinger? Pinger => _pinger;
+
+    /// <summary>
+    /// Gets the phone liveness state, which outlives every run and its pinger (Go keeps it on the client).
+    /// </summary>
+    internal PhoneLiveness Liveness => _liveness;
 
     /// <summary>
     /// Runs the loop until it is stopped, canceled, or the credentials are refused.
@@ -91,7 +98,7 @@ public sealed partial class LongPollLoop(
         Task background = Task.CompletedTask;
         if (loggedIn)
         {
-            var pinger = new DittoPinger(rpc, time, log, SetActiveSessionAsync, RequestReconnectAsync);
+            var pinger = new DittoPinger(rpc, _liveness, time, log, SetActiveSessionAsync, RequestReconnectAsync);
             pinger.EventRaised += Raise;
             pinger.BumpDataReceiveCheck(TimeSpan.FromMinutes(10));
             dispatcher.Pinger = pinger;
@@ -156,125 +163,193 @@ public sealed partial class LongPollLoop(
 
     private async Task ListenAsync(bool loggedIn, Action? onFirstConnect, CancellationToken stop)
     {
-        Action? first_connect          = onFirstConnect;
-        string listen_request_id       = Guid.NewGuid().ToString();
-        int error_count                = 1;
+        Action? first_connect           = onFirstConnect;
+        string listen_request_id        = Guid.NewGuid().ToString();
+        int error_count                 = 1;
         DateTimeOffset? disconnected_at = null;
+
+        // Recovery Reconnect: Start Over Like A New doLongPoll (Go: Reconnect Starts A Fresh Loop With postConnect)
+        bool TakeReconnect()
+        {
+            lock (_lock)
+            {
+                if (!_reconnectRequested)
+                {
+                    return false;
+                }
+
+                _reconnectRequested = false;
+            }
+
+            first_connect     = onFirstConnect;
+            listen_request_id = Guid.NewGuid().ToString();
+            error_count       = 1;
+            disconnected_at   = null;
+            _pinger?.BumpDataReceiveCheck(TimeSpan.FromMinutes(10));
+            return true;
+        }
 
         while (!stop.IsCancellationRequested)
         {
-            // Refresh Token
-            Exception? error = null;
+            TakeReconnect();
+
+            // One Connection Attempt; A Reconnect Request Cancels Its Backoff Wait Or Its Read
+            using var attempt_cts = CancellationTokenSource.CreateLinkedTokenSource(stop);
+            lock (_lock)
+            {
+                _connectionCts = attempt_cts;
+            }
+
             try
             {
-                await refresher.RefreshIfNeededAsync(stop).ConfigureAwait(false);
-            }
-            catch (Exception ex) when (!stop.IsCancellationRequested)
-            {
-                if (TokenRefresher.IsFatal(ex))
-                {
-                    LogFatal(log, ex);
-                    RaiseIf(loggedIn, new ListenFatalError(ex));
-                    return;
-                }
-
-                error = ex;
-            }
-
-            // Open The Stream
-            HttpResponseMessage? res = null;
-            if (error is null)
-            {
+                // Refresh Token
+                Exception? error = null;
                 try
                 {
-                    res = await http.PostAsync(auth.HasCookies ? endpoints.ReceiveMessagesGoogle : endpoints.ReceiveMessages, BuildReceiveRequest(listen_request_id), GmContentType.PbLite, true, stop).ConfigureAwait(false);
-                    int status = (int)res.StatusCode;
-                    if (status is 401 or 403)
-                    {
-                        var fatal = new GmRequestException(status, null, await res.Content.ReadAsByteArrayAsync(stop).ConfigureAwait(false));
-                        res.Dispose();
-                        LogFatal(log, fatal);
-                        RaiseIf(loggedIn, new ListenFatalError(fatal));
-                        return;
-                    }
-
-                    if (status >= 400)
-                    {
-                        res.Dispose();
-                        error = new GmRequestException(status, null, []);
-                    }
+                    await refresher.RefreshIfNeededAsync(stop).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (!stop.IsCancellationRequested)
                 {
-                    error = ex;
+                    var wrapped = new InvalidOperationException("Failed to refresh auth token.", ex);
+                    if (TokenRefresher.IsFatal(ex))
+                    {
+                        LogFatal(log, wrapped);
+                        RaiseIf(loggedIn, new ListenFatalError(wrapped));
+                        return;
+                    }
+
+                    error = wrapped;
                 }
+
+                // Open The Stream
+                HttpResponseMessage? res = null;
+                if (error is null)
+                {
+                    try
+                    {
+                        res = await http.PostAsync(auth.HasCookies ? endpoints.ReceiveMessagesGoogle : endpoints.ReceiveMessages, BuildReceiveRequest(listen_request_id), GmContentType.PbLite, true, stop).ConfigureAwait(false);
+                        int status = (int)res.StatusCode;
+                        if (status >= 400)
+                        {
+                            // The Body Read Disposes The Response And Never Throws, So A 401/403 Always Stays Fatal
+                            HttpResponseMessage failed = res;
+                            res = null;
+                            var failure = new GmRequestException(status, null, await ReadBodyAsync(failed, stop).ConfigureAwait(false));
+                            if (status is 401 or 403)
+                            {
+                                LogFatal(log, failure);
+                                RaiseIf(loggedIn, new ListenFatalError(failure));
+                                return;
+                            }
+
+                            error = failure;
+                        }
+                    }
+                    catch (Exception ex) when (!stop.IsCancellationRequested)
+                    {
+                        res?.Dispose();
+                        error = ex;
+                    }
+                }
+
+                // Back Off On Errors
+                if (error is not null)
+                {
+                    RaiseIf(loggedIn, new ListenTemporaryError(error));
+                    error_count++;
+                    TimeSpan sleep = TimeSpan.FromSeconds((error_count + 1) * 5);
+                    LogRetrying(log, error, sleep);
+                    try
+                    {
+                        await Task.Delay(sleep, time, attempt_cts.Token).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException) when (!stop.IsCancellationRequested)
+                    {
+                        // Reconnect Requested: Go Starts The New Loop Right Away
+                    }
+
+                    continue;
+                }
+
+                using (res)
+                {
+                    // Go (longpoll.go:578-583): A Reconnect While Opening Closes This Stream And Starts Over
+                    if (TakeReconnect())
+                    {
+                        LogReconnectWhileOpening(log);
+                        continue;
+                    }
+
+                    if (error_count > 0)
+                    {
+                        error_count = 0;
+                        RaiseIf(loggedIn, new ListenRecovered());
+                    }
+
+                    LogOpened(log);
+                    if (loggedIn && disconnected_at is { } since && time.GetUtcNow() - since > GapCatchUp)
+                    {
+                        _ = _pinger!.RequestUpdatesAfterGapAsync("long polling was disconnected");
+                    }
+
+                    if (first_connect is not null)
+                    {
+                        _ = RunFirstConnectAsync(first_connect);
+                        first_connect = null;
+                    }
+
+                    await ReadAsync(res!, attempt_cts.Token, stop).ConfigureAwait(false);
+                }
+
+                disconnected_at = time.GetUtcNow();
             }
-
-            // Back Off On Errors
-            if (error is not null)
+            finally
             {
-                RaiseIf(loggedIn, new ListenTemporaryError(error));
-                error_count++;
-                TimeSpan sleep = TimeSpan.FromSeconds((error_count + 1) * 5);
-                LogRetrying(log, error, sleep);
-                await Task.Delay(sleep, time, stop).ConfigureAwait(false);
-                continue;
-            }
-
-            using (res)
-            {
-                if (error_count > 0)
+                lock (_lock)
                 {
-                    error_count = 0;
-                    RaiseIf(loggedIn, new ListenRecovered());
-                }
-
-                LogOpened(log);
-                if (loggedIn && disconnected_at is { } since && time.GetUtcNow() - since > GapCatchUp)
-                {
-                    _ = _pinger!.RequestUpdatesAfterGapAsync("long polling was disconnected");
-                }
-
-                if (first_connect is not null)
-                {
-                    _ = Task.Run(first_connect, CancellationToken.None);
-                    first_connect = null;
-                }
-
-                await ReadAsync(res!, stop).ConfigureAwait(false);
-            }
-
-            disconnected_at = time.GetUtcNow();
-
-            // Recovery Reconnect: Start Over Like A New doLongPoll
-            lock (_lock)
-            {
-                if (_reconnectRequested)
-                {
-                    _reconnectRequested = false;
-                    first_connect       = onFirstConnect;
-                    listen_request_id   = Guid.NewGuid().ToString();
-                    error_count         = 1;
-                    disconnected_at     = null;
-                    _pinger?.BumpDataReceiveCheck(TimeSpan.FromMinutes(10));
+                    _connectionCts = null;
                 }
             }
         }
     }
 
-    // Port Of readLongPoll: Any Read Problem Just Ends This Connection
-    private async Task ReadAsync(HttpResponseMessage res, CancellationToken stop)
+    // Reads A Failed Response's Body For Diagnosis, Always Disposing It; A Failed Read Gives An Empty Body
+    private static async Task<byte[]> ReadBodyAsync(HttpResponseMessage res, CancellationToken ct)
     {
-        using var connection_cts = CancellationTokenSource.CreateLinkedTokenSource(stop);
-        lock (_lock)
-        {
-            _connectionCts = connection_cts;
-        }
-
         try
         {
-            Stream body = await res.Content.ReadAsStreamAsync(connection_cts.Token).ConfigureAwait(false);
-            await foreach (LongPollingPayload payload in LongPollStreamReader.ReadAsync(body, ReadIdleTimeout, time, connection_cts.Token, log).ConfigureAwait(false))
+            return await res.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
+        }
+        catch (Exception) when (!ct.IsCancellationRequested)
+        {
+            return [];
+        }
+        finally
+        {
+            res.Dispose();
+        }
+    }
+
+    // Port Of `go onFirstConnect()`: Runs In The Background; A Failure Is Logged, Not Lost
+    private async Task RunFirstConnectAsync(Action firstConnect)
+    {
+        try
+        {
+            await Task.Run(firstConnect, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            LogFirstConnectFailed(log, ex);
+        }
+    }
+
+    // Port Of readLongPoll: Any Read Problem Just Ends This Connection
+    private async Task ReadAsync(HttpResponseMessage res, CancellationToken connection, CancellationToken stop)
+    {
+        try
+        {
+            Stream body = await res.Content.ReadAsStreamAsync(connection).ConfigureAwait(false);
+            await foreach (LongPollingPayload payload in LongPollStreamReader.ReadAsync(body, ReadIdleTimeout, time, connection, log).ConfigureAwait(false))
             {
                 // Go Checks Data First, Then The Startup Ack Count; Heartbeats Need Nothing
                 if (payload.Data is not null)
@@ -291,13 +366,6 @@ public sealed partial class LongPollLoop(
         catch (Exception ex) when (!stop.IsCancellationRequested)
         {
             LogReadStopped(log, ex);
-        }
-        finally
-        {
-            lock (_lock)
-            {
-                _connectionCts = null;
-            }
         }
     }
 
@@ -369,6 +437,12 @@ public sealed partial class LongPollLoop(
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Error in long polling, retrying in {Sleep}")]
     private static partial void LogRetrying(ILogger logger, Exception exception, TimeSpan sleep);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Long polling stopped while opening stream, closing it")]
+    private static partial void LogReconnectWhileOpening(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "The first-connect callback failed")]
+    private static partial void LogFirstConnectFailed(ILogger logger, Exception exception);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Long polling opened")]
     private static partial void LogOpened(ILogger logger);

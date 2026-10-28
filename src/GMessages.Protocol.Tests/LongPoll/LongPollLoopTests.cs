@@ -42,6 +42,9 @@ public class LongPollLoopTests
 
         public List<object> Events { get; } = [];
 
+        // Open Quiet Streams Handed Out After The Script, In Order
+        public List<OpenStream> Streams { get; } = [];
+
         // ReceiveMessages Answers In Order; After The Script, An Open Quiet Stream
         public Queue<Func<HttpResponseMessage>> Script { get; } = new();
 
@@ -71,12 +74,21 @@ public class LongPollLoopTests
                 return FakeHttpHandler.Response(HttpStatusCode.OK, "application/json+protobuf", Encoding.UTF8.GetBytes("[]"));
             }
 
-            return rig.Script.TryDequeue(out Func<HttpResponseMessage>? next) ? next() : Open();
+            if (rig.Script.TryDequeue(out Func<HttpResponseMessage>? next))
+            {
+                return next();
+            }
+
+            var stream = new OpenStream("[["u8.ToArray());
+            lock (rig.Streams)
+            {
+                rig.Streams.Add(stream);
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StreamContent(stream) };
         };
         return rig;
     }
-
-    private static HttpResponseMessage Open() => new(HttpStatusCode.OK) { Content = new StreamContent(new OpenStream("[["u8.ToArray())) };
 
     private static HttpResponseMessage Ended() => FakeHttpHandler.Response(HttpStatusCode.OK, "application/json+protobuf", "[[]]"u8.ToArray());
 
@@ -221,6 +233,31 @@ public class LongPollLoopTests
         Assert.AreEqual(rig.Rpc.SessionId, outgoing.Data.RequestID);
         Assert.AreEqual(0, outgoing.TTL, "TTL omitted");
         Assert.AreEqual(1, rig.Count<NoDataReceived>());
+
+        await cts.CancelAsync();
+        await run.WaitAsync(HangGuard);
+    }
+
+    /// <summary>
+    /// Reconnecting after a short gap (10 s) sends no catch-up GET_UPDATES.
+    /// </summary>
+    [TestMethod]
+    public async Task ShortGap_NoCatchUp()
+    {
+        Rig rig = CreateRig();
+        rig.Script.Enqueue(Ended);
+        rig.Script.Enqueue(() => Status(500));
+        using var cts = new CancellationTokenSource();
+        Task run      = rig.Loop.RunAsync(true, null, cts.Token);
+
+        WaitUntil(() => rig.Time.CountTimers(TimeSpan.FromSeconds(10)) == 1, "10 s retry wait");
+        rig.Time.Advance(TimeSpan.FromSeconds(10));
+
+        // The Catch-Up Would Be Started Before Reading, So Once The New Stream Is Being Read, It Would Have Shown
+        WaitUntil(() => { lock (rig.Streams) { return rig.Streams.Count == 1; } }, "reconnected");
+        await rig.Streams[0].Waiting.WaitAsync(HangGuard);
+        Assert.AreEqual(0, rig.Count<NoDataReceived>());
+        Assert.IsFalse(rig.Requests("/SendMessage").Any(r => ActionOf(r) == ActionType.GetUpdates));
 
         await cts.CancelAsync();
         await run.WaitAsync(HangGuard);
