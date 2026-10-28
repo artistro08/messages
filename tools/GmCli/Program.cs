@@ -60,12 +60,18 @@ static async Task<int> PairAsync(bool verbose)
 
     // Load Cookies (DPAPI JSON {name: value}; values are never printed)
     var cookies = new Dictionary<string, string>();
-    using (var doc = JsonDocument.Parse(ProtectedData.Unprotect(File.ReadAllBytes(cookie_file), null, DataProtectionScope.CurrentUser)))
+    try
     {
+        using var doc = JsonDocument.Parse(ProtectedData.Unprotect(File.ReadAllBytes(cookie_file), null, DataProtectionScope.CurrentUser));
         foreach (var prop in doc.RootElement.EnumerateObject())
         {
             cookies[prop.Name] = prop.Value.GetString() ?? "";
         }
+    }
+    catch (Exception ex) when (ex is CryptographicException or JsonException or InvalidOperationException)
+    {
+        Console.Error.WriteLine("Spike cookies unreadable. Re-run SignInSpike.");
+        return 1;
     }
 
     var auth = AuthData.CreateNew();
@@ -73,7 +79,8 @@ static async Task<int> PairAsync(bool verbose)
 
     using var logs = CreateLogs(verbose);
     using var stop = new CancellationTokenSource(TimeSpan.FromMinutes(10));
-    Console.CancelKeyPress += (_, e) => { e.Cancel = true; stop.Cancel(); };
+    ConsoleCancelEventHandler on_cancel = (_, e) => { e.Cancel = !stop.IsCancellationRequested; stop.Cancel(); };
+    Console.CancelKeyPress += on_cancel;
 
     await using var client = GmClient.Create(auth, new SessionStore(Path.Combine(DevDir(), "session.bin")), GmEndpoints.Production, TimeProvider.System, logs);
     try
@@ -89,6 +96,20 @@ static async Task<int> PairAsync(bool verbose)
     {
         Console.Error.WriteLine("pairing failed: canceled or timed out");
         return 1;
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"pairing failed: {ex.GetType().Name}: {ex.Message}");
+        if (ex is GmRequestException { StatusCode: 401 or 403 })
+        {
+            Console.Error.WriteLine("Google rejected the sign-in cookies (likely stale). Re-run SignInSpike, then pair right away.");
+        }
+
+        return 1;
+    }
+    finally
+    {
+        Console.CancelKeyPress -= on_cancel;
     }
 
     Console.WriteLine("paired");
@@ -111,10 +132,21 @@ static async Task<int> ListenAsync(bool verbose)
 
     using var logs = CreateLogs(verbose);
     using var stop = new CancellationTokenSource();
-    Console.CancelKeyPress += (_, e) => { e.Cancel = true; stop.Cancel(); };
+    ConsoleCancelEventHandler on_cancel = (_, e) => { e.Cancel = !stop.IsCancellationRequested; stop.Cancel(); };
+    Console.CancelKeyPress += on_cancel;
 
+    // Fatal Listen Error Stops The Run With A Non-Zero Exit
+    bool fatal = false;
     await using var client = GmClient.Create(auth, new SessionStore(Path.Combine(DevDir(), "session.bin")), GmEndpoints.Production, TimeProvider.System, logs);
-    client.EventRaised += PrintEvent;
+    client.EventRaised += evt =>
+    {
+        PrintEvent(evt);
+        if (evt is ListenFatalError)
+        {
+            Volatile.Write(ref fatal, true);
+            stop.Cancel();
+        }
+    };
 
     try
     {
@@ -129,12 +161,21 @@ static async Task<int> ListenAsync(bool verbose)
     }
     catch (OperationCanceledException)
     {
-        // Ctrl+C: Fall Through To Disconnect
+        // Ctrl+C Or Fatal Error: Fall Through To Disconnect
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"listen failed: {ex.GetType().Name}: {ex.Message}");
+        return 1;
+    }
+    finally
+    {
+        Console.CancelKeyPress -= on_cancel;
     }
 
     await client.DisconnectAsync();
     Console.WriteLine("stopped");
-    return 0;
+    return Volatile.Read(ref fatal) ? 1 : 0;
 }
 
 /// <summary>
@@ -152,15 +193,23 @@ static async Task<int> UnpairAsync(bool verbose)
     }
 
     using var logs = CreateLogs(verbose);
+    using var stop = new CancellationTokenSource();
+    ConsoleCancelEventHandler on_cancel = (_, e) => { e.Cancel = !stop.IsCancellationRequested; stop.Cancel(); };
+    Console.CancelKeyPress += on_cancel;
+
     await using var client = GmClient.Create(auth, new SessionStore(Path.Combine(DevDir(), "session.bin")), GmEndpoints.Production, TimeProvider.System, logs);
     try
     {
-        await client.UnpairAsync(CancellationToken.None);
+        await client.UnpairAsync(stop.Token);
     }
     catch (Exception ex)
     {
-        Console.Error.WriteLine($"unpair request failed (local session removed anyway): {ex.Message}");
+        Console.Error.WriteLine($"unpair request failed (local session removed anyway): {ex.GetType().Name}: {ex.Message}");
         return 1;
+    }
+    finally
+    {
+        Console.CancelKeyPress -= on_cancel;
     }
 
     Console.WriteLine("unpaired");
