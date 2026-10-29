@@ -416,6 +416,51 @@ public sealed class ChatTests : UiTest
         }, AppDriver.DefaultTimeout, () => $"No {NextPage} after the older page landed.");
     }
 
+    /// <summary>
+    /// Scroll to bottom, pressed while an older page is still on its way, ends on the newest message and stays there
+    /// once the page lands (the older page's anchoring doesn't pull the list back up).
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task ScrollToNewest_WhileOlderPageLoads_EndsAtNewest()
+    {
+        // A Long Chat Whose Older Pages Take Two Seconds
+        Server.Phone.Chats.AddLongChat();
+        Server.Phone.OlderPagesDelay = TimeSpan.FromSeconds(2);
+
+        await OpenMainAsync();
+        App.Find("Row.c-history").Patterns.SelectionItem.Pattern.Select();
+        Wait.Until(() => Bubbles().Any(b => b.Text.StartsWith("long 120", StringComparison.Ordinal)), AppDriver.DefaultTimeout,
+            () => $"The long chat didn't show 'long 120'; bubbles: [{string.Join(", ", Bubbles().Select(b => b.Id))}].");
+
+        // Up Until The Older Page Is Asked For
+        AutomationElement list = App.Find("Chat.Messages");
+        var scroll             = list.Patterns.Scroll.Pattern;
+        Wait.Until(() =>
+        {
+            scroll.SetScrollPercent(-1, 0);
+            return App.TryFind("Chat.LoadingOlder") is not null;
+        }, AppDriver.DefaultTimeout, () => "Scrolling up never showed the loading ring.");
+
+        // The Button, While The Page Is Still On Its Way
+        AutomationElement down = App.Find("Chat.ScrollToBottom");
+        Wait.Until(() => down.Properties.IsKeyboardFocusable.ValueOrDefault, AppDriver.DefaultTimeout, () => "Scroll to bottom didn't show at the top of the chat.");
+        down.Patterns.Invoke.Pattern.Invoke();
+
+        // The Page Lands, Then The List Settles
+        Wait.Until(() => App.TryFind("Chat.LoadingOlder") is null, AppDriver.DefaultTimeout, () => "The older page never landed.");
+        Thread.Sleep(1000);
+        AssertAtNewest("Scroll to bottom pressed while the older page loaded");
+
+        // And Stays There For A Second
+        DateTime until = DateTime.UtcNow.AddSeconds(1);
+        while (DateTime.UtcNow < until)
+        {
+            Thread.Sleep(100);
+            AssertAtNewest("A second after the older page landed, the list");
+        }
+    }
+
     // =========================================================================
     // HELPERS
     // =========================================================================

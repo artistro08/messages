@@ -144,10 +144,10 @@ public sealed partial class ChatPane : UserControl
     // Already At The End (The Usual Case), KeepPinned Has Done It And Nothing Moves
     private void OnMessagesChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        // An Older Page's First Bubble: Note Where The View Sits, Before The Page Moves It (Pinned, The Pin Keeps The Newest
-        // Bubbles In Place)
+        // An Older Page's First Bubble: Note Where The View Sits, Before The Page Moves It (Pinned, Or On The Way To The
+        // Newest Message, The Newest Bubbles Are Where The View Belongs Instead)
         if (e is { Action: NotifyCollectionChangedAction.Add, NewStartingIndex: 0 } && Chat is { IsLoadingOlder: true } chat
-            && !_pinned && _olderBubble is null && _scroller is { } anchored)
+            && !_pinned && !_toNewest && _olderBubble is null && _scroller is { } anchored)
         {
             NoteOlderAnchor(anchored, chat);
         }
@@ -205,7 +205,7 @@ public sealed partial class ChatPane : UserControl
     // Near Its Top, Until No Pages Are Left, A Page Adds Nothing Or A Load Fails (See ChatViewModel.CanFillOlder)
     private void FillWithOlder()
     {
-        if (Chat is not { IsLoading: false, CanFillOlder: true } chat)
+        if (Chat is not { IsLoading: false, CanFillOlder: true } chat || _olderFromEnd is not null)
         {
             return;
         }
@@ -231,6 +231,13 @@ public sealed partial class ChatPane : UserControl
         // The Same Content Height Means The Person (Or The Arrow) Moved The List; A New One Is Bubbles Measuring Or A Page
         bool content_changed = ContentChanged(scroller);
         _pinned              = ChatScroll.StaysPinned(_pinned, content_changed, scroller.VerticalOffset, scroller.ScrollableHeight);
+
+        // The Person Is Scrolling: An Older Page's Corrections Would Snap Them Back, So They End
+        if (e.IsIntermediate && !content_changed)
+        {
+            _olderFromEnd = null;
+            _olderBubble  = null;
+        }
         if (content_changed)
         {
             KeepPinned(scroller);
@@ -381,10 +388,12 @@ public sealed partial class ChatPane : UserControl
     }
 
     // Notes, Before An Older Page Goes In Above, How Far The View's Top Sits From The Content's End And The First Shown
-    // Bubble With Its Top In The View (Its Row Is Still Where The Last Layout Put It)
+    // Bubble With Its Top In The View (Its Row Is Still Where The Last Layout Put It). The Search Starts At The Panel's
+    // First Shown Row As Of That Layout, Which Is One Row Above It Now That The New Bubble Sits At 0
     private void NoteOlderAnchor(ScrollViewer scroller, ChatViewModel chat)
     {
-        foreach (MessageBubbleViewModel bubble in chat.Messages.Skip(1))
+        int first = MessageList.ItemsPanelRoot?.As<ItemsStackPanel>().FirstVisibleIndex ?? 0;
+        foreach (MessageBubbleViewModel bubble in chat.Messages.Skip(Math.Max(1, first)))
         {
             if (RowTop(scroller, bubble) is not { } top)
             {
@@ -411,6 +420,14 @@ public sealed partial class ChatPane : UserControl
     {
         if (_olderBubble is not { } bubble || Chat is null || Chat.IsLoadingOlder)
         {
+            return;
+        }
+
+        // Pinned Or On The Way To The Newest Message Since: That Wins
+        if (_pinned || _toNewest)
+        {
+            _olderFromEnd = null;
+            _olderBubble  = null;
             return;
         }
 
