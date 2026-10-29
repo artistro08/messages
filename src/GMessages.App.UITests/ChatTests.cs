@@ -461,6 +461,31 @@ public sealed class ChatTests : UiTest
         }
     }
 
+    /// <summary>
+    /// Reopening a chat the app kept shows its bubbles at once, with the small top ring up while the phone's page loads,
+    /// then the ring goes away.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Reopen_CachedChat_ShowsTopRingWhilePhoneLoads()
+    {
+        // Ann And Team Opened Once, So Both Are Kept
+        await OpenAnnAsync();
+        App.Find("Row.c-team").Patterns.SelectionItem.Pattern.Select();
+        Wait.Until(() => Bubbles().Any(b => b.Text == "Works for me"), AppDriver.DefaultTimeout, () => "Team never showed its bubbles.");
+
+        // Back To Ann With The Phone Slow
+        Server.Phone.MessagesDelay = TimeSpan.FromSeconds(3);
+        App.Find("Row.c-ann").Patterns.SelectionItem.Pattern.Select();
+
+        Wait.Until(() => Bubbles().Count == 3 && App.TryFind("Chat.TopRing") is not null, TimeSpan.FromSeconds(2),
+            () => $"Ann's kept bubbles and the top ring didn't show together; bubbles: {Bubbles().Count}.");
+        Assert.IsNull(App.TryFind("Chat.Loading"), "The big ring showed over kept bubbles.");
+
+        // The Phone Answers, The Ring Goes
+        Wait.Until(() => App.TryFind("Chat.TopRing") is null, AppDriver.DefaultTimeout, () => "The top ring stayed after the phone answered.");
+    }
+
     // =========================================================================
     // HELPERS
     // =========================================================================

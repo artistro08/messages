@@ -38,6 +38,7 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     private bool _isLoading;
     private bool _isLoadingHistory;
     private bool _isLoadingOlder;
+    private bool _isRefreshing;
 
     // A Reload Asked For While A Load Was Running; Runs When That Load Ends
     private bool _reloadPending;
@@ -147,8 +148,26 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     public bool IsLoadingOlder
     {
         get => _isLoadingOlder;
-        private set => Set(ref _isLoadingOlder, value, nameof(IsLoadingOlder));
+        private set
+        {
+            Set(ref _isLoadingOlder, value, nameof(IsLoadingOlder));
+            Raise(nameof(ShowsTopRing));
+        }
     }
+
+    /// <summary>Gets whether the newest page is loading with bubbles already shown (the cached copy): the small ring at the top.</summary>
+    public bool IsRefreshing
+    {
+        get => _isRefreshing;
+        private set
+        {
+            Set(ref _isRefreshing, value, nameof(IsRefreshing));
+            Raise(nameof(ShowsTopRing));
+        }
+    }
+
+    /// <summary>Gets whether the small raised ring at the top shows: an older page or a refresh of the cached copy is loading.</summary>
+    public bool ShowsTopRing => IsLoadingOlder || IsRefreshing;
 
     // =========================================================================
     // LOADING
@@ -175,6 +194,7 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
 
         IsLoading        = true;
         IsLoadingHistory = Messages.Count == 0;
+        IsRefreshing     = Messages.Count > 0;
         Trace($"load started ({Messages.Count} shown)");
         try
         {
@@ -204,6 +224,7 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
         {
             IsLoading        = false;
             IsLoadingHistory = false;
+            IsRefreshing     = false;
             Trace($"load ended ({Messages.Count} shown, older {(_older is null ? "none" : "set")})");
         }
 

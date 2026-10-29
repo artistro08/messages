@@ -484,6 +484,53 @@ public sealed class ChatViewModelTests
     }
 
     /// <summary>
+    /// Over a cached page the small top ring shows (not the big one) until the phone answers.
+    /// </summary>
+    [TestMethod]
+    public async Task Load_WithCachedPage_IsRefreshingUntilPhoneAnswers()
+    {
+        using var rig = new MainRig();
+        using (ChatViewModel first = NewChat(rig, null, Msg("m1", "one")))
+        {
+            await first.LoadAsync();
+        }
+
+        var gate             = new TaskCompletionSource();
+        rig.Client.FetchGate = gate;
+        using var chat       = new ChatViewModel(rig.Store, "a", TimeProvider.System, a => a());
+
+        Task load = chat.LoadAsync();
+        Assert.IsTrue(chat.IsRefreshing);
+        Assert.IsTrue(chat.ShowsTopRing);
+        Assert.IsFalse(chat.IsLoadingHistory);
+
+        gate.SetResult();
+        await load;
+        Assert.IsFalse(chat.IsRefreshing);
+        Assert.IsFalse(chat.ShowsTopRing);
+    }
+
+    /// <summary>
+    /// With nothing cached only the big ring shows.
+    /// </summary>
+    [TestMethod]
+    public async Task Load_NoCache_BigRingOnly()
+    {
+        using var rig = new MainRig();
+        using ChatViewModel chat = NewChat(rig, null, Msg("m1", "one"));
+        var gate                 = new TaskCompletionSource();
+        rig.Client.FetchGate     = gate;
+
+        Task load = chat.LoadAsync();
+        Assert.IsTrue(chat.IsLoadingHistory);
+        Assert.IsFalse(chat.IsRefreshing);
+        Assert.IsFalse(chat.ShowsTopRing);
+
+        gate.SetResult();
+        await load;
+    }
+
+    /// <summary>
     /// A message that arrives while a refresh is in flight keeps its bubble when the (older) page lands.
     /// </summary>
     [TestMethod]
