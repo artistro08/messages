@@ -419,13 +419,24 @@ public sealed partial class ChatStore : IDisposable
             || !old.Participants.SequenceEqual(info.Participants);
     }
 
-    // Keeps A Conversation's Newest Page As The Most Recently Used, Dropping The Least Recently Used Past 20
+    // Keeps A Conversation's Newest Page As The Most Recently Used, Dropping The Least Recently Used Past 20. Messages
+    // Cached While The Page Was On Its Way (Newer Than Anything In It, And Not In It) Stay Below It
     private void CachePage(string conversationId, List<ChatMessage> page)
     {
         lock (_pagesLock)
         {
-            _pages.Remove(conversationId);
-            _pages.Add(conversationId, [.. page]);
+            List<ChatMessage> merged = [.. page];
+            if (_pages.Remove(conversationId, out List<ChatMessage>? old) && page.Count > 0)
+            {
+                DateTimeOffset newest = page.Max(m => m.Time);
+                merged.AddRange(old.Where(m => m.Time > newest && !page.Any(p => SameMessage(p, m))));
+                if (merged.Count > PageSize)
+                {
+                    merged.RemoveRange(0, merged.Count - PageSize);
+                }
+            }
+
+            _pages.Add(conversationId, merged);
             if (_pages.Count > CachedChatCount)
             {
                 _pages.RemoveAt(0);
@@ -444,7 +455,13 @@ public sealed partial class ChatStore : IDisposable
                 return;
             }
 
-            page.RemoveAll(m => (message.Id.Length > 0 && m.Id == message.Id) || (message.TmpId.Length > 0 && m.TmpId == message.TmpId));
+            // A Pending Copy Never Replaces The Delivered One: The Echo Can Arrive Before The Send Call Returns
+            if (message.Id.Length == 0 && page.Any(m => m.Id.Length > 0 && SameMessage(m, message)))
+            {
+                return;
+            }
+
+            page.RemoveAll(m => SameMessage(m, message));
 
             int at = page.FindLastIndex(m => m.Time <= message.Time) + 1;
             page.Insert(at, message);
@@ -454,6 +471,10 @@ public sealed partial class ChatStore : IDisposable
             }
         }
     }
+
+    // The Same Message: The Same ID, Or The Same Temporary ID (A Pending Copy And Its Echo)
+    private static bool SameMessage(ChatMessage a, ChatMessage b) =>
+        (a.Id.Length > 0 && a.Id == b.Id) || (a.TmpId.Length > 0 && a.TmpId == b.TmpId);
 
     // Remembers A Message ID; True The First Time It Is Seen
     private bool MarkNotified(string messageId)

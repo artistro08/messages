@@ -54,6 +54,9 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     /// <summary>Gets whether <see cref="SenderName"/> is set (for bindings, which skip their function when an argument is null).</summary>
     public bool HasSenderName => SenderName is not null;
 
+    /// <summary>Gets when the message was sent.</summary>
+    public DateTimeOffset SentAt { get; private set; }
+
     /// <summary>Gets the time of day the message was sent.</summary>
     public string Time { get; private set; } = string.Empty;
 
@@ -117,6 +120,7 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         ParticipantId = m.ParticipantId;
         Text          = m.Kind == MessageKind.Text ? m.Text : ChatFormat.KindLabel(m.Kind);
         FromMe        = m.FromMe;
+        SentAt        = m.Time;
         Time          = m.Time.ToLocalTime().ToString("t", CultureInfo.CurrentCulture);
         IsFailed      = m.IsFailed;
         IsSending     = m.Status == MessageStatusType.OutgoingSending;

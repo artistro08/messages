@@ -383,7 +383,8 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
         ?? Messages.FirstOrDefault(b => m.TmpId.Length > 0 && b.TmpId == m.TmpId);
 
     // Shows The Newest Page In Place Of The Bubbles, Reusing (And Updating) The Ones Already Shown So The List Doesn't
-    // Redraw Them. Unsent Bubbles Stay At The Bottom Unless The Page Holds Their Echo; Older Pages Above Are Dropped
+    // Redraw Them. Unsent Bubbles, And Ones That Arrived While The Page Was On Its Way (Newer Than Anything In It),
+    // Stay At The Bottom Unless The Page Holds Them; Older Pages Above Are Dropped
     private void ShowPage(IReadOnlyList<ChatMessage> page)
     {
         List<MessageBubbleViewModel> wanted = [];
@@ -402,7 +403,10 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
             wanted.Add(bubble);
         }
 
-        wanted.AddRange([.. Messages.Where(b => b.Id.Length == 0 && !wanted.Contains(b))]);
+        DateTimeOffset? newest = page.Count > 0 ? page.Max(m => m.Time) : null;
+        wanted.AddRange([.. Messages
+            .Where(b => !wanted.Contains(b) && (b.Id.Length == 0 || b.SentAt > newest))
+            .OrderBy(b => b.SentAt)]);
 
         // Drop What The Page No Longer Holds, Then Put Each Bubble In Its Place
         for (int i = Messages.Count - 1; i >= 0; i--)

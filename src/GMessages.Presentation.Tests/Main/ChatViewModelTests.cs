@@ -457,6 +457,29 @@ public sealed class ChatViewModelTests
         Assert.IsFalse(chat.IsLoadingHistory);
     }
 
+    /// <summary>
+    /// A message that arrives while a refresh is in flight keeps its bubble when the (older) page lands.
+    /// </summary>
+    [TestMethod]
+    public async Task ArrivalDuringRefresh_KeepsBubble()
+    {
+        using var rig = new MainRig();
+        using ChatViewModel chat = NewChat(rig, null, Msg("m1", "one"));
+        await chat.LoadAsync();
+
+        var gate             = new TaskCompletionSource();
+        rig.Client.FetchGate = gate;
+        Task load            = chat.LoadAsync();
+        await rig.LiveMessage(Msg("m2", "two", ts: 1_761_700_000_001_000));
+        gate.SetResult();
+        await load;
+
+        Assert.AreEqual("one,two", string.Join(",", chat.Messages.Select(b => b.Text)));
+    }
+
+    /// <summary>
+    /// The small ring shows only while an older page loads.
+    /// </summary>
     [TestMethod]
     public async Task LoadOlder_IsLoadingOlderWhileFetching()
     {

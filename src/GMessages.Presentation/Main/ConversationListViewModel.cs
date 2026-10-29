@@ -53,6 +53,9 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
 
         _store.ConversationChanged += OnConversationChanged;
         _store.Resynced            += OnResynced;
+
+        // A Row Landing Mid-Load (A Live Update) Ends The Empty List, So The Ring Goes At Once
+        Rows.CollectionChanged += (_, _) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsLoadingFirstPage)));
     }
 
     /// <inheritdoc />

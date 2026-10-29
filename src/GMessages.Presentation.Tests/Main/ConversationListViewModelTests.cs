@@ -263,4 +263,33 @@ public sealed class ConversationListViewModelTests
         gate.SetResult();
         await more;
     }
+
+    /// <summary>
+    /// A live row that lands during the first load hides the ring at once (it is no longer an empty list).
+    /// </summary>
+    [TestMethod]
+    public async Task IsLoadingFirstPage_LiveRowDuringFirstLoad_HidesRing()
+    {
+        using var rig = new MainRig();
+        rig.Page(MainRig.Conv("a", "Ann"));
+        using var list      = NewList(rig);
+        var gate            = new TaskCompletionSource();
+        rig.Client.ListGate = gate;
+        Task first          = list.LoadAsync();
+        var raised          = new List<bool>();
+        list.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(ConversationListViewModel.IsLoadingFirstPage))
+            {
+                raised.Add(list.IsLoadingFirstPage);
+            }
+        };
+
+        await rig.Live(MainRig.Conv("n", "Newcomer"));
+
+        Assert.IsFalse(list.IsLoadingFirstPage);
+        CollectionAssert.Contains(raised, false, "the view was told the ring went away");
+        gate.SetResult();
+        await first;
+    }
 }

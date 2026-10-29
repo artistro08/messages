@@ -282,6 +282,56 @@ public sealed class ChatStoreTests
         Assert.IsNotNull(rig.Store.CachedMessages("c-new"));
     }
 
+    /// <summary>
+    /// The phone's echo can arrive before the send call returns; the pending copy cached after it must not replace
+    /// the delivered one.
+    /// </summary>
+    [TestMethod]
+    public async Task EchoBeforeSendReturns_KeepsDeliveredCopy()
+    {
+        using var rig = new Rig();
+        await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1")));
+        rig.Client.MessagesPage = PageOf(Msg("m1", "c1", ts: 1_000));
+        await rig.Store.LoadMessagesAsync("c1", null, Ct);
+
+        // The Echo Lands While The Send Is Still Waiting For Its Answer
+        Message echo = Msg("m2", "c1", "mine", ts: 2_000);
+        echo.TmpID   = "tmp-9";
+        rig.Client.SendAnswerGate = new TaskCompletionSource();
+        Task send = rig.Store.SendTextAsync("c1", "mine", "tmp-9", Ct);
+        await rig.Store.HandleEventAsync(new MessageReceived(echo, false));
+        rig.Client.SendAnswerGate.SetResult();
+        await send;
+
+        IReadOnlyList<ChatMessage> page = rig.Store.CachedMessages("c1")!;
+        Assert.AreEqual("m1,m2", Ids(page));
+        Assert.AreEqual(MessageStatusType.OutgoingComplete, page[1].Status);
+    }
+
+    /// <summary>
+    /// A message that arrives while the newest page is being fetched stays cached when the (older) page lands.
+    /// </summary>
+    [TestMethod]
+    public async Task ArrivalDuringFetch_StaysCached()
+    {
+        using var rig = new Rig();
+        await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1")));
+        rig.Client.MessagesPage = PageOf(Msg("m1", "c1", ts: 1_000));
+        await rig.Store.LoadMessagesAsync("c1", null, Ct);
+
+        var gate             = new TaskCompletionSource();
+        rig.Client.FetchGate = gate;
+        Task<(IReadOnlyList<ChatMessage> Messages, Cursor? Older)> load = rig.Store.LoadMessagesAsync("c1", null, Ct);
+        await rig.Store.HandleEventAsync(new MessageReceived(Msg("m2", "c1", ts: 2_000), false));
+        gate.SetResult();
+        await load;
+
+        Assert.AreEqual("m1,m2", Ids(rig.Store.CachedMessages("c1")));
+    }
+
+    /// <summary>
+    /// Reset drops every cached page.
+    /// </summary>
     [TestMethod]
     public async Task Reset_ClearsCachedMessages()
     {

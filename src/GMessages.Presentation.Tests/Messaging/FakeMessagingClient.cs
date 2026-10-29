@@ -124,10 +124,18 @@ internal sealed class FakeMessagingClient : IMessagingClient
         return page;
     }
 
-    public Task<SendMessageResponse> SendMessageAsync(SendMessageRequest request, CancellationToken ct)
+    /// <summary>When set, the next send answers only after this completes.</summary>
+    public TaskCompletionSource? SendAnswerGate { get; set; }
+
+    public async Task<SendMessageResponse> SendMessageAsync(SendMessageRequest request, CancellationToken ct)
     {
         Sent.Add(request);
-        return SendThrows is { } ex ? Task.FromException<SendMessageResponse>(ex) : Task.FromResult(SendAnswer);
+        if (SendAnswerGate is { } gate)
+        {
+            await gate.Task;
+        }
+
+        return SendThrows is { } ex ? throw ex : SendAnswer;
     }
 
     public Task MarkReadAsync(string conversationId, string messageId, CancellationToken ct)
