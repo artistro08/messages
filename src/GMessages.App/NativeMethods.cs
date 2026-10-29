@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 namespace GMessages.App;
 
 /// <summary>
-/// Win32 calls for the tray icon, the tray menu's host window, single instance and memory trim.
+/// Win32 calls for the tray icon, the tray menu's host window, single instance, memory trim and the emoji panel shortcut.
 /// </summary>
 /// <remarks>
 /// Ported from Magic Buds' <c>NativeMethods.cs</c>, keeping only the members this app uses. Plain
@@ -73,6 +73,12 @@ internal static class NativeMethods
     // GetCurrentPackageFullName's answer when the process has no package identity
     public const int APPMODEL_ERROR_NO_PACKAGE = 15700;
 
+    // SendInput: keyboard input, key up; Windows key and period for the emoji panel
+    public const uint INPUT_KEYBOARD  = 1;
+    public const uint KEYEVENTF_KEYUP = 0x0002;
+    public const ushort VK_LWIN       = 0x5B;
+    public const ushort VK_OEM_PERIOD = 0xBE;
+
     // =========================================================================
     // STRUCTS AND CALLBACKS
     // =========================================================================
@@ -88,6 +94,19 @@ internal static class NativeMethods
         public int Top;
         public int Right;
         public int Bottom;
+    }
+
+    // INPUT With Its KEYBDINPUT Member: 40 Bytes On 64-Bit Windows (The Union Is Sized By MOUSEINPUT). The App
+    // Ships x64 And ARM64 Only, Both 64-Bit
+    [StructLayout(LayoutKind.Explicit, Size = 40)]
+    public struct KEYBOARD_INPUT
+    {
+        [FieldOffset(0)] public uint type;
+        [FieldOffset(8)] public ushort wVk;
+        [FieldOffset(10)] public ushort wScan;
+        [FieldOffset(12)] public uint dwFlags;
+        [FieldOffset(16)] public uint time;
+        [FieldOffset(24)] public IntPtr dwExtraInfo;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -292,6 +311,9 @@ internal static class NativeMethods
 
     [DllImport("kernel32.dll")]
     public static extern IntPtr GetCurrentProcess();
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern uint SendInput(uint count, KEYBOARD_INPUT[] inputs, int size);
 
     // -1, -1 empties the working set
     [DllImport("kernel32.dll")]

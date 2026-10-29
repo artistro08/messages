@@ -178,6 +178,17 @@ public abstract class UiTest
     }
 
     /// <summary>
+    /// Pairs, then opens the main window from the tray and waits for its conversation list.
+    /// </summary>
+    /// <returns>A task that completes once the list shows.</returns>
+    protected async Task OpenMainAsync()
+    {
+        await PairAsync();
+        Tray.LeftClick();
+        App.Find("Main.ConversationList");
+    }
+
+    /// <summary>
     /// Opens the tray menu with a right-click and invokes one of its items.
     /// </summary>
     /// <param name="automationId">The item, such as <c>TrayMenu.Settings</c>.</param>

@@ -217,14 +217,31 @@ public sealed partial class ChatStore : IDisposable
     }
 
     /// <summary>
-    /// Tells the phone a conversation was read up to a message.
+    /// Tells the phone a conversation was read up to a message, then marks the cached conversation read.
     /// </summary>
+    /// <remarks>
+    /// The cached copy changes as soon as the phone answers, raising <see cref="ConversationChanged"/>, so the list
+    /// stops showing it unread without waiting for the phone to send the conversation back.
+    /// </remarks>
     /// <param name="conversationId">The conversation ID.</param>
     /// <param name="messageId">The newest message that was read.</param>
     /// <param name="ct">Cancels the wait.</param>
     /// <returns>A task that completes when the phone answered.</returns>
     /// <exception cref="MessagingUnavailableException">Not connected.</exception>
-    public Task MarkReadAsync(string conversationId, string messageId, CancellationToken ct) => RequireClient().MarkReadAsync(conversationId, messageId, ct);
+    public async Task MarkReadAsync(string conversationId, string messageId, CancellationToken ct)
+    {
+        // No ConfigureAwait(false): ConversationChanged Must Be Raised On The Caller Thread
+        await RequireClient().MarkReadAsync(conversationId, messageId, ct);
+
+        if (Find(conversationId) is not { Unread: true } cached)
+        {
+            return;
+        }
+
+        ConversationInfo read = cached with { Unread = false };
+        Upsert(read);
+        ConversationChanged?.Invoke(this, read);
+    }
 
     /// <inheritdoc />
     public void Dispose() => _connection.ClientEvent -= OnClientEvent;

@@ -75,6 +75,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// <summary>Gets the open conversation's ID, or null when none is open.</summary>
     public string? SelectedConversationId { get; private set; }
 
+    /// <summary>Gets whether a conversation is open (for bindings, which skip their function when an argument is null).</summary>
+    public bool IsChatOpen => SelectedConversationId is not null;
+
     /// <summary>Gets whether the list is collapsed to avatars.</summary>
     public bool IsListCollapsed { get; private set; }
 
@@ -106,8 +109,14 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// <summary>Gets whether Start chat shows in place of a conversation.</summary>
     public bool IsStartChatOpen { get; private set; }
 
+    /// <summary>Gets the Start chat pane's state while it is open, or null.</summary>
+    public StartChatViewModel? StartChat { get; private set; }
+
     /// <summary>Gets whether the chat pane shows instead of the list (narrow only: a conversation or Start chat is open).</summary>
     public bool ShowChatPane => IsNarrow && (SelectedConversationId is not null || IsStartChatOpen);
+
+    /// <summary>Gets whether the connection banner shows (for bindings, which skip their function when an argument is null).</summary>
+    public bool HasStatusBanner => StatusBanner is not null;
 
     /// <summary>Gets the connection banner text, or null when connected and the phone answers.</summary>
     public string? StatusBanner => _state switch
@@ -149,6 +158,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
         SelectedConversationId = conversationId;
         IsStartChatOpen        = false;
+        StartChat              = null;
 
         // Picking The Open Conversation Again Keeps Its Chat (And The Draft)
         if (Chat?.ConversationId != conversationId)
@@ -165,6 +175,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     {
         SelectedConversationId = null;
         IsStartChatOpen        = false;
+        StartChat              = null;
         ReplaceChat(null);
         Changed();
     }
@@ -175,12 +186,20 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// <summary>Opens the conversation above the open one in the current list (the first one stays open).</summary>
     public void PreviousConversation() => MoveSelection(-1);
 
-    /// <summary>Shows Start chat in place of the open conversation.</summary>
+    /// <summary>Shows Start chat in place of the open conversation, loading the contacts the first time.</summary>
     public void OpenStartChat()
     {
         SelectedConversationId = null;
         IsStartChatOpen        = true;
         ReplaceChat(null);
+
+        // Already Open: Keep What Was Typed And Picked
+        if (StartChat is null)
+        {
+            StartChat = new StartChatViewModel(_store, _post);
+            _ = StartChat.LoadAsync();
+        }
+
         Changed();
     }
 

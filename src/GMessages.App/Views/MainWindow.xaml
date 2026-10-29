@@ -138,7 +138,7 @@
                     AutomationProperties.AutomationId="Main.Status"
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                     Text="{x:Bind ViewModel.StatusBanner, Mode=OneWay}"
-                    Visibility="{x:Bind local:MainWindow.ShownIfText(ViewModel.StatusBanner), Mode=OneWay}" />
+                    Visibility="{x:Bind ViewModel.HasStatusBanner, Mode=OneWay}" />
 
                 <!-- Conversations -->
                 <ListView
@@ -157,9 +157,9 @@
             </Grid>
             <!-- /List Pane -->
 
-            <!-- Chat Pane: the empty state until something opens; Task 10 fills the conversation and Start chat -->
+            <!-- Chat Pane: the empty state, the open conversation or Start chat -->
             <Grid
-                x:Name="ChatPane"
+                x:Name="ChatArea"
                 Grid.Column="{x:Bind local:MainWindow.ChatColumn(ViewModel.IsNarrow), Mode=OneWay}"
                 Grid.ColumnSpan="{x:Bind local:MainWindow.PaneSpan(ViewModel.IsNarrow), Mode=OneWay}"
                 Visibility="{x:Bind local:MainWindow.ChatVisibility(ViewModel.IsNarrow, ViewModel.ShowChatPane, ViewModel.IsListCollapsed), Mode=OneWay}">
@@ -169,7 +169,7 @@
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center"
                     Spacing="16"
-                    Visibility="{x:Bind local:MainWindow.EmptyStateVisibility(ViewModel.SelectedConversationId, ViewModel.IsStartChatOpen), Mode=OneWay}">
+                    Visibility="{x:Bind local:MainWindow.EmptyStateVisibility(ViewModel.IsChatOpen, ViewModel.IsStartChatOpen), Mode=OneWay}">
                     <FontIcon
                         FontSize="96"
                         Foreground="{ThemeResource TextFillColorTertiaryBrush}"
@@ -182,13 +182,20 @@
                         Style="{StaticResource SubtitleTextBlockStyle}" />
                 </StackPanel>
 
-                <!-- Chat Placeholder: the open conversation's name until Task 10's chat pane replaces it -->
-                <TextBlock
-                    Margin="24,16"
-                    AutomationProperties.AutomationId="Chat.Header"
-                    Style="{StaticResource SubtitleTextBlockStyle}"
-                    Text="{x:Bind ViewModel.Chat.Title, Mode=OneWay, FallbackValue=''}"
-                    Visibility="{x:Bind local:MainWindow.ShownIfText(ViewModel.SelectedConversationId), Mode=OneWay}" />
+                <!-- Conversation -->
+                <local:ChatPane
+                    BackRequested="OnPaneBack"
+                    Chat="{x:Bind ViewModel.Chat, Mode=OneWay}"
+                    ShowBack="{x:Bind ViewModel.IsNarrow, Mode=OneWay}"
+                    Visibility="{x:Bind ViewModel.IsChatOpen, Mode=OneWay}" />
+
+                <!-- Start Chat -->
+                <local:StartChatPane
+                    BackRequested="OnPaneBack"
+                    ShowBack="{x:Bind ViewModel.IsNarrow, Mode=OneWay}"
+                    StartChat="{x:Bind ViewModel.StartChat, Mode=OneWay}"
+                    Started="OnChatStarted"
+                    Visibility="{x:Bind ViewModel.IsStartChatOpen, Mode=OneWay}" />
             </Grid>
             <!-- /Chat Pane -->
         </Grid>

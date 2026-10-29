@@ -371,12 +371,12 @@ public sealed class FakeGoogleServerTests
             SIMPayload     = new SIMPayload { SIMNumber = 1 },
             MessagePayload = new MessagePayload
             {
-                TmpID                 = tmp_id,
-                ConversationID        = "c-ann",
-                ParticipantID         = "me-1",
-                MessagePayloadContent = new MessagePayloadContent { MessageContent = new MessageContent { Content = "Hello" } },
+                TmpID          = tmp_id,
+                ConversationID = "c-ann",
+                ParticipantID  = "me-1",
             },
         };
+        request.MessagePayload.MessageInfo.Add(new MessageInfo { MessageContent = new MessageContent { Content = "Hello" } });
 
         SendMessageResponse answer = await rig.Client.SendMessageAsync(request, CancellationToken.None).WaitAsync(HangGuard);
 

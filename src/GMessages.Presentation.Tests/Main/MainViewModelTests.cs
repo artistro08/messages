@@ -101,9 +101,11 @@ public sealed class MainViewModelTests
 
         vm.ApplyState(ConnectionState.Connecting);
         Assert.AreEqual(ChatCopy.Connecting, vm.StatusBanner);
+        Assert.IsTrue(vm.HasStatusBanner);
 
         vm.ApplyState(ConnectionState.Connected);
         Assert.IsNull(vm.StatusBanner);
+        Assert.IsFalse(vm.HasStatusBanner);
 
         vm.ApplyEvent(new PhoneNotResponding());
         Assert.AreEqual(ChatCopy.WaitingForPhone, vm.StatusBanner);
@@ -129,9 +131,12 @@ public sealed class MainViewModelTests
         using MainViewModel vm = await NewMainAsync(rig);
         Assert.IsNull(vm.Chat);
 
+        Assert.IsFalse(vm.IsChatOpen);
+
         vm.Select("a");
         ChatViewModel first = vm.Chat!;
         Assert.AreEqual("a", first.ConversationId);
+        Assert.IsTrue(vm.IsChatOpen);
 
         // Same Conversation Again Keeps The Chat
         vm.Select("a");
@@ -143,10 +148,35 @@ public sealed class MainViewModelTests
 
         vm.ExitConversation();
         Assert.IsNull(vm.Chat);
+        Assert.IsFalse(vm.IsChatOpen);
 
         vm.Select("a");
         vm.OpenStartChat();
         Assert.IsNull(vm.Chat);
+        Assert.IsFalse(vm.IsChatOpen);
+    }
+
+    [TestMethod]
+    public async Task OpenStartChat_MakesPane_SelectAndExitDropIt()
+    {
+        using var rig = new MainRig();
+        using MainViewModel vm = await NewMainAsync(rig);
+        Assert.IsNull(vm.StartChat);
+
+        vm.OpenStartChat();
+        StartChatViewModel first = vm.StartChat!;
+
+        // Opening Again Keeps The Pane (And What Was Typed)
+        vm.OpenStartChat();
+        Assert.AreSame(first, vm.StartChat);
+
+        vm.Select("a");
+        Assert.IsNull(vm.StartChat);
+
+        vm.OpenStartChat();
+        Assert.AreNotSame(first, vm.StartChat);
+        vm.ExitConversation();
+        Assert.IsNull(vm.StartChat);
     }
 
     [TestMethod]

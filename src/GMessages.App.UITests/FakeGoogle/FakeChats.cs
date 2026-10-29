@@ -224,7 +224,7 @@ public sealed class FakeChats
     private Conversation Find(string conversationId) =>
         _conversations.FirstOrDefault(c => c.ConversationID == conversationId) ?? throw new KeyNotFoundException($"No conversation {conversationId}.");
 
-    private static Participant Person(string id, string name, string number) => new()
+    internal static Participant Person(string id, string name, string number) => new()
     {
         ID        = new SmallInfo { Type = IdentifierType.Phone, Number = number, ParticipantID = id },
         FullName  = name,
@@ -232,7 +232,7 @@ public sealed class FakeChats
         IsVisible = true,
     };
 
-    private static Conversation NewConversation(string id, string name, bool group, ConversationStatus status, bool pinned, bool unread, params Participant[] others)
+    internal static Conversation NewConversation(string id, string name, bool group, ConversationStatus status, bool pinned, bool unread, params Participant[] others)
     {
         var conversation = new Conversation
         {

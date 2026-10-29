@@ -249,6 +249,27 @@ public sealed class ChatStoreTests
     }
 
     [TestMethod]
+    public async Task MarkRead_ClearsCachedUnread_AndRaises()
+    {
+        using var rig = new Rig();
+        Conversation unread = Conv("c1", "Ann");
+        unread.Unread = true;
+        await rig.Store.HandleEventAsync(new ConversationUpdated(unread));
+        var raised = new List<ConversationInfo>();
+        rig.Store.ConversationChanged += (_, c) => raised.Add(c);
+
+        await rig.Store.MarkReadAsync("c1", "m1", Ct);
+
+        // The Row Stops Being Bold Without Waiting For The Phone To Send The Conversation Back
+        Assert.IsFalse(rig.Store.Find("c1")?.Unread);
+        Assert.IsFalse(raised.Single().Unread);
+
+        // Already Read: Nothing Changes, Nothing Raised
+        await rig.Store.MarkReadAsync("c1", "m1", Ct);
+        Assert.AreEqual(1, raised.Count);
+    }
+
+    [TestMethod]
     public async Task SendText_UnknownConversation_NotFound_ThrowsBeforeSending()
     {
         using var rig = new Rig();

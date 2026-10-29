@@ -266,7 +266,7 @@ public partial class App : Application, IDisposable
     // Made when needed and destroyed on close, then the memory it used goes back to Windows
     private void ShowMainWindow()
     {
-        if (_quitting || _connection is null || _store is null || _settings is null)
+        if (_quitting || _connection is null || _store is null || _settings is null || _startup is null || _paths is null)
         {
             return;
         }

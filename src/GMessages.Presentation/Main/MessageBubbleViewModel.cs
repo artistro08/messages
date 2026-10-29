@@ -48,6 +48,9 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     /// <summary>Gets the sender's name when this is the first bubble of a received run in a group, else null.</summary>
     public string? SenderName { get; private set; }
 
+    /// <summary>Gets whether <see cref="SenderName"/> is set (for bindings, which skip their function when an argument is null).</summary>
+    public bool HasSenderName => SenderName is not null;
+
     /// <summary>Gets the time of day the message was sent.</summary>
     public string Time { get; private set; } = string.Empty;
 
@@ -69,6 +72,13 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         Fill(m);
         PropertyChanged?.Invoke(this, AllChanged);
     }
+
+    /// <summary>
+    /// Gives the text, followed by the "Not sent" note when the send failed.
+    /// </summary>
+    /// <remarks>A XAML list item reads its item's <c>ToString()</c> as its UI Automation name, so screen readers hear this.</remarks>
+    /// <returns>The text to read out.</returns>
+    public override string ToString() => IsFailed ? $"{Text}, {ChatCopy.NotSentRetry}" : Text;
 
     internal void SetSenderName(string? name)
     {

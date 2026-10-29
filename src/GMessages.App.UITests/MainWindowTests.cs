@@ -1,8 +1,10 @@
 using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Definitions;
 using GMessages.App.UITests.Driver;
+using GMessages.App.UITests.FakeGoogle;
 using GMessages.Presentation;
 using GMessages.Presentation.Messaging;
+using GMessages.Protocol.Proto;
 
 namespace GMessages.App.UITests;
 
@@ -88,20 +90,23 @@ public sealed class MainWindowTests : UiTest
     }
 
     /// <summary>
-    /// A live message for Ann updates her row's snippet and keeps her right below pinned Team.
+    /// A live message for an older conversation updates its row's snippet and moves it above Ann, right below
+    /// pinned Team.
     /// </summary>
     /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task LiveConversationUpdate_MovesRowToTop()
     {
+        // Dee: Older Than Every Seeded Conversation, So Her Row Starts Last
+        Server.Phone.Chats.Add(FakeChats.NewConversation("c-dee", "Dee", false, ConversationStatus.Active, false, false, FakeChats.Person("p-dee", "Dee", "+15550000004")));
         await OpenMainAsync();
-        WaitForRows(InboxRows);
+        WaitForRows(["Row.c-team", "Row.c-ann", "Row.c-dee"]);
 
-        Server.Phone.PushIncoming("c-ann", "yo");
+        Server.Phone.PushIncoming("c-dee", "yo");
 
-        Wait.Until(() => App.TryFind("Row.c-ann") is { } row && AppDriver.Search(row, e => AppDriver.SafeName(e) == "yo") is not null,
-            AppDriver.DefaultTimeout, () => "Ann's row never showed the snippet 'yo'.");
-        WaitForRows(InboxRows);
+        Wait.Until(() => App.TryFind("Row.c-dee") is { } row && AppDriver.Search(row, e => AppDriver.SafeName(e) == "yo") is not null,
+            AppDriver.DefaultTimeout, () => "Dee's row never showed the snippet 'yo'.");
+        WaitForRows(["Row.c-team", "Row.c-dee", "Row.c-ann"]);
     }
 
     /// <summary>
@@ -127,14 +132,6 @@ public sealed class MainWindowTests : UiTest
     // =========================================================================
     // HELPERS
     // =========================================================================
-
-    // Pairs, Then Opens The Main Window From The Tray
-    private async Task OpenMainAsync()
-    {
-        await PairAsync();
-        Tray.LeftClick();
-        App.Find("Main.ConversationList");
-    }
 
     private void Invoke(string automationId) => App.Find(automationId).Patterns.Invoke.Pattern.Invoke();
 

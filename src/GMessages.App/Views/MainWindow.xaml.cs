@@ -153,11 +153,11 @@ public sealed partial class MainWindow : Window
     /// <summary>
     /// Shows the empty state while no conversation and no Start chat is open.
     /// </summary>
-    /// <param name="selectedConversationId">The open conversation, or null.</param>
+    /// <param name="isChatOpen">True when a conversation is open.</param>
     /// <param name="isStartChatOpen">True when Start chat is open.</param>
     /// <returns>The empty state's visibility.</returns>
-    public static Visibility EmptyStateVisibility(string? selectedConversationId, bool isStartChatOpen) =>
-        selectedConversationId is null && !isStartChatOpen ? Visibility.Visible : Visibility.Collapsed;
+    public static Visibility EmptyStateVisibility(bool isChatOpen, bool isStartChatOpen) =>
+        !isChatOpen && !isStartChatOpen ? Visibility.Visible : Visibility.Collapsed;
 
     /// <summary>
     /// Hides an element while the flag is set.
@@ -179,19 +179,11 @@ public sealed partial class MainWindow : Window
 
     private void OnViewModelChanged(object? sender, PropertyChangedEventArgs e) => ShowCurrentList();
 
-    // Inbox Or Spam & Blocked: Wrapped For XAML Only When The List Itself Changes, So Other Changes Keep The Selection
-    // (See BindableRows For Why The Rows Aren't Bound Directly)
-    private void ShowCurrentList()
-    {
-        if (ConversationList.ItemsSource is BindableRows shown && shown.Rows == ViewModel.CurrentList.Rows)
-        {
-            return;
-        }
+    // Inbox Or Spam & Blocked: Rewrapped Only When The List Itself Changes, So Other Changes Keep The Selection
+    // (See BindableList For Why The Rows Aren't Bound Directly)
+    private void ShowCurrentList() => BindableList.Show(ConversationList, ViewModel.CurrentList.Rows);
 
-        ConversationList.ItemsSource = new BindableRows(ViewModel.CurrentList.Rows);
-    }
-
-    // The Adaptive Trigger Picked A Layout; The View Model Needs It For The One-Pane Rule
+    // Narrow Or Wide From The Window Width (See The Class Remarks); The View Model Needs It For The One-Pane Rule
     private void OnRootSizeChanged(object sender, SizeChangedEventArgs e)
     {
         bool is_narrow = e.NewSize.Width < NarrowBelow;
@@ -204,6 +196,12 @@ public sealed partial class MainWindow : Window
     private void OnMenuClick(object sender, RoutedEventArgs e) => ViewModel.ToggleList();
 
     private void OnStartChatClick(object sender, RoutedEventArgs e) => ViewModel.OpenStartChat();
+
+    // Start Chat Opened (Or Found) The Conversation: Show It In Place Of Start Chat
+    private void OnChatStarted(object? sender, string conversationId) => ViewModel.Select(conversationId);
+
+    // The Back Arrow Of A Narrow Window Closes The Chat Or Start Chat, Which Shows The List
+    private void OnPaneBack(object? sender, EventArgs e) => ViewModel.ExitConversation();
 
     private void OnSpamBlockedClick(object sender, RoutedEventArgs e) => ViewModel.OpenSpamBlocked();
 

@@ -172,6 +172,9 @@ public sealed class ChatViewModelTests
         await chat.SendAsync();
 
         Assert.IsTrue(chat.Messages[0].IsFailed);
+
+        // Screen Readers Hear The Text And That It Failed (A List Item Reads Its Item's ToString)
+        Assert.AreEqual("hello, " + ChatCopy.NotSentRetry, chat.Messages[0].ToString());
     }
 
     [TestMethod]
@@ -199,7 +202,9 @@ public sealed class ChatViewModelTests
         await chat.LoadAsync();
 
         Assert.AreEqual("Team", chat.Messages[0].SenderName);
+        Assert.IsTrue(chat.Messages[0].HasSenderName);
         Assert.IsNull(chat.Messages[1].SenderName);
+        Assert.IsFalse(chat.Messages[1].HasSenderName);
         Assert.AreEqual("Bo", chat.Messages[2].SenderName);
     }
 

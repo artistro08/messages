@@ -1,0 +1,114 @@
+<UserControl
+    x:Class="GMessages.App.Views.ChatPane"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:GMessages.App.Views.Controls"
+    xmlns:main="using:GMessages.Presentation.Main">
+
+    <Grid RowDefinitions="Auto,*,Auto">
+
+        <!-- Header: back (narrow only), avatar and name -->
+        <Grid
+            Padding="12,8,16,8"
+            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+            BorderThickness="0,0,0,1"
+            ColumnDefinitions="Auto,Auto,*"
+            ColumnSpacing="12">
+            <Button
+                Width="40"
+                Height="36"
+                Padding="0"
+                AutomationProperties.AutomationId="Chat.Back"
+                AutomationProperties.Name="Back"
+                Background="Transparent"
+                BorderThickness="0"
+                Click="OnBackClick"
+                Visibility="{x:Bind ShowBack, Mode=OneWay}">
+                <FontIcon FontSize="16" Glyph="&#xE72B;" />
+            </Button>
+            <controls:Avatar
+                Grid.Column="1"
+                VerticalAlignment="Center"
+                Color="{x:Bind Chat.AvatarColor, Mode=OneWay, FallbackValue=0}"
+                Initial="{x:Bind Chat.Initial, Mode=OneWay, FallbackValue=''}" />
+            <TextBlock
+                Grid.Column="2"
+                VerticalAlignment="Center"
+                AutomationProperties.AutomationId="Chat.Header"
+                MaxLines="1"
+                Style="{StaticResource SubtitleTextBlockStyle}"
+                Text="{x:Bind Chat.Title, Mode=OneWay, FallbackValue=''}"
+                TextTrimming="CharacterEllipsis" />
+        </Grid>
+
+        <!-- Messages: oldest at the top, kept scrolled to the newest; reaching the top loads older ones -->
+        <ListView
+            x:Name="MessageList"
+            Grid.Row="1"
+            Padding="12,8"
+            AutomationProperties.AutomationId="Chat.Messages"
+            Loaded="OnMessageListLoaded"
+            SelectionMode="None">
+            <ListView.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <ItemsStackPanel VerticalAlignment="Bottom" ItemsUpdatingScrollMode="KeepLastItemInView" />
+                </ItemsPanelTemplate>
+            </ListView.ItemsPanel>
+            <ListView.ItemContainerStyle>
+                <Style TargetType="ListViewItem">
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                    <Setter Property="MinHeight" Value="0" />
+                    <Setter Property="Padding" Value="0" />
+                </Style>
+            </ListView.ItemContainerStyle>
+            <ListView.ItemTemplate>
+                <DataTemplate x:DataType="main:MessageBubbleViewModel">
+                    <controls:MessageBubble Bubble="{x:Bind}" RetryRequested="OnRetryRequested" />
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+
+        <!-- Compose: emoji, the message box (Enter sends, Shift + Enter adds a line), send -->
+        <Grid
+            Grid.Row="2"
+            Padding="12,8,12,12"
+            ColumnDefinitions="Auto,*,Auto"
+            ColumnSpacing="8">
+            <Button
+                Width="40"
+                Height="36"
+                Padding="0"
+                VerticalAlignment="Bottom"
+                AutomationProperties.AutomationId="Chat.Emoji"
+                AutomationProperties.Name="Emoji"
+                Background="Transparent"
+                BorderThickness="0"
+                Click="OnEmojiClick">
+                <FontIcon FontSize="16" Glyph="&#xE76E;" />
+            </Button>
+            <TextBox
+                x:Name="DraftBox"
+                Grid.Column="1"
+                MaxHeight="160"
+                AcceptsReturn="True"
+                AutomationProperties.AutomationId="Chat.Draft"
+                AutomationProperties.Name="Message"
+                PreviewKeyDown="OnDraftKeyDown"
+                Text="{x:Bind Chat.Draft, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, FallbackValue=''}"
+                TextWrapping="Wrap" />
+            <Button
+                Grid.Column="2"
+                Width="40"
+                Height="36"
+                Padding="0"
+                VerticalAlignment="Bottom"
+                AutomationProperties.AutomationId="Chat.Send"
+                AutomationProperties.Name="Send"
+                Click="OnSendClick"
+                IsEnabled="{x:Bind Chat.CanSend, Mode=OneWay, FallbackValue=False}"
+                Style="{StaticResource AccentButtonStyle}">
+                <FontIcon FontSize="16" Glyph="&#xE724;" />
+            </Button>
+        </Grid>
+    </Grid>
+</UserControl>

@@ -274,11 +274,20 @@ public sealed class FakePhone
             return;
         }
 
-        string text     = request.MessagePayload?.MessagePayloadContent?.MessageContent?.Content ?? "";
+        string text     = SentText(request);
         Message message = Chats.AddOutgoing(request.ConversationID, text, request.TmpID);
         Reply(data.RequestID, data.Action, new SendMessageResponse { Status = SendMessageResponse.Types.Status.Success }, encrypt: true);
         PushUpdate(new UpdateEvents { MessageEvent = new MessageEvent { Data = { message } } }, _push);
     }
+
+    /// <summary>
+    /// Reads the text of a sent message: the first <c>MessageInfo</c>'s content, where the app (like the bridge's
+    /// <c>ConvertMatrixMessage</c>) puts it.
+    /// </summary>
+    /// <param name="request">The send request.</param>
+    /// <returns>The text, or empty.</returns>
+    public static string SentText(SendMessageRequest request) =>
+        request?.MessagePayload?.MessageInfo.FirstOrDefault()?.MessageContent?.Content ?? "";
 
     // A Live Update: A GET_UPDATES Data Event That Answers No Request
     private void PushUpdate(UpdateEvents update, Action<IncomingRPCMessage> push) =>

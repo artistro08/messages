@@ -72,5 +72,12 @@ public sealed class ContactRowViewModel
     /// <summary>Gets whether this is the "Send to" row for a typed number.</summary>
     public bool IsSendTo { get; }
 
+    /// <summary>
+    /// Gives the name.
+    /// </summary>
+    /// <remarks>A XAML list item reads its item's <c>ToString()</c> as its UI Automation name, so screen readers hear this.</remarks>
+    /// <returns>The name.</returns>
+    public override string ToString() => Name;
+
     internal static string DigitsOf(string text) => new([.. text.Where(char.IsAsciiDigit)]);
 }
