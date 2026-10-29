@@ -43,6 +43,11 @@ public sealed class AppPaths
     public string AvatarsFolder => Path.Combine(DataFolder, "Avatars");
 
     /// <summary>
+    /// The encrypted message database; deleted with the session.
+    /// </summary>
+    public string MessagesDatabase => Path.Combine(DataFolder, "messages.db");
+
+    /// <summary>
     /// Picks the data folder.
     /// </summary>
     /// <remarks>
