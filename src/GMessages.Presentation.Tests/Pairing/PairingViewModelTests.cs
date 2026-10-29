@@ -209,23 +209,6 @@ public sealed class PairingViewModelTests
     }
 
     /// <summary>
-    /// A sign-in window closed without signing in ends Failed with the closed message; Try again resets.
-    /// </summary>
-    [TestMethod]
-    public async Task SignInClosed_IsFailedWithClosedMessage()
-    {
-        await using var rig = new Rig();
-        var watched = new Watched(rig);
-
-        watched.ViewModel.SignInClosed();
-
-        Assert.AreEqual(PairingStep.Failed, watched.ViewModel.Step);
-        Assert.AreEqual("Sign-in was closed. Try again.", watched.ViewModel.Message);
-        watched.ViewModel.TryAgain();
-        Assert.AreEqual(PairingStep.SigningIn, watched.ViewModel.Step);
-    }
-
-    /// <summary>
     /// Cookies captured twice in one attempt start only one pairing.
     /// </summary>
     [TestMethod]

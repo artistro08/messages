@@ -19,9 +19,6 @@ public abstract class UiTest
     /// <summary>The pairing window's title.</summary>
     protected static readonly string PairingTitle = $"{AppInfo.DisplayName}: Pair your phone";
 
-    /// <summary>The sign-in helper window's title.</summary>
-    protected static readonly string SignInTitle = $"{AppInfo.DisplayName}: Sign in to Google";
-
     /// <summary>The settings window's title.</summary>
     protected static readonly string SettingsTitle = $"{AppInfo.DisplayName} Settings";
 
@@ -101,12 +98,9 @@ public abstract class UiTest
     protected void AssertTitleBar(string automationId, string expectedTitle) => App.WaitForText(automationId, expectedTitle);
 
     /// <summary>
-    /// Waits for the fake sign-in page inside the sign-in helper's WebView2 and returns its "Sign in" button.
+    /// Waits for the fake sign-in page inside the pairing window's WebView2 and returns its "Sign in" button.
     /// </summary>
-    /// <remarks>
-    /// WebView2 content is exposed to UI Automation through the Chromium accessibility tree. The WebView2 lives in the
-    /// helper process, which <see cref="AppDriver"/> searches too.
-    /// </remarks>
+    /// <remarks>WebView2 content is exposed to UI Automation through the Chromium accessibility tree.</remarks>
     /// <returns>The button.</returns>
     protected AutomationElement WaitForSignInButton()
     {
@@ -171,7 +165,7 @@ public abstract class UiTest
     }
 
     /// <summary>
-    /// Pairs from the pairing window: sign in, matching emoji, correct tap, window closes, session saved, helper gone.
+    /// Pairs from the pairing window: sign in, matching emoji, correct tap, window closes, session saved.
     /// </summary>
     /// <returns>A task that completes once paired.</returns>
     protected async Task PairAsync()
@@ -181,7 +175,6 @@ public abstract class UiTest
         Server.Phone.Tap(true);
         App.WaitForNoWindow(PairingTitle, AppDriver.DefaultTimeout);
         Wait.Until(() => File.Exists(SessionFile), AppDriver.DefaultTimeout, () => $"No session.bin in {App.DataDir}.");
-        App.WaitForNoHelper();
     }
 
     /// <summary>

@@ -13,9 +13,8 @@ namespace GMessages.App.UITests.Driver;
 /// <remarks>
 /// The app is never hosted in the test process. It starts with <c>--test-endpoints</c> and <c>--test-data-dir</c>,
 /// so it gets the <c>.Test</c> single-instance names and the test tray GUID and never touches a real install's data.
-/// Every lookup is limited to windows of the app's own process and its sign-in helper (a second <c>Messages.exe</c>
-/// with <c>--sign-in</c>, found by exe path and start time). Dispose always cleans up, also after a failed test:
-/// <c>--quit</c>, up to 10 s for the exit, then a kill, then any helper is killed and the temp folder is deleted.
+/// Every lookup is limited to windows of the app's own process. Dispose always cleans up, also after a failed test:
+/// <c>--quit</c>, up to 10 s for the exit, then a kill, then the temp folder is deleted.
 /// </remarks>
 public sealed class AppDriver : IAsyncDisposable
 {
@@ -354,26 +353,7 @@ public sealed class AppDriver : IAsyncDisposable
     }
 
     /// <summary>
-    /// Gets the sign-in helpers this app started: other processes of <see cref="ExePath"/> started since this driver.
-    /// </summary>
-    /// <remarks>
-    /// The UI tests run one at a time, so no other copy of the test exe runs then except a short-lived <c>--quit</c>
-    /// or second launch, neither of which has windows.
-    /// </remarks>
-    /// <returns>The process IDs.</returns>
-    public IReadOnlyList<int> HelperIds() =>
-        [.. RunningTestExeIds().Where(id => id != _process.Id && StartedSince(id, _startedUtc))];
-
-    /// <summary>
-    /// Waits until no sign-in helper runs (it exits on its own after sending its message and deleting its profile).
-    /// </summary>
-    /// <exception cref="AssertFailedException">A helper was still running after <see cref="DefaultTimeout"/>.</exception>
-    public void WaitForNoHelper() =>
-        Wait.Until(() => HelperIds().Count == 0, DefaultTimeout, () => $"The sign-in helper is still running: pids [{string.Join(", ", HelperIds())}].");
-
-    /// <summary>
-    /// Quits the app (a kill if it won't), kills any sign-in helper it left, releases UI Automation and deletes the temp
-    /// data folder.
+    /// Quits the app (a kill if it won't), releases UI Automation and deletes the temp data folder.
     /// </summary>
     /// <returns>A task that completes when everything is cleaned up.</returns>
     public async ValueTask DisposeAsync()
@@ -395,9 +375,6 @@ public sealed class AppDriver : IAsyncDisposable
             _process.Kill(entireProcessTree: true);
             await _process.WaitForExitAsync().WaitAsync(QuitTimeout).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
         }
-
-        // Sign-In Helpers: The App Kills Its Own On Quit; A Killed App Can't
-        await KillHelpersAsync();
 
         _process.Dispose();
         Automation.Dispose();
@@ -438,36 +415,6 @@ public sealed class AppDriver : IAsyncDisposable
         return process;
     }
 
-    private async Task KillHelpersAsync()
-    {
-        foreach (int id in HelperIds())
-        {
-            try
-            {
-                using Process helper = Process.GetProcessById(id);
-                helper.Kill(entireProcessTree: true);
-                await helper.WaitForExitAsync().WaitAsync(QuitTimeout).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
-            }
-            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception)
-            {
-                // Already Gone
-            }
-        }
-    }
-
-    private static bool StartedSince(int id, DateTime startedUtc)
-    {
-        try
-        {
-            using Process process = Process.GetProcessById(id);
-            return process.StartTime.ToUniversalTime() >= startedUtc;
-        }
-        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception)
-        {
-            return false;
-        }
-    }
-
     // The Reason The App Wrote When It Refused Its Test Flags
     private static string TestHookError()
     {
@@ -505,7 +452,7 @@ public sealed class AppDriver : IAsyncDisposable
         }
     }
 
-    // Top-Level Windows Of The App Process And Its Sign-In Helper, Including Popup Windows (Menus)
+    // Top-Level Windows Of The App Process, Including Its Popup Windows (Menus)
     private AutomationElement[] TopLevel()
     {
         if (_process.HasExited)
@@ -515,8 +462,7 @@ public sealed class AppDriver : IAsyncDisposable
 
         try
         {
-            AutomationElement desktop = Automation.GetDesktop();
-            return [.. desktop.FindAllChildren(cf => cf.ByProcessId(_process.Id)), .. HelperIds().SelectMany(id => desktop.FindAllChildren(cf => cf.ByProcessId(id)))];
+            return Automation.GetDesktop().FindAllChildren(cf => cf.ByProcessId(_process.Id));
         }
         catch (Exception ex) when (IsGone(ex))
         {

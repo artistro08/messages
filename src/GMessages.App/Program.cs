@@ -1,6 +1,4 @@
-using System.Diagnostics;
 using GMessages.Presentation;
-using GMessages.Presentation.Pairing;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.Windows.AppLifecycle;
@@ -13,8 +11,7 @@ namespace GMessages.App;
 /// <remarks>
 /// Ported from Magic Buds' <c>Program.cs</c>. <c>Messages.exe --quit</c> asks the running copy to quit the
 /// same way the tray menu's Quit does. A second launch tells the running copy to open its main window, then
-/// exits. <c>Messages.exe --sign-in &lt;pipe&gt;</c> is the sign-in helper (<see cref="SignInRequest"/>), which skips all
-/// of that. Names come from <see cref="AppInfo.DisplayName"/>, with a <c>.Test</c> suffix under test so UI test
+/// exits. Names come from <see cref="AppInfo.DisplayName"/>, with a <c>.Test</c> suffix under test so UI test
 /// runs never collide with a real copy.
 /// </remarks>
 public static class Program
@@ -41,12 +38,6 @@ public static class Program
     /// Signaled by a second launch; the running copy opens its main window.
     /// </summary>
     public static string ShowEventName => $"{AppInfo.DisplayName}.Show{NameSuffix}";
-
-    /// <summary>
-    /// The sign-in helper's pipe, log folder and theme when started with <c>--sign-in</c>, else null.
-    /// </summary>
-    public static (string PipeName, string? LogsFolder, Presentation.Settings.AppTheme Theme)? SignInRequest { get; } =
-        SignInHelperArgs.Parse(Environment.GetCommandLineArgs());
 
     /// <summary>
     /// The running copy's end of <see cref="ShowEventName"/>, made before the single-instance check so a
@@ -102,21 +93,6 @@ public static class Program
             return;
         }
 
-        // Sign-In Helper Relay: the break-away policy puts the children of the process it's set on outside the package,
-        // not that process itself. So a helper still in the package starts the real helper and passes on its exit code
-        if (SignInRequest is not null && AppIdentity.IsPackaged && !args.Contains(RelayedFlag, StringComparer.Ordinal))
-        {
-            Environment.Exit(RelaySignIn(args));
-            return;
-        }
-
-        // Sign-In Helper: no single instance, quit or show events; the app that started it owns the lifetime
-        if (SignInRequest is not null)
-        {
-            StartApplication();
-            return;
-        }
-
         // Every launch makes or opens the show and quit events before checking for a running copy, so they
         // always exist by the time a second launch or a --quit looks for them
         var showRequest = OpenEvent(ShowEventName);
@@ -139,36 +115,15 @@ public static class Program
         // First Launch
         ShowRequest = showRequest;
         QuitRequest = quitRequest;
-        StartApplication();
-        ShowRequest?.Dispose();
-        QuitRequest?.Dispose();
-    }
-
-    // Marks The Relayed Helper, So A Break-Away That Didn't Take Can't Relay Forever
-    private const string RelayedFlag = "--relayed";
-
-    // Starts The Real Helper (Outside The Package) And Waits For It; Killing This Process Tree Kills It Too
-    private static int RelaySignIn(string[] args)
-    {
-        var start        = new ProcessStartInfo(Environment.ProcessPath!, SignInHelperArgs.Join([.. args, RelayedFlag])) { UseShellExecute = false };
-        using var helper = Process.Start(start);
-        if (helper is null)
-        {
-            return 1;
-        }
-
-        helper.WaitForExit();
-        return helper.ExitCode;
-    }
-
-    // Runs The XAML App Until It Exits
-    private static void StartApplication() =>
         Application.Start(callbackParams =>
         {
             var context = new DispatcherQueueSynchronizationContext(DispatcherQueue.GetForCurrentThread());
             SynchronizationContext.SetSynchronizationContext(context);
             _ = new App();
         });
+        ShowRequest?.Dispose();
+        QuitRequest?.Dispose();
+    }
 
     // Null when another process owns the name (an elevated copy, say); the app runs without it
     private static EventWaitHandle? OpenEvent(string name)

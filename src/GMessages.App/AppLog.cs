@@ -47,21 +47,6 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 913, Level = LogLevel.Warning, Message = "Reconnect failed ({Reason})")]
     public static partial void ReconnectFailed(ILogger logger, string reason, Exception ex);
 
-    [LoggerMessage(EventId = 914, Level = LogLevel.Information, Message = "Sign-in helper launched (pid {Pid}, break-away: {BreakAway})")]
-    public static partial void SignInHelperLaunched(ILogger logger, int pid, bool breakAway);
-
-    [LoggerMessage(EventId = 915, Level = LogLevel.Information, Message = "Sign-in window closed without signing in")]
-    public static partial void SignInClosed(ILogger logger);
-
-    [LoggerMessage(EventId = 916, Level = LogLevel.Warning, Message = "Sign-in helper failed ({ErrorType})")]
-    public static partial void SignInHelperFailed(ILogger logger, string errorType);
-
-    [LoggerMessage(EventId = 917, Level = LogLevel.Information, Message = "Sign-in helper started (packaged: {Packaged})")]
-    public static partial void SignInHelperStarted(ILogger logger, bool packaged);
-
-    [LoggerMessage(EventId = 918, Level = LogLevel.Error, Message = "Sign-in pipe failed ({ErrorType})")]
-    public static partial void SignInPipeFailed(ILogger logger, string errorType);
-
     [LoggerMessage(EventId = 951, Level = LogLevel.Information, Message = "Test endpoint {Endpoint}, data folder {DataFolder}")]
     public static partial void TestEndpoint(ILogger logger, string endpoint, string dataFolder);
 }

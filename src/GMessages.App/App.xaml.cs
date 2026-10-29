@@ -1,6 +1,5 @@
 using System.ComponentModel;
 using System.Diagnostics;
-using System.IO.Pipes;
 using GMessages.App.Startup;
 using GMessages.App.Views;
 using GMessages.Presentation;
@@ -86,13 +85,6 @@ public partial class App : Application, IDisposable
     /// <param name="args">Launch details (unused; the command line is read by <see cref="Program"/>).</param>
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
-        // Sign-In Helper: only its window, none of the tray app
-        if (Program.SignInRequest is { } signIn)
-        {
-            LaunchSignInHelper(signIn.PipeName, signIn.LogsFolder, signIn.Theme);
-            return;
-        }
-
         // Paths
         var paths = AppPaths.Resolve(AppIdentity.IsPackaged ? ApplicationData.Current.LocalFolder.Path : null, TestHooks.DataDir);
         _paths    = paths;
@@ -119,7 +111,7 @@ public partial class App : Application, IDisposable
         }
 
         // Sign-In Profiles A Quit Or Crash Mid-Sign-In Left Behind (They Can Hold A Live Google Session)
-        SignIn.DeleteLeftoverProfiles(_logger);
+        PairingWindow.DeleteLeftoverProfiles(_logger);
 
         // Memory Trim
         var dispatcher = DispatcherQueue.GetForCurrentThread();
@@ -223,7 +215,7 @@ public partial class App : Application, IDisposable
 
         var dispatcher = DispatcherQueue.GetForCurrentThread();
         var viewModel  = new PairingViewModel(_connection, a => dispatcher.TryEnqueue(() => a()));
-        _pairingWindow = new PairingWindow(viewModel, _paths!.LogsFolder, _logger);
+        _pairingWindow = new PairingWindow(viewModel, TestHooks.Endpoints ?? GmEndpoints.Production, _logger);
         _pairingWindow.ApplyTheme(_settings?.Theme ?? AppTheme.System);
         _pairingWindow.Closed += (_, _) =>
         {
@@ -234,49 +226,6 @@ public partial class App : Application, IDisposable
             }
         };
         _pairingWindow.Activate();
-    }
-
-    // =========================================================================
-    // SIGN-IN HELPER
-    // =========================================================================
-
-    // The --sign-in process: the sign-in window only. No tray, single instance, connection, settings or session.bin.
-    // It runs outside the package, so the app passes its log folder and theme. Its log is its own file there
-    private void LaunchSignInHelper(string pipeName, string? logsFolder, AppTheme theme)
-    {
-        // Log
-        if (logsFolder is not null)
-        {
-            _logProvider = new RollingFileLoggerProvider(logsFolder, new LogLevelSwitch { MinimumLevel = LogLevel.Information }, TimeProvider.System, baseName: $"{Program.InstanceKey}-signin");
-            _logger      = _logProvider.CreateLogger("GMessages.SignIn");
-        }
-
-        AppLog.SignInHelperStarted(_logger, AppIdentity.IsPackaged);
-        SignIn.DeleteLeftoverProfiles(_logger);
-
-        // Pipe: the app is already listening, so a failed connect means it's gone
-        var pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.Out, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
-        try
-        {
-            pipe.Connect(TimeSpan.FromSeconds(5));
-        }
-        catch (Exception ex) when (ex is TimeoutException or IOException or UnauthorizedAccessException)
-        {
-            AppLog.SignInPipeFailed(_logger, ex.GetType().Name);
-            pipe.Dispose();
-            Environment.ExitCode = 1;
-            Exit();
-            return;
-        }
-
-        // Window: sends once, then exits by itself
-        var window = new SignInWindow(TestHooks.Endpoints ?? GmEndpoints.Production, _logger, async cookies =>
-        {
-            await pipe.WriteAsync(SignInPipeMessage.Encode(cookies));
-            await pipe.FlushAsync();
-        });
-        window.ApplyTheme(theme);
-        window.Activate();
     }
 
     // =========================================================================
