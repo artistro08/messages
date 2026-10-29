@@ -22,9 +22,6 @@ namespace GMessages.Presentation.Main;
 /// </remarks>
 public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
 {
-    // Gray Used When The Phone Gives No Avatar Color
-    private const uint FallbackColor = 0xFF5F6368;
-
     private readonly ChatStore _store;
     private readonly TimeProvider _time;
     private readonly Action<Action> _post;
@@ -71,14 +68,23 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     /// <summary>Gets the conversation name.</summary>
     public string Title { get; private set; } = string.Empty;
 
-    /// <summary>Gets the avatar letter.</summary>
+    /// <summary>Gets the avatar letter: the conversation's, or a group's first other person's.</summary>
     public string Initial { get; private set; } = string.Empty;
 
     /// <summary>Gets the avatar color as opaque ARGB.</summary>
-    public uint AvatarColor { get; private set; } = FallbackColor;
+    public uint AvatarColor { get; private set; } = AvatarParts.FallbackColor;
 
     /// <summary>Gets the participant whose photo covers the avatar (the first other person), or empty.</summary>
     public string PhotoId { get; private set; } = string.Empty;
+
+    /// <summary>Gets the back circle's letter: the second other person of a group, else empty.</summary>
+    public string SecondInitial { get; private set; } = string.Empty;
+
+    /// <summary>Gets the back circle's color as opaque ARGB; 0 (no back circle) unless a group with two others.</summary>
+    public uint SecondColor { get; private set; }
+
+    /// <summary>Gets the participant whose photo covers the back circle, or empty.</summary>
+    public string SecondPhotoId { get; private set; } = string.Empty;
 
     /// <summary>Gets the bubbles, oldest first.</summary>
     public ObservableCollection<MessageBubbleViewModel> Messages { get; } = [];
@@ -100,6 +106,9 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
 
     /// <summary>Gets or sets whether the window is focused with this chat open, so incoming messages count as read (set by <see cref="MainViewModel"/>).</summary>
     public bool IsActive { get; set; }
+
+    /// <summary>Gets whether older messages are left to load above the bubbles.</summary>
+    public bool HasOlder => _older is not null;
 
     /// <summary>Gets whether a page is loading.</summary>
     public bool IsLoading
@@ -356,10 +365,15 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
-        Title       = c.Name;
-        Initial     = ChatFormat.Initial(c.Name);
-        AvatarColor = ChatFormat.ColorFromHex(c.AvatarHexColor, FallbackColor);
-        PhotoId     = c.Participants.FirstOrDefault(p => !p.IsMe)?.Id ?? string.Empty;
+        // Avatar: Stacked People For A Group (R12), The Same As The List Row
+        AvatarParts avatar = AvatarParts.Of(c);
+        Title              = c.Name;
+        Initial            = avatar.Initial;
+        AvatarColor        = avatar.Color;
+        PhotoId            = avatar.PhotoId;
+        SecondInitial      = avatar.SecondInitial;
+        SecondColor        = avatar.SecondColor;
+        SecondPhotoId      = avatar.SecondPhotoId;
         Raise(string.Empty);
     }
 

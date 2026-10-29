@@ -37,6 +37,9 @@ public static class ChatCopy
     public const string TypeNameOrNumber   = "Type a name or phone number";
     public const string SendToFormat       = "Send to {0}";
 
+    // Start Chat Failure (R11; Controller Copy, The Owner May Edit It)
+    public const string StartFailed = "Couldn't start this conversation. Try again.";
+
     // Startup
     public const string StartupRefused = "You'll have to manually enable startup. Turn it on in Settings > Apps > Startup.";
 }

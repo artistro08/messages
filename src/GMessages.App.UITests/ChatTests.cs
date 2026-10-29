@@ -2,7 +2,9 @@ using FlaUI.Core.AutomationElements;
 using FlaUI.Core.WindowsAPI;
 using GMessages.App.UITests.Driver;
 using GMessages.App.UITests.FakeGoogle;
+using GMessages.Presentation;
 using GMessages.Presentation.Messaging;
+using GMessages.Protocol.Proto;
 using Keyboard = FlaUI.Core.Input.Keyboard;
 
 namespace GMessages.App.UITests;
@@ -112,6 +114,9 @@ public sealed class ChatTests : UiTest
         // Only Ann Matches
         Wait.Until(() => AppDriver.SafeName(App.TryFind("Contact.0")).Contains("Ann Lee", StringComparison.Ordinal) && App.TryFind("Contact.1") is null,
             AppDriver.DefaultTimeout, () => $"Contact.0 was '{AppDriver.SafeName(App.TryFind("Contact.0"))}', Contact.1 was '{AppDriver.SafeName(App.TryFind("Contact.1"))}'.");
+        // The Real Mouse Clicks Whatever Window Is On Top There. A Window Opened Through UI Automation (No Real Input)
+        // Isn't Allowed The Foreground, So It Can Sit Behind Another Window And The Click Misses It: Bring It Up First
+        App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).SetForeground();
         App.Find("Contact.0").Click();
 
         // Go Opens Her Conversation
@@ -122,6 +127,41 @@ public sealed class ChatTests : UiTest
         App.WaitForText("Chat.Header", "Ann Lee");
         Wait.Until(() => App.TryFind("StartChat.Query") is null, AppDriver.DefaultTimeout, () => "The Start chat pane stayed open.");
         Wait.Until(() => Bubbles().Count == 3, AppDriver.DefaultTimeout, () => $"Ann's chat showed {Bubbles().Count} bubbles, not 3.");
+    }
+
+    /// <summary>
+    /// A first page that doesn't fill the list (here all system lines, which show no bubble) loads older pages on its
+    /// own, since there is nothing to scroll up to.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task ShortFirstPage_LoadsOlderUntilItScrolls()
+    {
+        // Five Real Messages, Then A Full Page Of System Lines Above Them In Time
+        Conversation old = FakeChats.NewConversation("c-old", "Old Pal", false, ConversationStatus.Active, false, false, FakeChats.Person("p-old", "Old Pal", "+15550000005"));
+        long time        = DateTimeOffset.UtcNow.AddDays(-1).ToUnixTimeMilliseconds() * 1000;
+        Message[] texts  = [.. Enumerable.Range(1, 5).Select(i => Line($"Old {i}", MessageStatusType.IncomingComplete))];
+        Message[] lines  = [.. Enumerable.Range(1, ChatStore.PageSize).Select(i => Line($"System {i}", (MessageStatusType)200))];
+        Server.Phone.Chats.Add(old, [.. texts, .. lines]);
+
+        await OpenMainAsync();
+        App.Find("Row.c-old").Patterns.SelectionItem.Pattern.Select();
+
+        Wait.Until(() => Bubbles().Count == 5, AppDriver.DefaultTimeout, () => $"The short chat showed {Bubbles().Count} bubbles, not the 5 older ones.");
+
+        Message Line(string text, MessageStatusType status)
+        {
+            var message = new Message
+            {
+                MessageID      = "m-" + text.Replace(' ', '-'),
+                ConversationID = "c-old",
+                ParticipantID  = "p-old",
+                Timestamp      = time += 1_000_000,
+                MessageStatus  = new MessageStatus { Status = status },
+            };
+            message.MessageInfo.Add(new MessageInfo { MessageContent = new MessageContent { Content = text } });
+            return message;
+        }
     }
 
     // =========================================================================

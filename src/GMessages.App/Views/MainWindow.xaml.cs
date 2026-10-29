@@ -44,7 +44,7 @@ public sealed partial class MainWindow : Window
     private readonly SettingsViewModel _settings;
     private readonly AvatarCache _avatars;
 
-    // The Owner's Photo Is Asked For Once, After A Load Names The Owner
+    // The Owner's Photo Is Asked For Once A Load Names The Owner, And Again After An Answer Without One
     private bool _profileAsked;
 
     /// <summary>
@@ -78,10 +78,12 @@ public sealed partial class MainWindow : Window
         // Behavior
         Activated                              += (_, e) => ViewModel.IsWindowFocused = e.WindowActivationState != WindowActivationState.Deactivated;
         ViewModel.PropertyChanged              += OnViewModelChanged;
+        ViewModel.Connected                    += OnConnected;
         ViewModel.Inbox.Rows.CollectionChanged += OnInboxRowsChanged;
         Closed                                 += (_, _) =>
         {
             ViewModel.PropertyChanged              -= OnViewModelChanged;
+            ViewModel.Connected                    -= OnConnected;
             ViewModel.Inbox.Rows.CollectionChanged -= OnInboxRowsChanged;
             Bindings.StopTracking();
             ViewModel.Dispose();
@@ -238,8 +240,19 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    // Rows Came In, So A Conversation May Now Name The Owner: Show Their Photo (PersonPicture Keeps Its Glyph Without One)
-    private async void OnInboxRowsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    // Rows Came In, So A Conversation May Now Name The Owner: Show Their Photo
+    private void OnInboxRowsChanged(object? sender, NotifyCollectionChangedEventArgs e) => _ = ShowProfilePhotoAsync();
+
+    // Back Online: Photos That Failed While The Phone Was Away Are Asked For Again
+    private void OnConnected(object? sender, EventArgs e)
+    {
+        Avatar.ReloadMissing(RootGrid);
+        _ = ShowProfilePhotoAsync();
+    }
+
+    // PersonPicture Keeps Its Glyph Without A Photo. No Answer (No Photo, Or The Phone Didn't Answer) Lets The Next
+    // Load Or Reconnect Ask Again; The Cache Remembers "No Photo", So That Costs The Phone Nothing
+    private async Task ShowProfilePhotoAsync()
     {
         if (_profileAsked || ViewModel.MeId is not { } me_id)
         {
@@ -247,10 +260,13 @@ public sealed partial class MainWindow : Window
         }
 
         _profileAsked = true;
-        if (await _avatars.GetAsync(me_id, CancellationToken.None) is { } photo)
+        if (await _avatars.GetAsync(me_id, CancellationToken.None) is not { } photo)
         {
-            ProfilePicture.ProfilePicture = await Avatar.ToImageAsync(photo);
+            _profileAsked = false;
+            return;
         }
+
+        ProfilePicture.ProfilePicture = await Avatar.ToImageAsync(photo);
     }
 
     private void OnMenuClick(object sender, RoutedEventArgs e) => ViewModel.ToggleList();

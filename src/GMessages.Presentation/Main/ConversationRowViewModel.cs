@@ -13,9 +13,6 @@ namespace GMessages.Presentation.Main;
 /// </remarks>
 public sealed class ConversationRowViewModel : INotifyPropertyChanged
 {
-    // Gray Used When The Phone Gives No Avatar Color
-    private const uint FallbackColor = 0xFF5F6368;
-
     private static readonly PropertyChangedEventArgs AllChanged = new(string.Empty);
 
     /// <summary>
@@ -55,7 +52,7 @@ public sealed class ConversationRowViewModel : INotifyPropertyChanged
     /// <summary>Gets whether the conversation is a group chat.</summary>
     public bool IsGroup { get; private set; }
 
-    /// <summary>Gets the avatar letter.</summary>
+    /// <summary>Gets the avatar letter: the conversation's, or a group's first other person's.</summary>
     public string Initial { get; private set; } = string.Empty;
 
     /// <summary>Gets the avatar color as opaque ARGB.</summary>
@@ -67,7 +64,7 @@ public sealed class ConversationRowViewModel : INotifyPropertyChanged
     /// <summary>Gets the participant whose photo covers the front circle, or empty.</summary>
     public string PhotoId { get; private set; } = string.Empty;
 
-    /// <summary>Gets the back circle's letter: the second person of a group, else empty.</summary>
+    /// <summary>Gets the back circle's letter: the second other person of a group, else empty.</summary>
     public string SecondInitial { get; private set; } = string.Empty;
 
     /// <summary>Gets the back circle's color as opaque ARGB; 0 (no back circle) unless a group.</summary>
@@ -107,16 +104,16 @@ public sealed class ConversationRowViewModel : INotifyPropertyChanged
         IsUnread        = c.Unread;
         IsPinned        = c.Pinned;
         IsGroup         = c.IsGroup;
-        Initial         = ChatFormat.Initial(c.Name);
-        AvatarColor     = ChatFormat.ColorFromHex(c.AvatarHexColor, FallbackColor);
         LastMessageTime = c.LastMessageTime;
         ParticipantIds  = [.. c.Participants.Where(p => !p.IsMe).Take(c.IsGroup ? 2 : 1).Select(p => p.Id)];
-        PhotoId         = ParticipantIds.Count > 0 ? ParticipantIds[0] : string.Empty;
 
-        // Group Back Circle: The Second Person
-        ParticipantInfo? second = ParticipantIds.Count > 1 ? c.FindParticipant(ParticipantIds[1]) : null;
-        SecondInitial = second is null ? string.Empty : ChatFormat.Initial(ChatFormat.SenderName(second));
-        SecondColor   = second is null ? 0 : ChatFormat.ColorFromHex(second.AvatarHexColor, FallbackColor);
-        SecondPhotoId = second?.Id ?? string.Empty;
+        // Avatar: Stacked People For A Group (R12), The Same As The Chat Header
+        AvatarParts avatar = AvatarParts.Of(c);
+        Initial            = avatar.Initial;
+        AvatarColor        = avatar.Color;
+        PhotoId            = avatar.PhotoId;
+        SecondInitial      = avatar.SecondInitial;
+        SecondColor        = avatar.SecondColor;
+        SecondPhotoId      = avatar.SecondPhotoId;
     }
 }

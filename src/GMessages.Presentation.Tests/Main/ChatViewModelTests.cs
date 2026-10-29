@@ -48,6 +48,30 @@ public sealed class ChatViewModelTests
         Assert.AreEqual(("a", "m2"), rig.Client.MarkedRead[0]);
     }
 
+    /// <summary>
+    /// R12: a group chat's header stacks its first two other people, the same as its list row.
+    /// </summary>
+    [TestMethod]
+    public async Task Header_Group_StacksTwoPeople()
+    {
+        using var rig = new MainRig();
+        Conversation conv = MainRig.Conv("a", "Team");
+        conv.IsGroupChat  = true;
+        conv.Participants.Add(new Participant { ID = new SmallInfo { ParticipantID = "p-cy" }, FullName = "Cy Ray", AvatarHexColor = "#123456" });
+        conv.Participants[1].FullName       = "Bo Ng";
+        conv.Participants[1].AvatarHexColor = "#1a73e8";
+        using ChatViewModel chat = NewChat(rig, conv, Msg("m1", "one"));
+
+        await chat.LoadAsync();
+
+        Assert.AreEqual("B", chat.Initial);
+        Assert.AreEqual("p-a", chat.PhotoId);
+        Assert.AreEqual(0xFF1A73E8u, chat.AvatarColor);
+        Assert.AreEqual("C", chat.SecondInitial);
+        Assert.AreEqual(0xFF123456u, chat.SecondColor);
+        Assert.AreEqual("p-cy", chat.SecondPhotoId);
+    }
+
     [TestMethod]
     public async Task Load_Read_DoesNotMarkRead()
     {

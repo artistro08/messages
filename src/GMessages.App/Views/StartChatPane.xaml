@@ -6,7 +6,7 @@
     xmlns:local="using:GMessages.App.Views"
     xmlns:main="using:GMessages.Presentation.Main">
 
-    <Grid RowDefinitions="Auto,Auto,*">
+    <Grid RowDefinitions="Auto,Auto,Auto,*">
 
         <!-- Search: back (narrow only), the name or number box, and Go -->
         <Grid
@@ -46,10 +46,20 @@
             </Button>
         </Grid>
 
+        <!-- Start Failed (R11): shown until the next Go -->
+        <TextBlock
+            Grid.Row="1"
+            Margin="16,8,16,0"
+            AutomationProperties.AutomationId="StartChat.Error"
+            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+            Text="{x:Bind StartChat.Error, Mode=OneWay, FallbackValue='', TargetNullValue=''}"
+            TextWrapping="Wrap"
+            Visibility="{x:Bind StartChat.HasError, Mode=OneWay, FallbackValue=Collapsed}" />
+
         <!-- Picked: one chip per person; clicking a chip removes it -->
         <GridView
             x:Name="PickedList"
-            Grid.Row="1"
+            Grid.Row="2"
             Margin="12,8,12,0"
             AutomationProperties.AutomationId="StartChat.Picked"
             ContainerContentChanging="OnContainerContentChanging"
@@ -72,7 +82,7 @@
         <!-- Contacts: a "Send to" row for a typed number first, then top contacts, then everyone else -->
         <ListView
             x:Name="ContactList"
-            Grid.Row="2"
+            Grid.Row="3"
             AutomationProperties.AutomationId="StartChat.Contacts"
             ContainerContentChanging="OnContainerContentChanging"
             IsItemClickEnabled="True"

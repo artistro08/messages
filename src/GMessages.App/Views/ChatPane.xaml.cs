@@ -1,4 +1,5 @@
 using System.Collections.Specialized;
+using System.ComponentModel;
 using System.Runtime.InteropServices;
 using GMessages.App.Views.Controls;
 using GMessages.Presentation.Main;
@@ -19,7 +20,8 @@ namespace GMessages.App.Views;
 /// <para>
 /// Shows whatever <see cref="Chat"/> holds; the main window sets it from <see cref="MainViewModel.Chat"/>. The bubbles
 /// are wrapped with <see cref="BindableList"/> (see there for why), and the list stays scrolled to the newest bubble
-/// as messages arrive. Scrolling to the top loads the older page.
+/// as messages arrive. Scrolling to the top loads the older page; a page too short to scroll loads the next older one
+/// on its own, until the list scrolls or no older pages are left.
 /// </para>
 /// <para>
 /// Enter sends the draft and Shift + Enter adds a line. The emoji button opens the Windows emoji panel on the
@@ -107,6 +109,7 @@ public sealed partial class ChatPane : UserControl
         if (e.OldValue is ChatViewModel old_chat)
         {
             old_chat.Messages.CollectionChanged -= pane.OnMessagesChanged;
+            old_chat.PropertyChanged            -= pane.OnChatPropertyChanged;
         }
 
         var chat = (ChatViewModel?)e.NewValue;
@@ -115,6 +118,7 @@ public sealed partial class ChatPane : UserControl
         if (chat is not null)
         {
             chat.Messages.CollectionChanged += pane.OnMessagesChanged;
+            chat.PropertyChanged            += pane.OnChatPropertyChanged;
 
             // The Chat Is On Screen, So Its Toasts Are Read
             (Application.Current as App)?.Notifications?.RemoveConversation(chat.ConversationId);
@@ -135,16 +139,44 @@ public sealed partial class ChatPane : UserControl
         DispatcherQueue.TryEnqueue(() => MessageList.ScrollIntoView(last));
     }
 
-    // The List's Own Scroller Tells When The Top Is Reached
-    private void OnMessageListLoaded(object sender, RoutedEventArgs e)
+    private void OnMessageListLoaded(object sender, RoutedEventArgs e) => FillWithOlder();
+
+    // The List's Own Scroller Tells When The Top Is Reached. Found On First Need: While The Pane Is Still Collapsed At
+    // Load, The List Has No Template Yet, So There Is No Scroller To Find
+    private ScrollViewer? Scroller()
     {
-        if (_scroller is not null)
+        if (_scroller is null && FindScroller(MessageList) is { } found)
+        {
+            _scroller              = found;
+            _scroller.ViewChanged += OnScrolled;
+        }
+
+        return _scroller;
+    }
+
+    // A Page Finished Loading: Too Short To Scroll Means There Is No Top To Reach, So Load Older Here
+    private void OnChatPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ChatViewModel.IsLoading) && sender == Chat && Chat is { IsLoading: false })
+        {
+            DispatcherQueue.TryEnqueue(FillWithOlder);
+        }
+    }
+
+    // Each Older Page Ends In Another IsLoading Change, So This Repeats Until The List Scrolls Or No Pages Are Left
+    private void FillWithOlder()
+    {
+        if (Chat is not { IsLoading: false, HasOlder: true } chat)
         {
             return;
         }
 
-        _scroller = FindScroller(MessageList);
-        _scroller?.ViewChanged += OnScrolled;
+        // Measure The New Bubbles Now, So The Scroll Height Is Current
+        MessageList.UpdateLayout();
+        if (Scroller() is { ScrollableHeight: <= 0 })
+        {
+            _ = chat.LoadOlderAsync();
+        }
     }
 
     private void OnScrolled(object? sender, ScrollViewerViewChangedEventArgs e)
@@ -203,8 +235,22 @@ public sealed partial class ChatPane : UserControl
         keys.Add(Key(NativeMethods.VK_OEM_PERIOD, NativeMethods.KEYEVENTF_KEYUP));
         keys.Add(Key(NativeMethods.VK_LWIN, NativeMethods.KEYEVENTF_KEYUP));
 
-        // A Refused Shortcut (Another App Holds The Input) Just Opens Nothing
-        _ = NativeMethods.SendInput((uint)keys.Count, [.. keys], Marshal.SizeOf<NativeMethods.KEYBOARD_INPUT>());
+        // A Refused Shortcut (Another App Holds The Input) Just Opens Nothing. Cut Short, Any Key It Pressed But Didn't
+        // Release (Win Above All) Is Released, So No Key Is Left Held Down
+        int size = Marshal.SizeOf<NativeMethods.KEYBOARD_INPUT>();
+        int sent = (int)NativeMethods.SendInput((uint)keys.Count, [.. keys], size);
+        if (sent < keys.Count)
+        {
+            NativeMethods.KEYBOARD_INPUT[] releases = [.. keys.Take(sent)
+                .Where(k => (k.dwFlags & NativeMethods.KEYEVENTF_KEYUP) == 0)
+                .Select(k => k.wVk)
+                .Except(keys.Take(sent).Where(k => (k.dwFlags & NativeMethods.KEYEVENTF_KEYUP) != 0).Select(k => k.wVk))
+                .Select(vk => Key(vk, NativeMethods.KEYEVENTF_KEYUP))];
+            if (releases.Length > 0)
+            {
+                _ = NativeMethods.SendInput((uint)releases.Length, releases, size);
+            }
+        }
 
         static NativeMethods.KEYBOARD_INPUT Key(ushort virtualKey, uint flags) =>
             new() { type = NativeMethods.INPUT_KEYBOARD, wVk = virtualKey, dwFlags = flags };

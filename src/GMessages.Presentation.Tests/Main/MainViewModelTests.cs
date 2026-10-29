@@ -93,6 +93,27 @@ public sealed class MainViewModelTests
         Assert.AreSame(vm.Inbox, vm.CurrentList);
     }
 
+    /// <summary>
+    /// Reaching Connected (and only the arrival, not staying there) tells the window to retry its photos.
+    /// </summary>
+    [TestMethod]
+    public async Task Connected_RaisedOnArrivalOnly()
+    {
+        using var rig = new MainRig();
+        using MainViewModel vm = await NewMainAsync(rig);
+        int raised = 0;
+        vm.Connected += (_, _) => raised++;
+
+        vm.ApplyState(ConnectionState.Reconnecting);
+        vm.ApplyState(ConnectionState.Connected);
+        vm.ApplyState(ConnectionState.Connected);
+        Assert.AreEqual(1, raised);
+
+        vm.ApplyState(ConnectionState.Reconnecting);
+        vm.ApplyState(ConnectionState.Connected);
+        Assert.AreEqual(2, raised);
+    }
+
     [TestMethod]
     public async Task Banner_FollowsStateAndPhoneEvents()
     {

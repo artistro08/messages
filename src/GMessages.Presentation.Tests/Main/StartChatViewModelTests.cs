@@ -1,6 +1,7 @@
 using GMessages.Presentation.Main;
 using GMessages.Presentation.Messaging;
 using GMessages.Protocol.Proto;
+using GMessages.Protocol.Rpc;
 
 namespace GMessages.Presentation.Tests.Main;
 
@@ -81,7 +82,7 @@ public sealed class StartChatViewModelTests
         });
         vm.Toggle(vm.Results[1]);
 
-        string id = await vm.StartAsync();
+        string? id = await vm.StartAsync();
 
         Assert.AreEqual("new-1", id);
         GetOrCreateConversationRequest req = rig.Client.CreateCalls.Single();
@@ -106,7 +107,7 @@ public sealed class StartChatViewModelTests
         vm.Toggle(vm.Results[0]);
         vm.Toggle(vm.Results[1]);
 
-        string id = await vm.StartAsync();
+        string? id = await vm.StartAsync();
 
         Assert.AreEqual("grp-1", id);
         Assert.AreEqual(2, rig.Client.CreateCalls.Count);
@@ -132,7 +133,7 @@ public sealed class StartChatViewModelTests
     }
 
     [TestMethod]
-    public async Task Start_NotSuccessAfterRetry_Throws()
+    public async Task Start_NotSuccessAfterRetry_ShowsError()
     {
         using var rig = new MainRig();
         StartChatViewModel vm = await NewPaneAsync(rig);
@@ -140,6 +141,87 @@ public sealed class StartChatViewModelTests
         rig.Client.CreateAnswers.Enqueue(new GetOrCreateConversationResponse { Status = GetOrCreateConversationResponse.Types.Status.CreateRcs });
         vm.Toggle(vm.Results[0]);
 
-        await Assert.ThrowsExactlyAsync<MessageSendException>(vm.StartAsync);
+        Assert.IsNull(await vm.StartAsync());
+        Assert.AreEqual(ChatCopy.StartFailed, vm.Error);
+    }
+
+    /// <summary>
+    /// R11: a start the phone can't do says so in the pane, keeps everyone picked, and the next attempt clears it.
+    /// </summary>
+    [TestMethod]
+    public async Task Start_PhoneProblem_ShowsError_NextAttemptClears()
+    {
+        using var rig = new MainRig();
+        StartChatViewModel vm = await NewPaneAsync(rig);
+        vm.Toggle(vm.Results[0]);
+        Assert.IsNull(vm.Error);
+        Assert.IsFalse(vm.HasError);
+
+        rig.Client.CreateThrows = new PhoneNotRespondingException();
+        Assert.IsNull(await vm.StartAsync());
+        Assert.AreEqual("Couldn't start this conversation. Try again.", vm.Error);
+        Assert.IsTrue(vm.HasError);
+        Assert.IsTrue(vm.CanStart, "still picked");
+
+        // The Next Attempt Clears It Before Asking (And It Stays Clear On Success)
+        string? seen = "unset";
+        vm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(StartChatViewModel.Error) && seen == "unset")
+            {
+                seen = vm.Error;
+            }
+        };
+        rig.Client.CreateThrows = null;
+        rig.Client.CreateAnswers.Enqueue(new GetOrCreateConversationResponse
+        {
+            Status       = GetOrCreateConversationResponse.Types.Status.Success,
+            Conversation = new Conversation { ConversationID = "new-2" },
+        });
+
+        Assert.AreEqual("new-2", await vm.StartAsync());
+        Assert.IsNull(seen);
+        Assert.IsNull(vm.Error);
+        Assert.IsFalse(vm.HasError);
+    }
+
+    /// <summary>
+    /// A phone that fails the contact load (not answering, connection closed) is no crash; the next open loads again.
+    /// </summary>
+    [TestMethod]
+    public async Task Load_PhoneProblem_NextLoadRetries()
+    {
+        using var rig = new MainRig();
+        rig.Client.TopContactsAnswer.Contacts.Add(Person("c1", "Ann Lee", "+1 (555) 010-0001"));
+        rig.Client.ContactsAnswer.Contacts.Add(Person("c2", "Bob Stone", "+1 (555) 020-0002"));
+        rig.Client.ContactsThrows = new ConnectionClosedException();
+        var vm = new StartChatViewModel(rig.Store, a => a());
+
+        await vm.LoadAsync();
+        Assert.AreEqual("Ann Lee", Names(vm));
+
+        rig.Client.ContactsThrows = null;
+        await vm.LoadAsync();
+        Assert.AreEqual("Ann Lee|Bob Stone", Names(vm));
+    }
+
+    /// <summary>
+    /// A refresh that matches the same rows (the full contact list arriving after the top contacts) leaves the list
+    /// alone, so a row being clicked isn't swapped out from under the click.
+    /// </summary>
+    [TestMethod]
+    public async Task Refresh_SameRows_LeavesListAlone()
+    {
+        using var rig = new MainRig();
+        StartChatViewModel vm = await NewPaneAsync(rig);
+        vm.Query                = "Ann";
+        ContactRowViewModel ann = vm.Results[0];
+        int changes             = 0;
+        vm.Results.CollectionChanged += (_, _) => changes++;
+
+        vm.Query = "Ann";
+
+        Assert.AreEqual(0, changes);
+        Assert.AreSame(ann, vm.Results[0]);
     }
 }

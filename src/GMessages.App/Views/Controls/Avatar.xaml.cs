@@ -166,6 +166,36 @@ public sealed partial class Avatar : UserControl
     /// <returns>The font size.</returns>
     public static double InitialSize(uint secondColor) => secondColor != 0 ? 12 : 16;
 
+    /// <summary>
+    /// Loads again every photo under <paramref name="root"/> that is still missing, such as one that failed while the
+    /// phone was away. Photos already showing are left alone.
+    /// </summary>
+    /// <param name="root">Where to look for avatars (a window's root grid).</param>
+    public static void ReloadMissing(DependencyObject root)
+    {
+        ArgumentNullException.ThrowIfNull(root);
+
+        if (root is Avatar avatar)
+        {
+            if (avatar.Image is null && avatar.PhotoId.Length > 0)
+            {
+                _ = avatar.LoadPhotoAsync(front: true);
+            }
+
+            if (avatar.SecondPhoto.ImageSource is null && avatar.SecondPhotoId.Length > 0)
+            {
+                _ = avatar.LoadPhotoAsync(front: false);
+            }
+
+            return;
+        }
+
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+        {
+            ReloadMissing(VisualTreeHelper.GetChild(root, i));
+        }
+    }
+
     /// <inheritdoc />
     protected override AutomationPeer OnCreateAutomationPeer() => new FrameworkElementAutomationPeer(this);
 

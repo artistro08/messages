@@ -105,7 +105,7 @@ public sealed class AvatarCacheTests
         string path = new Uri(uri).LocalPath;
         CollectionAssert.AreEqual(AnnPhoto, File.ReadAllBytes(path));
         Assert.EndsWith(".png", path);
-        Assert.DoesNotContain("ann", Path.GetFileName(path), "no IDs in file names");
+        Assert.MatchesRegex(@"^[0-9a-f]{32}\.png$", Path.GetFileName(path), "a hash, never the ID, names the file");
 
         // A Second Cache (Like The Notifications' Own) Reuses The File Without Asking The Phone
         var other = new AvatarCache(rig.Store, rig.Folder);

@@ -68,10 +68,13 @@ internal sealed class FakeMessagingClient : IMessagingClient
 
     public List<GetOrCreateConversationRequest> CreateCalls { get; } = [];
 
+    /// <summary>When set, creating a conversation fails with this.</summary>
+    public Exception? CreateThrows { get; set; }
+
     public Task<GetOrCreateConversationResponse> GetOrCreateConversationAsync(GetOrCreateConversationRequest request, CancellationToken ct)
     {
         CreateCalls.Add(request.Clone());
-        return Task.FromResult(CreateAnswers.Dequeue());
+        return CreateThrows is { } ex ? Task.FromException<GetOrCreateConversationResponse>(ex) : Task.FromResult(CreateAnswers.Dequeue());
     }
 
     /// <summary>Pages returned by successive message fetches before falling back to <see cref="MessagesPage"/>.</summary>
@@ -112,7 +115,11 @@ internal sealed class FakeMessagingClient : IMessagingClient
 
     public ListTopContactsResponse TopContactsAnswer { get; set; } = new();
 
-    public Task<ListContactsResponse> ListContactsAsync(CancellationToken ct) => Task.FromResult(ContactsAnswer);
+    /// <summary>When set, the full contact list fails with this (the top contacts still load).</summary>
+    public Exception? ContactsThrows { get; set; }
+
+    public Task<ListContactsResponse> ListContactsAsync(CancellationToken ct) =>
+        ContactsThrows is { } ex ? Task.FromException<ListContactsResponse>(ex) : Task.FromResult(ContactsAnswer);
 
     public Task<ListTopContactsResponse> ListTopContactsAsync(CancellationToken ct) => Task.FromResult(TopContactsAnswer);
 

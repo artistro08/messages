@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using GMessages.Presentation.Messaging;
 using GMessages.Protocol.Proto;
+using GMessages.Protocol.Rpc;
 
 namespace GMessages.Presentation.Main;
 
@@ -19,6 +20,7 @@ public sealed class StartChatViewModel : INotifyPropertyChanged
     private List<ContactRowViewModel> _all = [];
     private bool _loaded;
     private string _query = string.Empty;
+    private string? _error;
 
     /// <summary>
     /// Creates the pane with no contacts yet.
@@ -58,10 +60,25 @@ public sealed class StartChatViewModel : INotifyPropertyChanged
     /// <summary>Gets whether anyone is picked.</summary>
     public bool CanStart => Selected.Count > 0;
 
+    /// <summary>Gets why the last Go failed (<see cref="ChatCopy.StartFailed"/>), or null; the next Go clears it.</summary>
+    public string? Error
+    {
+        get => _error;
+        private set
+        {
+            _error = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Error)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HasError)));
+        }
+    }
+
+    /// <summary>Gets whether <see cref="Error"/> shows (for bindings, which skip their function when an argument is null).</summary>
+    public bool HasError => _error is not null;
+
     /// <summary>
     /// Loads the top contacts, then the full contact list (once).
     /// </summary>
-    /// <remarks>When the phone is not connected the lists stay empty and a later call tries again.</remarks>
+    /// <remarks>When the phone is not connected or not answering, what loaded so far stays and a later call tries again.</remarks>
     /// <returns>A task that completes when the contacts are shown.</returns>
     public async Task LoadAsync()
     {
@@ -83,9 +100,9 @@ public sealed class StartChatViewModel : INotifyPropertyChanged
             _loaded = true;
             Refresh();
         }
-        catch (MessagingUnavailableException)
+        catch (Exception ex) when (IsPhoneProblem(ex))
         {
-            // Not Connected: Opening Start chat Again Tries Again
+            // Not Connected Or Not Answering: Opening Start chat Again Tries Again
         }
     }
 
@@ -122,19 +139,33 @@ public sealed class StartChatViewModel : INotifyPropertyChanged
     /// <remarks>
     /// Ported from the bridge's create flow: each number is sent as <c>ContactNumber { MysteriousInt = 2, Number = n,
     /// Number2 = n }</c>. When the phone answers <c>CreateRcs</c> the request is sent again as an RCS group with an
-    /// empty name.
+    /// empty name. When the phone can't (not connected, not answering, connection closed, or no success with a
+    /// conversation, also after the RCS retry), <see cref="Error"/> says so and everyone stays picked.
     /// </remarks>
-    /// <returns>The conversation ID.</returns>
+    /// <returns>The conversation ID, or null when it failed.</returns>
     /// <exception cref="InvalidOperationException">Nobody is picked.</exception>
-    /// <exception cref="MessagingUnavailableException">Not connected.</exception>
-    /// <exception cref="MessageSendException">The phone did not answer success with a conversation (also after the RCS retry).</exception>
-    public async Task<string> StartAsync()
+    public async Task<string?> StartAsync()
     {
         if (!CanStart)
         {
             throw new InvalidOperationException("Nobody is picked.");
         }
 
+        Error = null;
+        try
+        {
+            return await GetOrCreateAsync();
+        }
+        catch (Exception ex) when (IsPhoneProblem(ex))
+        {
+            Error = ChatCopy.StartFailed;
+            return null;
+        }
+    }
+
+    // The Create Request, Retried As An RCS Group When The Phone Asks; Throws When The Phone Can't
+    private async Task<string> GetOrCreateAsync()
+    {
         IMessagingClient client = _store.RequireClient();
 
         var request = new GetOrCreateConversationRequest();
@@ -162,11 +193,15 @@ public sealed class StartChatViewModel : INotifyPropertyChanged
         return response.Conversation.ConversationID;
     }
 
+    private static bool IsPhoneProblem(Exception ex) =>
+        ex is MessagingUnavailableException or PhoneNotRespondingException or ConnectionClosedException or MessageSendException;
+
     // =========================================================================
     // FILTERING
     // =========================================================================
 
-    // Rebuilds Results: Send-To Row, Then Top Contacts, Then The Rest, Filtered By The Query
+    // Rebuilds Results: Send-To Row, Then Top Contacts, Then The Rest, Filtered By The Query. The Same Rows Leave The
+    // List Alone, So A Row Being Clicked (The Full List Arriving After The Top Contacts) Isn't Swapped Out Under The Click
     private void Refresh()
     {
         string query   = _query.Trim();
@@ -179,13 +214,20 @@ public sealed class StartChatViewModel : INotifyPropertyChanged
                 || c.Name.Contains(query, StringComparison.OrdinalIgnoreCase)
                 || (digits.Length > 0 && c.Digits.Contains(digits, StringComparison.Ordinal)));
 
-        Results.Clear();
+        List<ContactRowViewModel> rows = [];
         if (query.Any(char.IsAsciiDigit) || query.Contains('@', StringComparison.Ordinal))
         {
-            Results.Add(new ContactRowViewModel(query));
+            rows.Add(Results.FirstOrDefault(r => r.IsSendTo && r.Number == query) ?? new ContactRowViewModel(query));
         }
 
-        foreach (ContactRowViewModel c in matches)
+        rows.AddRange(matches);
+        if (rows.SequenceEqual(Results))
+        {
+            return;
+        }
+
+        Results.Clear();
+        foreach (ContactRowViewModel c in rows)
         {
             Results.Add(c);
         }

@@ -1,7 +1,6 @@
 using GMessages.App.Views.Controls;
 using GMessages.Presentation.Main;
 using GMessages.Presentation.Messaging;
-using GMessages.Protocol.Rpc;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -105,7 +104,7 @@ public sealed partial class StartChatPane : UserControl
         AutomationProperties.SetAutomationId(args.ItemContainer, prefix + args.ItemIndex);
     }
 
-    // Opens The Conversation; When The Phone Can't, The Pane Stays Open With Everyone Still Picked
+    // Opens The Conversation; When The Phone Can't, The Pane Says So (R11) And Stays Open With Everyone Still Picked
     private async void OnGoClick(object sender, RoutedEventArgs e)
     {
         if (StartChat is not { CanStart: true } start)
@@ -113,14 +112,9 @@ public sealed partial class StartChatPane : UserControl
             return;
         }
 
-        try
+        if (await start.StartAsync() is { } conversation_id)
         {
-            string conversation_id = await start.StartAsync();
             Started?.Invoke(this, conversation_id);
-        }
-        catch (Exception ex) when (ex is MessageSendException or MessagingUnavailableException or PhoneNotRespondingException or ConnectionClosedException)
-        {
-            // TODO: No copy yet for a failed start; Go can be pressed again
         }
     }
 

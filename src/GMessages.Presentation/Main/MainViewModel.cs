@@ -60,6 +60,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// <inheritdoc />
     public event PropertyChangedEventHandler? PropertyChanged;
 
+    /// <summary>
+    /// Raised when the connection arrives at <see cref="ConnectionState.Connected"/>, so the window can retry what
+    /// failed while it was down (photos).
+    /// </summary>
+    public event EventHandler? Connected;
+
     /// <summary>Gets the inbox list.</summary>
     public ConversationListViewModel Inbox { get; }
 
@@ -282,13 +288,19 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     internal void ApplyState(ConnectionState state)
     {
         // A New State Starts Fresh: The Phone Is Not Silent Until It Says So
-        if (_state != state)
+        bool arrived = _state != state;
+        if (arrived)
         {
             _phoneSilent = false;
         }
 
         _state = state;
         Changed();
+
+        if (arrived && state == ConnectionState.Connected)
+        {
+            Connected?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     internal void ApplyEvent(object e)

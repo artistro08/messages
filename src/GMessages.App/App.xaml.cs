@@ -69,6 +69,7 @@ public partial class App : Application, IDisposable
     private DispatcherQueueTimer? _networkDebounce;
     private bool _connectionStarted;
     private string? _heldShowSource;
+    private string? _pendingConversationId;
     private RegisteredWaitHandle? _quitWait;
     private RegisteredWaitHandle? _showWait;
     private bool _quitting;
@@ -150,8 +151,10 @@ public partial class App : Application, IDisposable
         store.MessageArrived                     += (_, e) => _ = _notifications.ShowAsync(e);
         _notifications.Register();
 
-        // Started By A Toast Click: Read After Register, As The Windows App SDK Requires; Handled Once Connected
-        if (AppInstance.GetCurrent().GetActivatedEventArgs() is { Kind: ExtendedActivationKind.AppNotification, Data: AppNotificationActivatedEventArgs launched })
+        // Started By A Toast Click: Read After Register, As The Windows App SDK Requires. A Reply Waits For Connected; An
+        // Open Shows The Main Window At Once (Held Until Start-Up Ends)
+        AppNotificationActivatedEventArgs? launched = AppInstance.GetCurrent().GetActivatedEventArgs() is { Kind: ExtendedActivationKind.AppNotification, Data: AppNotificationActivatedEventArgs toast } ? toast : null;
+        if (launched is not null && NotificationArgs.Parse(launched.Argument) is { Action: "reply" })
         {
             _launchNotification                    = launched;
             _launchNotificationTimeout             = dispatcher.CreateTimer();
@@ -159,6 +162,10 @@ public partial class App : Application, IDisposable
             _launchNotificationTimeout.IsRepeating = false;
             _launchNotificationTimeout.Tick       += (_, _) => HandleLaunchNotification(timedOut: true);
             _launchNotificationTimeout.Start();
+        }
+        else if (launched is not null)
+        {
+            _ = _notifications.HandleAsync(launched);
         }
 
         _ = StartConnectionAsync();
@@ -241,9 +248,13 @@ public partial class App : Application, IDisposable
         if (NeedsPairing())
         {
             // No "Not paired" main window left behind the pairing window after an unpair or sign-out
+            _pendingConversationId = null;
             _mainWindow?.Close();
             ShowPairingWindow();
+            return;
         }
+
+        SelectPendingConversation();
     }
 
     // Made when needed and destroyed on close, then the memory it used goes back to Windows
@@ -279,8 +290,7 @@ public partial class App : Application, IDisposable
     // NOTIFICATIONS
     // =========================================================================
 
-    // The Toast Click That Started The App: Handled Once Connected. After 30 s Without A Connection A Reply Gets The
-    // Failure Toast, And An Open Request Opens The Window Anyway
+    // The Toast Reply That Started The App: Sent Once Connected. After 30 s Without A Connection It Gets The Failure Toast
     private void HandleLaunchNotification(bool timedOut)
     {
         if (_launchNotification is not { } args || _notifications is null || (!timedOut && _connection?.State != ConnectionState.Connected))
@@ -291,7 +301,7 @@ public partial class App : Application, IDisposable
         _launchNotification = null;
         _launchNotificationTimeout?.Stop();
 
-        if (timedOut && NotificationArgs.Parse(args.Argument) is { Action: "reply" } reply)
+        if (timedOut && NotificationArgs.Parse(args.Argument) is { } reply)
         {
             _notifications.ShowReplyFailed(reply.ConversationId);
             return;
@@ -300,11 +310,24 @@ public partial class App : Application, IDisposable
         _ = _notifications.HandleAsync(args);
     }
 
-    // A Toast Body Click: The Main Window On That Conversation
+    // A Toast Body Click: The Main Window Shows At Once, On That Conversation As Soon As It Can Be Shown
     private void OpenConversation(string conversationId)
     {
+        _pendingConversationId = conversationId;
         OnShowMainWindowRequested("notification");
-        _mainWindow?.ViewModel.Select(conversationId);
+    }
+
+    // Selected Once Connected, Or Right Away When The Conversation Is Already Cached
+    private void SelectPendingConversation()
+    {
+        if (_pendingConversationId is not { } id || _mainWindow is null
+            || (_connection?.State != ConnectionState.Connected && _store?.Find(id) is null))
+        {
+            return;
+        }
+
+        _pendingConversationId = null;
+        _mainWindow.ViewModel.Select(id);
     }
 
     // =========================================================================
@@ -334,6 +357,7 @@ public partial class App : Application, IDisposable
         }
 
         ShowMainWindow();
+        SelectPendingConversation();
     }
 
     // Made when needed and destroyed on close, then the memory it used goes back to Windows

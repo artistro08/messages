@@ -43,25 +43,39 @@ public sealed class ConversationListViewModelTests
     }
 
     [TestMethod]
-    public void Row_Avatar_OneOnOneHasOnePhoto_GroupHasTheSecondPerson()
+    public void Row_Avatar_OneOnOneHasOnePhoto_GroupStacksTwoPeople()
     {
-        ParticipantInfo me  = new("me", "Me", "Me", "", true, null);
-        ParticipantInfo bo  = new("p-bo", "Bo Ng", "Bo", "#1a73e8", false, null);
-        ParticipantInfo cy  = new("p-cy", "", "", "", false, "+1 555");
-        ConversationInfo c  = ConversationInfo.From(MainRig.Conv("a", "Ann")) with { Participants = [me, bo] };
-        ConversationInfo gr = c with { Name = "Team", IsGroup = true, Participants = [me, bo, cy] };
+        ParticipantInfo me    = new("me", "Me", "Me", "", true, null);
+        ParticipantInfo bo    = new("p-bo", "Bo Ng", "Bo", "#1a73e8", false, null);
+        ParticipantInfo cy    = new("p-cy", "", "", "", false, "+1 555");
+        ConversationInfo c    = ConversationInfo.From(MainRig.Conv("a", "Ann")) with { AvatarHexColor = "#00ff00", Participants = [me, bo] };
+        ConversationInfo gr   = c with { Name = "Team", IsGroup = true, Participants = [me, bo, cy] };
+        ConversationInfo bare = gr with { Participants = [me] };
 
         var one   = new ConversationRowViewModel(c, MainRig.Now);
         var group = new ConversationRowViewModel(gr, MainRig.Now);
+        var alone = new ConversationRowViewModel(bare, MainRig.Now);
 
+        // One On One: The Conversation's Letter And Color, The Other Person's Photo
+        Assert.AreEqual("A", one.Initial);
+        Assert.AreEqual(0xFF00FF00u, one.AvatarColor);
         Assert.AreEqual("p-bo", one.PhotoId);
         Assert.AreEqual(string.Empty, one.SecondPhotoId);
         Assert.AreEqual(0u, one.SecondColor);
 
+        // R12 Group: Front Circle Is The First Other Person, Back Circle The Second
+        Assert.AreEqual("B", group.Initial);
+        Assert.AreEqual(0xFF1A73E8u, group.AvatarColor);
         Assert.AreEqual("p-bo", group.PhotoId);
-        Assert.AreEqual("p-cy", group.SecondPhotoId);
         Assert.AreEqual("+", group.SecondInitial);
         Assert.AreNotEqual(0u, group.SecondColor);
+        Assert.AreEqual("p-cy", group.SecondPhotoId);
+
+        // A Group With Nobody Else: The Conversation's Letter, One Circle
+        Assert.AreEqual("T", alone.Initial);
+        Assert.AreEqual(0xFF00FF00u, alone.AvatarColor);
+        Assert.AreEqual(string.Empty, alone.PhotoId);
+        Assert.AreEqual(0u, alone.SecondColor);
     }
 
     [TestMethod]
