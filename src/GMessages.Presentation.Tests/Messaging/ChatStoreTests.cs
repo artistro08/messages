@@ -4,6 +4,7 @@ using GMessages.Protocol;
 using GMessages.Protocol.Events;
 using GMessages.Protocol.Http;
 using GMessages.Protocol.Proto;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 
@@ -391,6 +392,41 @@ public sealed class ChatStoreTests
         Assert.AreEqual("Ann", rig.Store.Find("c1")?.Name);
         Assert.AreEqual("me1", rig.Store.Me?.Id);
         Assert.AreEqual(0, raised);
+    }
+
+    /// <summary>
+    /// An unpair or sign-out while the saved conversations wait their turn on the queue: the old account's rows never
+    /// reach memory.
+    /// </summary>
+    [TestMethod]
+    public async Task Reset_WhileLoadSavedQueued_LoadsNothing()
+    {
+        using var rig = new Rig(withDatabase: true);
+        rig.Database!.SaveConversation(Conv("c1", "Old Ann"));
+
+        // Another Process Holds The File, So A Save Blocks The Queue And The Load Waits Behind It
+        using (var holder = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = rig.DatabasePath, Pooling = false }.ToString()))
+        {
+            holder.Open();
+            using (SqliteCommand command = holder.CreateCommand())
+            {
+                command.CommandText = "BEGIN EXCLUSIVE";
+                command.ExecuteNonQuery();
+            }
+
+            await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c2", "Bo")));
+            Task load = rig.Store.LoadSavedAsync();
+
+            rig.Store.Reset();
+            holder.Close();
+            await load;
+        }
+
+        await rig.Store.FlushAsync();
+
+        Assert.IsNull(rig.Store.Find("c1"));
+        Assert.IsNull(rig.Store.Me);
+        Assert.AreEqual(0, rig.Store.CachedConversations().Count);
     }
 
     /// <summary>

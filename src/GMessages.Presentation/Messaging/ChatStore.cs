@@ -49,6 +49,9 @@ public sealed partial class ChatStore : IDisposable
     // Bumped By Reset: Work Started Under An Older Generation Belongs To The Old Account And Is Dropped
     private int _generation;
 
+    // Held By Reset While It Bumps The Generation And Clears The Conversations, And By LoadSavedAsync While It Fills Them
+    private readonly Lock _resetLock = new();
+
     // Database Calls, Run One After Another Off The Caller's Thread
     private readonly Lock _queueLock = new();
     private Task _queue = Task.CompletedTask;
@@ -153,24 +156,39 @@ public sealed partial class ChatStore : IDisposable
     /// already sent is kept over the saved copy.
     /// </remarks>
     /// <returns>A task that completes when the saved conversations are cached.</returns>
-    public Task LoadSavedAsync() => Enqueue(database =>
+    public Task LoadSavedAsync()
     {
+        // Taken Now, Not When The Queue Gets To It: A Reset Meanwhile Means These Rows Are The Old Account's
         int generation = Generation;
-        IReadOnlyList<Conversation> saved = database.LoadConversations();
-        if (generation != Generation)
-        {
-            return;
-        }
 
-        foreach (Conversation c in saved)
+        return Enqueue(database =>
         {
-            ConversationInfo info = ConversationInfo.From(c);
-            if (_cache.TryAdd(info.Id, info))
+            if (generation != Generation)
             {
-                _me ??= info.Participants.FirstOrDefault(p => p.IsMe);
+                return;
             }
-        }
-    });
+
+            IReadOnlyList<Conversation> saved = database.LoadConversations();
+
+            // Under The Reset Lock, So Reset Can't Land Between The Check And The Rows
+            lock (_resetLock)
+            {
+                if (generation != Generation)
+                {
+                    return;
+                }
+
+                foreach (Conversation c in saved)
+                {
+                    ConversationInfo info = ConversationInfo.From(c);
+                    if (_cache.TryAdd(info.Id, info))
+                    {
+                        _me ??= info.Participants.FirstOrDefault(p => p.IsMe);
+                    }
+                }
+            }
+        });
+    }
 
     /// <summary>
     /// Loads one page of a folder and caches it.
@@ -419,11 +437,14 @@ public sealed partial class ChatStore : IDisposable
     /// </remarks>
     public void Reset()
     {
-        Interlocked.Increment(ref _generation);
-        _ = Enqueue(database => database.Delete());
+        lock (_resetLock)
+        {
+            Interlocked.Increment(ref _generation);
+            _cache.Clear();
+            _me = null;
+        }
 
-        _cache.Clear();
-        _me   = null;
+        _ = Enqueue(database => database.Delete());
         _sims = [];
 
         lock (_ringLock)
