@@ -428,7 +428,7 @@ public sealed class FakePhone
         }
 
         string text     = SentText(request);
-        Message message = Chats.AddOutgoing(request.ConversationID, text, request.TmpID);
+        Message message = Chats.AddOutgoing(request.ConversationID, text, request.TmpID, request.Reply?.MessageID);
         Reply(data.RequestID, data.Action, new SendMessageResponse { Status = SendMessageResponse.Types.Status.Success }, encrypt: true);
         PushUpdate(new UpdateEvents { MessageEvent = new MessageEvent { Data = { message } } }, _push);
     }

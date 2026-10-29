@@ -20,6 +20,8 @@ public sealed class ShortcutMapTests
     [DataRow((VirtualKey)188, true, false, ShortcutCommand.PreviousConversation)]
     [DataRow(VirtualKey.S, true, false, ShortcutCommand.OpenSettings)]
     [DataRow((VirtualKey)191, true, true, ShortcutCommand.ShowHelp)]
+    [DataRow((VirtualKey)187, false, true, ShortcutCommand.OpenReactions)]
+    [DataRow(VirtualKey.Enter, true, false, ShortcutCommand.ReplyToMessage)]
     public void Resolve_MapsKey(VirtualKey key, bool ctrl, bool shift, ShortcutCommand expected)
     {
         Assert.AreEqual(expected, ShortcutMap.Resolve(key, ctrl, shift, false, false));
@@ -27,6 +29,12 @@ public sealed class ShortcutMapTests
 
     [TestMethod]
     public void R_InTextBox_IsNull() => Assert.IsNull(ShortcutMap.Resolve(VirtualKey.R, false, false, false, true));
+
+    [TestMethod]
+    public void ShiftPlus_InTextBox_IsNull() => Assert.IsNull(ShortcutMap.Resolve((VirtualKey)187, false, true, false, true));
+
+    [TestMethod]
+    public void CtrlEnter_InTextBox_IsNull() => Assert.IsNull(ShortcutMap.Resolve(VirtualKey.Enter, true, false, false, true));
 
     [TestMethod]
     public void CtrlK_InTextBox_StillStartsChat() =>
@@ -51,11 +59,13 @@ public sealed class ShortcutMapTests
             ("Ctrl + Shift + k", "Focus on conversation list"),
             ("r", "Focus on message box"),
             ("Ctrl + Shift + e", "Show/hide emoji picker"),
+            ("Shift + +", "Open reactions selector"),
             ("Ctrl + j", "Focus on messages in conversation"),
             ("Escape", "Exit current conversation"),
             ("Ctrl + .", "Next conversation"),
             ("Ctrl + ,", "Previous conversation"),
             ("Ctrl + s", "Open Settings"),
+            ("Ctrl + Enter", "Reply to message"),
             ("Ctrl + ?", "Open keyboard shortcut help"),
         ];
 

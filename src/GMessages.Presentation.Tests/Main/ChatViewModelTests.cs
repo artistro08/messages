@@ -888,6 +888,20 @@ public sealed class ChatViewModelTests
     }
 
     [TestMethod]
+    public async Task Send_InRcsChat_OptimisticBubbleIsRcs()
+    {
+        using var rig            = new MainRig();
+        using ChatViewModel chat = await RcsChat(rig, TimeProvider.System, Msg("m1", "one"));
+
+        chat.Draft = "hi";
+        Task send  = chat.SendAsync();
+
+        // Before The Echo: Already In The RCS Colors, So It Doesn't Flash The SMS Ones
+        Assert.IsTrue(chat.Messages[^1].IsRcs);
+        await send;
+    }
+
+    [TestMethod]
     public async Task Reply_ToSms_SendsPlainText()
     {
         using var rig = new MainRig();

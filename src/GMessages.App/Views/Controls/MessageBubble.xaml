@@ -4,7 +4,8 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:GMessages.App.Views.Controls">
 
-    <!-- Bubble: sender name, the text on its colored back, then the time (once clicked) or the retry link -->
+    <!-- Bubble: sender name, the quote and text on its colored back, the reaction pill on its bottom corner, then the
+         time (once clicked) or the retry link, and the status line -->
     <StackPanel
         x:Name="Root"
         MaxWidth="480"
@@ -13,7 +14,32 @@
         Opacity="{x:Bind local:MessageBubble.SendingOpacity(Bubble.IsSending), Mode=OneWay}"
         Spacing="2">
 
-        <!-- Sent Or Received: sent sits right on the accent color, received left on the card color -->
+        <!-- Bubble Menu: right-click, the Application key or Shift + F10 -->
+        <StackPanel.ContextFlyout>
+            <MenuFlyout x:Name="Menu">
+                <MenuFlyoutItem
+                    AutomationProperties.AutomationId="Bubble.React"
+                    Click="OnReactClick"
+                    KeyboardAcceleratorTextOverride="Shift + +"
+                    Text="{x:Bind local:MessageBubble.ReactText}">
+                    <MenuFlyoutItem.Icon>
+                        <FontIcon Glyph="&#xE76E;" />
+                    </MenuFlyoutItem.Icon>
+                </MenuFlyoutItem>
+                <MenuFlyoutItem
+                    AutomationProperties.AutomationId="Bubble.Reply"
+                    Click="OnReplyClick"
+                    KeyboardAcceleratorTextOverride="Ctrl + Enter"
+                    Text="{x:Bind local:MessageBubble.ReplyText}">
+                    <MenuFlyoutItem.Icon>
+                        <FontIcon Glyph="&#xE97A;" />
+                    </MenuFlyoutItem.Icon>
+                </MenuFlyoutItem>
+            </MenuFlyout>
+        </StackPanel.ContextFlyout>
+
+        <!-- Sent Or Received: sent RCS sits right on the accent color, sent SMS right on a shade of it, received left on
+             the card color; the reaction pill takes the bubble's inner corner -->
         <VisualStateManager.VisualStateGroups>
             <VisualStateGroup x:Name="Side">
                 <VisualState x:Name="Received" />
@@ -23,7 +49,31 @@
                         <Setter Target="Back.Background" Value="{ThemeResource AccentFillColorDefaultBrush}" />
                         <Setter Target="Back.BorderThickness" Value="0" />
                         <Setter Target="Body.Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                        <Setter Target="Quote.BorderBrush" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                        <Setter Target="QuoteSender.Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                        <Setter Target="QuoteText.Foreground" Value="{ThemeResource TextOnAccentFillColorSecondaryBrush}" />
+                        <Setter Target="Pill.HorizontalAlignment" Value="Left" />
                         <Setter Target="Footer.HorizontalAlignment" Value="Right" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="SentSms">
+                    <VisualState.Setters>
+                        <Setter Target="Root.HorizontalAlignment" Value="Right" />
+                        <Setter Target="Back.Background" Value="{ThemeResource SmsBubbleBrush}" />
+                        <Setter Target="Back.BorderThickness" Value="0" />
+                        <Setter Target="Body.Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+                        <Setter Target="Pill.HorizontalAlignment" Value="Left" />
+                        <Setter Target="Footer.HorizontalAlignment" Value="Right" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+
+            <!-- My Reaction: the pill gets an accent border -->
+            <VisualStateGroup x:Name="Reaction">
+                <VisualState x:Name="NotMine" />
+                <VisualState x:Name="Mine">
+                    <VisualState.Setters>
+                        <Setter Target="Pill.BorderBrush" Value="{ThemeResource AccentFillColorDefaultBrush}" />
                     </VisualState.Setters>
                 </VisualState>
             </VisualStateGroup>
@@ -45,13 +95,62 @@
             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
             BorderThickness="1"
             CornerRadius="18">
-            <TextBlock
-                x:Name="Body"
-                AutomationProperties.AutomationId="{x:Bind local:MessageBubble.AutomationIdOf(Bubble.Id, Bubble.TmpId), Mode=OneWay}"
-                IsTextSelectionEnabled="True"
-                Text="{x:Bind Bubble.Text, Mode=OneWay}"
-                TextWrapping="Wrap" />
+            <StackPanel>
+
+                <!-- Quote: the message this one replies to, sender in caption style and at most two lines of text -->
+                <Border
+                    x:Name="Quote"
+                    Margin="0,0,0,6"
+                    Padding="8,4"
+                    Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                    BorderBrush="{ThemeResource AccentFillColorDefaultBrush}"
+                    BorderThickness="2,0,0,0"
+                    CornerRadius="4"
+                    Visibility="{x:Bind Bubble.HasQuote, Mode=OneWay, FallbackValue=Collapsed}">
+                    <StackPanel>
+                        <TextBlock
+                            x:Name="QuoteSender"
+                            MaxLines="1"
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            Text="{x:Bind Bubble.QuoteSender, Mode=OneWay, FallbackValue=''}"
+                            TextTrimming="CharacterEllipsis"
+                            Visibility="{x:Bind local:MessageBubble.ShownIfText(Bubble.QuoteSender), Mode=OneWay, FallbackValue=Collapsed}" />
+                        <TextBlock
+                            x:Name="QuoteText"
+                            AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Quote.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            MaxLines="2"
+                            Text="{x:Bind Bubble.QuoteText, Mode=OneWay, FallbackValue=''}"
+                            TextTrimming="CharacterEllipsis"
+                            TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+
+                <TextBlock
+                    x:Name="Body"
+                    AutomationProperties.AutomationId="{x:Bind local:MessageBubble.AutomationIdOf(Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                    AutomationProperties.ItemType="{x:Bind Bubble.ItemTypeName, Mode=OneWay, FallbackValue=''}"
+                    IsTextSelectionEnabled="True"
+                    Text="{x:Bind Bubble.Text, Mode=OneWay}"
+                    TextWrapping="Wrap" />
+            </StackPanel>
         </Border>
+
+        <!-- Reactions: a pill over the bubble's bottom corner; a click opens the reaction picker -->
+        <Button
+            x:Name="Pill"
+            MinHeight="0"
+            Margin="12,-10,12,0"
+            Padding="6,1"
+            HorizontalAlignment="Right"
+            AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Reactions.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+            Background="{ThemeResource SolidBackgroundFillColorTertiaryBrush}"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            Click="OnReactClick"
+            Content="{x:Bind Bubble.ReactionsText, Mode=OneWay, FallbackValue=''}"
+            CornerRadius="12"
+            FontSize="12"
+            Visibility="{x:Bind Bubble.HasReactions, Mode=OneWay, FallbackValue=Collapsed}" />
 
         <!-- Time (Hidden Until The Bubble Is Clicked), Or The Retry Link When The Send Failed -->
         <Grid x:Name="Footer" Margin="12,0">
@@ -70,5 +169,15 @@
                 Foreground="{ThemeResource SystemFillColorCriticalBrush}"
                 Visibility="{x:Bind Bubble.IsFailed, Mode=OneWay}" />
         </Grid>
+
+        <!-- Status: Sent, Delivered or Read under my newest message -->
+        <TextBlock
+            Margin="12,0"
+            HorizontalAlignment="Right"
+            AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Status.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+            Style="{StaticResource CaptionTextBlockStyle}"
+            Text="{x:Bind Bubble.StatusText, Mode=OneWay, FallbackValue=''}"
+            Visibility="{x:Bind local:MessageBubble.ShownIfText(Bubble.StatusText), Mode=OneWay, FallbackValue=Collapsed}" />
     </StackPanel>
 </UserControl>

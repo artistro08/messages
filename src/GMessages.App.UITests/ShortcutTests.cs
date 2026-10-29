@@ -102,7 +102,7 @@ public sealed class ShortcutTests : UiTest
     }
 
     /// <summary>
-    /// Ctrl + ? (Ctrl + Shift + /) opens the help dialog listing the ten wired shortcuts, Ctrl + k first.
+    /// Ctrl + ? (Ctrl + Shift + /) opens the help dialog listing the twelve wired shortcuts, Ctrl + k first.
     /// </summary>
     /// <returns>A task for the test.</returns>
     [TestMethod]
@@ -114,8 +114,8 @@ public sealed class ShortcutTests : UiTest
 
         AutomationElement dialog = App.Find("Shortcuts.Dialog");
         int rows = 0;
-        Wait.Until(() => (rows = dialog.FindAllDescendants().Count(e => (e.Properties.AutomationId.ValueOrDefault ?? "").StartsWith("Shortcuts.Keys.", StringComparison.Ordinal))) == 10,
-            AppDriver.DefaultTimeout, () => $"The dialog listed {rows} shortcuts, not 10.");
+        Wait.Until(() => (rows = dialog.FindAllDescendants().Count(e => (e.Properties.AutomationId.ValueOrDefault ?? "").StartsWith("Shortcuts.Keys.", StringComparison.Ordinal))) == 12,
+            AppDriver.DefaultTimeout, () => $"The dialog listed {rows} shortcuts, not 12.");
         App.WaitForText("Shortcuts.Keys.0", "Ctrl + k");
         App.WaitForText("Shortcuts.Action.0", "Start new conversation");
     }

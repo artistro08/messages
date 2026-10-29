@@ -3,8 +3,12 @@ using System.ComponentModel;
 using System.Runtime.InteropServices;
 using GMessages.App.Views.Controls;
 using GMessages.Presentation.Main;
+using GMessages.Presentation.Messaging;
+using GMessages.Protocol;
+using GMessages.Protocol.Proto;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
@@ -15,7 +19,8 @@ using WinRT;
 namespace GMessages.App.Views;
 
 /// <summary>
-/// The open conversation: the header, the message bubbles and the message box with its emoji and send buttons.
+/// The open conversation: the header with the lock, the message bubbles, the typing dots, the reply chip and the
+/// message box with its emoji and send buttons.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -28,6 +33,11 @@ namespace GMessages.App.Views;
 /// Enter sends the draft and Shift + Enter adds a line. The emoji button opens the Windows emoji panel on the
 /// message box.
 /// </para>
+/// <para>
+/// One reaction picker (<c>ReactionPicker</c>, buttons <c>ReactionPicker.1</c> to <c>.7</c>) serves every bubble: a
+/// bubble's pill or menu, or Shift + + on its row, opens it over that bubble. A bubble's Reply, or Ctrl + Enter on its
+/// row, starts the reply and moves to the message box. The Application key or Shift + F10 on a row opens its menu.
+/// </para>
 /// </remarks>
 public sealed partial class ChatPane : UserControl
 {
@@ -35,11 +45,18 @@ public sealed partial class ChatPane : UserControl
     public static readonly DependencyProperty ChatProperty =
         DependencyProperty.Register(nameof(Chat), typeof(ChatViewModel), typeof(ChatPane), new PropertyMetadata(null, OnChatChanged));
 
+    // LibGM's Reactions: EmojiType 1 To 7
+    private const int ReactionCount = 7;
+
     private ScrollViewer? _scroller;
 
-    // Pinned To The Newest Message (See ChatScroll.StaysPinned), And The Content Height Last Seen
+    // Pinned To The Newest Message (See ChatScroll.StaysPinned), And The Content And View Heights Last Seen
     private bool _pinned = true;
     private double _lastExtent;
+    private double _lastViewport;
+
+    // The Bubble The Reaction Picker Is Open For
+    private MessageBubbleViewModel? _reactTarget;
 
     // On The Way To The Newest Message (See ScrollToNewest)
     private bool _toNewest;
@@ -54,7 +71,29 @@ public sealed partial class ChatPane : UserControl
     /// <summary>
     /// Creates the pane.
     /// </summary>
-    public ChatPane() => InitializeComponent();
+    public ChatPane()
+    {
+        InitializeComponent();
+
+        // Reaction Picker: One Button Per Reaction In Enum Order, Labeled With Its Emoji (Styled By The Panel)
+        for (int i = 1; i <= ReactionCount; i++)
+        {
+            string emoji = EmojiTypes.Unicode((EmojiType)i);
+            var button   = new Button { Content = emoji };
+            AutomationProperties.SetAutomationId(button, "ReactionPicker." + i);
+            button.Click += (_, _) => React(emoji);
+            ReactionButtons.Children.Add(button);
+        }
+    }
+
+    /// <summary>Gets the lock's tooltip and name.</summary>
+    public static string EncryptedText => ChatCopy.EndToEndEncrypted;
+
+    /// <summary>Gets the typing dots' name.</summary>
+    public static string TypingText => ChatCopy.Typing;
+
+    /// <summary>Gets the reply chip's close button name.</summary>
+    public static string CancelReplyText => ChatCopy.CancelReply;
 
     /// <summary>Gets or sets the open conversation, or null.</summary>
     public ChatViewModel? Chat
@@ -74,6 +113,27 @@ public sealed partial class ChatPane : UserControl
     /// </summary>
     /// <returns>True when the list took focus (false while no chat shows).</returns>
     public bool FocusMessages() => MessageList.Focus(FocusState.Keyboard);
+
+    /// <summary>
+    /// Opens the reaction picker over the bubble whose row has focus (the Shift + + shortcut).
+    /// </summary>
+    /// <returns>True when a bubble row had focus.</returns>
+    public bool OpenReactionsForFocused() => FocusedBubbleView() is { } view && OpenReactionPicker(view);
+
+    /// <summary>
+    /// Starts a reply to the bubble whose row has focus and moves to the message box (the Ctrl + Enter shortcut).
+    /// </summary>
+    /// <returns>True when a bubble row had focus.</returns>
+    public bool ReplyToFocused()
+    {
+        if (FocusedBubbleView() is not { Bubble: { } bubble })
+        {
+            return false;
+        }
+
+        StartReply(bubble);
+        return true;
+    }
 
     /// <summary>
     /// Opens (or, pressed again, closes) the Windows emoji panel on the message box: the emoji button and the
@@ -122,6 +182,8 @@ public sealed partial class ChatPane : UserControl
         // The Last Chat's Content Height Means Nothing Here: Unset, The First Look Counts As A Content Change, Not As The
         // Person Scrolling (Two Chats Of The Same Height Would Otherwise Unpin On The Offset Reset To The Top)
         pane._lastExtent   = -1;
+        pane._lastViewport = -1;
+        pane._reactTarget  = null;
 
         if (chat is not null)
         {
@@ -316,6 +378,44 @@ public sealed partial class ChatPane : UserControl
         }
     }
 
+    // A Bubble's Pill Or Its Menu's React
+    private void OnReactRequested(object? sender, EventArgs e)
+    {
+        if (sender is MessageBubble view)
+        {
+            OpenReactionPicker(view);
+        }
+    }
+
+    // A Bubble Menu's Reply
+    private void OnReplyRequested(object? sender, EventArgs e)
+    {
+        if (sender is MessageBubble { Bubble: { } bubble })
+        {
+            StartReply(bubble);
+        }
+    }
+
+    // The Reply Chip's Close: Its Button Goes With It, So Focus Goes Back To The Message Box
+    private void OnCancelReplyClick(object sender, RoutedEventArgs e)
+    {
+        Chat?.CancelReply();
+        DraftBox.Focus(FocusState.Programmatic);
+    }
+
+    // The Application Key Or Shift + F10 On A Bubble's Row Opens That Bubble's Menu (A Right-Click On The Bubble Opens It
+    // There, Before This)
+    private void OnMessageListContextRequested(UIElement sender, ContextRequestedEventArgs e)
+    {
+        if (e.OriginalSource is null || RowBubbleView(e.OriginalSource.As<DependencyObject>()) is not { } view)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        view.ShowMenu();
+    }
+
     private void OnEmojiClick(object sender, RoutedEventArgs e) => ToggleEmojiPanel();
 
     // Win + Period, Pressed And Released. Ctrl And Shift Still Held From The Ctrl + Shift + e Shortcut Are Let Go First:
@@ -363,12 +463,58 @@ public sealed partial class ChatPane : UserControl
     // HELPERS
     // =========================================================================
 
-    // Notes The Content Height; True When It Differs From The Last One Seen
+    // Notes The Content And View Heights; True When Either Differs From The Last One Seen. The View Shrinks Or Grows When
+    // The Typing Dots, The Reply Chip Or A Longer Draft Come And Go Below The List: Not The Person Scrolling, So A Pinned
+    // List Stays On The Newest Message
     private bool ContentChanged(ScrollViewer scroller)
     {
-        bool changed = Math.Abs(scroller.ExtentHeight - _lastExtent) >= 0.5;
-        _lastExtent  = scroller.ExtentHeight;
+        bool changed  = Math.Abs(scroller.ExtentHeight - _lastExtent) >= 0.5 || Math.Abs(scroller.ViewportHeight - _lastViewport) >= 0.5;
+        _lastExtent   = scroller.ExtentHeight;
+        _lastViewport = scroller.ViewportHeight;
         return changed;
+    }
+
+    // The Bubble Of The Row With Keyboard Focus, Or Null When Focus Is Elsewhere (Also On A Link Inside A Row)
+    private MessageBubble? FocusedBubbleView() =>
+        XamlRoot is { } root && FocusManager.GetFocusedElement(root) is { } focused ? RowBubbleView(focused.As<DependencyObject>()) : null;
+
+    // A Row's Bubble, Or Null When The Element Isn't One Of The List's Rows. Found By Its Name (See FindPart)
+    private MessageBubble? RowBubbleView(DependencyObject element) =>
+        MessageList.IndexFromContainer(element) >= 0 ? FindPart<MessageBubble>(element, "BubbleView") : null;
+
+    // Opens The Reaction Picker Over A Bubble; Not For A Bubble The Phone Hasn't Reported Yet (Nothing To React To)
+    private bool OpenReactionPicker(MessageBubble view)
+    {
+        if (view.Bubble is not { Id.Length: > 0 } bubble)
+        {
+            return false;
+        }
+
+        _reactTarget = bubble;
+        ReactionPicker.ShowAt(view.Anchor);
+        return true;
+    }
+
+    // A Picker Button: Closes The Picker And Sends The Reaction (Add, Switch Or Remove; See ChatViewModel.ReactAsync)
+    private void React(string emoji)
+    {
+        ReactionPicker.Hide();
+        if (_reactTarget is { } bubble && Chat is { } chat)
+        {
+            _ = chat.ReactAsync(bubble, emoji);
+        }
+    }
+
+    // Starts The Reply, Then Moves To The Message Box A Turn Later: A Closing Menu Puts Focus Back Where It Was First
+    private void StartReply(MessageBubbleViewModel bubble)
+    {
+        if (Chat is not { } chat)
+        {
+            return;
+        }
+
+        chat.StartReply(bubble);
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => DraftBox.Focus(FocusState.Keyboard));
     }
 
     // Notes, Before An Older Page Goes In Above, How Far The View's Top Sits From The Content's End And The First Shown

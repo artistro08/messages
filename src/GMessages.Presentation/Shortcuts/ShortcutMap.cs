@@ -11,7 +11,8 @@ namespace GMessages.Presentation.Shortcuts;
 /// </remarks>
 public static class ShortcutMap
 {
-    // Punctuation keys the Windows.System.VirtualKey enum has no names for (OEM period, comma, slash).
+    // Punctuation keys the Windows.System.VirtualKey enum has no names for (OEM period, comma, slash, plus).
+    private const VirtualKey Plus   = (VirtualKey)187;
     private const VirtualKey Period = (VirtualKey)190;
     private const VirtualKey Comma  = (VirtualKey)188;
     private const VirtualKey Slash  = (VirtualKey)191;
@@ -25,11 +26,13 @@ public static class ShortcutMap
         ("Ctrl + Shift + k", "Focus on conversation list"),
         ("r", "Focus on message box"),
         ("Ctrl + Shift + e", "Show/hide emoji picker"),
+        ("Shift + +", "Open reactions selector"),
         ("Ctrl + j", "Focus on messages in conversation"),
         ("Escape", "Exit current conversation"),
         ("Ctrl + .", "Next conversation"),
         ("Ctrl + ,", "Previous conversation"),
         ("Ctrl + s", "Open Settings"),
+        ("Ctrl + Enter", "Reply to message"),
         ("Ctrl + ?", "Open keyboard shortcut help"),
     ];
 
@@ -37,8 +40,8 @@ public static class ShortcutMap
     /// Finds the command for a key press, or null when the press is not a shortcut.
     /// </summary>
     /// <remarks>
-    /// Chords must match their modifiers exactly, so Ctrl + Alt + k is not a shortcut. Only the bare "r" depends on
-    /// <paramref name="focusInTextBox"/>; it is ignored while typing.
+    /// Chords must match their modifiers exactly, so Ctrl + Alt + k is not a shortcut. The bare "r", Shift + + and
+    /// Ctrl + Enter depend on <paramref name="focusInTextBox"/>; they are ignored while typing.
     /// </remarks>
     /// <param name="key">The pressed key.</param>
     /// <param name="ctrl">Whether Ctrl is held.</param>
@@ -65,11 +68,18 @@ public static class ShortcutMap
             };
         }
 
+        // Shift Chords
+        if (!ctrl && shift)
+        {
+            return key == Plus && !focusInTextBox ? ShortcutCommand.OpenReactions : null;
+        }
+
         // Ctrl Chords
         if (ctrl && !shift)
         {
             return key switch
             {
+                VirtualKey.Enter when !focusInTextBox => ShortcutCommand.ReplyToMessage,
                 VirtualKey.K => ShortcutCommand.StartChat,
                 VirtualKey.J => ShortcutCommand.FocusMessages,
                 VirtualKey.S => ShortcutCommand.OpenSettings,

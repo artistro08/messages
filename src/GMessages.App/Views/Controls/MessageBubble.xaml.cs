@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using GMessages.Presentation.Main;
 using GMessages.Presentation.Messaging;
 using Microsoft.UI.Xaml;
@@ -7,7 +8,8 @@ using Microsoft.UI.Xaml.Input;
 namespace GMessages.App.Views.Controls;
 
 /// <summary>
-/// One message bubble: sent ones on the right in the accent color, received ones on the left in the card color.
+/// One message bubble: sent ones on the right (RCS in the accent color, SMS in a shade of it), received ones on the left
+/// in the card color.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -21,7 +23,14 @@ namespace GMessages.App.Views.Controls;
 /// Enter and Space on a focused bubble.
 /// </para>
 /// <para>
-/// The side is a visual state so its brushes stay theme resources and follow the window's light or dark theme.
+/// The side is a visual state so its brushes stay theme resources and follow the window's light or dark theme. So is
+/// the reaction pill's accent border for my reaction. Both follow the bubble's changes (an echo turns a sending bubble
+/// into the sent one).
+/// </para>
+/// <para>
+/// The reply quote shows above the text (<c>Quote.{id}</c>), the reaction pill (<c>Reactions.{id}</c>) over the bottom
+/// corner and the status line (<c>Status.{id}</c>) under it. The pill and the menu's React raise
+/// <see cref="ReactRequested"/>, and the menu's Reply raises <see cref="ReplyRequested"/>, for the chat to act on.
 /// </para>
 /// </remarks>
 public sealed partial class MessageBubble : UserControl
@@ -42,6 +51,9 @@ public sealed partial class MessageBubble : UserControl
 
         // Behavior
         Back.AddHandler(TappedEvent, new TappedEventHandler(OnBackTapped), handledEventsToo: true);
+
+        // The Text's Own Menu (Copy) Would Win A Right-Click On It, So It Gets The Bubble Menu Too
+        Body.ContextFlyout = Menu;
     }
 
     /// <summary>
@@ -49,8 +61,27 @@ public sealed partial class MessageBubble : UserControl
     /// </summary>
     public event EventHandler? RetryRequested;
 
+    /// <summary>
+    /// Asks the chat to open the reaction picker on this bubble (the pill or the menu's React).
+    /// </summary>
+    public event EventHandler? ReactRequested;
+
+    /// <summary>
+    /// Asks the chat to start a reply to this bubble (the menu's Reply).
+    /// </summary>
+    public event EventHandler? ReplyRequested;
+
     /// <summary>Gets the "Not sent" link text.</summary>
     public static string NotSentText => ChatCopy.NotSentRetry;
+
+    /// <summary>Gets the menu's React text.</summary>
+    public static string ReactText => ChatCopy.React;
+
+    /// <summary>Gets the menu's Reply text.</summary>
+    public static string ReplyText => ChatCopy.Reply;
+
+    /// <summary>Gets the colored back, which the reaction picker opens over.</summary>
+    internal FrameworkElement Anchor => Back;
 
     /// <summary>Gets or sets the message the bubble shows.</summary>
     public MessageBubbleViewModel? Bubble
@@ -59,9 +90,31 @@ public sealed partial class MessageBubble : UserControl
         set => SetValue(BubbleProperty, value);
     }
 
+    /// <summary>
+    /// Opens the bubble menu (the Application key or Shift + F10 on the bubble's row).
+    /// </summary>
+    public void ShowMenu() => Menu.ShowAt(Back);
+
     // =========================================================================
     // X:BIND HELPERS
     // =========================================================================
+
+    /// <summary>
+    /// Gives a part's AutomationId: the prefix, then the message ID or, until the phone has reported the message, the
+    /// temporary ID.
+    /// </summary>
+    /// <param name="prefix">The prefix, such as "Status.".</param>
+    /// <param name="id">The message ID, or empty.</param>
+    /// <param name="tmpId">The temporary ID, or empty.</param>
+    /// <returns>The AutomationId.</returns>
+    public static string PartIdOf(string prefix, string id, string tmpId) => prefix + (id.Length > 0 ? id : tmpId);
+
+    /// <summary>
+    /// Shows an element only when there is text.
+    /// </summary>
+    /// <param name="text">The text.</param>
+    /// <returns>Visible for non-empty text.</returns>
+    public static Visibility ShownIfText(string text) => string.IsNullOrEmpty(text) ? Visibility.Collapsed : Visibility.Visible;
 
     /// <summary>
     /// Gives the text's AutomationId: the message ID, or the temporary ID until the phone has reported the message.
@@ -69,7 +122,7 @@ public sealed partial class MessageBubble : UserControl
     /// <param name="id">The message ID, or empty.</param>
     /// <param name="tmpId">The temporary ID, or empty.</param>
     /// <returns>The AutomationId.</returns>
-    public static string AutomationIdOf(string id, string tmpId) => "Bubble." + (id.Length > 0 ? id : tmpId);
+    public static string AutomationIdOf(string id, string tmpId) => PartIdOf("Bubble.", id, tmpId);
 
     /// <summary>
     /// Gives the "Not sent" link's AutomationId.
@@ -107,15 +160,45 @@ public sealed partial class MessageBubble : UserControl
     // EVENT HANDLERS
     // =========================================================================
 
-    // A Recycled Container Gets Another Message: Put It On Its Side
+    // A Recycled Container Gets Another Message: Follow Its Changes Instead, And Put It On Its Side
     private static void OnBubbleChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         var view = (MessageBubble)d;
-        bool sent = view.Bubble?.FromMe == true;
-        VisualStateManager.GoToState(view, sent ? "Sent" : "Received", false);
+
+        if (e.OldValue is MessageBubbleViewModel old_bubble)
+        {
+            old_bubble.PropertyChanged -= view.OnBubblePropertyChanged;
+        }
+
+        if (e.NewValue is MessageBubbleViewModel new_bubble)
+        {
+            new_bubble.PropertyChanged += view.OnBubblePropertyChanged;
+        }
+
+        view.ShowStates();
+    }
+
+    // An Echo Can Make A Sending Bubble RCS, And My Reaction Comes And Goes
+    private void OnBubblePropertyChanged(object? sender, PropertyChangedEventArgs e) => ShowStates();
+
+    private void ShowStates()
+    {
+        string side = Bubble switch
+        {
+            { FromMe: false } or null => "Received",
+            { IsRcs: true }           => "Sent",
+            _                         => "SentSms",
+        };
+
+        VisualStateManager.GoToState(this, side, false);
+        VisualStateManager.GoToState(this, Bubble?.HasMyReaction == true ? "Mine" : "NotMine", false);
     }
 
     private void OnBackTapped(object sender, TappedRoutedEventArgs e) => Bubble?.ToggleTime();
 
     private void OnRetryClick(object sender, RoutedEventArgs e) => RetryRequested?.Invoke(this, EventArgs.Empty);
+
+    private void OnReactClick(object sender, RoutedEventArgs e) => ReactRequested?.Invoke(this, EventArgs.Empty);
+
+    private void OnReplyClick(object sender, RoutedEventArgs e) => ReplyRequested?.Invoke(this, EventArgs.Empty);
 }

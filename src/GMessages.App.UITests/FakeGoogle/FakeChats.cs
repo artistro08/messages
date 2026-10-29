@@ -199,13 +199,18 @@ public sealed class FakeChats
     // CHANGES
     // =========================================================================
 
-    // The Phone's Own Message, Sent From The App
-    internal Message AddOutgoing(string conversationId, string text, string tmpId)
+    // The Phone's Own Message, Sent From The App; A Reply Carries The Quoted Message's ID, As The Phone's Echo Does
+    internal Message AddOutgoing(string conversationId, string text, string tmpId, string? replyToId = null)
     {
         lock (_lock)
         {
             Conversation conversation = Find(conversationId);
             Message message           = NewMessage(conversation, MyParticipantId, text, tmpId);
+            if (replyToId is not null)
+            {
+                message.ReplyMessage = new ReplyMessage { MessageID = replyToId, ConversationID = conversationId };
+            }
+
             _messages[conversationId].Add(message);
             Refresh(conversation, message);
             return message.Clone();

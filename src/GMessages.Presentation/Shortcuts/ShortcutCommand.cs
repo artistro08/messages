@@ -34,4 +34,10 @@ public enum ShortcutCommand
 
     /// <summary>Opens the keyboard shortcut help.</summary>
     ShowHelp,
+
+    /// <summary>Opens the reaction picker on the focused message.</summary>
+    OpenReactions,
+
+    /// <summary>Starts a reply to the focused message.</summary>
+    ReplyToMessage,
 }

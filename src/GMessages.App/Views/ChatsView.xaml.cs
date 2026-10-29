@@ -365,6 +365,13 @@ public sealed partial class ChatsView : UserControl
             case ShortcutCommand.FocusMessages:
                 return ChatView.FocusMessages();
 
+            // Only On A Focused Bubble Row; Anywhere Else The Key Goes On To The Controls
+            case ShortcutCommand.OpenReactions:
+                return ChatView.OpenReactionsForFocused();
+
+            case ShortcutCommand.ReplyToMessage:
+                return ChatView.ReplyToFocused();
+
             case ShortcutCommand.ExitConversation:
                 ViewModel.ExitConversation();
                 return true;

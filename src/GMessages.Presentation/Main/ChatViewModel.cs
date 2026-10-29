@@ -402,6 +402,7 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
         var pending = new ChatMessage(string.Empty, tmp_id, ConversationId, string.Empty, _time.GetUtcNow(), true, MessageKind.Text, text, MessageStatusType.OutgoingSending)
         {
             ReplyToId = reply_to ?? string.Empty,
+            IsRcs     = _store.Find(ConversationId)?.IsRcs == true,
         };
         var bubble = NewBubble(pending);
         Messages.Add(bubble);
