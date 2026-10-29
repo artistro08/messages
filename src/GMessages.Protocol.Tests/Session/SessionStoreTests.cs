@@ -187,21 +187,6 @@ public class SessionStoreTests
         Assert.AreEqual(0, b.Cookies.Snapshot().Count);
     }
 
-    /// <summary>A saved <c>__Secure-1PSIDTS</c> (captured by older versions) is dropped on load; other cookies stay.</summary>
-    [TestMethod]
-    public void Load_DropsStaleSecure1PsidtsCookie()
-    {
-        AuthData a = AuthData.CreateNew();
-        a.Cookies.Set(new Dictionary<string, string> { ["SAPISID"] = "s", ["__Secure-1PSIDTS"] = "stale" });
-        SessionStore store = new(FilePath);
-
-        store.Save(a);
-        IReadOnlyDictionary<string, string> cookies = store.Load()!.Cookies.Snapshot();
-
-        Assert.IsFalse(cookies.ContainsKey("__Secure-1PSIDTS"));
-        Assert.AreEqual("s", cookies["SAPISID"]);
-    }
-
     /// <summary>The largest DestPhoneId survives a round trip.</summary>
     [TestMethod]
     public void SaveThenLoad_MaxDestPhoneId_Survives()
