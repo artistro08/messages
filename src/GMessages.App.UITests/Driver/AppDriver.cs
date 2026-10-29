@@ -219,6 +219,60 @@ public sealed class AppDriver : IAsyncDisposable
     }
 
     /// <summary>
+    /// Writes the UIA tree under <paramref name="root"/>, one element per line: control type, name, AutomationId and
+    /// bounds, indented by level.
+    /// </summary>
+    /// <remarks>
+    /// For probes and failure messages. Like <see cref="Search"/>, it skips elements it has already seen (the WebView2
+    /// cycle) and stops after a few thousand; an element that goes away mid-walk is noted and its subtree skipped.
+    /// </remarks>
+    /// <param name="root">Where to start; it is written too.</param>
+    /// <param name="depth">How many levels below <paramref name="root"/> to write.</param>
+    /// <returns>The tree.</returns>
+    public static string DumpTree(AutomationElement root, int depth)
+    {
+        ArgumentNullException.ThrowIfNull(root);
+
+        var lines = new System.Text.StringBuilder();
+        var seen  = new HashSet<string>(StringComparer.Ordinal);
+        Write(root, 0);
+        return lines.ToString();
+
+        void Write(AutomationElement element, int level)
+        {
+            if (seen.Count >= MaxSearchNodes)
+            {
+                return;
+            }
+
+            string indent = new(' ', level * 2);
+            try
+            {
+                if (!seen.Add(string.Join('.', element.Properties.RuntimeId.Value)))
+                {
+                    return;
+                }
+
+                System.Drawing.Rectangle bounds = element.Properties.BoundingRectangle.ValueOrDefault;
+                lines.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"{indent}{element.Properties.ControlType.ValueOrDefault} '{SafeName(element)}' #{element.Properties.AutomationId.ValueOrDefault} [{bounds.X},{bounds.Y} {bounds.Width}x{bounds.Height}]");
+                if (level >= depth)
+                {
+                    return;
+                }
+
+                foreach (AutomationElement child in element.FindAllChildren())
+                {
+                    Write(child, level + 1);
+                }
+            }
+            catch (Exception ex) when (IsGone(ex))
+            {
+                lines.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"{indent}(gone: {ex.GetType().Name})");
+            }
+        }
+    }
+
+    /// <summary>
     /// Waits until a control's Name (a TextBlock's text) equals <paramref name="expected"/>.
     /// </summary>
     /// <param name="automationId">The control's AutomationId.</param>

@@ -73,6 +73,17 @@ public sealed class FakePhone
     public bool FailSends { get; set; }
 
     /// <summary>
+    /// Gets or sets how long every <c>ListMessages</c> answer waits before it goes out (zero by default).
+    /// </summary>
+    public TimeSpan MessagesDelay { get; set; }
+
+    /// <summary>
+    /// Gets or sets how much longer a <c>ListMessages</c> answer for an older page (the request carries a cursor)
+    /// waits, on top of <see cref="MessagesDelay"/> (zero by default).
+    /// </summary>
+    public TimeSpan OlderPagesDelay { get; set; }
+
+    /// <summary>
     /// Gets every <c>SendMessage</c> request so far, in arrival order.
     /// </summary>
     public IReadOnlyList<SendMessageRequest> Sent
@@ -192,7 +203,17 @@ public sealed class FakePhone
             case ActionType.ListMessages when RequestCrypto is not null:
                 var messages = Open(data, ListMessagesRequest.Parser);
                 (List<Message> page, Cursor? next) = Chats.Page(messages.ConversationID, messages.Count, messages.Cursor);
-                Reply(data.RequestID, data.Action, new ListMessagesResponse { Messages = { page }, TotalMessages = page.Count, Cursor = next }, encrypt: true);
+                var answer                          = new ListMessagesResponse { Messages = { page }, TotalMessages = page.Count, Cursor = next };
+                TimeSpan delay                      = MessagesDelay + (messages.Cursor is { LastItemID.Length: > 0 } ? OlderPagesDelay : TimeSpan.Zero);
+                if (delay <= TimeSpan.Zero)
+                {
+                    Reply(data.RequestID, data.Action, answer, encrypt: true);
+                    break;
+                }
+
+                // Held Off The Request's Thread, So Other Requests Are Answered Meanwhile
+                string request_id = data.RequestID;
+                _ = Task.Delay(delay).ContinueWith(_ => Reply(request_id, ActionType.ListMessages, answer, encrypt: true), TaskScheduler.Default);
                 break;
 
             case ActionType.SendMessage when RequestCrypto is not null:

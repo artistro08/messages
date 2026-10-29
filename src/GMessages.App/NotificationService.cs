@@ -107,7 +107,7 @@ internal sealed class NotificationService(ChatStore store, AppSettings settings,
             string? avatar = content.AvatarParticipantId is { Length: > 0 } participant ? await avatars.GetFileUriAsync(participant, CancellationToken.None) : null;
             avatars.Clear();
 
-            string xml = NotificationXml.Build(content, avatar, SendIconUri);
+            string xml = NotificationXml.Build(content, avatar, SendIconUri, TestHooks.ToastPartsOverride ?? ToastParts.All);
             _toasts.Remember(new ShownToast(content.Tag, content.Group, xml));
             Show(xml, content.Tag, content.Group);
         }

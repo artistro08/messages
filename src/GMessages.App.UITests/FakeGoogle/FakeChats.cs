@@ -99,6 +99,42 @@ public sealed class FakeChats
         }
     }
 
+    /// <summary>
+    /// Adds a long one-on-one chat with Bo, for tests that scroll through older pages.
+    /// </summary>
+    /// <remarks>
+    /// The messages read <c>long 001</c> to <c>long {count}</c>, oldest first, one minute apart, the newest a minute
+    /// ago. Like a real chat, Bo and the phone take turns in runs of one to three, and every fourth message carries a
+    /// longer line after its number that wraps. Message IDs are <c>{id}-001</c> to <c>{id}-{count}</c>, so a test
+    /// can find <c>Bubble.{id}-096</c>.
+    /// </remarks>
+    /// <param name="id">The conversation ID.</param>
+    /// <param name="count">How many messages.</param>
+    public void AddLongChat(string id = "c-history", int count = 120)
+    {
+        Conversation chat = NewConversation(id, "Long Chat", false, ConversationStatus.Active, false, false, Person("p-bo", "Bo", "+15550000002"));
+        long start        = DateTimeOffset.UtcNow.AddMinutes(-count).ToUnixTimeMilliseconds() * 1000;
+        Message[] texts   = [.. Enumerable.Range(1, count).Select(Line)];
+        Add(chat, texts);
+
+        Message Line(int i)
+        {
+            // Runs Of One To Three From Each Side; Every Fourth Message Wraps
+            bool from_me = (i / 3 + i / 5) % 2 == 0;
+            string text  = i % 4 == 0 ? $"long {i:000} " + string.Concat(Enumerable.Repeat("and a longer line that wraps ", 4)).TrimEnd() : $"long {i:000}";
+            var message  = new Message
+            {
+                MessageID      = $"{id}-{i:000}",
+                ConversationID = id,
+                ParticipantID  = from_me ? MyParticipantId : "p-bo",
+                Timestamp      = start + ((i - 1) * 60_000_000L),
+                MessageStatus  = new MessageStatus { Status = from_me ? MessageStatusType.OutgoingComplete : MessageStatusType.IncomingComplete },
+            };
+            message.MessageInfo.Add(new MessageInfo { MessageContent = new MessageContent { Content = text } });
+            return message;
+        }
+    }
+
     // =========================================================================
     // ANSWERS
     // =========================================================================

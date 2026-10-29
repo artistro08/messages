@@ -341,9 +341,104 @@ public sealed class ChatTests : UiTest
         }
     }
 
+    /// <summary>
+    /// While an older page loads and lands, the bubbles on screen stay where they are: no blanking, no jump. The
+    /// oldest shown bubble keeps its place on screen (within 4 px) from the loading ring showing until a second after
+    /// the page landed.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task OlderPage_KeepsVisibleBubblesInPlace()
+    {
+        // A Long Chat Whose Older Pages Take A Second, So The Wait Can Be Watched
+        Server.Phone.Chats.AddLongChat();
+        Server.Phone.OlderPagesDelay = TimeSpan.FromSeconds(1);
+        const string Oldest          = "Bubble.c-history-096";
+        const string NextPage        = "Bubble.c-history-071";
+
+        await OpenMainAsync();
+        App.Find("Row.c-history").Patterns.SelectionItem.Pattern.Select();
+        Wait.Until(() => Bubbles().Any(b => b.Text.StartsWith("long 120", StringComparison.Ordinal)), AppDriver.DefaultTimeout,
+            () => $"The long chat didn't show 'long 120'; bubbles: [{string.Join(", ", Bubbles().Select(b => b.Id))}].");
+
+        // Up Until The Older Page Is Asked For
+        AutomationElement list = App.Find("Chat.Messages");
+        var scroll             = list.Patterns.Scroll.Pattern;
+        Wait.Until(() =>
+        {
+            scroll.SetScrollPercent(-1, 0);
+            return App.TryFind("Chat.LoadingOlder") is not null;
+        }, AppDriver.DefaultTimeout, () => "Scrolling up never showed the loading ring.");
+
+        // Where The Oldest Shown Bubble Sits Once The Scroll Settled
+        int? recorded = null;
+        Wait.Until(() =>
+        {
+            int? y    = BubbleTop(list, Oldest);
+            bool same = y is not null && y == recorded;
+            recorded  = y;
+            return same;
+        }, TimeSpan.FromSeconds(1), () => $"{Oldest} never settled on screen (last top: {recorded?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "gone"}).");
+
+        // Every 50 ms Until The Page Lands, Then A Second More: It Stays Put
+        var samples         = new List<string>();
+        DateTime landed_cap = DateTime.UtcNow + AppDriver.DefaultTimeout;
+        DateTime? until     = null;
+        while (until is null || DateTime.UtcNow < until)
+        {
+            int? y = BubbleTop(list, Oldest);
+            samples.Add(y?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "off");
+            Assert.IsTrue(y is { } top && Math.Abs(top - recorded!.Value) <= 4,
+                $"{Oldest} moved from y={recorded} during the older page's arrival. Samples: {string.Join(" ", samples)}.");
+
+            if (until is null && App.TryFind("Chat.LoadingOlder") is null)
+            {
+                until = DateTime.UtcNow.AddSeconds(1);
+            }
+
+            Assert.IsTrue(DateTime.UtcNow < landed_cap, $"The older page never landed. Samples: {string.Join(" ", samples)}.");
+            Thread.Sleep(50);
+        }
+
+        TestContext.WriteLine($"{Oldest} tops: {string.Join(" ", samples)}");
+
+        // The Older Page Is There (Scrolled To If It Sits Above The Realized Bubbles)
+        Wait.Until(() =>
+        {
+            if (Bubbles().Any(b => b.Id == NextPage))
+            {
+                return true;
+            }
+
+            scroll.SetScrollPercent(-1, 0);
+            return false;
+        }, AppDriver.DefaultTimeout, () => $"No {NextPage} after the older page landed.");
+    }
+
     // =========================================================================
     // HELPERS
     // =========================================================================
+
+    // A Bubble's Screen Top, Or Null When It Is Gone, Off Screen Or Outside The List
+    private static int? BubbleTop(AutomationElement list, string automationId)
+    {
+        try
+        {
+            AutomationElement? bubble = list.FindFirstDescendant(cf => cf.ByAutomationId(automationId));
+            if (bubble is null || bubble.Properties.IsOffscreen.ValueOrDefault)
+            {
+                return null;
+            }
+
+            System.Drawing.Rectangle box  = bubble.BoundingRectangle;
+            System.Drawing.Rectangle view = list.BoundingRectangle;
+            return box.Bottom > view.Top && box.Top < view.Bottom ? box.Top : null;
+        }
+        catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or FlaUI.Core.Exceptions.ElementNotAvailableException)
+        {
+            return null;
+        }
+    }
 
     // The Message List Sits On Its Newest Message: Less Than A Pixel Short Of Its End, So No Bottom Fade Or Arrow
     private void AssertAtNewest(string what)

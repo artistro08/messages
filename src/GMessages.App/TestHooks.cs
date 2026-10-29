@@ -1,3 +1,4 @@
+using GMessages.Presentation.Notifications;
 using GMessages.Protocol.Http;
 
 namespace GMessages.App;
@@ -36,6 +37,34 @@ internal static class TestHooks
     /// </summary>
     /// <remarks>Authentication resolves to <c>{base}/web/authentication</c>.</remarks>
     public static GmEndpoints? Endpoints { get; } = Parsed.EndpointBase is { } b ? new GmEndpoints(b, b, b) : null;
+
+    /// <summary>
+    /// The toast buttons a probe asked for in <c>{DataDir}	oast-parts.txt</c>, read each time a toast is built, else null.
+    /// </summary>
+    /// <remarks>
+    /// The file holds a <see cref="ToastParts"/> value such as <c>Reply, Snooze</c> or <c>None</c>. A missing,
+    /// unreadable or unparsable file means null, so the toast keeps every button.
+    /// </remarks>
+    public static ToastParts? ToastPartsOverride
+    {
+        get
+        {
+            if (DataDir is null)
+            {
+                return null;
+            }
+
+            try
+            {
+                string text = File.ReadAllText(Path.Combine(DataDir, "toast-parts.txt")).Trim();
+                return Enum.TryParse(text, ignoreCase: true, out ToastParts parts) ? parts : null;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return null;
+            }
+        }
+    }
 }
 #else
 /// <summary>
@@ -54,5 +83,8 @@ internal static class TestHooks
 
     /// <summary>Always null in Release: the app uses the real servers.</summary>
     public static GmEndpoints? Endpoints => null;
+
+    /// <summary>Always null in Release: toasts keep every button.</summary>
+    public static ToastParts? ToastPartsOverride => null;
 }
 #endif

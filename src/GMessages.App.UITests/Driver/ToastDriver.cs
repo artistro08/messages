@@ -9,8 +9,8 @@ namespace GMessages.App.UITests.Driver;
 /// </summary>
 /// <remarks>
 /// Windows shows each toast as a top-level window named <c>New notification</c>, owned by the shell, on the desktop
-/// root. Toasts of other apps may be on screen too, so a toast only counts when its texts include the expected title;
-/// nothing is read out of the others.
+/// root. Toasts of other apps may be on screen too, so a toast only counts when its texts include the expected title.
+/// A failed wait lists every toast's texts (<see cref="DescribeAll"/>), so a missing toast can be told from a wrong one.
 /// </remarks>
 public sealed class ToastDriver
 {
@@ -35,7 +35,7 @@ public sealed class ToastDriver
     public AutomationElement WaitFor(TimeSpan timeout, params string[] texts)
     {
         AutomationElement? toast = null;
-        Wait.Until(() => (toast = TryFind(texts)) is not null, timeout, () => $"No toast showed with [{string.Join(" | ", texts)}].");
+        Wait.Until(() => (toast = TryFind(texts)) is not null, timeout, () => $"No toast showed with [{string.Join(" | ", texts)}]. Toasts on screen:{Environment.NewLine}{DescribeAll()}");
         return toast!;
     }
 
@@ -45,6 +45,16 @@ public sealed class ToastDriver
     /// <param name="texts">The texts it must show.</param>
     /// <returns>The toast window, or null.</returns>
     public AutomationElement? TryFind(params string[] texts) => Toasts().FirstOrDefault(t => texts.All(Texts(t).Contains));
+
+    /// <summary>
+    /// Lists every toast on screen, one per line, as its texts in order.
+    /// </summary>
+    /// <returns>The lines, or <c>(none)</c>.</returns>
+    public string DescribeAll()
+    {
+        string[] lines = [.. Toasts().Select(t => "[" + string.Join(" | ", Texts(t)) + "]")];
+        return lines.Length > 0 ? string.Join(Environment.NewLine, lines) : "(none)";
+    }
 
     /// <summary>
     /// Says that no toast showing <paramref name="text"/> appears for the whole of <paramref name="period"/>.
