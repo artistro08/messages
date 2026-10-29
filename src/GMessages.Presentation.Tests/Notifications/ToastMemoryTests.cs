@@ -1,4 +1,6 @@
+using GMessages.Presentation.Messaging;
 using GMessages.Presentation.Notifications;
+using GMessages.Protocol.Proto;
 
 namespace GMessages.Presentation.Tests.Notifications;
 
@@ -61,5 +63,44 @@ public sealed class ToastMemoryTests
         ShownToast again = memory.Snooze("m2", "c2")!;
         memory.Clear();
         Assert.IsFalse(memory.Wake(again));
+    }
+
+    /// <summary>
+    /// The real phone sends several updates per incoming message (status changes, reactions). Even when every one of
+    /// them reaches the toast gate as new, the message gets one toast; a snooze wake still shows its own toast again.
+    /// </summary>
+    [TestMethod]
+    public void RepeatedArrivals_SameMessage_ShowOneToast()
+    {
+        var memory       = new ToastMemory(3);
+        var conversation = new ConversationInfo("c1", "Ann", false, ConversationStatus.Active, false, true, DateTimeOffset.UnixEpoch, "", false, "", [], "me", "m1");
+        int shows        = 0;
+
+        // The Gate NotificationService.ShowAsync Runs: The Policy, Then The First-Show Check
+        for (int i = 0; i < 4; i++)
+        {
+            var message = new ChatMessage("m1", "", "c1", "p1", DateTimeOffset.UnixEpoch, false, MessageKind.Text, "hi", MessageStatusType.IncomingComplete);
+            var e       = new MessageArrivedEventArgs(message, conversation, isOld: false, isNew: true);
+            if (NotificationPolicy.ShouldNotify(e, true, null, false, false) && memory.FirstShow(e.Message.Id))
+            {
+                memory.Remember(Toast("m1"));
+                shows++;
+            }
+        }
+
+        Assert.AreEqual(1, shows);
+
+        // Snoozed And Waiting, Or Its Chat Opened: Still Not Shown Again By An Update
+        ShownToast snoozed = memory.Snooze("m1", "c1")!;
+        Assert.IsFalse(memory.FirstShow("m1"));
+        memory.RemoveConversation("c1");
+        Assert.IsFalse(memory.FirstShow("m1"));
+        Assert.IsFalse(memory.Wake(snoozed), "Opening the chat cancelled the snooze.");
+
+        // A Snooze Wake Still Shows Its Own Toast
+        memory.Remember(Toast("m2"));
+        ShownToast second = memory.Snooze("m2", "c1")!;
+        Assert.IsTrue(memory.Wake(second));
+        Assert.IsTrue(memory.FirstShow("m3"), "Another message still shows.");
     }
 }

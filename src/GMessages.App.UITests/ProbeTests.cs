@@ -2,14 +2,12 @@ using System.Diagnostics;
 using System.Globalization;
 using FlaUI.Core.AutomationElements;
 using GMessages.App.UITests.Driver;
-using GMessages.Presentation.Notifications;
-using Microsoft.Win32;
 
 namespace GMessages.App.UITests;
 
 /// <summary>
 /// Diagnostic probes, not checks: they measure and write what they find to the test output. Removed once their
-/// findings are recorded (Tasks 5 and 8).
+/// findings are recorded (Task 8).
 /// </summary>
 [TestClass]
 [TestCategory("Probe")]
@@ -18,48 +16,6 @@ public sealed class ProbeTests : UiTest
 {
     // Owner Wording, Verbatim (As In PairingTests)
     private const string WrongEmojiText = "That wasn't the matching emoji. Try again.";
-
-    /// <summary>
-    /// How long a message toast stays on screen with each set of buttons, and the Windows message duration it is
-    /// compared with.
-    /// </summary>
-    /// <remarks>
-    /// Each variant writes its <see cref="ToastParts"/> to <c>toast-parts.txt</c> (read each time a toast is built),
-    /// pushes a message into Ann's chat, then times the toast window from appearing to leaving the desktop root,
-    /// polling every 250 ms, capped at 60 s. The accessibility setting is only read, never written (R14).
-    /// </remarks>
-    /// <returns>A task for the test.</returns>
-    [TestMethod]
-    public async Task ToastBanner_SecondsOnScreen_PerParts()
-    {
-        await PairAsync();
-        var toasts = new ToastDriver(App.Automation);
-
-        // Windows' "Dismiss Notifications After" Setting, In Seconds
-        object? duration = Registry.GetValue(@"HKEY_CURRENT_USER\Control Panel\Accessibility", "MessageDuration", null);
-        TestContext.WriteLine($"MessageDuration={duration ?? "(not set)"}");
-
-        ToastParts[] variants = [ToastParts.All, ToastParts.Reply, ToastParts.Snooze, ToastParts.Dismiss, ToastParts.Reply | ToastParts.Snooze, ToastParts.None];
-        for (int n = 0; n < variants.Length; n++)
-        {
-            ToastParts parts = variants[n];
-            File.WriteAllText(Path.Combine(App.DataDir, "toast-parts.txt"), parts.ToString());
-
-            string text = $"probe {parts} {n}";
-            Server.Phone.PushIncoming("c-ann", text);
-            toasts.WaitFor(AppDriver.DefaultTimeout, "Ann Lee", text);
-
-            // Shown Until It Leaves The Desktop Root, Or The Cap
-            var shown = Stopwatch.StartNew();
-            while (toasts.TryFind(text) is not null && shown.Elapsed < TimeSpan.FromSeconds(60))
-            {
-                Thread.Sleep(250);
-            }
-
-            string seconds = shown.Elapsed.TotalSeconds.ToString("0.0", CultureInfo.InvariantCulture);
-            TestContext.WriteLine($"parts={parts} seconds={seconds}{(shown.Elapsed >= TimeSpan.FromSeconds(60) ? " (cap)" : "")}");
-        }
-    }
 
     /// <summary>
     /// After a wrong emoji and Try again, writes the sign-in's UI Automation tree and the WebView2's native windows

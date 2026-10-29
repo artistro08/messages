@@ -93,29 +93,9 @@ public sealed class NotificationXmlTests
     }
 
     [TestMethod]
-    public void Build_PartsNone_HasNoActions()
-    {
-        XDocument doc = XDocument.Parse(NotificationXml.Build(new NotificationContent("m1", "c1", "Ann", "hi", "p1"), null, Send, ToastParts.None));
-
-        Assert.IsFalse(doc.Descendants("action").Any());
-        Assert.IsFalse(doc.Descendants("input").Any());
-    }
-
-    [TestMethod]
-    public void Build_PartsWithoutReply_HasNoTextInput()
-    {
-        XDocument doc = XDocument.Parse(NotificationXml.Build(new NotificationContent("m1", "c1", "Ann", "hi", "p1"), null, Send, ToastParts.Snooze | ToastParts.Dismiss));
-        var actions   = doc.Descendants("action").ToList();
-
-        Assert.IsFalse(doc.Descendants("input").Any());
-        Assert.AreEqual(2, actions.Count);
-        Assert.IsFalse(actions.Any(a => a.Attribute("hint-inputId") is not null));
-    }
-
-    [TestMethod]
     public void Build_All_MatchesThePlan3Shape()
     {
-        // The Plan 3 Toast, Character For Character: All Is The Default And Changes Nothing
+        // The Plan 3 Toast, Character For Character: Quick Reply, The App's Own Snooze (R25) And Windows' Dismiss
         const string Expected = "<toast launch=\"action=open&amp;conversation=c1\"><visual><binding template=\"ToastGeneric\"><text>Ann</text><text>hi</text></binding></visual>"
             + "<actions><input id=\"reply\" type=\"text\" placeHolderContent=\"Reply\" />"
             + "<action content=\"\" hint-inputId=\"reply\" activationType=\"foreground\" arguments=\"action=reply&amp;conversation=c1&amp;message=m1\" imageUri=\"file:///send.png\" hint-toolTip=\"Send\" />"
@@ -124,7 +104,6 @@ public sealed class NotificationXmlTests
         var content           = new NotificationContent("m1", "c1", "Ann", "hi", "p1");
 
         Assert.AreEqual(Expected, NotificationXml.Build(content, null, Send));
-        Assert.AreEqual(Expected, NotificationXml.Build(content, null, Send, ToastParts.All));
     }
 
     [TestMethod]

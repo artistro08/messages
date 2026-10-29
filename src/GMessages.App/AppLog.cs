@@ -56,6 +56,9 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 916, Level = LogLevel.Information, Message = "Notifications registered")]
     public static partial void NotificationsRegistered(ILogger logger);
 
+    [LoggerMessage(EventId = 918, Level = LogLevel.Information, Message = "Toast shown for {MessageId} in {ConversationId}")]
+    public static partial void ToastShown(ILogger logger, string messageId, string conversationId);
+
     [LoggerMessage(EventId = 917, Level = LogLevel.Error, Message = "Unhandled error ({ErrorType} 0x{HResult:X8}, handled: {Handled})")]
     public static partial void UnhandledError(ILogger logger, string errorType, int hResult, bool handled);
 

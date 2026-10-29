@@ -86,7 +86,8 @@ internal sealed class NotificationService(ChatStore store, AppSettings settings,
     }
 
     /// <summary>
-    /// Shows a toast for an arrived message when <see cref="NotificationPolicy"/> says it should notify.
+    /// Shows a toast for an arrived message when <see cref="NotificationPolicy"/> says it should notify, once per
+    /// message: a later update of an already toasted message shows nothing (see <see cref="ToastMemory.FirstShow"/>).
     /// </summary>
     /// <param name="e">The arrived message.</param>
     /// <returns>A task that completes once the toast was shown or skipped. It never throws.</returns>
@@ -100,6 +101,13 @@ internal sealed class NotificationService(ChatStore store, AppSettings settings,
             return;
         }
 
+        // One Toast Per Message: Claimed Before Any Await, So Updates Of It (Status Changes, Reactions) Never Show The
+        // Banner Again, Even When They Arrive Mid-Show
+        if (!_toasts.FirstShow(e.Message.Id))
+        {
+            return;
+        }
+
         try
         {
             // Content And The Sender's Photo
@@ -107,9 +115,10 @@ internal sealed class NotificationService(ChatStore store, AppSettings settings,
             string? avatar = content.AvatarParticipantId is { Length: > 0 } participant ? await avatars.GetFileUriAsync(participant, CancellationToken.None) : null;
             avatars.Clear();
 
-            string xml = NotificationXml.Build(content, avatar, SendIconUri, TestHooks.ToastPartsOverride ?? ToastParts.All);
+            string xml = NotificationXml.Build(content, avatar, SendIconUri);
             _toasts.Remember(new ShownToast(content.Tag, content.Group, xml));
             Show(xml, content.Tag, content.Group);
+            AppLog.ToastShown(logger, content.Tag, content.Group);
         }
 #pragma warning disable CA1031 // A message that can't become a toast must not take the tray down; the failure is logged
         catch (Exception ex)
@@ -263,6 +272,7 @@ internal sealed class NotificationService(ChatStore store, AppSettings settings,
         if (_toasts.Wake(toast))
         {
             Show(toast.Xml, toast.Tag, toast.Group);
+            AppLog.ToastShown(logger, toast.Tag, toast.Group);
         }
     }
 

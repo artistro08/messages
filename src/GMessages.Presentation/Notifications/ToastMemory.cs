@@ -9,18 +9,52 @@ namespace GMessages.Presentation.Notifications;
 public sealed record ShownToast(string Tag, string Group, string Xml);
 
 /// <summary>
-/// The toasts Snooze can show again: the latest few shown, and the ones snoozed and waiting.
+/// The toasts Snooze can show again: the latest few shown, and the ones snoozed and waiting. Also the message IDs
+/// already toasted, so a message gets one toast however many updates of it arrive.
 /// </summary>
 /// <remarks>
-/// Payloads live in memory only, never on disk. Only the latest <c>capacity</c> shown toasts can be snoozed (older ones
-/// are dropped first), but a snooze already waiting is kept apart, so newer toasts never push it out. Opening the chat
-/// (<see cref="RemoveConversation"/>) or clearing every toast (<see cref="Clear"/>) cancels its waiting snoozes.
+/// Payloads live in memory only, never on disk. The real phone sends several updates per incoming message (status
+/// changes, reactions); <see cref="FirstShow"/> keeps the last 256 toasted message IDs, so none of them shows the
+/// banner again. Opening the chat or clearing the toasts doesn't forget them, and a snooze wake isn't a first show.
+/// Only the latest <c>capacity</c> shown toasts can be snoozed (older ones are dropped first), but a snooze already
+/// waiting is kept apart, so newer toasts never push it out. Opening the chat (<see cref="RemoveConversation"/>) or
+/// clearing every toast (<see cref="Clear"/>) cancels its waiting snoozes.
 /// </remarks>
 /// <param name="capacity">How many recently shown toasts can still be snoozed.</param>
 public sealed class ToastMemory(int capacity)
 {
+    // How Many Toasted Message IDs Are Kept (As Many As ChatStore Remembers)
+    private const int ShownIdCapacity = 256;
+
     private readonly List<ShownToast> _recent = [];
     private readonly HashSet<ShownToast> _snoozed = [];
+
+    // Toasted Message IDs (Queue Keeps The Order, Set Makes The Lookup Fast)
+    private readonly Queue<string> _shownOrder = new();
+    private readonly HashSet<string> _shownIds = [];
+
+    /// <summary>
+    /// Claims a message's one toast. Call it before showing a toast for an arrived message.
+    /// </summary>
+    /// <param name="messageId">The message ID (the toast's tag).</param>
+    /// <returns>True the first time; false when the message was already toasted (a repeated update of it).</returns>
+    public bool FirstShow(string messageId)
+    {
+        ArgumentNullException.ThrowIfNull(messageId);
+
+        if (!_shownIds.Add(messageId))
+        {
+            return false;
+        }
+
+        _shownOrder.Enqueue(messageId);
+        if (_shownOrder.Count > ShownIdCapacity)
+        {
+            _shownIds.Remove(_shownOrder.Dequeue());
+        }
+
+        return true;
+    }
 
     /// <summary>
     /// Keeps a shown toast so it can be snoozed; the oldest is dropped past the capacity.

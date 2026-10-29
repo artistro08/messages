@@ -20,9 +20,8 @@ public static class NotificationXml
     /// <param name="n">The toast content.</param>
     /// <param name="avatarFileUri">A file URI for the avatar picture, or null for none.</param>
     /// <param name="sendIconUri">A file URI for the send button icon.</param>
-    /// <param name="parts">Which buttons to include; every one by default. With none, the toast has no actions at all.</param>
     /// <returns>The toast XML.</returns>
-    public static string Build(NotificationContent n, string? avatarFileUri, string sendIconUri, ToastParts parts = ToastParts.All)
+    public static string Build(NotificationContent n, string? avatarFileUri, string sendIconUri)
     {
         ArgumentNullException.ThrowIfNull(n);
 
@@ -41,33 +40,19 @@ public static class NotificationXml
         // Windows' Dismiss. Every <input> Before Any <action>, As The Toast Schema Requires (Else Windows Shows "New
         // notification")
         string about = $"conversation={id}&message={Uri.EscapeDataString(n.Tag)}";
-        var actions  = new XElement("actions");
+        var actions  = new XElement("actions",
+            new XElement("input", new XAttribute("id", "reply"), new XAttribute("type", "text"), new XAttribute("placeHolderContent", ChatCopy.Reply)),
+            new XElement("action",
+                new XAttribute("content", string.Empty), new XAttribute("hint-inputId", "reply"), new XAttribute("activationType", "foreground"),
+                new XAttribute("arguments", $"action=reply&{about}"), new XAttribute("imageUri", sendIconUri),
+                new XAttribute("hint-toolTip", ChatCopy.Send)),
+            new XElement("action", new XAttribute("activationType", "foreground"), new XAttribute("arguments", $"action=snooze&{about}"), new XAttribute("content", ChatCopy.Snooze)),
+            new XElement("action", new XAttribute("activationType", "system"), new XAttribute("arguments", "dismiss"), new XAttribute("content", string.Empty)));
 
-        if (parts.HasFlag(ToastParts.Reply))
-        {
-            actions.Add(
-                new XElement("input", new XAttribute("id", "reply"), new XAttribute("type", "text"), new XAttribute("placeHolderContent", ChatCopy.Reply)),
-                new XElement("action",
-                    new XAttribute("content", string.Empty), new XAttribute("hint-inputId", "reply"), new XAttribute("activationType", "foreground"),
-                    new XAttribute("arguments", $"action=reply&{about}"), new XAttribute("imageUri", sendIconUri),
-                    new XAttribute("hint-toolTip", ChatCopy.Send)));
-        }
-
-        if (parts.HasFlag(ToastParts.Snooze))
-        {
-            actions.Add(new XElement("action", new XAttribute("activationType", "foreground"), new XAttribute("arguments", $"action=snooze&{about}"), new XAttribute("content", ChatCopy.Snooze)));
-        }
-
-        if (parts.HasFlag(ToastParts.Dismiss))
-        {
-            actions.Add(new XElement("action", new XAttribute("activationType", "system"), new XAttribute("arguments", "dismiss"), new XAttribute("content", string.Empty)));
-        }
-
-        // No Buttons: No <actions> Element At All, Since An Empty One Isn't A Valid Toast
         var toast = new XElement("toast",
             new XAttribute("launch", $"action=open&conversation={id}"),
             new XElement("visual", binding),
-            actions.HasElements ? actions : null);
+            actions);
 
         return toast.ToString(SaveOptions.DisableFormatting);
     }

@@ -26,7 +26,9 @@ namespace GMessages.App.UITests.FakeGoogle;
 /// by folder, messages, sends (answered, then echoed as a live message with the request's temporary ID, unless
 /// <see cref="FailSends"/>), read marks, single conversations, contacts, top contacts, get-or-create and
 /// thumbnails (always none). A <c>SettingsEvent</c> with one SIM goes out after every <c>GET_UPDATES</c>.
-/// <see cref="PushIncoming"/> sends a live message, or, with <c>old</c>, one in the startup catch-up batch.
+/// <see cref="PushIncoming"/> sends a live message, or, with <c>old</c>, one in the startup catch-up batch;
+/// <see cref="PushStatusUpdate"/> sends the same message again with a new status, as a real phone does several times
+/// per incoming message.
 /// </para>
 /// </remarks>
 public sealed class FakePhone
@@ -286,13 +288,31 @@ public sealed class FakePhone
     /// <param name="conversationId">The conversation ID.</param>
     /// <param name="text">The message text.</param>
     /// <param name="old">True to send it in the catch-up batch.</param>
+    /// <returns>The message as pushed, for <see cref="PushStatusUpdate"/>.</returns>
     /// <exception cref="InvalidOperationException">Pairing has not reached the client finished message.</exception>
-    public void PushIncoming(string conversationId, string text, bool old = false)
+    public Message PushIncoming(string conversationId, string text, bool old = false)
     {
         (Conversation conversation, Message message) = Chats.AddIncoming(conversationId, text);
         Action<IncomingRPCMessage> push = old ? _pushCatchUp : _push;
         PushUpdate(new UpdateEvents { ConversationEvent = new ConversationEvent { Data = { conversation } } }, push);
         PushUpdate(new UpdateEvents { MessageEvent = new MessageEvent { Data = { message } } }, push);
+        return message;
+    }
+
+    /// <summary>
+    /// Pushes an already pushed message again with a new status, as a live update: the same message ID, as the real
+    /// phone sends for status changes and reactions.
+    /// </summary>
+    /// <param name="message">The message, as <see cref="PushIncoming"/> returned it.</param>
+    /// <param name="status">The new status.</param>
+    /// <exception cref="InvalidOperationException">Pairing has not reached the client finished message.</exception>
+    public void PushStatusUpdate(Message message, MessageStatusType status)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+
+        Message update       = message.Clone();
+        update.MessageStatus = new MessageStatus { Status = status };
+        PushUpdate(new UpdateEvents { MessageEvent = new MessageEvent { Data = { update } } }, _push);
     }
 
     // Answers A Send, Then Echoes It As A Live Message With The Request's Temporary ID

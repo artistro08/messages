@@ -3,6 +3,7 @@ using GMessages.App.UITests.Driver;
 using GMessages.App.UITests.FakeGoogle;
 using GMessages.Presentation;
 using GMessages.Presentation.Messaging;
+using GMessages.Protocol.Proto;
 
 namespace GMessages.App.UITests;
 
@@ -21,6 +22,9 @@ public sealed class NotificationTests : UiTest
 {
     // How Long A Message That Must Not Notify Is Watched For A Toast
     private static readonly TimeSpan QuietPeriod = TimeSpan.FromSeconds(5);
+
+    // How Long A Toast's Banner May Stay On Screen Before It Moves To The Notification Center
+    private static readonly TimeSpan BannerTime = TimeSpan.FromSeconds(10);
 
     private ToastDriver _toasts = null!;
 
@@ -188,6 +192,46 @@ public sealed class NotificationTests : UiTest
 
         _toasts.WaitFor(AppDriver.DefaultTimeout, "Ann Lee", ChatCopy.ReplyNotSent);
         Assert.AreEqual(1, Server.Phone.Sent.Count, "The phone didn't get the reply once.");
+    }
+
+    /// <summary>
+    /// A message's toast leaves the screen (for the Notification Center) within 10 s, as other apps' toasts do.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Toast_LeavesScreenWithin10Seconds()
+    {
+        await PairAsync();
+
+        Server.Phone.PushIncoming("c-ann", "hey there");
+        _toasts.WaitFor(AppDriver.DefaultTimeout, "Ann Lee", "hey there");
+
+        Wait.Until(() => _toasts.TryFind("Ann Lee", "hey there") is null, BannerTime, () => $"The toast was still on screen after {BannerTime.TotalSeconds} s.");
+    }
+
+    /// <summary>
+    /// Updates of one incoming message (new statuses, as the real phone sends) show one toast: it leaves the screen
+    /// within 10 s and no update brings it back.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task RepeatedUpdates_ShowOneToast_LeavesScreenWithin10Seconds()
+    {
+        await PairAsync();
+
+        Message message = Server.Phone.PushIncoming("c-ann", "hey there");
+        _toasts.WaitFor(AppDriver.DefaultTimeout, "Ann Lee", "hey there");
+
+        // Updates While It Shows, Then After It Left
+        Server.Phone.PushStatusUpdate(message, MessageStatusType.IncomingDelivered);
+        Server.Phone.PushStatusUpdate(message, MessageStatusType.IncomingComplete);
+        Wait.Until(() => _toasts.TryFind("Ann Lee", "hey there") is null, BannerTime, () => $"The toast was still on screen after {BannerTime.TotalSeconds} s.");
+
+        Server.Phone.PushStatusUpdate(message, MessageStatusType.IncomingDelivered);
+        Server.Phone.PushStatusUpdate(message, MessageStatusType.IncomingComplete);
+        _toasts.AssertNone("hey there", QuietPeriod);
+
+        AssertLiveStillToasts();
     }
 
     // =========================================================================
