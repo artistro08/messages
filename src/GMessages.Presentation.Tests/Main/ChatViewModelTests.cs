@@ -1,6 +1,7 @@
 using System.Net;
 using GMessages.Presentation.Main;
 using GMessages.Presentation.Messaging;
+using GMessages.Presentation.Tests.Messaging;
 using GMessages.Protocol.Events;
 using GMessages.Protocol.Proto;
 using GMessages.Protocol.Rpc;
@@ -1161,7 +1162,7 @@ public sealed class ChatViewModelTests
     {
         using var rig       = new MainRig();
         var handler         = PreviewPage();
-        using var previews  = new LinkPreviewer(handler, false, NullLogger.Instance);
+        using var previews  = new LinkPreviewer(handler, false, NullLogger.Instance, TestProxy.Direct);
         rig.Client.Conversations["a"] = MainRig.Conv("a", "Ann");
         rig.Client.MessagesPage       = new ListMessagesResponse();
         rig.Client.MessagesPage.Messages.Add(Msg("m1", "look https://www.example.com/a."));
@@ -1192,7 +1193,7 @@ public sealed class ChatViewModelTests
     {
         using var rig      = new MainRig();
         var handler        = PreviewPage();
-        using var previews = new LinkPreviewer(handler, false, NullLogger.Instance);
+        using var previews = new LinkPreviewer(handler, false, NullLogger.Instance, TestProxy.Direct);
         rig.Client.Conversations["a"] = MainRig.Conv("a", "Ann", status: status);
         rig.Client.MessagesPage       = new ListMessagesResponse();
         rig.Client.MessagesPage.Messages.Add(Msg("m1", "look https://www.example.com/a"));

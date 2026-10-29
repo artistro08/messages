@@ -19,6 +19,13 @@ public sealed class LinkPreviewerTests
         </head><body>hi</body></html>
         """;
 
+    private static HttpResponseMessage Redirect(string location)
+    {
+        HttpResponseMessage response = FakeHttpHandler.Response(HttpStatusCode.Found);
+        response.Headers.Location    = new Uri(location);
+        return response;
+    }
+
     private static HttpResponseMessage HtmlResponse(string html) =>
         FakeHttpHandler.Response(HttpStatusCode.OK, "text/html; charset=utf-8", Encoding.UTF8.GetBytes(html));
 
@@ -52,6 +59,7 @@ public sealed class LinkPreviewerTests
     [DataRow("https://printer.local/")]
     [DataRow("https://router/")]
     [DataRow("https://user:pass@example.com/")]
+    [DataRow("https://example.com:8443/")]
     [DataRow("file:///C:/Windows/win.ini")]
     public void IsAllowed_RefusesUnsafeUrls(string url)
     {
@@ -89,6 +97,16 @@ public sealed class LinkPreviewerTests
     [DataRow("ff02::1")]
     [DataRow("255.255.255.255")]
     [DataRow("::ffff:10.0.0.1")]
+    [DataRow("64:ff9b::a00:1")]
+    [DataRow("64:ff9b::7f00:1")]
+    [DataRow("64:ff9b:1:a00:0:100::")]
+    [DataRow("2002:a00:1::1")]
+    [DataRow("2002:c0a8:101::1")]
+    [DataRow("2001:0:4136:e378:8000:63bf:3fff:fdd2")]
+    [DataRow("::ffff:0:a00:1")]
+    [DataRow("::ffff:0:808:808")]
+    [DataRow("::a00:1")]
+    [DataRow("::808:808")]
     public void IsPublic_RefusesPrivateAddresses(string address)
     {
         Assert.IsFalse(LinkPreviewer.IsPublic(IPAddress.Parse(address)));
@@ -99,6 +117,9 @@ public sealed class LinkPreviewerTests
     [DataRow("172.32.0.1")]
     [DataRow("100.128.0.1")]
     [DataRow("2606:4700::1111")]
+    [DataRow("64:ff9b::808:808")]
+    [DataRow("64:ff9b:1:808:8:800::")]
+    [DataRow("2002:808:808::1")]
     public void IsPublic_AllowsPublicAddresses(string address)
     {
         Assert.IsTrue(LinkPreviewer.IsPublic(IPAddress.Parse(address)));
@@ -124,7 +145,7 @@ public sealed class LinkPreviewerTests
         (string title, string site, Uri? image) = LinkPreviewer.ParseHead(html, Page)!.Value;
 
         Assert.AreEqual("Og Title", title);
-        Assert.AreEqual("Site Name", site);
+        Assert.AreEqual("example.com", site, "the site is the real host, never og:site_name");
         Assert.AreEqual(new Uri("https://www.example.com/img/card.png"), image);
     }
 
@@ -144,6 +165,18 @@ public sealed class LinkPreviewerTests
         (string title, _, _) = LinkPreviewer.ParseHead("<title>Tom &amp; <b>Jerry</b> &#8211; &quot;Hi&quot;</title>", Page)!.Value;
 
         Assert.AreEqual("Tom & Jerry \u2013 \"Hi\"", title);
+    }
+
+    [TestMethod]
+    public void ParseHead_StripsBidiControls_CapsLength()
+    {
+        string long_title    = new('a', 500);
+        (string title, _, _) = LinkPreviewer.ParseHead($"<title>Pay\u202Egnp.exe {long_title}</title>", Page)!.Value;
+
+        Assert.IsFalse(title.Contains('\u202E', StringComparison.Ordinal), title);
+        StringAssert.StartsWith(title, "Paygnp.exe aaa");
+        Assert.AreEqual(301, title.Length);
+        Assert.IsTrue(title.EndsWith('\u2026'));
     }
 
     [TestMethod]
@@ -171,14 +204,14 @@ public sealed class LinkPreviewerTests
                 ? FakeHttpHandler.Response(HttpStatusCode.OK, "image/png", png)
                 : HtmlResponse(Html.Replace("</head>", "<meta property=\"og:image\" content=\"https://cdn.example.com/c.png\"></head>", StringComparison.Ordinal)),
         };
-        using var previewer = new LinkPreviewer(handler, false, new CollectingLogger());
+        using var previewer = new LinkPreviewer(handler, false, new CollectingLogger(), TestProxy.Direct);
 
         LinkPreview? preview = await previewer.GetAsync(Page, CancellationToken.None);
 
         Assert.IsNotNull(preview);
         Assert.AreEqual(Page, preview.Url);
         Assert.AreEqual("Example Title", preview.Title);
-        Assert.AreEqual("Example", preview.Site);
+        Assert.AreEqual("example.com", preview.Site);
         CollectionAssert.AreEqual(png, preview.Image);
         Assert.AreEqual(GmConstants.UserAgent, handler.Requests[0].Headers["User-Agent"]);
         Assert.IsFalse(handler.Requests[0].Headers.ContainsKey("Cookie"));
@@ -188,7 +221,7 @@ public sealed class LinkPreviewerTests
     public async Task Get_NotHtml_Null()
     {
         var handler = new FakeHttpHandler { Respond = (_, _) => FakeHttpHandler.Response(HttpStatusCode.OK, "application/json", "{}"u8.ToArray()) };
-        using var previewer = new LinkPreviewer(handler, false, new CollectingLogger());
+        using var previewer = new LinkPreviewer(handler, false, new CollectingLogger(), TestProxy.Direct);
 
         Assert.IsNull(await previewer.GetAsync(Page, CancellationToken.None));
     }
@@ -198,7 +231,7 @@ public sealed class LinkPreviewerTests
     {
         string big  = Html + new string('x', LinkPreviewer.MaxPageBytes);
         var handler = new FakeHttpHandler { Respond = (_, _) => HtmlResponse(big) };
-        using var previewer = new LinkPreviewer(handler, false, new CollectingLogger());
+        using var previewer = new LinkPreviewer(handler, false, new CollectingLogger(), TestProxy.Direct);
 
         Assert.IsNull(await previewer.GetAsync(Page, CancellationToken.None));
     }
@@ -212,7 +245,7 @@ public sealed class LinkPreviewerTests
                 ? FakeHttpHandler.Response(HttpStatusCode.OK, "image/png", new byte[LinkPreviewer.MaxImageBytes + 1])
                 : HtmlResponse(Html.Replace("</head>", "<meta property=\"og:image\" content=\"/c.png\"></head>", StringComparison.Ordinal)),
         };
-        using var previewer = new LinkPreviewer(handler, false, new CollectingLogger());
+        using var previewer = new LinkPreviewer(handler, false, new CollectingLogger(), TestProxy.Direct);
 
         LinkPreview? preview = await previewer.GetAsync(Page, CancellationToken.None);
 
@@ -224,7 +257,7 @@ public sealed class LinkPreviewerTests
     public async Task Get_SecondCall_Cached()
     {
         var handler = new FakeHttpHandler { Respond = (_, _) => HtmlResponse(Html) };
-        using var previewer = new LinkPreviewer(handler, false, new CollectingLogger());
+        using var previewer = new LinkPreviewer(handler, false, new CollectingLogger(), TestProxy.Direct);
 
         LinkPreview? first  = await previewer.GetAsync(Page, CancellationToken.None);
         LinkPreview? second = await previewer.GetAsync(Page, CancellationToken.None);
@@ -237,10 +270,64 @@ public sealed class LinkPreviewerTests
     public async Task Get_UnsafeUrl_NoRequest()
     {
         var handler = new FakeHttpHandler { Respond = (_, _) => HtmlResponse(Html) };
-        using var previewer = new LinkPreviewer(handler, false, new CollectingLogger());
+        using var previewer = new LinkPreviewer(handler, false, new CollectingLogger(), TestProxy.Direct);
 
         Assert.IsNull(await previewer.GetAsync(new Uri("https://192.168.1.1/"), CancellationToken.None));
         Assert.AreEqual(0, handler.Requests.Count);
+    }
+
+    /// <summary>
+    /// Review fix: a link the system would send through a proxy gets no preview, so the user's proxy is never bypassed.
+    /// </summary>
+    [TestMethod]
+    public async Task Get_SystemProxy_NoRequest()
+    {
+        var handler = new FakeHttpHandler { Respond = (_, _) => HtmlResponse(Html) };
+        using var previewer = new LinkPreviewer(handler, false, new CollectingLogger(), new TestProxy(new Uri("http://proxy.example.com:8080/")));
+
+        Assert.IsNull(await previewer.GetAsync(Page, CancellationToken.None));
+        Assert.AreEqual(0, handler.Requests.Count);
+    }
+
+    [TestMethod]
+    [DataRow("https://192.168.1.1/")]
+    [DataRow("http://www.example.com/b")]
+    [DataRow("https://localhost/")]
+    [DataRow("https://www.example.com:8443/")]
+    public async Task Get_RedirectToUnsafe_NotFollowed(string target)
+    {
+        var handler = new FakeHttpHandler { Respond = (_, _) => Redirect(target) };
+        using var previewer = new LinkPreviewer(handler, false, new CollectingLogger(), TestProxy.Direct);
+
+        Assert.IsNull(await previewer.GetAsync(Page, CancellationToken.None));
+        Assert.AreEqual(1, handler.Requests.Count);
+    }
+
+    [TestMethod]
+    public async Task Get_Redirect_Followed_SiteIsFinalHost()
+    {
+        var handler = new FakeHttpHandler
+        {
+            Respond = (i, _) => i == 0 ? Redirect("https://other.example.org/page") : HtmlResponse(Html),
+        };
+        using var previewer = new LinkPreviewer(handler, false, new CollectingLogger(), TestProxy.Direct);
+
+        LinkPreview? preview = await previewer.GetAsync(Page, CancellationToken.None);
+
+        Assert.IsNotNull(preview);
+        Assert.AreEqual(Page, preview.Url);
+        Assert.AreEqual("other.example.org", preview.Site);
+        Assert.AreEqual("https://other.example.org/page", handler.Requests[1].Url);
+    }
+
+    [TestMethod]
+    public async Task Get_TooManyRedirects_Null()
+    {
+        var handler = new FakeHttpHandler { Respond = (i, _) => Redirect($"https://www.example.com/{i + 1}") };
+        using var previewer = new LinkPreviewer(handler, false, new CollectingLogger(), TestProxy.Direct);
+
+        Assert.IsNull(await previewer.GetAsync(Page, CancellationToken.None));
+        Assert.AreEqual(4, handler.Requests.Count, "the link, then 3 redirects");
     }
 
     [TestMethod]
@@ -248,7 +335,7 @@ public sealed class LinkPreviewerTests
     {
         var handler = new FakeHttpHandler { Respond = (_, r) => throw new HttpRequestException("boom " + r.Url) };
         var log     = new CollectingLogger();
-        using var previewer = new LinkPreviewer(handler, false, log);
+        using var previewer = new LinkPreviewer(handler, false, log, TestProxy.Direct);
 
         Assert.IsNull(await previewer.GetAsync(Page, CancellationToken.None));
 
@@ -256,4 +343,20 @@ public sealed class LinkPreviewerTests
         StringAssert.Contains(all, nameof(HttpRequestException));
         Assert.IsFalse(all.Contains("example.com", StringComparison.OrdinalIgnoreCase), all);
     }
+}
+
+/// <summary>
+/// A system proxy for tests: one that sends everything through a proxy, or <see cref="Direct"/> for none.
+/// </summary>
+/// <param name="via">The proxy, or null to connect directly.</param>
+internal sealed class TestProxy(Uri? via) : IWebProxy
+{
+    /// <summary>Gets a proxy setting that connects directly.</summary>
+    public static TestProxy Direct { get; } = new(null);
+
+    public ICredentials? Credentials { get; set; }
+
+    public Uri? GetProxy(Uri destination) => via ?? destination;
+
+    public bool IsBypassed(Uri host) => via is null;
 }

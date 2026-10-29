@@ -12,11 +12,12 @@ namespace GMessages.Presentation.Messaging;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Fetching a page the other side chose is a privacy and safety risk, so the rules are strict. Only HTTPS links to a
+/// Fetching a page the other side chose is a privacy and safety risk, so the rules are strict. Only HTTPS links (port 443) to a
 /// named public host are fetched (<see cref="IsAllowed"/>): no IP literals, <c>localhost</c> or <c>*.local</c>. The
 /// handler from <see cref="CreateHandler"/> resolves the host itself and connects only to the address it vetted
-/// (<see cref="IsPublic"/>), on every redirect hop too, so DNS rebinding can't reach the local network. No cookies,
-/// credentials or proxy are used.
+/// (<see cref="IsPublic"/>), on every redirect hop too, so DNS rebinding can't reach the local network. Each redirect
+/// hop is held to <see cref="IsAllowed"/> as well. No cookies or credentials are sent, and a link the system would send
+/// through a proxy gets no preview, so the user's proxy is never bypassed. At most 4 previews fetch at once.
 /// </para>
 /// <para>
 /// A page must be <c>text/html</c> within <see cref="MaxPageBytes"/> and an image <c>image/*</c> within
@@ -39,12 +40,28 @@ public sealed partial class LinkPreviewer : IDisposable
     // How Many Links' Results Are Kept In Memory
     private const int CacheSize = 50;
 
+    // How Many Redirects A Request May Follow
+    private const int MaxRedirects = 3;
+
+    // How Many Previews Fetch At Once
+    private const int MaxFetches = 4;
+
+    // The Longest Title Or Site Kept, In Characters; The Card Shows Two Lines At Most
+    private const int MaxTextLength = 300;
+
+    // How Long A Regular Expression May Spend On A Page, So A Hostile Page Can't Stall Parsing
+    private const int HtmlTimeoutMs = 500;
+
     // Punctuation A Link Ends Before, Like A Browser's Or Windows' Link Detection
     private const string TrailingPunctuation = ".,;:!?)]}'\"";
 
     private readonly HttpClient _http;
     private readonly bool _allowLoopback;
     private readonly ILogger _log;
+    private readonly IWebProxy _proxy;
+
+    // Bounds How Many Previews Fetch At Once, However Many Links A Chat Shows
+    private readonly SemaphoreSlim _fetchSlots = new(MaxFetches);
 
     // Canceled On Dispose, So Fetches Still Running Stop
     private readonly CancellationTokenSource _closing = new();
@@ -59,8 +76,12 @@ public sealed partial class LinkPreviewer : IDisposable
     /// <param name="handler">Sends the requests; <see cref="CreateHandler"/> in the app, a fake in tests. Disposed with the previewer.</param>
     /// <param name="allowLoopback">True in UI test runs only, so <c>http://127.0.0.1</c> (the fake server) can be previewed.</param>
     /// <param name="log">Takes failures, by error type only.</param>
-    /// <exception cref="ArgumentNullException">An argument is null.</exception>
-    public LinkPreviewer(HttpMessageHandler handler, bool allowLoopback, ILogger log)
+    /// <param name="proxy">
+    /// The proxy Windows would send the link through; null for the system's (<see cref="HttpClient.DefaultProxy"/>).
+    /// A link it would proxy gets no preview, since previews connect directly.
+    /// </param>
+    /// <exception cref="ArgumentNullException">An argument other than <paramref name="proxy"/> is null.</exception>
+    public LinkPreviewer(HttpMessageHandler handler, bool allowLoopback, ILogger log, IWebProxy? proxy = null)
     {
         ArgumentNullException.ThrowIfNull(handler);
         ArgumentNullException.ThrowIfNull(log);
@@ -68,6 +89,7 @@ public sealed partial class LinkPreviewer : IDisposable
         _http          = new HttpClient(handler, disposeHandler: true) { Timeout = Timeout.InfiniteTimeSpan };
         _allowLoopback = allowLoopback;
         _log           = log;
+        _proxy         = proxy ?? HttpClient.DefaultProxy;
     }
 
     // =========================================================================
@@ -78,24 +100,24 @@ public sealed partial class LinkPreviewer : IDisposable
     /// Creates the handler the app sends previews through.
     /// </summary>
     /// <remarks>
-    /// Cookies and the proxy are off, redirects are followed at most 3 times (never from HTTPS to HTTP), and the
-    /// <c>ConnectCallback</c> resolves each host itself and connects only when every address it resolves to passes
-    /// <see cref="IsPublic"/> (or is loopback when <paramref name="allowLoopback"/>). It connects to those vetted
-    /// addresses, so a second lookup can't swap in a private one. The proxy is off because through a proxy the check
-    /// would vet the proxy, not the link's host.
+    /// Cookies are off, and redirects are left to the previewer, which holds each hop (3 at most) to
+    /// <see cref="IsAllowed"/>. The <c>ConnectCallback</c> resolves each host itself and connects only when every address
+    /// it resolves to passes <see cref="IsPublic"/> (or is loopback when <paramref name="allowLoopback"/>). It connects to
+    /// those vetted addresses, so a second lookup can't swap in a private one. The proxy is off because through a proxy
+    /// the check would vet the proxy, not the link's host; instead a link the system would proxy gets no preview at all,
+    /// so a user's proxy is never quietly bypassed.
     /// </remarks>
     /// <param name="allowLoopback">True in UI test runs only.</param>
     /// <returns>The handler.</returns>
     public static SocketsHttpHandler CreateHandler(bool allowLoopback) => new()
     {
-        UseCookies               = false,
-        UseProxy                 = false,
-        PreAuthenticate          = false,
-        AllowAutoRedirect        = true,
-        MaxAutomaticRedirections = 3,
-        AutomaticDecompression   = DecompressionMethods.All,
-        ConnectTimeout           = RequestTimeout,
-        ConnectCallback          = (context, ct) => ConnectAsync(context.DnsEndPoint, allowLoopback, ct),
+        UseCookies             = false,
+        UseProxy               = false,
+        PreAuthenticate        = false,
+        AllowAutoRedirect      = false,
+        AutomaticDecompression = DecompressionMethods.All,
+        ConnectTimeout         = RequestTimeout,
+        ConnectCallback        = (context, ct) => ConnectAsync(context.DnsEndPoint, allowLoopback, ct),
     };
 
     /// <summary>
@@ -127,7 +149,7 @@ public sealed partial class LinkPreviewer : IDisposable
     /// Says whether a link may be fetched for a preview.
     /// </summary>
     /// <remarks>
-    /// HTTPS only, to a named host with a dot in it: no IP literal, <c>localhost</c>, <c>*.local</c>, single-label
+    /// HTTPS on port 443 only, to a named host with a dot in it: no IP literal, <c>localhost</c>, <c>*.local</c>, single-label
     /// intranet name, or user name and password in the link. With <paramref name="allowLoopback"/> (UI test runs), an
     /// <c>http</c> or <c>https</c> link to <c>127.0.0.1</c> is allowed too. Where the host really points is checked when
     /// connecting (<see cref="CreateHandler"/>).
@@ -150,7 +172,7 @@ public sealed partial class LinkPreviewer : IDisposable
             return true;
         }
 
-        if (url.Scheme != Uri.UriSchemeHttps || url.HostNameType != UriHostNameType.Dns)
+        if (url.Scheme != Uri.UriSchemeHttps || url.Port != 443 || url.HostNameType != UriHostNameType.Dns)
         {
             return false;
         }
@@ -168,7 +190,9 @@ public sealed partial class LinkPreviewer : IDisposable
     /// <remarks>
     /// False for loopback, private (10/8, 172.16/12, 192.168/16, fc00::/7), link-local (169.254/16, fe80::/10), CGNAT
     /// (100.64/10), unspecified (0/8, ::), multicast and reserved (224/4, 240/4, ff00::/8) and the old IPv6 site-local
-    /// range. An IPv4 address written as IPv6 (<c>::ffff:10.0.0.1</c>) is judged as IPv4.
+    /// range. IPv6 that carries an IPv4 address is judged by that address: IPv4-mapped (<c>::ffff:10.0.0.1</c>), NAT64
+    /// (64:ff9b::/96 and 64:ff9b:1::/48) and 6to4 (2002::/16). Teredo (2001::/32), SIIT (::ffff:0:0/96) and
+    /// IPv4-compatible (::/96) addresses are refused outright.
     /// </remarks>
     /// <param name="address">The address.</param>
     /// <returns>True when public.</returns>
@@ -201,6 +225,31 @@ public sealed partial class LinkPreviewer : IDisposable
         if (address.AddressFamily == AddressFamily.InterNetworkV6)
         {
             byte[] b = address.GetAddressBytes();
+
+            // IPv6 Carrying An IPv4 Address: Judged By That Address (6to4, NAT64 Well-Known, NAT64 Local-Use /48)
+            if (b is [0x20, 0x02, ..])
+            {
+                return IsPublic(new IPAddress(b.AsSpan(2, 4)));
+            }
+
+            if (b is [0x00, 0x64, 0xFF, 0x9B, 0, 0, 0, 0, 0, 0, 0, 0, ..])
+            {
+                return IsPublic(new IPAddress(b.AsSpan(12, 4)));
+            }
+
+            if (b is [0x00, 0x64, 0xFF, 0x9B, 0x00, 0x01, ..])
+            {
+                return IsPublic(new IPAddress(new byte[] { b[6], b[7], b[9], b[10] }));
+            }
+
+            // Refused Outright: Teredo, SIIT And IPv4-Compatible (::/96, Which Holds :: And ::1 Too)
+            if (b is [0x20, 0x01, 0x00, 0x00, ..]
+                || b is [0, 0, 0, 0, 0, 0, 0, 0, 0xFF, 0xFF, 0, 0, ..]
+                || b.AsSpan(0, 12).IndexOfAnyExcept((byte)0) < 0)
+            {
+                return false;
+            }
+
             return !(address.Equals(IPAddress.IPv6Any)
                 || address.IsIPv6LinkLocal
                 || address.IsIPv6SiteLocal
@@ -219,13 +268,14 @@ public sealed partial class LinkPreviewer : IDisposable
     /// Reads the preview's parts from a page's head, with regular expressions only.
     /// </summary>
     /// <remarks>
-    /// The title is <c>og:title</c>, else <c>&lt;title&gt;</c>; the site is <c>og:site_name</c>, else the host without
-    /// <c>www.</c>. Attributes may come in any order and any quotes. Text has tags removed, entities decoded and spaces
-    /// collapsed. The image is <c>og:image</c> resolved against <paramref name="page"/>, kept only when
+    /// The title is <c>og:title</c>, else <c>&lt;title&gt;</c>; the site is always the page's real host without
+    /// <c>www.</c> (never the page's own claim, so a card can't pose as another site). Attributes may come in any order
+    /// and any quotes. The title has tags removed, entities decoded, direction-control characters removed and spaces
+    /// collapsed, and is cut to 300 characters. The image is <c>og:image</c> resolved against <paramref name="page"/>, kept only when
     /// <see cref="IsAllowed"/>.
     /// </remarks>
     /// <param name="html">The page.</param>
-    /// <param name="page">The page's address, for relative image links and the host.</param>
+    /// <param name="page">The page's address after redirects, for relative image links and the host.</param>
     /// <param name="allowLoopback">True in UI test runs only.</param>
     /// <returns>The parts, or null when the page has no title.</returns>
     internal static (string Title, string Site, Uri? Image)? ParseHead(string html, Uri page, bool allowLoopback = false)
@@ -239,7 +289,6 @@ public sealed partial class LinkPreviewer : IDisposable
 
         // Open Graph Tags: The First Of Each Wins
         string? og_title = null;
-        string? og_site  = null;
         string? og_image = null;
         foreach (Match tag in MetaTag().Matches(head))
         {
@@ -268,10 +317,6 @@ public sealed partial class LinkPreviewer : IDisposable
             {
                 og_title ??= content;
             }
-            else if (key.Equals("og:site_name", StringComparison.OrdinalIgnoreCase))
-            {
-                og_site ??= content;
-            }
             else if (key.Equals("og:image", StringComparison.OrdinalIgnoreCase))
             {
                 og_image ??= content;
@@ -290,12 +335,8 @@ public sealed partial class LinkPreviewer : IDisposable
             return null;
         }
 
-        // Site: og:site_name, Else The Host Without www.
-        string site = PlainText(og_site);
-        if (site.Length == 0)
-        {
-            site = page.Host.StartsWith("www.", StringComparison.OrdinalIgnoreCase) ? page.Host[4..] : page.Host;
-        }
+        // Site: The Real Host Without www.
+        string site = Cap(page.Host.StartsWith("www.", StringComparison.OrdinalIgnoreCase) ? page.Host[4..] : page.Host);
 
         // Image: Resolved Against The Page, Then Held To The Same Rules As A Link
         Uri? image = og_image is not null
@@ -367,19 +408,24 @@ public sealed partial class LinkPreviewer : IDisposable
         _closing.Cancel();
         _closing.Dispose();
         _http.Dispose();
+
     }
 
     // The Page, Then Its Image; A Page Without A Title Gives Nothing, A Missing Image Only Drops The Image
     private async Task<LinkPreview?> FetchAsync(Uri url)
     {
+        bool slot = false;
         try
         {
+            await _fetchSlots.WaitAsync(_closing.Token).ConfigureAwait(false);
+            slot = true;
+
             if (await GetBodyAsync(url, "text/html", MaxPageBytes).ConfigureAwait(false) is not { } page)
             {
                 return null;
             }
 
-            if (ParseHead(Decode(page.Body, page.CharSet), url, _allowLoopback) is not { } head)
+            if (ParseHead(Decode(page.Body, page.CharSet), page.Final, _allowLoopback) is not { } head)
             {
                 LogSkipped("no title");
                 return null;
@@ -393,61 +439,120 @@ public sealed partial class LinkPreviewer : IDisposable
             LogError(ex);
             return null;
         }
+        finally
+        {
+            if (slot)
+            {
+                _fetchSlots.Release();
+            }
+        }
     }
 
-    // One GET Within The Time And Size Limits, Of The Wanted Type, Ending (After Redirects) Somewhere Still Allowed.
-    // Null, Logged By Reason Or Error Type, Otherwise
-    private async Task<(byte[] Body, string? CharSet)?> GetBodyAsync(Uri url, string accept, int maxBytes)
+    // One GET Within The Time And Size Limits, Of The Wanted Type. Every Hop, Redirects Included, Must Be Allowed And
+    // Not Go Through The System's Proxy. Null, Logged By Reason Or Error Type, Otherwise
+    private async Task<(byte[] Body, string? CharSet, Uri Final)?> GetBodyAsync(Uri url, string accept, int maxBytes)
     {
         try
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(_closing.Token);
             timeout.CancelAfter(RequestTimeout);
 
-            using var request = new HttpRequestMessage(HttpMethod.Get, url);
-            request.Headers.TryAddWithoutValidation("User-Agent", GmConstants.UserAgent);
-            request.Headers.TryAddWithoutValidation("Accept", accept);
-
-            using HttpResponseMessage response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token).ConfigureAwait(false);
-            string type = response.Content.Headers.ContentType?.MediaType ?? string.Empty;
-            bool wanted = accept == "image/*"
-                ? type.StartsWith("image/", StringComparison.OrdinalIgnoreCase) && !type.Equals("image/svg+xml", StringComparison.OrdinalIgnoreCase)
-                : type.Equals(accept, StringComparison.OrdinalIgnoreCase);
-
-            string? refused = !response.IsSuccessStatusCode                                            ? "status " + (int)response.StatusCode
-                : !IsAllowed(response.RequestMessage?.RequestUri ?? url, _allowLoopback)               ? "redirected away"
-                : !wanted                                                                              ? "wrong type"
-                : response.Content.Headers.ContentLength > maxBytes                                    ? "too large"
-                : null;
-            if (refused is not null)
+            for (int hop = 0; ; hop++)
             {
-                LogSkipped(refused);
-                return null;
-            }
-
-            // Read At Most maxBytes, Whatever The Length Header Said
-            using Stream stream = await response.Content.ReadAsStreamAsync(timeout.Token).ConfigureAwait(false);
-            using var body      = new MemoryStream();
-            byte[] chunk        = new byte[16_384];
-            int read;
-            while ((read = await stream.ReadAsync(chunk, timeout.Token).ConfigureAwait(false)) > 0)
-            {
-                if (body.Length + read > maxBytes)
+                if (await GetHopAsync(url, accept, maxBytes, timeout.Token).ConfigureAwait(false) is not { } answer)
                 {
-                    LogSkipped("too large");
                     return null;
                 }
 
-                body.Write(chunk, 0, read);
-            }
+                if (answer.RedirectTo is null)
+                {
+                    return (answer.Body, answer.CharSet, url);
+                }
 
-            return (body.ToArray(), response.Content.Headers.ContentType?.CharSet);
+                if (hop == MaxRedirects)
+                {
+                    LogSkipped("too many redirects");
+                    return null;
+                }
+
+                url = answer.RedirectTo;
+            }
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             LogError(ex);
             return null;
         }
+    }
+
+    // One Hop: A Redirect's Target, Or The Body. Null When Refused, Logged By Reason
+    private async Task<(byte[] Body, string? CharSet, Uri? RedirectTo)?> GetHopAsync(Uri url, string accept, int maxBytes, CancellationToken ct)
+    {
+        string? before = !IsAllowed(url, _allowLoopback) ? "link not allowed"
+            : IsProxied(url)                             ? "system proxy"
+            : null;
+        if (before is not null)
+        {
+            LogSkipped(before);
+            return null;
+        }
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        request.Headers.TryAddWithoutValidation("User-Agent", GmConstants.UserAgent);
+        request.Headers.TryAddWithoutValidation("Accept", accept);
+
+        using HttpResponseMessage response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+
+        // A Redirect: The Next Hop Is Checked Like The First
+        if ((int)response.StatusCode is >= 300 and < 400 && response.Headers.Location is { } location)
+        {
+            return ([], null, new Uri(url, location));
+        }
+
+        string type = response.Content.Headers.ContentType?.MediaType ?? string.Empty;
+        bool wanted = accept == "image/*"
+            ? type.StartsWith("image/", StringComparison.OrdinalIgnoreCase) && !type.Equals("image/svg+xml", StringComparison.OrdinalIgnoreCase)
+            : type.Equals(accept, StringComparison.OrdinalIgnoreCase);
+
+        string? refused = !response.IsSuccessStatusCode                ? "status " + (int)response.StatusCode
+            : !wanted                                                  ? "wrong type"
+            : response.Content.Headers.ContentLength > maxBytes        ? "too large"
+            : null;
+        if (refused is not null)
+        {
+            LogSkipped(refused);
+            return null;
+        }
+
+        // Read At Most maxBytes, Whatever The Length Header Said
+        using Stream stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+        using var body      = new MemoryStream();
+        byte[] chunk        = new byte[16_384];
+        int read;
+        while ((read = await stream.ReadAsync(chunk, ct).ConfigureAwait(false)) > 0)
+        {
+            if (body.Length + read > maxBytes)
+            {
+                LogSkipped("too large");
+                return null;
+            }
+
+            body.Write(chunk, 0, read);
+        }
+
+        return (body.ToArray(), response.Content.Headers.ContentType?.CharSet, null);
+    }
+
+    // Whether The System Would Send The Link Through A Proxy; The Fake Server In UI Test Runs Never Is
+    private bool IsProxied(Uri url)
+    {
+        if (_allowLoopback && url.IsLoopback)
+        {
+            return false;
+        }
+
+        Uri? via = _proxy.GetProxy(url);
+        return via is not null && via != url && !_proxy.IsBypassed(url);
     }
 
     // Connects Only When Every Address The Host Resolves To Is Allowed, And Only To Those Addresses
@@ -494,9 +599,22 @@ public sealed partial class LinkPreviewer : IDisposable
     // The Error Type Only: An Exception's Message Can Hold The Link
     private void LogError(Exception ex) => LogFailed(ex.GetType().Name);
 
-    // Tags Removed, Entities Decoded, Spaces Collapsed
+    // Tags Removed, Entities Decoded, Direction Controls Removed (They Could Make Text Read Backwards), Spaces Collapsed,
+    // Then Cut To Length
     private static string PlainText(string? html) =>
-        html is null ? string.Empty : Spaces().Replace(WebUtility.HtmlDecode(AnyTag().Replace(html, " ")), " ").Trim();
+        html is null ? string.Empty : Cap(Spaces().Replace(BidiControls().Replace(WebUtility.HtmlDecode(AnyTag().Replace(html, " ")), string.Empty), " ").Trim());
+
+    // At Most MaxTextLength Characters, Never Splitting An Emoji's Surrogate Pair
+    private static string Cap(string text)
+    {
+        if (text.Length <= MaxTextLength)
+        {
+            return text;
+        }
+
+        int cut = char.IsHighSurrogate(text[MaxTextLength - 1]) ? MaxTextLength - 1 : MaxTextLength;
+        return text[..cut].TrimEnd() + "\u2026";
+    }
 
     // Sentence Punctuation Comes Off The End; A Closing Bracket Stays When The Link Opened One Itself
     private static string TrimLink(string link)
@@ -519,20 +637,23 @@ public sealed partial class LinkPreviewer : IDisposable
     [GeneratedRegex(@"\bhttps?://\S+", RegexOptions.IgnoreCase)]
     private static partial Regex LinkPattern();
 
-    [GeneratedRegex(@"<meta\b[^>]*>", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"<meta\b[^>]*>", RegexOptions.IgnoreCase, HtmlTimeoutMs)]
     private static partial Regex MetaTag();
 
-    [GeneratedRegex("""(?<name>[\w:-]+)\s*=\s*(?:"(?<value>[^"]*)"|'(?<value>[^']*)'|(?<value>[^\s"'>]+))""")]
+    [GeneratedRegex("""(?<name>[\w:-]+)\s*=\s*(?:"(?<value>[^"]*)"|'(?<value>[^']*)'|(?<value>[^\s"'>]+))""", RegexOptions.None, HtmlTimeoutMs)]
     private static partial Regex Attribute();
 
-    [GeneratedRegex(@"<title\b[^>]*>(?<text>.*?)</title>", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
+    [GeneratedRegex(@"<title\b[^>]*>(?<text>.*?)</title>", RegexOptions.IgnoreCase | RegexOptions.Singleline, HtmlTimeoutMs)]
     private static partial Regex TitleTag();
 
-    [GeneratedRegex(@"<[^>]*>")]
+    [GeneratedRegex(@"<[^>]*>", RegexOptions.None, HtmlTimeoutMs)]
     private static partial Regex AnyTag();
 
     [GeneratedRegex(@"\s+")]
     private static partial Regex Spaces();
+
+    [GeneratedRegex("[\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]")]
+    private static partial Regex BidiControls();
 
     [LoggerMessage(Level = LogLevel.Information, Message = "No link preview ({Reason})")]
     private partial void LogSkipped(string reason);
