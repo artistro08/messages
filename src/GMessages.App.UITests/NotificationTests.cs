@@ -23,9 +23,6 @@ public sealed class NotificationTests : UiTest
     // How Long A Message That Must Not Notify Is Watched For A Toast
     private static readonly TimeSpan QuietPeriod = TimeSpan.FromSeconds(5);
 
-    // How Long A Toast's Banner May Stay On Screen Before It Moves To The Notification Center
-    private static readonly TimeSpan BannerTime = TimeSpan.FromSeconds(10);
-
     private ToastDriver _toasts = null!;
 
     /// <summary>
@@ -195,43 +192,30 @@ public sealed class NotificationTests : UiTest
     }
 
     /// <summary>
-    /// A message's toast leaves the screen (for the Notification Center) within 10 s, as other apps' toasts do.
+    /// Updates of one incoming message (new statuses, as the real phone sends) while its toast shows don't show it
+    /// again: the app logs one toast for the message.
     /// </summary>
+    /// <remarks>
+    /// A repeat show reuses the toast's tag, so it would replace the toast on screen rather than add one. The app's
+    /// "Toast shown" log line is what tells them apart. The live message after the updates arrives behind them, so once
+    /// it toasts, the updates were handled.
+    /// </remarks>
     /// <returns>A task for the test.</returns>
     [TestMethod]
-    public async Task Toast_LeavesScreenWithin10Seconds()
-    {
-        await PairAsync();
-
-        Server.Phone.PushIncoming("c-ann", "hey there");
-        _toasts.WaitFor(AppDriver.DefaultTimeout, "Ann Lee", "hey there");
-
-        Wait.Until(() => _toasts.TryFind("Ann Lee", "hey there") is null, BannerTime, () => $"The toast was still on screen after {BannerTime.TotalSeconds} s.");
-    }
-
-    /// <summary>
-    /// Updates of one incoming message (new statuses, as the real phone sends) show one toast: it leaves the screen
-    /// within 10 s and no update brings it back.
-    /// </summary>
-    /// <returns>A task for the test.</returns>
-    [TestMethod]
-    public async Task RepeatedUpdates_ShowOneToast_LeavesScreenWithin10Seconds()
+    public async Task RepeatedUpdates_ShowOneToast()
     {
         await PairAsync();
 
         Message message = Server.Phone.PushIncoming("c-ann", "hey there");
         _toasts.WaitFor(AppDriver.DefaultTimeout, "Ann Lee", "hey there");
 
-        // Updates While It Shows, Then After It Left
+        // Updates While It Shows
         Server.Phone.PushStatusUpdate(message, MessageStatusType.IncomingDelivered);
         Server.Phone.PushStatusUpdate(message, MessageStatusType.IncomingComplete);
-        Wait.Until(() => _toasts.TryFind("Ann Lee", "hey there") is null, BannerTime, () => $"The toast was still on screen after {BannerTime.TotalSeconds} s.");
-
-        Server.Phone.PushStatusUpdate(message, MessageStatusType.IncomingDelivered);
-        Server.Phone.PushStatusUpdate(message, MessageStatusType.IncomingComplete);
-        _toasts.AssertNone("hey there", QuietPeriod);
-
         AssertLiveStillToasts();
+
+        string shown = $"Toast shown for {message.MessageID} ";
+        Assert.AreEqual(1, ReadLog().Split('\n').Count(l => l.Contains(shown, StringComparison.Ordinal)), "An update showed the message's toast again.");
     }
 
     // =========================================================================
@@ -249,5 +233,39 @@ public sealed class NotificationTests : UiTest
     private void FocusMainWindow()
     {
         App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).SetForeground();
+    }
+}
+
+/// <summary>
+/// Toast checks that need a person at the machine, so they're left out of the <c>TestCategory=UI</c> run.
+/// </summary>
+/// <remarks>
+/// Windows keeps a toast's banner on screen while the user is away (no real keyboard or mouse input; UI Automation
+/// and a cursor moved from code don't count), so on an unattended machine the banner never leaves. Run these with
+/// <c>--filter TestCategory=Manual</c> while using the mouse or keyboard now and then.
+/// </remarks>
+[TestClass]
+[TestCategory("Manual")]
+[DoNotParallelize]
+public sealed class ManualNotificationTests : UiTest
+{
+    // How Long A Toast's Banner May Stay On Screen Before It Moves To The Notification Center
+    private static readonly TimeSpan BannerTime = TimeSpan.FromSeconds(10);
+
+    /// <summary>
+    /// A message's toast leaves the screen (for the Notification Center) within 10 s, as other apps' toasts do. Needs
+    /// real user input during the run (see the class remarks).
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Toast_LeavesScreenWithin10Seconds()
+    {
+        var toasts = new ToastDriver(App.Automation);
+        await PairAsync();
+
+        Server.Phone.PushIncoming("c-ann", "hey there");
+        toasts.WaitFor(AppDriver.DefaultTimeout, "Ann Lee", "hey there");
+
+        Wait.Until(() => toasts.TryFind("Ann Lee", "hey there") is null, BannerTime, () => $"The toast was still on screen after {BannerTime.TotalSeconds} s.");
     }
 }
