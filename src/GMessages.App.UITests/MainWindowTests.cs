@@ -134,6 +134,35 @@ public sealed class MainWindowTests : UiTest
     }
 
     /// <summary>
+    /// Closing the window with an inbox chat open and opening it again from the tray shows that chat again; a chat
+    /// opened from Spam &amp; blocked doesn't come back.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Reopen_RestoresLastInboxChat_NotSpamChat()
+    {
+        await OpenMainAsync();
+        WaitForRows(InboxRows);
+
+        // Inbox Chat: Back After A Reopen
+        App.Find("Row.c-ann").Patterns.SelectionItem.Pattern.Select();
+        App.WaitForText("Chat.Header", "Ann Lee");
+        CloseMainWindow();
+        Tray.LeftClick();
+        App.WaitForText("Chat.Header", "Ann Lee");
+
+        // Spam Chat: Not Back
+        InvokeProfileItem("Main.Profile.SpamBlocked");
+        WaitForRows(["Row.c-spam"]);
+        App.Find("Row.c-spam").Patterns.SelectionItem.Pattern.Select();
+        App.Find("Chat.Header");
+        CloseMainWindow();
+        Tray.LeftClick();
+        WaitForRows(InboxRows);
+        App.WaitForText("Main.EmptyState", ChatCopy.StartAConversation);
+    }
+
+    /// <summary>
     /// The settings page's About names the app, its version and its maker, and links to the repository.
     /// </summary>
     /// <returns>A task for the test.</returns>

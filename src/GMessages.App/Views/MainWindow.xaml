@@ -22,6 +22,11 @@
             x:Name="AppTitleBar"
             AutomationProperties.AutomationId="Main.TitleBar"
             BackRequested="OnTitleBarBackRequested">
+            <!-- Leaf Calendar's title bar: the content fills the space up to the caption buttons, with a narrow drag strip -->
+            <TitleBar.Resources>
+                <x:Double x:Key="TitleBarMinDragRegionWidth">8</x:Double>
+                <HorizontalAlignment x:Key="TitleBarContentHorizontalAlignment">Stretch</HorizontalAlignment>
+            </TitleBar.Resources>
             <TitleBar.IconSource>
                 <ImageIconSource ImageSource="ms-appx:///Assets/AppIcon.ico" />
             </TitleBar.IconSource>
@@ -44,7 +49,8 @@
 
             <!-- Profile Button: Spam & blocked, Settings and Unpair. Just the picture, no hover or pressed background. It
                  sits at the right end of the title bar's content, which fills the space up to the caption buttons, so it
-                 moves with the window edge in the same layout pass (Leaf Calendar's way, see the window's code) -->
+                 moves with the window edge in the same layout pass (Leaf Calendar's way, see the window's code). Only
+                 the picture takes clicks; the empty content around it drags the window -->
             <TitleBar.Content>
                 <Grid x:Name="TitleBarContent" SizeChanged="OnTitleBarContentSizeChanged">
                     <Button

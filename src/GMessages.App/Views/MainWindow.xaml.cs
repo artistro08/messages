@@ -81,7 +81,8 @@ public sealed partial class MainWindow : Window
         ProfileSpamBlocked.Text = ChatCopy.SpamAndBlocked;
 
         // Behavior
-        Activated += (_, e) =>
+        RootGrid.Loaded += (_, _) => RootGrid.XamlRoot.Changed += (_, _) => PlaceProfilePicture();
+        Activated       += (_, e) =>
         {
             _isActive = e.WindowActivationState != WindowActivationState.Deactivated;
             ShowChatFocus();
@@ -283,6 +284,9 @@ public sealed partial class MainWindow : Window
         AppTitleBar.IsBackButtonVisible = show_back;
         MenuButton.Visibility           = _chats is not null && !show_back ? Visibility.Visible : Visibility.Collapsed;
         ProfileButton.Visibility        = _chats is not null ? Visibility.Visible : Visibility.Collapsed;
+
+        // The Title Bar Only Lets Clicks Through Where Its Buttons Are When It Computes Its Regions
+        AppTitleBar.RecomputeDragRegions();
         if (!show_back)
         {
             return null;
@@ -337,11 +341,15 @@ public sealed partial class MainWindow : Window
     // EVENT HANDLERS
     // =========================================================================
 
-    // Leaf Calendar's Way: The Profile Picture Rides The Right End Of The Title Bar's Content, Which Stretches With The
-    // Window In The Same Layout Pass, So It Never Trails The Edge. The TitleBar Control Reserves The Caption Buttons'
-    // Width In Physical Pixels As If Effective, So Above 100% Scale The Content Stops Short Of Minimize; The Gap Is
-    // Measured, Not Assumed, And A Negative Right Margin Closes It. It Only Changes With The Scale
-    private void OnTitleBarContentSizeChanged(object sender, SizeChangedEventArgs e)
+    private void OnTitleBarContentSizeChanged(object sender, SizeChangedEventArgs e) => PlaceProfilePicture();
+
+    // Leaf Calendar's Way (UpdateTitleBarLayout): The Profile Picture Rides The Right End Of The Title Bar's Content,
+    // Which Stretches With The Window In The Same Layout Pass, So It Never Trails The Edge. The TitleBar Control Reserves
+    // The Caption Buttons' Width In Physical Pixels As If Effective, So Above 100% Scale The Content Stops Short Of
+    // Minimize; The Gap Is Measured, Not Assumed, And A Negative Right Margin Closes It. Then The Click-Through Hole Is
+    // Punched Again Where The Picture Now Is (WinUI 2.3), So The Picture Takes Clicks And The Rest Drags. Runs For Every
+    // Step Of A Resize, So Nothing Happens Unless The Gap Changed (Only The Scale Changes It)
+    private void PlaceProfilePicture()
     {
         if (RootGrid.XamlRoot is not { } root || TitleBarContent.ActualWidth <= 0)
         {
@@ -355,11 +363,18 @@ public sealed partial class MainWindow : Window
         if (ProfileButton.Margin.Right != overhang)
         {
             ProfileButton.Margin = new Thickness(0, 0, overhang, 0);
+            AppTitleBar.RecomputeDragRegions();
         }
     }
 
-    // Spam & Blocked Opened Or Closed: Back Or ☰
-    private void OnChatsChanged(object? sender, PropertyChangedEventArgs e) => ShowTitleBarButtons();
+    // Spam & Blocked Opened Or Closed: Back Or ☰ (Other Changes Leave The Title Bar Alone)
+    private void OnChatsChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (AppTitleBar.IsBackButtonVisible != (_settingsPage is not null || ViewModel?.IsSpamView == true))
+        {
+            ShowTitleBarButtons();
+        }
+    }
 
     // The Title Bar's Back: Leaves Settings, Else Spam & Blocked
     private void OnTitleBarBackRequested(TitleBar sender, object args)

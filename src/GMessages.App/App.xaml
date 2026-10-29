@@ -8,12 +8,6 @@
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
             </ResourceDictionary.MergedDictionaries>
-
-            <!-- Title Bars: the content fills the space up to the caption buttons (the main window pins its profile
-                 picture to that end), with no spare drag strip after it. Set here because the template reads them from
-                 the app, not from the TitleBar -->
-            <x:Double x:Key="TitleBarMinDragRegionWidth">0</x:Double>
-            <HorizontalAlignment x:Key="TitleBarContentHorizontalAlignment">Stretch</HorizontalAlignment>
         </ResourceDictionary>
     </Application.Resources>
 </Application>
