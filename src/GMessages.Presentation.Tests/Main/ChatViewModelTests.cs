@@ -3,6 +3,8 @@ using GMessages.Presentation.Messaging;
 using GMessages.Protocol.Events;
 using GMessages.Protocol.Proto;
 using GMessages.Protocol.Rpc;
+using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace GMessages.Presentation.Tests.Main;
 
@@ -686,5 +688,95 @@ public sealed class ChatViewModelTests
         bubble.ToggleTime();
         Assert.IsFalse(bubble.IsTimeShown);
         Assert.AreEqual(2, raised);
+    }
+
+    // =========================================================================
+    // SAVED COPY (DATABASE)
+    // =========================================================================
+
+    // A Database In Its Own Temp Folder Holding One Saved Message Of Chat "a"; A Short Wait On A Locked File
+    private static (MessageDatabase Database, string Path) SavedDatabase()
+    {
+        string folder = Path.Combine(Path.GetTempPath(), "chat-vm-db-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        string path = Path.Combine(folder, "messages.db");
+        var database = new MessageDatabase(path, NullLogger.Instance, busyTimeoutSeconds: 5);
+        database.SaveMessages("a", [Msg("m0", "saved")]);
+        return (database, path);
+    }
+
+    private static async Task WaitUntil(Func<bool> condition, string what)
+    {
+        for (int i = 0; i < 300 && !condition(); i++)
+        {
+            await Task.Delay(10);
+        }
+
+        Assert.IsTrue(condition(), what);
+    }
+
+    /// <summary>
+    /// A chat not in memory shows its saved copy from the database before the phone answers, under the small top ring.
+    /// </summary>
+    [TestMethod]
+    public async Task Load_SavedCopy_ShowsBeforePhoneAnswers()
+    {
+        (MessageDatabase database, string path) = SavedDatabase();
+        using var rig            = new MainRig(database);
+        using ChatViewModel chat = NewChat(rig, null, Msg("m1", "one"));
+        var gate                 = new TaskCompletionSource();
+        rig.Client.FetchGate     = gate;
+
+        Task load = chat.LoadAsync();
+        await WaitUntil(() => chat.Messages.Count == 1, "the saved copy never showed while the phone was slow");
+
+        Assert.AreEqual("saved", chat.Messages[0].Text);
+        Assert.IsFalse(chat.IsLoadingHistory);
+        Assert.IsTrue(chat.IsRefreshing);
+
+        gate.SetResult();
+        await load;
+        Assert.AreEqual("one", string.Join(",", chat.Messages.Select(b => b.Text)));
+        await rig.Store.FlushAsync();
+        Directory.Delete(Path.GetDirectoryName(path)!, recursive: true);
+    }
+
+    /// <summary>
+    /// A locked database never holds the chat: the big ring shows and the phone is asked at once, its page shows, and
+    /// the saved copy that lands later is dropped.
+    /// </summary>
+    [TestMethod]
+    public async Task Load_LockedDatabase_PhoneFetchStartsAtOnce()
+    {
+        (MessageDatabase database, string path) = SavedDatabase();
+        using var rig            = new MainRig(database);
+        using ChatViewModel chat = NewChat(rig, null, Msg("m1", "one"));
+
+        // Another Process Holds The File
+        using (var holder = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = path, Pooling = false }.ToString()))
+        {
+            holder.Open();
+            using (SqliteCommand command = holder.CreateCommand())
+            {
+                command.CommandText = "BEGIN EXCLUSIVE";
+                command.ExecuteNonQuery();
+            }
+
+            var gate             = new TaskCompletionSource();
+            rig.Client.FetchGate = gate;
+            Task load            = chat.LoadAsync();
+            Assert.IsTrue(chat.IsLoadingHistory, "no loading ring while the database is locked");
+            Assert.AreEqual(1, rig.Client.FetchCount, "the phone wasn't asked while the database is locked");
+
+            gate.SetResult();
+            await load.WaitAsync(TimeSpan.FromSeconds(3));
+            Assert.AreEqual("one", string.Join(",", chat.Messages.Select(b => b.Text)));
+        }
+
+        // The Saved Copy Lands After The Phone's Page: Dropped
+        await rig.Store.FlushAsync();
+        await Task.Delay(50);
+        Assert.AreEqual("one", string.Join(",", chat.Messages.Select(b => b.Text)));
+        Directory.Delete(Path.GetDirectoryName(path)!, recursive: true);
     }
 }

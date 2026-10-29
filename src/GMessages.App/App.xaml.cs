@@ -237,10 +237,11 @@ public partial class App : Application, IDisposable
             AppLog.ConnectionStartFailed(_logger, ex);
         }
 
-        // Paired: The Saved Chats Fill The List Before The Phone Answers (Read Off The UI Thread)
+        // Paired: The Saved Chats Fill The List Before The Phone Answers (Read Off The UI Thread). A Locked File Holds
+        // Start-Up 2 s At Most; The Phone's Page Fills The List Then
         if (!NeedsPairing() && _store is { } store)
         {
-            await store.LoadSavedAsync();
+            await Task.WhenAny(store.LoadSavedAsync(), Task.Delay(TimeSpan.FromSeconds(2)));
         }
 
         // NotPaired is the starting state, so StartAsync raises nothing for it

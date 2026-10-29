@@ -443,7 +443,10 @@ public sealed class ChatStoreTests
         await rig.Store.FlushAsync();
         Assert.IsTrue(File.Exists(rig.DatabasePath));
 
+        // A Chat Opened While Unpairing: Its Read Must Not Recreate The File
+        Task<IReadOnlyList<ChatMessage>?> read = rig.Store.CachedMessagesAsync("c1");
         rig.Store.Reset();
+        Assert.IsNull(await read);
         await rig.Store.FlushAsync();
 
         Assert.IsFalse(File.Exists(rig.DatabasePath));
@@ -495,6 +498,7 @@ public sealed class ChatStoreTests
         Assert.AreEqual(0, raised);
         Assert.AreEqual(0, rig.Database!.LoadMessages("c1", 25).Count);
         Assert.AreEqual(0, rig.Database.LoadConversations().Count);
+        Assert.AreEqual(0, rig.Database.LoadMessages("c3", 25).Count);
     }
 
     /// <summary>
@@ -515,7 +519,6 @@ public sealed class ChatStoreTests
         Assert.IsNotNull(got);
         Assert.IsFalse(got.IsNew);
     }
-
 
     // =========================================================================
     // SENDING

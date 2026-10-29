@@ -22,9 +22,9 @@ namespace GMessages.Presentation.Messaging;
 /// </para>
 /// <para>
 /// <b>Threads.</b> Live events come from <see cref="ConnectionController.ClientEvent"/> on the UI thread. The cache is
-/// safe to read from anywhere. The database is never touched on the caller's thread: writes go, in order, through one
-/// background queue, and reads run on the thread pool (a locked file can block a call for 30 s). Message text, names
-/// and numbers are never logged.
+/// safe to read from anywhere. The database is never touched on the caller's thread: reads, writes and the delete go,
+/// in order, through one background queue (a locked file can block a call for 30 s). Message text, names and numbers
+/// are never logged.
 /// </para>
 /// </remarks>
 public sealed partial class ChatStore : IDisposable
@@ -252,7 +252,7 @@ public sealed partial class ChatStore : IDisposable
     /// Gets the newest page of a conversation from memory, else from the database (then kept in memory).
     /// </summary>
     /// <remarks>
-    /// A memory hit completes at once, without leaving the caller's thread; the database is read on the thread pool.
+    /// A memory hit completes at once, without leaving the caller's thread; the database is read on the background queue.
     /// Counts as a use, so the conversation is the last one the memory cache drops.
     /// </remarks>
     /// <param name="conversationId">The conversation ID.</param>
@@ -264,13 +264,22 @@ public sealed partial class ChatStore : IDisposable
             return cached;
         }
 
-        if (_database is not { } database)
+        if (_database is null)
         {
             return null;
         }
 
+        // On The Queue, So A Read Never Reopens (And Recreates) The File After Reset Queued Its Delete
         int generation               = Generation;
-        IReadOnlyList<Message> saved = await Task.Run(() => database.LoadMessages(conversationId, PageSize)).ConfigureAwait(false);
+        IReadOnlyList<Message> saved = [];
+        await Enqueue(database =>
+        {
+            if (generation == Generation)
+            {
+                saved = database.LoadMessages(conversationId, PageSize);
+            }
+        }).ConfigureAwait(false);
+
         if (saved.Count == 0 || generation != Generation)
         {
             return null;

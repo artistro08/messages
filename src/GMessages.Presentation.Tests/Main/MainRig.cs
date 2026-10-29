@@ -17,7 +17,7 @@ internal sealed class MainRig : IDisposable
 {
     public static readonly DateTimeOffset Now = new(2026, 10, 28, 12, 0, 0, TimeSpan.Zero);
 
-    public MainRig()
+    public MainRig(MessageDatabase? database = null)
     {
         Controller = new ConnectionController(
             new AppPaths(Path.Combine(Path.GetTempPath(), "main-test-" + Guid.NewGuid().ToString("N"))),
@@ -25,7 +25,7 @@ internal sealed class MainRig : IDisposable
             TimeProvider.System,
             NullLoggerFactory.Instance,
             a => a());
-        Store = new ChatStore(Controller, () => Connected ? Client : null, NullLogger.Instance);
+        Store = new ChatStore(Controller, () => Connected ? Client : null, NullLogger.Instance, database);
     }
 
     public ConnectionController Controller { get; }

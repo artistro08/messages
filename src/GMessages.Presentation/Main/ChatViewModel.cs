@@ -43,6 +43,9 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     // A Reload Asked For While A Load Was Running; Runs When That Load Ends
     private bool _reloadPending;
 
+    // How Many Phone Pages Were Shown; A Saved Copy That Lands After One Is Stale And Dropped
+    private int _phonePages;
+
     private string _draft = string.Empty;
 
     /// <summary>
@@ -174,7 +177,7 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     /// <summary>
     /// Loads the newest page, merging it into the bubbles (unsent ones stay), and marks the conversation read when it was unread.
     /// </summary>
-    /// <remarks>Call on the UI thread. With no bubbles yet, the cached page shows first: at once from memory, or after a read of the database off the UI thread. While a page is loading the call is remembered and runs once that load ends. When the load fails (phone not connected or not answering, a network error) the bubbles stay as they were.</remarks>
+    /// <remarks>Call on the UI thread. With no bubbles yet, the cached page shows alongside the phone fetch: at once from memory, or from the database (read off the UI thread) unless the phone answered first. While a page is loading the call is remembered and runs once that load ends. When the load fails (phone not connected or not answering, a network error) the bubbles stay as they were.</remarks>
     /// <returns>A task that completes when the page is shown.</returns>
     public async Task LoadAsync()
     {
@@ -184,16 +187,17 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
-        // Opened Before (Also Before A Restart): The Saved Copy Shows At Once, And The Phone's Page Is Merged In Below. A
-        // Copy In Memory Comes Back Without Awaiting; The Database Is Read Off The UI Thread
-        IsLoading = true;
-        if (Messages.Count == 0 && await _store.CachedMessagesAsync(ConversationId) is { } cached)
-        {
-            ShowPage(cached);
-        }
-
+        IsLoading        = true;
         IsLoadingHistory = Messages.Count == 0;
         IsRefreshing     = Messages.Count > 0;
+
+        // Opened Before (Also Before A Restart): The Saved Copy Shows Alongside The Phone Fetch. A Copy In Memory Shows At
+        // Once; The Database Is Read Off The UI Thread And Shows Only If The Phone's Page Hasn't Come First
+        if (Messages.Count == 0)
+        {
+            _ = ShowSavedPageAsync(_store.CachedMessagesAsync(ConversationId), _phonePages);
+        }
+
         try
         {
             // The Conversation May Not Be Cached Yet (Opened Right After Start Chat)
@@ -203,6 +207,7 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
             (IReadOnlyList<ChatMessage> page, Cursor? older) = await _store.LoadMessagesAsync(ConversationId, null, CancellationToken.None);
 
             _older = older;
+            _phonePages++;
             ShowPage(page);
             _fillOlder = true;
 
@@ -226,6 +231,23 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
         }
 
         await RunPendingReloadAsync();
+    }
+
+    // Shows The Saved Copy Unless A Phone Page Was Shown Since It Was Asked For; Over It The Small Top Ring Replaces The
+    // Big One. A Copy In Memory Completes At Once, So It Shows Before LoadAsync Awaits Anything
+    private async Task ShowSavedPageAsync(Task<IReadOnlyList<ChatMessage>?> saved, int phonePages)
+    {
+        if (await saved is not { } page || _phonePages != phonePages)
+        {
+            return;
+        }
+
+        ShowPage(page);
+        if (IsLoading)
+        {
+            IsLoadingHistory = false;
+            IsRefreshing     = true;
+        }
     }
 
     /// <summary>
