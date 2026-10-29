@@ -77,6 +77,9 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     /// <summary>Gets the avatar color as opaque ARGB.</summary>
     public uint AvatarColor { get; private set; } = FallbackColor;
 
+    /// <summary>Gets the participant whose photo covers the avatar (the first other person), or empty.</summary>
+    public string PhotoId { get; private set; } = string.Empty;
+
     /// <summary>Gets the bubbles, oldest first.</summary>
     public ObservableCollection<MessageBubbleViewModel> Messages { get; } = [];
 
@@ -356,6 +359,7 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
         Title       = c.Name;
         Initial     = ChatFormat.Initial(c.Name);
         AvatarColor = ChatFormat.ColorFromHex(c.AvatarHexColor, FallbackColor);
+        PhotoId     = c.Participants.FirstOrDefault(p => !p.IsMe)?.Id ?? string.Empty;
         Raise(string.Empty);
     }
 

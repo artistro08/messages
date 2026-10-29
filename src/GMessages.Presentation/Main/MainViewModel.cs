@@ -106,6 +106,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// <summary>Gets the open conversation's chat, or null when none is open.</summary>
     public ChatViewModel? Chat { get; private set; }
 
+    /// <summary>Gets the phone owner's participant ID (for the profile picture), or null until a conversation names them.</summary>
+    public string? MeId => _store.Me?.Id;
+
     /// <summary>Gets whether Start chat shows in place of a conversation.</summary>
     public bool IsStartChatOpen { get; private set; }
 

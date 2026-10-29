@@ -1,3 +1,4 @@
+using System.Collections.Specialized;
 using System.ComponentModel;
 using GMessages.App.Views.Controls;
 using GMessages.Presentation;
@@ -34,16 +35,23 @@ public sealed partial class MainWindow : Window
     private const double ListPaneWidth = 360;
 
     private readonly SettingsViewModel _settings;
+    private readonly AvatarCache _avatars;
+
+    // The Owner's Photo Is Asked For Once, After A Load Names The Owner
+    private bool _profileAsked;
 
     /// <summary>
     /// Creates the window and starts loading the inbox.
     /// </summary>
     /// <param name="viewModel">The window's state; the window disposes it on close.</param>
     /// <param name="settings">Does the profile menu's Unpair, the same way the settings window does.</param>
-    public MainWindow(MainViewModel viewModel, SettingsViewModel settings)
+    /// <param name="avatars">The window's photo cache; the window clears it on close.</param>
+    public MainWindow(MainViewModel viewModel, SettingsViewModel settings, AvatarCache avatars)
     {
-        ViewModel = viewModel;
-        _settings = settings;
+        ViewModel    = viewModel;
+        _settings    = settings;
+        _avatars     = avatars;
+        Avatar.Cache = avatars;
         InitializeComponent();
 
         // Window
@@ -61,13 +69,17 @@ public sealed partial class MainWindow : Window
         EmptyStateText.Text     = ChatCopy.StartAConversation;
 
         // Behavior
-        Activated                 += (_, e) => ViewModel.IsWindowFocused = e.WindowActivationState != WindowActivationState.Deactivated;
-        ViewModel.PropertyChanged += OnViewModelChanged;
-        Closed                    += (_, _) =>
+        Activated                              += (_, e) => ViewModel.IsWindowFocused = e.WindowActivationState != WindowActivationState.Deactivated;
+        ViewModel.PropertyChanged              += OnViewModelChanged;
+        ViewModel.Inbox.Rows.CollectionChanged += OnInboxRowsChanged;
+        Closed                                 += (_, _) =>
         {
-            ViewModel.PropertyChanged -= OnViewModelChanged;
+            ViewModel.PropertyChanged              -= OnViewModelChanged;
+            ViewModel.Inbox.Rows.CollectionChanged -= OnInboxRowsChanged;
             Bindings.StopTracking();
             ViewModel.Dispose();
+            Avatar.Cache = null;
+            _avatars.Clear();
         };
         ShowCurrentList();
         _ = ViewModel.Inbox.LoadAsync();
@@ -190,6 +202,21 @@ public sealed partial class MainWindow : Window
         if (is_narrow != ViewModel.IsNarrow)
         {
             ViewModel.IsNarrow = is_narrow;
+        }
+    }
+
+    // Rows Came In, So A Conversation May Now Name The Owner: Show Their Photo (PersonPicture Keeps Its Glyph Without One)
+    private async void OnInboxRowsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (_profileAsked || ViewModel.MeId is not { } me_id)
+        {
+            return;
+        }
+
+        _profileAsked = true;
+        if (await _avatars.GetAsync(me_id, CancellationToken.None) is { } photo)
+        {
+            ProfilePicture.ProfilePicture = await Avatar.ToImageAsync(photo);
         }
     }
 

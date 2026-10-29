@@ -15,7 +15,10 @@
             VerticalAlignment="Center"
             Color="{x:Bind Row.AvatarColor, Mode=OneWay}"
             Initial="{x:Bind Row.Initial, Mode=OneWay}"
-            SecondColor="{x:Bind local:ColorConverters.GroupBackColor(Row.IsGroup), Mode=OneWay}" />
+            PhotoId="{x:Bind Row.PhotoId, Mode=OneWay}"
+            SecondColor="{x:Bind Row.SecondColor, Mode=OneWay}"
+            SecondInitial="{x:Bind Row.SecondInitial, Mode=OneWay}"
+            SecondPhotoId="{x:Bind Row.SecondPhotoId, Mode=OneWay}" />
 
         <!-- Name And Snippet: bold while unread -->
         <StackPanel Grid.Column="1" VerticalAlignment="Center">

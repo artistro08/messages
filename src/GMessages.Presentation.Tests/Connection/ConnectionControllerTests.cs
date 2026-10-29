@@ -370,6 +370,7 @@ public sealed class ConnectionControllerTests
     {
         await using var rig = new Rig();
         rig.SaveSession(TimeSpan.FromDays(1));
+        Directory.CreateDirectory(rig.Paths.AvatarsFolder);
         await rig.Controller.StartAsync().WaitAsync(HangGuard);
 
         // Fed Straight In: Producing It Over The Wire Needs An Encrypted GET_UPDATES Stream
@@ -378,6 +379,7 @@ public sealed class ConnectionControllerTests
 
         Assert.IsNull(rig.Controller.Client);
         Assert.IsFalse(File.Exists(rig.Paths.SessionFile), "dead session deleted");
+        Assert.IsFalse(Directory.Exists(rig.Paths.AvatarsFolder), "contacts' photos deleted");
         Assert.IsTrue(rig.Events.OfType<GaiaLoggedOut>().Any(), "forwarded");
         Assert.AreEqual(0, rig.NotPosted);
     }
@@ -575,6 +577,23 @@ public sealed class ConnectionControllerTests
         Assert.IsNull(rig.Controller.Client);
         Assert.IsFalse(File.Exists(rig.Paths.SessionFile));
         Assert.AreEqual(0, rig.NotPosted);
+    }
+
+    /// <summary>
+    /// Unpair deletes the avatar folder too: it holds contacts' photos.
+    /// </summary>
+    [TestMethod]
+    public async Task Unpair_DeletesAvatarFolder()
+    {
+        await using var rig = new Rig();
+        rig.SaveSession(TimeSpan.FromDays(1));
+        Directory.CreateDirectory(rig.Paths.AvatarsFolder);
+        File.WriteAllBytes(Path.Combine(rig.Paths.AvatarsFolder, "a.png"), [1]);
+        await rig.Controller.StartAsync().WaitAsync(HangGuard);
+
+        await rig.Controller.UnpairAsync().WaitAsync(HangGuard);
+
+        Assert.IsFalse(Directory.Exists(rig.Paths.AvatarsFolder));
     }
 
     // =========================================================================

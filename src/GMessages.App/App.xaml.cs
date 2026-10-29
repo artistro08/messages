@@ -279,7 +279,7 @@ public partial class App : Application, IDisposable
 
         var dispatcher = DispatcherQueue.GetForCurrentThread();
         var viewModel  = new MainViewModel(_connection, _store, TimeProvider.System, a => dispatcher.TryEnqueue(() => a()));
-        _mainWindow    = new MainWindow(viewModel, NewSettingsViewModel());
+        _mainWindow    = new MainWindow(viewModel, NewSettingsViewModel(), new AvatarCache(_store, _paths.AvatarsFolder));
         _mainWindow.ApplyTheme(_settings.Theme);
         _mainWindow.SettingsRequested += (_, _) => ShowSettingsWindow();
         _mainWindow.Closed += (_, _) =>

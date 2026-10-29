@@ -30,7 +30,8 @@
                 Grid.Column="1"
                 VerticalAlignment="Center"
                 Color="{x:Bind Chat.AvatarColor, Mode=OneWay, FallbackValue=0}"
-                Initial="{x:Bind Chat.Initial, Mode=OneWay, FallbackValue=''}" />
+                Initial="{x:Bind Chat.Initial, Mode=OneWay, FallbackValue=''}"
+                PhotoId="{x:Bind Chat.PhotoId, Mode=OneWay, FallbackValue=''}" />
             <TextBlock
                 Grid.Column="2"
                 VerticalAlignment="Center"

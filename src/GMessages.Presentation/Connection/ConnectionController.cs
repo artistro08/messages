@@ -30,7 +30,7 @@ namespace GMessages.Presentation.Connection;
 /// <see cref="GmClient.DisposeAsync"/> waits for the long poll that is raising the event, so disposing inline could
 /// deadlock. The pool task takes the gate, checks the client is still the current one (a stale or repeated event is
 /// ignored), disposes it (a finished client can't be reused), deletes the dead session file (after dispose, which may
-/// flush a save) and moves to <see cref="ConnectionState.SignedOut"/>.
+/// flush a save) and the avatar folder, and moves to <see cref="ConnectionState.SignedOut"/>.
 /// </para>
 /// <para>
 /// <b>Pairing cancel.</b> A running pairing's cancel source lives behind the state lock, so
@@ -322,7 +322,7 @@ public sealed partial class ConnectionController : IAsyncDisposable
     }
 
     /// <summary>
-    /// Unpairs from the phone, drops the client and deletes the saved session.
+    /// Unpairs from the phone, drops the client and deletes the saved session and the avatar folder.
     /// </summary>
     /// <remarks>
     /// Ends in <see cref="ConnectionState.NotPaired"/> even when the server refuses the request; that error is then
@@ -359,6 +359,7 @@ public sealed partial class ConnectionController : IAsyncDisposable
             }
             finally
             {
+                DeleteAvatars();
                 SetState(ConnectionState.NotPaired);
             }
         }
@@ -506,7 +507,24 @@ public sealed partial class ConnectionController : IAsyncDisposable
             LogDeleteFailed(_log, ex.GetType().Name);
         }
 
+        DeleteAvatars();
         SetState(ConnectionState.SignedOut);
+    }
+
+    // Contacts' Photos Go With The Session; A Locked File Is Logged, Not Thrown
+    private void DeleteAvatars()
+    {
+        try
+        {
+            if (Directory.Exists(_paths.AvatarsFolder))
+            {
+                Directory.Delete(_paths.AvatarsFolder, recursive: true);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            LogAvatarsDeleteFailed(_log, ex.GetType().Name);
+        }
     }
 
     // =========================================================================
@@ -619,6 +637,9 @@ public sealed partial class ConnectionController : IAsyncDisposable
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Dead session file could not be deleted ({ErrorType})")]
     private static partial void LogDeleteFailed(ILogger logger, string errorType);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Avatar folder could not be deleted ({ErrorType})")]
+    private static partial void LogAvatarsDeleteFailed(ILogger logger, string errorType);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Sign-out cleanup failed")]
     private static partial void LogSignOutFailed(ILogger logger, Exception ex);

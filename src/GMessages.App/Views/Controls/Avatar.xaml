@@ -7,7 +7,7 @@
     <!-- Avatar: one circle, or two stacked circles for a group -->
     <Grid Width="40" Height="40">
 
-        <!-- Back Circle (Groups Only) -->
+        <!-- Back Circle (Groups Only): the photo over the colored initial -->
         <Grid
             Width="28"
             Height="28"
@@ -21,9 +21,14 @@
                 FontSize="12"
                 Foreground="White"
                 Text="{x:Bind SecondInitial, Mode=OneWay}" />
+            <Ellipse>
+                <Ellipse.Fill>
+                    <ImageBrush x:Name="SecondPhoto" Stretch="UniformToFill" />
+                </Ellipse.Fill>
+            </Ellipse>
         </Grid>
 
-        <!-- Front Circle: the photo over the colored initial -->
+        <!-- Front Circle: the photo over the colored initial (an image brush with no source draws nothing) -->
         <Grid
             Width="{x:Bind local:Avatar.FrontSize(SecondColor), Mode=OneWay}"
             Height="{x:Bind local:Avatar.FrontSize(SecondColor), Mode=OneWay}"
@@ -36,7 +41,7 @@
                 FontSize="{x:Bind local:Avatar.InitialSize(SecondColor), Mode=OneWay}"
                 Foreground="White"
                 Text="{x:Bind Initial, Mode=OneWay}" />
-            <Ellipse Visibility="{x:Bind local:Avatar.ShownIfImage(Image), Mode=OneWay}">
+            <Ellipse>
                 <Ellipse.Fill>
                     <ImageBrush ImageSource="{x:Bind Image, Mode=OneWay}" Stretch="UniformToFill" />
                 </Ellipse.Fill>

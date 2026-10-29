@@ -64,6 +64,18 @@ public sealed class ConversationRowViewModel : INotifyPropertyChanged
     /// <summary>Gets the IDs whose photos make the avatar: one other person, or up to two for a group.</summary>
     public IReadOnlyList<string> ParticipantIds { get; private set; } = [];
 
+    /// <summary>Gets the participant whose photo covers the front circle, or empty.</summary>
+    public string PhotoId { get; private set; } = string.Empty;
+
+    /// <summary>Gets the back circle's letter: the second person of a group, else empty.</summary>
+    public string SecondInitial { get; private set; } = string.Empty;
+
+    /// <summary>Gets the back circle's color as opaque ARGB; 0 (no back circle) unless a group.</summary>
+    public uint SecondColor { get; private set; }
+
+    /// <summary>Gets the participant whose photo covers the back circle, or empty.</summary>
+    public string SecondPhotoId { get; private set; } = string.Empty;
+
     /// <summary>Gets when the newest message arrived (the sort key).</summary>
     public DateTimeOffset LastMessageTime { get; private set; }
 
@@ -99,5 +111,12 @@ public sealed class ConversationRowViewModel : INotifyPropertyChanged
         AvatarColor     = ChatFormat.ColorFromHex(c.AvatarHexColor, FallbackColor);
         LastMessageTime = c.LastMessageTime;
         ParticipantIds  = [.. c.Participants.Where(p => !p.IsMe).Take(c.IsGroup ? 2 : 1).Select(p => p.Id)];
+        PhotoId         = ParticipantIds.Count > 0 ? ParticipantIds[0] : string.Empty;
+
+        // Group Back Circle: The Second Person
+        ParticipantInfo? second = ParticipantIds.Count > 1 ? c.FindParticipant(ParticipantIds[1]) : null;
+        SecondInitial = second is null ? string.Empty : ChatFormat.Initial(ChatFormat.SenderName(second));
+        SecondColor   = second is null ? 0 : ChatFormat.ColorFromHex(second.AvatarHexColor, FallbackColor);
+        SecondPhotoId = second?.Id ?? string.Empty;
     }
 }

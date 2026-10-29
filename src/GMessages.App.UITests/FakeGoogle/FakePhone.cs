@@ -34,6 +34,9 @@ public sealed class FakePhone
     // Copied Verbatim From encryptionKeyInfo In pair_google.go
     private static readonly byte[] EncryptionKeyInfo = [130, 170, 85, 160, 211, 151, 248, 131, 70, 202, 28, 238, 141, 57, 9, 185, 95, 19, 250, 125, 235, 29, 74, 179, 131, 118, 184, 37, 109, 168, 85, 16];
 
+    // Ann's Photo: A 1x1 Blue PNG
+    private const string AnnPhotoPng = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGOQKn4BAAIgAXZmNuK1AAAAAElFTkSuQmCC";
+
     private readonly Lock _lock = new();
     private readonly Action<IncomingRPCMessage> _push;
     private readonly Action<IncomingRPCMessage> _pushCatchUp;
@@ -225,8 +228,20 @@ public sealed class FakePhone
                 Reply(data.RequestID, data.Action, new GetOrCreateConversationResponse { Conversation = Chats.FindOrCreate(create.Numbers), Status = GetOrCreateConversationResponse.Types.Status.Success }, encrypt: true);
                 break;
 
-            // No Photos: An Empty Thumbnail List
-            case ActionType.GetParticipantsThumbnail or ActionType.GetContactsThumbnail when RequestCrypto is not null:
+            // Photos: Ann Has A 1x1 PNG, Everyone Else None
+            case ActionType.GetParticipantsThumbnail when RequestCrypto is not null:
+                var thumbnails = Open(data, GetThumbnailRequest.Parser);
+                var photos     = new GetThumbnailResponse();
+                if (thumbnails.Identifiers.Contains("p-ann"))
+                {
+                    photos.Thumbnail.Add(new GetThumbnailResponse.Types.Thumbnail { Identifier = "p-ann", Data = new ThumbnailData { ImageBuffer = ByteString.FromBase64(AnnPhotoPng) } });
+                }
+
+                Reply(data.RequestID, data.Action, photos, encrypt: true);
+                break;
+
+            // No Contact Photos: An Empty Thumbnail List
+            case ActionType.GetContactsThumbnail when RequestCrypto is not null:
                 Reply(data.RequestID, data.Action, new GetThumbnailResponse(), encrypt: true);
                 break;
 

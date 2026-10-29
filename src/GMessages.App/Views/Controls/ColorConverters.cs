@@ -13,9 +13,6 @@ namespace GMessages.App.Views.Controls;
 /// </remarks>
 public static class ColorConverters
 {
-    // Back Circle Of A Group Avatar: Google's Light Gray
-    private const uint GroupBackArgb = 0xFFBDC1C6;
-
     /// <summary>
     /// Makes a solid brush from an opaque ARGB color.
     /// </summary>
@@ -23,13 +20,6 @@ public static class ColorConverters
     /// <returns>The brush.</returns>
     public static SolidColorBrush ToBrush(uint argb) =>
         new(Color.FromArgb((byte)(argb >> 24), (byte)(argb >> 16), (byte)(argb >> 8), (byte)argb));
-
-    /// <summary>
-    /// Gives the back circle's color for a group avatar, or 0 (no back circle) for a one-on-one chat.
-    /// </summary>
-    /// <param name="isGroup">True for a group chat.</param>
-    /// <returns>The color as <c>0xAARRGGBB</c>, or 0.</returns>
-    public static uint GroupBackColor(bool isGroup) => isGroup ? GroupBackArgb : 0;
 
     /// <summary>
     /// Gives bold for unread rows and normal for the rest.

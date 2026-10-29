@@ -43,6 +43,28 @@ public sealed class ConversationListViewModelTests
     }
 
     [TestMethod]
+    public void Row_Avatar_OneOnOneHasOnePhoto_GroupHasTheSecondPerson()
+    {
+        ParticipantInfo me  = new("me", "Me", "Me", "", true, null);
+        ParticipantInfo bo  = new("p-bo", "Bo Ng", "Bo", "#1a73e8", false, null);
+        ParticipantInfo cy  = new("p-cy", "", "", "", false, "+1 555");
+        ConversationInfo c  = ConversationInfo.From(MainRig.Conv("a", "Ann")) with { Participants = [me, bo] };
+        ConversationInfo gr = c with { Name = "Team", IsGroup = true, Participants = [me, bo, cy] };
+
+        var one   = new ConversationRowViewModel(c, MainRig.Now);
+        var group = new ConversationRowViewModel(gr, MainRig.Now);
+
+        Assert.AreEqual("p-bo", one.PhotoId);
+        Assert.AreEqual(string.Empty, one.SecondPhotoId);
+        Assert.AreEqual(0u, one.SecondColor);
+
+        Assert.AreEqual("p-bo", group.PhotoId);
+        Assert.AreEqual("p-cy", group.SecondPhotoId);
+        Assert.AreEqual("+", group.SecondInitial);
+        Assert.AreNotEqual(0u, group.SecondColor);
+    }
+
+    [TestMethod]
     public async Task LiveUpdate_MovesRowToTop_UpdatesSnippet()
     {
         using var rig = new MainRig();

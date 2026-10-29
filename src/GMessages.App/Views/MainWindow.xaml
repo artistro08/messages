@@ -16,7 +16,7 @@
         RowDefinitions="Auto,*"
         SizeChanged="OnRootSizeChanged">
 
-        <!-- Title Bar: ☰ on the left, the title from code, the profile picture on the right -->
+        <!-- Title Bar: ☰ on the left, the title from code, the profile picture (the owner's photo, else the default glyph) on the right -->
         <TitleBar
             x:Name="AppTitleBar"
             AutomationProperties.AutomationId="Main.TitleBar">
@@ -50,7 +50,10 @@
                     AutomationProperties.Name="Account"
                     Background="Transparent"
                     BorderThickness="0">
-                    <PersonPicture Width="28" Height="28" />
+                    <PersonPicture
+                        x:Name="ProfilePicture"
+                        Width="28"
+                        Height="28" />
                     <Button.Flyout>
                         <MenuFlyout Placement="BottomEdgeAlignedRight">
                             <MenuFlyoutItem

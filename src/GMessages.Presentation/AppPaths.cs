@@ -1,7 +1,7 @@
 namespace GMessages.Presentation;
 
 /// <summary>
-/// Where the app keeps its files: the session, the settings and the logs.
+/// Where the app keeps its files: the session, the settings, the logs and contacts' photos.
 /// </summary>
 /// <remarks>
 /// Never points at the owner's dev pairing folder; every run uses its own folder.
@@ -36,6 +36,11 @@ public sealed class AppPaths
     /// The folder for rolling log files.
     /// </summary>
     public string LogsFolder => Path.Combine(DataFolder, "Logs");
+
+    /// <summary>
+    /// The folder for contacts' photos written for notifications; deleted with the session.
+    /// </summary>
+    public string AvatarsFolder => Path.Combine(DataFolder, "Avatars");
 
     /// <summary>
     /// Picks the data folder.

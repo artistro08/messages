@@ -38,6 +38,20 @@ public sealed class MainWindowTests : UiTest
     }
 
     /// <summary>
+    /// Ann's row shows the photo the phone has for her; Team's members have none, so its avatar keeps the initials.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Avatars_AnnShowsPhoto_TeamShowsInitials()
+    {
+        await OpenMainAsync();
+        WaitForRows(InboxRows);
+
+        Wait.Until(() => HasPhoto("Row.c-ann"), AppDriver.DefaultTimeout, () => "Ann's row never showed her photo.");
+        Assert.IsFalse(HasPhoto("Row.c-team"), "Team's row showed a photo nobody has.");
+    }
+
+    /// <summary>
     /// ☰ hides the conversation list, and a second click brings it back.
     /// </summary>
     /// <returns>A task for the test.</returns>
@@ -141,6 +155,10 @@ public sealed class MainWindowTests : UiTest
         Invoke("Main.ProfileButton");
         Invoke(automationId);
     }
+
+    // True When An Avatar Under The Row Says It Shows A Photo
+    private bool HasPhoto(string rowId) =>
+        App.TryFind(rowId) is { } row && AppDriver.Search(row, e => e.Properties.ItemStatus.ValueOrDefault == "Photo") is not null;
 
     // The List's Rows, Top To Bottom, By AutomationId
     private string[] RowIds()
