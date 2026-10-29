@@ -19,10 +19,10 @@ public sealed class TrayTests : UiTest
     [TestMethod]
     public async Task TrayRightClick_ShowsFlyoutMenu_OpenSettingsQuit()
     {
-        // Unpaired, So Open Brings Back The Pairing Window Once It's Closed
-        App.WaitForWindow(PairingTitle, AppDriver.DefaultTimeout);
+        // Unpaired, So Open Brings Back The Window On Pairing Once It's Closed
+        WaitForPairing();
         App.Find("Pairing.Cancel").Patterns.Invoke.Pattern.Invoke();
-        App.WaitForNoWindow(PairingTitle, AppDriver.DefaultTimeout);
+        App.WaitForNoWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout);
 
         // The Menu Shows All Three Items
         Tray.RightClick();
@@ -33,11 +33,11 @@ public sealed class TrayTests : UiTest
         // Open
         App.Find("TrayMenu.Open").Patterns.Invoke.Pattern.Invoke();
         Tray.CloseOverflow();
-        App.WaitForWindow(PairingTitle, AppDriver.DefaultTimeout);
+        WaitForPairing();
 
         // Settings
         InvokeTrayMenu("TrayMenu.Settings");
-        App.WaitForWindow(SettingsTitle, AppDriver.DefaultTimeout);
+        WaitForSettings();
 
         // Quit
         InvokeTrayMenu("TrayMenu.Quit");

@@ -6,7 +6,7 @@ using GMessages.Protocol.Pairing;
 namespace GMessages.Presentation.Pairing;
 
 /// <summary>
-/// Where the pairing window is in the sign-in and pairing flow.
+/// Where the pairing page is in the sign-in and pairing flow.
 /// </summary>
 public enum PairingStep
 {
@@ -22,12 +22,12 @@ public enum PairingStep
     /// <summary>Pairing failed; <see cref="PairingViewModel.Message"/> says why.</summary>
     Failed,
 
-    /// <summary>Paired and connected; the window closes.</summary>
+    /// <summary>Paired and connected; the main window switches to the chats.</summary>
     Done,
 }
 
 /// <summary>
-/// The pairing window's state: sign-in, the emoji to tap, and a plain-English message when pairing fails.
+/// The pairing page's state: sign-in, the emoji to tap, and a plain-English message when pairing fails.
 /// </summary>
 /// <remarks>
 /// <para>

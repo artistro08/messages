@@ -16,12 +16,6 @@ namespace GMessages.App.UITests.Driver;
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1001", Justification = "StopApp, the TestCleanup, disposes them after every test.")]
 public abstract class UiTest
 {
-    /// <summary>The pairing window's title.</summary>
-    protected static readonly string PairingTitle = $"{AppInfo.DisplayName}: Pair your phone";
-
-    /// <summary>The settings window's title.</summary>
-    protected static readonly string SettingsTitle = $"{AppInfo.DisplayName} Settings";
-
     /// <summary>The fake sign-in page's button text.</summary>
     protected const string SignInButtonName = "Sign in";
 
@@ -98,7 +92,46 @@ public abstract class UiTest
     protected void AssertTitleBar(string automationId, string expectedTitle) => App.WaitForText(automationId, expectedTitle);
 
     /// <summary>
-    /// Waits for the fake sign-in page inside the pairing window's WebView2 and returns its "Sign in" button.
+    /// Waits for the main window showing pairing (its Cancel button is there) and returns the window.
+    /// </summary>
+    /// <param name="timeout">How long to wait; <see cref="AppDriver.DefaultTimeout"/> when null.</param>
+    /// <returns>The main window.</returns>
+    protected Window WaitForPairing(TimeSpan? timeout = null)
+    {
+        Window window = App.WaitForWindow(AppInfo.DisplayName, timeout ?? AppDriver.DefaultTimeout);
+        App.Find("Pairing.Cancel", timeout ?? AppDriver.DefaultTimeout);
+        return window;
+    }
+
+    /// <summary>
+    /// Waits for the main window showing the settings page (its Back button is there) and returns the window.
+    /// </summary>
+    /// <returns>The main window.</returns>
+    protected Window WaitForSettings()
+    {
+        Window window = App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout);
+        App.Find("Settings.Back");
+        return window;
+    }
+
+    /// <summary>
+    /// Waits until no control with the given AutomationId shows (a page was switched away or covered).
+    /// </summary>
+    /// <param name="automationId">The AutomationId, such as <c>Pairing.Cancel</c>.</param>
+    protected void WaitForGone(string automationId) =>
+        Wait.Until(() => App.TryFind(automationId) is null, AppDriver.DefaultTimeout, () => $"'{automationId}' still shows.");
+
+    /// <summary>
+    /// Closes the main window with its close button and waits until it is gone.
+    /// </summary>
+    protected void CloseMainWindow()
+    {
+        App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).Close();
+        App.WaitForNoWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout);
+    }
+
+    /// <summary>
+    /// Waits for the fake sign-in page inside the pairing page's WebView2 and returns its "Sign in" button.
     /// </summary>
     /// <remarks>WebView2 content is exposed to UI Automation through the Chromium accessibility tree.</remarks>
     /// <returns>The button.</returns>
@@ -165,16 +198,19 @@ public abstract class UiTest
     }
 
     /// <summary>
-    /// Pairs from the pairing window: sign in, matching emoji, correct tap, window closes, session saved.
+    /// Pairs from the main window's pairing page: sign in, matching emoji, correct tap, the window switches to the
+    /// chats, session saved. Then closes the window, so the test starts from the tray alone.
     /// </summary>
     /// <returns>A task that completes once paired.</returns>
     protected async Task PairAsync()
     {
-        App.WaitForWindow(PairingTitle, AppDriver.DefaultTimeout);
+        WaitForPairing();
         await SignInAndWaitForEmojiAsync();
         Server.Phone.Tap(true);
-        App.WaitForNoWindow(PairingTitle, AppDriver.DefaultTimeout);
+        App.Find("Main.ConversationList");
+        WaitForGone("Pairing.Cancel");
         Wait.Until(() => File.Exists(SessionFile), AppDriver.DefaultTimeout, () => $"No session.bin in {App.DataDir}.");
+        CloseMainWindow();
     }
 
     /// <summary>

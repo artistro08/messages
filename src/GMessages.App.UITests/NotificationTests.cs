@@ -153,8 +153,9 @@ public sealed class NotificationTests : UiTest
         // Turn The Setting On, Then Back To The Chat
         InvokeTrayMenu("TrayMenu.Settings");
         App.Find("Settings.NotifyViewedChat").Patterns.Toggle.Pattern.Toggle();
-        App.WaitForWindow(SettingsTitle, AppDriver.DefaultTimeout).Close();
-        App.WaitForNoWindow(SettingsTitle, AppDriver.DefaultTimeout);
+        App.Find("Settings.Back").Patterns.Invoke.Pattern.Invoke();
+        WaitForGone("Settings.Back");
+        App.WaitForText("Chat.Header", "Ann Lee");
         FocusMainWindow();
 
         Server.Phone.PushIncoming("c-ann", "hello?");

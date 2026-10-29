@@ -1,7 +1,7 @@
 namespace GMessages.App;
 
 /// <summary>
-/// Google sign-in values for the pairing window's WebView2, proven by the sign-in spike.
+/// Google sign-in values for the pairing page's WebView2, proven by the sign-in spike.
 /// </summary>
 /// <remarks>
 /// See <c>docs/superpowers/notes/sign-in-spike.md</c>. Google blocks WebView2's own user agent ("This browser or app

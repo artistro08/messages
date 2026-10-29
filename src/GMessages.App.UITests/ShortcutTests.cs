@@ -88,7 +88,7 @@ public sealed class ShortcutTests : UiTest
     }
 
     /// <summary>
-    /// Ctrl + s opens the settings window.
+    /// Ctrl + s opens the settings page.
     /// </summary>
     /// <returns>A task for the test.</returns>
     [TestMethod]
@@ -98,7 +98,7 @@ public sealed class ShortcutTests : UiTest
 
         Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_S);
 
-        App.WaitForWindow(SettingsTitle, AppDriver.DefaultTimeout);
+        WaitForSettings();
     }
 
     /// <summary>

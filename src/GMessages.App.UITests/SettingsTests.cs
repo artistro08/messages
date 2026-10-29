@@ -5,11 +5,12 @@ using FlaUI.Core.Definitions;
 using Keyboard = FlaUI.Core.Input.Keyboard;
 using FlaUI.Core.WindowsAPI;
 using GMessages.App.UITests.Driver;
+using GMessages.Presentation;
 
 namespace GMessages.App.UITests;
 
 /// <summary>
-/// The settings window: values that survive a restart, the live tray menu theme, and unpairing.
+/// The settings page in the main window: values that survive a restart, the live tray menu theme, Back, and unpairing.
 /// </summary>
 [TestClass]
 [TestCategory("UI")]
@@ -31,7 +32,7 @@ public sealed class SettingsTests : UiTest
     {
         string marker = Path.Combine(App.DataDir, "startup-enabled");
         OpenSettings();
-        AssertTitleBar("Settings.TitleBar", SettingsTitle);
+        AssertTitleBar("Main.TitleBar", AppInfo.DisplayName);
 
         // Defaults
         Assert.AreEqual(0, ThemeIndex(), "Theme should start at 'Use system setting'.");
@@ -64,7 +65,28 @@ public sealed class SettingsTests : UiTest
     }
 
     /// <summary>
-    /// Unpair asks first; confirming closes settings, deletes the session and brings back the pairing window.
+    /// Settings covers pairing, keeping its sign-in alive; Back returns to the same sign-in.
+    /// </summary>
+    [TestMethod]
+    public void Settings_Back_ReturnsToPairing()
+    {
+        WaitForSignInButton();
+        int page_loads = Server.RequestedPaths.Count(p => p == "/web/authentication");
+
+        // Settings Over Pairing
+        OpenSettings();
+        WaitForGone("Pairing.Cancel");
+
+        // Back: The Same Sign-In, Not A New One
+        App.Find("Settings.Back").Patterns.Invoke.Pattern.Invoke();
+        WaitForGone("Settings.Back");
+        WaitForPairing();
+        WaitForSignInButton();
+        Assert.AreEqual(page_loads, Server.RequestedPaths.Count(p => p == "/web/authentication"), "Back started a new sign-in.");
+    }
+
+    /// <summary>
+    /// Unpair asks first; confirming closes settings, deletes the session and switches the main window to pairing.
     /// </summary>
     /// <returns>A task for the test.</returns>
     [TestMethod]
@@ -80,8 +102,8 @@ public sealed class SettingsTests : UiTest
         confirm.Patterns.Invoke.Pattern.Invoke();
 
         // Back To Pairing
-        App.WaitForNoWindow(SettingsTitle, AppDriver.DefaultTimeout);
-        App.WaitForWindow(PairingTitle, AppDriver.DefaultTimeout);
+        WaitForGone("Settings.Back");
+        WaitForPairing();
         Wait.Until(() => !File.Exists(SessionFile), AppDriver.DefaultTimeout, () => "Unpair left session.bin behind.");
     }
 
@@ -92,7 +114,7 @@ public sealed class SettingsTests : UiTest
     private void OpenSettings()
     {
         InvokeTrayMenu("TrayMenu.Settings");
-        App.WaitForWindow(SettingsTitle, AppDriver.DefaultTimeout).Focus();
+        WaitForSettings().Focus();
     }
 
     // The Selected Item's Text, Mapped Back To Its Index
@@ -154,14 +176,14 @@ public sealed class SettingsTests : UiTest
     // Since UIA Gives Pixels No Theme: A Strip Inside The Window's Top-Right, Clear Of The Invisible Resize Border
     private void AssertCloseGlyph(bool light)
     {
-        Window window = App.WaitForWindow(SettingsTitle, AppDriver.DefaultTimeout);
+        Window window = App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout);
         window.Focus();
         double background = 0;
         double glyph      = 0;
         Wait.Until(() =>
         {
             Rectangle box = window.BoundingRectangle;
-            (background, glyph) = Extremes(new Rectangle(box.Right - 48, box.Top + 8, 34, 22), light);
+            (background, glyph) = Extremes(new Rectangle(box.Right - 48, box.Top + 8, 34, 44), light);
             return light ? background - glyph > 80 : glyph - background > 80;
         }, TimeSpan.FromSeconds(5), () => $"The close glyph doesn't contrast in {(light ? "Light" : "Dark")}: background {background:0}, glyph {glyph:0}.");
         TestContext.WriteLine($"Close glyph ({(light ? "Light" : "Dark")}): background {background:0}, glyph {glyph:0}");
@@ -170,12 +192,12 @@ public sealed class SettingsTests : UiTest
     // The Title Bar Icon Area Must Show An Icon: Its Brightness Varies Instead Of Being One Flat Background
     private void AssertTitleBarIcon()
     {
-        Window window = App.WaitForWindow(SettingsTitle, AppDriver.DefaultTimeout);
+        Window window = App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout);
         double spread = 0;
         Wait.Until(() =>
         {
             Rectangle box = window.BoundingRectangle;
-            (double low, double high) = Range(new Rectangle(box.Left + 12, box.Top + 8, 30, 30));
+            (double low, double high) = Range(new Rectangle(box.Left + 12, box.Top + 8, 30, 44));
             spread = high - low;
             return spread > 40;
         }, TimeSpan.FromSeconds(5), () => $"The title bar icon area looks blank (brightness spread {spread:0}).");

@@ -1,4 +1,7 @@
+using System.Drawing;
+using FlaUI.Core.AutomationElements;
 using GMessages.App.UITests.Driver;
+using GMessages.Presentation;
 
 namespace GMessages.App.UITests;
 
@@ -15,26 +18,35 @@ public sealed class PairingTests : UiTest
     private const string NotAcceptedText = "Google didn't accept the sign-in. Try again.";
 
     /// <summary>
-    /// A first run opens pairing; the fake sign-in page loads in the WebView2; the app shows the phone's emoji; a
-    /// correct tap closes the window, saves the session and leaves the tray icon.
+    /// A first run opens the main window on pairing, with no ☰ or profile button; the fake sign-in page loads in the
+    /// WebView2, about as wide as the window; the app shows the phone's emoji; a correct tap switches the same window to
+    /// the chats, saves the session and leaves the tray icon.
     /// </summary>
     /// <returns>A task for the test.</returns>
     [TestMethod]
-    public async Task FirstRun_ShowsPairing_SignIn_Emoji_TapPairs_WindowCloses()
+    public async Task FirstRun_ShowsPairing_SignIn_Emoji_TapPairs_SwitchesToChats()
     {
-        // Pairing Window With The Fake Sign-In Page
-        App.WaitForWindow(PairingTitle, AppDriver.DefaultTimeout);
-        AssertTitleBar("Pairing.TitleBar", PairingTitle);
+        // Main Window On Pairing With The Fake Sign-In Page, Nearly As Wide As The Window
+        Window window = WaitForPairing();
+        AssertTitleBar("Main.TitleBar", AppInfo.DisplayName);
+        Assert.IsNull(App.TryFind("Main.MenuButton"), "☰ shows while pairing.");
+        Assert.IsNull(App.TryFind("Main.ProfileButton"), "The profile button shows while pairing.");
         WaitForSignInButton();
         CollectionAssert.Contains(Server.RequestedPaths.ToList(), "/web/authentication", "The WebView2 never asked the fake server for the sign-in page.");
+        Rectangle sign_in = App.Find("Pairing.SignIn").BoundingRectangle;
+        Assert.IsTrue(sign_in.Width >= window.BoundingRectangle.Width - 40, $"The sign-in is {sign_in.Width} px wide in a {window.BoundingRectangle.Width} px window.");
 
         // Emoji Matches The Phone
         string emoji = await SignInAndWaitForEmojiAsync();
         Assert.AreEqual(Server.Phone.ShownEmoji, emoji);
 
-        // Correct Tap: Window Closes, Session Saved, Tray Stays
+        // Correct Tap: The Same Window Shows The Chats (☰ And Profile Back), Session Saved, Tray Stays
         Server.Phone.Tap(true);
-        App.WaitForNoWindow(PairingTitle, AppDriver.DefaultTimeout);
+        App.Find("Main.ConversationList");
+        WaitForGone("Pairing.Cancel");
+        App.Find("Main.MenuButton");
+        App.Find("Main.ProfileButton");
+        Assert.AreEqual(window.Properties.NativeWindowHandle.Value, App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).Properties.NativeWindowHandle.Value, "Pairing opened another window for the chats.");
         Wait.Until(() => File.Exists(SessionFile), AppDriver.DefaultTimeout, () => $"No session.bin in {App.DataDir}.");
         Tray.FindIcon(AppDriver.DefaultTimeout);
         Tray.CloseOverflow();
@@ -51,7 +63,7 @@ public sealed class PairingTests : UiTest
     [TestMethod]
     public async Task WrongEmoji_ShowsMessage_TryAgain_RestartsSignIn()
     {
-        App.WaitForWindow(PairingTitle, AppDriver.DefaultTimeout);
+        WaitForPairing();
         await SignInAndWaitForEmojiAsync();
 
         // Wrong Tap
@@ -74,7 +86,7 @@ public sealed class PairingTests : UiTest
     public void RejectedCookies_ShowsGoogleDidntAccept()
     {
         Server.RejectCookies = true;
-        App.WaitForWindow(PairingTitle, AppDriver.DefaultTimeout);
+        WaitForPairing();
         ClickSignIn();
 
         App.WaitForText("Pairing.Message", NotAcceptedText);

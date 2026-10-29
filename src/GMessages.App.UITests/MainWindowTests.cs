@@ -110,16 +110,21 @@ public sealed class MainWindowTests : UiTest
     }
 
     /// <summary>
-    /// The profile menu's Settings opens the settings window.
+    /// The profile menu's Settings opens the settings page over the chats in the same window; Back returns to them.
     /// </summary>
     /// <returns>A task for the test.</returns>
     [TestMethod]
-    public async Task Profile_Settings_OpensSettingsWindow()
+    public async Task Profile_Settings_OpensSettingsPage_BackReturns()
     {
         await OpenMainAsync();
 
         InvokeProfileItem("Main.Profile.Settings");
-        App.WaitForWindow(SettingsTitle, AppDriver.DefaultTimeout);
+        WaitForSettings();
+        WaitForGone("Main.ConversationList");
+
+        App.Find("Settings.Back").Patterns.Invoke.Pattern.Invoke();
+        WaitForGone("Settings.Back");
+        WaitForRows(InboxRows);
     }
 
     /// <summary>

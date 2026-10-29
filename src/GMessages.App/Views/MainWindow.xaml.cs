@@ -1,5 +1,4 @@
 using System.Collections.Specialized;
-using System.ComponentModel;
 using GMessages.App.Views.Controls;
 using GMessages.Presentation;
 using GMessages.Presentation.Main;
@@ -9,9 +8,7 @@ using GMessages.Presentation.Shortcuts;
 using Microsoft.UI.Input;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Windows.System;
@@ -20,49 +17,43 @@ using Windows.UI.Core;
 namespace GMessages.App.Views;
 
 /// <summary>
-/// The main window: the title bar with ☰ and the profile menu, the conversation list (or Spam &amp; blocked) and the
-/// chat pane.
+/// The main window: the title bar with ☰ and the profile menu, and below it the pairing steps until the app is paired,
+/// then the chats. Settings opens as a page over both.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Made when asked for and destroyed on close (the App then trims memory). Closing disposes the
+/// Made when asked for and destroyed on close (the App then trims memory). The App picks the body with
+/// <see cref="ShowPairing"/> or <see cref="ShowChats"/> and switches it in place when pairing ends or the phone is
+/// unpaired. Dropping the body (a switch or the close) cancels a running pairing or disposes the
 /// <see cref="MainViewModel"/>, which unhooks its lists from the store that outlives the window.
 /// </para>
 /// <para>
-/// Wide windows (720 effective px and up) show both panes; narrow ones show one at a time, following
-/// <see cref="MainViewModel.ShowChatPane"/>. ☰ collapses the list in both. The width is read from the root grid's
-/// <c>SizeChanged</c>, not an <c>AdaptiveTrigger</c>: visual state triggers never run on a window's root element
-/// (it isn't inside a control), so the panes are laid out with <c>x:Bind</c> on <see cref="MainViewModel.IsNarrow"/>.
-/// </para>
-/// <para>
-/// The list is the pane of an inline <c>SplitView</c>, so opening and closing it plays the Windows pane animation. A
-/// narrow window makes the pane as wide as the window, so closing it (a chat opened) slides the chat in over the whole
-/// width. The chat sits on a layer above the Mica, rounded at the top left beside the list.
+/// The settings page covers the body but keeps it running (a sign-in in progress, the open chat), so Back returns to it
+/// as it was. ☰ and the profile picture hide while pairing, since there is nothing for them yet.
 /// </para>
 /// </remarks>
 public sealed partial class MainWindow : Window
 {
-    // Layout: Below This Width (Effective Pixels) One Pane Shows At A Time; The List Pane's Width Beside The Chat; The
-    // Chat Layer's Top-Left Corner (OverlayCornerRadius, Which Can't Be Read Back Unboxed Under Native AOT)
-    private const double NarrowBelow   = 720;
-    private const double ListPaneWidth = 360;
-    private const double LayerRadius   = 8;
-
     private readonly SettingsViewModel _settings;
     private readonly AvatarCache _avatars;
+
+    // The Body (Pairing Or Chats, Never Both) And The Settings Page Over It While Open
+    private PairingPage? _pairing;
+    private ChatsView? _chats;
+    private SettingsPage? _settingsPage;
+    private Control? _focusBeforeSettings;
+    private bool _isActive;
 
     // The Owner's Photo Is Asked For Once A Load Names The Owner, And Again After An Answer Without One
     private bool _profileAsked;
 
     /// <summary>
-    /// Creates the window and starts loading the inbox.
+    /// Creates the window with an empty body; the App then calls <see cref="ShowPairing"/> or <see cref="ShowChats"/>.
     /// </summary>
-    /// <param name="viewModel">The window's state; the window disposes it on close.</param>
-    /// <param name="settings">Does the profile menu's Unpair, the same way the settings window does.</param>
-    /// <param name="avatars">The window's photo cache; the window clears it on close.</param>
-    public MainWindow(MainViewModel viewModel, SettingsViewModel settings, AvatarCache avatars)
+    /// <param name="settings">The settings page's state, also doing the profile menu's Unpair; the window disposes it on close.</param>
+    /// <param name="avatars">The window's photo cache; the window clears it on close and on going back to pairing.</param>
+    public MainWindow(SettingsViewModel settings, AvatarCache avatars)
     {
-        ViewModel    = viewModel;
         _settings    = settings;
         _avatars     = avatars;
         Avatar.Cache = avatars;
@@ -80,42 +71,41 @@ public sealed partial class MainWindow : Window
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"));
 
         // Copy
-        StartChatText.Text      = ChatCopy.StartChat;
-        ListTitle.Text          = ChatCopy.SpamAndBlocked;
         ProfileSpamBlocked.Text = ChatCopy.SpamAndBlocked;
-        EmptyStateText.Text     = ChatCopy.StartAConversation;
 
         // Behavior
-        Activated                              += (_, e) => ViewModel.IsWindowFocused = e.WindowActivationState != WindowActivationState.Deactivated;
-        ViewModel.PropertyChanged              += OnViewModelChanged;
-        ViewModel.Connected                    += OnConnected;
-        ViewModel.Inbox.Rows.CollectionChanged += OnInboxRowsChanged;
-        AppTitleBar.LayoutUpdated              += OnTitleBarLayoutUpdated;
-        Closed                                 += (_, _) =>
+        Activated += (_, e) =>
         {
-            ViewModel.PropertyChanged              -= OnViewModelChanged;
-            ViewModel.Connected                    -= OnConnected;
-            ViewModel.Inbox.Rows.CollectionChanged -= OnInboxRowsChanged;
-            AppTitleBar.LayoutUpdated              -= OnTitleBarLayoutUpdated;
+            _isActive = e.WindowActivationState != WindowActivationState.Deactivated;
+            ShowChatFocus();
+        };
+        AppTitleBar.LayoutUpdated += OnTitleBarLayoutUpdated;
+        Closed                    += (_, _) =>
+        {
+            AppTitleBar.LayoutUpdated -= OnTitleBarLayoutUpdated;
+            CloseSettings();
+            DropBody();
             Bindings.StopTracking();
-            ViewModel.Dispose();
             _settings.Dispose();
             Avatar.Cache = null;
             _avatars.Clear();
         };
-        ShowCurrentList();
-        _ = ViewModel.Inbox.LoadAsync();
     }
 
     /// <summary>
-    /// Asks the App to open the settings window (the profile menu's Settings).
+    /// Asks the App to open the settings page (the profile menu's Settings, Ctrl + ,).
     /// </summary>
     public event EventHandler? SettingsRequested;
 
     /// <summary>
-    /// Gets the window's state the view binds to.
+    /// Gets the chats' state, or null while the window shows pairing.
     /// </summary>
-    public MainViewModel ViewModel { get; }
+    public MainViewModel? ViewModel => _chats?.ViewModel;
+
+    /// <summary>
+    /// Gets whether the window shows the pairing steps.
+    /// </summary>
+    public bool IsPairing => _pairing is not null;
 
     /// <summary>
     /// Gets the settings state the profile menu's Unpair binds to.
@@ -146,49 +136,130 @@ public sealed partial class MainWindow : Window
     }
 
     // =========================================================================
-    // X:BIND HELPERS
+    // BODY AND SETTINGS
     // =========================================================================
 
     /// <summary>
-    /// Opens the list pane unless ☰ collapsed it or a narrow window shows the chat instead.
+    /// Shows the pairing steps in place of the chats (or the empty body), and closes the settings page.
     /// </summary>
-    /// <param name="isListCollapsed">True when ☰ collapsed the list.</param>
-    /// <param name="showChatPane">True when a narrow window shows the chat.</param>
-    /// <returns>True to open the pane.</returns>
-    public static bool IsListOpen(bool isListCollapsed, bool showChatPane) => !isListCollapsed && !showChatPane;
+    /// <remarks>
+    /// The chats are dropped first, and nothing of the old phone stays: its photos and the owner's picture go too.
+    /// </remarks>
+    /// <param name="page">The pairing page, which starts its sign-in when made; the window closes it when dropped.</param>
+    public void ShowPairing(PairingPage page)
+    {
+        ArgumentNullException.ThrowIfNull(page);
+
+        CloseSettings();
+        DropBody();
+        _avatars.Clear();
+        _profileAsked                 = false;
+        ProfilePicture.ProfilePicture = null;
+
+        _pairing              = page;
+        page.CancelRequested += OnPairingCancel;
+        BodyHost.Child        = page;
+        ShowTitleBarButtons(false);
+    }
 
     /// <summary>
-    /// Gives the chat layer's border: top and left beside the list, only the top in a narrow window.
+    /// Shows the chats in place of the pairing steps (or the empty body) and starts loading the inbox.
     /// </summary>
-    /// <param name="isNarrow">True for a narrow window.</param>
-    /// <returns>The border thickness.</returns>
-    public static Thickness LayerBorder(bool isNarrow) => new(isNarrow ? 0 : 1, 1, 0, 0);
+    /// <param name="viewModel">The chats' state; the window disposes it when the chats are dropped.</param>
+    public void ShowChats(MainViewModel viewModel)
+    {
+        ArgumentNullException.ThrowIfNull(viewModel);
+
+        DropBody();
+        _chats                                  = new ChatsView(viewModel);
+        viewModel.Connected                    += OnConnected;
+        viewModel.Inbox.Rows.CollectionChanged += OnInboxRowsChanged;
+        BodyHost.Child                          = _chats;
+        ShowTitleBarButtons(true);
+        ShowChatFocus();
+    }
 
     /// <summary>
-    /// Gives the chat layer's corners: the top left rounded beside the list, square in a narrow window.
+    /// Opens the settings page over the body. Does nothing when it is already open.
     /// </summary>
-    /// <param name="isNarrow">True for a narrow window.</param>
-    /// <returns>The corner radius.</returns>
-    public static CornerRadius LayerCorner(bool isNarrow) => new(isNarrow ? 0 : LayerRadius, 0, 0, 0);
+    public void ShowSettings()
+    {
+        if (_settingsPage is not null)
+        {
+            return;
+        }
 
-    /// <summary>
-    /// Shows the chat pane in a wide window, and in a narrow one when it holds a chat or the list is collapsed.
-    /// </summary>
-    /// <param name="isNarrow">True for a narrow window.</param>
-    /// <param name="showChatPane">True when a narrow window shows the chat.</param>
-    /// <param name="isListCollapsed">True when ☰ collapsed the list.</param>
-    /// <returns>The chat pane's visibility.</returns>
-    public static Visibility ChatVisibility(bool isNarrow, bool showChatPane, bool isListCollapsed) =>
-        !isNarrow || showChatPane || isListCollapsed ? Visibility.Visible : Visibility.Collapsed;
+        // Back Puts Keyboard Focus Where It Was
+        _focusBeforeSettings = RootGrid.XamlRoot is { } root ? FocusManager.GetFocusedElement(root) as Control : null;
 
-    /// <summary>
-    /// Shows the empty state while no conversation and no Start chat is open.
-    /// </summary>
-    /// <param name="isChatOpen">True when a conversation is open.</param>
-    /// <param name="isStartChatOpen">True when Start chat is open.</param>
-    /// <returns>The empty state's visibility.</returns>
-    public static Visibility EmptyStateVisibility(bool isChatOpen, bool isStartChatOpen) =>
-        !isChatOpen && !isStartChatOpen ? Visibility.Visible : Visibility.Collapsed;
+        _settingsPage                  = new SettingsPage(_settings);
+        _settingsPage.BackRequested   += OnSettingsBack;
+        _settingsPage.UnpairRequested += OnSettingsUnpair;
+        SettingsHost.Child             = _settingsPage;
+        BodyHost.Visibility            = Visibility.Collapsed;
+        ShowChatFocus();
+    }
+
+    // Back (Or A Switch To Pairing): The Body Shows Again
+    private void CloseSettings()
+    {
+        if (_settingsPage is not { } page)
+        {
+            return;
+        }
+
+        page.BackRequested   -= OnSettingsBack;
+        page.UnpairRequested -= OnSettingsUnpair;
+        page.Close();
+        _settingsPage       = null;
+        SettingsHost.Child  = null;
+        BodyHost.Visibility = Visibility.Visible;
+        ShowChatFocus();
+
+        _focusBeforeSettings?.Focus(FocusState.Programmatic);
+        _focusBeforeSettings = null;
+    }
+
+    // Cancels A Running Pairing Or Disposes The Chats' View Model
+    private void DropBody()
+    {
+        if (_pairing is { } pairing)
+        {
+            pairing.CancelRequested -= OnPairingCancel;
+            pairing.Close();
+            _pairing = null;
+        }
+
+        if (_chats is { } chats)
+        {
+            chats.ViewModel.Connected                    -= OnConnected;
+            chats.ViewModel.Inbox.Rows.CollectionChanged -= OnInboxRowsChanged;
+            chats.Close();
+            _chats = null;
+        }
+
+        BodyHost.Child = null;
+    }
+
+    // ☰ And The Profile Picture Have Nothing To Show While Pairing
+    private void ShowTitleBarButtons(bool show)
+    {
+        MenuButton.Visibility    = show ? Visibility.Visible : Visibility.Collapsed;
+        ProfileButton.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    // The Open Chat Counts As Viewed Only While The Window Is Active And Settings Doesn't Cover It
+    private void ShowChatFocus()
+    {
+        if (_chats is { } chats)
+        {
+            chats.ViewModel.IsWindowFocused = _isActive && _settingsPage is null;
+        }
+    }
+
+    // =========================================================================
+    // X:BIND HELPERS
+    // =========================================================================
 
     /// <summary>
     /// Hides an element while the flag is set.
@@ -207,45 +278,6 @@ public sealed partial class MainWindow : Window
     // =========================================================================
     // EVENT HANDLERS
     // =========================================================================
-
-    private void OnViewModelChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        ShowCurrentList();
-        ShowSelection();
-    }
-
-    // Inbox Or Spam & Blocked: Rewrapped Only When The List Itself Changes, So Other Changes Keep The Selection
-    // (See BindableList For Why The Rows Aren't Bound Directly)
-    private void ShowCurrentList() => BindableList.Show(ConversationList, ViewModel.CurrentList.Rows);
-
-    // The List Highlights The Open Conversation: Picking A Row Opens It, And This Follows Opens From Elsewhere
-    // (Ctrl + . And Ctrl + ,, Start Chat, Escape), Scrolling The Row Into View
-    private void ShowSelection()
-    {
-        ConversationRowViewModel? row = ViewModel.CurrentList.Rows.FirstOrDefault(r => r.Id == ViewModel.SelectedConversationId);
-        if (ConversationList.SelectedItem == row)
-        {
-            return;
-        }
-
-        ConversationList.SelectedItem = row;
-        if (row is not null)
-        {
-            ConversationList.ScrollIntoView(row);
-        }
-    }
-
-    // Narrow Or Wide From The Window Width (See The Class Remarks); The View Model Needs It For The One-Pane Rule, And
-    // A Narrow Window's List Pane Fills The Width
-    private void OnRootSizeChanged(object sender, SizeChangedEventArgs e)
-    {
-        bool is_narrow       = e.NewSize.Width < NarrowBelow;
-        Panes.OpenPaneLength = is_narrow ? e.NewSize.Width : ListPaneWidth;
-        if (is_narrow != ViewModel.IsNarrow)
-        {
-            ViewModel.IsNarrow = is_narrow;
-        }
-    }
 
     // The TitleBar Control Reserves Room For The Caption Buttons With Their Width In Physical Pixels, As If Effective, So
     // Above 100% Scale A Gap Opened Between The Profile Picture And Minimize. Its Last Column Is That Reserve: Size It
@@ -279,7 +311,7 @@ public sealed partial class MainWindow : Window
     // Load Or Reconnect Ask Again; The Cache Remembers "No Photo", So That Costs The Phone Nothing
     private async Task ShowProfilePhotoAsync()
     {
-        if (_profileAsked || ViewModel.MeId is not { } me_id)
+        if (_profileAsked || ViewModel?.MeId is not { } me_id)
         {
             return;
         }
@@ -291,57 +323,41 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        // Back To Pairing Meanwhile: The Old Phone's Owner Must Not Show
+        if (_chats is null)
+        {
+            return;
+        }
+
         ProfilePicture.ProfilePicture = await Avatar.ToImageAsync(photo);
     }
 
-    private void OnMenuClick(object sender, RoutedEventArgs e) => ViewModel.ToggleList();
+    private void OnMenuClick(object sender, RoutedEventArgs e) => ViewModel?.ToggleList();
 
-    private void OnStartChatClick(object sender, RoutedEventArgs e) => ViewModel.OpenStartChat();
-
-    // Start Chat Opened (Or Found) The Conversation: Show It In Place Of Start Chat
-    private void OnChatStarted(object? sender, string conversationId) => ViewModel.Select(conversationId);
-
-    // The Back Arrow Of A Narrow Window Closes The Chat Or Start Chat, Which Shows The List
-    private void OnPaneBack(object? sender, EventArgs e) => ViewModel.ExitConversation();
-
-    private void OnSpamBlockedClick(object sender, RoutedEventArgs e) => ViewModel.OpenSpamBlocked();
-
-    private void OnSpamBackClick(object sender, RoutedEventArgs e) => ViewModel.BackToInbox();
+    // Spam & Blocked Is A List, So It Closes Settings To Show It
+    private void OnSpamBlockedClick(object sender, RoutedEventArgs e)
+    {
+        CloseSettings();
+        ViewModel?.OpenSpamBlocked();
+    }
 
     private void OnSettingsClick(object sender, RoutedEventArgs e) => SettingsRequested?.Invoke(this, EventArgs.Empty);
 
-    // Confirm, Then Unpair: The App Closes This Window And Opens Pairing On NotPaired
-    private async void OnUnpairClick(object sender, RoutedEventArgs e)
+    private void OnSettingsBack(object? sender, EventArgs e) => CloseSettings();
+
+    // Pairing's Cancel Closes The Window, Which Cancels The Pairing
+    private void OnPairingCancel(object? sender, EventArgs e) => Close();
+
+    private void OnUnpairClick(object sender, RoutedEventArgs e) => ConfirmUnpair();
+
+    private void OnSettingsUnpair(object? sender, EventArgs e) => ConfirmUnpair();
+
+    // Confirm, Then Unpair: The App Switches This Window To Pairing On NotPaired. Async Void Like A Click Handler, So A
+    // Failure Reaches The App's Unhandled Error Log
+    private async void ConfirmUnpair()
     {
         UnpairDialog.RequestedTheme = RootGrid.RequestedTheme;
         await UnpairDialog.ConfirmAndUnpairAsync(_settings);
-    }
-
-    // Picking A Row Opens It; A Cleared Selection (List Swapped, Row Moved) Keeps The Open Conversation
-    private void OnSelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (ConversationList.SelectedItem is not ConversationRowViewModel row || row.Id == ViewModel.SelectedConversationId)
-        {
-            return;
-        }
-
-        ViewModel.Select(row.Id);
-    }
-
-    // Names Each Row For UI Automation (Row.{id}), And Loads The Next Page Once The Last Row Is Realized
-    private void OnContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
-    {
-        if (args.InRecycleQueue || args.Item is not ConversationRowViewModel row)
-        {
-            return;
-        }
-
-        AutomationProperties.SetAutomationId(args.ItemContainer, "Row." + row.Id);
-
-        if (args.ItemIndex == sender.Items.Count - 1)
-        {
-            _ = ViewModel.CurrentList.LoadMoreAsync();
-        }
     }
 
     // =========================================================================
@@ -349,10 +365,12 @@ public sealed partial class MainWindow : Window
     // =========================================================================
 
     // Every Key Press In The Window Passes Here First. Handled Only When A Shortcut Ran, So Other Keys (And A Shortcut
-    // With Nothing To Do, Like "r" With No Chat Open) Reach The Controls. Skipped While A Dialog Or Menu Is Open
+    // With Nothing To Do, Like "r" With No Chat Open) Reach The Controls. Only For The Chats (Not Pairing Or Settings),
+    // And Skipped While A Dialog Or Menu Is Open
     private void OnRootPreviewKeyDown(object sender, KeyRoutedEventArgs e)
     {
-        if (VisualTreeHelper.GetOpenPopupsForXamlRoot(RootGrid.XamlRoot).Any(p => p.Child is not ToolTip))
+        if (_chats is not { } chats || _settingsPage is not null
+            || VisualTreeHelper.GetOpenPopupsForXamlRoot(RootGrid.XamlRoot).Any(p => p.Child is not ToolTip))
         {
             return;
         }
@@ -360,45 +378,15 @@ public sealed partial class MainWindow : Window
         bool focus_in_text_box = FocusManager.GetFocusedElement(RootGrid.XamlRoot) is TextBox;
         if (ShortcutMap.Resolve(e.Key, IsDown(VirtualKey.Control), IsDown(VirtualKey.Shift), IsDown(VirtualKey.Menu), focus_in_text_box) is { } command)
         {
-            e.Handled = Run(command);
+            e.Handled = Run(chats, command);
         }
     }
 
-    // Runs A Shortcut; False When It Had Nothing To Act On (Such As A Focus Shortcut For A Pane That Isn't Showing)
-    private bool Run(ShortcutCommand command)
+    // Settings And Help Belong To The Window; The Rest To The Chats
+    private bool Run(ChatsView chats, ShortcutCommand command)
     {
         switch (command)
         {
-            case ShortcutCommand.StartChat:
-                ViewModel.OpenStartChat();
-
-                // A Turn Later, Once The Pane Shows: A Hidden Box Can't Take Focus
-                return DispatcherQueue.TryEnqueue(() => StartChatView.FocusQuery());
-
-            case ShortcutCommand.FocusConversationList:
-                return ConversationList.Focus(FocusState.Keyboard);
-
-            case ShortcutCommand.FocusMessageBox:
-                return ChatView.FocusDraft();
-
-            case ShortcutCommand.ToggleEmoji:
-                return ChatView.ToggleEmojiPanel();
-
-            case ShortcutCommand.FocusMessages:
-                return ChatView.FocusMessages();
-
-            case ShortcutCommand.ExitConversation:
-                ViewModel.ExitConversation();
-                return true;
-
-            case ShortcutCommand.NextConversation:
-                ViewModel.NextConversation();
-                return true;
-
-            case ShortcutCommand.PreviousConversation:
-                ViewModel.PreviousConversation();
-                return true;
-
             case ShortcutCommand.OpenSettings:
                 SettingsRequested?.Invoke(this, EventArgs.Empty);
                 return true;
@@ -409,7 +397,7 @@ public sealed partial class MainWindow : Window
                 return true;
 
             default:
-                return false;
+                return chats.Run(command);
         }
     }
 

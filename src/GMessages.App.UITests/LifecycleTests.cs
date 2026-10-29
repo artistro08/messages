@@ -82,7 +82,7 @@ public sealed class LifecycleTests : UiTest
     }
 
     /// <summary>
-    /// Google ending the session (401 on the long poll) while connected brings back the pairing window with the
+    /// Google ending the session (401 on the long poll) while connected opens the main window on pairing with the
     /// signed-out reason above the sign-in.
     /// </summary>
     /// <returns>A task for the test.</returns>
@@ -93,34 +93,35 @@ public sealed class LifecycleTests : UiTest
 
         Server.KillLongPoll(401);
 
-        FlaUI.Core.AutomationElements.Window pairing = App.WaitForWindow(PairingTitle, TimeSpan.FromSeconds(30));
+        FlaUI.Core.AutomationElements.Window pairing = WaitForPairing(TimeSpan.FromSeconds(30));
         Wait.Until(() => AppDriver.Search(pairing, e => AppDriver.SafeName(e).Contains(ConnectionController.SignedOutText, StringComparison.Ordinal)) is not null,
-            AppDriver.DefaultTimeout, () => $"The pairing window never showed '{ConnectionController.SignedOutText}'.");
+            AppDriver.DefaultTimeout, () => $"Pairing never showed '{ConnectionController.SignedOutText}'.");
         WaitForSignInButton();
     }
 
     /// <summary>
-    /// Closing the pairing and settings windows leaves the app and its tray icon running, and the icon still works.
+    /// Closing the main window (on pairing or on settings) leaves the app and its tray icon running, and the icon
+    /// still works.
     /// </summary>
     [TestMethod]
     public void ClosingWindows_KeepsTrayRunning()
     {
-        // Cancel Pairing
-        App.WaitForWindow(PairingTitle, AppDriver.DefaultTimeout);
+        // Cancel Pairing: The Window Closes
+        WaitForPairing();
         App.Find("Pairing.Cancel").Patterns.Invoke.Pattern.Invoke();
-        App.WaitForNoWindow(PairingTitle, AppDriver.DefaultTimeout);
+        App.WaitForNoWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout);
         AssertStillRunning();
 
-        // Close Settings With Its Close Button
+        // Close The Window On Settings With Its Close Button
         InvokeTrayMenu("TrayMenu.Settings");
-        App.WaitForWindow(SettingsTitle, AppDriver.DefaultTimeout).Close();
-        App.WaitForNoWindow(SettingsTitle, AppDriver.DefaultTimeout);
+        WaitForSettings().Close();
+        App.WaitForNoWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout);
         AssertStillRunning();
 
         // The Icon Still Answers: Unpaired, A Left-Click Brings Pairing Back; Close It Too
         Tray.LeftClick();
-        App.WaitForWindow(PairingTitle, AppDriver.DefaultTimeout).Close();
-        App.WaitForNoWindow(PairingTitle, AppDriver.DefaultTimeout);
+        WaitForPairing().Close();
+        App.WaitForNoWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout);
         AssertStillRunning();
     }
 

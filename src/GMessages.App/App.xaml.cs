@@ -60,9 +60,7 @@ public partial class App : Application, IDisposable
     private NotificationService? _notifications;
     private AppNotificationActivatedEventArgs? _launchNotification;
     private DispatcherQueueTimer? _launchNotificationTimeout;
-    private PairingWindow? _pairingWindow;
     private MainWindow? _mainWindow;
-    private SettingsWindow? _settingsWindow;
     private IStartupService? _startup;
     private AppPaths? _paths;
     private DispatcherQueue? _dispatcher;
@@ -131,12 +129,12 @@ public partial class App : Application, IDisposable
         }
 
         // Sign-In Profiles A Quit Or Crash Mid-Sign-In Left Behind (They Can Hold A Live Google Session)
-        PairingWindow.DeleteLeftoverProfiles(_logger);
+        PairingPage.DeleteLeftoverProfiles(_logger);
 
         // Memory Trim
         var dispatcher = DispatcherQueue.GetForCurrentThread();
         _dispatcher    = dispatcher;
-        _memoryTrim    = new MemoryTrim(dispatcher, () => _trayMenu?.AppWindow.IsVisible != true && _pairingWindow is null && _mainWindow is null && _settingsWindow is null);
+        _memoryTrim    = new MemoryTrim(dispatcher, () => _trayMenu?.AppWindow.IsVisible != true && _mainWindow is null);
 
         // Connection: every controller event comes back on the UI thread
         // Debug test hooks can point it at a local fake server; Release is always production
@@ -220,8 +218,8 @@ public partial class App : Application, IDisposable
     // CONNECTION AND PAIRING
     // =========================================================================
 
-    // Loads the saved session; no session (or a dead one) opens the pairing window. Start-up always ends, also when
-    // StartAsync throws (then it ends in the pairing window), so the tray never goes dead. A click held meanwhile runs last
+    // Loads the saved session; no session (or a dead one) opens the main window on pairing. Start-up always ends, also
+    // when StartAsync throws (then it ends in pairing), so the tray never goes dead. A click held meanwhile runs last
     private async Task StartConnectionAsync()
     {
         try
@@ -249,7 +247,8 @@ public partial class App : Application, IDisposable
 
     private bool NeedsPairing() => _connection?.State is ConnectionState.NotPaired or ConnectionState.SignedOut;
 
-    // NotPaired or SignedOut (also a later sign-out) opens the pairing window; pairing closes it itself on Done
+    // NotPaired or SignedOut (also a later sign-out) opens the main window on pairing; once paired an open window
+    // switches to the chats in place
     private void OnConnectionStateChanged()
     {
         if (_quitting || _connection is null || !_connectionStarted)
@@ -261,45 +260,16 @@ public partial class App : Application, IDisposable
         HandleLaunchNotification(timedOut: false);
         if (NeedsPairing())
         {
-            // No "Not paired" main window left behind the pairing window after an unpair or sign-out, and nothing of the
-            // old phone (names, numbers, owner, SIMs) kept for whichever phone pairs next
+            // The Chats Go (Showing Pairing Drops Them First), And Nothing Of The Old Phone (Names, Numbers, Owner, SIMs)
+            // Is Kept For Whichever Phone Pairs Next
             _pendingConversationId = null;
-            _mainWindow?.Close();
+            ShowMainWindow();
             _store?.Reset();
-            ShowPairingWindow();
             return;
         }
 
+        ShowBody();
         SelectPendingConversation();
-    }
-
-    // Made when needed and destroyed on close, then the memory it used goes back to Windows
-    private void ShowPairingWindow()
-    {
-        if (_quitting || _connection is null)
-        {
-            return;
-        }
-
-        if (_pairingWindow is not null)
-        {
-            _pairingWindow.Activate();
-            return;
-        }
-
-        var dispatcher = DispatcherQueue.GetForCurrentThread();
-        var viewModel  = new PairingViewModel(_connection, a => dispatcher.TryEnqueue(() => a()));
-        _pairingWindow = new PairingWindow(viewModel, TestHooks.Endpoints ?? GmEndpoints.Production, _logger);
-        _pairingWindow.ApplyTheme(_settings?.Theme ?? AppTheme.System);
-        _pairingWindow.Closed += (_, _) =>
-        {
-            _pairingWindow = null;
-            if (!_quitting)
-            {
-                _memoryTrim?.Schedule();
-            }
-        };
-        _pairingWindow.Activate();
     }
 
     // =========================================================================
@@ -336,21 +306,21 @@ public partial class App : Application, IDisposable
     // Selected Once Connected, Or Right Away When The Conversation Is Already Cached
     private void SelectPendingConversation()
     {
-        if (_pendingConversationId is not { } id || _mainWindow is null
+        if (_pendingConversationId is not { } id || _mainWindow?.ViewModel is not { } view
             || (_connection?.State != ConnectionState.Connected && _store?.Find(id) is null))
         {
             return;
         }
 
         _pendingConversationId = null;
-        _mainWindow.ViewModel.Select(id);
+        view.Select(id);
     }
 
     // =========================================================================
-    // MAIN AND SETTINGS WINDOWS
+    // MAIN WINDOW
     // =========================================================================
 
-    // Tray left-click, the menu's Open, or a second launch. Unpaired, the way in is the pairing window
+    // Tray left-click, the menu's Open, or a second launch. Unpaired, the window opens on pairing
     private void OnShowMainWindowRequested(string source)
     {
         if (_quitting)
@@ -366,17 +336,12 @@ public partial class App : Application, IDisposable
             return;
         }
 
-        if (NeedsPairing())
-        {
-            ShowPairingWindow();
-            return;
-        }
-
         ShowMainWindow();
         SelectPendingConversation();
     }
 
-    // Made when needed and destroyed on close, then the memory it used goes back to Windows
+    // Made when needed and destroyed on close, then the memory it used goes back to Windows. Shows pairing or the
+    // chats, whichever the connection calls for
     private void ShowMainWindow()
     {
         if (_quitting || _connection is null || _store is null || _settings is null || _startup is null || _paths is null)
@@ -384,54 +349,58 @@ public partial class App : Application, IDisposable
             return;
         }
 
-        if (_mainWindow is not null)
+        if (_mainWindow is null)
         {
-            _mainWindow.Activate();
+            var settings = new SettingsViewModel(_settings, _startup, _connection, OpenFolder, _paths.LogsFolder, _logger);
+            _mainWindow  = new MainWindow(settings, new AvatarCache(_store, _paths.AvatarsFolder));
+            _mainWindow.ApplyTheme(_settings.Theme);
+            _mainWindow.SettingsRequested += (_, _) => ShowSettings();
+            _mainWindow.Closed            += (_, _) =>
+            {
+                // A Toast's Conversation Not Yet Shown Goes With The Window, So A Later Open Doesn't Jump To It
+                _mainWindow            = null;
+                _pendingConversationId = null;
+                ScheduleTrim();
+            };
+        }
+
+        ShowBody();
+        _mainWindow.Activate();
+    }
+
+    // Pairing While Unpaired Or Signed Out, Else The Chats. An Open Window Switches In Place Only When That Changes, So
+    // A Sign-In In Progress Or The Open Chat Survives Other State Changes
+    private void ShowBody()
+    {
+        if (_mainWindow is not { } window || _connection is not { } connection || _store is not { } store)
+        {
             return;
         }
 
         var dispatcher = DispatcherQueue.GetForCurrentThread();
-        var viewModel  = new MainViewModel(_connection, _store, TimeProvider.System, a => dispatcher.TryEnqueue(() => a()));
-        _mainWindow    = new MainWindow(viewModel, NewSettingsViewModel(), new AvatarCache(_store, _paths.AvatarsFolder));
-        _mainWindow.ApplyTheme(_settings.Theme);
-        _mainWindow.SettingsRequested += (_, _) => ShowSettingsWindow();
-        _mainWindow.Closed += (_, _) =>
+        if (NeedsPairing() && !window.IsPairing)
         {
-            // A Toast's Conversation Not Yet Shown Goes With The Window, So A Later Open Doesn't Jump To It
-            _mainWindow            = null;
-            _pendingConversationId = null;
-            ScheduleTrim();
-        };
-        _mainWindow.Activate();
+            var pairing = new PairingViewModel(connection, a => dispatcher.TryEnqueue(() => a()));
+            window.ShowPairing(new PairingPage(pairing, TestHooks.Endpoints ?? GmEndpoints.Production, _logger));
+        }
+        else if (!NeedsPairing() && window.ViewModel is null)
+        {
+            window.ShowChats(new MainViewModel(connection, store, TimeProvider.System, a => dispatcher.TryEnqueue(() => a())));
+        }
     }
 
-    // Made when needed and destroyed on close, then the memory it used goes back to Windows
-    private void ShowSettingsWindow()
+    // The Tray Menu's Settings And The Window's Own (Profile Menu, Ctrl + ,): The Main Window Opens On The Settings Page
+    private void ShowSettings()
     {
-        if (_quitting || _connection is null || _settings is null || _startup is null || _paths is null)
+        if (_quitting)
         {
             return;
         }
 
         AppLog.SettingsRequested(_logger);
-        if (_settingsWindow is not null)
-        {
-            _settingsWindow.Activate();
-            return;
-        }
-
-        _settingsWindow = new SettingsWindow(NewSettingsViewModel());
-        _settingsWindow.ApplyTheme(_settings.Theme);
-        _settingsWindow.Closed += (_, _) =>
-        {
-            _settingsWindow = null;
-            ScheduleTrim();
-        };
-        _settingsWindow.Activate();
+        ShowMainWindow();
+        _mainWindow?.ShowSettings();
     }
-
-    // The Settings Window's State; The Main Window Borrows One For Its Unpair
-    private SettingsViewModel NewSettingsViewModel() => new(_settings!, _startup!, _connection!, OpenFolder, _paths!.LogsFolder, _logger);
 
     // Theme: every open window and the tray menu follow the setting live
     private void OnSettingChanged(object? sender, PropertyChangedEventArgs e)
@@ -443,9 +412,7 @@ public partial class App : Application, IDisposable
 
         var theme = _settings.Theme;
         RefreshTrayMenu(theme);
-        _pairingWindow?.ApplyTheme(theme);
         _mainWindow?.ApplyTheme(theme);
-        _settingsWindow?.ApplyTheme(theme);
     }
 
     // Tray Menu: its popup keeps the backdrop of the theme it first opened with (a light theme set later gives dark
@@ -481,12 +448,7 @@ public partial class App : Application, IDisposable
         }
     }
 
-    private void CloseWindows()
-    {
-        _pairingWindow?.Close();
-        _mainWindow?.Close();
-        _settingsWindow?.Close();
-    }
+    private void CloseWindows() => _mainWindow?.Close();
 
     // Explorer makes no folder, so a fresh install's empty logs folder is made first
     private static void OpenFolder(string folder)
@@ -599,7 +561,7 @@ public partial class App : Application, IDisposable
             _trayMenu = new TrayMenuWindow();
             _trayMenu.ApplyTheme(_settings?.Theme ?? AppTheme.System);
             _trayMenu.OpenRequested     += (_, _) => ShowMainWindowRequested?.Invoke(this, "menu");
-            _trayMenu.SettingsRequested += (_, _) => ShowSettingsWindow();
+            _trayMenu.SettingsRequested += (_, _) => ShowSettings();
             _trayMenu.QuitRequested     += (_, _) => Quit();
 
             // Memory Trim: once the menu is gone, hand what it used back to Windows

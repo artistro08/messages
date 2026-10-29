@@ -1,10 +1,8 @@
 using System.ComponentModel;
-using GMessages.Presentation;
 using GMessages.Presentation.Pairing;
 using GMessages.Protocol.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Dispatching;
-using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -13,7 +11,8 @@ using Microsoft.Web.WebView2.Core;
 namespace GMessages.App.Views;
 
 /// <summary>
-/// Pairs the app with the phone: Google sign-in in a WebView2, then the emoji to tap on the phone.
+/// Pairs the app with the phone: Google sign-in in a WebView2, then the emoji to tap on the phone. Fills the main window
+/// below the title bar while the app isn't paired.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -31,10 +30,11 @@ namespace GMessages.App.Views;
 /// Cookie values are never logged.
 /// </para>
 /// <para>
-/// Closing the window cancels a running pairing. Ported in style from Magic Buds' <c>SettingsWindow</c>.
+/// The window calls <see cref="Close"/> when it drops the page (paired, or the window closed), which cancels a running
+/// pairing. Ported in style from Magic Buds' <c>SettingsWindow</c>.
 /// </para>
 /// </remarks>
-public sealed partial class PairingWindow : Window
+public sealed partial class PairingPage : UserControl
 {
     private readonly GmEndpoints _endpoints;
     private readonly ILogger _log;
@@ -47,25 +47,17 @@ public sealed partial class PairingWindow : Window
     private bool _closed;
 
     /// <summary>
-    /// Creates the window and starts the first sign-in.
+    /// Creates the page and starts the first sign-in.
     /// </summary>
     /// <param name="viewModel">The pairing state.</param>
     /// <param name="endpoints">Where the sign-in page lives.</param>
     /// <param name="log">Writes warnings (never cookie values).</param>
-    public PairingWindow(PairingViewModel viewModel, GmEndpoints endpoints, ILogger log)
+    public PairingPage(PairingViewModel viewModel, GmEndpoints endpoints, ILogger log)
     {
         ViewModel  = viewModel;
         _endpoints = endpoints;
         _log       = log;
         InitializeComponent();
-
-        // Window
-        Title                      = $"{AppInfo.DisplayName}: Pair your phone";
-        AppTitleBar.Title          = Title;
-        ExtendsContentIntoTitleBar = true;
-        SetTitleBar(AppTitleBar);
-        AppWindow.Resize(new Windows.Graphics.SizeInt32(560, 760));
-        AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"));
 
         // Grace Wait For The Session Cookie
         _sessionCookieTimer             = DispatcherQueue.CreateTimer();
@@ -75,9 +67,13 @@ public sealed partial class PairingWindow : Window
 
         // Behavior
         ViewModel.PropertyChanged += OnViewModelChanged;
-        Closed                    += OnClosed;
         _ = StartSignInAsync();
     }
+
+    /// <summary>
+    /// Asks the window to close (Cancel), which cancels the pairing.
+    /// </summary>
+    public event EventHandler? CancelRequested;
 
     /// <summary>
     /// Gets the pairing state the view binds to.
@@ -85,26 +81,20 @@ public sealed partial class PairingWindow : Window
     public PairingViewModel ViewModel { get; }
 
     /// <summary>
-    /// Sets the window's light or dark look from the app theme.
+    /// Cancels a running pairing and removes the browser, so nothing outlives the page. Call when the window drops it.
     /// </summary>
-    /// <param name="theme">The app theme setting.</param>
-    public void ApplyTheme(Presentation.Settings.AppTheme theme)
+    public void Close()
     {
-        // Page Colors
-        RootGrid.RequestedTheme = theme switch
+        if (_closed)
         {
-            Presentation.Settings.AppTheme.Light => ElementTheme.Light,
-            Presentation.Settings.AppTheme.Dark  => ElementTheme.Dark,
-            _                                    => ElementTheme.Default,
-        };
+            return;
+        }
 
-        // Caption Buttons: Drawn By The System, So Tell Them The App Theme (Or They Follow Windows' Instead)
-        AppWindow.TitleBar.PreferredTheme = theme switch
-        {
-            Presentation.Settings.AppTheme.Light => TitleBarTheme.Light,
-            Presentation.Settings.AppTheme.Dark  => TitleBarTheme.Dark,
-            _                                    => TitleBarTheme.UseDefaultAppMode,
-        };
+        _closed = true;
+        Bindings.StopTracking();
+        ViewModel.PropertyChanged -= OnViewModelChanged;
+        ViewModel.Cancel();
+        CloseSignIn();
     }
 
     // =========================================================================
@@ -185,7 +175,7 @@ public sealed partial class PairingWindow : Window
                 }
             }
 
-            // Re-Check After The Awaits: Another Navigation May Have Captured First, Or The Window Closed
+            // Re-Check After The Awaits: Another Navigation May Have Captured First, Or The Page Closed
             if (_captured || _webView != web || !jar.ContainsKey(SignIn.SignedInCookie))
             {
                 return;
@@ -261,7 +251,7 @@ public sealed partial class PairingWindow : Window
     /// before its delete finishes), in the background.
     /// </summary>
     /// <remarks>
-    /// Call at launch, before any pairing window opens. The single-instance check means no other running copy uses
+    /// Call at launch, before any pairing page opens. The single-instance check means no other running copy uses
     /// these names, and the folders are listed now, so a sign-in started later is never touched.
     /// </remarks>
     /// <param name="log">Writes a warning for a folder that can't be deleted (never its contents).</param>
@@ -315,36 +305,16 @@ public sealed partial class PairingWindow : Window
 
     private void OnViewModelChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (_closed)
+        // Try Again: A New Browser. Paired (Done) Needs Nothing Here: The App Switches The Window To The Chats
+        if (_closed || ViewModel.Step != PairingStep.SigningIn || _webView is not null)
         {
             return;
         }
 
-        switch (ViewModel.Step)
-        {
-            // Try Again: A New Browser
-            case PairingStep.SigningIn when _webView is null:
-                _ = StartSignInAsync();
-                break;
-
-            // Paired: The Tray Takes Over
-            case PairingStep.Done:
-                Close();
-                break;
-        }
+        _ = StartSignInAsync();
     }
 
     private void OnTryAgainClick(object sender, RoutedEventArgs e) => ViewModel.TryAgain();
 
-    private void OnCancelClick(object sender, RoutedEventArgs e) => Close();
-
-    // Cancels A Running Pairing And Removes The Browser, So Nothing Outlives The Window
-    private void OnClosed(object sender, WindowEventArgs args)
-    {
-        _closed = true;
-        Bindings.StopTracking();
-        ViewModel.PropertyChanged -= OnViewModelChanged;
-        ViewModel.Cancel();
-        CloseSignIn();
-    }
+    private void OnCancelClick(object sender, RoutedEventArgs e) => CancelRequested?.Invoke(this, EventArgs.Empty);
 }
