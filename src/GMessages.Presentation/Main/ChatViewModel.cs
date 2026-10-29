@@ -25,9 +25,30 @@ namespace GMessages.Presentation.Main;
 /// </remarks>
 public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
 {
+    /// <summary>How long "typing" shows without a stop from the phone (the Go connector's timeout, handlegmessages.go).</summary>
+    public static readonly TimeSpan TypingTimeout = TimeSpan.FromSeconds(15);
+
+    /// <summary>How long after telling the other side I'm typing before telling them again.</summary>
+    public static readonly TimeSpan TypingResend = TimeSpan.FromSeconds(10);
+
     private readonly ChatStore _store;
     private readonly TimeProvider _time;
     private readonly Action<Action> _post;
+
+    // Clears The Typing Dots When No Stop Arrives In Time
+    private readonly ITimer _typingTimer;
+
+    // Who Is Typing, And Until When; One Person At A Time
+    // ponytail: a group shows one typer; track a set per participant if group typing needs to be exact
+    private string _typingParticipant = string.Empty;
+    private DateTimeOffset _typingUntil;
+    private bool _isTyping;
+
+    // When I Last Told The Other Side I'm Typing
+    private DateTimeOffset? _typingSentAt;
+
+    private bool _isEncrypted;
+    private MessageBubbleViewModel? _replyingTo;
 
     // Where The Last Older Page Ended; Null Means No More Pages
     private Cursor? _older;
@@ -68,8 +89,12 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
         _time          = time;
         _post          = post;
 
+        _typingTimer = time.CreateTimer(_ => _post(OnTypingTimeout), null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+        _isEncrypted = store.IsEncrypted(conversationId);
+
         _store.MessageArrived += OnMessageArrived;
         _store.Resynced       += OnResynced;
+        _store.TypingChanged  += OnTypingChanged;
         ApplyConversation(_store.Find(conversationId));
     }
 
@@ -104,6 +129,7 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     public ObservableCollection<MessageBubbleViewModel> Messages { get; } = [];
 
     /// <summary>Gets or sets the text being typed.</summary>
+    /// <remarks>Typing in an RCS chat tells the other side, at most once every <see cref="TypingResend"/>.</remarks>
     public string Draft
     {
         get => _draft;
@@ -112,7 +138,44 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
             _draft = value ?? string.Empty;
             Raise(nameof(Draft));
             Raise(nameof(CanSend));
+
+            // Typing Out: RCS Only, Not More Often Than Every 10 Seconds
+            DateTimeOffset now = _time.GetUtcNow();
+            if (_draft.Length > 0 && _store.Find(ConversationId) is { IsRcs: true } && (_typingSentAt is null || now - _typingSentAt >= TypingResend))
+            {
+                _typingSentAt = now;
+                _ = SendTypingAsync();
+            }
         }
+    }
+
+    /// <summary>Gets the bubble being replied to, or null.</summary>
+    public MessageBubbleViewModel? ReplyingTo
+    {
+        get => _replyingTo;
+        private set
+        {
+            _replyingTo = value;
+            Raise(nameof(ReplyingTo));
+            Raise(nameof(IsReplying));
+        }
+    }
+
+    /// <summary>Gets whether a reply is being written (the reply chip shows).</summary>
+    public bool IsReplying => _replyingTo is not null;
+
+    /// <summary>Gets whether the other person is typing (the typing dots show).</summary>
+    public bool IsTyping
+    {
+        get => _isTyping;
+        private set => Set(ref _isTyping, value, nameof(IsTyping));
+    }
+
+    /// <summary>Gets whether the conversation is end-to-end encrypted (the lock shows).</summary>
+    public bool IsEncrypted
+    {
+        get => _isEncrypted;
+        private set => Set(ref _isEncrypted, value, nameof(IsEncrypted));
     }
 
     /// <summary>Gets whether the draft has something to send (not empty or only spaces).</summary>
@@ -274,10 +337,10 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
             int at = 0;
             foreach (ChatMessage m in page.Where(m => m.Kind != MessageKind.Tombstone))
             {
-                Messages.Insert(at++, new MessageBubbleViewModel(m));
+                Messages.Insert(at++, NewBubble(m));
             }
 
-            RefreshSenders();
+            RefreshBubbles();
             _fillOlder = at > 0;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -312,7 +375,11 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     /// <summary>
     /// Sends the draft: a bubble appears at once and the draft clears.
     /// </summary>
-    /// <remarks>A send that fails for any reason marks the bubble failed instead of throwing. Does nothing when <see cref="CanSend"/> is false.</remarks>
+    /// <remarks>
+    /// A send that fails for any reason marks the bubble failed instead of throwing. Does nothing when <see cref="CanSend"/> is false.
+    /// A reply to an RCS message carries its ID and the bubble shows the quote; a reply to SMS or MMS goes as plain
+    /// text, as the Go connector sends it (<c>handlematrix.go</c>). The reply clears once sent.
+    /// </remarks>
     /// <returns>A task that completes when the phone answered or the bubble failed.</returns>
     public async Task SendAsync()
     {
@@ -321,18 +388,74 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
-        string text   = Draft;
-        string tmp_id = GmClient.NewTmpId();
+        string text      = Draft;
+        string tmp_id    = GmClient.NewTmpId();
+        string? reply_to = ReplyingTo is { IsRcs: true, Id.Length: > 0 } quoted ? quoted.Id : null;
 
         Draft = string.Empty;
+        CancelReply();
 
         // Optimistic Bubble
-        var pending = new ChatMessage(string.Empty, tmp_id, ConversationId, string.Empty, _time.GetUtcNow(), true, MessageKind.Text, text, MessageStatusType.OutgoingSending);
-        var bubble  = new MessageBubbleViewModel(pending);
+        var pending = new ChatMessage(string.Empty, tmp_id, ConversationId, string.Empty, _time.GetUtcNow(), true, MessageKind.Text, text, MessageStatusType.OutgoingSending)
+        {
+            ReplyToId = reply_to ?? string.Empty,
+        };
+        var bubble = NewBubble(pending);
         Messages.Add(bubble);
-        RefreshSenders();
+        RefreshBubbles();
 
         await SendBubbleAsync(bubble);
+    }
+
+    /// <summary>
+    /// Starts a reply to a bubble: the reply chip shows until the next send or <see cref="CancelReply"/>.
+    /// </summary>
+    /// <param name="bubble">The bubble to reply to.</param>
+    public void StartReply(MessageBubbleViewModel bubble)
+    {
+        ArgumentNullException.ThrowIfNull(bubble);
+
+        ReplyingTo = bubble;
+    }
+
+    /// <summary>
+    /// Drops the reply being written (the reply chip's close button).
+    /// </summary>
+    public void CancelReply() => ReplyingTo = null;
+
+    /// <summary>
+    /// Reacts to a bubble: adds the emoji, switches my other emoji to it, or removes it when it is already mine.
+    /// </summary>
+    /// <remarks>The bubble changes when the phone's echo arrives, not before. A failure is logged by type and swallowed.</remarks>
+    /// <param name="bubble">The bubble reacted to.</param>
+    /// <param name="emoji">The emoji.</param>
+    /// <returns>A task that completes when the phone answered.</returns>
+    public async Task ReactAsync(MessageBubbleViewModel bubble, string emoji)
+    {
+        ArgumentNullException.ThrowIfNull(bubble);
+        ArgumentException.ThrowIfNullOrEmpty(emoji);
+
+        // Not Reported By The Phone Yet: Nothing To React To
+        if (bubble.Id.Length == 0)
+        {
+            return;
+        }
+
+        SendReactionRequest.Types.Action action = bubble.MyReaction switch
+        {
+            null                        => SendReactionRequest.Types.Action.Add,
+            var mine when mine == emoji => SendReactionRequest.Types.Action.Remove,
+            _                           => SendReactionRequest.Types.Action.Switch,
+        };
+
+        try
+        {
+            await _store.SendReactionAsync(ConversationId, bubble.Id, emoji, action, CancellationToken.None);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            _store.LogFailure("react", ex);
+        }
     }
 
     /// <summary>
@@ -350,20 +473,37 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
         }
 
         failed.MarkSending(GmClient.NewTmpId());
+        RefreshBubbles();
         await SendBubbleAsync(failed);
     }
 
-    // Sends A Bubble's Text; Any Failure (Phone, Refusal, Network, Timeout, Decode) Fails The Bubble Instead Of Escaping
+    // Sends A Bubble's Text (As A Reply When It Quotes One); Any Failure (Phone, Refusal, Network, Timeout, Decode)
+    // Fails The Bubble Instead Of Escaping
     private async Task SendBubbleAsync(MessageBubbleViewModel bubble)
     {
         try
         {
-            await _store.SendTextAsync(ConversationId, bubble.Text, bubble.TmpId, CancellationToken.None);
+            string? reply_to = bubble.ReplyToId.Length > 0 ? bubble.ReplyToId : null;
+            await _store.SendTextAsync(ConversationId, bubble.Text, bubble.TmpId, reply_to, CancellationToken.None);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             _store.LogFailure("send", ex);
             bubble.MarkFailed();
+            RefreshBubbles();
+        }
+    }
+
+    // Tells The Other Side I'm Typing; A Failure Is Only Logged
+    private async Task SendTypingAsync()
+    {
+        try
+        {
+            await _store.SendTypingAsync(ConversationId, CancellationToken.None);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            _store.LogFailure("send typing", ex);
         }
     }
 
@@ -374,8 +514,15 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     private void OnMessageArrived(object? sender, MessageArrivedEventArgs e)
     {
         ChatMessage m = e.Message;
-        if (m.ConversationId != ConversationId || m.Kind == MessageKind.Tombstone)
+        if (m.ConversationId != ConversationId)
         {
+            return;
+        }
+
+        // A System Line Shows No Bubble, But Can Switch Encryption On Or Off
+        if (m.Kind == MessageKind.Tombstone)
+        {
+            IsEncrypted = _store.IsEncrypted(ConversationId);
             return;
         }
 
@@ -385,8 +532,15 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
         }
         else
         {
-            Messages.Add(new MessageBubbleViewModel(m));
-            RefreshSenders();
+            Messages.Add(NewBubble(m));
+        }
+
+        RefreshBubbles();
+
+        // Their Message Ends Their Typing
+        if (!m.FromMe && m.ParticipantId == _typingParticipant)
+        {
+            StopTyping();
         }
 
         // Reading Along: Tell The Phone
@@ -397,6 +551,42 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     }
 
     private void OnResynced(object? sender, EventArgs e) => _post(() => _ = LoadAsync());
+
+    // Typing In: A Start Shows The Dots For Up To 15 Seconds, A Stop Hides Them At Once
+    private void OnTypingChanged(object? sender, TypingEventArgs e)
+    {
+        if (e.ConversationId != ConversationId)
+        {
+            return;
+        }
+
+        if (!e.IsTyping)
+        {
+            StopTyping();
+            return;
+        }
+
+        _typingParticipant = e.ParticipantId;
+        _typingUntil       = _time.GetUtcNow() + TypingTimeout;
+        IsTyping           = true;
+        _typingTimer.Change(TypingTimeout, Timeout.InfiniteTimeSpan);
+    }
+
+    // The Timer Fired; A Start That Came Since Moved The Deadline
+    private void OnTypingTimeout()
+    {
+        if (_time.GetUtcNow() >= _typingUntil)
+        {
+            StopTyping();
+        }
+    }
+
+    private void StopTyping()
+    {
+        _typingParticipant = string.Empty;
+        IsTyping           = false;
+        _typingTimer.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+    }
 
     private async Task MarkReadAsync(string messageId)
     {
@@ -416,6 +606,8 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     {
         _store.MessageArrived -= OnMessageArrived;
         _store.Resynced       -= OnResynced;
+        _store.TypingChanged  -= OnTypingChanged;
+        _typingTimer.Dispose();
     }
 
     // =========================================================================
@@ -438,7 +630,7 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
             MessageBubbleViewModel? bubble = FindBubble(m);
             if (bubble is null || wanted.Contains(bubble))
             {
-                bubble = new MessageBubbleViewModel(m);
+                bubble = NewBubble(m);
             }
             else
             {
@@ -475,7 +667,7 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
             }
         }
 
-        RefreshSenders();
+        RefreshBubbles();
     }
 
     private void ApplyConversation(ConversationInfo? c)
@@ -497,10 +689,23 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
         Raise(string.Empty);
     }
 
-    // Names The Sender On The First Received Bubble Of A Run, Groups Only
-    private void RefreshSenders()
+    // A Bubble That Knows The Conversation, So It Can Tell Which Reaction Is Mine
+    private MessageBubbleViewModel NewBubble(ChatMessage m) => new(m, _store.Find(ConversationId));
+
+    // Brings Everything That Depends On The Bubbles Up To Date After Any Change: Senders, Quotes, The Status Line And The Lock
+    private void RefreshBubbles()
     {
         ConversationInfo? c = _store.Find(ConversationId);
+
+        RefreshSenders(c);
+        RefreshQuotes(c);
+        RefreshStatus();
+        IsEncrypted = _store.IsEncrypted(ConversationId);
+    }
+
+    // Names The Sender On The First Received Bubble Of A Run, Groups Only
+    private void RefreshSenders(ConversationInfo? c)
+    {
         MessageBubbleViewModel? previous = null;
 
         foreach (MessageBubbleViewModel b in Messages)
@@ -512,6 +717,53 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
             // The Name Takes The Color Of The Sender's Letter Circle
             b.SetSender(name.Length > 0 ? name : null, AvatarParts.ColorOf(sender));
             previous = b;
+        }
+    }
+
+    // Quotes Come From The Bubbles Shown, Else The Store (Memory Or Database), Else "Original message" With No Sender.
+    // The Store Is Asked Once Per Bubble: Only While Its Quote Is Still Empty
+    private void RefreshQuotes(ConversationInfo? c)
+    {
+        foreach (MessageBubbleViewModel b in Messages.Where(b => b.HasQuote))
+        {
+            if (Messages.FirstOrDefault(q => q.Id == b.ReplyToId) is { } shown)
+            {
+                b.SetQuote(ChatFormat.SenderName(c?.FindParticipant(shown.ParticipantId)), shown.Text);
+            }
+            else if (b.QuoteText.Length == 0)
+            {
+                b.SetQuote(string.Empty, ChatCopy.OriginalMessage);
+                _ = LookUpQuoteAsync(b, b.ReplyToId);
+            }
+        }
+    }
+
+    // Fills A Quote From The Store When It Has The Message; The Database Answers Off The UI Thread, So The Result Is Posted
+    private async Task LookUpQuoteAsync(MessageBubbleViewModel bubble, string replyToId)
+    {
+        if (await _store.FindMessageAsync(ConversationId, replyToId) is not { } quoted)
+        {
+            return;
+        }
+
+        string text = quoted.Kind == MessageKind.Text ? quoted.Text : ChatFormat.KindLabel(quoted.Kind);
+        _post(() =>
+        {
+            if (bubble.ReplyToId == replyToId)
+            {
+                bubble.SetQuote(ChatFormat.SenderName(_store.Find(ConversationId)?.FindParticipant(quoted.ParticipantId)), text);
+            }
+        });
+    }
+
+    // "Sent", "Delivered" Or "Read" Under The Newest Of My Bubbles That Is Neither Failed Nor Sending; None Elsewhere
+    private void RefreshStatus()
+    {
+        MessageBubbleViewModel? newest = Messages.LastOrDefault(b => b.FromMe && !b.IsFailed && !b.IsSending);
+
+        foreach (MessageBubbleViewModel b in Messages)
+        {
+            b.SetStatusText(b == newest ? ChatFormat.StatusText(b.Status) : string.Empty);
         }
     }
 

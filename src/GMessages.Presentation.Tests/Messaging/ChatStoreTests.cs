@@ -167,7 +167,7 @@ public sealed class ChatStoreTests
         Assert.IsTrue(got!.IsNew, "the notified ring was cleared");
         Assert.AreEqual("me2", rig.Store.Me?.Id);
 
-        await rig.Store.SendTextAsync("c1", "hi", "tmp-1", Ct);
+        await rig.Store.SendTextAsync("c1", "hi", "tmp-1", null, Ct);
         SendMessageRequest req = rig.Client.Sent.Single();
         Assert.AreEqual("me2", req.MessagePayload.ParticipantID);
         Assert.IsNull(req.SIMPayload, "the old phone's SIMs are gone");
@@ -276,7 +276,7 @@ public sealed class ChatStoreTests
         Assert.AreEqual("edited", rig.Store.CachedMessages("c1")![1].Text);
 
         // Sent, Then Its Echo
-        await rig.Store.SendTextAsync("c1", "mine", "tmp-9", Ct);
+        await rig.Store.SendTextAsync("c1", "mine", "tmp-9", null, Ct);
         Assert.AreEqual("m1,m2,m3,tmp-9", Ids(rig.Store.CachedMessages("c1")));
         Message echo = Msg("m4", "c1", "mine", ts: 4_000);
         echo.TmpID = "tmp-9";
@@ -326,7 +326,7 @@ public sealed class ChatStoreTests
         Message echo = Msg("m2", "c1", "mine", ts: 2_000);
         echo.TmpID   = "tmp-9";
         rig.Client.SendAnswerGate = new TaskCompletionSource();
-        Task send = rig.Store.SendTextAsync("c1", "mine", "tmp-9", Ct);
+        Task send = rig.Store.SendTextAsync("c1", "mine", "tmp-9", null, Ct);
         await rig.Store.HandleEventAsync(new MessageReceived(echo, false));
         rig.Client.SendAnswerGate.SetResult();
         await send;
@@ -576,7 +576,7 @@ public sealed class ChatStoreTests
         settings.SIMCards.Add(Sim("sim-b", "bb"));
         await rig.Store.HandleEventAsync(new SettingsChanged(settings));
 
-        ChatMessage sent = await rig.Store.SendTextAsync("c1", "hello", "tmp-1", Ct);
+        ChatMessage sent = await rig.Store.SendTextAsync("c1", "hello", "tmp-1", null, Ct);
 
         SendMessageRequest req = rig.Client.Sent.Single();
         Assert.AreEqual("c1", req.ConversationID);
@@ -601,7 +601,59 @@ public sealed class ChatStoreTests
         await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1")));
         rig.Client.SendAnswer = new SendMessageResponse { Status = SendMessageResponse.Types.Status.Failure2 };
 
-        await Assert.ThrowsExactlyAsync<MessageSendException>(() => rig.Store.SendTextAsync("c1", "x", "t", Ct));
+        await Assert.ThrowsExactlyAsync<MessageSendException>(() => rig.Store.SendTextAsync("c1", "x", "t", null, Ct));
+    }
+
+    [TestMethod]
+    public async Task SendText_Reply_SetsReplyPayload()
+    {
+        using var rig = new Rig();
+        await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1")));
+
+        ChatMessage sent = await rig.Store.SendTextAsync("c1", "x", "t", "m1", Ct);
+        await rig.Store.SendTextAsync("c1", "y", "u", null, Ct);
+
+        Assert.AreEqual("m1", rig.Client.Sent[0].Reply?.MessageID);
+        Assert.AreEqual("m1", sent.ReplyToId);
+        Assert.IsNull(rig.Client.Sent[1].Reply);
+    }
+
+    [TestMethod]
+    public async Task SendReaction_UsesSimExceptForRemove_RefusalThrows()
+    {
+        using var rig = new Rig();
+        await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1", outgoing: "sim-b")));
+        var settings = new GMessages.Protocol.Proto.Settings();
+        settings.SIMCards.Add(Sim("sim-b", "bb"));
+        await rig.Store.HandleEventAsync(new SettingsChanged(settings));
+
+        await rig.Store.SendReactionAsync("c1", "m1", "\U0001F44D", SendReactionRequest.Types.Action.Add, Ct);
+        await rig.Store.SendReactionAsync("c1", "m1", "\U0001F44D", SendReactionRequest.Types.Action.Remove, Ct);
+
+        Assert.AreEqual("m1", rig.Client.Reactions[0].MessageID);
+        Assert.AreEqual(EmojiType.Like, rig.Client.Reactions[0].ReactionData.Type);
+        Assert.AreEqual(2, rig.Client.Reactions[0].SIMPayload.SIMNumber);
+        Assert.IsNull(rig.Client.Reactions[1].SIMPayload);
+
+        rig.Client.ReactionAnswer = new SendReactionResponse { Success = false };
+        MessageSendException refused = await Assert.ThrowsExactlyAsync<MessageSendException>(() => rig.Store.SendReactionAsync("c1", "m1", "\U0001F44D", SendReactionRequest.Types.Action.Add, Ct));
+        Assert.AreEqual("ReactionRefused", refused.Status);
+    }
+
+    [TestMethod]
+    public async Task SendTyping_UsesTheConversationSim()
+    {
+        using var rig = new Rig();
+        await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1", outgoing: "sim-b")));
+        var settings = new GMessages.Protocol.Proto.Settings();
+        settings.SIMCards.Add(Sim("sim-a", "a"));
+        settings.SIMCards.Add(Sim("sim-b", "bb"));
+        await rig.Store.HandleEventAsync(new SettingsChanged(settings));
+
+        await rig.Store.SendTypingAsync("c1", Ct);
+
+        Assert.AreEqual("c1", rig.Client.Typing.Single().ConversationId);
+        Assert.AreEqual(2, rig.Client.Typing.Single().Sim?.SIMNumber);
     }
 
     // =========================================================================
@@ -719,7 +771,7 @@ public sealed class ChatStoreTests
     {
         using var rig = new Rig();
 
-        await Assert.ThrowsExactlyAsync<MessageSendException>(() => rig.Store.SendTextAsync("nope", "x", "t", Ct));
+        await Assert.ThrowsExactlyAsync<MessageSendException>(() => rig.Store.SendTextAsync("nope", "x", "t", null, Ct));
 
         Assert.AreEqual(0, rig.Client.Sent.Count);
     }
@@ -732,7 +784,7 @@ public sealed class ChatStoreTests
         var raised = new List<ConversationInfo>();
         rig.Store.ConversationChanged += (_, c) => raised.Add(c);
 
-        await rig.Store.SendTextAsync("c5", "x", "t", Ct);
+        await rig.Store.SendTextAsync("c5", "x", "t", null, Ct);
 
         Assert.AreEqual("me1", rig.Client.Sent.Single().MessagePayload.ParticipantID);
         Assert.AreEqual("Bo", rig.Store.Find("c5")?.Name);
@@ -846,6 +898,40 @@ public sealed class ChatStoreTests
         Assert.AreEqual("fresh", (await rig.Store.FindMessageAsync("c1", "m2"))?.Text);
         Assert.AreEqual("saved", (await rig.Store.FindMessageAsync("c1", "m1"))?.Text);
         Assert.IsNull(await rig.Store.FindMessageAsync("c1", "m9"));
+    }
+
+    /// <summary>
+    /// An empty ID finds nothing, not a still-sending message (which has no ID yet).
+    /// </summary>
+    [TestMethod]
+    public async Task Store_FindMessage_EmptyId_FindsNothing()
+    {
+        using var rig = new Rig();
+        await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1")));
+        rig.Client.MessagesPage = PageOf(Msg("m1", "c1"));
+        await rig.Store.LoadMessagesAsync("c1", null, Ct);
+        await rig.Store.SendTextAsync("c1", "sending", "tmp-1", null, Ct);
+
+        Assert.IsNull(await rig.Store.FindMessageAsync("c1", string.Empty));
+    }
+
+    /// <summary>
+    /// A page that lands after a reset leaves no lock state of the old account.
+    /// </summary>
+    [TestMethod]
+    public async Task Store_IsEncrypted_ResetMidLoad_KeepsNoLock()
+    {
+        using var rig           = new Rig();
+        rig.Client.MessagesPage = PageOf(Tomb("t1", "c1", MessageStatusType.TombstoneProtocolSwitchToEncryptedRcs, 1_000_000));
+        var gate                = new TaskCompletionSource();
+        rig.Client.FetchGate    = gate;
+
+        Task load = rig.Store.LoadMessagesAsync("c1", null, Ct);
+        rig.Store.Reset();
+        gate.SetResult();
+        await load;
+
+        Assert.IsFalse(rig.Store.IsEncrypted("c1"));
     }
 
     [TestMethod]

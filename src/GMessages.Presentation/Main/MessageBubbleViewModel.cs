@@ -110,6 +110,9 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     /// <summary>Gets the first web link in the text, or null.</summary>
     public Uri? LinkUrl { get; private set; }
 
+    // The Phone's Delivery Status, For The Chat's Status Line
+    internal MessageStatusType Status { get; private set; }
+
     /// <summary>
     /// Copies new message details into the bubble (an echo or a status change).
     /// </summary>
@@ -200,6 +203,7 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         Time          = m.Time.ToLocalTime().ToString("t", CultureInfo.CurrentCulture);
         IsFailed      = m.IsFailed;
         IsSending     = m.Status == MessageStatusType.OutgoingSending;
+        Status        = m.Status;
         IsRcs         = m.IsRcs;
         ReactionsText = ChatFormat.ReactionSummary(m.Reactions);
         MyReaction    = m.Reactions.FirstOrDefault(r => r.ParticipantIds.Any(IsMine))?.Emoji;

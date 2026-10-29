@@ -239,7 +239,7 @@ internal sealed class NotificationService(ChatStore store, AppSettings settings,
 
         try
         {
-            await store.SendTextAsync(args.ConversationId, text, GmClient.NewTmpId(), CancellationToken.None);
+            await store.SendTextAsync(args.ConversationId, text, GmClient.NewTmpId(), null, CancellationToken.None);
         }
 #pragma warning disable CA1031 // Any send failure (not connected, phone refused, timeout) gets the same toast
         catch (Exception ex)

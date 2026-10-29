@@ -5,6 +5,7 @@ using GMessages.Protocol.Proto;
 using GMessages.Protocol.Rpc;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 
 namespace GMessages.Presentation.Tests.Main;
 
@@ -20,14 +21,16 @@ public sealed class ChatViewModelTests
 
     private static Message Mine(string id, string text, string tmp, MessageStatusType status) => Msg(id, text, tmp, "me", status);
 
-    private static ChatViewModel NewChat(MainRig rig, Conversation? conv = null, params Message[] page)
+    private static ChatViewModel NewChat(MainRig rig, Conversation? conv = null, params Message[] page) => NewChat(rig, TimeProvider.System, conv, page);
+
+    private static ChatViewModel NewChat(MainRig rig, TimeProvider time, Conversation? conv = null, params Message[] page)
     {
         rig.Client.Conversations["a"] = conv ?? MainRig.Conv("a", "Ann");
         rig.Client.MessagesPage = new ListMessagesResponse();
 
         // The Phone Answers Newest First
         rig.Client.MessagesPage.Messages.AddRange(page.Reverse());
-        return new ChatViewModel(rig.Store, "a", TimeProvider.System, a => a());
+        return new ChatViewModel(rig.Store, "a", time, a => a());
     }
 
     [TestMethod]
@@ -778,5 +781,285 @@ public sealed class ChatViewModelTests
         await Task.Delay(50);
         Assert.AreEqual("one", string.Join(",", chat.Messages.Select(b => b.Text)));
         Directory.Delete(Path.GetDirectoryName(path)!, recursive: true);
+    }
+
+    // =========================================================================
+    // REACT, REPLY, STATUS, TYPING AND ENCRYPTION
+    // =========================================================================
+
+    private const string Like  = "\U0001F44D";
+    private const string Laugh = "\U0001F602";
+
+    // An RCS Chat Sent As "me", With A SIM For "me", So A Request's SIM Can Be Checked
+    private static async Task<ChatViewModel> RcsChat(MainRig rig, TimeProvider time, params Message[] page)
+    {
+        Conversation conv      = MainRig.Conv("a", "Ann");
+        conv.DefaultOutgoingID = "me";
+        conv.Type              = ConversationType.Rcs;
+
+        var settings = new GMessages.Protocol.Proto.Settings();
+        settings.SIMCards.Add(new SIMCard { SIMData = new SIMData { SIMPayload = new SIMPayload { SIMNumber = 3 } }, SIMParticipant = new SIMParticipant { ID = "me" } });
+        await rig.Store.HandleEventAsync(new SettingsChanged(settings));
+        await rig.Live(conv);
+
+        ChatViewModel chat = NewChat(rig, time, conv, page);
+        await chat.LoadAsync();
+        return chat;
+    }
+
+    private static Message Reacted(string id, string emoji, string by)
+    {
+        Message m = Msg(id, "one");
+        var entry = new ReactionEntry { Data = GMessages.Protocol.EmojiTypes.MakeReactionData(emoji) };
+        entry.ParticipantIDs.Add(by);
+        m.Reactions.Add(entry);
+        return m;
+    }
+
+    [TestMethod]
+    public async Task React_None_SendsAdd()
+    {
+        using var rig            = new MainRig();
+        using ChatViewModel chat = await RcsChat(rig, TimeProvider.System, Reacted("m1", Laugh, "p-a"));
+
+        await chat.ReactAsync(chat.Messages[0], Like);
+
+        SendReactionRequest sent = rig.Client.Reactions.Single();
+        Assert.AreEqual("m1", sent.MessageID);
+        Assert.AreEqual(SendReactionRequest.Types.Action.Add, sent.Action);
+        Assert.AreEqual(EmojiType.Like, sent.ReactionData.Type);
+        Assert.AreEqual(3, sent.SIMPayload.SIMNumber);
+        Assert.IsNull(chat.Messages[0].MyReaction, "not optimistic: the phone's echo changes the bubble");
+    }
+
+    [TestMethod]
+    public async Task React_Same_SendsRemoveWithoutSim()
+    {
+        using var rig            = new MainRig();
+        using ChatViewModel chat = await RcsChat(rig, TimeProvider.System, Reacted("m1", Like, "me"));
+        Assert.AreEqual(Like, chat.Messages[0].MyReaction);
+
+        await chat.ReactAsync(chat.Messages[0], Like);
+
+        SendReactionRequest sent = rig.Client.Reactions.Single();
+        Assert.AreEqual(SendReactionRequest.Types.Action.Remove, sent.Action);
+        Assert.IsNull(sent.SIMPayload);
+    }
+
+    [TestMethod]
+    public async Task React_Other_SendsSwitch()
+    {
+        using var rig            = new MainRig();
+        using ChatViewModel chat = await RcsChat(rig, TimeProvider.System, Reacted("m1", Like, "me"));
+
+        await chat.ReactAsync(chat.Messages[0], Laugh);
+
+        SendReactionRequest sent = rig.Client.Reactions.Single();
+        Assert.AreEqual(SendReactionRequest.Types.Action.Switch, sent.Action);
+        Assert.AreEqual(EmojiType.Laugh, sent.ReactionData.Type);
+        Assert.AreEqual(3, sent.SIMPayload.SIMNumber);
+
+        // A Refusal Or Failure Is Logged And Swallowed
+        rig.Client.ReactionAnswer = new SendReactionResponse { Success = false };
+        await chat.ReactAsync(chat.Messages[0], Laugh);
+        rig.Client.ReactionThrows = new PhoneNotRespondingException();
+        await chat.ReactAsync(chat.Messages[0], Laugh);
+        Assert.AreEqual(3, rig.Client.Reactions.Count);
+    }
+
+    [TestMethod]
+    public async Task Reply_ToRcs_SendsReplyPayload()
+    {
+        using var rig            = new MainRig();
+        using ChatViewModel chat = await RcsChat(rig, TimeProvider.System, Msg("m1", "one"));
+
+        chat.StartReply(chat.Messages[0]);
+        Assert.IsTrue(chat.IsReplying);
+        chat.Draft = "answer";
+        await chat.SendAsync();
+
+        Assert.AreEqual("m1", rig.Client.Sent.Single().Reply?.MessageID);
+
+        // The Optimistic Bubble Shows The Quote
+        MessageBubbleViewModel sent = chat.Messages[^1];
+        Assert.IsTrue(sent.HasQuote);
+        Assert.AreEqual("one", sent.QuoteText);
+        Assert.AreEqual("Ann", sent.QuoteSender);
+    }
+
+    [TestMethod]
+    public async Task Reply_ToSms_SendsPlainText()
+    {
+        using var rig = new MainRig();
+        Message sms   = Msg("m1", "one");
+        sms.Type      = 1;
+        using ChatViewModel chat = await RcsChat(rig, TimeProvider.System, sms);
+
+        chat.StartReply(chat.Messages[0]);
+        chat.Draft = "answer";
+        await chat.SendAsync();
+
+        Assert.IsNull(rig.Client.Sent.Single().Reply);
+        Assert.IsFalse(chat.Messages[^1].HasQuote);
+    }
+
+    [TestMethod]
+    public async Task Reply_ClearsAfterSend()
+    {
+        using var rig            = new MainRig();
+        using ChatViewModel chat = await RcsChat(rig, TimeProvider.System, Msg("m1", "one"));
+        chat.StartReply(chat.Messages[0]);
+        chat.CancelReply();
+        Assert.IsFalse(chat.IsReplying);
+
+        chat.StartReply(chat.Messages[0]);
+        chat.Draft = "answer";
+        await chat.SendAsync();
+
+        Assert.IsFalse(chat.IsReplying);
+        Assert.IsNull(chat.ReplyingTo);
+
+        chat.Draft = "again";
+        await chat.SendAsync();
+        Assert.IsNull(rig.Client.Sent[1].Reply);
+    }
+
+    [TestMethod]
+    public async Task Quote_FromShownBubble()
+    {
+        using var rig      = new MainRig();
+        Message reply      = Msg("m2", "two");
+        reply.ReplyMessage = new ReplyMessage { MessageID = "m1" };
+        using ChatViewModel chat = await RcsChat(rig, TimeProvider.System, Msg("m1", "one"), reply);
+
+        Assert.AreEqual("one", chat.Messages[1].QuoteText);
+        Assert.AreEqual("Ann", chat.Messages[1].QuoteSender);
+    }
+
+    [TestMethod]
+    public async Task Quote_Unknown_UsesOriginalMessageCopy()
+    {
+        using var rig      = new MainRig();
+        Message reply      = Msg("m2", "two");
+        reply.ReplyMessage = new ReplyMessage { MessageID = "gone" };
+        using ChatViewModel chat = await RcsChat(rig, TimeProvider.System, reply);
+
+        Assert.AreEqual(ChatCopy.OriginalMessage, chat.Messages[0].QuoteText);
+        Assert.AreEqual(string.Empty, chat.Messages[0].QuoteSender);
+    }
+
+    [TestMethod]
+    public async Task Status_OnlyNewestSentBubble()
+    {
+        using var rig            = new MainRig();
+        using ChatViewModel chat = await RcsChat(rig, TimeProvider.System, Mine("m1", "one", "t1", MessageStatusType.OutgoingDelivered), Msg("m2", "two"));
+        Assert.AreEqual(ChatCopy.Delivered, chat.Messages[0].StatusText);
+
+        // A Newer Send Still Sending: The Older One Keeps Its Status
+        chat.Draft = "three";
+        await chat.SendAsync();
+        MessageBubbleViewModel sent = chat.Messages[^1];
+        Assert.AreEqual(ChatCopy.Delivered, chat.Messages[0].StatusText);
+        Assert.AreEqual(string.Empty, sent.StatusText);
+
+        // The Phone's Echo: The Newer One Takes The Status, The Older One Loses It
+        await rig.LiveMessage(Mine("m3", "three", sent.TmpId, MessageStatusType.OutgoingComplete));
+        Assert.AreEqual(string.Empty, chat.Messages[0].StatusText);
+        Assert.AreEqual(ChatCopy.Sent, sent.StatusText);
+
+        await rig.LiveMessage(Mine("m3", "three", sent.TmpId, MessageStatusType.OutgoingDisplayed));
+        Assert.AreEqual(ChatCopy.Read, sent.StatusText);
+    }
+
+    private static TypingChanged Typing(bool started) => new(new TypingData
+    {
+        ConversationID = "a",
+        User           = new User { Number = "+15550100" },
+        Type           = started ? TypingTypes.StartedTyping : TypingTypes.StoppedTyping,
+    });
+
+    // Ann Types From +15550100
+    private static async Task<ChatViewModel> TypingChat(MainRig rig, TimeProvider time)
+    {
+        ChatViewModel chat             = await RcsChat(rig, time);
+        Conversation conv              = rig.Client.Conversations["a"];
+        conv.Participants[1].ID.Number = "+15550100";
+        await rig.Live(conv);
+        return chat;
+    }
+
+    [TestMethod]
+    public async Task TypingIn_ClearsAfter15Seconds()
+    {
+        var time                 = new FakeTimeProvider(MainRig.Now);
+        using var rig            = new MainRig();
+        using ChatViewModel chat = await TypingChat(rig, time);
+
+        await rig.Store.HandleEventAsync(Typing(true));
+        Assert.IsTrue(chat.IsTyping);
+        time.Advance(TimeSpan.FromSeconds(14));
+        Assert.IsTrue(chat.IsTyping);
+        time.Advance(TimeSpan.FromSeconds(1));
+        Assert.IsFalse(chat.IsTyping);
+
+        // A Stop Clears It At Once
+        await rig.Store.HandleEventAsync(Typing(true));
+        Assert.IsTrue(chat.IsTyping);
+        await rig.Store.HandleEventAsync(Typing(false));
+        Assert.IsFalse(chat.IsTyping);
+    }
+
+    [TestMethod]
+    public async Task TypingIn_ClearsOnTheirMessage()
+    {
+        var time                 = new FakeTimeProvider(MainRig.Now);
+        using var rig            = new MainRig();
+        using ChatViewModel chat = await TypingChat(rig, time);
+
+        await rig.Store.HandleEventAsync(Typing(true));
+        await rig.LiveMessage(Mine("m5", "mine", "t5", MessageStatusType.OutgoingComplete));
+        Assert.IsTrue(chat.IsTyping, "my own message doesn't stop theirs");
+
+        await rig.LiveMessage(Msg("m6", "theirs"));
+        Assert.IsFalse(chat.IsTyping);
+    }
+
+    [TestMethod]
+    public async Task TypingOut_RcsOnly_AtMostEvery10Seconds()
+    {
+        var time                 = new FakeTimeProvider(MainRig.Now);
+        using var rig            = new MainRig();
+        using ChatViewModel chat = await RcsChat(rig, time);
+
+        chat.Draft = "h";
+        chat.Draft = "he";
+        Assert.AreEqual(1, rig.Client.Typing.Count);
+        Assert.AreEqual("a", rig.Client.Typing[0].ConversationId);
+        Assert.AreEqual(3, rig.Client.Typing[0].Sim?.SIMNumber);
+
+        time.Advance(TimeSpan.FromSeconds(10));
+        chat.Draft = string.Empty;
+        Assert.AreEqual(1, rig.Client.Typing.Count, "clearing the draft isn't typing");
+        chat.Draft = "hey";
+        Assert.AreEqual(2, rig.Client.Typing.Count);
+
+        // An SMS Chat Never Says It
+        using var sms_rig            = new MainRig();
+        using ChatViewModel sms_chat = NewChat(sms_rig, time);
+        await sms_chat.LoadAsync();
+        sms_chat.Draft = "h";
+        Assert.AreEqual(0, sms_rig.Client.Typing.Count);
+    }
+
+    [TestMethod]
+    public async Task IsEncrypted_FollowsStore()
+    {
+        using var rig            = new MainRig();
+        Message on               = Msg("t1", string.Empty, status: MessageStatusType.TombstoneProtocolSwitchToEncryptedRcs, ts: 1_000_000);
+        using ChatViewModel chat = await RcsChat(rig, TimeProvider.System, on);
+        Assert.IsTrue(chat.IsEncrypted);
+
+        await rig.LiveMessage(Msg("t2", string.Empty, status: MessageStatusType.TombstoneProtocolSwitchToText, ts: 2_000_000));
+        Assert.IsFalse(chat.IsEncrypted);
     }
 }

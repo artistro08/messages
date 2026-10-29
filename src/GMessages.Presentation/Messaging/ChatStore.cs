@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using GMessages.Presentation.Connection;
+using GMessages.Protocol;
 using GMessages.Protocol.Events;
 using GMessages.Protocol.Proto;
 using Microsoft.Extensions.Logging;
@@ -49,7 +50,7 @@ public sealed partial class ChatStore : IDisposable
     // Bumped By Reset: Work Started Under An Older Generation Belongs To The Old Account And Is Dropped
     private int _generation;
 
-    // Held By Reset While It Bumps The Generation And Clears The Conversations, And By LoadSavedAsync While It Fills Them
+    // Held By Reset While It Bumps The Generation And Clears The Conversations, And By LoadSavedAsync And NoteEncryption While They Fill Them
     private readonly Lock _resetLock = new();
 
     // Database Calls, Run One After Another Off The Caller's Thread
@@ -367,6 +368,12 @@ public sealed partial class ChatStore : IDisposable
     /// <returns>The message, or null when neither memory nor the database has it.</returns>
     public async Task<ChatMessage?> FindMessageAsync(string conversationId, string messageId)
     {
+        // An Empty ID Would Match A Message Still Being Sent
+        if (messageId.Length == 0)
+        {
+            return null;
+        }
+
         lock (_pagesLock)
         {
             if (_pages.TryGetValue(conversationId, out List<ChatMessage>? page) && page.FirstOrDefault(m => m.Id == messageId) is { } hit)
@@ -375,7 +382,7 @@ public sealed partial class ChatStore : IDisposable
             }
         }
 
-        if (_database is null || messageId.Length == 0)
+        if (_database is null)
         {
             return null;
         }
@@ -406,30 +413,18 @@ public sealed partial class ChatStore : IDisposable
     /// <param name="conversationId">The conversation ID.</param>
     /// <param name="text">The text.</param>
     /// <param name="tmpId">The temporary ID (<c>GmClient.NewTmpId()</c>), so the echo can be matched to the pending bubble.</param>
+    /// <param name="replyToId">The ID of the message this one replies to (RCS only), or null for a plain message.</param>
     /// <param name="ct">Cancels the wait.</param>
     /// <returns>The pending message as sent.</returns>
     /// <exception cref="MessagingUnavailableException">Not connected.</exception>
     /// <exception cref="MessageSendException">The phone answered with a status other than success.</exception>
-    public async Task<ChatMessage> SendTextAsync(string conversationId, string text, string tmpId, CancellationToken ct)
+    public async Task<ChatMessage> SendTextAsync(string conversationId, string text, string tmpId, string? replyToId, CancellationToken ct)
     {
         IMessagingClient client = RequireClient();
 
-        // Look Up The Conversation, Fetching It When Not Cached
-        int generation                 = Generation;
-        ConversationInfo? conversation = Find(conversationId);
-        if (conversation is null)
-        {
-            Conversation? fetched = await client.GetConversationAsync(conversationId, ct);
-            if (fetched is null || generation != Generation)
-            {
-                throw new MessageSendException("ConversationNotFound");
-            }
-
-            conversation = CacheConversation(fetched, generation);
-        }
-
-        string outgoing_id = conversation.DefaultOutgoingId;
-        SIMCard? sim       = _sims.FirstOrDefault(s => s.SIMParticipant?.ID == outgoing_id);
+        int generation                = Generation;
+        ConversationInfo conversation = await RequireConversationAsync(client, conversationId, generation, ct);
+        string outgoing_id            = conversation.DefaultOutgoingId;
 
         var request = new SendMessageRequest
         {
@@ -441,11 +436,17 @@ public sealed partial class ChatStore : IDisposable
                 ParticipantID  = outgoing_id,
                 TmpID2         = tmpId,
             },
-            SIMPayload = sim?.SIMData?.SIMPayload,
+            SIMPayload = SimOf(conversation),
             TmpID      = tmpId,
             ForceRCS   = false,
         };
         request.MessagePayload.MessageInfo.Add(new MessageInfo { MessageContent = new MessageContent { Content = text } });
+
+        // A Reply Carries The Quoted Message's ID (handlematrix.go)
+        if (replyToId is not null)
+        {
+            request.Reply = new ReplyPayload { MessageID = replyToId };
+        }
 
         SendMessageResponse response = await client.SendMessageAsync(request, ct).ConfigureAwait(false);
         if (response.Status != SendMessageResponse.Types.Status.Success)
@@ -454,7 +455,10 @@ public sealed partial class ChatStore : IDisposable
             throw new MessageSendException(response.Status.ToString());
         }
 
-        var pending = new ChatMessage(string.Empty, tmpId, conversationId, outgoing_id, DateTimeOffset.UtcNow, true, MessageKind.Text, text, MessageStatusType.OutgoingSending);
+        var pending = new ChatMessage(string.Empty, tmpId, conversationId, outgoing_id, DateTimeOffset.UtcNow, true, MessageKind.Text, text, MessageStatusType.OutgoingSending)
+        {
+            ReplyToId = replyToId ?? string.Empty,
+        };
         if (generation == Generation)
         {
             CacheMessage(pending);
@@ -462,6 +466,83 @@ public sealed partial class ChatStore : IDisposable
 
         return pending;
     }
+
+    /// <summary>
+    /// Adds, switches or removes my reaction on a message, the way the bridge does.
+    /// </summary>
+    /// <remarks>
+    /// Ported from <c>HandleMatrixReaction</c> and <c>HandleMatrixReactionRemove</c> in the Go connector: the emoji
+    /// maps to its LibGM type, and the SIM is the conversation's (as <see cref="SendTextAsync"/> picks it), except a
+    /// removal, which sends none. The bubble changes when the phone's echo arrives.
+    /// </remarks>
+    /// <param name="conversationId">The conversation ID.</param>
+    /// <param name="messageId">The message reacted to.</param>
+    /// <param name="emoji">The emoji.</param>
+    /// <param name="action">Add, switch (from another emoji of mine) or remove.</param>
+    /// <param name="ct">Cancels the wait.</param>
+    /// <returns>A task that completes when the phone answered.</returns>
+    /// <exception cref="MessagingUnavailableException">Not connected.</exception>
+    /// <exception cref="MessageSendException">The phone refused the reaction, or the conversation is unknown.</exception>
+    public async Task SendReactionAsync(string conversationId, string messageId, string emoji, SendReactionRequest.Types.Action action, CancellationToken ct)
+    {
+        IMessagingClient client = RequireClient();
+
+        ConversationInfo conversation = await RequireConversationAsync(client, conversationId, Generation, ct);
+
+        var request = new SendReactionRequest
+        {
+            MessageID    = messageId,
+            ReactionData = EmojiTypes.MakeReactionData(emoji),
+            Action       = action,
+            SIMPayload   = action == SendReactionRequest.Types.Action.Remove ? null : SimOf(conversation),
+        };
+
+        SendReactionResponse response = await client.SendReactionAsync(request, ct).ConfigureAwait(false);
+        if (!response.Success)
+        {
+            LogSendRefused(conversationId, "ReactionRefused");
+            throw new MessageSendException("ReactionRefused");
+        }
+    }
+
+    /// <summary>
+    /// Tells the other side of a conversation that I'm typing.
+    /// </summary>
+    /// <remarks>Sent with the conversation's SIM, as <see cref="SendTextAsync"/> picks it. The phone sends no answer.</remarks>
+    /// <param name="conversationId">The conversation ID.</param>
+    /// <param name="ct">Cancels the wait.</param>
+    /// <returns>A task that completes when the request was sent.</returns>
+    /// <exception cref="MessagingUnavailableException">Not connected.</exception>
+    /// <exception cref="MessageSendException">The conversation is unknown.</exception>
+    public async Task SendTypingAsync(string conversationId, CancellationToken ct)
+    {
+        IMessagingClient client = RequireClient();
+
+        ConversationInfo conversation = await RequireConversationAsync(client, conversationId, Generation, ct);
+        await client.SetTypingAsync(conversationId, SimOf(conversation), ct).ConfigureAwait(false);
+    }
+
+    // Looks Up The Conversation, Fetching It When Not Cached. No ConfigureAwait(false): ConversationChanged Must Be
+    // Raised On The Caller Thread
+    private async Task<ConversationInfo> RequireConversationAsync(IMessagingClient client, string conversationId, int generation, CancellationToken ct)
+    {
+        if (Find(conversationId) is { } cached)
+        {
+            return cached;
+        }
+
+        Conversation? fetched = await client.GetConversationAsync(conversationId, ct);
+        if (fetched is null || generation != Generation)
+        {
+            throw new MessageSendException("ConversationNotFound");
+        }
+
+        return CacheConversation(fetched, generation);
+    }
+
+    // The SIM Card Of The Participant The Conversation Sends As (From The Last Settings Event), Or Null
+    private SIMPayload? SimOf(ConversationInfo conversation) =>
+        _sims.FirstOrDefault(s => s.SIMParticipant?.ID == conversation.DefaultOutgoingId)?.SIMData?.SIMPayload;
 
     /// <summary>
     /// Tells the phone a conversation was read up to a message, then marks the cached conversation read.
@@ -849,8 +930,17 @@ public sealed partial class ChatStore : IDisposable
             return;
         }
 
+        // Under The Reset Lock, So Reset Can't Land Between The Check And The Write (As In LoadSavedAsync)
         (bool Encrypted, long At) state = (newest.EncryptionChange == true, newest.Time.ToUnixTimeMilliseconds() * 1000);
-        _encryption.AddOrUpdate(conversationId, state, (_, old) => state.At > old.At ? state : old);
+        lock (_resetLock)
+        {
+            if (generation != Generation)
+            {
+                return;
+            }
+
+            _encryption.AddOrUpdate(conversationId, state, (_, old) => state.At > old.At ? state : old);
+        }
 
         _ = Enqueue(database =>
         {
