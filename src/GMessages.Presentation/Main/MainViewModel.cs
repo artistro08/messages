@@ -27,6 +27,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     private readonly TimeProvider _time;
     private readonly Action<Action> _post;
 
+    // Fetches Link Preview Cards For The Open Chat; Null Means None
+    private readonly LinkPreviewer? _previews;
+
     private ConversationListViewModel? _spamBlocked;
     private ConnectionState _state;
     private bool _phoneSilent;
@@ -41,8 +44,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// <param name="store">Loads the conversations.</param>
     /// <param name="time">Gives the current time for the list times.</param>
     /// <param name="post">Runs an action on the UI thread.</param>
-    /// <exception cref="ArgumentNullException">An argument is null.</exception>
-    public MainViewModel(ConnectionController connection, ChatStore store, TimeProvider time, Action<Action> post)
+    /// <param name="previews">Fetches link preview cards for the open chat; null for none. The caller owns it.</param>
+    /// <exception cref="ArgumentNullException">An argument other than <paramref name="previews"/> is null.</exception>
+    public MainViewModel(ConnectionController connection, ChatStore store, TimeProvider time, Action<Action> post, LinkPreviewer? previews = null)
     {
         ArgumentNullException.ThrowIfNull(connection);
         ArgumentNullException.ThrowIfNull(store);
@@ -53,6 +57,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _store      = store;
         _time       = time;
         _post       = post;
+        _previews   = previews;
         _state      = connection.State;
         Inbox       = new ConversationListViewModel(store, ConversationFolder.Inbox, time, post);
 
@@ -258,7 +263,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
         if (conversationId is not null)
         {
-            Chat = new ChatViewModel(_store, conversationId, _time, _post);
+            Chat = new ChatViewModel(_store, conversationId, _time, _post, _previews);
             _ = Chat.LoadAsync();
         }
 

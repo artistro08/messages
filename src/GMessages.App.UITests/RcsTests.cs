@@ -60,6 +60,19 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
+    /// A link in an inbox chat gets a preview card named by the linked page's <c>og:title</c>.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task LinkMessage_ShowsPreviewCard()
+    {
+        await OpenChatAsync("Row.c-ann");
+
+        Message link = Server.Phone.PushIncoming("c-ann", $"look http://127.0.0.1:{Server.BaseUrl.Port}/preview-page");
+        App.WaitForText("Preview." + link.MessageID, FakeGoogleServer.PreviewPageTitle);
+    }
+
+    /// <summary>
     /// Ann's encrypted chat shows the lock after her name; Team's SMS group doesn't.
     /// </summary>
     /// <returns>A task for the test.</returns>

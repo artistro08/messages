@@ -123,8 +123,9 @@ public sealed partial class Avatar : UserControl
     /// Turns photo bytes into an image, decoded small.
     /// </summary>
     /// <param name="photo">The image bytes.</param>
+    /// <param name="decodeWidth">The width to decode to, in effective pixels; 0 for an avatar's.</param>
     /// <returns>The image, or null when the bytes are not an image.</returns>
-    public static async Task<ImageSource?> ToImageAsync(byte[] photo)
+    public static async Task<ImageSource?> ToImageAsync(byte[] photo, int decodeWidth = 0)
     {
         ArgumentNullException.ThrowIfNull(photo);
 
@@ -134,7 +135,7 @@ public sealed partial class Avatar : UserControl
             await stream.WriteAsync(photo.AsBuffer());
             stream.Seek(0);
 
-            var image = new BitmapImage { DecodePixelWidth = PhotoDecodeWidth, DecodePixelType = DecodePixelType.Logical };
+            var image = new BitmapImage { DecodePixelWidth = decodeWidth > 0 ? decodeWidth : PhotoDecodeWidth, DecodePixelType = DecodePixelType.Logical };
             await image.SetSourceAsync(stream);
             return image;
         }

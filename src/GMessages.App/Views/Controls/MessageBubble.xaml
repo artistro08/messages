@@ -4,7 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:GMessages.App.Views.Controls">
 
-    <!-- Bubble: sender name, the quote and text on its colored back, the reaction pill on its bottom corner, then the
+    <!-- Bubble: sender name, the quote, text and link preview on its colored back, the reaction pill on its bottom corner, then the
          time (once clicked) or the retry link, and the status line -->
     <StackPanel
         x:Name="Root"
@@ -141,6 +141,41 @@
                     IsTextSelectionEnabled="True"
                     Text="{x:Bind Bubble.Text, Mode=OneWay}"
                     TextWrapping="Wrap" />
+
+                <!-- Link Preview: the page's image, its title (two lines at most) and its site in caption style; a click,
+                     Enter or Space opens the link in the default browser -->
+                <Button
+                    x:Name="Preview"
+                    Margin="0,8,0,0"
+                    Padding="0"
+                    HorizontalContentAlignment="Stretch"
+                    AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Preview.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                    AutomationProperties.Name="{x:Bind Bubble.Preview.Title, Mode=OneWay, FallbackValue=''}"
+                    Click="OnPreviewClick"
+                    CornerRadius="8"
+                    Visibility="{x:Bind Bubble.HasPreview, Mode=OneWay, FallbackValue=Collapsed}">
+                    <StackPanel MaxWidth="240">
+                        <Image
+                            x:Name="PreviewImage"
+                            MaxWidth="240"
+                            Stretch="Uniform"
+                            Visibility="Collapsed" />
+                        <StackPanel Padding="10,6,10,8" Spacing="2">
+                            <TextBlock
+                                MaxLines="2"
+                                Style="{StaticResource BodyStrongTextBlockStyle}"
+                                Text="{x:Bind Bubble.Preview.Title, Mode=OneWay, FallbackValue=''}"
+                                TextTrimming="CharacterEllipsis"
+                                TextWrapping="Wrap" />
+                            <TextBlock
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                MaxLines="1"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Text="{x:Bind Bubble.Preview.Site, Mode=OneWay, FallbackValue=''}"
+                                TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                    </StackPanel>
+                </Button>
             </StackPanel>
         </Border>
 

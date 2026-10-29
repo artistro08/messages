@@ -80,6 +80,26 @@ public sealed class FakeGoogleServer : IAsyncDisposable
         </html>
         """;
 
+    /// <summary>The <c>og:title</c> of the page at <c>/preview-page</c>, which a link preview card shows.</summary>
+    public const string PreviewPageTitle = "Fake Preview Page";
+
+    // A Linked Page For The Link Preview Card
+    private const string PreviewPage = $"""
+        <!doctype html>
+        <html>
+            <head>
+                <title>Fallback Title</title>
+                <meta property="og:title" content="{PreviewPageTitle}">
+                <meta property="og:site_name" content="Fake Site">
+            </head>
+            <body>
+                <p>
+                    Preview
+                </p>
+            </body>
+        </html>
+        """;
+
     private readonly HttpListener _listener;
     private readonly CancellationTokenSource _stop = new();
     private readonly Task _acceptLoop;
@@ -290,6 +310,10 @@ public sealed class FakeGoogleServer : IAsyncDisposable
                     int rotation = Interlocked.Increment(ref _rotations);
                     context.Response.Headers.Add("Set-Cookie", $"__Secure-1PSIDTS=fake-1psidts-rotated-{rotation}; Domain=.google.com; Max-Age=31536000; Path=/; Secure; HttpOnly");
                     await RespondAsync(context.Response, 200, "application/json", "[]"u8.ToArray());
+                    break;
+
+                case "/preview-page" when request.HttpMethod == "GET":
+                    await RespondAsync(context.Response, 200, "text/html; charset=utf-8", Encoding.UTF8.GetBytes(PreviewPage));
                     break;
 
                 case "/web/config":

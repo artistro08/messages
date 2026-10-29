@@ -1,8 +1,10 @@
+using System.Net;
 using GMessages.Presentation.Main;
 using GMessages.Presentation.Messaging;
 using GMessages.Protocol.Events;
 using GMessages.Protocol.Proto;
 using GMessages.Protocol.Rpc;
+using GMessages.Protocol.Tests.Fakes;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
@@ -1143,5 +1145,65 @@ public sealed class ChatViewModelTests
 
         await rig.LiveMessage(Msg("t2", string.Empty, status: MessageStatusType.TombstoneProtocolSwitchToText, ts: 2_000_000));
         Assert.IsFalse(chat.IsEncrypted);
+    }
+
+    // =========================================================================
+    // LINK PREVIEWS
+    // =========================================================================
+
+    private static FakeHttpHandler PreviewPage() => new()
+    {
+        Respond = (_, _) => FakeHttpHandler.Response(HttpStatusCode.OK, "text/html", "<title>Page Title</title>"u8.ToArray()),
+    };
+
+    [TestMethod]
+    public async Task InboxChat_LinkBubble_GetsPreview()
+    {
+        using var rig       = new MainRig();
+        var handler         = PreviewPage();
+        using var previews  = new LinkPreviewer(handler, false, NullLogger.Instance);
+        rig.Client.Conversations["a"] = MainRig.Conv("a", "Ann");
+        rig.Client.MessagesPage       = new ListMessagesResponse();
+        rig.Client.MessagesPage.Messages.Add(Msg("m1", "look https://www.example.com/a."));
+        using var chat = new ChatViewModel(rig.Store, "a", TimeProvider.System, a => a(), previews);
+
+        await chat.LoadAsync();
+
+        MessageBubbleViewModel bubble = chat.Messages.Single();
+        for (int i = 0; i < 100 && !bubble.HasPreview; i++)
+        {
+            await Task.Delay(20);
+        }
+
+        Assert.IsTrue(bubble.HasPreview);
+        Assert.AreEqual("Page Title", bubble.Preview!.Title);
+        Assert.AreEqual(1, handler.Requests.Count);
+        Assert.AreEqual("https://www.example.com/a", handler.Requests[0].Url);
+    }
+
+    /// <summary>
+    /// Review Focus 5: a spam or blocked chat's links are never fetched.
+    /// </summary>
+    [TestMethod]
+    [DataRow(ConversationStatus.SpamFolder)]
+    [DataRow(ConversationStatus.BlockedFolder)]
+    [DataRow(ConversationStatus.Archived)]
+    public async Task SpamChat_NoPreviewRequest(ConversationStatus status)
+    {
+        using var rig      = new MainRig();
+        var handler        = PreviewPage();
+        using var previews = new LinkPreviewer(handler, false, NullLogger.Instance);
+        rig.Client.Conversations["a"] = MainRig.Conv("a", "Ann", status: status);
+        rig.Client.MessagesPage       = new ListMessagesResponse();
+        rig.Client.MessagesPage.Messages.Add(Msg("m1", "look https://www.example.com/a"));
+        using var chat = new ChatViewModel(rig.Store, "a", TimeProvider.System, a => a(), previews);
+
+        await chat.LoadAsync();
+        await rig.LiveMessage(Msg("m2", "and https://www.example.com/b"));
+        await Task.Delay(100);
+
+        Assert.AreEqual(2, chat.Messages.Count);
+        Assert.AreEqual(0, handler.Requests.Count);
+        Assert.IsFalse(chat.Messages.Any(b => b.HasPreview));
     }
 }

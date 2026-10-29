@@ -4,7 +4,9 @@ using GMessages.Presentation.Messaging;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using Windows.ApplicationModel.DataTransfer;
+using Windows.System;
 
 namespace GMessages.App.Views.Controls;
 
@@ -30,7 +32,8 @@ namespace GMessages.App.Views.Controls;
 /// </para>
 /// <para>
 /// The reply quote shows above the text (<c>Quote.{id}</c>), the reaction pill (<c>Reactions.{id}</c>) over the bottom
-/// corner and the status line (<c>Status.{id}</c>) under it. The pill and the menu's React raise
+/// corner and the status line (<c>Status.{id}</c>) under it. A link's preview card (<c>Preview.{id}</c>), named by its
+/// title, shows under the text once fetched; clicking it opens the link in the default browser. The pill and the menu's React raise
 /// <see cref="ReactRequested"/>, and the menu's Reply raises <see cref="ReplyRequested"/>, for the chat to act on.
 /// </para>
 /// </remarks>
@@ -43,6 +46,15 @@ public sealed partial class MessageBubble : UserControl
     // A Bubble Still Being Sent Shows Faded
     private const double SendingFade = 0.6;
 
+    // The Preview Card's Image Width, In Effective Pixels
+    private const int PreviewImageWidth = 240;
+
+    // The Image Bytes The Card Shows (Or Is Decoding), So A Change Decodes Once
+    private byte[]? _previewImage;
+
+    // A Click On The Card Also Reaches The Bubble's Back, Which Must Not Toggle The Time For It
+    private bool _previewTapped;
+
     /// <summary>
     /// Creates the bubble.
     /// </summary>
@@ -52,6 +64,7 @@ public sealed partial class MessageBubble : UserControl
 
         // Behavior
         Back.AddHandler(TappedEvent, new TappedEventHandler(OnBackTapped), handledEventsToo: true);
+        Preview.AddHandler(TappedEvent, new TappedEventHandler((_, _) => _previewTapped = true), handledEventsToo: true);
 
         // The Text's Own Menu Would Win A Right-Click On It, So It Gets The Bubble Menu Too (Which Has Copy)
         Body.ContextFlyout = Menu;
@@ -180,10 +193,43 @@ public sealed partial class MessageBubble : UserControl
         }
 
         view.ShowStates();
+        view.ShowPreviewImage();
     }
 
-    // An Echo Can Make A Sending Bubble RCS, And My Reaction Comes And Goes
-    private void OnBubblePropertyChanged(object? sender, PropertyChangedEventArgs e) => ShowStates();
+    // An Echo Can Make A Sending Bubble RCS, My Reaction Comes And Goes, And A Preview Card Arrives
+    private void OnBubblePropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        ShowStates();
+        ShowPreviewImage();
+    }
+
+    // Decodes The Card's Image From Its Bytes; Bytes Windows Can't Read Leave The Card Without One
+    private async void ShowPreviewImage()
+    {
+        byte[]? bytes = Bubble?.Preview?.Image;
+        if (ReferenceEquals(bytes, _previewImage))
+        {
+            return;
+        }
+
+        _previewImage           = bytes;
+        PreviewImage.Source     = null;
+        PreviewImage.Visibility = Visibility.Collapsed;
+        if (bytes is null)
+        {
+            return;
+        }
+
+        // A Recycled Container May Have Moved On While Decoding
+        ImageSource? image = await Avatar.ToImageAsync(bytes, PreviewImageWidth);
+        if (image is null || !ReferenceEquals(bytes, _previewImage))
+        {
+            return;
+        }
+
+        PreviewImage.Source     = image;
+        PreviewImage.Visibility = Visibility.Visible;
+    }
 
     private void ShowStates()
     {
@@ -198,7 +244,25 @@ public sealed partial class MessageBubble : UserControl
         VisualStateManager.GoToState(this, Bubble?.HasMyReaction == true ? "Mine" : "NotMine", false);
     }
 
-    private void OnBackTapped(object sender, TappedRoutedEventArgs e) => Bubble?.ToggleTime();
+    private void OnBackTapped(object sender, TappedRoutedEventArgs e)
+    {
+        if (_previewTapped)
+        {
+            _previewTapped = false;
+            return;
+        }
+
+        Bubble?.ToggleTime();
+    }
+
+    // Opens The Link In The Default Browser
+    private void OnPreviewClick(object sender, RoutedEventArgs e)
+    {
+        if (Bubble?.Preview is { } preview)
+        {
+            _ = Launcher.LaunchUriAsync(preview.Url);
+        }
+    }
 
     private void OnRetryClick(object sender, RoutedEventArgs e) => RetryRequested?.Invoke(this, EventArgs.Empty);
 

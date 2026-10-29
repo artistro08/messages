@@ -36,6 +36,11 @@ internal static class TestHooks
     /// </summary>
     /// <remarks>Authentication resolves to <c>{base}/web/authentication</c>.</remarks>
     public static GmEndpoints? Endpoints { get; } = Parsed.EndpointBase is { } b ? new GmEndpoints(b, b, b) { AccountsBase = b } : null;
+
+    /// <summary>
+    /// True when pointed at the fake server, so link previews may fetch its <c>http://127.0.0.1</c> pages.
+    /// </summary>
+    public static bool AllowLoopbackPreviews => EndpointBase is not null;
 }
 #else
 /// <summary>
@@ -54,5 +59,8 @@ internal static class TestHooks
 
     /// <summary>Always null in Release: the app uses the real servers.</summary>
     public static GmEndpoints? Endpoints => null;
+
+    /// <summary>Always false in Release: link previews never fetch loopback addresses.</summary>
+    public static bool AllowLoopbackPreviews => false;
 }
 #endif

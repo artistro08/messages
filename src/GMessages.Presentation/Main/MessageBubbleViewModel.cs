@@ -113,6 +113,15 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     /// <summary>Gets the first web link in the text, or null.</summary>
     public Uri? LinkUrl { get; private set; }
 
+    /// <summary>Gets the link's preview card, or null; set by the chat once fetched.</summary>
+    public LinkPreview? Preview { get; private set; }
+
+    /// <summary>Gets whether the preview card shows.</summary>
+    public bool HasPreview => Preview is not null;
+
+    // The Link The Chat Asked A Preview For, So It Asks Once Per Link
+    internal Uri? PreviewAskedFor { get; set; }
+
     // The Phone's Delivery Status, For The Chat's Status Line
     internal MessageStatusType Status { get; private set; }
 
@@ -199,6 +208,17 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         PropertyChanged?.Invoke(this, AllChanged);
     }
 
+    internal void SetPreview(LinkPreview preview)
+    {
+        if (ReferenceEquals(Preview, preview))
+        {
+            return;
+        }
+
+        Preview = preview;
+        PropertyChanged?.Invoke(this, AllChanged);
+    }
+
     internal void MarkFailed()
     {
         IsFailed  = true;
@@ -231,7 +251,8 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         _reactions    = m.Reactions;
         MyReaction    = FindMyReaction();
         ReplyToId     = m.ReplyToId;
-        LinkUrl       = m.Kind == MessageKind.Text ? FirstLink(m.Text) : null;
+        LinkUrl       = m.Kind == MessageKind.Text ? LinkPreviewer.FirstLink(m.Text) : null;
+        Preview       = Preview?.Url == LinkUrl ? Preview : null;
     }
 
     private string? FindMyReaction() => _reactions.FirstOrDefault(r => r.ParticipantIds.Any(IsMine))?.Emoji;
@@ -239,10 +260,4 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     // Mine: Any Participant Marked As Me, Or The ID The Conversation Sends As
     private bool IsMine(string participantId) =>
         participantId.Length > 0 && _conversation is { } c && (participantId == c.DefaultOutgoingId || c.FindParticipant(participantId)?.IsMe == true);
-
-    // The First Word That Is An Absolute http Or https Link
-    private static Uri? FirstLink(string text) => text
-        .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
-        .Select(word => Uri.TryCreate(word, UriKind.Absolute, out Uri? uri) && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps) ? uri : null)
-        .FirstOrDefault(uri => uri is not null);
 }

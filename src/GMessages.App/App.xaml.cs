@@ -61,6 +61,9 @@ public partial class App : Application, IDisposable
     private AppNotificationActivatedEventArgs? _launchNotification;
     private DispatcherQueueTimer? _launchNotificationTimeout;
     private MainWindow? _mainWindow;
+
+    // The Main Window's Link Preview Fetcher: Made With The Window And Disposed On Close, So Its Cache Goes With It
+    private LinkPreviewer? _linkPreviewer;
     private IStartupService? _startup;
     private AppPaths? _paths;
     private DispatcherQueue? _dispatcher;
@@ -363,8 +366,9 @@ public partial class App : Application, IDisposable
 
         if (_mainWindow is null)
         {
-            var settings = new SettingsViewModel(_settings, _startup, _connection, OpenFolder, _paths.LogsFolder, _logger);
-            _mainWindow  = new MainWindow(settings, new AvatarCache(_store, _paths.AvatarsFolder));
+            var settings   = new SettingsViewModel(_settings, _startup, _connection, OpenFolder, _paths.LogsFolder, _logger);
+            _mainWindow    = new MainWindow(settings, new AvatarCache(_store, _paths.AvatarsFolder));
+            _linkPreviewer = new LinkPreviewer(LinkPreviewer.CreateHandler(TestHooks.AllowLoopbackPreviews), TestHooks.AllowLoopbackPreviews, _logger);
             _mainWindow.ApplyTheme(_settings.Theme);
             _mainWindow.SettingsRequested += (_, _) => ShowSettings();
             _mainWindow.Closed            += (_, _) =>
@@ -374,6 +378,8 @@ public partial class App : Application, IDisposable
                 _lastConversationId    = _mainWindow?.LastConversationId;
                 _mainWindow            = null;
                 _pendingConversationId = null;
+                _linkPreviewer?.Dispose();
+                _linkPreviewer = null;
                 ScheduleTrim();
             };
         }
@@ -401,7 +407,7 @@ public partial class App : Application, IDisposable
         {
             // The List And The Last Open Chat Show At Once From What The Store Already Has, Then Refresh Quietly. Only An
             // Inbox Chat Comes Back: One From Spam & Blocked, Or Moved Out Of The Inbox Meanwhile, Stays Closed
-            window.ShowChats(new MainViewModel(connection, store, TimeProvider.System, a => dispatcher.TryEnqueue(() => a())));
+            window.ShowChats(new MainViewModel(connection, store, TimeProvider.System, a => dispatcher.TryEnqueue(() => a()), _linkPreviewer));
             if (_lastConversationId is { } last && store.Find(last) is { IsMainView: true })
             {
                 window.SelectConversation(last);
