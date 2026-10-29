@@ -75,11 +75,12 @@ public sealed class FakeChats
 
         lock (_lock)
         {
-            _conversations.Add(conversation);
-            _messages[conversation.ConversationID] = [.. messages];
+            Conversation own = conversation.Clone();
+            _conversations.Add(own);
+            _messages[own.ConversationID] = [.. messages.Select(m => m.Clone())];
             if (messages.Length > 0)
             {
-                Refresh(conversation, messages[^1]);
+                Refresh(own, messages[^1]);
             }
         }
     }

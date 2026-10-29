@@ -406,6 +406,36 @@ public sealed class FakeGoogleServerTests
     }
 
     /// <summary>
+    /// An old message pushed while connected arrives with IsOld after the long poll is ended and reopened, and a second
+    /// connect (a second GET_UPDATES) gets the settings event again.
+    /// </summary>
+    [TestMethod]
+    public async Task Reconnect_DeliversQueuedCatchUpAsOld_AndResendsSettings()
+    {
+        await using Rig rig = await PairedAsync();
+        WaitForEvent<SettingsChanged>(rig.Events, _ => true, "first settings");
+        lock (rig.Events)
+        {
+            rig.Events.Clear();
+        }
+
+        rig.Server.Phone.PushIncoming("c-ann", "Queued while connected", old: true);
+        rig.Server.KillLongPoll(0);
+
+        MessageReceived message = WaitForEvent<MessageReceived>(rig.Events, e => e.Message.MessageInfo[0].MessageContent.Content == "Queued while connected", "catch-up message");
+        Assert.IsTrue(message.IsOld);
+
+        // A Second Connect (A Restarted App) Asks For Updates Again And Gets The Settings Again
+        lock (rig.Events)
+        {
+            rig.Events.Clear();
+        }
+
+        await rig.Client.ConnectAsync(CancellationToken.None).WaitAsync(HangGuard);
+        WaitForEvent<SettingsChanged>(rig.Events, e => e.Settings.SIMCards[0].SIMParticipant.ID == "me-1", "settings after second connect");
+    }
+
+    /// <summary>
     /// A message pushed with <c>old</c> before the client connects comes in the startup catch-up batch, so the client
     /// counts it as old through the startup ack.
     /// </summary>

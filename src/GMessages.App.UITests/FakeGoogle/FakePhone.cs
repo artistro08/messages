@@ -25,7 +25,7 @@ namespace GMessages.App.UITests.FakeGoogle;
 /// Once paired it also keeps <see cref="Chats"/> and answers the requests the app sends for them: conversations
 /// by folder, messages, sends (answered, then echoed as a live message with the request's temporary ID, unless
 /// <see cref="FailSends"/>), read marks, single conversations, contacts, top contacts, get-or-create and
-/// thumbnails (always none). A <c>SettingsEvent</c> with one SIM goes out after the first <c>GET_UPDATES</c>.
+/// thumbnails (always none). A <c>SettingsEvent</c> with one SIM goes out after every <c>GET_UPDATES</c>.
 /// <see cref="PushIncoming"/> sends a live message, or, with <c>old</c>, one in the startup catch-up batch.
 /// </para>
 /// </remarks>
@@ -40,7 +40,6 @@ public sealed class FakePhone
     private readonly List<SendMessageRequest> _sent  = [];
     private readonly List<MessageReadRequest> _reads = [];
     private AesCtrHelper? _derivedCrypto;
-    private int _settingsSent;
     private TaskCompletionSource _finishReceived = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private ECParameters _key;
     private byte[] _clientInit = [];
@@ -177,13 +176,9 @@ public sealed class FakePhone
                 Reply(data.RequestID, data.Action, new NotifyDittoActivityResponse(), encrypt: true);
                 break;
 
-            // The First Update Request Gets The Settings Event Right After
+            // Every Update Request (Each Connect) Gets The Settings Event Right After, As From A Real Phone
             case ActionType.GetUpdates when RequestCrypto is not null:
-                if (Interlocked.Exchange(ref _settingsSent, 1) == 0)
-                {
-                    PushUpdate(new UpdateEvents { SettingsEvent = new Settings { SIMCards = { new SIMCard { SIMParticipant = new SIMParticipant { ID = FakeChats.MyParticipantId } } } } }, _push);
-                }
-
+                PushUpdate(new UpdateEvents { SettingsEvent = new Settings { SIMCards = { new SIMCard { SIMParticipant = new SIMParticipant { ID = FakeChats.MyParticipantId } } } } }, _push);
                 break;
 
             case ActionType.ListConversations when RequestCrypto is not null:
@@ -247,8 +242,10 @@ public sealed class FakePhone
     /// The conversation's snippet is updated and it becomes unread. A <c>ConversationEvent</c> with the updated
     /// conversation goes first, then the <c>MessageEvent</c>. With <paramref name="old"/>, both are put in the startup
     /// catch-up batch instead: the next long poll of a paired client counts them in its startup ack, so the client
-    /// marks them old. Push those after the client finished message arrived and before <see cref="Tap"/>; a long
-    /// poll that is already open has had its ack.
+    /// marks them old. The batch is only delivered at the start of a long poll, so a client that is already
+    /// connected holds it until it reconnects: call <see cref="FakeGoogleServer.KillLongPoll"/> with 0 to end the
+    /// current long poll and the client reopens one and receives the batch. Before the first connect, push after the
+    /// client finished message arrived and before <see cref="Tap"/>.
     /// </remarks>
     /// <param name="conversationId">The conversation ID.</param>
     /// <param name="text">The message text.</param>
