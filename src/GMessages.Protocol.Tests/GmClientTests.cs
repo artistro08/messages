@@ -114,6 +114,7 @@ public class GmClientTests
         string go_session     = go.GetProperty("sessionId").GetString()!;
 
         AuthData auth = AuthDataGoldenTests.BuildGolden();
+        auth.Cookies.Set(new Dictionary<string, string>(auth.Cookies.Snapshot()) { ["__Secure-1PSID"] = "fake-1psid" });
         await using Rig rig = CreateRig(auth);
         auth.TachyonExpiry = rig.Time.GetUtcNow() + TimeSpan.FromMinutes(30);
         rig.Respond = req =>

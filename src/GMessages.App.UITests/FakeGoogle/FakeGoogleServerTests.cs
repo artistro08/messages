@@ -28,7 +28,7 @@ public sealed class FakeGoogleServerTests
 
     private static readonly string[] SpamIds = ["c-spam"];
 
-    private static readonly string[] CookieNames = ["SAPISID", "SID", "HSID", "SSID", "APISID", "OSID", "__Secure-1PSIDTS"];
+    private static readonly string[] CookieNames = ["SAPISID", "SID", "HSID", "SSID", "APISID", "OSID", "__Secure-1PSIDTS", "__Secure-1PSID"];
 
     // =========================================================================
     // RIG
@@ -282,7 +282,7 @@ public sealed class FakeGoogleServerTests
     // =========================================================================
 
     /// <summary>
-    /// The sign-in page sets no cookies and has the "signin" button; the login POST sets all seven cookies.
+    /// The sign-in page sets no cookies and has the "signin" button; the login POST sets all eight cookies.
     /// </summary>
     [TestMethod]
     public async Task SignInPage_SetsCookiesOnlyAfterLogin()
@@ -298,7 +298,7 @@ public sealed class FakeGoogleServerTests
         Assert.IsFalse(page.Headers.Contains("Set-Cookie"), "no cookies before login");
         StringAssert.Contains(html, "id=\"signin\"");
 
-        // Login: All Seven
+        // Login: All Eight
         using HttpResponseMessage login = await http.PostAsync(new Uri(server.BaseUrl, "/web/authentication/login"), null).WaitAsync(HangGuard);
         string[] names = [.. login.Headers.GetValues("Set-Cookie").Select(c => c[..c.IndexOf('=', StringComparison.Ordinal)])];
         Assert.AreEqual(HttpStatusCode.OK, login.StatusCode);

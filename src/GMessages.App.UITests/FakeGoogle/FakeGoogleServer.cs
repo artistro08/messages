@@ -31,7 +31,7 @@ public sealed class FakeGoogleServer : IAsyncDisposable
     public static readonly TimeSpan HeartbeatInterval = TimeSpan.FromSeconds(10);
 
     /// <summary>
-    /// Gets the seven cookies the login sets, by name, with fake values.
+    /// Gets the eight cookies the login sets, by name, with fake values.
     /// </summary>
     public static FrozenDictionary<string, string> SignInCookies { get; } = new Dictionary<string, string>
     {
@@ -42,6 +42,7 @@ public sealed class FakeGoogleServer : IAsyncDisposable
         ["APISID"]           = "fake-apisid",
         ["OSID"]             = "fake-osid",
         ["__Secure-1PSIDTS"] = "fake-1psidts",
+        ["__Secure-1PSID"]   = "fake-1psid",
     }.ToFrozenDictionary();
 
     private const string PbLiteMime = "application/json+protobuf";

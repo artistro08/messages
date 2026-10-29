@@ -36,6 +36,7 @@ public class CookieRotatorTests
             ["SAPISID"]          = "fake-sapisid",
             ["SID"]              = "fake-sid",
             ["__Secure-1PSIDTS"] = OldPsidts,
+            ["__Secure-1PSID"]   = "fake-1psid",
         });
 
         var time    = new SignalingTimeProvider();
@@ -79,6 +80,7 @@ public class CookieRotatorTests
         Assert.AreEqual("[000,\"-0000000000000000000\"]", Encoding.UTF8.GetString(req.Body));
         StringAssert.Contains(req.Headers["Cookie"], $"__Secure-1PSIDTS={OldPsidts}");
         StringAssert.Contains(req.Headers["Cookie"], "SID=fake-sid");
+        StringAssert.Contains(req.Headers["Cookie"], "__Secure-1PSID=fake-1psid");
         Assert.IsFalse(req.Headers.ContainsKey("Authorization"), "no SAPISIDHASH on the rotation request");
 
         Assert.AreEqual(NewPsidts, rig.Auth.Cookies.Snapshot()["__Secure-1PSIDTS"]);
@@ -155,7 +157,7 @@ public class CookieRotatorTests
         // Never A Value
         foreach (string line in log.Messages)
         {
-            foreach (string secret in new[] { OldPsidts, NewPsidts, "fake-sapisid", "fake-sid" })
+            foreach (string secret in new[] { OldPsidts, NewPsidts, "fake-sapisid", "fake-sid", "fake-1psid" })
             {
                 Assert.IsFalse(line.Contains(secret, StringComparison.Ordinal), $"log line shows a cookie value: {line}");
             }
@@ -262,5 +264,26 @@ public class CookieRotatorTests
         Assert.IsFalse(jar.ContainsKey("ACCOUNT_CHOOSER"));
         Assert.IsFalse(jar.ContainsKey("LSID"));
         Assert.IsTrue(log.Messages.Any(m => m.StartsWith("Cookies rotated: __Secure-1PSIDTS (expires ", StringComparison.Ordinal) && !m.Contains(',', StringComparison.Ordinal)));
+    }
+
+    /// <summary>
+    /// A session without <c>__Secure-1PSID</c> (paired before it was captured) sends nothing, which Google would only
+    /// refuse with a 403, and says so once, however often it is checked.
+    /// </summary>
+    [TestMethod]
+    public async Task Rotate_WithoutPsid_SkipsAndSaysSoOnce()
+    {
+        var log     = new CollectingLogger();
+        Rig rig     = CreateRig(log);
+        var cookies = new Dictionary<string, string>(rig.Auth.Cookies.Snapshot());
+        cookies.Remove("__Secure-1PSID");
+        rig.Auth.Cookies.Set(cookies);
+
+        await rig.Rotator.RotateIfDueAsync(CancellationToken.None);
+        rig.Time.Advance(TimeSpan.FromMinutes(30));
+        await rig.Rotator.RotateIfDueAsync(CancellationToken.None);
+
+        Assert.AreEqual(0, Count(rig.Handler));
+        Assert.AreEqual(1, log.Messages.Count(m => m == "Cookie rotation skipped: __Secure-1PSID missing"));
     }
 }

@@ -22,8 +22,9 @@ namespace GMessages.Protocol.Auth;
 /// <para>
 /// A rotation is due when none was tried yet or the last try is <see cref="Interval"/> old, so it happens at most
 /// every 10 minutes, whether the last try worked or not. A failure is logged with its error type and HTTP status and
-/// keeps the session; the next interval tries again. Only paired Google accounts (a browser device and a cookie map)
-/// are rotated. Every wait uses the <see cref="TimeProvider"/>. Cookie values are never logged, only names and expiry.
+/// keeps the session; the next interval tries again. That includes a 401, which gemini-webapi raises as an auth error:
+/// here the long poll alone decides a sign-out. Only paired Google accounts (a browser device and a cookie map) that
+/// hold <see cref="MainCookie"/> are rotated; without it the rotation is skipped and said once. Every wait uses the <see cref="TimeProvider"/>. Cookie values are never logged, only names and expiry.
 /// </para>
 /// </remarks>
 /// <param name="http">Sends the request with the session's cookie jar; built on a client with <see cref="RequestTimeout"/> and no automatic redirects (see <c>GmClient.Create</c>).</param>
@@ -52,6 +53,16 @@ public sealed partial class CookieRotator(GmHttpClient http, AuthData auth, GmEn
     private readonly Lock _lock = new();
     private DateTimeOffset? _lastAttempt;
     private Task? _inFlight;
+    private int _skipLogged;
+
+    /// <summary>
+    /// The main sign-in cookie rotation needs; without it Google answers 403.
+    /// </summary>
+    /// <remarks>
+    /// gemini-webapi's <c>rotate_1psidts</c> sends nothing without <c>__Secure-1PSID</c>, and its README asks only for
+    /// <c>__Secure-1PSID</c> and <c>__Secure-1PSIDTS</c>; no <c>__Secure-3PSID*</c> or <c>…PSIDCC</c> is needed.
+    /// </remarks>
+    public const string MainCookie = "__Secure-1PSID";
 
     /// <summary>
     /// Rotates the cookie when the last try is <see cref="Interval"/> old or there was none.
@@ -75,6 +86,17 @@ public sealed partial class CookieRotator(GmHttpClient http, AuthData auth, GmEn
             // Not Paired Or Not A Google Account: Nothing To Keep Fresh
             if (auth.Browser is null || !auth.Cookies.HasCookies)
             {
+                return now + Interval;
+            }
+
+            // No __Secure-1PSID (A Session Paired Before It Was Captured): Google Would Refuse (403), So Skip, Said Once
+            if (!auth.Cookies.Snapshot().ContainsKey(MainCookie))
+            {
+                if (Interlocked.Exchange(ref _skipLogged, 1) == 0)
+                {
+                    LogSkipped(log, MainCookie);
+                }
+
                 return now + Interval;
             }
 
@@ -207,6 +229,9 @@ public sealed partial class CookieRotator(GmHttpClient http, AuthData auth, GmEn
             .Select(a => a.Trim())
             .Any(a => a.StartsWith("Domain=", StringComparison.OrdinalIgnoreCase) && a[7..].TrimStart('.').Equals("google.com", StringComparison.OrdinalIgnoreCase));
     }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Cookie rotation skipped: {Name} missing")]
+    private static partial void LogSkipped(ILogger logger, string name);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Cookies rotated: {Names}")]
     private static partial void LogRotated(ILogger logger, string names);
