@@ -140,6 +140,53 @@ public sealed partial class GmClient
     }
 
     /// <summary>
+    /// Adds, switches or removes a reaction on a message.
+    /// </summary>
+    /// <remarks>
+    /// Ported from <see href="https://github.com/mautrix/gmessages/blob/ba33f4875a491f5cb47db8a6baf42a8869f5f383/pkg/libgm/methods.go">SendReaction</see>.
+    /// Sent as user-initiated, like <see cref="SendMessageAsync"/>. Use <see cref="EmojiTypes.MakeReactionData"/> for
+    /// the request's reaction data. The phone then sends the message again with its reactions updated.
+    /// </remarks>
+    /// <param name="request">The message ID, reaction data, action and SIM.</param>
+    /// <param name="ct">Cancels the wait.</param>
+    /// <returns>Whether the phone accepted the reaction.</returns>
+    /// <exception cref="InvalidDataException">The phone answered with another type.</exception>
+    /// <exception cref="PhoneNotRespondingException">No answer within 60 seconds.</exception>
+    /// <exception cref="ConnectionClosedException">Not connected, or the connection closed while waiting.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="ct"/> was canceled.</exception>
+    public async Task<SendReactionResponse> SendReactionAsync(SendReactionRequest request, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        IncomingRpc answer = await Rpc.SendAsync(new SendParams(ActionType.SendReaction, request, UserInitiated: true), ct).ConfigureAwait(false);
+        return Typed<SendReactionResponse>(answer);
+    }
+
+    /// <summary>
+    /// Tells the other side of a conversation that the user is typing.
+    /// </summary>
+    /// <remarks>
+    /// Ported from <see href="https://github.com/mautrix/gmessages/blob/ba33f4875a491f5cb47db8a6baf42a8869f5f383/pkg/libgm/methods.go">SetTyping</see>.
+    /// Always sends typing as true and waits for no answer, as Go does; the phone stops showing it on its own.
+    /// </remarks>
+    /// <param name="conversationId">The conversation ID.</param>
+    /// <param name="sim">The SIM of the conversation, or null.</param>
+    /// <param name="ct">Cancels the request.</param>
+    /// <returns>A task that completes when the server has accepted the request.</returns>
+    /// <exception cref="Http.GmRequestException">The server refused the request.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="ct"/> was canceled.</exception>
+    public Task SetTypingAsync(string conversationId, SIMPayload? sim, CancellationToken ct)
+    {
+        var request = new TypingUpdateRequest
+        {
+            Data       = new TypingUpdateRequest.Types.Data { ConversationID = conversationId, Typing = true },
+            SIMPayload = sim,
+        };
+
+        return Rpc.SendNoResponseAsync(new SendParams(ActionType.TypingUpdates, request), ct);
+    }
+
+    /// <summary>
     /// Tells the phone that a conversation was read up to a message.
     /// </summary>
     /// <remarks>

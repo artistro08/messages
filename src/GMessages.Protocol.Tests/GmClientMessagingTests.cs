@@ -189,6 +189,60 @@ public class GmClientMessagingTests
     }
 
     /// <summary>
+    /// SendReaction is user-initiated: five seconds without an answer raises PhoneSlow once; the request goes out as
+    /// given and the typed answer is returned.
+    /// </summary>
+    [TestMethod]
+    public async Task SendReaction_IsUserInitiated_SendsRequest()
+    {
+        await using Rig rig = CreateRig();
+        int slow_count = 0;
+        rig.Client.Rpc.PhoneSlow += (_, _) => Interlocked.Increment(ref slow_count);
+        var request = new SendReactionRequest
+        {
+            MessageID    = "m-5",
+            ReactionData = EmojiTypes.MakeReactionData("👍"),
+            Action       = SendReactionRequest.Types.Action.Add,
+            SIMPayload   = new SIMPayload { SIMNumber = 1 },
+        };
+
+        Task<SendReactionResponse> call = rig.Client.SendReactionAsync(request, CancellationToken.None);
+        Sent sent = Captured(rig, 0);
+
+        // Five Seconds With No Answer
+        Assert.IsTrue(SpinWait.SpinUntil(() => rig.Time.CountTimers(RpcSession.PhoneSlowTimeout) > 0, HangGuard), "slow timer");
+        rig.Time.Advance(RpcSession.PhoneSlowTimeout);
+        Assert.IsTrue(SpinWait.SpinUntil(() => Volatile.Read(ref slow_count) > 0, HangGuard), "PhoneSlow raised");
+
+        Answer(rig, sent, new SendReactionResponse { Success = true });
+        SendReactionResponse result = await call.WaitAsync(HangGuard);
+
+        Assert.AreEqual(ActionType.SendReaction, sent.Data.Action);
+        SendReactionRequest sent_request = sent.Payload(SendReactionRequest.Parser);
+        Assert.AreEqual(request, sent_request);
+        Assert.AreEqual(EmojiType.Like, sent_request.ReactionData.Type);
+        Assert.IsTrue(result.Success);
+    }
+
+    /// <summary>
+    /// SetTyping sends a typing update with the conversation, typing true and the SIM, and completes without an answer.
+    /// </summary>
+    [TestMethod]
+    public async Task SetTyping_SendsTypingUpdatesWithoutWaiting()
+    {
+        await using Rig rig = CreateRig();
+
+        await rig.Client.SetTypingAsync("c-1", new SIMPayload { SIMNumber = 2 }, CancellationToken.None).WaitAsync(HangGuard);
+        Sent sent = Captured(rig, 0);
+
+        Assert.AreEqual(ActionType.TypingUpdates, sent.Data.Action);
+        TypingUpdateRequest request = sent.Payload(TypingUpdateRequest.Parser);
+        Assert.AreEqual("c-1", request.Data.ConversationID);
+        Assert.IsTrue(request.Data.Typing);
+        Assert.AreEqual(2, request.SIMPayload.SIMNumber);
+    }
+
+    /// <summary>
     /// MarkRead sends both IDs and completes once the phone answers.
     /// </summary>
     [TestMethod]

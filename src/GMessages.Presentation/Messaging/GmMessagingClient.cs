@@ -25,6 +25,12 @@ public sealed class GmMessagingClient(GmClient client) : IMessagingClient
     public Task<SendMessageResponse> SendMessageAsync(SendMessageRequest request, CancellationToken ct) => client.SendMessageAsync(request, ct);
 
     /// <inheritdoc />
+    public Task<SendReactionResponse> SendReactionAsync(SendReactionRequest request, CancellationToken ct) => client.SendReactionAsync(request, ct);
+
+    /// <inheritdoc />
+    public Task SetTypingAsync(string conversationId, SIMPayload? sim, CancellationToken ct) => client.SetTypingAsync(conversationId, sim, ct);
+
+    /// <inheritdoc />
     public Task MarkReadAsync(string conversationId, string messageId, CancellationToken ct) => client.MarkReadAsync(conversationId, messageId, ct);
 
     /// <inheritdoc />

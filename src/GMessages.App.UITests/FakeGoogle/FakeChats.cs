@@ -6,8 +6,10 @@ namespace GMessages.App.UITests.FakeGoogle;
 /// The conversations, messages and contacts of the <see cref="FakePhone"/>.
 /// </summary>
 /// <remarks>
-/// Starts with three conversations: <c>c-ann</c> (Ann Lee, one on one, three messages, unread), <c>c-team</c> (Team, a
-/// group with Bo and Cy, pinned) and <c>c-spam</c> (Prize Bot, in the spam folder), plus the contacts Ann, Bo and Cy.
+/// Starts with three conversations: <c>c-ann</c> (Ann Lee, one on one over RCS, an encrypted-chat tombstone then three
+/// messages, unread), <c>c-team</c> (Team, an SMS/MMS group with Bo and Cy, pinned) and <c>c-spam</c> (Prize Bot, in
+/// the spam folder), plus the contacts Ann, Bo and Cy. Texts in RCS conversations have message type 4, in SMS ones 2
+/// (a downloaded MMS), as <c>Message.type</c> in conversations.proto documents.
 /// Use <see cref="Clear"/>, <see cref="Add"/> and <see cref="AddContact"/> to seed something else. Every conversation
 /// has the phone's own participant (<see cref="MyParticipantId"/>, <c>IsMe</c>) and that ID as its default outgoing
 /// ID. Timestamps are microseconds since the epoch. Safe to use from any thread; everything handed out is a copy.
@@ -33,12 +35,13 @@ public sealed class FakeChats
         AddContact("p-bo", "Bo", "+15550000002");
         AddContact("p-cy", "Cy", "+15550000003");
 
-        // Ann: Three Messages, The Last One Unread
+        // Ann: An RCS Chat That Starts Encrypted, Three Messages, The Last One Unread
         Conversation ann = NewConversation("c-ann", "Ann Lee", false, ConversationStatus.Active, false, true, Person("p-ann", "Ann Lee", "+15550000001"));
-        Add(ann, NewMessage(ann, "p-ann", "Hi, it's Ann"), NewMessage(ann, MyParticipantId, "Hey Ann"), NewMessage(ann, "p-ann", "Are you free later?"));
+        Add(ann, NewTombstone(ann, MessageStatusType.TombstoneEncryptedOneOnOneRcsCreated), NewMessage(ann, "p-ann", "Hi, it's Ann"), NewMessage(ann, MyParticipantId, "Hey Ann"), NewMessage(ann, "p-ann", "Are you free later?"));
 
-        // Team: A Pinned Group
+        // Team: A Pinned SMS/MMS Group
         Conversation team = NewConversation("c-team", "Team", true, ConversationStatus.Active, true, false, Person("p-bo", "Bo", "+15550000002"), Person("p-cy", "Cy", "+15550000003"));
+        team.Type         = ConversationType.Sms;
         Add(team, NewMessage(team, "p-bo", "Lunch at noon?"), NewMessage(team, "p-cy", "Works for me"));
 
         // Spam: One Message From A Bot
@@ -128,6 +131,7 @@ public sealed class FakeChats
                 ConversationID = id,
                 ParticipantID  = from_me ? MyParticipantId : "p-bo",
                 Timestamp      = start + ((i - 1) * 60_000_000L),
+                Type           = TextType(chat),
                 MessageStatus  = new MessageStatus { Status = from_me ? MessageStatusType.OutgoingComplete : MessageStatusType.IncomingComplete },
             };
             message.MessageInfo.Add(new MessageInfo { MessageContent = new MessageContent { Content = text } });
@@ -208,18 +212,78 @@ public sealed class FakeChats
         }
     }
 
-    // A Message From The Other Side, Which Leaves The Conversation Unread
-    internal (Conversation Conversation, Message Message) AddIncoming(string conversationId, string text)
+    // A Message From The Other Side, Which Leaves The Conversation Unread; A Reply Carries The Quoted Message's ID
+    internal (Conversation Conversation, Message Message) AddIncoming(string conversationId, string text, string? replyToId, long type)
     {
         lock (_lock)
         {
             Conversation conversation = Find(conversationId);
             string sender             = conversation.OtherParticipants.FirstOrDefault() ?? "p-unknown";
             Message message           = NewMessage(conversation, sender, text);
+            message.Type              = type;
+            if (replyToId is not null)
+            {
+                message.ReplyMessage = new ReplyMessage { MessageID = replyToId, ConversationID = conversationId };
+            }
+
             _messages[conversationId].Add(message);
             Refresh(conversation, message);
             conversation.Unread = true;
             return (conversation.Clone(), message.Clone());
+        }
+    }
+
+    // My Reaction On A Message: Add And Switch Leave Me Only On The New Emoji, Remove Takes Me Off; Null For An Unknown Message
+    internal Message? React(SendReactionRequest request)
+    {
+        lock (_lock)
+        {
+            Message? message = _messages.Values.SelectMany(m => m).FirstOrDefault(m => m.MessageID == request.MessageID);
+            if (message is null)
+            {
+                return null;
+            }
+
+            // Off Every Emoji First, Dropping Emptied Ones
+            foreach (ReactionEntry entry in message.Reactions)
+            {
+                entry.ParticipantIDs.Remove(MyParticipantId);
+            }
+
+            foreach (ReactionEntry empty in message.Reactions.Where(e => e.ParticipantIDs.Count == 0).ToList())
+            {
+                message.Reactions.Remove(empty);
+            }
+
+            if (request.Action is SendReactionRequest.Types.Action.Add or SendReactionRequest.Types.Action.Switch)
+            {
+                ReactionEntry? same = message.Reactions.FirstOrDefault(e => e.Data?.Unicode == request.ReactionData?.Unicode);
+                if (same is null)
+                {
+                    same = new ReactionEntry { Data = request.ReactionData?.Clone() };
+                    message.Reactions.Add(same);
+                }
+
+                same.ParticipantIDs.Add(MyParticipantId);
+            }
+
+            return message.Clone();
+        }
+    }
+
+    // A New Status On A Stored Message; Null For An Unknown Message
+    internal Message? SetStatus(string conversationId, string messageId, MessageStatusType status)
+    {
+        lock (_lock)
+        {
+            Message? message = _messages.TryGetValue(conversationId, out List<Message>? all) ? all.FirstOrDefault(m => m.MessageID == messageId) : null;
+            if (message is null)
+            {
+                return null;
+            }
+
+            message.MessageStatus = new MessageStatus { Status = status };
+            return message.Clone();
         }
     }
 
@@ -298,11 +362,24 @@ public sealed class FakeChats
             ParticipantID  = participantId,
             Timestamp      = _clock += 1_000_000,
             TmpID          = tmpId,
+            Type           = TextType(conversation),
             MessageStatus  = new MessageStatus { Status = from_me ? MessageStatusType.OutgoingComplete : MessageStatusType.IncomingComplete },
         };
         message.MessageInfo.Add(new MessageInfo { MessageContent = new MessageContent { Content = text } });
         return message;
     }
+
+    // A Tombstone (A System Line Such As The Chat Becoming Encrypted): A Status And No Content
+    private Message NewTombstone(Conversation conversation, MessageStatusType status) => new()
+    {
+        MessageID      = "m-" + ++_nextId,
+        ConversationID = conversation.ConversationID,
+        Timestamp      = _clock += 1_000_000,
+        MessageStatus  = new MessageStatus { Status = status },
+    };
+
+    // Message Type Of A Text: 4 (RCS) Or 2 (A Downloaded MMS, As In An SMS Group)
+    private static long TextType(Conversation conversation) => conversation.Type == ConversationType.Sms ? 2 : 4;
 
     // Snippet, Latest Message And Time Follow The Newest Message
     private static void Refresh(Conversation conversation, Message latest)

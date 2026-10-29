@@ -147,6 +147,27 @@ internal sealed class FakeMessagingClient : IMessagingClient
         return SendThrows is { } ex ? throw ex : SendAnswer;
     }
 
+    public SendReactionResponse ReactionAnswer { get; set; } = new() { Success = true };
+
+    public List<SendReactionRequest> Reactions { get; } = [];
+
+    /// <summary>When set, sending a reaction fails with this.</summary>
+    public Exception? ReactionThrows { get; set; }
+
+    public Task<SendReactionResponse> SendReactionAsync(SendReactionRequest request, CancellationToken ct)
+    {
+        Reactions.Add(request.Clone());
+        return ReactionThrows is { } ex ? Task.FromException<SendReactionResponse>(ex) : Task.FromResult(ReactionAnswer);
+    }
+
+    public List<(string ConversationId, SIMPayload? Sim)> Typing { get; } = [];
+
+    public Task SetTypingAsync(string conversationId, SIMPayload? sim, CancellationToken ct)
+    {
+        Typing.Add((conversationId, sim?.Clone()));
+        return Task.CompletedTask;
+    }
+
     public Task MarkReadAsync(string conversationId, string messageId, CancellationToken ct)
     {
         MarkedRead.Add((conversationId, messageId));

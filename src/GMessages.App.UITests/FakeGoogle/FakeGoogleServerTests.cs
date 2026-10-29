@@ -411,6 +411,98 @@ public sealed class FakeGoogleServerTests
     }
 
     /// <summary>
+    /// A reaction is answered with success and the message comes back with my reaction; a switch moves it to the new
+    /// emoji and a remove takes it off.
+    /// </summary>
+    [TestMethod]
+    public async Task SendReaction_EchoesMessageWithReaction()
+    {
+        await using Rig rig = await PairedAsync();
+        ListMessagesResponse page = await rig.Client.FetchMessagesAsync("c-ann", 10, null, CancellationToken.None).WaitAsync(HangGuard);
+        string message_id         = page.Messages[0].MessageID;
+
+        // Add A Thumbs Up
+        SendReactionResponse added = await rig.Client.SendReactionAsync(Reaction(message_id, "\U0001F44D", SendReactionRequest.Types.Action.Add), CancellationToken.None).WaitAsync(HangGuard);
+        Assert.IsTrue(added.Success);
+        MessageReceived like = WaitForEvent<MessageReceived>(rig.Events, e => e.Message.MessageID == message_id && e.Message.Reactions.Count > 0, "message with the like");
+        Assert.HasCount(1, like.Message.Reactions);
+        Assert.AreEqual(EmojiType.Like, like.Message.Reactions[0].Data.Type);
+        Assert.AreEqual("me-1", like.Message.Reactions[0].ParticipantIDs.Single());
+
+        // Switch To A Heart
+        await rig.Client.SendReactionAsync(Reaction(message_id, "❤️", SendReactionRequest.Types.Action.Switch), CancellationToken.None).WaitAsync(HangGuard);
+        MessageReceived heart = WaitForEvent<MessageReceived>(rig.Events, e => e.Message.MessageID == message_id && e.Message.Reactions.Any(r => r.Data.Type == EmojiType.RedHeart), "message with the heart");
+        Assert.HasCount(1, heart.Message.Reactions);
+
+        // Remove It
+        lock (rig.Events)
+        {
+            rig.Events.Clear();
+        }
+
+        await rig.Client.SendReactionAsync(Reaction(message_id, "❤️", SendReactionRequest.Types.Action.Remove), CancellationToken.None).WaitAsync(HangGuard);
+        MessageReceived removed = WaitForEvent<MessageReceived>(rig.Events, e => e.Message.MessageID == message_id, "message without reactions");
+        Assert.IsEmpty(removed.Message.Reactions);
+        Assert.HasCount(3, rig.Server.Phone.Reactions);
+
+        static SendReactionRequest Reaction(string id, string emoji, SendReactionRequest.Types.Action action) =>
+            new() { MessageID = id, ReactionData = EmojiTypes.MakeReactionData(emoji), Action = action, SIMPayload = new SIMPayload { SIMNumber = 1 } };
+    }
+
+    /// <summary>
+    /// Pushed typing raises TypingChanged with the conversation, number and start or stop; the app's own typing
+    /// update reaches the phone.
+    /// </summary>
+    [TestMethod]
+    public async Task PushTyping_RaisesTypingChanged()
+    {
+        await using Rig rig = await PairedAsync();
+
+        rig.Server.Phone.PushTyping("c-ann", "+15550000001", true);
+        TypingChanged started = WaitForEvent<TypingChanged>(rig.Events, e => e.Data.Type == TypingTypes.StartedTyping, "started typing");
+        rig.Server.Phone.PushTyping("c-ann", "+15550000001", false);
+        TypingChanged stopped = WaitForEvent<TypingChanged>(rig.Events, e => e.Data.Type == TypingTypes.StoppedTyping, "stopped typing");
+
+        Assert.AreEqual("c-ann", started.Data.ConversationID);
+        Assert.AreEqual("+15550000001", started.Data.User.Number);
+        Assert.AreEqual("c-ann", stopped.Data.ConversationID);
+
+        // The App's Own Typing
+        await rig.Client.SetTypingAsync("c-ann", new SIMPayload { SIMNumber = 1 }, CancellationToken.None).WaitAsync(HangGuard);
+        WaitUntil(() => rig.Server.Phone.Typing.Count == 1, "typing update received");
+        Assert.AreEqual("c-ann", rig.Server.Phone.Typing[0].Data.ConversationID);
+        Assert.IsTrue(rig.Server.Phone.Typing[0].Data.Typing);
+    }
+
+    /// <summary>
+    /// The seeded chats carry their types and Ann's tombstone; a pushed reply quotes its message, and a pushed status
+    /// arrives on the same message.
+    /// </summary>
+    [TestMethod]
+    public async Task Chats_TypesTombstoneReplyAndStatus()
+    {
+        await using Rig rig = await PairedAsync();
+        ListConversationsResponse inbox = await rig.Client.ListConversationsAsync(ListConversationsRequest.Types.Folder.Inbox, 25, null, CancellationToken.None).WaitAsync(HangGuard);
+        ListMessagesResponse ann        = await rig.Client.FetchMessagesAsync("c-ann", 10, null, CancellationToken.None).WaitAsync(HangGuard);
+        ListMessagesResponse team       = await rig.Client.FetchMessagesAsync("c-team", 10, null, CancellationToken.None).WaitAsync(HangGuard);
+
+        // Types And The Tombstone
+        Assert.AreEqual(ConversationType.Rcs, inbox.Conversations.Single(c => c.ConversationID == "c-ann").Type);
+        Assert.AreEqual(ConversationType.Sms, inbox.Conversations.Single(c => c.ConversationID == "c-team").Type);
+        Assert.IsTrue(inbox.Conversations.SelectMany(c => c.Participants).All(p => p.ID.Number.Length > 0), "every participant has a number");
+        Assert.AreEqual(MessageStatusType.TombstoneEncryptedOneOnOneRcsCreated, ann.Messages[^1].MessageStatus.Status);
+        Assert.IsTrue(ann.Messages.SkipLast(1).All(m => m.Type == 4));
+        Assert.IsTrue(team.Messages.All(m => m.Type == 2));
+
+        // A Reply, Then A New Status On It
+        string quoted = ann.Messages[0].MessageID;
+        Message reply = rig.Server.Phone.PushIncoming("c-ann", "Reply", replyToId: quoted);
+        Assert.AreEqual(quoted, WaitForEvent<MessageReceived>(rig.Events, e => e.Message.MessageID == reply.MessageID, "reply").Message.ReplyMessage.MessageID);
+        rig.Server.Phone.PushStatus("c-ann", reply.MessageID, MessageStatusType.IncomingDisplayed);
+        WaitForEvent<MessageReceived>(rig.Events, e => e.Message.MessageID == reply.MessageID && e.Message.MessageStatus.Status == MessageStatusType.IncomingDisplayed, "status update");
+    }
+
+    /// <summary>
     /// A pushed incoming message arrives live (not old), preceded by the conversation with the new snippet.
     /// </summary>
     [TestMethod]

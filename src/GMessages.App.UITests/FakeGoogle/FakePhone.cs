@@ -24,11 +24,12 @@ namespace GMessages.App.UITests.FakeGoogle;
 /// <para>
 /// Once paired it also keeps <see cref="Chats"/> and answers the requests the app sends for them: conversations
 /// by folder, messages, sends (answered, then echoed as a live message with the request's temporary ID, unless
-/// <see cref="FailSends"/>), read marks, single conversations, contacts, top contacts, get-or-create and
-/// thumbnails (always none). A <c>SettingsEvent</c> with one SIM goes out after every <c>GET_UPDATES</c>.
-/// <see cref="PushIncoming"/> sends a live message, or, with <c>old</c>, one in the startup catch-up batch;
-/// <see cref="PushStatusUpdate"/> sends the same message again with a new status, as a real phone does several times
-/// per incoming message.
+/// <see cref="FailSends"/>), reactions (answered with success, then the message is sent again with its reactions
+/// updated), typing updates (kept in <see cref="Typing"/>, never answered), read marks, single conversations,
+/// contacts, top contacts, get-or-create and thumbnails (always none). A <c>SettingsEvent</c> with one SIM goes out
+/// after every <c>GET_UPDATES</c>. <see cref="PushIncoming"/> sends a live message, or, with <c>old</c>, one in the
+/// startup catch-up batch; <see cref="PushStatusUpdate"/> and <see cref="PushStatus"/> send a message again with a new
+/// status, as a real phone does several times per message; <see cref="PushTyping"/> sends a typing event.
 /// </para>
 /// </remarks>
 public sealed class FakePhone
@@ -44,6 +45,8 @@ public sealed class FakePhone
     private readonly Action<IncomingRPCMessage> _pushCatchUp;
     private readonly List<SendMessageRequest> _sent  = [];
     private readonly List<MessageReadRequest> _reads = [];
+    private readonly List<SendReactionRequest> _reactions = [];
+    private readonly List<TypingUpdateRequest> _typing    = [];
     private AesCtrHelper? _derivedCrypto;
     private TaskCompletionSource _finishReceived = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private ECParameters _key;
@@ -109,6 +112,34 @@ public sealed class FakePhone
             lock (_lock)
             {
                 return [.. _reads];
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets every <c>SendReaction</c> request so far, in arrival order.
+    /// </summary>
+    public IReadOnlyList<SendReactionRequest> Reactions
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return [.. _reactions];
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets every <c>TypingUpdates</c> request so far, in arrival order.
+    /// </summary>
+    public IReadOnlyList<TypingUpdateRequest> Typing
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return [.. _typing];
             }
         }
     }
@@ -222,6 +253,20 @@ public sealed class FakePhone
                 OnSendMessage(data);
                 break;
 
+            case ActionType.SendReaction when RequestCrypto is not null:
+                OnSendReaction(data);
+                break;
+
+            // Typing Is Sent Without Waiting, So The Phone Never Answers It
+            case ActionType.TypingUpdates when RequestCrypto is not null:
+                var typing = Open(data, TypingUpdateRequest.Parser);
+                lock (_lock)
+                {
+                    _typing.Add(typing);
+                }
+
+                break;
+
             case ActionType.MessageRead when RequestCrypto is not null:
                 var read = Open(data, MessageReadRequest.Parser);
                 lock (_lock)
@@ -288,11 +333,13 @@ public sealed class FakePhone
     /// <param name="conversationId">The conversation ID.</param>
     /// <param name="text">The message text.</param>
     /// <param name="old">True to send it in the catch-up batch.</param>
+    /// <param name="replyToId">The ID of the message it replies to, or null for none.</param>
+    /// <param name="type">The message type: 4 for RCS (the default), 2 for a downloaded MMS, 1 for SMS.</param>
     /// <returns>The message as pushed, for <see cref="PushStatusUpdate"/>.</returns>
     /// <exception cref="InvalidOperationException">Pairing has not reached the client finished message.</exception>
-    public Message PushIncoming(string conversationId, string text, bool old = false)
+    public Message PushIncoming(string conversationId, string text, bool old = false, string? replyToId = null, long type = 4)
     {
-        (Conversation conversation, Message message) = Chats.AddIncoming(conversationId, text);
+        (Conversation conversation, Message message) = Chats.AddIncoming(conversationId, text, replyToId, type);
         Action<IncomingRPCMessage> push = old ? _pushCatchUp : _push;
         PushUpdate(new UpdateEvents { ConversationEvent = new ConversationEvent { Data = { conversation } } }, push);
         PushUpdate(new UpdateEvents { MessageEvent = new MessageEvent { Data = { message } } }, push);
@@ -313,6 +360,56 @@ public sealed class FakePhone
         Message update       = message.Clone();
         update.MessageStatus = new MessageStatus { Status = status };
         PushUpdate(new UpdateEvents { MessageEvent = new MessageEvent { Data = { update } } }, _push);
+    }
+
+    /// <summary>
+    /// Gives a stored message a new status and pushes it again, as a live update.
+    /// </summary>
+    /// <param name="conversationId">The conversation ID.</param>
+    /// <param name="messageId">The message ID.</param>
+    /// <param name="status">The new status.</param>
+    /// <exception cref="KeyNotFoundException">The conversation has no such message.</exception>
+    /// <exception cref="InvalidOperationException">Pairing has not reached the client finished message.</exception>
+    public void PushStatus(string conversationId, string messageId, MessageStatusType status)
+    {
+        Message message = Chats.SetStatus(conversationId, messageId, status) ?? throw new KeyNotFoundException($"No message {messageId} in {conversationId}.");
+        PushUpdate(new UpdateEvents { MessageEvent = new MessageEvent { Data = { message } } }, _push);
+    }
+
+    /// <summary>
+    /// Pushes a typing event from someone in a conversation, as a live update.
+    /// </summary>
+    /// <remarks>The sender is named by phone number, as the real phone does; the app maps it to a participant.</remarks>
+    /// <param name="conversationId">The conversation ID.</param>
+    /// <param name="number">The typing person's phone number.</param>
+    /// <param name="started">True when they started typing, false when they stopped.</param>
+    /// <exception cref="InvalidOperationException">Pairing has not reached the client finished message.</exception>
+    public void PushTyping(string conversationId, string number, bool started)
+    {
+        var typing = new TypingData
+        {
+            ConversationID = conversationId,
+            User           = new User { Number = number },
+            Type           = started ? TypingTypes.StartedTyping : TypingTypes.StoppedTyping,
+        };
+        PushUpdate(new UpdateEvents { TypingEvent = new TypingEvent { Data = typing } }, _push);
+    }
+
+    // Answers A Reaction, Then Sends The Message Again With Its Reactions Updated
+    private void OnSendReaction(OutgoingRPCData data)
+    {
+        var request = Open(data, SendReactionRequest.Parser);
+        lock (_lock)
+        {
+            _reactions.Add(request);
+        }
+
+        Message? message = Chats.React(request);
+        Reply(data.RequestID, data.Action, new SendReactionResponse { Success = true }, encrypt: true);
+        if (message is not null)
+        {
+            PushUpdate(new UpdateEvents { MessageEvent = new MessageEvent { Data = { message } } }, _push);
+        }
     }
 
     // Answers A Send, Then Echoes It As A Live Message With The Request's Temporary ID
