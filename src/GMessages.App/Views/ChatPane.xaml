@@ -78,9 +78,12 @@
             Loaded="OnMessageListLoaded"
             PreviewKeyDown="OnMessageListKeyDown"
             SelectionMode="None">
+            <!-- KeepItemsInView, not KeepLastItemInView: that one puts the last bubble at the bottom edge without the list's
+                 bottom padding, scrolling a just-opened chat 8 px short of its end under the bottom fade. Staying on
+                 the newest message is ChatPane's pin -->
             <ListView.ItemsPanel>
                 <ItemsPanelTemplate>
-                    <ItemsStackPanel VerticalAlignment="Bottom" ItemsUpdatingScrollMode="KeepLastItemInView" />
+                    <ItemsStackPanel VerticalAlignment="Bottom" ItemsUpdatingScrollMode="KeepItemsInView" />
                 </ItemsPanelTemplate>
             </ListView.ItemsPanel>
             <ListView.ItemContainerStyle>

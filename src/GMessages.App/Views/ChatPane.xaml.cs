@@ -41,6 +41,9 @@ public sealed partial class ChatPane : UserControl
     private bool _pinned = true;
     private double _lastExtent;
 
+    // On The Way To The Newest Message (See ScrollToNewest)
+    private bool _toNewest;
+
     // The Last Scroll Decisions Logged (Wave 7 Diagnostics), So Only Changes Are Logged
     private string? _lastScrollTrace;
 
@@ -109,6 +112,11 @@ public sealed partial class ChatPane : UserControl
         pane.ShowScrollToBottom(false);
         pane._lastScrollTrace = null;
         pane._pinned          = true;
+        pane._toNewest        = false;
+
+        // The Last Chat's Content Height Means Nothing Here: Unset, The First Look Counts As A Content Change, Not As The
+        // Person Scrolling (Two Chats Of The Same Height Would Otherwise Unpin On The Offset Reset To The Top)
+        pane._lastExtent      = -1;
         chat?.Trace($"opened in pane (scroller {(pane._scroller is null ? "not yet hooked" : "hooked")})");
 
         if (chat is not null)
@@ -124,7 +132,7 @@ public sealed partial class ChatPane : UserControl
     // A Bubble Added At The Bottom (Sent, Arrived Or The First Page) Comes Into View; Older Pages Go In Above. The List
     // Scrolls To Its End Instead Of ScrollIntoView: On This Bottom-Aligned List, ScrollIntoView Made The Panel Realize
     // Its Rows Again, So Every Bubble Above The New One Replayed Its Entrance (The Whole Chat Seemed To Reload On Send).
-    // Already At The End (The Usual Case), KeepLastItemInView Has Done It And Nothing Moves
+    // Already At The End (The Usual Case), KeepPinned Has Done It And Nothing Moves
     private void OnMessagesChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         if (e.Action != NotifyCollectionChangedAction.Add || sender is not ICollection<MessageBubbleViewModel> messages
@@ -139,7 +147,7 @@ public sealed partial class ChatPane : UserControl
             MessageList.UpdateLayout();
             if (Scroller() is { } scroller && scroller.VerticalOffset < scroller.ScrollableHeight)
             {
-                scroller.ChangeView(null, scroller.ScrollableHeight, null);
+                ScrollToNewest(scroller);
             }
         });
     }
@@ -211,6 +219,15 @@ public sealed partial class ChatPane : UserControl
             KeepPinned(scroller);
         }
 
+        // Come To Rest After Scrolling To The Newest Message: Pinned There, And Put Right At It If Rows Measured On The
+        // Way Grew The Content Past Where The Scroll Was Headed
+        if (_toNewest && !e.IsIntermediate)
+        {
+            _toNewest = false;
+            _pinned   = true;
+            KeepPinned(scroller);
+        }
+
         bool show_arrow = ChatScroll.ShowScrollToBottom(scroller.VerticalOffset, scroller.ScrollableHeight, scroller.ViewportHeight);
         bool load_older = scroller.ScrollableHeight > 0 && ChatScroll.ShouldLoadOlder(scroller.VerticalOffset, scroller.ScrollableHeight, scroller.ViewportHeight);
 
@@ -230,7 +247,13 @@ public sealed partial class ChatPane : UserControl
         }
     }
 
-    private void OnScrollToBottomClick(object sender, RoutedEventArgs e) => _scroller?.ChangeView(null, _scroller.ScrollableHeight, null);
+    private void OnScrollToBottomClick(object sender, RoutedEventArgs e)
+    {
+        if (_scroller is { } scroller)
+        {
+            ScrollToNewest(scroller);
+        }
+    }
 
     // Bubbles Measure Their Real Heights After They Show (The List Only Estimates Them First), So A Just-Opened Chat Would
     // Stop A Few Pixels Short Of Its Newest Message, Showing The Bottom Fade. While Pinned, Each Change In Content Height
@@ -341,6 +364,14 @@ public sealed partial class ChatPane : UserControl
         {
             scroller.ChangeView(null, scroller.ScrollableHeight, null, true);
         }
+    }
+
+    // Scrolls (Animated) To The Newest Message. The List Only Estimates The Heights Of Rows Not Yet Shown, So The Content
+    // Can Grow Past The Scroll's Target While It Runs; OnScrolled Finishes The Job Where It Comes To Rest
+    private void ScrollToNewest(ScrollViewer scroller)
+    {
+        _toNewest = true;
+        scroller.ChangeView(null, scroller.ScrollableHeight, null);
     }
 
     // Fades The Scroll-To-Bottom Button In Or Out (Its OpacityTransition Animates It); Hidden, It Takes No Clicks Or Focus

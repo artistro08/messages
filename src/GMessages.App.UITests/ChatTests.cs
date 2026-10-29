@@ -301,6 +301,46 @@ public sealed class ChatTests : UiTest
         }
     }
 
+    /// <summary>
+    /// Switching back and forth between two chats that were opened before (their bubbles shown from what the app kept)
+    /// leaves each one on its newest message, not a few pixels short of it under the bottom fade.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task SwitchChats_EachOpensOnNewest()
+    {
+        // Two Chats Like Real Ones: Sent And Received One-Liners, Some With Emoji, A Screen And A Half Per Page
+        long time = DateTimeOffset.UtcNow.AddDays(-1).ToUnixTimeMilliseconds() * 1000;
+        foreach (string id in new[] { "sa", "sb" })
+        {
+            Conversation chat = FakeChats.NewConversation("c-" + id, "Pal " + id, false, ConversationStatus.Active, false, false, FakeChats.Person("p-" + id, "Pal " + id, "+1555000001" + id.Length));
+            Server.Phone.Chats.Add(chat, [.. Enumerable.Range(1, ChatStore.PageSize * 2).Select(i => Line(id, i))]);
+        }
+
+        await OpenMainAsync();
+        foreach (string id in new[] { "sa", "sb", "sa", "sb" })
+        {
+            App.Find("Row.c-" + id).Patterns.SelectionItem.Pattern.Select();
+            Wait.Until(() => Bubbles().Any(b => b.Id == $"Bubble.{id}-{ChatStore.PageSize * 2}"), AppDriver.DefaultTimeout, () => $"Chat {id} didn't show its newest bubble.");
+            Thread.Sleep(2000);
+            AssertAtNewest($"Opening chat {id}");
+        }
+
+        Message Line(string id, int i)
+        {
+            var message = new Message
+            {
+                MessageID      = $"{id}-{i}",
+                ConversationID = "c-" + id,
+                ParticipantID  = i % 2 == 0 ? FakeChats.MyParticipantId : "p-" + id,
+                Timestamp      = time += 1_000_000,
+                MessageStatus  = new MessageStatus { Status = i % 2 == 0 ? MessageStatusType.OutgoingComplete : MessageStatusType.IncomingComplete },
+            };
+            message.MessageInfo.Add(new MessageInfo { MessageContent = new MessageContent { Content = i % 3 == 0 ? $"Line {i} \U0001F923\U0001F923" : $"Line {i}" } });
+            return message;
+        }
+    }
+
     // =========================================================================
     // HELPERS
     // =========================================================================
