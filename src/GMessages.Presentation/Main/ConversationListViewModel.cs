@@ -29,6 +29,9 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
     private Cursor? _next;
     private bool _isLoading;
 
+    // A Reload Asked For While A Load Was Running; Runs When That Load Ends
+    private bool _reloadPending;
+
     /// <summary>
     /// Creates an empty list and starts listening to the store.
     /// </summary>
@@ -77,12 +80,13 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
     /// <summary>
     /// Loads the newest page, replacing the rows.
     /// </summary>
-    /// <remarks>Call on the UI thread. Does nothing while a page is loading. When the phone is not connected the rows stay as they were.</remarks>
+    /// <remarks>Call on the UI thread. While a page is loading the call is remembered and runs once that load ends. When the phone is not connected the rows stay as they were.</remarks>
     /// <returns>A task that completes when the page is shown.</returns>
     public async Task LoadAsync()
     {
         if (IsLoading)
         {
+            _reloadPending = true;
             return;
         }
 
@@ -105,6 +109,13 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
         finally
         {
             IsLoading = false;
+        }
+
+        // A Resync Or Reload Arrived Mid-Load: The Page Above May Be Stale, So Load Again
+        if (_reloadPending)
+        {
+            _reloadPending = false;
+            await LoadAsync();
         }
     }
 

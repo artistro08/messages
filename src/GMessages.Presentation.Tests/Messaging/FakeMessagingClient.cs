@@ -26,10 +26,21 @@ internal sealed class FakeMessagingClient : IMessagingClient
 
     public List<(ListConversationsRequest.Types.Folder Folder, long Count)> ListCalls { get; } = [];
 
-    public Task<ListConversationsResponse> ListConversationsAsync(ListConversationsRequest.Types.Folder folder, long count, Cursor? cursor, CancellationToken ct)
+    /// <summary>When set, the next list call returns the page it had when called, but only after this completes.</summary>
+    public TaskCompletionSource? ListGate { get; set; }
+
+    public async Task<ListConversationsResponse> ListConversationsAsync(ListConversationsRequest.Types.Folder folder, long count, Cursor? cursor, CancellationToken ct)
     {
         ListCalls.Add((folder, count));
-        return Task.FromResult(ConversationsPage);
+        ListConversationsResponse page = ConversationsPage;
+
+        if (ListGate is { } gate)
+        {
+            ListGate = null;
+            await gate.Task;
+        }
+
+        return page;
     }
 
     public async Task<Conversation?> GetConversationAsync(string conversationId, CancellationToken ct)

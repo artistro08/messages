@@ -113,6 +113,13 @@ public sealed class MainViewModelTests
 
         vm.ApplyState(ConnectionState.Reconnecting);
         Assert.AreEqual(ChatCopy.Connecting, vm.StatusBanner);
+
+        // Stale Silence Doesn't Survive A Reconnect
+        vm.ApplyState(ConnectionState.Connected);
+        vm.ApplyEvent(new PhoneNotResponding());
+        vm.ApplyState(ConnectionState.Reconnecting);
+        vm.ApplyState(ConnectionState.Connected);
+        Assert.IsNull(vm.StatusBanner);
     }
 
     [TestMethod]

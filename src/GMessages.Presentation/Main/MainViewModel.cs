@@ -214,6 +214,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
     internal void ApplyState(ConnectionState state)
     {
+        // A New State Starts Fresh: The Phone Is Not Silent Until It Says So
+        if (_state != state)
+        {
+            _phoneSilent = false;
+        }
+
         _state = state;
         Changed();
     }

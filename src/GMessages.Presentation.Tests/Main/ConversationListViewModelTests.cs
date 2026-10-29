@@ -113,4 +113,23 @@ public sealed class ConversationListViewModelTests
         Assert.AreEqual("a,b", Ids(list));
         Assert.AreEqual(2, rig.Client.ListCalls.Count);
     }
+
+    [TestMethod]
+    public async Task Resynced_DuringLoad_RunsASecondLoad()
+    {
+        using var rig = new MainRig();
+        rig.Page(MainRig.Conv("a", "Ann"));
+        var gate         = new TaskCompletionSource();
+        rig.Client.ListGate = gate;
+        using var list   = NewList(rig);
+
+        Task first = list.LoadAsync();
+        rig.Page(MainRig.Conv("a", "Ann"), MainRig.Conv("n", "Newcomer", minutesAgo: 1));
+        await rig.Store.HandleEventAsync(new ListenRecovered());
+        gate.SetResult();
+        await first;
+
+        Assert.AreEqual("a,n", Ids(list));
+        Assert.AreEqual(2, rig.Client.ListCalls.Count);
+    }
 }

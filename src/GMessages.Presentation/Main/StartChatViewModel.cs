@@ -127,6 +127,7 @@ public sealed class StartChatViewModel : INotifyPropertyChanged
     /// <returns>The conversation ID.</returns>
     /// <exception cref="InvalidOperationException">Nobody is picked.</exception>
     /// <exception cref="MessagingUnavailableException">Not connected.</exception>
+    /// <exception cref="MessageSendException">The phone did not answer success with a conversation (also after the RCS retry).</exception>
     public async Task<string> StartAsync()
     {
         if (!CanStart)
@@ -149,6 +150,13 @@ public sealed class StartChatViewModel : INotifyPropertyChanged
             request.RCSGroupName   = string.Empty;
             request.CreateRCSGroup = true;
             response               = await client.GetOrCreateConversationAsync(request, CancellationToken.None);
+        }
+
+        // The Phone Must Have Answered Success With A Real Conversation
+        if (response.Status != GetOrCreateConversationResponse.Types.Status.Success
+            || string.IsNullOrEmpty(response.Conversation?.ConversationID))
+        {
+            throw new MessageSendException(response.Status.ToString());
         }
 
         return response.Conversation.ConversationID;

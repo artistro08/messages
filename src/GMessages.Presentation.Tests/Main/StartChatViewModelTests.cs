@@ -130,4 +130,16 @@ public sealed class StartChatViewModelTests
         Assert.IsFalse(vm.CanStart);
         await Assert.ThrowsExactlyAsync<InvalidOperationException>(vm.StartAsync);
     }
+
+    [TestMethod]
+    public async Task Start_NotSuccessAfterRetry_Throws()
+    {
+        using var rig = new MainRig();
+        StartChatViewModel vm = await NewPaneAsync(rig);
+        rig.Client.CreateAnswers.Enqueue(new GetOrCreateConversationResponse { Status = GetOrCreateConversationResponse.Types.Status.CreateRcs });
+        rig.Client.CreateAnswers.Enqueue(new GetOrCreateConversationResponse { Status = GetOrCreateConversationResponse.Types.Status.CreateRcs });
+        vm.Toggle(vm.Results[0]);
+
+        await Assert.ThrowsExactlyAsync<MessageSendException>(vm.StartAsync);
+    }
 }
