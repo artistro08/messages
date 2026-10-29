@@ -15,7 +15,7 @@
     <!-- The one place the app display name lives: exe name, MSIX names and AppInfo.DisplayName all read it -->
     <AppDisplayName>Messages</AppDisplayName>
     <!-- App version (AppInfo.Version); keep it in step with Identity Version in src/GMessages.App/Package.appxmanifest -->
-    <Version>0.2.5</Version>
+    <Version>0.2.6</Version>
   </PropertyGroup>
 
   <!-- Display Name: stamped into every assembly, read at runtime by AppInfo.DisplayName -->
