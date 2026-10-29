@@ -22,10 +22,6 @@ public sealed partial class StartChatPane : UserControl
     public static readonly DependencyProperty StartChatProperty =
         DependencyProperty.Register(nameof(StartChat), typeof(StartChatViewModel), typeof(StartChatPane), new PropertyMetadata(null, OnStartChatChanged));
 
-    /// <summary>Identifies the <see cref="ShowBack"/> property.</summary>
-    public static readonly DependencyProperty ShowBackProperty =
-        DependencyProperty.Register(nameof(ShowBack), typeof(bool), typeof(StartChatPane), new PropertyMetadata(false));
-
     /// <summary>
     /// Creates the pane.
     /// </summary>
@@ -40,23 +36,11 @@ public sealed partial class StartChatPane : UserControl
     /// </summary>
     public event EventHandler<string>? Started;
 
-    /// <summary>
-    /// Asks the window to close Start chat and show the list (the back button of a narrow window).
-    /// </summary>
-    public event EventHandler? BackRequested;
-
     /// <summary>Gets or sets the pane's state, or null while closed.</summary>
     public StartChatViewModel? StartChat
     {
         get => (StartChatViewModel?)GetValue(StartChatProperty);
         set => SetValue(StartChatProperty, value);
-    }
-
-    /// <summary>Gets or sets whether the back button shows (narrow windows).</summary>
-    public bool ShowBack
-    {
-        get => (bool)GetValue(ShowBackProperty);
-        set => SetValue(ShowBackProperty, value);
     }
 
     /// <summary>
@@ -118,6 +102,4 @@ public sealed partial class StartChatPane : UserControl
             Started?.Invoke(this, conversation_id);
         }
     }
-
-    private void OnBackClick(object sender, RoutedEventArgs e) => BackRequested?.Invoke(this, EventArgs.Empty);
 }

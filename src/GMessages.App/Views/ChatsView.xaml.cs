@@ -297,8 +297,6 @@ public sealed partial class ChatsView : UserControl
     // Start Chat Opened (Or Found) The Conversation: Show It In Place Of Start Chat
     private void OnChatStarted(object? sender, string conversationId) => ViewModel.Select(conversationId);
 
-    // The Back Arrow Of A Narrow Window Closes The Chat Or Start Chat, Which Shows The List
-    private void OnPaneBack(object? sender, EventArgs e) => ViewModel.ExitConversation();
 
     // Picking A Row Opens It; A Cleared Selection (List Swapped, Row Moved) Keeps The Open Conversation
     private void OnSelectionChanged(object sender, SelectionChangedEventArgs e)

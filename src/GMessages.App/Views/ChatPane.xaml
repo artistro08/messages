@@ -44,27 +44,14 @@
 
     <Grid RowDefinitions="Auto,*,Auto">
 
-        <!-- Header: back (narrow only), avatar and name -->
+        <!-- Header: avatar and name (a narrow window's back is the title bar's) -->
         <Grid
             Padding="12,8,16,8"
             BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
             BorderThickness="0,0,0,1"
-            ColumnDefinitions="Auto,Auto,*"
+            ColumnDefinitions="Auto,*"
             ColumnSpacing="12">
-            <Button
-                Width="40"
-                Height="36"
-                Padding="0"
-                AutomationProperties.AutomationId="Chat.Back"
-                AutomationProperties.Name="Back"
-                Background="Transparent"
-                BorderThickness="0"
-                Click="OnBackClick"
-                Visibility="{x:Bind ShowBack, Mode=OneWay}">
-                <FontIcon FontSize="16" Glyph="&#xE72B;" />
-            </Button>
             <controls:Avatar
-                Grid.Column="1"
                 VerticalAlignment="Center"
                 Color="{x:Bind Chat.AvatarColor, Mode=OneWay, FallbackValue=0}"
                 Initial="{x:Bind Chat.Initial, Mode=OneWay, FallbackValue=''}"
@@ -73,7 +60,7 @@
                 SecondInitial="{x:Bind Chat.SecondInitial, Mode=OneWay, FallbackValue=''}"
                 SecondPhotoId="{x:Bind Chat.SecondPhotoId, Mode=OneWay, FallbackValue=''}" />
             <TextBlock
-                Grid.Column="2"
+                Grid.Column="1"
                 VerticalAlignment="Center"
                 AutomationProperties.AutomationId="Chat.Header"
                 MaxLines="1"

@@ -286,10 +286,25 @@ public sealed class MainWindowTests : UiTest
         Window window = App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout);
         window.Patterns.Transform.Pattern.Resize(600, 700);
 
-        // Pick Ann: The List Gives Way To The Chat
+        // No ☰: There Is No List To Hide While One Pane Shows
+        WaitForGone("Main.MenuButton");
+
+        // Pick Ann: The List Gives Way To The Chat, With Back In The Title Bar
         App.Find("Row.c-ann").Patterns.SelectionItem.Pattern.Select();
         Wait.Until(() => App.TryFind("Main.ConversationList") is null, AppDriver.DefaultTimeout, () => "The list still showed beside the chat in a narrow window.");
         App.Find("Chat.Header");
+        AssertBackInTitleBar("Chat.Back");
+
+        // Back: The List Again, Still Without ☰ Or Back
+        Invoke("Chat.Back");
+        App.Find("Main.ConversationList");
+        Wait.Until(() => App.TryFind("Chat.Back") is null, AppDriver.DefaultTimeout, () => "Back stayed in the title bar on the list.");
+        WaitForGone("Main.MenuButton");
+
+        // Start Chat Gets The Same Back
+        Invoke("Main.StartChat");
+        App.Find("StartChat.Query");
+        AssertBackInTitleBar("Chat.Back");
     }
 
     // =========================================================================

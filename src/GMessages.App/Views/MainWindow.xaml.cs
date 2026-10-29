@@ -275,14 +275,16 @@ public sealed partial class MainWindow : Window
         BodyHost.Child = null;
     }
 
-    // ☰ And The Profile Picture Have Nothing To Show While Pairing. Settings And Spam & Blocked Show The Title Bar's Back
-    // In Place Of ☰, Named For The Page It Leaves (The Tests Find It By That). Returns Back While It Shows
+    // ☰ And The Profile Picture Have Nothing To Show While Pairing. A Narrow Window Has No ☰ (It Shows One Pane, So There
+    // Is No List To Hide). Settings, Spam & Blocked And A Narrow Window's Open Chat Show The Title Bar's Back In Place Of
+    // ☰, Named For The Page It Leaves (The Tests Find It By That). Returns Back While It Shows
     private Button? ShowTitleBarButtons()
     {
-        bool show_back = _settingsPage is not null || ViewModel?.IsSpamView == true;
+        bool narrow_chat = ViewModel?.ShowChatPane == true;
+        bool show_back   = _settingsPage is not null || ViewModel?.IsSpamView == true || narrow_chat;
 
         AppTitleBar.IsBackButtonVisible = show_back;
-        MenuButton.Visibility           = _chats is not null && !show_back ? Visibility.Visible : Visibility.Collapsed;
+        MenuButton.Visibility           = _chats is not null && !show_back && ViewModel?.IsNarrow != true ? Visibility.Visible : Visibility.Collapsed;
         ProfileButton.Visibility        = _chats is not null ? Visibility.Visible : Visibility.Collapsed;
 
         // The Title Bar Only Lets Clicks Through Where Its Buttons Are When It Computes Its Regions
@@ -292,19 +294,17 @@ public sealed partial class MainWindow : Window
             return null;
         }
 
-        // Back Is Made The First Time It Shows (Deferred In The Template), So The Layout Runs First
+        // Back Is Made The First Time It Shows (Deferred In The Template), So The Layout Runs First. Found By Its Part Name:
+        // Native AOT Can Hand Template Parts Back As Base Types, So A Plain Cast Would Miss It (See ChatPane.FindPart)
         if (_backButton is null)
         {
             AppTitleBar.UpdateLayout();
-            if (VisualTreeHelper.GetChildrenCount(AppTitleBar) > 0 && VisualTreeHelper.GetChild(AppTitleBar, 0) is Grid layout)
-            {
-                _backButton = layout.FindName("PART_BackButton") as Button;
-            }
+            _backButton = ChatPane.FindPart<Button>(AppTitleBar, "PART_BackButton");
         }
 
         if (_backButton is not null)
         {
-            AutomationProperties.SetAutomationId(_backButton, _settingsPage is not null ? "Settings.Back" : "Main.SpamBack");
+            AutomationProperties.SetAutomationId(_backButton, _settingsPage is not null ? "Settings.Back" : narrow_chat ? "Chat.Back" : "Main.SpamBack");
         }
 
         return _backButton;
@@ -374,21 +374,33 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    // Spam & Blocked Opened Or Closed: Back Or ☰ (Other Changes Leave The Title Bar Alone)
+    // Spam & Blocked Opened Or Closed, The Window Went Narrow Or Wide, Or A Narrow Window's Chat Opened Or Closed: Back
+    // Or ☰ (Other Changes Leave The Title Bar Alone)
     private void OnChatsChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (AppTitleBar.IsBackButtonVisible != (_settingsPage is not null || ViewModel?.IsSpamView == true))
+        // The View Model Raises Everything At Once (An Empty Name), So The Title Bar Is Only Touched When It Would Change
+        bool narrow_chat = ViewModel?.ShowChatPane == true;
+        bool show_back   = _settingsPage is not null || ViewModel?.IsSpamView == true || narrow_chat;
+        bool show_menu   = _chats is not null && !show_back && ViewModel?.IsNarrow != true;
+        if (AppTitleBar.IsBackButtonVisible != show_back || (MenuButton.Visibility == Visibility.Visible) != show_menu
+            || (narrow_chat && _backButton is not null && AutomationProperties.GetAutomationId(_backButton) != "Chat.Back"))
         {
             ShowTitleBarButtons();
         }
     }
 
-    // The Title Bar's Back: Leaves Settings, Else Spam & Blocked
+    // The Title Bar's Back: Leaves Settings, Else A Narrow Window's Chat (Back To The List), Else Spam & Blocked
     private void OnTitleBarBackRequested(TitleBar sender, object args)
     {
         if (_settingsPage is not null)
         {
             CloseSettings();
+            return;
+        }
+
+        if (ViewModel?.ShowChatPane == true)
+        {
+            ViewModel.ExitConversation();
             return;
         }
 

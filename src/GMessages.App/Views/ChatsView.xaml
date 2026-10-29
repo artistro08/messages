@@ -144,16 +144,12 @@
                 <!-- Conversation -->
                 <local:ChatPane
                     x:Name="ChatView"
-                    BackRequested="OnPaneBack"
                     Chat="{x:Bind ViewModel.Chat, Mode=OneWay}"
-                    ShowBack="{x:Bind ViewModel.IsNarrow, Mode=OneWay}"
                     Visibility="{x:Bind ViewModel.IsChatOpen, Mode=OneWay}" />
 
                 <!-- Start Chat -->
                 <local:StartChatPane
                     x:Name="StartChatView"
-                    BackRequested="OnPaneBack"
-                    ShowBack="{x:Bind ViewModel.IsNarrow, Mode=OneWay}"
                     StartChat="{x:Bind ViewModel.StartChat, Mode=OneWay}"
                     Started="OnChatStarted"
                     Visibility="{x:Bind ViewModel.IsStartChatOpen, Mode=OneWay}" />

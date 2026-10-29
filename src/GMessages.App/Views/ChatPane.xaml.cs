@@ -35,10 +35,6 @@ public sealed partial class ChatPane : UserControl
     public static readonly DependencyProperty ChatProperty =
         DependencyProperty.Register(nameof(Chat), typeof(ChatViewModel), typeof(ChatPane), new PropertyMetadata(null, OnChatChanged));
 
-    /// <summary>Identifies the <see cref="ShowBack"/> property.</summary>
-    public static readonly DependencyProperty ShowBackProperty =
-        DependencyProperty.Register(nameof(ShowBack), typeof(bool), typeof(ChatPane), new PropertyMetadata(false));
-
     private ScrollViewer? _scroller;
 
     // The Last Scroll Decisions Logged (Wave 7 Diagnostics), So Only Changes Are Logged
@@ -49,23 +45,11 @@ public sealed partial class ChatPane : UserControl
     /// </summary>
     public ChatPane() => InitializeComponent();
 
-    /// <summary>
-    /// Asks the window to close the chat and show the list (the back button of a narrow window).
-    /// </summary>
-    public event EventHandler? BackRequested;
-
     /// <summary>Gets or sets the open conversation, or null.</summary>
     public ChatViewModel? Chat
     {
         get => (ChatViewModel?)GetValue(ChatProperty);
         set => SetValue(ChatProperty, value);
-    }
-
-    /// <summary>Gets or sets whether the back button shows (narrow windows).</summary>
-    public bool ShowBack
-    {
-        get => (bool)GetValue(ShowBackProperty);
-        set => SetValue(ShowBackProperty, value);
     }
 
     /// <summary>
@@ -247,8 +231,6 @@ public sealed partial class ChatPane : UserControl
         e.Handled = true;
         bubble.ToggleTime();
     }
-
-    private void OnBackClick(object sender, RoutedEventArgs e) => BackRequested?.Invoke(this, EventArgs.Empty);
 
     private void OnSendClick(object sender, RoutedEventArgs e) => _ = Chat?.SendAsync();
 
