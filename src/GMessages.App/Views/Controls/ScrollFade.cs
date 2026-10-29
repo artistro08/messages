@@ -103,7 +103,7 @@ internal sealed class ScrollFade
     /// <returns>The fade, or null when the scroller has no content presenter yet.</returns>
     public static ScrollFade? Attach(ScrollViewer scroller)
     {
-        if (Find<ScrollContentPresenter>(scroller) is not { } content || VisualTreeHelper.GetParent(content) is not Panel parent)
+        if (ChatPane.FindPart<ScrollContentPresenter>(scroller, "ScrollContentPresenter") is not { } content || VisualTreeHelper.GetParent(content) is not Panel parent)
         {
             return null;
         }
@@ -164,20 +164,5 @@ internal sealed class ScrollFade
         fade.InsertKeyFrame(1, color);
         fade.Duration = FadeDuration;
         stop.StartAnimation(nameof(stop.Color), fade);
-    }
-
-    private static T? Find<T>(DependencyObject root)
-        where T : DependencyObject
-    {
-        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
-        {
-            DependencyObject child = VisualTreeHelper.GetChild(root, i);
-            if ((child as T ?? Find<T>(child)) is { } found)
-            {
-                return found;
-            }
-        }
-
-        return null;
     }
 }

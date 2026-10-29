@@ -10,6 +10,7 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Windows.System;
 using Windows.UI.Core;
+using WinRT;
 
 namespace GMessages.App.Views;
 
@@ -169,8 +170,8 @@ public sealed partial class ChatPane : UserControl
         {
             _scroller              = found;
             _scroller.ViewChanged += OnScrolled;
-            _ = ScrollFade.Attach(found);
-            Chat?.Trace("scroller hooked");
+            bool faded = ScrollFade.Attach(found) is not null;
+            Chat?.Trace($"scroller hooked (edge fades {faded})");
         }
 
         return _scroller;
@@ -233,10 +234,12 @@ public sealed partial class ChatPane : UserControl
 
     private void OnScrollToBottomClick(object sender, RoutedEventArgs e) => _scroller?.ChangeView(null, _scroller.ScrollableHeight, null);
 
-    // Enter Or Space On A Focused Bubble Shows Or Hides Its Time, Like A Click (Not On Its Retry Link, Which Has Focus Then)
+    // Enter Or Space On A Focused Bubble Shows Or Hides Its Time, Like A Click (Not On Its Retry Link, Which Has Focus Then).
+    // The Row Is Matched As A ContentControl Holding A Bubble: In The Native AOT Build It Arrives As A ContentControl, Not
+    // A ListViewItem (See FindScroller)
     private void OnMessageListKeyDown(object sender, KeyRoutedEventArgs e)
     {
-        if (e.Key is not (VirtualKey.Enter or VirtualKey.Space) || e.OriginalSource is not ListViewItem { Content: MessageBubbleViewModel bubble })
+        if (e.Key is not (VirtualKey.Enter or VirtualKey.Space) || e.OriginalSource is not ContentControl { Content: MessageBubbleViewModel bubble })
         {
             return;
         }
@@ -332,14 +335,31 @@ public sealed partial class ChatPane : UserControl
     /// <summary>
     /// Finds the first <see cref="ScrollViewer"/> under an element (a list's template holds one).
     /// </summary>
+    /// <remarks>
+    /// In the Native AOT build, the visual tree hands a template's scroller back as a base type (a
+    /// <see cref="ContentControl"/>), so a plain <c>as ScrollViewer</c> finds nothing there. The template part is
+    /// found by its name instead and cast with a WinRT cast (a COM QueryInterface), which needs no type lookup.
+    /// </remarks>
     /// <param name="root">The element to search under.</param>
     /// <returns>The scroller, or null before the element has its template.</returns>
-    internal static ScrollViewer? FindScroller(DependencyObject root)
+    internal static ScrollViewer? FindScroller(DependencyObject root) => FindPart<ScrollViewer>(root, "ScrollViewer");
+
+    /// <summary>
+    /// Finds the first element of a type, or a template part of that name, under an element (AOT safe; see
+    /// <see cref="FindScroller"/>).
+    /// </summary>
+    /// <typeparam name="T">The element's type.</typeparam>
+    /// <param name="root">The element to search under.</param>
+    /// <param name="partName">The template part's name, such as "ScrollViewer".</param>
+    /// <returns>The element, or null when there is none (yet).</returns>
+    internal static T? FindPart<T>(DependencyObject root, string partName)
+        where T : class
     {
         for (int i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
         {
             DependencyObject child = VisualTreeHelper.GetChild(root, i);
-            if ((child as ScrollViewer ?? FindScroller(child)) is { } found)
+            T? part = child as T ?? (child is FrameworkElement element && element.Name == partName ? element.As<T>() : null);
+            if ((part ?? FindPart<T>(child, partName)) is { } found)
             {
                 return found;
             }
