@@ -595,4 +595,21 @@ public sealed class ChatViewModelTests
 
         Assert.AreEqual("four", chat.Messages[^1].Text);
     }
+    /// <summary>
+    /// A bubble's time is hidden until the bubble is clicked, and a second click hides it again.
+    /// </summary>
+    [TestMethod]
+    public void ToggleTime_ShowsThenHides()
+    {
+        var bubble  = new MessageBubbleViewModel(ChatMessage.From(Msg("m1", "one")));
+        int raised  = 0;
+        bubble.PropertyChanged += (_, _) => raised++;
+
+        Assert.IsFalse(bubble.IsTimeShown);
+        bubble.ToggleTime();
+        Assert.IsTrue(bubble.IsTimeShown);
+        bubble.ToggleTime();
+        Assert.IsFalse(bubble.IsTimeShown);
+        Assert.AreEqual(2, raised);
+    }
 }

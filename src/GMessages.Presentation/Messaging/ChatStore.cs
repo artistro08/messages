@@ -98,6 +98,13 @@ public sealed partial class ChatStore : IDisposable
     public ConversationInfo? Find(string conversationId) => _cache.GetValueOrDefault(conversationId);
 
     /// <summary>
+    /// Gets every cached conversation, in no order: what the app already knows, so a list can show at once while it
+    /// asks the phone for the newest page.
+    /// </summary>
+    /// <returns>A copy of the cached conversations.</returns>
+    public IReadOnlyList<ConversationInfo> CachedConversations() => [.. _cache.Values];
+
+    /// <summary>
     /// Gets a conversation from the cache, fetching it from the phone when it is not cached.
     /// </summary>
     /// <param name="conversationId">The conversation ID.</param>

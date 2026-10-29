@@ -60,6 +60,9 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     /// <summary>Gets the time of day the message was sent.</summary>
     public string Time { get; private set; } = string.Empty;
 
+    /// <summary>Gets whether the time shows under the bubble: hidden until the bubble is clicked (see <see cref="ToggleTime"/>).</summary>
+    public bool IsTimeShown { get; private set; }
+
     /// <summary>Gets whether the message was not sent.</summary>
     public bool IsFailed { get; private set; }
 
@@ -85,6 +88,15 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     /// <remarks>A XAML list item reads its item's <c>ToString()</c> as its UI Automation name, so screen readers hear this.</remarks>
     /// <returns>The text to read out.</returns>
     public override string ToString() => IsFailed ? $"{Text}, {ChatCopy.NotSentRetry}" : Text;
+
+    /// <summary>
+    /// Shows the time under the bubble, or hides it again (a click on the bubble).
+    /// </summary>
+    public void ToggleTime()
+    {
+        IsTimeShown = !IsTimeShown;
+        PropertyChanged?.Invoke(this, AllChanged);
+    }
 
     internal void SetSender(string? name, uint color)
     {

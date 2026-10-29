@@ -292,4 +292,39 @@ public sealed class ConversationListViewModelTests
         gate.SetResult();
         await first;
     }
+    /// <summary>
+    /// A list made after another one loaded (the window reopened) shows the store's conversations at once, with no
+    /// ring, then the phone's page updates the same rows and drops the ones it no longer lists.
+    /// </summary>
+    [TestMethod]
+    public async Task Load_ShowsCachedRowsAtOnce_ThenRefreshUpdatesThem()
+    {
+        using var rig = new MainRig();
+        rig.Page(
+            MainRig.Conv("a", "Ann", minutesAgo: 5),
+            MainRig.Conv("b", "Bo", minutesAgo: 1),
+            MainRig.Conv("s", "Spam", status: ConversationStatus.SpamFolder));
+        using (ConversationListViewModel first = NewList(rig))
+        {
+            await first.LoadAsync();
+        }
+
+        // The Phone's Next Answer No Longer Lists Bo
+        rig.Page(MainRig.Conv("a", "Ann", minutesAgo: 5, snippet: "new"));
+        using var list      = NewList(rig);
+        var gate            = new TaskCompletionSource();
+        rig.Client.ListGate = gate;
+        Task load           = list.LoadAsync();
+
+        // From The Store, Before The Phone Answers
+        Assert.AreEqual("b,a", Ids(list));
+        Assert.IsFalse(list.IsLoadingFirstPage);
+        ConversationRowViewModel ann = list.Rows[1];
+
+        gate.SetResult();
+        await load;
+
+        Assert.AreEqual("a", Ids(list));
+        Assert.AreSame(ann, list.Rows[0], "the row was updated in place, not replaced");
+    }
 }

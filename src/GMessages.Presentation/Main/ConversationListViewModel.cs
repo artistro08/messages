@@ -90,7 +90,12 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
     /// <summary>
     /// Loads the newest page, replacing the rows.
     /// </summary>
-    /// <remarks>Call on the UI thread. While a page is loading the call is remembered and runs once that load ends. When the load fails (phone not connected or not answering, a network error) the rows stay as they were.</remarks>
+    /// <remarks>
+    /// Call on the UI thread. An empty list first shows the conversations the store already has (the window reopened),
+    /// so it never waits on the phone. The page then updates those rows in place and drops the ones it doesn't list.
+    /// While a page is loading the call is remembered and runs once that load ends. When the load fails (phone not
+    /// connected or not answering, a network error) the rows stay as they were.
+    /// </remarks>
     /// <returns>A task that completes when the page is shown.</returns>
     public async Task LoadAsync()
     {
@@ -100,12 +105,30 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
             return;
         }
 
+        // What The Store Already Has, Before The Phone Answers
+        if (Rows.Count == 0)
+        {
+            foreach (ConversationInfo c in _store.CachedConversations())
+            {
+                Apply(c);
+            }
+        }
+
         IsLoading = true;
         try
         {
             (IReadOnlyList<ConversationInfo> page, Cursor? next) = await _store.LoadFolderAsync(_folder, null, CancellationToken.None);
 
-            Rows.Clear();
+            // Rows Stay The Same Objects, So The Selection And Scroll Survive The Refresh
+            HashSet<string> listed = [.. page.Select(c => c.Id)];
+            for (int i = Rows.Count - 1; i >= 0; i--)
+            {
+                if (!listed.Contains(Rows[i].Id))
+                {
+                    Rows.RemoveAt(i);
+                }
+            }
+
             _next = next;
             foreach (ConversationInfo c in page)
             {
