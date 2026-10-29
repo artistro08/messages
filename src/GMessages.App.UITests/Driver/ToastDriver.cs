@@ -11,6 +11,8 @@ namespace GMessages.App.UITests.Driver;
 /// Windows shows each toast as a top-level window named <c>New notification</c>, owned by the shell, on the desktop
 /// root. Toasts of other apps may be on screen too, so a toast only counts when its texts include the expected title.
 /// A failed wait lists every toast's texts (<see cref="DescribeAll"/>), so a missing toast can be told from a wrong one.
+/// A new toast's content slides in, and Windows drops a reply or click made during the slide, so <see cref="Reply"/>
+/// and <see cref="ClickBody"/> first wait for the part they use to stand still.
 /// </remarks>
 public sealed class ToastDriver
 {
@@ -109,6 +111,7 @@ public sealed class ToastDriver
 
         AutomationElement box = AppDriver.Search(toast, e => e.ControlType == ControlType.Edit)
             ?? throw new AssertFailedException($"The toast has no reply box. {Describe(toast)}");
+        WaitUntilStill(box);
         box.Patterns.Value.Pattern.SetValue(text);
 
         // Windows' Quick Reply Button Beside The Box Has No Name In UI Automation, Only Its Own ID
@@ -128,6 +131,7 @@ public sealed class ToastDriver
         // The Title, As A Person Would: The Toast's Own Center Can Land On The Reply Box
         AutomationElement title = AppDriver.Search(toast, e => e.ControlType == ControlType.Text && e.AutomationId == "Title")
             ?? throw new AssertFailedException($"The toast has no title. {Describe(toast)}");
+        WaitUntilStill(title);
         title.Click();
     }
 
@@ -151,6 +155,27 @@ public sealed class ToastDriver
 
     // The Send Button Is The Reply Box's Button; Its Name Comes From Windows
     private const string SendButtonId = "BuddyButton";
+
+    // How Long A Toast's Part Must Keep Its Bounds Before It Counts As Done Sliding In (The Slide Takes About 100 ms)
+    private static readonly TimeSpan StillTime = TimeSpan.FromMilliseconds(500);
+
+    // Waits Until The Toast's Entrance Slide Is Over: Its Part Kept The Same Bounds For StillTime
+    private static void WaitUntilStill(AutomationElement part)
+    {
+        System.Drawing.Rectangle bounds = part.BoundingRectangle;
+        DateTime still_since            = DateTime.UtcNow;
+        Wait.Until(() =>
+        {
+            System.Drawing.Rectangle now = part.BoundingRectangle;
+            if (now != bounds)
+            {
+                bounds      = now;
+                still_since = DateTime.UtcNow;
+            }
+
+            return DateTime.UtcNow - still_since >= StillTime;
+        }, AppDriver.DefaultTimeout, () => $"The toast never stopped moving; last at {bounds}.");
+    }
 
     // Every Toast Window On The Desktop Root
     private AutomationElement[] Toasts()

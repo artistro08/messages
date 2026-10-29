@@ -70,12 +70,13 @@ public sealed class PairingTests : UiTest
         Server.Phone.Tap(false);
         App.WaitForText("Pairing.Message", WrongEmojiText);
 
-        // Try Again: A New Browser Loads The Sign-In Page Again
+        // Try Again: A New Browser Loads The Sign-In Page Again. UI Automation Waits For The Load: A WebView2 Asked
+        // While Its Browser Is Still Starting Stays An Empty Pane For Good
         int page_loads = Server.RequestedPaths.Count(p => p == "/web/authentication");
         App.Find("Pairing.TryAgain").Patterns.Invoke.Pattern.Invoke();
-        WaitForSignInButton();
         Wait.Until(() => Server.RequestedPaths.Count(p => p == "/web/authentication") > page_loads, AppDriver.DefaultTimeout,
             () => "Try again did not load the sign-in page again.");
+        WaitForSignInButton();
         Assert.IsFalse(File.Exists(SessionFile), "A failed pairing saved a session.");
     }
 
