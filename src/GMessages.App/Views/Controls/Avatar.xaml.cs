@@ -167,6 +167,21 @@ public sealed partial class Avatar : UserControl
     public static double InitialSize(uint secondColor) => secondColor != 0 ? 12 : 16;
 
     /// <summary>
+    /// Shows the filled person icon in place of a letter for someone with no name (an empty initial: the phone only has
+    /// their number or a short code).
+    /// </summary>
+    /// <param name="initial">The circle's letter.</param>
+    /// <returns>Visible when there is no letter.</returns>
+    public static Visibility PersonIfNoInitial(string initial) => string.IsNullOrEmpty(initial) ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>
+    /// Gives the front circle's person icon size to match the circle.
+    /// </summary>
+    /// <param name="secondColor">The back circle's color.</param>
+    /// <returns>The icon size.</returns>
+    public static double PersonSize(uint secondColor) => secondColor != 0 ? 14 : 20;
+
+    /// <summary>
     /// Loads again every photo under <paramref name="root"/> that is still missing, such as one that failed while the
     /// phone was away. Photos already showing are left alone.
     /// </summary>

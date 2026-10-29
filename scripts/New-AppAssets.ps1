@@ -266,25 +266,34 @@ foreach ($target in 16, 20, 24, 30, 32, 36, 40, 48, 60, 64, 72, 80, 96, 256) {
     }
 }
 
-# Notification Send Button: the Segoe Fluent Icons Send glyph (E724). Toasts follow the system theme, so it's a
-# mid gray that holds on both the light and the dark toast. 32 px covers the 16 px button at 200% scale
-$sendSize = 32
-$sendVisual = New-Object System.Windows.Media.DrawingVisual
-$sendContext = $sendVisual.RenderOpen()
-$sendText = New-Object System.Windows.Media.FormattedText (
-    [string][char]0xE724,
-    [System.Globalization.CultureInfo]::InvariantCulture,
-    [System.Windows.FlowDirection]::LeftToRight,
-    (New-Object System.Windows.Media.Typeface 'Segoe Fluent Icons'),
-    $sendSize,
-    (New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.Color]::FromRgb(128, 128, 128))),
-    1.0)
-$sendContext.DrawText($sendText, (New-Object System.Windows.Point (($sendSize - $sendText.Width) / 2), (($sendSize - $sendText.Height) / 2)))
-$sendContext.Close()
-$sendBitmap = ConvertTo-Bitmap -Visual $sendVisual -Size $sendSize
-$sendBitmap.Save((Join-Path $assets 'Send.png'), [System.Drawing.Imaging.ImageFormat]::Png)
-$sendBitmap.Dispose()
-Write-Output "Wrote $(Join-Path $assets 'Send.png')"
+# Notification Send Button: the Segoe Fluent Icons Send glyph (E724), for the toast's quick reply button. Per
+# Microsoft's toast content guidance (icons are drawn for 100% scale, with no padding of their own:
+# https://learn.microsoft.com/windows/apps/develop/notifications/app-notifications/app-notifications-content#buttons-with-icons)
+# it's a 16 px icon at 100%, with one file per display scale so Windows never stretches a bigger one: the packaged app
+# names Send.png and Windows picks the Send.scale-*.png that fits. The glyph is drawn at the icon's size (the font's
+# em, as Windows draws its own 16 px icons) and centered on its ink. Toasts follow the system theme, so it's a mid
+# gray that holds on both the light and the dark toast
+Get-ChildItem -Path $assets -Filter 'Send*.png' | Remove-Item
+foreach ($scale in 100, 125, 150, 200, 400) {
+    $sendSize = [int](16 * $scale / 100)
+    $sendText = New-Object System.Windows.Media.FormattedText (
+        [string][char]0xE724,
+        [System.Globalization.CultureInfo]::InvariantCulture,
+        [System.Windows.FlowDirection]::LeftToRight,
+        (New-Object System.Windows.Media.Typeface 'Segoe Fluent Icons'),
+        $sendSize,
+        (New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.Color]::FromRgb(128, 128, 128))),
+        1.0)
+    $sendInk = $sendText.BuildGeometry((New-Object System.Windows.Point 0, 0)).Bounds
+    $sendVisual = New-Object System.Windows.Media.DrawingVisual
+    $sendContext = $sendVisual.RenderOpen()
+    $sendContext.DrawText($sendText, (New-Object System.Windows.Point (($sendSize - $sendInk.Width) / 2 - $sendInk.X), (($sendSize - $sendInk.Height) / 2 - $sendInk.Y)))
+    $sendContext.Close()
+    $sendBitmap = ConvertTo-Bitmap -Visual $sendVisual -Size $sendSize
+    $sendBitmap.Save((Join-Path $assets "Send.scale-$scale.png"), [System.Drawing.Imaging.ImageFormat]::Png)
+    $sendBitmap.Dispose()
+    Write-Output "Wrote $(Join-Path $assets "Send.scale-$scale.png")"
+}
 
 # Tray Icons: the dark glyph for light taskbars, the light glyph for dark ones
 $traySizes = 16, 20, 24, 32, 40, 48, 64

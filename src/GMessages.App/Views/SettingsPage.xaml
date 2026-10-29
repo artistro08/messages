@@ -157,6 +157,24 @@
                     </Grid>
                 </Border>
 
+                <!-- Snooze Length: how long a notification's Snooze waits -->
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
+                        <FontIcon Glyph="&#xE708;" Style="{StaticResource CardIconStyle}" />
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock x:Name="SnoozeHeader" TextWrapping="Wrap" />
+                            <TextBlock x:Name="SnoozeDescription" Style="{StaticResource CardDescriptionStyle}" />
+                        </StackPanel>
+                        <ComboBox
+                            x:Name="SnoozeBox"
+                            Grid.Column="2"
+                            MinWidth="220"
+                            VerticalAlignment="Center"
+                            AutomationProperties.AutomationId="Settings.SnoozeLength"
+                            SelectedIndex="{x:Bind ViewModel.SnoozeIndex, Mode=TwoWay}" />
+                    </Grid>
+                </Border>
+
                 <!-- Account And Logs -->
                 <TextBlock Style="{StaticResource GroupHeaderStyle}" Text="Account" />
 

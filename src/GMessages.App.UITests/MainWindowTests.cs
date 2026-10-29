@@ -163,6 +163,39 @@ public sealed class MainWindowTests : UiTest
     }
 
     /// <summary>
+    /// The edge between the list and the chat resizes the list (arrow keys here, as the mouse drag shares the same path);
+    /// the width comes back in the next window. ☰ hides the edge with the list.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task ListSplitter_ResizesList_WidthKeptForNextWindow()
+    {
+        await OpenMainAsync();
+        WaitForRows(InboxRows);
+        int before = ListWidth();
+
+        // Two Steps Right: The List Grows By 32 Effective Pixels
+        App.Find("Main.ListSplitter").Focus();
+        FlaUI.Core.Input.Keyboard.Type(FlaUI.Core.WindowsAPI.VirtualKeyShort.RIGHT);
+        FlaUI.Core.Input.Keyboard.Type(FlaUI.Core.WindowsAPI.VirtualKeyShort.RIGHT);
+        double scale = App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).BoundingRectangle.Width / 1100.0;
+        Wait.Until(() => Math.Abs(ListWidth() - before - (32 * scale)) <= 2, AppDriver.DefaultTimeout, () => $"The list is {ListWidth()} px wide, not {before} + 32 effective px.");
+        int widened = ListWidth();
+
+        // Next Window: Same Width
+        CloseMainWindow();
+        Tray.LeftClick();
+        WaitForRows(InboxRows);
+        Wait.Until(() => Math.Abs(ListWidth() - widened) <= 2, AppDriver.DefaultTimeout, () => $"The reopened list is {ListWidth()} px wide, not {widened}.");
+
+        // ☰ Takes The Edge Away With The List
+        Invoke("Main.MenuButton");
+        Wait.Until(() => App.TryFind("Main.ListSplitter") is null, AppDriver.DefaultTimeout, () => "The resize edge stayed with the list collapsed.");
+
+        int ListWidth() => App.Find("Main.ConversationList").BoundingRectangle.Width;
+    }
+
+    /// <summary>
     /// The settings page's About names the app, its version and its maker, and links to the repository.
     /// </summary>
     /// <returns>A task for the test.</returns>
@@ -205,6 +238,10 @@ public sealed class MainWindowTests : UiTest
         System.Drawing.Rectangle button = start.BoundingRectangle;
         Assert.IsTrue(over.Contains(button), $"Start chat ({button}) isn't over the list ({over}).");
         Assert.IsTrue(over.Right - button.Right < 40 && over.Bottom - button.Bottom < 40, $"Start chat ({button}) isn't at the list's bottom right ({over}).");
+
+        // The Standard Accent Button's Size (About 32 Effective Pixels Tall), Not The Old 48 Pixel Pill
+        double scale = App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).BoundingRectangle.Width / 1100.0;
+        Assert.IsTrue(button.Height / scale < 40, $"Start chat is {button.Height / scale:0} effective pixels tall, not the standard button's size.");
 
         // Down Hides It, Up Shows It
         list.Patterns.Scroll.Pattern.SetScrollPercent(-1, 50);

@@ -1,13 +1,15 @@
 using GMessages.Presentation;
+using GMessages.Presentation.Messaging;
 using GMessages.Presentation.Settings;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 
 namespace GMessages.App.Views;
 
 /// <summary>
 /// The settings page, shown over the whole main window below the title bar: theme, Start with Windows, notification
-/// switches, unpair, the logs folder and About, each on a Windows Settings card.
+/// switches and the snooze length, unpair, the logs folder and About, each on a Windows Settings card.
 /// </summary>
 /// <remarks>
 /// Adapted from Magic Buds' <c>SettingsWindow</c>, its cards and its About page. Made when opened and dropped on the
@@ -24,6 +26,18 @@ public sealed partial class SettingsPage : UserControl
     {
         ViewModel = viewModel;
         InitializeComponent();
+
+        // Copy
+        SnoozeHeader.Text      = ChatCopy.SnoozeLength;
+        SnoozeDescription.Text = ChatCopy.SnoozeLengthDescription;
+        AutomationProperties.SetName(SnoozeBox, ChatCopy.SnoozeLength);
+
+        // Snooze Choices: Added Here, Before The Bindings Select One (A .NET List Isn't A XAML ItemsSource Under AOT)
+        foreach (string choice in ViewModel.SnoozeChoices)
+        {
+            SnoozeBox.Items.Add(choice);
+        }
+
         _ = ViewModel.LoadAsync();
     }
 

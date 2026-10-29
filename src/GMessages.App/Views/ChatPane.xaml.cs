@@ -125,7 +125,10 @@ public sealed partial class ChatPane : UserControl
         }
     }
 
-    // A Bubble Added At The Bottom (Sent, Arrived Or The First Page) Scrolls Into View; Older Pages Go In Above
+    // A Bubble Added At The Bottom (Sent, Arrived Or The First Page) Comes Into View; Older Pages Go In Above. The List
+    // Scrolls To Its End Instead Of ScrollIntoView: On This Bottom-Aligned List, ScrollIntoView Made The Panel Realize
+    // Its Rows Again, So Every Bubble Above The New One Replayed Its Entrance (The Whole Chat Seemed To Reload On Send).
+    // Already At The End (The Usual Case), KeepLastItemInView Has Done It And Nothing Moves
     private void OnMessagesChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         if (e.Action != NotifyCollectionChangedAction.Add || sender is not ICollection<MessageBubbleViewModel> messages
@@ -134,9 +137,15 @@ public sealed partial class ChatPane : UserControl
             return;
         }
 
-        // After The List Has Made The New Item's Container
-        object? last = e.NewItems[e.NewItems.Count - 1];
-        DispatcherQueue.TryEnqueue(() => MessageList.ScrollIntoView(last));
+        // After The List Has Measured The New Bubble
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            MessageList.UpdateLayout();
+            if (Scroller() is { } scroller && scroller.VerticalOffset < scroller.ScrollableHeight)
+            {
+                scroller.ChangeView(null, scroller.ScrollableHeight, null);
+            }
+        });
     }
 
     private void OnMessageListLoaded(object sender, RoutedEventArgs e) => FillWithOlder();

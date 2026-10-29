@@ -3,6 +3,7 @@ using System.Numerics;
 using GMessages.App.Views.Controls;
 using GMessages.Presentation.Main;
 using GMessages.Presentation.Messaging;
+using GMessages.Presentation.Settings;
 using GMessages.Presentation.Shortcuts;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -29,34 +30,51 @@ namespace GMessages.App.Views;
 /// <para>
 /// The list is the pane of an inline <c>SplitView</c>, so opening and closing it plays the Windows pane animation. A
 /// narrow view makes the pane as wide as the view, so closing it (a chat opened) slides the chat in over the whole
-/// width. The chat sits on an island above the Mica, rounded, with a gap to the window's right and bottom edges.
+/// width. The chat sits on an island above the Mica, rounded, with the same gap on its left (beside the list, or the
+/// window edge once the list is collapsed), right and bottom.
 /// </para>
 /// <para>
 /// Start chat floats over the inbox's bottom right. Scrolling the list down slides it away; scrolling up (or reaching
-/// the top) brings it back.
+/// the top) brings it back (<see cref="ScrollHider"/> decides, ignoring small nudges).
+/// </para>
+/// <para>
+/// In a wide window the edge between the list and the island (<see cref="PaneSplitter"/>) resizes the list, from a bit
+/// narrower than its default up to half the window. The width is saved in the settings, so it comes back in the next
+/// window and after a restart.
 /// </para>
 /// </remarks>
 public sealed partial class ChatsView : UserControl
 {
-    // Layout: Below This Width (Effective Pixels) One Pane Shows At A Time; The List Pane's Width Beside The Chat; The
-    // Gap Around The Chat Island; How Far Start Chat Slides Down To Hide, And Its Shadow's Lift
-    private const double NarrowBelow   = 720;
-    private const double ListPaneWidth = 360;
-    private const double IslandGap     = 8;
-    private const float StartChatDrop  = 96;
-    private const float StartChatLift  = 16;
+    // Layout: Below This Width (Effective Pixels) One Pane Shows At A Time; The List Pane's Default Width Beside The
+    // Chat And The Narrowest It Can Be Dragged; How Far Start Chat Slides Down To Hide, And Its Shadow's Lift; How Far
+    // The List Must Scroll Against The Current Direction To Hide Or Show Start Chat
+    private const double NarrowBelow      = 720;
+    private const double ListPaneWidth    = 360;
+    private const double MinListPaneWidth = 300;
+    private const float StartChatDrop     = 96;
+    private const float StartChatLift     = 16;
+    private const double StartChatNudge   = 24;
 
-    // The List's Scroller (Found Once The List Has Its Template) And Where It Was Last, For The Scroll Direction
+    private readonly SettingsViewModel _settings;
+    private readonly ScrollHider _startChatHider = new(StartChatNudge);
+
+    // The List's Scroller, Found Once The List Has Its Template
     private ScrollViewer? _listScroller;
-    private double _lastListOffset;
+
+    // The List's Width Beside The Chat (Saved Or Default), And What It Was When A Resize Started
+    private double _listWidth;
+    private double? _widthAtResize;
 
     /// <summary>
     /// Creates the view and starts loading the inbox.
     /// </summary>
     /// <param name="viewModel">The chats' state; <see cref="Close"/> disposes it.</param>
-    public ChatsView(MainViewModel viewModel)
+    /// <param name="settings">Where the list's dragged width is kept (owned by the window).</param>
+    public ChatsView(MainViewModel viewModel, SettingsViewModel settings)
     {
-        ViewModel = viewModel;
+        ViewModel  = viewModel;
+        _settings  = settings;
+        _listWidth = settings.ListWidth ?? ListPaneWidth;
         InitializeComponent();
 
         // Copy
@@ -103,12 +121,13 @@ public sealed partial class ChatsView : UserControl
     public static bool IsListOpen(bool isListCollapsed, bool showChatPane) => !isListCollapsed && !showChatPane;
 
     /// <summary>
-    /// Gives the chat island's gap: clear of the window's right and bottom edges, and of the left edge too in a narrow
-    /// window, where no list sits beside it.
+    /// Shows the list's resize edge in a wide window while the list is open.
     /// </summary>
     /// <param name="isNarrow">True for a narrow window.</param>
-    /// <returns>The margin.</returns>
-    public static Thickness LayerMargin(bool isNarrow) => new(isNarrow ? IslandGap : 0, 0, IslandGap, IslandGap);
+    /// <param name="isListCollapsed">True when the menu button collapsed the list.</param>
+    /// <returns>The edge's visibility.</returns>
+    public static Visibility SplitterVisibility(bool isNarrow, bool isListCollapsed) =>
+        !isNarrow && !isListCollapsed ? Visibility.Visible : Visibility.Collapsed;
 
     /// <summary>
     /// Shows the chat pane in a wide window, and in a narrow one when it holds a chat or the list is collapsed.
@@ -165,17 +184,35 @@ public sealed partial class ChatsView : UserControl
     private void OnSizeChanged(object sender, SizeChangedEventArgs e)
     {
         bool is_narrow       = e.NewSize.Width < NarrowBelow;
-        Panes.OpenPaneLength = is_narrow ? e.NewSize.Width : ListPaneWidth;
+        Panes.OpenPaneLength = is_narrow ? e.NewSize.Width : FitListWidth(_listWidth, e.NewSize.Width);
         if (is_narrow != ViewModel.IsNarrow)
         {
             ViewModel.IsNarrow = is_narrow;
         }
     }
 
+    // Dragging (Or Arrowing) The Edge: The List Follows, Kept Between Its Narrowest And Half The Window
+    private void OnListResized(object? sender, double distance)
+    {
+        _widthAtResize     ??= Panes.OpenPaneLength;
+        Panes.OpenPaneLength = FitListWidth(_widthAtResize.Value + distance, ActualWidth);
+    }
+
+    // The Resize Ended: Keep The Width For The Next Window And The Next Start
+    private void OnListResizeCompleted(object? sender, EventArgs e)
+    {
+        _widthAtResize      = null;
+        _listWidth          = Panes.OpenPaneLength;
+        _settings.ListWidth = _listWidth;
+    }
+
     private void OnStartChatClick(object sender, RoutedEventArgs e) => ViewModel.OpenStartChat();
 
-    // The List's Scroller Exists Once Its Template Is Applied
-    private void OnConversationListLoaded(object sender, RoutedEventArgs e)
+    private void OnConversationListLoaded(object sender, RoutedEventArgs e) => WatchListScroller();
+
+    // The List's Scroller Exists Once Its Template Is Applied. Loaded Can Come Before That (A List Still Collapsed), So
+    // Each Realized Row Tries Again Until It Is Found
+    private void WatchListScroller()
     {
         if (_listScroller is not null || ChatPane.FindScroller(ConversationList) is not { } scroller)
         {
@@ -190,13 +227,12 @@ public sealed partial class ChatsView : UserControl
     // Transitions Animate It). Hidden, It Takes No Clicks Or Tab Stops, And UI Automation Reads "Hidden" As Its Status
     private void OnListScrolled(object? sender, ScrollViewerViewChangedEventArgs e)
     {
-        if (_listScroller is not { } scroller || scroller.VerticalOffset == _lastListOffset)
+        if (_listScroller is not { } scroller || !_startChatHider.Scrolled(scroller.VerticalOffset))
         {
             return;
         }
 
-        bool show       = scroller.VerticalOffset < _lastListOffset || scroller.VerticalOffset <= 0;
-        _lastListOffset = scroller.VerticalOffset;
+        bool show = _startChatHider.IsShown;
 
         StartChatButton.Opacity          = show ? 1 : 0;
         StartChatButton.Translation      = new Vector3(0, show ? 0 : StartChatDrop, StartChatLift);
@@ -231,12 +267,21 @@ public sealed partial class ChatsView : UserControl
         }
 
         AutomationProperties.SetAutomationId(args.ItemContainer, "Row." + row.Id);
+        WatchListScroller();
 
         if (args.ItemIndex == sender.Items.Count - 1)
         {
             _ = ViewModel.CurrentList.LoadMoreAsync();
         }
     }
+
+    // =========================================================================
+    // HELPERS
+    // =========================================================================
+
+    // A List Width That Fits: No Narrower Than Its Minimum, No Wider Than Half The View (Unless That Is Below The Minimum)
+    private static double FitListWidth(double width, double viewWidth) =>
+        Math.Clamp(width, MinListPaneWidth, Math.Max(MinListPaneWidth, viewWidth / 2));
 
     // =========================================================================
     // KEYBOARD SHORTCUTS

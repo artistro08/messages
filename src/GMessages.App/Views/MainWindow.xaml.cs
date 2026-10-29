@@ -184,7 +184,7 @@ public sealed partial class MainWindow : Window
         ArgumentNullException.ThrowIfNull(viewModel);
 
         DropBody();
-        _chats                                  = new ChatsView(viewModel);
+        _chats                                  = new ChatsView(viewModel, _settings);
         viewModel.Connected                    += OnConnected;
         viewModel.PropertyChanged              += OnChatsChanged;
         viewModel.Inbox.Rows.CollectionChanged += OnInboxRowsChanged;

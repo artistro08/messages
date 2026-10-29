@@ -42,7 +42,7 @@
                 <ListView
                     x:Name="ConversationList"
                     Grid.Row="2"
-                    Padding="0,0,0,80"
+                    Padding="0,0,0,64"
                     AutomationProperties.AutomationId="Main.ConversationList"
                     ContainerContentChanging="OnContainerContentChanging"
                     Loaded="OnConversationListLoaded"
@@ -63,19 +63,16 @@
                     AutomationProperties.AutomationId="Main.ListLoading"
                     IsActive="{x:Bind ViewModel.CurrentList.IsLoadingFirstPage, Mode=OneWay}" />
 
-                <!-- Start Chat: floats at the bottom right over the inbox; scrolling down slides it away, scrolling up
-                     brings it back (set from code, animated by its transitions) -->
+                <!-- Start Chat: floats at the bottom right over the inbox, the standard accent button's size; scrolling down
+                     slides it away, scrolling up brings it back (set from code, animated by its transitions) -->
                 <Button
                     x:Name="StartChatButton"
                     Grid.Row="2"
-                    Height="48"
                     Margin="0,0,16,16"
-                    Padding="16,0"
                     HorizontalAlignment="Right"
                     VerticalAlignment="Bottom"
                     AutomationProperties.AutomationId="Main.StartChat"
                     Click="OnStartChatClick"
-                    CornerRadius="24"
                     Style="{StaticResource AccentButtonStyle}"
                     Translation="0,0,16"
                     Visibility="{x:Bind local:MainWindow.HiddenIf(ViewModel.IsSpamView), Mode=OneWay}">
@@ -97,51 +94,66 @@
         </SplitView.Pane>
         <!-- /List Pane -->
 
-        <!-- Chat Pane: the empty state, the open conversation or Start chat, on an island above the Mica like Windows'
-             own apps (Settings, File Explorer): rounded, clear of the window's right and bottom edges -->
-        <Grid
-            x:Name="ChatArea"
-            Margin="{x:Bind local:ChatsView.LayerMargin(ViewModel.IsNarrow), Mode=OneWay}"
-            Background="{ThemeResource LayerFillColorDefaultBrush}"
-            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-            BorderThickness="1"
-            CornerRadius="8"
-            Visibility="{x:Bind local:ChatsView.ChatVisibility(ViewModel.IsNarrow, ViewModel.ShowChatPane, ViewModel.IsListCollapsed), Mode=OneWay}">
+        <!-- Chat Pane: the island, with the list's resize edge in the gap to its left. The gap is there with the list
+             open, collapsed (☰) or in a narrow window, so the island always sits clear of the window's edges -->
+        <Grid ColumnDefinitions="8,*">
 
-            <!-- Empty State: a large chat glyph above the prompt -->
-            <StackPanel
-                HorizontalAlignment="Center"
-                VerticalAlignment="Center"
-                Spacing="16"
-                Visibility="{x:Bind local:ChatsView.EmptyStateVisibility(ViewModel.IsChatOpen, ViewModel.IsStartChatOpen), Mode=OneWay}">
-                <FontIcon
-                    FontSize="96"
-                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                    Glyph="&#xE8BD;" />
-                <TextBlock
-                    x:Name="EmptyStateText"
+            <!-- Resize Edge: drag (or arrow keys once focused) to resize the list; wide windows with the list open only -->
+            <controls:PaneSplitter
+                x:Name="ListSplitter"
+                AutomationProperties.AutomationId="Main.ListSplitter"
+                Resized="OnListResized"
+                ResizeCompleted="OnListResizeCompleted"
+                Visibility="{x:Bind local:ChatsView.SplitterVisibility(ViewModel.IsNarrow, ViewModel.IsListCollapsed), Mode=OneWay}" />
+
+            <!-- Chat Island: the empty state, the open conversation or Start chat, above the Mica like Windows' own apps
+                 (Settings, File Explorer): rounded, the same gap on its left, right and bottom -->
+            <Grid
+                x:Name="ChatArea"
+                Grid.Column="1"
+                Margin="0,0,8,8"
+                Background="{ThemeResource LayerFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1"
+                CornerRadius="8"
+                Visibility="{x:Bind local:ChatsView.ChatVisibility(ViewModel.IsNarrow, ViewModel.ShowChatPane, ViewModel.IsListCollapsed), Mode=OneWay}">
+
+                <!-- Empty State: a large chat glyph above the prompt -->
+                <StackPanel
                     HorizontalAlignment="Center"
-                    AutomationProperties.AutomationId="Main.EmptyState"
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                    Style="{StaticResource SubtitleTextBlockStyle}" />
-            </StackPanel>
+                    VerticalAlignment="Center"
+                    Spacing="16"
+                    Visibility="{x:Bind local:ChatsView.EmptyStateVisibility(ViewModel.IsChatOpen, ViewModel.IsStartChatOpen), Mode=OneWay}">
+                    <FontIcon
+                        FontSize="96"
+                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                        Glyph="&#xE8BD;" />
+                    <TextBlock
+                        x:Name="EmptyStateText"
+                        HorizontalAlignment="Center"
+                        AutomationProperties.AutomationId="Main.EmptyState"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Style="{StaticResource SubtitleTextBlockStyle}" />
+                </StackPanel>
 
-            <!-- Conversation -->
-            <local:ChatPane
-                x:Name="ChatView"
-                BackRequested="OnPaneBack"
-                Chat="{x:Bind ViewModel.Chat, Mode=OneWay}"
-                ShowBack="{x:Bind ViewModel.IsNarrow, Mode=OneWay}"
-                Visibility="{x:Bind ViewModel.IsChatOpen, Mode=OneWay}" />
+                <!-- Conversation -->
+                <local:ChatPane
+                    x:Name="ChatView"
+                    BackRequested="OnPaneBack"
+                    Chat="{x:Bind ViewModel.Chat, Mode=OneWay}"
+                    ShowBack="{x:Bind ViewModel.IsNarrow, Mode=OneWay}"
+                    Visibility="{x:Bind ViewModel.IsChatOpen, Mode=OneWay}" />
 
-            <!-- Start Chat -->
-            <local:StartChatPane
-                x:Name="StartChatView"
-                BackRequested="OnPaneBack"
-                ShowBack="{x:Bind ViewModel.IsNarrow, Mode=OneWay}"
-                StartChat="{x:Bind ViewModel.StartChat, Mode=OneWay}"
-                Started="OnChatStarted"
-                Visibility="{x:Bind ViewModel.IsStartChatOpen, Mode=OneWay}" />
+                <!-- Start Chat -->
+                <local:StartChatPane
+                    x:Name="StartChatView"
+                    BackRequested="OnPaneBack"
+                    ShowBack="{x:Bind ViewModel.IsNarrow, Mode=OneWay}"
+                    StartChat="{x:Bind ViewModel.StartChat, Mode=OneWay}"
+                    Started="OnChatStarted"
+                    Visibility="{x:Bind ViewModel.IsStartChatOpen, Mode=OneWay}" />
+            </Grid>
+            <!-- /Chat Island -->
         </Grid>
         <!-- /Chat Pane -->
     </SplitView>

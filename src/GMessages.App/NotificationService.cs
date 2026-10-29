@@ -15,10 +15,16 @@ namespace GMessages.App;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Built on the Windows App SDK's <see cref="AppNotificationManager"/>. Snooze and dismiss are Windows' own system
-/// buttons, so only the reply and the body click come back here. A reply is sent through the running app without
-/// opening the window, then the conversation is marked read; a reply the phone doesn't take shows a second toast
-/// saying so. A body click raises <see cref="OpenConversationRequested"/>.
+/// Built on the Windows App SDK's <see cref="AppNotificationManager"/>. Dismiss is Windows' own system button; the
+/// reply, Snooze and the body click come back here. A reply is sent through the running app without opening the
+/// window, then the conversation is marked read; a reply the phone doesn't take shows a second toast saying so. A body
+/// click raises <see cref="OpenConversationRequested"/>.
+/// </para>
+/// <para>
+/// Snooze is the app's own button, because its length is a setting (<see cref="AppSettings.SnoozeMinutes"/>) and
+/// Windows' system snooze only takes a length from a picker on the toast. Windows takes the toast away on the click;
+/// the app shows the same toast again once the length has passed, unless its chat was opened meanwhile. To show it
+/// again it keeps the latest toasts' payloads in memory only (never on disk).
 /// </para>
 /// <para>
 /// Each toast's tag is the message ID and its group the conversation ID, so opening a chat clears its toasts with
@@ -35,9 +41,17 @@ namespace GMessages.App;
 /// <seealso href="https://learn.microsoft.com/windows/apps/develop/notifications/app-notifications/app-notifications-quickstart"/>
 internal sealed class NotificationService(ChatStore store, AppSettings settings, AvatarCache avatars, Func<MainViewModel?> mainView, DispatcherQueue dispatcher, ILogger logger) : IDisposable
 {
-    private static readonly string SendIconUri = new Uri(Path.Combine(AppContext.BaseDirectory, "Assets", "Send.png")).AbsoluteUri;
+    // The Quick Reply Button's Icon: Packaged, Windows Picks The Send.scale-*.png That Fits The Display Scale; Unpackaged
+    // (Debug), Only A File Path Works, So It Is The 100% One
+    private static readonly string SendIconUri = AppIdentity.IsPackaged
+        ? "ms-appx:///Assets/Send.png"
+        : new Uri(Path.Combine(AppContext.BaseDirectory, "Assets", "Send.scale-100.png")).AbsoluteUri;
+
+    // How Many Recent Toasts Can Still Be Snoozed (Their Payloads Kept In Memory)
+    private const int SnoozableToasts = 20;
 
     private readonly AppNotificationManager _manager = AppNotificationManager.Default;
+    private readonly List<ShownToast> _shown = [];
     private bool _registered;
 
     /// <summary>
@@ -91,7 +105,9 @@ internal sealed class NotificationService(ChatStore store, AppSettings settings,
             string? avatar = content.AvatarParticipantId is { Length: > 0 } participant ? await avatars.GetFileUriAsync(participant, CancellationToken.None) : null;
             avatars.Clear();
 
-            Show(NotificationXml.Build(content, avatar, SendIconUri), content.Tag, content.Group);
+            string xml = NotificationXml.Build(content, avatar, SendIconUri);
+            Remember(new ShownToast(content.Tag, content.Group, xml));
+            Show(xml, content.Tag, content.Group);
         }
 #pragma warning disable CA1031 // A message that can't become a toast must not take the tray down; the failure is logged
         catch (Exception ex)
@@ -105,17 +121,26 @@ internal sealed class NotificationService(ChatStore store, AppSettings settings,
     /// Removes every toast of a conversation (it was opened, so they're read).
     /// </summary>
     /// <param name="conversationId">The conversation ID.</param>
-    public void RemoveConversation(string conversationId) => _ = RunAsync("remove", () => _manager.RemoveByGroupAsync(conversationId).AsTask());
+    public void RemoveConversation(string conversationId)
+    {
+        // A Snoozed Toast Of This Chat Stays Away Too
+        _shown.RemoveAll(t => t.Group == conversationId);
+        _ = RunAsync("remove", () => _manager.RemoveByGroupAsync(conversationId).AsTask());
+    }
 
     /// <summary>
     /// Removes every toast this app shows. UI test runs call it on quit, so toasts never leak between tests.
     /// </summary>
     /// <returns>A task that completes once they're gone. It never throws.</returns>
-    public Task RemoveAllAsync() => RunAsync("remove all", () => _manager.RemoveAllAsync().AsTask());
+    public Task RemoveAllAsync()
+    {
+        _shown.Clear();
+        return RunAsync("remove all", () => _manager.RemoveAllAsync().AsTask());
+    }
 
     /// <summary>
-    /// Handles a toast click or reply: <c>reply</c> sends the reply box's text, <c>open</c> raises
-    /// <see cref="OpenConversationRequested"/>. Anything else is ignored.
+    /// Handles a toast click or button: <c>reply</c> sends the reply box's text, <c>snooze</c> shows the toast again
+    /// after the snooze length, <c>open</c> raises <see cref="OpenConversationRequested"/>. Anything else is ignored.
     /// </summary>
     /// <remarks>Called on the UI thread, also by the App for a click that started it.</remarks>
     /// <param name="args">The click's arguments and the reply box's text.</param>
@@ -130,6 +155,9 @@ internal sealed class NotificationService(ChatStore store, AppSettings settings,
         {
             case "reply":
                 return ReplyAsync(parsed, args.UserInput.TryGetValue("reply", out string? text) ? text : null);
+
+            case "snooze":
+                return SnoozeAsync(parsed);
 
             case "open":
                 OpenConversationRequested?.Invoke(this, parsed.ConversationId);
@@ -208,6 +236,34 @@ internal sealed class NotificationService(ChatStore store, AppSettings settings,
         await RunAsync("mark read", () => store.MarkReadAsync(args.ConversationId, args.MessageId, CancellationToken.None));
     }
 
+    // Shows The Toast Again Once The Snooze Length Has Passed, Unless Its Chat Was Opened (Or The Toasts Cleared) Meanwhile
+    // ponytail: the wait is an in-memory timer, so a snooze pending when the app quits is lost; a scheduled toast
+    // (ScheduledToastNotification) would survive a quit if that ever matters
+    private async Task SnoozeAsync(NotificationArgs args)
+    {
+        if (_shown.Find(t => t.Tag == args.MessageId && t.Group == args.ConversationId) is not { } toast)
+        {
+            return;
+        }
+
+        await Task.Delay(TimeSpan.FromMinutes(settings.SnoozeMinutes));
+        if (_shown.Contains(toast))
+        {
+            Show(toast.Xml, toast.Tag, toast.Group);
+        }
+    }
+
+    // Keeps A Shown Toast's Payload So Snooze Can Show It Again; Only The Latest Few, The Oldest Dropped First
+    private void Remember(ShownToast toast)
+    {
+        _shown.RemoveAll(t => t.Tag == toast.Tag && t.Group == toast.Group);
+        _shown.Add(toast);
+        if (_shown.Count > SnoozableToasts)
+        {
+            _shown.RemoveAt(0);
+        }
+    }
+
     private void Show(string xml, string tag, string group) => _manager.Show(new AppNotification(xml) { Tag = tag, Group = group });
 
     // Runs A Call And Logs Its Failure, So No Task Goes Unobserved
@@ -224,4 +280,7 @@ internal sealed class NotificationService(ChatStore store, AppSettings settings,
             AppLog.NotificationFailed(logger, action, ex.GetType().Name, ex.HResult);
         }
     }
+
+    // A Toast As Shown: Its Message (Tag), Conversation (Group) And Payload
+    private sealed record ShownToast(string Tag, string Group, string Xml);
 }

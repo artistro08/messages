@@ -21,6 +21,11 @@
                 FontSize="12"
                 Foreground="White"
                 Text="{x:Bind SecondInitial, Mode=OneWay}" />
+            <FontIcon
+                FontSize="14"
+                Foreground="White"
+                Glyph="&#xEA8C;"
+                Visibility="{x:Bind local:Avatar.PersonIfNoInitial(SecondInitial), Mode=OneWay}" />
             <Ellipse>
                 <Ellipse.Fill>
                     <ImageBrush x:Name="SecondPhoto" Stretch="UniformToFill" />
@@ -41,6 +46,13 @@
                 FontSize="{x:Bind local:Avatar.InitialSize(SecondColor), Mode=OneWay}"
                 Foreground="White"
                 Text="{x:Bind Initial, Mode=OneWay}" />
+
+            <!-- No Name (Just A Number Or A Short Code): The Filled Person Icon In Place Of The Letter -->
+            <FontIcon
+                FontSize="{x:Bind local:Avatar.PersonSize(SecondColor), Mode=OneWay}"
+                Foreground="White"
+                Glyph="&#xEA8C;"
+                Visibility="{x:Bind local:Avatar.PersonIfNoInitial(Initial), Mode=OneWay}" />
             <Ellipse>
                 <Ellipse.Fill>
                     <ImageBrush ImageSource="{x:Bind Image, Mode=OneWay}" Stretch="UniformToFill" />

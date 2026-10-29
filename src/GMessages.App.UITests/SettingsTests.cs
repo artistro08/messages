@@ -6,6 +6,7 @@ using Keyboard = FlaUI.Core.Input.Keyboard;
 using FlaUI.Core.WindowsAPI;
 using GMessages.App.UITests.Driver;
 using GMessages.Presentation;
+using GMessages.Presentation.Messaging;
 
 namespace GMessages.App.UITests;
 
@@ -23,7 +24,8 @@ public sealed class SettingsTests : UiTest
     private const int DarkIndex                 = 2;
 
     /// <summary>
-    /// Theme, both notification switches and Start with Windows (the test marker file) survive a quit and relaunch.
+    /// Theme, both notification switches, the snooze length and Start with Windows (the test marker file) survive a quit
+    /// and relaunch.
     /// The tray menu follows a theme change live.
     /// </summary>
     /// <returns>A task for the test.</returns>
@@ -39,6 +41,7 @@ public sealed class SettingsTests : UiTest
         WaitForToggle("Settings.Notifications", ToggleState.On);
         WaitForToggle("Settings.NotifyViewedChat", ToggleState.Off);
         WaitForToggle("Settings.StartWithWindows", ToggleState.Off);
+        Assert.AreEqual(ChatCopy.Minutes15, SnoozeLength(), "Snooze length should start at 15 minutes.");
 
         // Theme Flips The Tray Menu Live, Both Ways (So It Doesn't Depend On The System Theme)
         SelectTheme(LightIndex);
@@ -55,6 +58,12 @@ public sealed class SettingsTests : UiTest
         Toggle("Settings.StartWithWindows", ToggleState.On);
         Wait.Until(() => File.Exists(marker), AppDriver.DefaultTimeout, () => "Start with Windows didn't write the startup-enabled marker.");
 
+        // Snooze Length: The Card's Choices Are The Old Toast Picker's
+        ComboBox snooze = App.Find("Settings.SnoozeLength").AsComboBox();
+        snooze.Select(2);
+        snooze.Collapse();
+        Wait.Until(() => SnoozeLength() == ChatCopy.Hour1, AppDriver.DefaultTimeout, () => $"Snooze length shows '{SnoozeLength()}', not 1 hour.");
+
         // Restart: Everything Comes Back
         await App.RestartAsync();
         OpenSettings();
@@ -62,6 +71,7 @@ public sealed class SettingsTests : UiTest
         WaitForToggle("Settings.Notifications", ToggleState.Off);
         WaitForToggle("Settings.NotifyViewedChat", ToggleState.On);
         WaitForToggle("Settings.StartWithWindows", ToggleState.On);
+        Wait.Until(() => SnoozeLength() == ChatCopy.Hour1, AppDriver.DefaultTimeout, () => $"Snooze length came back as '{SnoozeLength()}', not 1 hour.");
     }
 
     /// <summary>
@@ -119,6 +129,8 @@ public sealed class SettingsTests : UiTest
 
     // The Selected Item's Text, Mapped Back To Its Index
     private int ThemeIndex() => Array.IndexOf(ThemeNames, AppDriver.SafeName(App.Find("Settings.Theme").AsComboBox().SelectedItem));
+
+    private string SnoozeLength() => AppDriver.SafeName(App.Find("Settings.SnoozeLength").AsComboBox().SelectedItem);
 
     private void SelectTheme(int index)
     {
