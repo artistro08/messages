@@ -83,7 +83,8 @@ public sealed partial class ChatPane : UserControl
         {
             chat.Messages.CollectionChanged += pane.OnMessagesChanged;
 
-            // TODO: Task 12 — remove this conversation's toasts here: NotificationService.RemoveConversation(chat.ConversationId)
+            // The Chat Is On Screen, So Its Toasts Are Read
+            (Application.Current as App)?.Notifications?.RemoveConversation(chat.ConversationId);
         }
     }
 

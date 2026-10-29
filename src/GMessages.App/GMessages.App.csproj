@@ -19,9 +19,12 @@
     <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
   </PropertyGroup>
 
-  <!-- Debug: unpackaged, with the test hooks compiled in -->
+  <!-- Debug: unpackaged, with the test hooks compiled in. It uses the installed Windows App SDK runtime (the
+       bootstrapper starts it), since unpackaged notification registration needs the runtime's Singleton package,
+       which a self-contained app can't use. Release stays self-contained. -->
   <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
     <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
     <DefineConstants>$(DefineConstants);EnableTestHooks</DefineConstants>
   </PropertyGroup>
 

@@ -47,6 +47,15 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 913, Level = LogLevel.Warning, Message = "Reconnect failed ({Reason})")]
     public static partial void ReconnectFailed(ILogger logger, string reason, Exception ex);
 
+    [LoggerMessage(EventId = 914, Level = LogLevel.Warning, Message = "Notification {Action} failed ({ErrorType} 0x{HResult:X8})")]
+    public static partial void NotificationFailed(ILogger logger, string action, string errorType, int hResult);
+
+    [LoggerMessage(EventId = 915, Level = LogLevel.Information, Message = "Notification invoked ({Action})")]
+    public static partial void NotificationInvoked(ILogger logger, string action);
+
+    [LoggerMessage(EventId = 916, Level = LogLevel.Information, Message = "Notifications registered")]
+    public static partial void NotificationsRegistered(ILogger logger);
+
     [LoggerMessage(EventId = 951, Level = LogLevel.Information, Message = "Test endpoint {Endpoint}, data folder {DataFolder}")]
     public static partial void TestEndpoint(ILogger logger, string endpoint, string dataFolder);
 }

@@ -9,7 +9,9 @@
   xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
   xmlns:uap5="http://schemas.microsoft.com/appx/manifest/uap/windows10/5"
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
-  IgnorableNamespaces="uap uap5 rescap">
+  xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10"
+  xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
+  IgnorableNamespaces="uap uap5 rescap com desktop">
 
   <!-- Publisher must match the signing certificate's subject (scripts/Signing.ps1) -->
   <Identity
@@ -47,6 +49,19 @@
         <uap5:Extension Category="windows.startupTask">
           <uap5:StartupTask TaskId="$AppDisplayName$" Enabled="false" DisplayName="$AppDisplayName$" />
         </uap5:Extension>
+
+        <!-- Notifications: a toast click while the app isn't running starts it through this COM class
+             (AppNotificationManager; the CLSID must match in both extensions) -->
+        <com:Extension Category="windows.comServer">
+          <com:ComServer>
+            <com:ExeServer Executable="$AppDisplayName$.exe" Arguments="----AppNotificationActivated:" DisplayName="Toast activator">
+              <com:Class Id="6B3A1C2E-5D8F-4E2A-9C71-3F0B8D4E6A15" DisplayName="Toast activator" />
+            </com:ExeServer>
+          </com:ComServer>
+        </com:Extension>
+        <desktop:Extension Category="windows.toastNotificationActivation">
+          <desktop:ToastNotificationActivation ToastActivatorCLSID="6B3A1C2E-5D8F-4E2A-9C71-3F0B8D4E6A15" />
+        </desktop:Extension>
       </Extensions>
     </Application>
   </Applications>

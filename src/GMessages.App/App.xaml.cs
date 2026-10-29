@@ -7,12 +7,15 @@ using GMessages.Presentation.Connection;
 using GMessages.Presentation.Logging;
 using GMessages.Presentation.Main;
 using GMessages.Presentation.Messaging;
+using GMessages.Presentation.Notifications;
 using GMessages.Presentation.Pairing;
 using GMessages.Presentation.Settings;
 using GMessages.Protocol.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
+using Microsoft.Windows.AppLifecycle;
+using Microsoft.Windows.AppNotifications;
 using Microsoft.Windows.System.Power;
 using Windows.Networking.Connectivity;
 using Windows.Storage;
@@ -54,6 +57,9 @@ public partial class App : Application, IDisposable
     private MemoryTrim? _memoryTrim;
     private ConnectionController? _connection;
     private ChatStore? _store;
+    private NotificationService? _notifications;
+    private AppNotificationActivatedEventArgs? _launchNotification;
+    private DispatcherQueueTimer? _launchNotificationTimeout;
     private PairingWindow? _pairingWindow;
     private MainWindow? _mainWindow;
     private SettingsWindow? _settingsWindow;
@@ -81,6 +87,11 @@ public partial class App : Application, IDisposable
     /// Asks for the main window: tray left-click, the menu's Open, or a second launch. Carries what asked.
     /// </summary>
     internal event EventHandler<string>? ShowMainWindowRequested;
+
+    /// <summary>
+    /// Gets the notifications, so an opened chat can clear its toasts. Null before launch.
+    /// </summary>
+    internal NotificationService? Notifications => _notifications;
 
     /// <summary>
     /// Sets up logging, settings and the tray icon, then starts watching for quit and show requests.
@@ -130,6 +141,24 @@ public partial class App : Application, IDisposable
         // Chat Store: outlives the main window; no client until paired and connected
         var connection = _connection;
         _store         = new ChatStore(connection, () => connection.Client is { } client ? new GmMessagingClient(client) : null, _logProvider.CreateLogger("GMessages.Chat"));
+
+        // Notifications: a toast for each new message, also with the main window closed
+        var store      = _store;
+        _notifications = new NotificationService(store, _settings, new AvatarCache(store, paths.AvatarsFolder), () => _mainWindow?.ViewModel, dispatcher, _logProvider.CreateLogger("GMessages.Notifications"));
+        _notifications.OpenConversationRequested += (_, id) => OpenConversation(id);
+        store.MessageArrived                     += (_, e) => _ = _notifications.ShowAsync(e);
+        _notifications.Register();
+
+        // Started By A Toast Click: Read After Register, As The Windows App SDK Requires; Handled Once Connected
+        if (AppInstance.GetCurrent().GetActivatedEventArgs() is { Kind: ExtendedActivationKind.AppNotification, Data: AppNotificationActivatedEventArgs launched })
+        {
+            _launchNotification                    = launched;
+            _launchNotificationTimeout             = dispatcher.CreateTimer();
+            _launchNotificationTimeout.Interval    = TimeSpan.FromSeconds(30);
+            _launchNotificationTimeout.IsRepeating = false;
+            _launchNotificationTimeout.Tick       += (_, _) => HandleLaunchNotification(timedOut: true);
+            _launchNotificationTimeout.Start();
+        }
 
         _ = StartConnectionAsync();
 
@@ -199,6 +228,7 @@ public partial class App : Application, IDisposable
         }
 
         AppLog.ConnectionStateChanged(_logger, _connection.State);
+        HandleLaunchNotification(timedOut: false);
         if (NeedsPairing())
         {
             // No "Not paired" main window left behind the pairing window after an unpair or sign-out
@@ -234,6 +264,38 @@ public partial class App : Application, IDisposable
             }
         };
         _pairingWindow.Activate();
+    }
+
+    // =========================================================================
+    // NOTIFICATIONS
+    // =========================================================================
+
+    // The Toast Click That Started The App: Handled Once Connected. After 30 s Without A Connection A Reply Gets The
+    // Failure Toast, And An Open Request Opens The Window Anyway
+    private void HandleLaunchNotification(bool timedOut)
+    {
+        if (_launchNotification is not { } args || _notifications is null || (!timedOut && _connection?.State != ConnectionState.Connected))
+        {
+            return;
+        }
+
+        _launchNotification = null;
+        _launchNotificationTimeout?.Stop();
+
+        if (timedOut && NotificationArgs.Parse(args.Argument) is { Action: "reply" } reply)
+        {
+            _notifications.ShowReplyFailed(reply.ConversationId);
+            return;
+        }
+
+        _ = _notifications.HandleAsync(args);
+    }
+
+    // A Toast Body Click: The Main Window On That Conversation
+    private void OpenConversation(string conversationId)
+    {
+        OnShowMainWindowRequested("notification");
+        _mainWindow?.ViewModel.Select(conversationId);
     }
 
     // =========================================================================
@@ -503,6 +565,8 @@ public partial class App : Application, IDisposable
         PowerManager.SystemSuspendStatusChanged -= OnSystemSuspendStatusChanged;
         NetworkInformation.NetworkStatusChanged -= OnNetworkStatusChanged;
         _networkDebounce?.Stop();
+        _launchNotificationTimeout?.Stop();
+        _notifications?.Dispose();
         _trayIcon?.Dispose();
         _trayMenu?.Close();
         CloseWindows();
@@ -526,6 +590,12 @@ public partial class App : Application, IDisposable
         // Let the client close its long poll and flush a save (while the log is still open), but never hang the quit on it
         try
         {
+            // Test Runs Take Their Toasts With Them, So None Leak Into The Next Test; Real Runs Keep Theirs
+            if (Program.IsTestRun && _notifications is not null)
+            {
+                await _notifications.RemoveAllAsync().WaitAsync(TimeSpan.FromSeconds(5));
+            }
+
             if (_connection is not null)
             {
                 await _connection.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));

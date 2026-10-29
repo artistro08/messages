@@ -266,6 +266,26 @@ foreach ($target in 16, 20, 24, 30, 32, 36, 40, 48, 60, 64, 72, 80, 96, 256) {
     }
 }
 
+# Notification Send Button: the Segoe Fluent Icons Send glyph (E724). Toasts follow the system theme, so it's a
+# mid gray that holds on both the light and the dark toast. 32 px covers the 16 px button at 200% scale
+$sendSize = 32
+$sendVisual = New-Object System.Windows.Media.DrawingVisual
+$sendContext = $sendVisual.RenderOpen()
+$sendText = New-Object System.Windows.Media.FormattedText (
+    [string][char]0xE724,
+    [System.Globalization.CultureInfo]::InvariantCulture,
+    [System.Windows.FlowDirection]::LeftToRight,
+    (New-Object System.Windows.Media.Typeface 'Segoe Fluent Icons'),
+    $sendSize,
+    (New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.Color]::FromRgb(128, 128, 128))),
+    1.0)
+$sendContext.DrawText($sendText, (New-Object System.Windows.Point (($sendSize - $sendText.Width) / 2), (($sendSize - $sendText.Height) / 2)))
+$sendContext.Close()
+$sendBitmap = ConvertTo-Bitmap -Visual $sendVisual -Size $sendSize
+$sendBitmap.Save((Join-Path $assets 'Send.png'), [System.Drawing.Imaging.ImageFormat]::Png)
+$sendBitmap.Dispose()
+Write-Output "Wrote $(Join-Path $assets 'Send.png')"
+
 # Tray Icons: the dark glyph for light taskbars, the light glyph for dark ones
 $traySizes = 16, 20, 24, 32, 40, 48, 64
 foreach ($tray in @(@{ Name = 'TrayLight.ico'; Color = [System.Windows.Media.Colors]::Black }, @{ Name = 'TrayDark.ico'; Color = [System.Windows.Media.Colors]::White })) {

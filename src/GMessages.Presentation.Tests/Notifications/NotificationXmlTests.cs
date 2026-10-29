@@ -24,6 +24,15 @@ public sealed class NotificationXmlTests
     }
 
     [TestMethod]
+    public void Build_StripsXmlIllegalCharacters_KeepsEmoji()
+    {
+        var texts = Doc("A\u0001nn\uD800", "\u0000h\u001Fi \uD83D\uDE00\uFFFE").Descendants("text").ToList();
+
+        Assert.AreEqual("Ann", texts[0].Value);
+        Assert.AreEqual("hi \uD83D\uDE00", texts[1].Value);
+    }
+
+    [TestMethod]
     public void Build_HasSystemSnoozeAndDismiss()
     {
         var actions = Doc().Descendants("action").ToList();
@@ -54,6 +63,19 @@ public sealed class NotificationXmlTests
 
         Assert.AreEqual(new NotificationArgs("open", "c1", null), launch);
         Assert.AreEqual(new NotificationArgs("reply", "c1", "m1"), reply);
+    }
+
+    [TestMethod]
+    public void BuildReplyFailed_TitleBodyAndOpenLaunch()
+    {
+        XDocument doc = XDocument.Parse(NotificationXml.BuildReplyFailed("c 1", "Ann\u0001"));
+        var texts     = doc.Descendants("text").Select(t => t.Value).ToList();
+
+        Assert.AreEqual(2, texts.Count);
+        Assert.AreEqual("Ann", texts[0]);
+        Assert.AreEqual("Your reply wasn't sent. Open the chat to try again.", texts[1]);
+        Assert.AreEqual(new NotificationArgs("open", "c 1", null), NotificationArgs.Parse((string)doc.Root!.Attribute("launch")!));
+        Assert.IsFalse(doc.Descendants("actions").Any());
     }
 
     [TestMethod]

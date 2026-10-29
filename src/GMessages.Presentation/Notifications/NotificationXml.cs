@@ -1,3 +1,5 @@
+using System.Text;
+using System.Xml;
 using System.Xml.Linq;
 using GMessages.Presentation.Messaging;
 
@@ -11,7 +13,10 @@ public static class NotificationXml
     /// <summary>
     /// Builds the toast: title, body, optional avatar, reply box, snooze picker and dismiss.
     /// </summary>
-    /// <remarks>Every value goes in through <see cref="XElement"/>/<see cref="XAttribute"/>, so markup in a message is escaped.</remarks>
+    /// <remarks>
+    /// Every value goes in through <see cref="XElement"/>/<see cref="XAttribute"/>, so markup in a message is escaped.
+    /// Characters XML can't hold at all (control characters, lone surrogates) are dropped from the title and body.
+    /// </remarks>
     /// <param name="n">The toast content.</param>
     /// <param name="avatarFileUri">A file URI for the avatar picture, or null for none.</param>
     /// <param name="sendIconUri">A file URI for the send button icon.</param>
@@ -23,7 +28,7 @@ public static class NotificationXml
         string id = Uri.EscapeDataString(n.Group);
 
         // Visual
-        var binding = new XElement("binding", new XAttribute("template", "ToastGeneric"), new XElement("text", n.Title), new XElement("text", n.Body));
+        var binding = new XElement("binding", new XAttribute("template", "ToastGeneric"), new XElement("text", XmlSafe(n.Title)), new XElement("text", XmlSafe(n.Body)));
 
         if (avatarFileUri is not null)
         {
@@ -50,6 +55,45 @@ public static class NotificationXml
             actions);
 
         return toast.ToString(SaveOptions.DisableFormatting);
+    }
+
+    /// <summary>
+    /// Builds the toast that says a reply from a toast wasn't sent. Clicking it opens the conversation.
+    /// </summary>
+    /// <param name="conversationId">The conversation the reply was for.</param>
+    /// <param name="title">The conversation name.</param>
+    /// <returns>The toast XML.</returns>
+    public static string BuildReplyFailed(string conversationId, string title)
+    {
+        ArgumentNullException.ThrowIfNull(conversationId);
+        ArgumentNullException.ThrowIfNull(title);
+
+        var toast = new XElement("toast",
+            new XAttribute("launch", $"action=open&conversation={Uri.EscapeDataString(conversationId)}"),
+            new XElement("visual", new XElement("binding", new XAttribute("template", "ToastGeneric"), new XElement("text", XmlSafe(title)), new XElement("text", ChatCopy.ReplyNotSent))));
+
+        return toast.ToString(SaveOptions.DisableFormatting);
+    }
+
+    // Drops Characters XML Can't Hold, Keeping Valid Surrogate Pairs (Emoji)
+    private static string XmlSafe(string s)
+    {
+        var kept = new StringBuilder(s.Length);
+
+        for (int i = 0; i < s.Length; i++)
+        {
+            if (XmlConvert.IsXmlChar(s[i]))
+            {
+                kept.Append(s[i]);
+            }
+            else if (i + 1 < s.Length && XmlConvert.IsXmlSurrogatePair(s[i + 1], s[i]))
+            {
+                kept.Append(s, i, 2);
+                i++;
+            }
+        }
+
+        return kept.ToString();
     }
 
     // One Snooze Choice
