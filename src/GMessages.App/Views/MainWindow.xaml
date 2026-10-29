@@ -13,6 +13,7 @@
 
     <Grid
         x:Name="RootGrid"
+        PreviewKeyDown="OnRootPreviewKeyDown"
         RowDefinitions="Auto,*"
         SizeChanged="OnRootSizeChanged">
 
@@ -187,6 +188,7 @@
 
                 <!-- Conversation -->
                 <local:ChatPane
+                    x:Name="ChatView"
                     BackRequested="OnPaneBack"
                     Chat="{x:Bind ViewModel.Chat, Mode=OneWay}"
                     ShowBack="{x:Bind ViewModel.IsNarrow, Mode=OneWay}"
@@ -194,6 +196,7 @@
 
                 <!-- Start Chat -->
                 <local:StartChatPane
+                    x:Name="StartChatView"
                     BackRequested="OnPaneBack"
                     ShowBack="{x:Bind ViewModel.IsNarrow, Mode=OneWay}"
                     StartChat="{x:Bind ViewModel.StartChat, Mode=OneWay}"
@@ -205,5 +208,8 @@
 
         <!-- Unpair Confirm -->
         <controls:UnpairDialog x:Name="UnpairDialog" Grid.Row="1" />
+
+        <!-- Shortcut Help (Ctrl + ?) -->
+        <local:ShortcutHelpDialog x:Name="ShortcutDialog" Grid.Row="1" />
     </Grid>
 </Window>

@@ -5,10 +5,17 @@ using GMessages.Presentation;
 using GMessages.Presentation.Main;
 using GMessages.Presentation.Messaging;
 using GMessages.Presentation.Settings;
+using GMessages.Presentation.Shortcuts;
+using Microsoft.UI.Input;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
+using Windows.System;
+using Windows.UI.Core;
 
 namespace GMessages.App.Views;
 
@@ -189,11 +196,32 @@ public sealed partial class MainWindow : Window
     // EVENT HANDLERS
     // =========================================================================
 
-    private void OnViewModelChanged(object? sender, PropertyChangedEventArgs e) => ShowCurrentList();
+    private void OnViewModelChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        ShowCurrentList();
+        ShowSelection();
+    }
 
     // Inbox Or Spam & Blocked: Rewrapped Only When The List Itself Changes, So Other Changes Keep The Selection
     // (See BindableList For Why The Rows Aren't Bound Directly)
     private void ShowCurrentList() => BindableList.Show(ConversationList, ViewModel.CurrentList.Rows);
+
+    // The List Highlights The Open Conversation: Picking A Row Opens It, And This Follows Opens From Elsewhere
+    // (Ctrl + . And Ctrl + ,, Start Chat, Escape), Scrolling The Row Into View
+    private void ShowSelection()
+    {
+        ConversationRowViewModel? row = ViewModel.CurrentList.Rows.FirstOrDefault(r => r.Id == ViewModel.SelectedConversationId);
+        if (ConversationList.SelectedItem == row)
+        {
+            return;
+        }
+
+        ConversationList.SelectedItem = row;
+        if (row is not null)
+        {
+            ConversationList.ScrollIntoView(row);
+        }
+    }
 
     // Narrow Or Wide From The Window Width (See The Class Remarks); The View Model Needs It For The One-Pane Rule
     private void OnRootSizeChanged(object sender, SizeChangedEventArgs e)
@@ -269,4 +297,76 @@ public sealed partial class MainWindow : Window
             _ = ViewModel.CurrentList.LoadMoreAsync();
         }
     }
+
+    // =========================================================================
+    // KEYBOARD SHORTCUTS
+    // =========================================================================
+
+    // Every Key Press In The Window Passes Here First. Handled Only When A Shortcut Ran, So Other Keys (And A Shortcut
+    // With Nothing To Do, Like "r" With No Chat Open) Reach The Controls. Skipped While A Dialog Or Menu Is Open
+    private void OnRootPreviewKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (VisualTreeHelper.GetOpenPopupsForXamlRoot(RootGrid.XamlRoot).Any(p => p.Child is not ToolTip))
+        {
+            return;
+        }
+
+        bool focus_in_text_box = FocusManager.GetFocusedElement(RootGrid.XamlRoot) is TextBox;
+        if (ShortcutMap.Resolve(e.Key, IsDown(VirtualKey.Control), IsDown(VirtualKey.Shift), IsDown(VirtualKey.Menu), focus_in_text_box) is { } command)
+        {
+            e.Handled = Run(command);
+        }
+    }
+
+    // Runs A Shortcut; False When It Had Nothing To Act On (Such As A Focus Shortcut For A Pane That Isn't Showing)
+    private bool Run(ShortcutCommand command)
+    {
+        switch (command)
+        {
+            case ShortcutCommand.StartChat:
+                ViewModel.OpenStartChat();
+
+                // A Turn Later, Once The Pane Shows: A Hidden Box Can't Take Focus
+                return DispatcherQueue.TryEnqueue(() => StartChatView.FocusQuery());
+
+            case ShortcutCommand.FocusConversationList:
+                return ConversationList.Focus(FocusState.Keyboard);
+
+            case ShortcutCommand.FocusMessageBox:
+                return ChatView.FocusDraft();
+
+            case ShortcutCommand.ToggleEmoji:
+                return ChatView.ToggleEmojiPanel();
+
+            case ShortcutCommand.FocusMessages:
+                return ChatView.FocusMessages();
+
+            case ShortcutCommand.ExitConversation:
+                ViewModel.ExitConversation();
+                return true;
+
+            case ShortcutCommand.NextConversation:
+                ViewModel.NextConversation();
+                return true;
+
+            case ShortcutCommand.PreviousConversation:
+                ViewModel.PreviousConversation();
+                return true;
+
+            case ShortcutCommand.OpenSettings:
+                SettingsRequested?.Invoke(this, EventArgs.Empty);
+                return true;
+
+            case ShortcutCommand.ShowHelp:
+                ShortcutDialog.RequestedTheme = RootGrid.RequestedTheme;
+                _ = ShortcutDialog.ShowAsync();
+                return true;
+
+            default:
+                return false;
+        }
+    }
+
+    private static bool IsDown(VirtualKey key) =>
+        InputKeyboardSource.GetKeyStateForCurrentThread(key).HasFlag(CoreVirtualKeyStates.Down);
 }

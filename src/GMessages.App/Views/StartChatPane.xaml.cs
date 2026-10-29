@@ -60,6 +60,12 @@ public sealed partial class StartChatPane : UserControl
         set => SetValue(ShowBackProperty, value);
     }
 
+    /// <summary>
+    /// Puts the cursor in the search box (the Ctrl + k shortcut, when Start chat was already open).
+    /// </summary>
+    /// <returns>True when the box took focus.</returns>
+    public bool FocusQuery() => QueryBox.Focus(FocusState.Keyboard);
+
     // =========================================================================
     // EVENT HANDLERS
     // =========================================================================

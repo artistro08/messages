@@ -62,6 +62,39 @@ public sealed partial class ChatPane : UserControl
         set => SetValue(ShowBackProperty, value);
     }
 
+    /// <summary>
+    /// Puts the cursor in the message box (the "r" shortcut).
+    /// </summary>
+    /// <returns>True when the box took focus (false while no chat shows).</returns>
+    public bool FocusDraft() => DraftBox.Focus(FocusState.Keyboard);
+
+    /// <summary>
+    /// Moves focus to the message bubbles (the Ctrl + j shortcut).
+    /// </summary>
+    /// <returns>True when the list took focus (false while no chat shows).</returns>
+    public bool FocusMessages() => MessageList.Focus(FocusState.Keyboard);
+
+    /// <summary>
+    /// Opens (or, pressed again, closes) the Windows emoji panel on the message box: the emoji button and the
+    /// Ctrl + Shift + e shortcut.
+    /// </summary>
+    /// <remarks>
+    /// The panel types into whatever has focus, so the message box is focused first. It is opened with the Win +
+    /// Period shortcut: <c>CoreInputView.GetForCurrentView().TryShow(Emoji)</c> needs a CoreWindow, which a WinUI 3
+    /// desktop window doesn't have, and showed nothing when tried. The shortcut waits a turn: sent before the box has
+    /// taken focus, Windows ignores it.
+    /// </remarks>
+    /// <returns>True when the panel was asked for (false while no chat shows).</returns>
+    public bool ToggleEmojiPanel()
+    {
+        if (Chat is null || !DraftBox.Focus(FocusState.Programmatic))
+        {
+            return false;
+        }
+
+        return DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, SendEmojiShortcut);
+    }
+
     // =========================================================================
     // EVENT HANDLERS
     // =========================================================================
@@ -148,37 +181,43 @@ public sealed partial class ChatPane : UserControl
         }
     }
 
-    // The Windows Emoji Panel Types Into Whatever Has Focus, So Focus The Message Box First. Opened With The Win +
-    // Period Shortcut: CoreInputView.GetForCurrentView().TryShow(Emoji) Needs A CoreWindow, Which A WinUI 3 Desktop
-    // Window Doesn't Have, And Showed Nothing When Tried. The Shortcut Waits A Turn: Sent Before The Box Has Taken
-    // Focus, Windows Ignores It
-    private void OnEmojiClick(object sender, RoutedEventArgs e)
-    {
-        DraftBox.Focus(FocusState.Programmatic);
-        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, SendEmojiShortcut);
-    }
+    private void OnEmojiClick(object sender, RoutedEventArgs e) => ToggleEmojiPanel();
 
-    // Win + Period, Pressed And Released
+    // Win + Period, Pressed And Released. Ctrl And Shift Still Held From The Ctrl + Shift + e Shortcut Are Let Go First:
+    // Windows Opens Nothing For Win + Ctrl + Shift + Period
     private static void SendEmojiShortcut()
     {
-        NativeMethods.KEYBOARD_INPUT[] keys =
-        [
-            new() { type = NativeMethods.INPUT_KEYBOARD, wVk = NativeMethods.VK_LWIN },
-            new() { type = NativeMethods.INPUT_KEYBOARD, wVk = NativeMethods.VK_OEM_PERIOD },
-            new() { type = NativeMethods.INPUT_KEYBOARD, wVk = NativeMethods.VK_OEM_PERIOD, dwFlags = NativeMethods.KEYEVENTF_KEYUP },
-            new() { type = NativeMethods.INPUT_KEYBOARD, wVk = NativeMethods.VK_LWIN, dwFlags = NativeMethods.KEYEVENTF_KEYUP },
-        ];
+        List<NativeMethods.KEYBOARD_INPUT> keys = [];
+        if (IsDown(VirtualKey.Control))
+        {
+            keys.Add(Key(NativeMethods.VK_CONTROL, NativeMethods.KEYEVENTF_KEYUP));
+        }
+
+        if (IsDown(VirtualKey.Shift))
+        {
+            keys.Add(Key(NativeMethods.VK_SHIFT, NativeMethods.KEYEVENTF_KEYUP));
+        }
+
+        keys.Add(Key(NativeMethods.VK_LWIN, 0));
+        keys.Add(Key(NativeMethods.VK_OEM_PERIOD, 0));
+        keys.Add(Key(NativeMethods.VK_OEM_PERIOD, NativeMethods.KEYEVENTF_KEYUP));
+        keys.Add(Key(NativeMethods.VK_LWIN, NativeMethods.KEYEVENTF_KEYUP));
 
         // A Refused Shortcut (Another App Holds The Input) Just Opens Nothing
-        _ = NativeMethods.SendInput((uint)keys.Length, keys, Marshal.SizeOf<NativeMethods.KEYBOARD_INPUT>());
+        _ = NativeMethods.SendInput((uint)keys.Count, [.. keys], Marshal.SizeOf<NativeMethods.KEYBOARD_INPUT>());
+
+        static NativeMethods.KEYBOARD_INPUT Key(ushort virtualKey, uint flags) =>
+            new() { type = NativeMethods.INPUT_KEYBOARD, wVk = virtualKey, dwFlags = flags };
     }
 
     // =========================================================================
     // HELPERS
     // =========================================================================
 
-    private static bool IsShiftDown() =>
-        InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Shift).HasFlag(CoreVirtualKeyStates.Down);
+    private static bool IsShiftDown() => IsDown(VirtualKey.Shift);
+
+    private static bool IsDown(VirtualKey key) =>
+        InputKeyboardSource.GetKeyStateForCurrentThread(key).HasFlag(CoreVirtualKeyStates.Down);
 
     // First ScrollViewer Under An Element (A ListView's Template Holds One)
     private static ScrollViewer? FindScroller(DependencyObject root)

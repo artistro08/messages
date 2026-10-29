@@ -73,11 +73,13 @@ internal static class NativeMethods
     // GetCurrentPackageFullName's answer when the process has no package identity
     public const int APPMODEL_ERROR_NO_PACKAGE = 15700;
 
-    // SendInput: keyboard input, key up; Windows key and period for the emoji panel
+    // SendInput: keyboard input, key up; Windows key and period for the emoji panel, Ctrl and Shift to let go first
     public const uint INPUT_KEYBOARD  = 1;
     public const uint KEYEVENTF_KEYUP = 0x0002;
     public const ushort VK_LWIN       = 0x5B;
     public const ushort VK_OEM_PERIOD = 0xBE;
+    public const ushort VK_SHIFT      = 0x10;
+    public const ushort VK_CONTROL    = 0x11;
 
     // =========================================================================
     // STRUCTS AND CALLBACKS
