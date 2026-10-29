@@ -11,6 +11,7 @@ using GMessages.Protocol.Rpc;
 using GMessages.Protocol.Session;
 using GMessages.Protocol.Tests.Fakes;
 using GMessages.Protocol.Tests.Session;
+using Google.Protobuf;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -222,6 +223,78 @@ public class LongPollLoopTests
     // =========================================================================
     // TIMING (C#-ONLY)
     // =========================================================================
+
+    // Makes RegisterRefresh Answer With A Fresh 24 Hour Token; Everything Else Keeps The Rig's Answers
+    private static void AnswerRefreshes(Rig rig)
+    {
+        Func<int, RecordedRequest, HttpResponseMessage> rest = rig.Handler.Respond;
+        rig.Handler.Respond = (msg, req) => req.Url.EndsWith("/RegisterRefresh", StringComparison.Ordinal)
+            ? FakeHttpHandler.Response(HttpStatusCode.OK, "application/json+protobuf", PbLiteSerializer.Serialize(new RegisterRefreshResponse
+            {
+                TokenData = new TokenData { TachyonAuthToken = ByteString.CopyFromUtf8("new-tachyon"), TTL = 86_400_000_000 },
+            }))
+            : rest(msg, req);
+    }
+
+    /// <summary>
+    /// A stream with steady data still ends 30 minutes after its request, then the refresh check runs and a new
+    /// stream opens, without any error (Go's 30 minute client timeout covers the body).
+    /// </summary>
+    [TestMethod]
+    public async Task StreamWithSteadyData_EndsAt30Minutes_ThenRefreshes()
+    {
+        var log = new CollectingLogger();
+        Rig rig = CreateRig(log);
+        AnswerRefreshes(rig);
+        rig.Auth.TachyonExpiry = rig.Time.GetUtcNow() + TimeSpan.FromMinutes(80);
+        using var cts          = new CancellationTokenSource();
+
+        // Not Logged In: The Pinger's Own Timers Would Add Reconnects That Have Nothing To Do With The Lifetime
+        Task run               = rig.Loop.RunAsync(false, null, cts.Token);
+        WaitUntil(() => { lock (rig.Streams) { return rig.Streams.Count == 1; } }, "first stream opened");
+        await rig.Streams[0].Waiting.WaitAsync(HangGuard);
+
+        // A Heartbeat Every 30 s Keeps The Stream Alive Until The Lifetime Ends It
+        byte[] heartbeat = ",[null,null,[],null,null]"u8.ToArray();
+        for (int i = 0; i < 59; i++)
+        {
+            rig.Time.Advance(TimeSpan.FromSeconds(30));
+            await rig.Streams[0].Push(heartbeat).WaitAsync(HangGuard);
+        }
+
+        Assert.AreEqual(0, rig.Requests("/RegisterRefresh").Length, "no refresh while the first stream is open");
+        Assert.AreEqual(1, rig.Requests("/ReceiveMessages").Length);
+        rig.Time.Advance(TimeSpan.FromSeconds(30));
+
+        WaitUntil(() => rig.Requests("/RegisterRefresh").Length == 1 && rig.Requests("/ReceiveMessages").Length == 2, "refresh, then a second stream");
+        Assert.IsFalse(log.Messages.Any(m => m.StartsWith("Error in long polling", StringComparison.Ordinal)), "the lifetime end is not an error");
+        Assert.AreEqual(0, rig.Time.CountTimers(LongPollLoop.MinStreamLifetime), "no short-stream pause");
+
+        await cts.CancelAsync();
+        await run.WaitAsync(HangGuard);
+    }
+
+    /// <summary>
+    /// A token that expired an hour ago is refreshed before the first stream opens.
+    /// </summary>
+    [TestMethod]
+    public async Task ExpiredToken_RefreshesBeforeOpeningTheStream()
+    {
+        Rig rig = CreateRig();
+        AnswerRefreshes(rig);
+        rig.Auth.TachyonExpiry = rig.Time.GetUtcNow() - TimeSpan.FromHours(1);
+        using var cts          = new CancellationTokenSource();
+        Task run               = rig.Loop.RunAsync(false, null, cts.Token);
+
+        WaitUntil(() => rig.Requests("/ReceiveMessages").Length == 1, "stream opened");
+
+        RecordedRequest[] order = [.. rig.Handler.Requests.Where(r => r.Url.EndsWith("/RegisterRefresh", StringComparison.Ordinal) || r.Url.EndsWith("/ReceiveMessages", StringComparison.Ordinal))];
+        Assert.IsTrue(order[0].Url.EndsWith("/RegisterRefresh", StringComparison.Ordinal), "refresh comes first");
+        Assert.IsTrue(order[1].Url.EndsWith("/ReceiveMessages", StringComparison.Ordinal));
+
+        await cts.CancelAsync();
+        await run.WaitAsync(HangGuard);
+    }
 
     /// <summary>
     /// A 401 on the long poll raises <see cref="ListenFatalError"/> and ends the loop.

@@ -20,7 +20,8 @@ namespace GMessages.Protocol.LongPoll;
 /// <see cref="ListenTemporaryError"/> and retry after <c>(errorCount + 1) × 5</c> seconds. The first success after
 /// errors raises <see cref="ListenRecovered"/>; the error count starts at 1, so that also happens on the first
 /// connect, as in Go. Reopening after more than a minute away asks the phone to resend updates. A minute of silence
-/// on the stream drops the connection and reopens it.
+/// on the stream drops the connection and reopens it, and so does <see cref="StreamLifetime"/> (30 minutes, as Go's
+/// client timeout), so the token refresh check runs at least that often.
 /// <para>
 /// Three deliberate differences from Go keep an always-on tray app sane: the retry wait stops growing at
 /// <see cref="MaxRetryDelay"/> (5 minutes) instead of growing forever; a stream that ends within
@@ -65,6 +66,12 @@ public sealed partial class LongPollLoop(
 
     /// <summary>A stream shorter than this is followed by this long a pause before reopening (C#-only; Go reopens at once).</summary>
     public static readonly TimeSpan MinStreamLifetime = TimeSpan.FromSeconds(5);
+
+    /// <summary>
+    /// How long one stream may stay open, counted from the start of its request (Go: the long-poll client's 30 minute
+    /// timeout covers the body, so every stream ends then and the loop's token refresh check runs again).
+    /// </summary>
+    public static readonly TimeSpan StreamLifetime = GmHttpClient.LongPollTimeout;
 
     private readonly Lock _lock = new();
     private readonly PhoneLiveness _liveness = new(time);
@@ -287,6 +294,9 @@ public sealed partial class LongPollLoop(
                     error = wrapped;
                 }
 
+                // Stream Lifetime Starts With The Request, As Go's Client Timeout Does
+                using var lifetime_cts = new CancellationTokenSource(StreamLifetime, time);
+
                 // Open The Stream; A Reconnect Request Or 1 Minute Without Headers Interrupts It
                 HttpResponseMessage? res = null;
                 if (error is null)
@@ -370,7 +380,9 @@ public sealed partial class LongPollLoop(
                     DateTimeOffset opened_at = time.GetUtcNow();
                     try
                     {
-                        await ReadAsync(res!, attempt_cts.Token, stop).ConfigureAwait(false);
+                        // Reaching The Lifetime Ends The Read Like Any Stream End: No Error, Reopen After The Refresh Check
+                        using var read_cts = CancellationTokenSource.CreateLinkedTokenSource(attempt_cts.Token, lifetime_cts.Token);
+                        await ReadAsync(res!, read_cts.Token, stop).ConfigureAwait(false);
                     }
                     finally
                     {
