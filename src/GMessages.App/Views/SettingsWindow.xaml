@@ -2,7 +2,8 @@
     x:Class="GMessages.App.Views.SettingsWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:controls="using:GMessages.App.Views.Controls">
+    xmlns:controls="using:GMessages.App.Views.Controls"
+    xmlns:local="using:GMessages.App.Views">
 
     <!-- Mica Background -->
     <Window.SystemBackdrop>
@@ -47,6 +48,14 @@
                         AutomationProperties.AutomationId="Settings.StartWithWindows"
                         Header="Start with Windows"
                         IsOn="{x:Bind ViewModel.StartWithWindows, Mode=TwoWay}" />
+
+                    <!-- Startup Refused: why the switch went back off -->
+                    <TextBlock
+                        AutomationProperties.AutomationId="Settings.StartupMessage"
+                        Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                        Text="{x:Bind ViewModel.StartupMessage, Mode=OneWay, TargetNullValue=''}"
+                        TextWrapping="Wrap"
+                        Visibility="{x:Bind ViewModel.HasStartupMessage, Mode=OneWay}" />
                 </StackPanel>
 
                 <!-- Notifications -->
@@ -66,10 +75,22 @@
                 <StackPanel Spacing="8">
                     <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Account" />
                     <StackPanel Orientation="Horizontal" Spacing="8">
+                        <!-- Unpair: hidden once unpaired, busy with a ring while it runs -->
                         <Button
                             AutomationProperties.AutomationId="Settings.Unpair"
+                            AutomationProperties.Name="Unpair this PC"
                             Click="OnUnpairClick"
-                            Content="Unpair this PC" />
+                            IsEnabled="{x:Bind local:SettingsWindow.Not(ViewModel.IsUnpairing), Mode=OneWay}"
+                            Visibility="{x:Bind ViewModel.CanUnpair, Mode=OneWay}">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <ProgressRing
+                                    Width="16"
+                                    Height="16"
+                                    IsActive="{x:Bind ViewModel.IsUnpairing, Mode=OneWay}"
+                                    Visibility="{x:Bind ViewModel.IsUnpairing, Mode=OneWay}" />
+                                <TextBlock Text="Unpair this PC" />
+                            </StackPanel>
+                        </Button>
                         <Button
                             AutomationProperties.AutomationId="Settings.OpenLogs"
                             Click="OnOpenLogsClick"

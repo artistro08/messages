@@ -135,6 +135,30 @@ public sealed class SettingsViewModelTests
         Assert.IsFalse(vm.StartWithWindows);
     }
 
+    /// <summary>
+    /// A refused enable says why with the owner's copy; the next flip clears it.
+    /// </summary>
+    [TestMethod]
+    public void StartWithWindows_Refused_ShowsWhy_NextFlipClears()
+    {
+        var startup = new FakeStartupService { RefuseEnable = true };
+        var vm      = Create(new InMemorySettingsStore(), startup);
+        Assert.IsNull(vm.StartupMessage);
+        Assert.IsFalse(vm.HasStartupMessage);
+
+        vm.StartWithWindows = true;
+
+        Assert.AreEqual("You'll have to manually enable startup. Turn it on in Settings > Apps > Startup.", vm.StartupMessage);
+        Assert.IsTrue(vm.HasStartupMessage);
+
+        startup.RefuseEnable = false;
+        vm.StartWithWindows  = true;
+
+        Assert.IsTrue(vm.StartWithWindows);
+        Assert.IsNull(vm.StartupMessage);
+        Assert.IsFalse(vm.HasStartupMessage);
+    }
+
     // =========================================================================
     // UNPAIR AND LOGS
     // =========================================================================
@@ -154,6 +178,39 @@ public sealed class SettingsViewModelTests
 
         Assert.AreEqual(ConnectionState.NotPaired, rig.Controller.State);
         Assert.IsFalse(File.Exists(rig.Paths.SessionFile));
+    }
+
+    /// <summary>
+    /// Unpair is offered only while paired, and is busy while it runs.
+    /// </summary>
+    [TestMethod]
+    public async Task Unpair_IsUnpairingWhileRunning_CanUnpairOnlyWhenPaired()
+    {
+        Assert.IsFalse(Create(new InMemorySettingsStore()).CanUnpair, "nothing to unpair");
+
+        await using var rig = new ConnectionControllerTests.Rig();
+        rig.SaveSession(TimeSpan.FromDays(1));
+        await rig.Controller.StartAsync().WaitAsync(ConnectionControllerTests.HangGuard);
+        var vm = Create(new InMemorySettingsStore(), controller: rig.Controller);
+        Assert.IsTrue(vm.CanUnpair);
+        Assert.IsFalse(vm.IsUnpairing);
+
+        // Busy Seen From Inside The Call; Both Flags Raised
+        var busy_seen = new List<bool>();
+        var raised    = new List<string?>();
+        vm.PropertyChanged += (_, e) =>
+        {
+            raised.Add(e.PropertyName);
+            busy_seen.Add(vm.IsUnpairing);
+        };
+
+        await vm.UnpairAsync().WaitAsync(ConnectionControllerTests.HangGuard);
+
+        Assert.IsTrue(busy_seen.Contains(true), "busy while unpairing");
+        Assert.IsFalse(vm.IsUnpairing);
+        Assert.IsFalse(vm.CanUnpair);
+        CollectionAssert.Contains(raised, nameof(SettingsViewModel.IsUnpairing));
+        CollectionAssert.Contains(raised, nameof(SettingsViewModel.CanUnpair));
     }
 
     /// <summary>

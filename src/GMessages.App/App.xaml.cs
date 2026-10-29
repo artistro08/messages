@@ -68,6 +68,7 @@ public partial class App : Application, IDisposable
     private DispatcherQueue? _dispatcher;
     private DispatcherQueueTimer? _networkDebounce;
     private bool _connectionStarted;
+    private string? _heldShowSource;
     private RegisteredWaitHandle? _quitWait;
     private RegisteredWaitHandle? _showWait;
     private bool _quitting;
@@ -175,6 +176,7 @@ public partial class App : Application, IDisposable
         _trayIcon = new TrayIcon(AppInfo.DisplayName, SelectTrayGuid());
         _trayIcon.Invoked              += (_, _) => ShowMainWindowRequested?.Invoke(this, "tray");
         _trayIcon.ContextMenuRequested += (_, point) => ShowTrayMenu(point.X, point.Y);
+        _trayIcon.ThemeChanged         += (_, _) => OnSystemThemeChanged();
         var trayAdded = _trayIcon.Show();
         AppLog.TrayAdded(_logger, trayAdded);
 
@@ -197,7 +199,8 @@ public partial class App : Application, IDisposable
     // CONNECTION AND PAIRING
     // =========================================================================
 
-    // Loads the saved session; no session (or a dead one) opens the pairing window
+    // Loads the saved session; no session (or a dead one) opens the pairing window. Start-up always ends, also when
+    // StartAsync throws (then it ends in the pairing window), so the tray never goes dead. A click held meanwhile runs last
     private async Task StartConnectionAsync()
     {
         try
@@ -209,12 +212,18 @@ public partial class App : Application, IDisposable
 #pragma warning restore CA1031
         {
             AppLog.ConnectionStartFailed(_logger, ex);
-            return;
         }
 
         // NotPaired is the starting state, so StartAsync raises nothing for it
         _connectionStarted = true;
         OnConnectionStateChanged();
+
+        // The Last Open Request Made During Start-Up
+        if (_heldShowSource is { } source)
+        {
+            _heldShowSource = null;
+            OnShowMainWindowRequested(source);
+        }
     }
 
     private bool NeedsPairing() => _connection?.State is ConnectionState.NotPaired or ConnectionState.SignedOut;
@@ -310,9 +319,11 @@ public partial class App : Application, IDisposable
             return;
         }
 
+        // Held Until Start-Up Ends (Only The Last One), Then Run
         AppLog.OpenRequested(_logger, source);
         if (!_connectionStarted)
         {
+            _heldShowSource = source;
             return;
         }
 
@@ -388,21 +399,36 @@ public partial class App : Application, IDisposable
             return;
         }
 
-        // Tray Menu: its popup keeps the backdrop of the theme it first opened with (a light theme set later gives dark
-        // text on a dark background), so a hidden menu is dropped and made fresh, with the new theme, on the next right-click
         var theme = _settings.Theme;
+        RefreshTrayMenu(theme);
+        _pairingWindow?.ApplyTheme(theme);
+        _mainWindow?.ApplyTheme(theme);
+        _settingsWindow?.ApplyTheme(theme);
+    }
+
+    // Tray Menu: its popup keeps the backdrop of the theme it first opened with (a light theme set later gives dark
+    // text on a dark background), so a hidden menu is dropped and made fresh, with the new theme, on the next right-click
+    private void RefreshTrayMenu(AppTheme theme)
+    {
         if (_trayMenu is { } menu && !menu.AppWindow.IsVisible)
         {
             _trayMenu = null;
             menu.Close();
+            return;
         }
-        else
+
+        _trayMenu?.ApplyTheme(theme);
+    }
+
+    // Windows Switched Light And Dark: With "System" The Tray Menu Follows It, The Same Way As A Theme Setting Change
+    private void OnSystemThemeChanged()
+    {
+        if (_quitting || _settings is not { Theme: AppTheme.System } settings)
         {
-            _trayMenu?.ApplyTheme(theme);
+            return;
         }
-        _pairingWindow?.ApplyTheme(theme);
-        _mainWindow?.ApplyTheme(theme);
-        _settingsWindow?.ApplyTheme(theme);
+
+        RefreshTrayMenu(settings.Theme);
     }
 
     private void ScheduleTrim()

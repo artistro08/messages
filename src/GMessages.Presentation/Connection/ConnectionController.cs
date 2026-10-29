@@ -43,6 +43,10 @@ public sealed partial class ConnectionController : IAsyncDisposable
     /// <summary>The text shown in the pairing window after Google ends the session.</summary>
     public const string SignedOutText = "You were signed out. Sign in again to keep getting texts.";
 
+    // A Session File Another Process Holds Open (Antivirus At Boot) Is Tried Again This Often, This Far Apart
+    private const int LockRetries = 3;
+    private static readonly TimeSpan LockRetryDelay = TimeSpan.FromSeconds(1);
+
     private readonly AppPaths _paths;
     private readonly GmEndpoints _endpoints;
     private readonly TimeProvider _time;
@@ -161,7 +165,9 @@ public sealed partial class ConnectionController : IAsyncDisposable
     /// Otherwise the state goes to Connecting, then Connected once the long poll is started. A refresh the server
     /// refuses for good, or any other connect error (such as a session with no token), means the session can't be
     /// used: the client is dropped, the session file deleted, and the state is
-    /// <see cref="ConnectionState.SignedOut"/>. A second call does nothing.
+    /// <see cref="ConnectionState.SignedOut"/>. A session file another process holds open is tried again 3 times, 1 s
+    /// apart, before loading, so a passing lock isn't taken for no session; a locked file is never deleted. A second
+    /// call does nothing.
     /// </remarks>
     /// <returns>A task that completes when the state is settled.</returns>
     /// <exception cref="ObjectDisposedException">The controller was disposed.</exception>
@@ -176,7 +182,13 @@ public sealed partial class ConnectionController : IAsyncDisposable
                 return;
             }
 
-            // Load The Session
+            // Wait Out A Passing Lock, Then Load The Session
+            for (int retry = 0; retry < LockRetries && IsLocked(_paths.SessionFile); retry++)
+            {
+                LogSessionLocked(_log, retry + 1);
+                await Task.Delay(LockRetryDelay, _time).ConfigureAwait(false);
+            }
+
             AuthData? auth = new SessionStore(_paths.SessionFile, _log).Load();
             if (auth is null)
             {
@@ -511,6 +523,26 @@ public sealed partial class ConnectionController : IAsyncDisposable
         SetState(ConnectionState.SignedOut);
     }
 
+    // ponytail: checks the lock just before Load, so a lock taken between the two still reads as no session (as before);
+    // an IOException-aware Load in SessionStore would close that gap
+    private static bool IsLocked(string path)
+    {
+        try
+        {
+            using var probe = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+            return false;
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException or UnauthorizedAccessException)
+        {
+            // Missing Or Not Ours To Read: Load Decides
+            return false;
+        }
+        catch (IOException)
+        {
+            return true;
+        }
+    }
+
     // Contacts' Photos Go With The Session; A Locked File Is Logged, Not Thrown
     private void DeleteAvatars()
     {
@@ -640,6 +672,9 @@ public sealed partial class ConnectionController : IAsyncDisposable
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Avatar folder could not be deleted ({ErrorType})")]
     private static partial void LogAvatarsDeleteFailed(ILogger logger, string errorType);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Session file is in use; trying again ({Attempt})")]
+    private static partial void LogSessionLocked(ILogger logger, int attempt);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Sign-out cleanup failed")]
     private static partial void LogSignOutFailed(ILogger logger, Exception ex);

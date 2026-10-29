@@ -49,6 +49,13 @@ public sealed partial class SettingsWindow : Window
     public SettingsViewModel ViewModel { get; }
 
     /// <summary>
+    /// Flips a flag for a binding (the Unpair button is enabled while no unpair runs).
+    /// </summary>
+    /// <param name="value">The flag.</param>
+    /// <returns>The opposite.</returns>
+    public static bool Not(bool value) => !value;
+
+    /// <summary>
     /// Sets the window's light or dark look from the app theme. The confirm dialog follows its parent grid.
     /// </summary>
     /// <param name="theme">The app theme setting.</param>

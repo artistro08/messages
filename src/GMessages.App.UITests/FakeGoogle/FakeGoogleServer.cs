@@ -92,6 +92,7 @@ public sealed class FakeGoogleServer : IAsyncDisposable
     private Channel<byte[]>? _stream;
     private int _killStatus;
     private volatile bool _rejectCookies;
+    private volatile bool _slowStart;
 
     /// <summary>
     /// Starts the server on a free port of 127.0.0.1.
@@ -148,6 +149,20 @@ public sealed class FakeGoogleServer : IAsyncDisposable
     {
         get => _rejectCookies;
         set => _rejectCookies = value;
+    }
+
+    /// <summary>
+    /// Gets or sets whether the app's start-up is slow: tokens are handed out with 30 minutes left, so every start
+    /// refreshes first, and each refresh is answered 3 s late.
+    /// </summary>
+    /// <remarks>
+    /// Start-up never fetches <c>/web/config</c> (only pairing does); the token refresh is the request a start waits
+    /// on. Set it before pairing, so the saved session already needs a refresh.
+    /// </remarks>
+    public bool SlowStart
+    {
+        get => _slowStart;
+        set => _slowStart = value;
     }
 
     /// <summary>
@@ -278,6 +293,11 @@ public sealed class FakeGoogleServer : IAsyncDisposable
                     break;
 
                 case not null when path.EndsWith("Registration/RegisterRefresh", StringComparison.Ordinal):
+                    if (SlowStart)
+                    {
+                        await Task.Delay(TimeSpan.FromSeconds(3), _stop.Token);
+                    }
+
                     await RespondAsync(context.Response, 200, PbLiteMime, PbLiteSerializer.Serialize(new RegisterRefreshResponse { TokenData = Token() }));
                     break;
 
@@ -486,11 +506,11 @@ public sealed class FakeGoogleServer : IAsyncDisposable
         return new SignInGaiaResponse { TokenData = Token(), DeviceData = device_data };
     }
 
-    // A Token Valid For 24 Hours
-    private static TokenData Token() => new()
+    // A Token Valid For 24 Hours, Or 30 Minutes (Inside The Client's 1 Hour Refresh Window) For A Slow Start
+    private TokenData Token() => new()
     {
         TachyonAuthToken = ByteString.CopyFromUtf8("fake-tachyon-token"),
-        TTL              = (long)TimeSpan.FromHours(24).TotalMicroseconds,
+        TTL              = (long)(SlowStart ? TimeSpan.FromMinutes(30) : TimeSpan.FromHours(24)).TotalMicroseconds,
     };
 
     // =========================================================================

@@ -76,7 +76,9 @@
                             <MenuFlyoutItem
                                 AutomationProperties.AutomationId="Main.Profile.Unpair"
                                 Click="OnUnpairClick"
-                                Text="Unpair">
+                                IsEnabled="{x:Bind local:SettingsWindow.Not(Settings.IsUnpairing), Mode=OneWay}"
+                                Text="Unpair"
+                                Visibility="{x:Bind Settings.CanUnpair, Mode=OneWay}">
                                 <MenuFlyoutItem.Icon>
                                     <FontIcon Glyph="&#xE8C9;" />
                                 </MenuFlyoutItem.Icon>

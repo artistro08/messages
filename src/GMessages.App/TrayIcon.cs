@@ -79,6 +79,11 @@ internal sealed class TrayIcon : IDisposable
     public event EventHandler<(int X, int Y)>? ContextMenuRequested;
 
     /// <summary>
+    /// Windows switched between light and dark (<c>WM_SETTINGCHANGE</c> with <c>ImmersiveColorSet</c>).
+    /// </summary>
+    public event EventHandler? ThemeChanged;
+
+    /// <summary>
     /// The icon's hidden window.
     /// </summary>
     public IntPtr Handle => _hwnd;
@@ -230,6 +235,12 @@ internal sealed class TrayIcon : IDisposable
             LoadIcon();
             var data = CreateData(NativeMethods.NIF_ICON);
             NativeMethods.Shell_NotifyIconW(NativeMethods.NIM_MODIFY, ref data);
+        }
+
+        // Light Or Dark Switched: The App's Own Popups Follow
+        if (message == NativeMethods.WM_SETTINGCHANGE && lParam != IntPtr.Zero && Marshal.PtrToStringUni(lParam) == "ImmersiveColorSet")
+        {
+            ThemeChanged?.Invoke(this, EventArgs.Empty);
         }
 
         return NativeMethods.DefWindowProcW(hwnd, message, wParam, lParam);

@@ -325,6 +325,39 @@ public sealed class ConnectionControllerTests
         Assert.IsFalse(File.Exists(rig.Paths.SessionFile), "token-less session deleted");
     }
 
+    /// <summary>
+    /// A session file another process holds open at boot (antivirus) is retried 1 s apart, then loads; it is never
+    /// taken for a missing or dead session.
+    /// </summary>
+    [TestMethod]
+    public async Task LockedSessionFile_RetriesThenLoads()
+    {
+        await using var rig = new Rig();
+        rig.SaveSession(TimeSpan.FromDays(1));
+        var locked = new FileStream(rig.Paths.SessionFile, FileMode.Open, FileAccess.Read, FileShare.None);
+
+        Task start = rig.Controller.StartAsync();
+        try
+        {
+            // Two Waits Of 1 s While Still Locked
+            Assert.IsTrue(await rig.Time.TimerCreated.WaitAsync(HangGuard), "first retry wait");
+            Assert.AreEqual(TimeSpan.FromSeconds(1), rig.Time.DueTimes.Last());
+            Assert.AreEqual(ConnectionState.NotPaired, rig.Controller.State, "not settled while locked");
+            rig.Time.Advance(TimeSpan.FromSeconds(1));
+            Assert.IsTrue(await rig.Time.TimerCreated.WaitAsync(HangGuard), "second retry wait");
+        }
+        finally
+        {
+            await locked.DisposeAsync();
+        }
+
+        rig.Time.Advance(TimeSpan.FromSeconds(1));
+        await start.WaitAsync(HangGuard);
+
+        Assert.AreEqual(ConnectionState.Connected, rig.Controller.State);
+        Assert.IsTrue(File.Exists(rig.Paths.SessionFile), "session kept");
+    }
+
     // =========================================================================
     // SIGN OUT AND RECONNECT
     // =========================================================================

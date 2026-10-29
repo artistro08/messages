@@ -52,6 +52,36 @@ public sealed class LifecycleTests : UiTest
     }
 
     /// <summary>
+    /// A tray click while start-up still waits on the server is kept and opens the main window once start-up ends.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task TrayClickDuringSlowStart_OpensWhenReady()
+    {
+        // Slow From The Start, So The Saved Session Needs A (Slow) Refresh At The Next Launch
+        Server.SlowStart = true;
+        await PairAsync();
+        int refreshes = Refreshes();
+
+        await App.RestartAsync();
+
+        // Click While The 3 s Refresh Is Still Unanswered
+        Wait.Until(() => Refreshes() > refreshes, AppDriver.DefaultTimeout, () => "The restarted app never asked for a token refresh.");
+        Tray.LeftClick();
+
+        App.Find("Main.ConversationList");
+
+        // The Click Really Came Before Start-Up Ended (The Restarted Run's First State Line), Or This Proved Nothing
+        string log        = ReadLog();
+        string second_run = log[log.LastIndexOf(" started (", StringComparison.Ordinal)..];
+        int clicked_at    = second_run.IndexOf("Open requested (tray)", StringComparison.Ordinal);
+        int started_at    = second_run.IndexOf("Connection state:", StringComparison.Ordinal);
+        Assert.IsTrue(clicked_at >= 0 && started_at > clicked_at, $"The tray click wasn't logged before start-up ended:\n{second_run}");
+
+        int Refreshes() => Server.RequestedPaths.Count(p => p.EndsWith("Registration/RegisterRefresh", StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// Google ending the session (401 on the long poll) while connected brings back the pairing window with the
     /// signed-out reason above the sign-in.
     /// </summary>

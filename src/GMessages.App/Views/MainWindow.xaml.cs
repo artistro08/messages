@@ -103,6 +103,11 @@ public sealed partial class MainWindow : Window
     public MainViewModel ViewModel { get; }
 
     /// <summary>
+    /// Gets the settings state the profile menu's Unpair binds to.
+    /// </summary>
+    public SettingsViewModel Settings => _settings;
+
+    /// <summary>
     /// Sets the window's light or dark look from the app theme.
     /// </summary>
     /// <param name="theme">The app theme setting.</param>

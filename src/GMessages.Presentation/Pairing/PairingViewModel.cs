@@ -115,8 +115,9 @@ public sealed class PairingViewModel : INotifyPropertyChanged
     /// </summary>
     /// <remarks>
     /// Call on the UI thread. Only the first call while <see cref="PairingStep.SigningIn"/> pairs; later calls do
-    /// nothing until <see cref="TryAgain"/>. A <see cref="Cancel"/> ends the attempt without showing a failure.
-    /// Every other error becomes <see cref="PairingStep.Failed"/> with <see cref="MessageFor"/>'s text.
+    /// nothing until <see cref="TryAgain"/>. A <see cref="Cancel"/> ends the attempt without showing a failure. A cancel
+    /// from the controller (an unpair while pairing) while it reports <see cref="ConnectionState.NotPaired"/> isn't a
+    /// failure either: the window goes back to <see cref="PairingStep.SigningIn"/>. Every other error becomes <see cref="PairingStep.Failed"/> with <see cref="MessageFor"/>'s text.
     /// </remarks>
     /// <param name="cookies">The Google sign-in cookies.</param>
     /// <returns>A task that completes when the attempt has ended.</returns>
@@ -143,6 +144,11 @@ public sealed class PairingViewModel : INotifyPropertyChanged
         catch (OperationCanceledException) when (cts.IsCancellationRequested)
         {
             // Canceled Here: The Window Is Closing, So Show Nothing
+        }
+        catch (OperationCanceledException) when (_controller.State == ConnectionState.NotPaired)
+        {
+            // Canceled By The Controller (An Unpair Meanwhile): No Failure, Back To A Fresh Sign-In
+            _post(() => Update(PairingStep.SigningIn, null, null));
         }
 #pragma warning disable CA1031 // Any Failure Becomes A Message; Nothing Is Left For A Caller To Handle
         catch (Exception ex)

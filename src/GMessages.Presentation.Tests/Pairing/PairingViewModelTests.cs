@@ -192,6 +192,30 @@ public sealed class PairingViewModelTests
     }
 
     /// <summary>
+    /// An unpair while the emoji waits (the controller cancels the pairing) is no failure: the window goes back to the
+    /// sign-in without "Something went wrong".
+    /// </summary>
+    [TestMethod]
+    public async Task UnpairDuringPairing_IsNotGenericFailure()
+    {
+        await using var rig = new Rig();
+        Directory.CreateDirectory(rig.DataFolder);
+        await rig.Controller.StartAsync().WaitAsync(Shared.HangGuard);
+        Shared.ScriptPairing(rig, finished: null);
+        var watched = new Watched(rig);
+
+        Task pairing = watched.ViewModel.OnCookiesCapturedAsync(Shared.PairCookies);
+        Shared.WaitUntil(() => watched.ViewModel.Step == PairingStep.ShowingEmoji, "emoji shown");
+        await rig.Controller.UnpairAsync().WaitAsync(Shared.HangGuard);
+        await pairing.WaitAsync(Shared.HangGuard);
+
+        Assert.AreEqual(PairingStep.SigningIn, watched.ViewModel.Step);
+        Assert.IsNull(watched.ViewModel.Message);
+        Assert.IsFalse(watched.Steps.Contains(PairingStep.Failed), "no failure shown");
+        Assert.AreEqual(ConnectionState.NotPaired, rig.Controller.State);
+    }
+
+    /// <summary>
     /// A sign-in page that can't load (no WebView2 runtime) ends Failed with the generic message; Try again resets.
     /// </summary>
     [TestMethod]

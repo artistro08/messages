@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using GMessages.Presentation.Connection;
+using GMessages.Presentation.Messaging;
 using Microsoft.Extensions.Logging;
 
 namespace GMessages.Presentation.Settings;
@@ -29,6 +30,8 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
     private readonly ILogger _logger;
 
     private bool _startWithWindows;
+    private string? _startupMessage;
+    private bool _isUnpairing;
 
     /// <summary>
     /// Creates the view model. Call <see cref="LoadAsync"/> when the window opens.
@@ -172,6 +175,31 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
     }
 
     /// <summary>
+    /// Gets why Start with Windows couldn't be turned on, or null. Set when Windows refuses an enable (turned off by the
+    /// user or a policy in Settings) and cleared by the next flip.
+    /// </summary>
+    public string? StartupMessage
+    {
+        get => _startupMessage;
+        private set
+        {
+            if (value == _startupMessage)
+            {
+                return;
+            }
+
+            _startupMessage = value;
+            Raise();
+            Raise(nameof(HasStartupMessage));
+        }
+    }
+
+    /// <summary>
+    /// Gets whether <see cref="StartupMessage"/> shows (for bindings, which skip their function when an argument is null).
+    /// </summary>
+    public bool HasStartupMessage => _startupMessage is not null;
+
+    /// <summary>
     /// Reads the Start with Windows state. Called when the window opens.
     /// </summary>
     /// <returns>A task that completes when the switch shows the current state.</returns>
@@ -190,13 +218,19 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
         }
     }
 
-    // Windows Can Refuse An Enable, So The Switch Follows The Result
+    // Windows Can Refuse An Enable, So The Switch Follows The Result And A Refusal Says Why
     private async Task ApplyStartWithWindowsAsync(bool enabled)
     {
+        StartupMessage = null;
+
         bool actual;
         try
         {
             actual = await _startup.SetEnabledAsync(enabled).ConfigureAwait(true);
+            if (enabled && !actual)
+            {
+                StartupMessage = ChatCopy.StartupRefused;
+            }
         }
 #pragma warning disable CA1031 // A Failed Change Puts The Switch Back; The Failure Is Logged
         catch (Exception ex)
@@ -223,15 +257,35 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
     public string LogsFolder { get; }
 
     /// <summary>
+    /// Gets whether Unpair is offered: hidden once there is nothing to unpair (<see cref="ConnectionState.NotPaired"/>).
+    /// </summary>
+    /// <remarks>Read from the controller each time; raised after an unpair.</remarks>
+    public bool CanUnpair => _controller.State != ConnectionState.NotPaired;
+
+    /// <summary>
+    /// Gets whether an unpair is running; the button is disabled and shows progress meanwhile.
+    /// </summary>
+    public bool IsUnpairing
+    {
+        get => _isUnpairing;
+        private set
+        {
+            _isUnpairing = value;
+            Raise();
+        }
+    }
+
+    /// <summary>
     /// Unpairs this PC. The window confirms with the user before calling this.
     /// </summary>
     /// <remarks>
-    /// The controller ends in <see cref="ConnectionState.NotPaired"/> even when Google refuses the request, so that
-    /// error is only logged.
+    /// <see cref="IsUnpairing"/> is true while it runs. The controller ends in <see cref="ConnectionState.NotPaired"/>
+    /// even when Google refuses the request, so that error is only logged.
     /// </remarks>
     /// <returns>A task that completes when the saved session is gone.</returns>
     public async Task UnpairAsync()
     {
+        IsUnpairing = true;
         try
         {
             await _controller.UnpairAsync().ConfigureAwait(true);
@@ -241,6 +295,11 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
 #pragma warning restore CA1031
         {
             LogUnpairFailed(_logger, ex);
+        }
+        finally
+        {
+            IsUnpairing = false;
+            Raise(nameof(CanUnpair));
         }
     }
 
