@@ -79,10 +79,19 @@ internal sealed class FakeMessagingClient : IMessagingClient
     /// <summary>When set, creating a conversation fails with this.</summary>
     public Exception? CreateThrows { get; set; }
 
-    public Task<GetOrCreateConversationResponse> GetOrCreateConversationAsync(GetOrCreateConversationRequest request, CancellationToken ct)
+    /// <summary>When set, the next create call answers only after this completes.</summary>
+    public TaskCompletionSource? CreateGate { get; set; }
+
+    public async Task<GetOrCreateConversationResponse> GetOrCreateConversationAsync(GetOrCreateConversationRequest request, CancellationToken ct)
     {
         CreateCalls.Add(request.Clone());
-        return CreateThrows is { } ex ? Task.FromException<GetOrCreateConversationResponse>(ex) : Task.FromResult(CreateAnswers.Dequeue());
+        if (CreateGate is { } gate)
+        {
+            CreateGate = null;
+            await gate.Task;
+        }
+
+        return CreateThrows is { } ex ? throw ex : CreateAnswers.Dequeue();
     }
 
     /// <summary>Pages returned by successive message fetches before falling back to <see cref="MessagesPage"/>.</summary>
@@ -137,7 +146,19 @@ internal sealed class FakeMessagingClient : IMessagingClient
     public Task<ListContactsResponse> ListContactsAsync(CancellationToken ct) =>
         ContactsThrows is { } ex ? Task.FromException<ListContactsResponse>(ex) : Task.FromResult(ContactsAnswer);
 
-    public Task<ListTopContactsResponse> ListTopContactsAsync(CancellationToken ct) => Task.FromResult(TopContactsAnswer);
+    /// <summary>When set, the next top contacts call answers only after this completes.</summary>
+    public TaskCompletionSource? TopContactsGate { get; set; }
+
+    public async Task<ListTopContactsResponse> ListTopContactsAsync(CancellationToken ct)
+    {
+        if (TopContactsGate is { } gate)
+        {
+            TopContactsGate = null;
+            await gate.Task;
+        }
+
+        return TopContactsAnswer;
+    }
 
     /// <summary>Photos by participant ID; IDs not here get no thumbnail.</summary>
     public Dictionary<string, byte[]> Photos { get; } = [];

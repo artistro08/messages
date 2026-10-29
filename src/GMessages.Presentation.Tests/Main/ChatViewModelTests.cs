@@ -341,6 +341,142 @@ public sealed class ChatViewModelTests
         Assert.AreEqual("Bo", chat.Messages[2].SenderName);
     }
 
+    /// <summary>
+    /// A group sender's name takes the color of that person's letter circle; a sender without a color gets the
+    /// avatar's fallback gray.
+    /// </summary>
+    [TestMethod]
+    public async Task GroupReceived_SenderNameUsesAvatarColor()
+    {
+        using var rig = new MainRig();
+        Conversation conv = MainRig.Conv("a", "Team");
+        conv.IsGroupChat                    = true;
+        conv.Participants[1].AvatarHexColor = "#1a73e8";
+        conv.Participants.Add(new Participant { ID = new SmallInfo { ParticipantID = "p-b" }, FullName = "Bo" });
+        using ChatViewModel chat = NewChat(rig, conv, Msg("m1", "one", from: "p-a"), Msg("m2", "two", from: "p-b"));
+
+        await chat.LoadAsync();
+
+        Assert.AreEqual(0xFF1A73E8u, chat.Messages[0].SenderColor);
+        Assert.AreEqual(0xFF5F6368u, chat.Messages[1].SenderColor);
+    }
+
+    // =========================================================================
+    // CACHE AND LOADING STATE
+    // =========================================================================
+
+    /// <summary>
+    /// A conversation opened before shows its cached page at once, with no loading ring, while the phone refreshes it.
+    /// </summary>
+    [TestMethod]
+    public async Task Load_CacheHit_ShowsCachedPageAtOnce()
+    {
+        using var rig = new MainRig();
+        using (ChatViewModel first = NewChat(rig, null, Msg("m1", "one"), Msg("m2", "two")))
+        {
+            await first.LoadAsync();
+        }
+
+        var gate             = new TaskCompletionSource();
+        rig.Client.FetchGate = gate;
+        using var chat       = new ChatViewModel(rig.Store, "a", TimeProvider.System, a => a());
+
+        Task load = chat.LoadAsync();
+
+        Assert.AreEqual("one,two", string.Join(",", chat.Messages.Select(b => b.Text)));
+        Assert.IsFalse(chat.IsLoadingHistory, "a cached page shows no loading ring");
+        gate.SetResult();
+        await load;
+    }
+
+    /// <summary>
+    /// The refresh after a cache hit merges into the bubbles already shown: known ones are kept (and updated), new ones
+    /// go in, ones the phone no longer has go away.
+    /// </summary>
+    [TestMethod]
+    public async Task Load_CacheHit_RefreshMerges()
+    {
+        using var rig = new MainRig();
+        using (ChatViewModel first = NewChat(rig, null, Msg("m1", "one"), Msg("m2", "two")))
+        {
+            await first.LoadAsync();
+        }
+
+        using var chat = new ChatViewModel(rig.Store, "a", TimeProvider.System, a => a());
+        rig.Client.MessagesPage = new ListMessagesResponse();
+        rig.Client.MessagesPage.Messages.AddRange([Msg("m3", "three"), Msg("m2", "two edited")]);
+        var gate             = new TaskCompletionSource();
+        rig.Client.FetchGate = gate;
+
+        Task load = chat.LoadAsync();
+        MessageBubbleViewModel cached_two = chat.Messages[1];
+        gate.SetResult();
+        await load;
+
+        Assert.AreEqual("two edited,three", string.Join(",", chat.Messages.Select(b => b.Text)));
+        Assert.AreSame(cached_two, chat.Messages[0], "the shown bubble was updated, not replaced");
+    }
+
+    /// <summary>
+    /// A message that arrives while the chat is closed updates the cached copy, so reopening shows it.
+    /// </summary>
+    [TestMethod]
+    public async Task ArrivalWhileClosed_ShowsOnReopen()
+    {
+        using var rig = new MainRig();
+        using (ChatViewModel first = NewChat(rig, null, Msg("m1", "one")))
+        {
+            await first.LoadAsync();
+        }
+
+        await rig.LiveMessage(Msg("m2", "two", ts: 1_761_700_000_000_001));
+        rig.Client.FetchGate = new TaskCompletionSource();
+        using var chat       = new ChatViewModel(rig.Store, "a", TimeProvider.System, a => a());
+
+        _ = chat.LoadAsync();
+
+        Assert.AreEqual("one,two", string.Join(",", chat.Messages.Select(b => b.Text)));
+    }
+
+    /// <summary>
+    /// With no cached copy the history ring shows until the first page is in.
+    /// </summary>
+    [TestMethod]
+    public async Task Load_NoCache_IsLoadingHistoryUntilPageArrives()
+    {
+        using var rig = new MainRig();
+        using ChatViewModel chat = NewChat(rig, null, Msg("m1", "one"));
+        var gate                 = new TaskCompletionSource();
+        rig.Client.FetchGate     = gate;
+
+        Task load = chat.LoadAsync();
+        Assert.IsTrue(chat.IsLoadingHistory);
+
+        gate.SetResult();
+        await load;
+        Assert.IsFalse(chat.IsLoadingHistory);
+    }
+
+    [TestMethod]
+    public async Task LoadOlder_IsLoadingOlderWhileFetching()
+    {
+        using var rig = new MainRig();
+        using ChatViewModel chat = NewChat(rig, null, Msg("m3", "three"));
+        rig.Client.MessagesPage.Cursor = new Cursor { LastItemID = "m3" };
+        await chat.LoadAsync();
+        Assert.IsFalse(chat.IsLoadingOlder);
+
+        var gate             = new TaskCompletionSource();
+        rig.Client.FetchGate = gate;
+        Task older           = chat.LoadOlderAsync();
+        Assert.IsTrue(chat.IsLoadingOlder);
+        Assert.IsFalse(chat.IsLoadingHistory, "older pages use the small ring only");
+
+        gate.SetResult();
+        await older;
+        Assert.IsFalse(chat.IsLoadingOlder);
+    }
+
     [TestMethod]
     public async Task Tombstones_AreHidden()
     {

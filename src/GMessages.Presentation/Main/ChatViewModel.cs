@@ -15,6 +15,10 @@ namespace GMessages.Presentation.Main;
 /// the store (which outlives the window), so call <see cref="Dispose"/> when the chat closes.
 /// </para>
 /// <para>
+/// Opening a conversation shows the page <see cref="ChatStore"/> kept from last time at once, then the phone's page
+/// is merged into it quietly. Only with nothing to show does <see cref="IsLoadingHistory"/> ask for the loading ring.
+/// </para>
+/// <para>
 /// A send adds a bubble at once. If it fails for any reason (not connected, not answering, refused, a network error) the bubble is
 /// marked failed and keeps its text so <see cref="RetryAsync"/> can resend it; nothing is thrown at the view.
 /// </para>
@@ -32,6 +36,8 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     // Older Page That Added Bubbles. A Failed Load Stops It Until The Next Good Load (The Resync After Reconnecting)
     private bool _fillOlder;
     private bool _isLoading;
+    private bool _isLoadingHistory;
+    private bool _isLoadingOlder;
 
     // A Reload Asked For While A Load Was Running; Runs When That Load Ends
     private bool _reloadPending;
@@ -124,16 +130,21 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     public bool IsLoading
     {
         get => _isLoading;
-        private set
-        {
-            if (_isLoading == value)
-            {
-                return;
-            }
+        private set => Set(ref _isLoading, value, nameof(IsLoading));
+    }
 
-            _isLoading = value;
-            Raise(nameof(IsLoading));
-        }
+    /// <summary>Gets whether the newest page is loading with no bubbles to show yet (no cached copy): the large ring.</summary>
+    public bool IsLoadingHistory
+    {
+        get => _isLoadingHistory;
+        private set => Set(ref _isLoadingHistory, value, nameof(IsLoadingHistory));
+    }
+
+    /// <summary>Gets whether an older page is loading above the bubbles: the small ring at the top.</summary>
+    public bool IsLoadingOlder
+    {
+        get => _isLoadingOlder;
+        private set => Set(ref _isLoadingOlder, value, nameof(IsLoadingOlder));
     }
 
     // =========================================================================
@@ -141,9 +152,9 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     // =========================================================================
 
     /// <summary>
-    /// Loads the newest page, replacing the bubbles (unsent ones stay), and marks the conversation read when it was unread.
+    /// Loads the newest page, merging it into the bubbles (unsent ones stay), and marks the conversation read when it was unread.
     /// </summary>
-    /// <remarks>Call on the UI thread. While a page is loading the call is remembered and runs once that load ends. When the load fails (phone not connected or not answering, a network error) the bubbles stay as they were.</remarks>
+    /// <remarks>Call on the UI thread. With no bubbles yet, the cached page shows first, before anything is awaited. While a page is loading the call is remembered and runs once that load ends. When the load fails (phone not connected or not answering, a network error) the bubbles stay as they were.</remarks>
     /// <returns>A task that completes when the page is shown.</returns>
     public async Task LoadAsync()
     {
@@ -153,7 +164,14 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
-        IsLoading = true;
+        // Opened Before: The Copy Kept From Then Shows At Once, And The Phone's Page Is Merged In Below
+        if (Messages.Count == 0 && _store.CachedMessages(ConversationId) is { } cached)
+        {
+            ShowPage(cached);
+        }
+
+        IsLoading        = true;
+        IsLoadingHistory = Messages.Count == 0;
         try
         {
             // The Conversation May Not Be Cached Yet (Opened Right After Start Chat)
@@ -162,22 +180,8 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
 
             (IReadOnlyList<ChatMessage> page, Cursor? older) = await _store.LoadMessagesAsync(ConversationId, null, CancellationToken.None);
 
-            // Unsent Bubbles Stay Unless The Page Already Holds Their Echo
-            List<MessageBubbleViewModel> unsent = [.. Messages.Where(b => b.Id.Length == 0 && !page.Any(m => m.TmpId.Length > 0 && m.TmpId == b.TmpId))];
-
-            Messages.Clear();
             _older = older;
-            foreach (ChatMessage m in page.Where(m => m.Kind != MessageKind.Tombstone))
-            {
-                Messages.Add(new MessageBubbleViewModel(m));
-            }
-
-            foreach (MessageBubbleViewModel b in unsent)
-            {
-                Messages.Add(b);
-            }
-
-            RefreshSenders();
+            ShowPage(page);
             _fillOlder = true;
 
             // Opening An Unread Chat Reads It
@@ -194,7 +198,8 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
         }
         finally
         {
-            IsLoading = false;
+            IsLoading        = false;
+            IsLoadingHistory = false;
         }
 
         await RunPendingReloadAsync();
@@ -212,7 +217,8 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
-        IsLoading = true;
+        IsLoading      = true;
+        IsLoadingOlder = true;
         try
         {
             (IReadOnlyList<ChatMessage> page, Cursor? older) = await _store.LoadMessagesAsync(ConversationId, _older, CancellationToken.None);
@@ -237,7 +243,8 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
         }
         finally
         {
-            IsLoading = false;
+            IsLoading      = false;
+            IsLoadingOlder = false;
         }
 
         await RunPendingReloadAsync();
@@ -327,11 +334,7 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
-        // Match By ID, Then By The Temporary ID Of A Bubble Sent From Here
-        MessageBubbleViewModel? bubble = Messages.FirstOrDefault(b => m.Id.Length > 0 && b.Id == m.Id)
-            ?? Messages.FirstOrDefault(b => m.TmpId.Length > 0 && b.TmpId == m.TmpId);
-
-        if (bubble is not null)
+        if (FindBubble(m) is { } bubble)
         {
             bubble.Update(m);
         }
@@ -374,6 +377,58 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     // HELPERS
     // =========================================================================
 
+    // Match By ID, Then By The Temporary ID Of A Bubble Sent From Here
+    private MessageBubbleViewModel? FindBubble(ChatMessage m) =>
+        Messages.FirstOrDefault(b => m.Id.Length > 0 && b.Id == m.Id)
+        ?? Messages.FirstOrDefault(b => m.TmpId.Length > 0 && b.TmpId == m.TmpId);
+
+    // Shows The Newest Page In Place Of The Bubbles, Reusing (And Updating) The Ones Already Shown So The List Doesn't
+    // Redraw Them. Unsent Bubbles Stay At The Bottom Unless The Page Holds Their Echo; Older Pages Above Are Dropped
+    private void ShowPage(IReadOnlyList<ChatMessage> page)
+    {
+        List<MessageBubbleViewModel> wanted = [];
+        foreach (ChatMessage m in page.Where(m => m.Kind != MessageKind.Tombstone))
+        {
+            MessageBubbleViewModel? bubble = FindBubble(m);
+            if (bubble is null || wanted.Contains(bubble))
+            {
+                bubble = new MessageBubbleViewModel(m);
+            }
+            else
+            {
+                bubble.Update(m);
+            }
+
+            wanted.Add(bubble);
+        }
+
+        wanted.AddRange([.. Messages.Where(b => b.Id.Length == 0 && !wanted.Contains(b))]);
+
+        // Drop What The Page No Longer Holds, Then Put Each Bubble In Its Place
+        for (int i = Messages.Count - 1; i >= 0; i--)
+        {
+            if (!wanted.Contains(Messages[i]))
+            {
+                Messages.RemoveAt(i);
+            }
+        }
+
+        for (int i = 0; i < wanted.Count; i++)
+        {
+            int at = Messages.IndexOf(wanted[i]);
+            if (at < 0)
+            {
+                Messages.Insert(i, wanted[i]);
+            }
+            else if (at != i)
+            {
+                Messages.Move(at, i);
+            }
+        }
+
+        RefreshSenders();
+    }
+
     private void ApplyConversation(ConversationInfo? c)
     {
         if (c is null)
@@ -401,12 +456,25 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
 
         foreach (MessageBubbleViewModel b in Messages)
         {
-            bool first_of_run = previous is null || previous.FromMe || previous.ParticipantId != b.ParticipantId;
-            string name       = c is { IsGroup: true } && !b.FromMe && first_of_run ? ChatFormat.SenderName(c.FindParticipant(b.ParticipantId)) : string.Empty;
+            bool first_of_run       = previous is null || previous.FromMe || previous.ParticipantId != b.ParticipantId;
+            ParticipantInfo? sender = c?.FindParticipant(b.ParticipantId);
+            string name             = c is { IsGroup: true } && !b.FromMe && first_of_run ? ChatFormat.SenderName(sender) : string.Empty;
 
-            b.SetSenderName(name.Length > 0 ? name : null);
+            // The Name Takes The Color Of The Sender's Letter Circle
+            b.SetSender(name.Length > 0 ? name : null, AvatarParts.ColorOf(sender));
             previous = b;
         }
+    }
+
+    private void Set(ref bool field, bool value, string property)
+    {
+        if (field == value)
+        {
+            return;
+        }
+
+        field = value;
+        Raise(property);
     }
 
     private void Raise(string property) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(property));

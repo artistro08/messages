@@ -245,4 +245,38 @@ public sealed class StartChatViewModelTests
         Assert.AreEqual(0, changes);
         Assert.AreSame(ann, vm.Results[0]);
     }
+
+    /// <summary>
+    /// The loading ring shows while the contacts load and while Go looks up the conversation.
+    /// </summary>
+    [TestMethod]
+    public async Task IsLoading_WhileContactsLoadAndWhileGoLooksUp()
+    {
+        using var rig = new MainRig();
+        rig.Client.TopContactsAnswer.Contacts.Add(Person("c1", "Ann Lee", "+1 (555) 010-0001"));
+        var vm                     = new StartChatViewModel(rig.Store, a => a());
+        var contacts_gate          = new TaskCompletionSource();
+        rig.Client.TopContactsGate  = contacts_gate;
+
+        Task load = vm.LoadAsync();
+        Assert.IsTrue(vm.IsLoading);
+        contacts_gate.SetResult();
+        await load;
+        Assert.IsFalse(vm.IsLoading);
+
+        vm.Toggle(vm.Results[0]);
+        var create_gate       = new TaskCompletionSource();
+        rig.Client.CreateGate = create_gate;
+        rig.Client.CreateAnswers.Enqueue(new GetOrCreateConversationResponse
+        {
+            Status       = GetOrCreateConversationResponse.Types.Status.Success,
+            Conversation = new Conversation { ConversationID = "new-1" },
+        });
+
+        Task<string?> start = vm.StartAsync();
+        Assert.IsTrue(vm.IsLoading);
+        create_gate.SetResult();
+        Assert.AreEqual("new-1", await start);
+        Assert.IsFalse(vm.IsLoading);
+    }
 }

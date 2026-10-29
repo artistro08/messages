@@ -48,6 +48,9 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     /// <summary>Gets the sender's name when this is the first bubble of a received run in a group, else null.</summary>
     public string? SenderName { get; private set; }
 
+    /// <summary>Gets the color of the sender's name: the same as their letter circle, as opaque ARGB.</summary>
+    public uint SenderColor { get; private set; } = AvatarParts.FallbackColor;
+
     /// <summary>Gets whether <see cref="SenderName"/> is set (for bindings, which skip their function when an argument is null).</summary>
     public bool HasSenderName => SenderName is not null;
 
@@ -80,14 +83,15 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     /// <returns>The text to read out.</returns>
     public override string ToString() => IsFailed ? $"{Text}, {ChatCopy.NotSentRetry}" : Text;
 
-    internal void SetSenderName(string? name)
+    internal void SetSender(string? name, uint color)
     {
-        if (SenderName == name)
+        if (SenderName == name && SenderColor == color)
         {
             return;
         }
 
-        SenderName = name;
+        SenderName  = name;
+        SenderColor = color;
         PropertyChanged?.Invoke(this, AllChanged);
     }
 

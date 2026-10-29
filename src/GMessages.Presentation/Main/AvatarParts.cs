@@ -22,6 +22,13 @@ internal readonly record struct AvatarParts(string Initial, uint Color, string P
     internal const uint FallbackColor = 0xFF5F6368;
 
     /// <summary>
+    /// Gives a person's letter circle color, which their name above group bubbles shares.
+    /// </summary>
+    /// <param name="p">The person, or null when unknown.</param>
+    /// <returns>The color as opaque ARGB; the fallback gray when the phone gives none.</returns>
+    public static uint ColorOf(ParticipantInfo? p) => ChatFormat.ColorFromHex(p?.AvatarHexColor ?? string.Empty, FallbackColor);
+
+    /// <summary>
     /// Works out the avatar of a conversation.
     /// </summary>
     /// <param name="c">The conversation.</param>
@@ -41,10 +48,10 @@ internal readonly record struct AvatarParts(string Initial, uint Color, string P
         ParticipantInfo? second = others.Count > 1 ? others[1] : null;
         return new AvatarParts(
             ChatFormat.Initial(ChatFormat.SenderName(front)),
-            ChatFormat.ColorFromHex(front.AvatarHexColor, FallbackColor),
+            ColorOf(front),
             front.Id,
             second is null ? string.Empty : ChatFormat.Initial(ChatFormat.SenderName(second)),
-            second is null ? 0 : ChatFormat.ColorFromHex(second.AvatarHexColor, FallbackColor),
+            second is null ? 0 : ColorOf(second),
             second?.Id ?? string.Empty);
     }
 }

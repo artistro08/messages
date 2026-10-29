@@ -18,6 +18,9 @@ public sealed class StartChatViewModel : INotifyPropertyChanged
     private List<ContactRowViewModel> _top = [];
     private List<ContactRowViewModel> _all = [];
     private bool _loaded;
+
+    // Lookups Running: The Contact Load And Go Can Overlap
+    private int _busy;
     private string _query = string.Empty;
     private string? _error;
 
@@ -71,6 +74,9 @@ public sealed class StartChatViewModel : INotifyPropertyChanged
         }
     }
 
+    /// <summary>Gets whether a lookup is running (the contacts loading, or Go finding the conversation): the loading ring.</summary>
+    public bool IsLoading => _busy > 0;
+
     /// <summary>Gets whether <see cref="Error"/> shows (for bindings, which skip their function when an argument is null).</summary>
     public bool HasError => _error is not null;
 
@@ -86,6 +92,7 @@ public sealed class StartChatViewModel : INotifyPropertyChanged
             return;
         }
 
+        Busy(1);
         try
         {
             IMessagingClient client = _store.RequireClient();
@@ -103,6 +110,10 @@ public sealed class StartChatViewModel : INotifyPropertyChanged
         {
             // Not Connected, Not Answering Or A Network Error: Opening Start chat Again Tries Again
             _store.LogFailure("load contacts", ex);
+        }
+        finally
+        {
+            Busy(-1);
         }
     }
 
@@ -153,6 +164,7 @@ public sealed class StartChatViewModel : INotifyPropertyChanged
         }
 
         Error = null;
+        Busy(1);
         try
         {
             return await GetOrCreateAsync();
@@ -164,6 +176,17 @@ public sealed class StartChatViewModel : INotifyPropertyChanged
             Error = ChatCopy.StartFailed;
             return null;
         }
+        finally
+        {
+            Busy(-1);
+        }
+    }
+
+    // Counts A Lookup In (1) Or Out (-1)
+    private void Busy(int change)
+    {
+        _busy += change;
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsLoading)));
     }
 
     // The Create Request, Retried As An RCS Group When The Phone Asks; Throws When The Phone Can't

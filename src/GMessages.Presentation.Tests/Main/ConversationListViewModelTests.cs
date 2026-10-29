@@ -230,4 +230,37 @@ public sealed class ConversationListViewModelTests
         Assert.AreEqual("a,n", Ids(list));
         Assert.AreEqual(3, rig.Client.ListCalls.Count);
     }
+
+    /// <summary>
+    /// The loading ring shows while an empty list loads, not while a list that already has rows reloads or loads more.
+    /// </summary>
+    [TestMethod]
+    public async Task IsLoadingFirstPage_OnlyWhileTheListIsEmpty()
+    {
+        using var rig = new MainRig();
+        rig.Page(MainRig.Conv("a", "Ann"));
+        rig.Client.ConversationsPage.Cursor = new Cursor { LastItemID = "next" };
+        using var list = NewList(rig);
+
+        var gate            = new TaskCompletionSource();
+        rig.Client.ListGate = gate;
+        Task first          = list.LoadAsync();
+        Assert.IsTrue(list.IsLoadingFirstPage);
+        gate.SetResult();
+        await first;
+        Assert.IsFalse(list.IsLoadingFirstPage);
+
+        // Reload And More Keep The Rows On Screen
+        rig.Client.ListGate = gate = new TaskCompletionSource();
+        Task reload         = list.LoadAsync();
+        Assert.IsFalse(list.IsLoadingFirstPage);
+        gate.SetResult();
+        await reload;
+
+        rig.Client.ListGate = gate = new TaskCompletionSource();
+        Task more           = list.LoadMoreAsync();
+        Assert.IsFalse(list.IsLoadingFirstPage);
+        gate.SetResult();
+        await more;
+    }
 }

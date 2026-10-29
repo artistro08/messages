@@ -195,6 +195,106 @@ public sealed class ChatStoreTests
     }
 
     // =========================================================================
+    // MESSAGE CACHE
+    // =========================================================================
+
+    private static ListMessagesResponse PageOf(params Message[] oldestFirst)
+    {
+        var page = new ListMessagesResponse();
+
+        // The Phone Answers Newest First
+        page.Messages.AddRange(oldestFirst.Reverse());
+        return page;
+    }
+
+    private static string Ids(IReadOnlyList<ChatMessage>? messages) => messages is null ? "(none)" : string.Join(",", messages.Select(m => m.Id.Length > 0 ? m.Id : m.TmpId));
+
+    /// <summary>
+    /// The newest page of a conversation is kept in memory; an older page is not.
+    /// </summary>
+    [TestMethod]
+    public async Task LoadMessages_NewestPageIsCached_OlderPageIsNot()
+    {
+        using var rig = new Rig();
+        Assert.IsNull(rig.Store.CachedMessages("c1"));
+
+        rig.Client.MessagesPage = PageOf(Msg("m1", "c1"), Msg("m2", "c1"));
+        await rig.Store.LoadMessagesAsync("c1", null, Ct);
+
+        rig.Client.MessagesPage = PageOf(Msg("m0", "c1"));
+        await rig.Store.LoadMessagesAsync("c1", new Cursor { LastItemID = "m1" }, Ct);
+
+        Assert.AreEqual("m1,m2", Ids(rig.Store.CachedMessages("c1")));
+    }
+
+    /// <summary>
+    /// A message that arrives updates the cached page: a new one goes in by time, a known one is replaced, and the
+    /// echo of a sent message replaces its pending copy.
+    /// </summary>
+    [TestMethod]
+    public async Task Arrival_UpdatesCachedPage()
+    {
+        using var rig = new Rig();
+        await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1")));
+        rig.Client.MessagesPage = PageOf(Msg("m1", "c1", ts: 1_000), Msg("m2", "c1", ts: 2_000));
+        await rig.Store.LoadMessagesAsync("c1", null, Ct);
+
+        // New
+        await rig.Store.HandleEventAsync(new MessageReceived(Msg("m3", "c1", "three", ts: 3_000), false));
+        Assert.AreEqual("m1,m2,m3", Ids(rig.Store.CachedMessages("c1")));
+
+        // Known: Replaced
+        await rig.Store.HandleEventAsync(new MessageReceived(Msg("m2", "c1", "edited", ts: 2_000), false));
+        Assert.AreEqual("edited", rig.Store.CachedMessages("c1")![1].Text);
+
+        // Sent, Then Its Echo
+        await rig.Store.SendTextAsync("c1", "mine", "tmp-9", Ct);
+        Assert.AreEqual("m1,m2,m3,tmp-9", Ids(rig.Store.CachedMessages("c1")));
+        Message echo = Msg("m4", "c1", "mine", ts: 4_000);
+        echo.TmpID = "tmp-9";
+        await rig.Store.HandleEventAsync(new MessageReceived(echo, false));
+        Assert.AreEqual("m1,m2,m3,m4", Ids(rig.Store.CachedMessages("c1")));
+
+        // Another Conversation's Message Isn't Cached (It Was Never Opened)
+        await rig.Store.HandleEventAsync(new MessageReceived(Msg("x1", "c2"), false));
+        Assert.IsNull(rig.Store.CachedMessages("c2"));
+    }
+
+    /// <summary>
+    /// The cache keeps the last 20 opened conversations: loading a 21st drops the one used longest ago.
+    /// </summary>
+    [TestMethod]
+    public async Task Cache_DropsTheLeastRecentlyUsed()
+    {
+        using var rig = new Rig();
+        rig.Client.MessagesPage = PageOf(Msg("m1", "any"));
+        for (int i = 0; i < ChatStore.CachedChatCount; i++)
+        {
+            await rig.Store.LoadMessagesAsync("c" + i, null, Ct);
+        }
+
+        // Opening c0 Again Makes c1 The Oldest
+        Assert.IsNotNull(rig.Store.CachedMessages("c0"));
+        await rig.Store.LoadMessagesAsync("c-new", null, Ct);
+
+        Assert.IsNotNull(rig.Store.CachedMessages("c0"));
+        Assert.IsNull(rig.Store.CachedMessages("c1"));
+        Assert.IsNotNull(rig.Store.CachedMessages("c-new"));
+    }
+
+    [TestMethod]
+    public async Task Reset_ClearsCachedMessages()
+    {
+        using var rig = new Rig();
+        rig.Client.MessagesPage = PageOf(Msg("m1", "c1"));
+        await rig.Store.LoadMessagesAsync("c1", null, Ct);
+
+        rig.Store.Reset();
+
+        Assert.IsNull(rig.Store.CachedMessages("c1"));
+    }
+
+    // =========================================================================
     // SENDING
     // =========================================================================
 

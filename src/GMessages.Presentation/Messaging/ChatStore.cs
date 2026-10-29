@@ -11,8 +11,12 @@ namespace GMessages.Presentation.Messaging;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Lives for the whole app so a message that arrives with the main window closed can still notify. It keeps only slim
-/// <see cref="ConversationInfo"/> records and a ring of the last 256 message IDs; messages themselves are never kept.
+/// Lives for the whole app so a message that arrives with the main window closed can still notify. It keeps slim
+/// <see cref="ConversationInfo"/> records, a ring of the last 256 message IDs, and the newest page of messages of the
+/// last 20 opened conversations, so reopening one shows it at once (see <see cref="CachedMessages"/>).
+/// </para>
+/// <para>
+/// <b>Privacy.</b> The message pages live in memory only: never written to disk, dropped by <see cref="Reset"/>.
 /// </para>
 /// <para>
 /// <b>Threads.</b> Live events come from <see cref="ConnectionController.ClientEvent"/> on the UI thread. The cache is
@@ -23,6 +27,9 @@ public sealed partial class ChatStore : IDisposable
 {
     /// <summary>How many conversations or messages one page asks for.</summary>
     public const int PageSize = 25;
+
+    /// <summary>How many conversations keep their newest page of messages in memory.</summary>
+    public const int CachedChatCount = 20;
 
     private const int NotifiedRingSize = 256;
 
@@ -37,6 +44,10 @@ public sealed partial class ChatStore : IDisposable
     private readonly Lock _ringLock = new();
     private readonly Queue<string> _ring = new();
     private readonly HashSet<string> _ringSet = [];
+
+    // Newest Page Of The Last 20 Opened Conversations, Oldest First; The Dictionary Order Is Least Recently Used First
+    private readonly Lock _pagesLock = new();
+    private readonly OrderedDictionary<string, List<ChatMessage>> _pages = [];
 
     private volatile ParticipantInfo? _me;
     private volatile IReadOnlyList<SIMCard> _sims = [];
@@ -151,7 +162,33 @@ public sealed partial class ChatStore : IDisposable
         // The Phone Answers Newest First
         List<ChatMessage> messages = [.. response.Messages.Select(ChatMessage.From).Reverse()];
 
+        // The Newest Page Is What Reopening The Chat Shows
+        if (cursor is null)
+        {
+            CachePage(conversationId, messages);
+        }
+
         return (messages, response.Cursor);
+    }
+
+    /// <summary>
+    /// Gets the cached newest page of a conversation, kept from its last load and the messages since.
+    /// </summary>
+    /// <remarks>Counts as a use, so the conversation is the last one the cache drops.</remarks>
+    /// <param name="conversationId">The conversation ID.</param>
+    /// <returns>A copy of the page, oldest first, or null when the conversation isn't cached.</returns>
+    public IReadOnlyList<ChatMessage>? CachedMessages(string conversationId)
+    {
+        lock (_pagesLock)
+        {
+            if (!_pages.Remove(conversationId, out List<ChatMessage>? page))
+            {
+                return null;
+            }
+
+            _pages.Add(conversationId, page);
+            return [.. page];
+        }
     }
 
     /// <summary>
@@ -213,7 +250,10 @@ public sealed partial class ChatStore : IDisposable
             throw new MessageSendException(response.Status.ToString());
         }
 
-        return new ChatMessage(string.Empty, tmpId, conversationId, outgoing_id, DateTimeOffset.UtcNow, true, MessageKind.Text, text, MessageStatusType.OutgoingSending);
+        var pending = new ChatMessage(string.Empty, tmpId, conversationId, outgoing_id, DateTimeOffset.UtcNow, true, MessageKind.Text, text, MessageStatusType.OutgoingSending);
+        CacheMessage(pending);
+
+        return pending;
     }
 
     /// <summary>
@@ -261,6 +301,11 @@ public sealed partial class ChatStore : IDisposable
         {
             _ring.Clear();
             _ringSet.Clear();
+        }
+
+        lock (_pagesLock)
+        {
+            _pages.Clear();
         }
     }
 
@@ -323,6 +368,7 @@ public sealed partial class ChatStore : IDisposable
         // No ConfigureAwait(false) Below: Events Must Be Raised On The Thread That Delivered The Client Event
         // Decide IsNew Before Any Await, So Two Quick Events Of One Message Can't Both Be New
         bool is_new = MarkNotified(message.Id);
+        CacheMessage(message);
 
         ConversationInfo? conversation = Find(message.ConversationId);
         if (conversation is null && _client() is { } client)
@@ -371,6 +417,42 @@ public sealed partial class ChatStore : IDisposable
         return old is null
             || old with { Participants = info.Participants } != info
             || !old.Participants.SequenceEqual(info.Participants);
+    }
+
+    // Keeps A Conversation's Newest Page As The Most Recently Used, Dropping The Least Recently Used Past 20
+    private void CachePage(string conversationId, List<ChatMessage> page)
+    {
+        lock (_pagesLock)
+        {
+            _pages.Remove(conversationId);
+            _pages.Add(conversationId, [.. page]);
+            if (_pages.Count > CachedChatCount)
+            {
+                _pages.RemoveAt(0);
+            }
+        }
+    }
+
+    // Puts An Arrived Or Sent Message Into Its Cached Page (Only Conversations Opened Before Have One): It Replaces The
+    // Copy With Its ID, Or Its Pending Copy By Temporary ID, And Goes In By Time. The Page Keeps Its Newest 25
+    private void CacheMessage(ChatMessage message)
+    {
+        lock (_pagesLock)
+        {
+            if (!_pages.TryGetValue(message.ConversationId, out List<ChatMessage>? page))
+            {
+                return;
+            }
+
+            page.RemoveAll(m => (message.Id.Length > 0 && m.Id == message.Id) || (message.TmpId.Length > 0 && m.TmpId == message.TmpId));
+
+            int at = page.FindLastIndex(m => m.Time <= message.Time) + 1;
+            page.Insert(at, message);
+            if (page.Count > PageSize)
+            {
+                page.RemoveAt(0);
+            }
+        }
     }
 
     // Remembers A Message ID; True The First Time It Is Seen

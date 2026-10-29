@@ -74,8 +74,15 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
 
             _isLoading = value;
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsLoading)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsLoadingFirstPage)));
         }
     }
+
+    /// <summary>
+    /// Gets whether a page is loading into an empty list (the first load, or a reload after one that failed): the
+    /// loading ring. A list with rows keeps them on screen while it reloads or loads more.
+    /// </summary>
+    public bool IsLoadingFirstPage => _isLoading && Rows.Count == 0;
 
     /// <summary>
     /// Loads the newest page, replacing the rows.
