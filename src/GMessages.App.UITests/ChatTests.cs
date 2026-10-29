@@ -187,6 +187,55 @@ public sealed class ChatTests : UiTest
         }
     }
 
+    /// <summary>
+    /// Scrolling up a long chat loads older pages, and the scroll-to-bottom button shows once far up and takes the list
+    /// back to the newest message.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task ScrollUp_LoadsOlder_ScrollToBottomReturns()
+    {
+        // Three Pages Of Texts
+        Conversation chat = FakeChats.NewConversation("c-long", "Long Pal", false, ConversationStatus.Active, false, false, FakeChats.Person("p-long", "Long Pal", "+15550000006"));
+        long time         = DateTimeOffset.UtcNow.AddDays(-1).ToUnixTimeMilliseconds() * 1000;
+        Message[] texts   = [.. Enumerable.Range(1, ChatStore.PageSize * 3).Select(i => Line($"Line {i}"))];
+        Server.Phone.Chats.Add(chat, texts);
+
+        await OpenMainAsync();
+        App.Find("Row.c-long").Patterns.SelectionItem.Pattern.Select();
+        Wait.Until(() => Bubbles().Count >= ChatStore.PageSize, AppDriver.DefaultTimeout, () => $"The long chat showed {Bubbles().Count} bubbles.");
+
+        // Up To The Top: The Older Page Comes In, And The Button Shows
+        var scroll = App.Find("Chat.Messages").Patterns.Scroll.Pattern;
+        Wait.Until(() =>
+        {
+            // -1: Leave The Horizontal Position Alone (UI Automation's NoScroll)
+            scroll.SetScrollPercent(-1, 0);
+            return Bubbles().Count > ChatStore.PageSize;
+        }, AppDriver.DefaultTimeout, () => $"Scrolling up left {Bubbles().Count} bubbles; no older page loaded.");
+        AutomationElement down = App.Find("Chat.ScrollToBottom");
+        Wait.Until(() => down.Properties.IsKeyboardFocusable.ValueOrDefault, AppDriver.DefaultTimeout, () => "Scroll to bottom didn't show far up the chat.");
+
+        // The Button: Back At The Newest, And It Hides Again
+        down.Patterns.Invoke.Pattern.Invoke();
+        Wait.Until(() => scroll.VerticalScrollPercent.ValueOrDefault >= 99, AppDriver.DefaultTimeout, () => $"Scroll to bottom left the list at {scroll.VerticalScrollPercent.ValueOrDefault:0}%.");
+        Wait.Until(() => !down.Properties.IsKeyboardFocusable.ValueOrDefault, AppDriver.DefaultTimeout, () => "Scroll to bottom stayed at the bottom of the chat.");
+
+        Message Line(string text)
+        {
+            var message = new Message
+            {
+                MessageID      = "m-" + text.Replace(' ', '-'),
+                ConversationID = "c-long",
+                ParticipantID  = "p-long",
+                Timestamp      = time += 1_000_000,
+                MessageStatus  = new MessageStatus { Status = MessageStatusType.IncomingComplete },
+            };
+            message.MessageInfo.Add(new MessageInfo { MessageContent = new MessageContent { Content = text } });
+            return message;
+        }
+    }
+
     // =========================================================================
     // HELPERS
     // =========================================================================

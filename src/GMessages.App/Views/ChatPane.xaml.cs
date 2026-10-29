@@ -114,6 +114,7 @@ public sealed partial class ChatPane : UserControl
 
         var chat = (ChatViewModel?)e.NewValue;
         BindableList.Show(pane.MessageList, chat?.Messages);
+        pane.ShowScrollToBottom(false);
 
         if (chat is not null)
         {
@@ -148,7 +149,12 @@ public sealed partial class ChatPane : UserControl
         });
     }
 
-    private void OnMessageListLoaded(object sender, RoutedEventArgs e) => FillWithOlder();
+    // The Scroller Is Hooked As Soon As The List Has Its Template, So Scrolling Up Loads Older Even Before Any Page Ends
+    private void OnMessageListLoaded(object sender, RoutedEventArgs e)
+    {
+        _ = Scroller();
+        FillWithOlder();
+    }
 
     // The List's Own Scroller Tells When The Top Is Reached. Found On First Need: While The Pane Is Still Collapsed At
     // Load, The List Has No Template Yet, So There Is No Scroller To Find
@@ -172,8 +178,8 @@ public sealed partial class ChatPane : UserControl
         }
     }
 
-    // Each Older Page Ends In Another IsLoading Change, So This Repeats Until The List Scrolls, No Pages Are Left, A Page
-    // Adds Nothing Or A Load Fails (See ChatViewModel.CanFillOlder)
+    // Each Older Page Ends In Another IsLoading Change, So This Repeats While The List Is Too Short To Scroll Or Still
+    // Near Its Top, Until No Pages Are Left, A Page Adds Nothing Or A Load Fails (See ChatViewModel.CanFillOlder)
     private void FillWithOlder()
     {
         if (Chat is not { IsLoading: false, CanFillOlder: true } chat)
@@ -183,21 +189,29 @@ public sealed partial class ChatPane : UserControl
 
         // Measure The New Bubbles Now, So The Scroll Height Is Current
         MessageList.UpdateLayout();
-        if (Scroller() is { ScrollableHeight: <= 0 })
+        if (Scroller() is { } scroller && ChatScroll.ShouldLoadOlder(scroller.VerticalOffset, scroller.ScrollableHeight, scroller.ViewportHeight))
         {
             _ = chat.LoadOlderAsync();
         }
     }
 
+    // Nearing The Top Starts The Older Page (Mid-Scroll Too, So It Is Usually In Before The Top), And The Scroll-To-Bottom
+    // Button Follows How Far Up The List Is. LoadOlderAsync Ignores Calls While A Page Loads
     private void OnScrolled(object? sender, ScrollViewerViewChangedEventArgs e)
     {
-        if (e.IsIntermediate || _scroller is not { VerticalOffset: <= 0, ScrollableHeight: > 0 } || Chat is null)
+        if (_scroller is not { } scroller || Chat is null)
         {
             return;
         }
 
-        _ = Chat.LoadOlderAsync();
+        ShowScrollToBottom(ChatScroll.ShowScrollToBottom(scroller.VerticalOffset, scroller.ScrollableHeight, scroller.ViewportHeight));
+        if (scroller.ScrollableHeight > 0 && ChatScroll.ShouldLoadOlder(scroller.VerticalOffset, scroller.ScrollableHeight, scroller.ViewportHeight))
+        {
+            _ = Chat.LoadOlderAsync();
+        }
     }
+
+    private void OnScrollToBottomClick(object sender, RoutedEventArgs e) => _scroller?.ChangeView(null, _scroller.ScrollableHeight, null);
 
     // Enter Or Space On A Focused Bubble Shows Or Hides Its Time, Like A Click (Not On Its Retry Link, Which Has Focus Then)
     private void OnMessageListKeyDown(object sender, KeyRoutedEventArgs e)
@@ -281,6 +295,14 @@ public sealed partial class ChatPane : UserControl
     // =========================================================================
     // HELPERS
     // =========================================================================
+
+    // Fades The Scroll-To-Bottom Button In Or Out (Its OpacityTransition Animates It); Hidden, It Takes No Clicks Or Focus
+    private void ShowScrollToBottom(bool show)
+    {
+        ScrollToBottomButton.Opacity          = show ? 1 : 0;
+        ScrollToBottomButton.IsHitTestVisible = show;
+        ScrollToBottomButton.IsTabStop        = show;
+    }
 
     private static bool IsShiftDown() => IsDown(VirtualKey.Shift);
 

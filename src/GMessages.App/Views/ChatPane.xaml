@@ -5,6 +5,43 @@
     xmlns:controls="using:GMessages.App.Views.Controls"
     xmlns:main="using:GMessages.Presentation.Main">
 
+    <UserControl.Resources>
+
+        <!-- Icon Button: just the icon, no background or hover; dimmed while disabled -->
+        <Style x:Key="IconOnlyButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="UseSystemFocusVisuals" Value="True" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <ContentPresenter
+                            x:Name="ContentPresenter"
+                            Padding="{TemplateBinding Padding}"
+                            HorizontalContentAlignment="Center"
+                            VerticalContentAlignment="Center"
+                            Background="Transparent"
+                            Content="{TemplateBinding Content}">
+                            <VisualStateManager.VisualStateGroups>
+                                <VisualStateGroup x:Name="CommonStates">
+                                    <VisualState x:Name="Normal" />
+                                    <VisualState x:Name="PointerOver" />
+                                    <VisualState x:Name="Pressed" />
+                                    <VisualState x:Name="Disabled">
+                                        <VisualState.Setters>
+                                            <Setter Target="ContentPresenter.Opacity" Value="0.4" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                </VisualStateGroup>
+                            </VisualStateManager.VisualStateGroups>
+                        </ContentPresenter>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
     <Grid RowDefinitions="Auto,*,Auto">
 
         <!-- Header: back (narrow only), avatar and name -->
@@ -81,58 +118,105 @@
             AutomationProperties.AutomationId="Chat.Loading"
             IsActive="{x:Bind Chat.IsLoadingHistory, Mode=OneWay, FallbackValue=False}" />
 
-        <!-- Loading Older: a small ring at the top while scrolling up loads more -->
-        <ProgressRing
+        <!-- Loading Older: a ring in a small raised circle at the top while scrolling up loads more -->
+        <Border
             Grid.Row="1"
-            Width="20"
-            Height="20"
-            Margin="0,8,0,0"
+            Width="40"
+            Height="40"
+            Margin="0,12,0,0"
             HorizontalAlignment="Center"
             VerticalAlignment="Top"
-            AutomationProperties.AutomationId="Chat.LoadingOlder"
-            IsActive="{x:Bind Chat.IsLoadingOlder, Mode=OneWay, FallbackValue=False}" />
+            Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            BorderThickness="1"
+            CornerRadius="20"
+            Translation="0,0,16"
+            Visibility="{x:Bind Chat.IsLoadingOlder, Mode=OneWay, FallbackValue=Collapsed}">
+            <Border.Shadow>
+                <ThemeShadow />
+            </Border.Shadow>
+            <ProgressRing
+                Width="20"
+                Height="20"
+                AutomationProperties.AutomationId="Chat.LoadingOlder"
+                IsActive="{x:Bind Chat.IsLoadingOlder, Mode=OneWay, FallbackValue=False}" />
+        </Border>
 
-        <!-- Compose: emoji, the message box (Enter sends, Shift + Enter adds a line), send -->
-        <Grid
-            Grid.Row="2"
-            Padding="12,8,12,12"
-            ColumnDefinitions="Auto,*,Auto"
-            ColumnSpacing="8">
-            <Button
-                Width="40"
-                Height="36"
-                Padding="0"
-                VerticalAlignment="Bottom"
-                AutomationProperties.AutomationId="Chat.Emoji"
-                AutomationProperties.Name="Emoji"
-                Background="Transparent"
-                BorderThickness="0"
-                Click="OnEmojiClick">
-                <FontIcon FontSize="16" Glyph="&#xE76E;" />
-            </Button>
+        <!-- Scroll To Bottom: floats just above the message box, fading in once the newest messages are a screen or more
+             below (set from code) -->
+        <Button
+            x:Name="ScrollToBottomButton"
+            Grid.Row="1"
+            Width="40"
+            Height="40"
+            Margin="0,0,0,8"
+            Padding="0"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Bottom"
+            AutomationProperties.AutomationId="Chat.ScrollToBottom"
+            AutomationProperties.Name="Scroll to bottom"
+            Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            BorderThickness="1"
+            Click="OnScrollToBottomClick"
+            CornerRadius="20"
+            IsHitTestVisible="False"
+            IsTabStop="False"
+            Opacity="0"
+            Translation="0,0,16">
+            <Button.Shadow>
+                <ThemeShadow />
+            </Button.Shadow>
+            <Button.OpacityTransition>
+                <ScalarTransition />
+            </Button.OpacityTransition>
+            <FontIcon FontSize="16" Glyph="&#xE74B;" />
+        </Button>
+
+        <!-- Compose: the message box (Enter sends, Shift + Enter adds a line) with emoji and send inside it on the right,
+             icons only -->
+        <Grid Grid.Row="2" Padding="12,8,12,12">
             <TextBox
                 x:Name="DraftBox"
-                Grid.Column="1"
                 MaxHeight="160"
+                Padding="10,5,76,6"
                 AcceptsReturn="True"
                 AutomationProperties.AutomationId="Chat.Draft"
                 AutomationProperties.Name="Message"
                 PreviewKeyDown="OnDraftKeyDown"
                 Text="{x:Bind Chat.Draft, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, FallbackValue=''}"
                 TextWrapping="Wrap" />
-            <Button
-                Grid.Column="2"
-                Width="40"
-                Height="36"
-                Padding="0"
+            <StackPanel
+                Margin="0,0,4,0"
+                HorizontalAlignment="Right"
                 VerticalAlignment="Bottom"
-                AutomationProperties.AutomationId="Chat.Send"
-                AutomationProperties.Name="Send"
-                Click="OnSendClick"
-                IsEnabled="{x:Bind Chat.CanSend, Mode=OneWay, FallbackValue=False}"
-                Style="{StaticResource AccentButtonStyle}">
-                <FontIcon FontSize="16" Glyph="&#xE724;" />
-            </Button>
+                Orientation="Horizontal">
+                <Button
+                    Width="32"
+                    Height="32"
+                    AutomationProperties.AutomationId="Chat.Emoji"
+                    AutomationProperties.Name="Emoji"
+                    Click="OnEmojiClick"
+                    Style="{StaticResource IconOnlyButtonStyle}">
+                    <FontIcon
+                        FontSize="16"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Glyph="&#xE76E;" />
+                </Button>
+                <Button
+                    Width="32"
+                    Height="32"
+                    AutomationProperties.AutomationId="Chat.Send"
+                    AutomationProperties.Name="Send"
+                    Click="OnSendClick"
+                    IsEnabled="{x:Bind Chat.CanSend, Mode=OneWay, FallbackValue=False}"
+                    Style="{StaticResource IconOnlyButtonStyle}">
+                    <FontIcon
+                        FontSize="16"
+                        Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                        Glyph="&#xE724;" />
+                </Button>
+            </StackPanel>
         </Grid>
     </Grid>
 </UserControl>

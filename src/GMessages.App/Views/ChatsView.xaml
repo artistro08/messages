@@ -38,11 +38,12 @@
                     Text="{x:Bind ViewModel.StatusBanner, Mode=OneWay}"
                     Visibility="{x:Bind ViewModel.HasStatusBanner, Mode=OneWay}" />
 
-                <!-- Conversations: room at the bottom so Start chat never covers the last row -->
+                <!-- Conversations: room at the bottom so Start chat never covers the last row, and a lane on the right where
+                     the scrollbar sits, between the rows and the chat island -->
                 <ListView
                     x:Name="ConversationList"
                     Grid.Row="2"
-                    Padding="0,0,0,64"
+                    Padding="0,0,8,64"
                     AutomationProperties.AutomationId="Main.ConversationList"
                     ContainerContentChanging="OnContainerContentChanging"
                     Loaded="OnConversationListLoaded"
@@ -96,7 +97,11 @@
 
         <!-- Chat Pane: the island, with the list's resize edge in the gap to its left. The gap is there with the list
              open, collapsed (☰) or in a narrow window, so the island always sits clear of the window's edges -->
-        <Grid ColumnDefinitions="8,*">
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="{x:Bind local:ChatsView.GapWidth(ViewModel.IsNarrow, ViewModel.IsListCollapsed), Mode=OneWay}" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
 
             <!-- Resize Edge: drag (or arrow keys once focused) to resize the list; wide windows with the list open only -->
             <controls:PaneSplitter

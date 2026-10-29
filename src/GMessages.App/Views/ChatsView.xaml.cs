@@ -140,6 +140,16 @@ public sealed partial class ChatsView : UserControl
         !isNarrow && !isListCollapsed ? Visibility.Visible : Visibility.Collapsed;
 
     /// <summary>
+    /// The gap left of the chat island: with the list open in a wide window, the list's scrollbar lane already makes
+    /// most of the gap, so only a thin resize edge follows it; otherwise the island's usual 8 pixel gap.
+    /// </summary>
+    /// <param name="isNarrow">True for a narrow window.</param>
+    /// <param name="isListCollapsed">True when the menu button collapsed the list.</param>
+    /// <returns>The gap column's width.</returns>
+    public static GridLength GapWidth(bool isNarrow, bool isListCollapsed) =>
+        new(!isNarrow && !isListCollapsed ? 4 : 8);
+
+    /// <summary>
     /// Shows the chat pane in a wide window, and in a narrow one when it holds a chat or the list is collapsed.
     /// </summary>
     /// <param name="isNarrow">True for a narrow window.</param>

@@ -29,6 +29,15 @@ public sealed class NotificationPolicyTests
     [TestMethod] public void ViewedAndFocused_NotifyForViewedOn_Notifies() => Assert.IsTrue(Run(viewed: "c1", focused: true, notifyViewed: true));
     [TestMethod] public void ViewedButUnfocused_Notifies() => Assert.IsTrue(Run(viewed: "c1", focused: false));
 
+    private static ConversationInfo Read(bool unread = false) => Conv() with { Unread = unread };
+
+    [TestMethod] public void Read_DismissesToasts() => Assert.IsTrue(NotificationPolicy.ShouldDismissOnRead(Read(), null, false, false));
+    [TestMethod] public void StillUnread_KeepsToasts() => Assert.IsFalse(NotificationPolicy.ShouldDismissOnRead(Read(unread: true), null, false, false));
+    [TestMethod] public void ReadWhileViewed_NotifyForViewedOff_DismissesToasts() => Assert.IsTrue(NotificationPolicy.ShouldDismissOnRead(Read(), "c1", true, false));
+    [TestMethod] public void ReadWhileViewed_NotifyForViewedOn_KeepsToasts() => Assert.IsFalse(NotificationPolicy.ShouldDismissOnRead(Read(), "c1", true, true));
+    [TestMethod] public void ReadWhileUnfocused_NotifyForViewedOn_DismissesToasts() => Assert.IsTrue(NotificationPolicy.ShouldDismissOnRead(Read(), "c1", false, true));
+    [TestMethod] public void ReadOtherChat_NotifyForViewedOn_DismissesToasts() => Assert.IsTrue(NotificationPolicy.ShouldDismissOnRead(Read(), "c2", true, true));
+
     [TestMethod]
     public void Compose_Group_PrefixesSenderName()
     {

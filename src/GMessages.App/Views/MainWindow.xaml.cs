@@ -316,6 +316,13 @@ public sealed partial class MainWindow : Window
         if (_chats is { } chats)
         {
             chats.ViewModel.IsWindowFocused = _isActive && _settingsPage is null;
+
+            // Back On The Open Chat (Switched Windows, Restored Or Left Settings): Its Toasts Are Read Now, Even Those Kept
+            // While It Was On Screen With "Notify for the chat I'm viewing" On
+            if (chats.ViewModel is { IsWindowFocused: true, SelectedConversationId: { } viewed })
+            {
+                (Application.Current as App)?.Notifications?.RemoveConversation(viewed);
+            }
         }
     }
 

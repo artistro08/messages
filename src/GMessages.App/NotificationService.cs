@@ -70,6 +70,7 @@ internal sealed class NotificationService(ChatStore store, AppSettings settings,
     public void Register()
     {
         _manager.NotificationInvoked += OnNotificationInvoked;
+        store.ConversationChanged    += OnConversationChanged;
         try
         {
             _manager.Register();
@@ -193,6 +194,7 @@ internal sealed class NotificationService(ChatStore store, AppSettings settings,
     public void Dispose()
     {
         _manager.NotificationInvoked -= OnNotificationInvoked;
+        store.ConversationChanged    -= OnConversationChanged;
         if (_registered)
         {
             _manager.Unregister();
@@ -203,6 +205,16 @@ internal sealed class NotificationService(ChatStore store, AppSettings settings,
     // =========================================================================
     // HELPERS
     // =========================================================================
+
+    // A Conversation Read Anywhere (Here, A Toast Reply Or The Phone) Takes Its Toasts With It; See NotificationPolicy.ShouldDismissOnRead
+    private void OnConversationChanged(object? sender, ConversationInfo conversation) => dispatcher.TryEnqueue(() =>
+    {
+        MainViewModel? view = mainView();
+        if (NotificationPolicy.ShouldDismissOnRead(conversation, view?.SelectedConversationId, view?.IsWindowFocused == true, settings.NotifyForViewedChat))
+        {
+            RemoveConversation(conversation.Id);
+        }
+    });
 
     // Raised On A Background Thread
     private void OnNotificationInvoked(AppNotificationManager sender, AppNotificationActivatedEventArgs args) =>
