@@ -30,7 +30,7 @@ internal static partial class AppLog
     public static partial void CookieReadFailed(ILogger logger, string errorType);
 
     [LoggerMessage(EventId = 908, Level = LogLevel.Information, Message = "Sign-in cookies captured: {Names}")]
-    public static partial void CookiesCaptured(ILogger logger, IEnumerable<string> names);
+    public static partial void CookiesCaptured(ILogger logger, string names);
 
     [LoggerMessage(EventId = 909, Level = LogLevel.Warning, Message = "Sign-in profile folder could not be deleted; it holds a live Google session: {Folder}")]
     public static partial void ProfileNotDeleted(ILogger logger, string folder);

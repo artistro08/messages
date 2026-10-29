@@ -7,6 +7,7 @@ using GMessages.Protocol.Proto;
 using GMessages.Protocol.Session;
 using GMessages.Protocol.Tests.Fakes;
 using Google.Protobuf;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 
@@ -42,7 +43,7 @@ public class GmHttpClientTests
 
     private sealed record Rig(GmHttpClient Client, FakeHttpHandler Handler, FakeHttpHandler LongPollHandler, CookieJar Jar, SignalingTimeProvider Time);
 
-    private static Rig CreateRig(Dictionary<string, string>? cookies = null)
+    private static Rig CreateRig(Dictionary<string, string>? cookies = null, ILogger? log = null)
     {
         var time = new SignalingTimeProvider();
         var handler = new FakeHttpHandler { Time = time };
@@ -53,8 +54,29 @@ public class GmHttpClientTests
             jar.Set(cookies);
         }
 
-        var client = new GmHttpClient(new HttpClient(handler), new HttpClient(long_poll_handler), jar, time, NullLogger.Instance);
+        var client = new GmHttpClient(new HttpClient(handler), new HttpClient(long_poll_handler), jar, time, log ?? NullLogger.Instance);
         return new Rig(client, handler, long_poll_handler, jar, time);
+    }
+
+    /// <summary>
+    /// A response that sets cookies logs their names and expiry times, never the values.
+    /// </summary>
+    [TestMethod]
+    public async Task SetCookie_LogsNamesAndExpiry_NeverValues()
+    {
+        var log = new CollectingLogger();
+        Rig rig = CreateRig(new Dictionary<string, string>(GoCookies), log);
+        rig.Handler.Respond = (_, _) => FakeHttpHandler.Response(
+            HttpStatusCode.OK,
+            "application/json+protobuf",
+            "[]"u8.ToArray(),
+            "SID=secret-sid; Expires=Fri, 30 Oct 2026 15:07:55 GMT; Path=/",
+            "SIDCC=secret-sidcc; Path=/");
+
+        using HttpResponseMessage _ = await rig.Client.PostAsync(new Uri("https://messages.google.com/x/Ping"), RelayBody, GmContentType.PbLite, false, CancellationToken.None);
+
+        CollectionAssert.Contains(log.Messages, "Cookies set by /x/Ping: SID (expires 2026-10-30T15:07:55Z), SIDCC (session)");
+        Assert.IsFalse(log.Messages.Any(m => m.Contains("secret", StringComparison.Ordinal)));
     }
 
     private static long GoTimestamp(string authorization) =>

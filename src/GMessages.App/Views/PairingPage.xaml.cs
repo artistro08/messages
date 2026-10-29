@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.ComponentModel;
 using GMessages.Presentation.Pairing;
 using GMessages.Protocol.Http;
@@ -163,14 +164,19 @@ public sealed partial class PairingPage : UserControl
 
         try
         {
-            var jar = new Dictionary<string, string>();
+            var jar      = new Dictionary<string, string>();
+            var expiries = new Dictionary<string, string>();
             foreach (string origin in CookieOrigins())
             {
                 foreach (CoreWebView2Cookie cookie in await web.CoreWebView2.CookieManager.GetCookiesAsync(origin))
                 {
                     if (SignIn.WantedNames.Contains(cookie.Name))
                     {
-                        jar.TryAdd(cookie.Name, cookie.Value);
+                        if (jar.TryAdd(cookie.Name, cookie.Value))
+                        {
+                            // Name And Expiry Only, For The Log; A Session Cookie Has No Expiry
+                            expiries[cookie.Name] = cookie.IsSession ? "session" : "expires " + DateTimeOffset.FromUnixTimeSeconds((long)cookie.Expires).UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
+                        }
                     }
                 }
             }
@@ -192,7 +198,7 @@ public sealed partial class PairingPage : UserControl
                 return;
             }
 
-            Capture(jar);
+            Capture(jar, expiries);
         }
 #pragma warning disable CA1031 // A Failed Read Is Retried On The Next Navigation
         catch (Exception ex)
@@ -219,11 +225,12 @@ public sealed partial class PairingPage : UserControl
     }
 
     // Pairs Right Away (Stale Cookies Get Rejected), Then Drops The Browser And Its Signed-In Profile
-    private void Capture(Dictionary<string, string> cookies)
+    private void Capture(Dictionary<string, string> cookies, Dictionary<string, string> expiries)
     {
         _captured = true;
         _sessionCookieTimer.Stop();
-        AppLog.CookiesCaptured(_log, cookies.Keys);
+        string names = string.Join(", ", cookies.Keys.Select(name => $"{name} ({expiries[name]})"));
+        AppLog.CookiesCaptured(_log, names);
 
         _ = ViewModel.OnCookiesCapturedAsync(cookies);
         CloseSignIn();

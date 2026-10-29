@@ -11,6 +11,7 @@ using GMessages.Protocol.Rpc;
 using GMessages.Protocol.Session;
 using GMessages.Protocol.Tests.Fakes;
 using GMessages.Protocol.Tests.Session;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace GMessages.Protocol.Tests.LongPoll;
@@ -34,6 +35,8 @@ public class LongPollLoopTests
     {
         public required LongPollLoop Loop { get; init; }
 
+        public required AuthData Auth { get; init; }
+
         public required RpcSession Rpc { get; init; }
 
         public required FakeHttpHandler Handler { get; init; }
@@ -53,7 +56,7 @@ public class LongPollLoopTests
         public RecordedRequest[] Requests(string suffix) { lock (Handler.Requests) { return [.. Handler.Requests.Where(r => r.Url.EndsWith(suffix, StringComparison.Ordinal))]; } }
     }
 
-    private static Rig CreateRig()
+    private static Rig CreateRig(ILogger? log = null)
     {
         AuthData auth      = AuthDataGoldenTests.BuildGolden();
         var time           = new SignalingTimeProvider();
@@ -62,9 +65,9 @@ public class LongPollLoopTests
         var handler   = new FakeHttpHandler { Time = time };
         var http      = new GmHttpClient(new HttpClient(handler), new HttpClient(handler), auth.Cookies, time, NullLogger.Instance);
         var rpc       = new RpcSession(http, auth, GmEndpoints.Production, time, NullLogger.Instance);
-        var refresher = new TokenRefresher(http, auth, GmEndpoints.Production, time, NullLogger.Instance);
-        var loop      = new LongPollLoop(http, rpc, auth, GmEndpoints.Production, refresher, new UpdateDispatcher(rpc, NullLogger.Instance), time, NullLogger.Instance);
-        var rig       = new Rig { Loop = loop, Rpc = rpc, Handler = handler, Time = time };
+        var refresher = new TokenRefresher(http, auth, GmEndpoints.Production, time, log ?? NullLogger.Instance);
+        var loop      = new LongPollLoop(http, rpc, auth, GmEndpoints.Production, refresher, new UpdateDispatcher(rpc, NullLogger.Instance), time, log ?? NullLogger.Instance);
+        var rig       = new Rig { Loop = loop, Auth = auth, Rpc = rpc, Handler = handler, Time = time };
 
         loop.EventRaised += e => { lock (rig.Events) { rig.Events.Add(e); } };
         handler.Respond = (_, req) =>
@@ -160,6 +163,60 @@ public class LongPollLoopTests
         cs_req.Auth.RequestID     = go_id;
         Assert.AreEqual(go.GetProperty("bodyText").GetString(), Encoding.UTF8.GetString(PbLiteSerializer.Serialize(cs_req)));
         Assert.AreEqual(go.GetProperty("url").GetString(), sent.Url);
+    }
+
+    // =========================================================================
+    // DIAGNOSTICS (C#-ONLY)
+    // =========================================================================
+
+    /// <summary>
+    /// A 401 from the token refresh logs which step Google refused.
+    /// </summary>
+    [TestMethod]
+    public async Task Fatal_FromRefresh_NamesTheStep()
+    {
+        var log = new CollectingLogger();
+        Rig rig = CreateRig(log);
+        rig.Auth.TachyonExpiry = rig.Time.GetUtcNow() + TimeSpan.FromMinutes(10);
+        rig.Handler.Respond    = (_, _) => Status(401);
+
+        await rig.Loop.RunAsync(true, null, CancellationToken.None).WaitAsync(HangGuard);
+
+        Assert.IsTrue(log.Messages.Any(m => m.StartsWith("Long polling stopped: credentials refused by token refresh: ", StringComparison.Ordinal)), string.Join("\n", log.Messages));
+    }
+
+    /// <summary>
+    /// A 401 from ReceiveMessages logs which step Google refused.
+    /// </summary>
+    [TestMethod]
+    public async Task Fatal_FromReceive_NamesTheStep()
+    {
+        var log = new CollectingLogger();
+        Rig rig = CreateRig(log);
+        rig.Script.Enqueue(() => Status(401));
+
+        await rig.Loop.RunAsync(true, null, CancellationToken.None).WaitAsync(HangGuard);
+
+        Assert.IsTrue(log.Messages.Any(m => m.StartsWith("Long polling stopped: credentials refused by receive messages: HTTP 401", StringComparison.Ordinal)), string.Join("\n", log.Messages));
+    }
+
+    /// <summary>
+    /// A stream that ends after 90 seconds on the fake clock logs its lifetime.
+    /// </summary>
+    [TestMethod]
+    public async Task StreamEnd_LogsLifetime()
+    {
+        var log       = new CollectingLogger();
+        Rig rig       = CreateRig(log);
+        using var cts = new CancellationTokenSource();
+        Task run      = rig.Loop.RunAsync(false, null, cts.Token);
+
+        WaitUntil(() => { lock (rig.Streams) { return rig.Streams.Count == 1; } }, "stream opened");
+        rig.Time.Advance(TimeSpan.FromSeconds(90));
+
+        WaitUntil(() => log.Messages.Contains("Long polling closed after 00:01:30"), string.Join("\n", log.Messages));
+        await cts.CancelAsync();
+        await run.WaitAsync(HangGuard);
     }
 
     // =========================================================================

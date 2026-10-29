@@ -279,7 +279,7 @@ public sealed partial class LongPollLoop(
                     var wrapped = new InvalidOperationException("Failed to refresh auth token.", ex);
                     if (TokenRefresher.IsFatal(ex))
                     {
-                        LogFatal(log, wrapped);
+                        LogFatal(log, "token refresh", ex.Message);
                         RaiseIf(loggedIn, new ListenFatalError(wrapped));
                         return wrapped;
                     }
@@ -305,7 +305,7 @@ public sealed partial class LongPollLoop(
                             var failure = new GmRequestException(status, null, await ReadBodyAsync(failed, stop).ConfigureAwait(false));
                             if (status is 401 or 403)
                             {
-                                LogFatal(log, failure);
+                                LogFatal(log, "receive messages", failure.Message);
                                 RaiseIf(loggedIn, new ListenFatalError(failure));
                                 return failure;
                             }
@@ -375,6 +375,8 @@ public sealed partial class LongPollLoop(
                     finally
                     {
                         Volatile.Write(ref _connected, 0);
+                        TimeSpan lifetime = time.GetUtcNow() - opened_at;
+                        LogClosed(log, lifetime);
                     }
 
                     // A Stream That Ended Almost At Once Gets A Pause, So A Server Closing Right Away Can't Spin The Loop
@@ -568,8 +570,11 @@ public sealed partial class LongPollLoop(
         }
     }
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "Long polling stopped: credentials refused")]
-    private static partial void LogFatal(ILogger logger, Exception exception);
+    [LoggerMessage(Level = LogLevel.Error, Message = "Long polling stopped: credentials refused by {Step}: {Error}")]
+    private static partial void LogFatal(ILogger logger, string step, string error);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Long polling closed after {Lifetime}")]
+    private static partial void LogClosed(ILogger logger, TimeSpan lifetime);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Error in long polling, retrying in {Sleep}")]
     private static partial void LogRetrying(ILogger logger, Exception exception, TimeSpan sleep);

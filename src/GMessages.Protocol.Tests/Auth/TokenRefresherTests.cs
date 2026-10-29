@@ -12,6 +12,7 @@ using GMessages.Protocol.Session;
 using GMessages.Protocol.Tests.Fakes;
 using GMessages.Protocol.Tests.Session;
 using Google.Protobuf;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace GMessages.Protocol.Tests.Auth;
@@ -30,7 +31,7 @@ public class TokenRefresherTests
 {
     private sealed record Rig(TokenRefresher Refresher, AuthData Auth, FakeHttpHandler Handler, SignalingTimeProvider Time, List<object> Events);
 
-    private static Rig CreateRig(TimeSpan timeLeft, long ttl = 3600000000)
+    private static Rig CreateRig(TimeSpan timeLeft, long ttl = 3600000000, ILogger? log = null)
     {
         AuthData auth = AuthDataGoldenTests.BuildGolden();
         var time      = new SignalingTimeProvider();
@@ -42,7 +43,7 @@ public class TokenRefresherTests
         auth.TachyonExpiry = time.GetUtcNow() + timeLeft;
 
         var http      = new GmHttpClient(new HttpClient(handler), new HttpClient(handler), auth.Cookies, time, NullLogger.Instance);
-        var refresher = new TokenRefresher(http, auth, GmEndpoints.Production, time, NullLogger.Instance);
+        var refresher = new TokenRefresher(http, auth, GmEndpoints.Production, time, log ?? NullLogger.Instance);
         var events    = new List<object>();
         refresher.EventRaised += events.Add;
         return new Rig(refresher, auth, handler, time, events);
@@ -134,6 +135,41 @@ public class TokenRefresherTests
             CollectionAssert.AreEqual(c.Value.GetProperty("events").EnumerateArray().Select(e => e.GetString()).ToArray(), rig.Events.Select(e => e.GetType().Name).ToArray(), c.Name);
             Assert.IsInstanceOfType<AuthTokenRefreshed>(rig.Events[0]);
         }
+    }
+
+    /// <summary>
+    /// A refresh logs the new expiry and TTL, never the token or its base64.
+    /// </summary>
+    [TestMethod]
+    public async Task Refresh_LogsExpiryAndTtl_NeverToken()
+    {
+        var log = new CollectingLogger();
+        Rig rig = CreateRig(TimeSpan.FromMinutes(30), log: log);
+        rig.Handler.Respond = (_, _) => FakeHttpHandler.Response(HttpStatusCode.OK, "application/json+protobuf", PbLiteSerializer.Serialize(new RegisterRefreshResponse
+        {
+            TokenData = new TokenData { TachyonAuthToken = ByteString.CopyFromUtf8("tok-123"), TTL = 3600000000 },
+        }));
+
+        await rig.Refresher.RefreshIfNeededAsync(CancellationToken.None);
+
+        string expected = $"Tachyon token valid until {rig.Auth.TachyonExpiry:o} (TTL 01:00:00)";
+        CollectionAssert.Contains(log.Messages, expected);
+        Assert.IsFalse(log.Messages.Any(m => m.Contains("tok-123", StringComparison.Ordinal) || m.Contains(Convert.ToBase64String("tok-123"u8), StringComparison.Ordinal)));
+    }
+
+    /// <summary>
+    /// A refused refresh logs the error type and the HTTP status.
+    /// </summary>
+    [TestMethod]
+    public async Task Refresh_Failure_LogsStatus()
+    {
+        var log = new CollectingLogger();
+        Rig rig = CreateRig(TimeSpan.FromMinutes(30), log: log);
+        rig.Handler.Respond = (_, _) => FakeHttpHandler.Response(HttpStatusCode.BadRequest);
+
+        await Assert.ThrowsAsync<GmRequestException>(() => rig.Refresher.RefreshIfNeededAsync(CancellationToken.None));
+
+        CollectionAssert.Contains(log.Messages, "Token refresh failed: GmRequestException HTTP 400");
     }
 
     /// <summary>

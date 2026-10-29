@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net.Http.Headers;
 using GMessages.Protocol.PbLite;
 using GMessages.Protocol.Proto;
@@ -109,6 +110,7 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
             // Send
             HttpResponseMessage res = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
             cookies.UpdateFrom(res);
+            LogSetCookies(res, url.AbsolutePath);
 
             if (longPoll || (int)res.StatusCode < 500 || attempt >= ServerErrorMaxAttempts)
             {
@@ -179,6 +181,7 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
 
         HttpResponseMessage res = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
         cookies.UpdateFrom(res);
+        LogSetCookies(res, url.AbsolutePath);
         return await ReadTypedAsync<T>(res, ct).ConfigureAwait(false);
     }
 
@@ -203,6 +206,52 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
         h.TryAddWithoutValidation("sec-fetch-dest", "empty");
         h.TryAddWithoutValidation("referer", "https://messages.google.com/");
         h.TryAddWithoutValidation("accept-language", "en-US,en;q=0.9");
+    }
+
+    // Diagnosis: Logs The Names And Expiry Times Of Cookies A Response Sets, Never The Values
+    private void LogSetCookies(HttpResponseMessage res, string path)
+    {
+        if (!res.Headers.TryGetValues("Set-Cookie", out IEnumerable<string>? lines))
+        {
+            return;
+        }
+
+        DateTimeOffset now = time.GetUtcNow();
+        var names          = new List<string>();
+        foreach (string line in lines)
+        {
+            string[] parts = line.Split(';');
+            int eq         = parts[0].IndexOf('=');
+            if (eq <= 0)
+            {
+                continue;
+            }
+
+            // Max-Age Wins Over Expires, As In RFC 6265
+            DateTimeOffset? expires = null;
+            foreach (string attr in parts.Skip(1).Select(a => a.Trim()))
+            {
+                if (attr.StartsWith("Max-Age=", StringComparison.OrdinalIgnoreCase) && long.TryParse(attr[8..], NumberStyles.Integer, CultureInfo.InvariantCulture, out long seconds))
+                {
+                    expires = now.AddSeconds(seconds);
+                    break;
+                }
+
+                if (attr.StartsWith("Expires=", StringComparison.OrdinalIgnoreCase) && DateTimeOffset.TryParse(attr[8..], CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out DateTimeOffset date))
+                {
+                    expires = date;
+                }
+            }
+
+            string when = expires is { } e ? "expires " + e.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture) : "session";
+            names.Add($"{parts[0][..eq].Trim()} ({when})");
+        }
+
+        if (names.Count > 0)
+        {
+            string joined = string.Join(", ", names);
+            LogCookiesSet(log, path, joined);
+        }
     }
 
     // Port Of typedHTTPResponse
@@ -262,6 +311,9 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Server error from Google Messages, retrying. Status {StatusCode}, path {Path}, attempt {Attempt}, retry in {RetryIn}")]
     private static partial void LogServerErrorRetry(ILogger logger, int statusCode, string path, int attempt, TimeSpan retryIn);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Cookies set by {Path}: {Names}")]
+    private static partial void LogCookiesSet(ILogger logger, string path, string names);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Error response body (status {StatusCode}) did not decode")]
     private static partial void LogErrorBodyNotDecoded(ILogger logger, int statusCode, Exception exception);

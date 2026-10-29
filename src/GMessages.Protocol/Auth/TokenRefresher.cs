@@ -84,12 +84,26 @@ public sealed partial class TokenRefresher(GmHttpClient http, AuthData auth, GmE
         };
 
         LogRefreshing(log, auth.TachyonExpiry);
-        RegisterRefreshResponse res = await http.PostTypedAsync<RegisterRefreshResponse>(endpoints.RegisterRefresh, payload, GmContentType.PbLite, ct).ConfigureAwait(false);
-
-        // Note: Length > 0 stands in for Go's != nil, as elsewhere in this port
-        if (res.TokenData is not { TachyonAuthToken.Length: > 0 } token)
+        TokenData token;
+        try
         {
-            throw new InvalidDataException("No tachyon auth token in refresh response.");
+            RegisterRefreshResponse res = await http.PostTypedAsync<RegisterRefreshResponse>(endpoints.RegisterRefresh, payload, GmContentType.PbLite, ct).ConfigureAwait(false);
+
+            // Note: Length > 0 stands in for Go's != nil, as elsewhere in this port
+            if (res.TokenData is not { TachyonAuthToken.Length: > 0 } data)
+            {
+                throw new InvalidDataException("No tachyon auth token in refresh response.");
+            }
+
+            token = data;
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            // Diagnosis: Which Failure, And The HTTP Status When There Was One (0 Otherwise)
+            int status = ex is GmRequestException req ? req.StatusCode : 0;
+            string error_type = ex.GetType().Name;
+            LogRefreshFailed(log, error_type, status);
+            throw;
         }
 
         Update(token);
@@ -107,7 +121,8 @@ public sealed partial class TokenRefresher(GmHttpClient http, AuthData auth, GmE
     public void Update(TokenData data)
     {
         Apply(auth, data, time);
-        LogUpdated(log, auth.TachyonExpiry, data.TTL);
+        TimeSpan valid_for = TimeSpan.FromMicroseconds(auth.TachyonTtlMicros);
+        LogUpdated(log, auth.TachyonExpiry, valid_for);
     }
 
     /// <summary>
@@ -162,9 +177,12 @@ public sealed partial class TokenRefresher(GmHttpClient http, AuthData auth, GmE
         return false;
     }
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Refreshing auth token, current expiry {Expiry}")]
+    [LoggerMessage(Level = LogLevel.Information, Message = "Refreshing tachyon token, expiry {Expiry:o}")]
     private static partial void LogRefreshing(ILogger logger, DateTimeOffset expiry);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Updated tachyon token, expiry {Expiry}, valid for {ValidForMicros} us")]
-    private static partial void LogUpdated(ILogger logger, DateTimeOffset expiry, long validForMicros);
+    [LoggerMessage(Level = LogLevel.Information, Message = "Token refresh failed: {ErrorType} HTTP {Status}")]
+    private static partial void LogRefreshFailed(ILogger logger, string errorType, int status);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Tachyon token valid until {Expiry:o} (TTL {ValidFor})")]
+    private static partial void LogUpdated(ILogger logger, DateTimeOffset expiry, TimeSpan validFor);
 }

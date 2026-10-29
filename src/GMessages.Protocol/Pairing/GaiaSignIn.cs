@@ -125,7 +125,8 @@ public sealed partial class GaiaSignIn(GmHttpClient http, AuthData auth, GmEndpo
         phone.SourceID = device.SourceID.ToLowerInvariant();
         auth.Mobile    = phone;
         auth.Browser   = device;
-        LogSignedIn(log, auth.TachyonExpiry);
+        TimeSpan valid_for = TimeSpan.FromMicroseconds(auth.TachyonTtlMicros);
+        LogSignedIn(log, auth.TachyonExpiry, valid_for);
 
         // Find The Phones
         var devices = new List<PrimaryDevice>();
@@ -211,6 +212,6 @@ public sealed partial class GaiaSignIn(GmHttpClient http, AuthData auth, GmEndpo
     [LoggerMessage(Level = LogLevel.Error, Message = "Failed to parse device ID {DeviceId}")]
     private static partial void LogBadDeviceId(ILogger logger, string deviceId);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Signed in with Google account, token expiry {Expiry}")]
-    private static partial void LogSignedIn(ILogger logger, DateTimeOffset expiry);
+    [LoggerMessage(Level = LogLevel.Information, Message = "Tachyon token valid until {Expiry:o} (TTL {ValidFor})")]
+    private static partial void LogSignedIn(ILogger logger, DateTimeOffset expiry, TimeSpan validFor);
 }
