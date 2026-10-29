@@ -111,12 +111,7 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
             IsLoading = false;
         }
 
-        // A Resync Or Reload Arrived Mid-Load: The Page Above May Be Stale, So Load Again
-        if (_reloadPending)
-        {
-            _reloadPending = false;
-            await LoadAsync();
-        }
+        await RunPendingReloadAsync();
     }
 
     /// <summary>
@@ -149,6 +144,18 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
         finally
         {
             IsLoading = false;
+        }
+
+        await RunPendingReloadAsync();
+    }
+
+    // A Resync Or Reload Arrived Mid-Load: The Page May Be Stale, So Load Again
+    private async Task RunPendingReloadAsync()
+    {
+        if (_reloadPending)
+        {
+            _reloadPending = false;
+            await LoadAsync();
         }
     }
 

@@ -74,7 +74,27 @@ internal sealed class FakeMessagingClient : IMessagingClient
         return Task.FromResult(CreateAnswers.Dequeue());
     }
 
-    public Task<ListMessagesResponse> FetchMessagesAsync(string conversationId, long count, Cursor? cursor, CancellationToken ct) => Task.FromResult(MessagesPage);
+    /// <summary>Pages returned by successive message fetches before falling back to <see cref="MessagesPage"/>.</summary>
+    public Queue<ListMessagesResponse> MessagePages { get; } = new();
+
+    /// <summary>When set, the next message fetch picks its page now but returns it only after this completes.</summary>
+    public TaskCompletionSource? FetchGate { get; set; }
+
+    public int FetchCount { get; private set; }
+
+    public async Task<ListMessagesResponse> FetchMessagesAsync(string conversationId, long count, Cursor? cursor, CancellationToken ct)
+    {
+        FetchCount++;
+        ListMessagesResponse page = MessagePages.Count > 0 ? MessagePages.Dequeue() : MessagesPage;
+
+        if (FetchGate is { } gate)
+        {
+            FetchGate = null;
+            await gate.Task;
+        }
+
+        return page;
+    }
 
     public Task<SendMessageResponse> SendMessageAsync(SendMessageRequest request, CancellationToken ct)
     {

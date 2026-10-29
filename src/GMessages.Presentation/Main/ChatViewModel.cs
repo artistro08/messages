@@ -172,12 +172,7 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
             IsLoading = false;
         }
 
-        // A Resync Arrived Mid-Load: The Page Above May Be Stale, So Load Again
-        if (_reloadPending)
-        {
-            _reloadPending = false;
-            await LoadAsync();
-        }
+        await RunPendingReloadAsync();
     }
 
     /// <summary>
@@ -215,6 +210,18 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
         finally
         {
             IsLoading = false;
+        }
+
+        await RunPendingReloadAsync();
+    }
+
+    // A Resync Arrived Mid-Load: The Page Above May Be Stale, So Load Again
+    private async Task RunPendingReloadAsync()
+    {
+        if (_reloadPending)
+        {
+            _reloadPending = false;
+            await LoadAsync();
         }
     }
 

@@ -255,4 +255,47 @@ public sealed class ChatViewModelTests
         Assert.AreEqual("unsent", chat.Messages[2].Text);
         Assert.IsTrue(chat.Messages[2].IsFailed);
     }
+
+    [TestMethod]
+    public async Task LoadOlder_InsertsAboveInOrder_StopsWhenCursorRunsOut()
+    {
+        using var rig = new MainRig();
+        using ChatViewModel chat = NewChat(rig, null, Msg("m3", "three"), Msg("m4", "four"));
+        rig.Client.MessagesPage.Cursor = new Cursor { LastItemID = "older" };
+        await chat.LoadAsync();
+
+        // The Older Page Is Newest First, With No Cursor Left
+        var older = new ListMessagesResponse();
+        older.Messages.Add(Msg("m2", "two"));
+        older.Messages.Add(Msg("m1", "one"));
+        rig.Client.MessagePages.Enqueue(older);
+        int fetches = rig.Client.FetchCount;
+
+        await chat.LoadOlderAsync();
+        await chat.LoadOlderAsync();
+
+        Assert.AreEqual("one,two,three,four", string.Join(",", chat.Messages.Select(b => b.Text)));
+        Assert.AreEqual(fetches + 1, rig.Client.FetchCount);
+    }
+
+    [TestMethod]
+    public async Task Resynced_DuringLoadOlder_ReloadsLatestPage()
+    {
+        using var rig = new MainRig();
+        using ChatViewModel chat = NewChat(rig, null, Msg("m3", "three"));
+        rig.Client.MessagesPage.Cursor = new Cursor { LastItemID = "older" };
+        await chat.LoadAsync();
+
+        var gate             = new TaskCompletionSource();
+        rig.Client.FetchGate = gate;
+        Task older           = chat.LoadOlderAsync();
+
+        rig.Client.MessagesPage.Cursor = null;
+        rig.Client.MessagesPage.Messages.Insert(0, Msg("m4", "four"));
+        await rig.Store.HandleEventAsync(new ListenRecovered());
+        gate.SetResult();
+        await older;
+
+        Assert.AreEqual("four", chat.Messages[^1].Text);
+    }
 }
