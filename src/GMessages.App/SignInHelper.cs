@@ -15,7 +15,9 @@ namespace GMessages.App;
 /// <para>
 /// Google sign-in fails in WebView2 inside the MSIX package identity (no passkeys, "This browser or app may not be
 /// secure"), so the sign-in runs in a helper process. Packaged, it is launched with the desktop-app break-away policy
-/// so it runs outside the package (proven by <c>tools/SignInSpike/Breakaway.cs</c>); unpackaged, it is a plain launch.
+/// (ported from <c>tools/SignInSpike/Breakaway.cs</c>). That policy puts the helper's <i>children</i> outside the
+/// package, so the packaged helper relays to a second helper that runs outside it (see <c>Program</c>), which was
+/// verified in the installed MSIX. Unpackaged, it is a plain launch.
 /// This process never loads WebView2.
 /// </para>
 /// <para>
@@ -75,8 +77,9 @@ internal sealed class SignInHelper : IDisposable
                 ? StartBrokenAway(arguments)
                 : Process.Start(new ProcessStartInfo(Environment.ProcessPath!, arguments) { UseShellExecute = false })!;
 
-            // Foreground: The Helper's Window Comes Up In Front Of The Pairing Window
-            NativeMethods.AllowSetForegroundWindow((uint)process.Id);
+            // Foreground: The Helper's Window Comes Up In Front Of The Pairing Window. Packaged, the window belongs to a
+            // grandchild (see Program's relay), whose ID isn't known here, so any process may take it
+            NativeMethods.AllowSetForegroundWindow(AppIdentity.IsPackaged ? NativeMethods.ASFW_ANY : (uint)process.Id);
             AppLog.SignInHelperLaunched(log, process.Id, AppIdentity.IsPackaged);
             return new SignInHelper(pipe, process, connect, log);
         }

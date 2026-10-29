@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using GMessages.Presentation;
+using GMessages.Presentation.Pairing;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.Windows.AppLifecycle;
@@ -44,7 +46,7 @@ public static class Program
     /// The sign-in helper's pipe, log folder and theme when started with <c>--sign-in</c>, else null.
     /// </summary>
     public static (string PipeName, string? LogsFolder, Presentation.Settings.AppTheme Theme)? SignInRequest { get; } =
-        Presentation.Pairing.SignInHelperArgs.Parse(Environment.GetCommandLineArgs());
+        SignInHelperArgs.Parse(Environment.GetCommandLineArgs());
 
     /// <summary>
     /// The running copy's end of <see cref="ShowEventName"/>, made before the single-instance check so a
@@ -100,6 +102,14 @@ public static class Program
             return;
         }
 
+        // Sign-In Helper Relay: the break-away policy puts the children of the process it's set on outside the package,
+        // not that process itself. So a helper still in the package starts the real helper and passes on its exit code
+        if (SignInRequest is not null && AppIdentity.IsPackaged && !args.Contains(RelayedFlag, StringComparer.Ordinal))
+        {
+            Environment.Exit(RelaySignIn(args));
+            return;
+        }
+
         // Sign-In Helper: no single instance, quit or show events; the app that started it owns the lifetime
         if (SignInRequest is not null)
         {
@@ -132,6 +142,23 @@ public static class Program
         StartApplication();
         ShowRequest?.Dispose();
         QuitRequest?.Dispose();
+    }
+
+    // Marks The Relayed Helper, So A Break-Away That Didn't Take Can't Relay Forever
+    private const string RelayedFlag = "--relayed";
+
+    // Starts The Real Helper (Outside The Package) And Waits For It; Killing This Process Tree Kills It Too
+    private static int RelaySignIn(string[] args)
+    {
+        var start        = new ProcessStartInfo(Environment.ProcessPath!, SignInHelperArgs.Join([.. args, RelayedFlag])) { UseShellExecute = false };
+        using var helper = Process.Start(start);
+        if (helper is null)
+        {
+            return 1;
+        }
+
+        helper.WaitForExit();
+        return helper.ExitCode;
     }
 
     // Runs The XAML App Until It Exits
