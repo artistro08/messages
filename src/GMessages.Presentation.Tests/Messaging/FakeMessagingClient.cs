@@ -85,9 +85,17 @@ internal sealed class FakeMessagingClient : IMessagingClient
 
     public int FetchCount { get; private set; }
 
+    /// <summary>When set, message fetches with a cursor (older pages) fail with this.</summary>
+    public Exception? OlderFetchThrows { get; set; }
+
     public async Task<ListMessagesResponse> FetchMessagesAsync(string conversationId, long count, Cursor? cursor, CancellationToken ct)
     {
         FetchCount++;
+        if (cursor is not null && OlderFetchThrows is { } ex)
+        {
+            throw ex;
+        }
+
         ListMessagesResponse page = MessagePages.Count > 0 ? MessagePages.Dequeue() : MessagesPage;
 
         if (FetchGate is { } gate)

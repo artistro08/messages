@@ -163,10 +163,11 @@ public sealed partial class ChatPane : UserControl
         }
     }
 
-    // Each Older Page Ends In Another IsLoading Change, So This Repeats Until The List Scrolls Or No Pages Are Left
+    // Each Older Page Ends In Another IsLoading Change, So This Repeats Until The List Scrolls, No Pages Are Left, A Page
+    // Adds Nothing Or A Load Fails (See ChatViewModel.CanFillOlder)
     private void FillWithOlder()
     {
-        if (Chat is not { IsLoading: false, HasOlder: true } chat)
+        if (Chat is not { IsLoading: false, CanFillOlder: true } chat)
         {
             return;
         }

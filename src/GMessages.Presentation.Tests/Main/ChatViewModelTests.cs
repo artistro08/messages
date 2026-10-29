@@ -72,6 +72,59 @@ public sealed class ChatViewModelTests
         Assert.AreEqual("p-cy", chat.SecondPhotoId);
     }
 
+    /// <summary>
+    /// A too-short list fills with older pages only while they work: a failed older load (phone silent) stops the
+    /// pane's fill after one try instead of asking forever, and the next good newest page re-arms it.
+    /// </summary>
+    [TestMethod]
+    public async Task FillOlder_FailedLoadStopsUntilNextGoodLoad()
+    {
+        using var rig = new MainRig();
+        using ChatViewModel chat = NewChat(rig, null, Msg("m1", "one"));
+        rig.Client.MessagesPage.Cursor = new Cursor { LastItemID = "m1" };
+        await chat.LoadAsync();
+        Assert.IsTrue(chat.CanFillOlder, "once after the newest page");
+
+        // The Pane's Fill Loop, Bounded Here: It Runs Only While CanFillOlder Holds
+        rig.Client.OlderFetchThrows = new PhoneNotRespondingException();
+        for (int i = 0; i < 10 && chat.CanFillOlder; i++)
+        {
+            await chat.LoadOlderAsync();
+        }
+
+        Assert.AreEqual(2, rig.Client.FetchCount, "the newest page and one older try, not a loop");
+        Assert.IsFalse(chat.CanFillOlder);
+
+        rig.Client.OlderFetchThrows = null;
+        await chat.LoadAsync();
+        Assert.IsTrue(chat.CanFillOlder);
+    }
+
+    /// <summary>
+    /// The fill goes on after an older page that added bubbles, and stops after one that added none.
+    /// </summary>
+    [TestMethod]
+    public async Task FillOlder_ContinuesOnlyAfterBubblesWereAdded()
+    {
+        using var rig = new MainRig();
+        using ChatViewModel chat = NewChat(rig, null, Msg("m3", "three"));
+        rig.Client.MessagesPage.Cursor = new Cursor { LastItemID = "m3" };
+        await chat.LoadAsync();
+
+        var with_bubble = new ListMessagesResponse { Cursor = new Cursor { LastItemID = "m2" } };
+        with_bubble.Messages.Add(Msg("m2", "two"));
+        var only_system = new ListMessagesResponse { Cursor = new Cursor { LastItemID = "m1" } };
+        only_system.Messages.Add(Msg("m1", "joined", status: (MessageStatusType)200));
+        rig.Client.MessagePages.Enqueue(with_bubble);
+        rig.Client.MessagePages.Enqueue(only_system);
+
+        await chat.LoadOlderAsync();
+        Assert.IsTrue(chat.CanFillOlder, "a bubble was added");
+
+        await chat.LoadOlderAsync();
+        Assert.IsFalse(chat.CanFillOlder, "nothing was added");
+    }
+
     [TestMethod]
     public async Task Load_Read_DoesNotMarkRead()
     {

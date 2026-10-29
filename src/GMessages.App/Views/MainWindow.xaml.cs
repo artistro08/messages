@@ -87,6 +87,7 @@ public sealed partial class MainWindow : Window
             ViewModel.Inbox.Rows.CollectionChanged -= OnInboxRowsChanged;
             Bindings.StopTracking();
             ViewModel.Dispose();
+            _settings.Dispose();
             Avatar.Cache = null;
             _avatars.Clear();
         };

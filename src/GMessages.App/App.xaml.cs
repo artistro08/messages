@@ -381,7 +381,9 @@ public partial class App : Application, IDisposable
         _mainWindow.SettingsRequested += (_, _) => ShowSettingsWindow();
         _mainWindow.Closed += (_, _) =>
         {
-            _mainWindow = null;
+            // A Toast's Conversation Not Yet Shown Goes With The Window, So A Later Open Doesn't Jump To It
+            _mainWindow            = null;
+            _pendingConversationId = null;
             ScheduleTrim();
         };
         _mainWindow.Activate();

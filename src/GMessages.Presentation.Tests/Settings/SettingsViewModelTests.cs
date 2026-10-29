@@ -181,6 +181,31 @@ public sealed class SettingsViewModelTests
     }
 
     /// <summary>
+    /// A window opened while not paired shows Unpair once pairing (here a start with a saved session) finishes, and stops
+    /// following the controller once disposed.
+    /// </summary>
+    [TestMethod]
+    public async Task CanUnpair_FollowsStateChanges_UntilDisposed()
+    {
+        await using var rig = new ConnectionControllerTests.Rig();
+        var vm              = Create(new InMemorySettingsStore(), controller: rig.Controller);
+        var raised          = new List<string?>();
+        vm.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+        Assert.IsFalse(vm.CanUnpair);
+
+        rig.SaveSession(TimeSpan.FromDays(1));
+        await rig.Controller.StartAsync().WaitAsync(ConnectionControllerTests.HangGuard);
+
+        Assert.IsTrue(vm.CanUnpair);
+        CollectionAssert.Contains(raised, nameof(SettingsViewModel.CanUnpair));
+
+        vm.Dispose();
+        raised.Clear();
+        await rig.Controller.UnpairAsync().WaitAsync(ConnectionControllerTests.HangGuard);
+        Assert.IsEmpty(raised, "nothing raised after dispose");
+    }
+
+    /// <summary>
     /// Unpair is offered only while paired, and is busy while it runs.
     /// </summary>
     [TestMethod]

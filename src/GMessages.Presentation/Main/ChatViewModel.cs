@@ -28,6 +28,10 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
 
     // Where The Last Older Page Ended; Null Means No More Pages
     private Cursor? _older;
+
+    // Whether A Too-Short List May Load The Next Older Page On Its Own: Once After The Newest Page, Then Only After An
+    // Older Page That Added Bubbles. A Failed Load Stops It Until The Next Good Load (The Resync After Reconnecting)
+    private bool _fillOlder;
     private bool _isLoading;
 
     // A Reload Asked For While A Load Was Running; Runs When That Load Ends
@@ -107,8 +111,15 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     /// <summary>Gets or sets whether the window is focused with this chat open, so incoming messages count as read (set by <see cref="MainViewModel"/>).</summary>
     public bool IsActive { get; set; }
 
-    /// <summary>Gets whether older messages are left to load above the bubbles.</summary>
-    public bool HasOlder => _older is not null;
+    /// <summary>
+    /// Gets whether a list too short to scroll should load the next older page on its own.
+    /// </summary>
+    /// <remarks>
+    /// True once after the newest page loads, then only after an older page that added bubbles, while older pages are
+    /// left. A failed load (phone not connected or not answering) stops it until the next successful newest page, so
+    /// the view never spins on a phone that can't answer.
+    /// </remarks>
+    public bool CanFillOlder => _fillOlder && _older is not null;
 
     /// <summary>Gets whether a page is loading.</summary>
     public bool IsLoading
@@ -168,6 +179,7 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
             }
 
             RefreshSenders();
+            _fillOlder = true;
 
             // Opening An Unread Chat Reads It
             if (conversation is { Unread: true } && conversation.LatestMessageId.Length > 0)
@@ -178,6 +190,7 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
         catch (Exception ex) when (IsPhoneProblem(ex))
         {
             // Not Connected Or Not Answering: The Resync After Reconnecting Reloads
+            _fillOlder = false;
         }
         finally
         {
@@ -214,10 +227,12 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
             }
 
             RefreshSenders();
+            _fillOlder = at > 0;
         }
         catch (Exception ex) when (IsPhoneProblem(ex))
         {
-            // Not Connected Or Not Answering: Scrolling Again Tries Again
+            // Not Connected Or Not Answering: Scrolling Again Tries Again, Filling Waits For The Next Good Load
+            _fillOlder = false;
         }
         finally
         {

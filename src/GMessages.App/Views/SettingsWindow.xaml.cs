@@ -39,6 +39,7 @@ public sealed partial class SettingsWindow : Window
         {
             _closed = true;
             Bindings.StopTracking();
+            ViewModel.Dispose();
         };
         _ = ViewModel.LoadAsync();
     }

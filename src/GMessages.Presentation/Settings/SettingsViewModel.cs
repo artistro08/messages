@@ -21,7 +21,7 @@ namespace GMessages.Presentation.Settings;
 /// controller lands in <see cref="ConnectionState.NotPaired"/> and the App opens the pairing window.
 /// </para>
 /// </remarks>
-public sealed partial class SettingsViewModel : INotifyPropertyChanged
+public sealed partial class SettingsViewModel : INotifyPropertyChanged, IDisposable
 {
     private readonly AppSettings _settings;
     private readonly IStartupService _startup;
@@ -64,6 +64,9 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
         _openFolder = openFolder;
         _logger     = logger;
         LogsFolder  = logsFolder;
+
+        // Unpair Shows Or Hides As The Pairing State Changes (Such As Pairing Finishing While Settings Is Open)
+        _controller.StateChanged += OnStateChanged;
     }
 
     /// <inheritdoc />
@@ -259,7 +262,7 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
     /// <summary>
     /// Gets whether Unpair is offered: hidden once there is nothing to unpair (<see cref="ConnectionState.NotPaired"/>).
     /// </summary>
-    /// <remarks>Read from the controller each time; raised after an unpair.</remarks>
+    /// <remarks>Read from the controller each time; raised on every connection state change and after an unpair.</remarks>
     public bool CanUnpair => _controller.State != ConnectionState.NotPaired;
 
     /// <summary>
@@ -308,9 +311,17 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged
     /// </summary>
     public void OpenLogsFolder() => _openFolder(LogsFolder);
 
+    /// <summary>
+    /// Stops following the connection state. The controller outlives every window, so call it when the window closes.
+    /// </summary>
+    public void Dispose() => _controller.StateChanged -= OnStateChanged;
+
     // =========================================================================
     // HELPERS
     // =========================================================================
+
+    // Raised On The UI Thread (The Controller Posts Its Events There)
+    private void OnStateChanged(object? sender, EventArgs e) => Raise(nameof(CanUnpair));
 
     private void Raise([CallerMemberName] string? property = null) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(property));
