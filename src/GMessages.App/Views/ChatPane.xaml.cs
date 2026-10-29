@@ -44,6 +44,13 @@ public sealed partial class ChatPane : UserControl
     // On The Way To The Newest Message (See ScrollToNewest)
     private bool _toNewest;
 
+    // An Older Page Going In Above (See KeepOlderAnchor): How Far The View's Top Sat From The Content's End Before It (Null
+    // Once Used), The Bubble At The View's Top Then And Its Top In The View (Null When Done), And The Corrections Left
+    private double? _olderFromEnd;
+    private MessageBubbleViewModel? _olderBubble;
+    private double _olderTop;
+    private int _olderTries;
+
     // The Last Scroll Decisions Logged (Wave 7 Diagnostics), So Only Changes Are Logged
     private string? _lastScrollTrace;
 
@@ -113,6 +120,8 @@ public sealed partial class ChatPane : UserControl
         pane._lastScrollTrace = null;
         pane._pinned          = true;
         pane._toNewest        = false;
+        pane._olderFromEnd    = null;
+        pane._olderBubble     = null;
 
         // The Last Chat's Content Height Means Nothing Here: Unset, The First Look Counts As A Content Change, Not As The
         // Person Scrolling (Two Chats Of The Same Height Would Otherwise Unpin On The Offset Reset To The Top)
@@ -135,6 +144,14 @@ public sealed partial class ChatPane : UserControl
     // Already At The End (The Usual Case), KeepPinned Has Done It And Nothing Moves
     private void OnMessagesChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
+        // An Older Page's First Bubble: Note Where The View Sits, Before The Page Moves It (Pinned, The Pin Keeps The Newest
+        // Bubbles In Place)
+        if (e is { Action: NotifyCollectionChangedAction.Add, NewStartingIndex: 0 } && Chat is { IsLoadingOlder: true } chat
+            && !_pinned && _olderBubble is null && _scroller is { } anchored)
+        {
+            NoteOlderAnchor(anchored, chat);
+        }
+
         if (e.Action != NotifyCollectionChangedAction.Add || sender is not ICollection<MessageBubbleViewModel> messages
             || e.NewStartingIndex + e.NewItems!.Count != messages.Count)
         {
@@ -260,7 +277,13 @@ public sealed partial class ChatPane : UserControl
     // Puts It Back At The Bottom. Scrolling (Same Height) Is Left To OnScrolled
     private void OnMessageListLayoutUpdated(object? sender, object e)
     {
-        if (_scroller is { } scroller && ContentChanged(scroller))
+        if (_scroller is not { } scroller)
+        {
+            return;
+        }
+
+        KeepOlderAnchor(scroller);
+        if (ContentChanged(scroller))
         {
             KeepPinned(scroller);
         }
@@ -356,6 +379,61 @@ public sealed partial class ChatPane : UserControl
         _lastExtent  = scroller.ExtentHeight;
         return changed;
     }
+
+    // Notes, Before An Older Page Goes In Above, How Far The View's Top Sits From The Content's End And The First Shown
+    // Bubble With Its Top In The View (Its Row Is Still Where The Last Layout Put It)
+    private void NoteOlderAnchor(ScrollViewer scroller, ChatViewModel chat)
+    {
+        foreach (MessageBubbleViewModel bubble in chat.Messages.Skip(1))
+        {
+            if (RowTop(scroller, bubble) is not { } top)
+            {
+                continue;
+            }
+
+            if (top + 1 >= 0)
+            {
+                _olderFromEnd = scroller.ExtentHeight - scroller.VerticalOffset;
+                _olderBubble  = bubble;
+                _olderTop     = top;
+                _olderTries   = 10;
+                return;
+            }
+        }
+    }
+
+    // The Older Page Went In Above: Puts The View Back (No Animation) So The Shown Bubbles Stay Put. The List's Own
+    // KeepItemsInView Does Nothing At The Very Top, Where The Page Is Asked For: There The Offset Stayed 0 And The New
+    // Page Took The View, Pushing The Shown Bubbles Below It. The First Layout Has Only The New Page's Rows Realized, So
+    // The View First Goes Back The Same Distance From The Content's End; Moving Re-Estimates The Heights Of The Rows Not
+    // Shown, So Each Layout After Puts The Noted Bubble Back At Its Top Until It Is There (A Few Tries At Most)
+    private void KeepOlderAnchor(ScrollViewer scroller)
+    {
+        if (_olderBubble is not { } bubble || Chat is null || Chat.IsLoadingOlder)
+        {
+            return;
+        }
+
+        if (_olderFromEnd is { } from_end)
+        {
+            _olderFromEnd = null;
+            scroller.ChangeView(null, Math.Max(0, scroller.ExtentHeight - from_end), null, true);
+            return;
+        }
+
+        double? top = RowTop(scroller, bubble);
+        if (top is null || Math.Abs(top.Value - _olderTop) < 0.5 || --_olderTries <= 0)
+        {
+            _olderBubble = null;
+            return;
+        }
+
+        scroller.ChangeView(null, scroller.VerticalOffset + top.Value - _olderTop, null, true);
+    }
+
+    // A Bubble's Row Top In The View, Or Null While Its Row Isn't Realized
+    private double? RowTop(ScrollViewer scroller, MessageBubbleViewModel bubble) =>
+        MessageList.ContainerFromItem(bubble)?.As<UIElement>().TransformToVisual(scroller).TransformPoint(default).Y;
 
     // Back To The Newest Message At Once (No Animation) While Pinned And Short Of It
     private void KeepPinned(ScrollViewer scroller)
