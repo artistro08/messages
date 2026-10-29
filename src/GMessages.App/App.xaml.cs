@@ -73,6 +73,7 @@ public partial class App : Application, IDisposable
     private RegisteredWaitHandle? _quitWait;
     private RegisteredWaitHandle? _showWait;
     private bool _quitting;
+    private bool _launched;
 
     /// <summary>
     /// Creates the app. Closing a window must never end a tray app, so it only shuts down on request.
@@ -83,6 +84,9 @@ public partial class App : Application, IDisposable
 
         // Closing the last window must not end a tray app
         DispatcherShutdownMode = DispatcherShutdownMode.OnExplicitShutdown;
+
+        // Last Resort For UI Event Handlers
+        UnhandledException += OnUnhandledException;
     }
 
     /// <summary>
@@ -200,6 +204,16 @@ public partial class App : Application, IDisposable
 
         // Startup itself leaves a lot behind that the idle tray app never needs
         _memoryTrim.Schedule();
+        _launched = true;
+    }
+
+    // An error that escaped a UI event handler (an async void click) is logged by type and HRESULT only, never its
+    // message (it can hold content). Once launched it is marked handled, so one failed click can't take the tray, and
+    // with it every later notification, down. Before then it still ends the app, so a broken start-up is never hidden
+    private void OnUnhandledException(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs e)
+    {
+        e.Handled = _launched && e.Exception is not OutOfMemoryException;
+        AppLog.UnhandledError(_logger, e.Exception?.GetType().Name ?? "Unknown", e.Exception?.HResult ?? 0, e.Handled);
     }
 
     // =========================================================================
@@ -247,9 +261,11 @@ public partial class App : Application, IDisposable
         HandleLaunchNotification(timedOut: false);
         if (NeedsPairing())
         {
-            // No "Not paired" main window left behind the pairing window after an unpair or sign-out
+            // No "Not paired" main window left behind the pairing window after an unpair or sign-out, and nothing of the
+            // old phone (names, numbers, owner, SIMs) kept for whichever phone pairs next
             _pendingConversationId = null;
             _mainWindow?.Close();
+            _store?.Reset();
             ShowPairingWindow();
             return;
         }

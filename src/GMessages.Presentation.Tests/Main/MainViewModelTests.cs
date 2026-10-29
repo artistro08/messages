@@ -3,6 +3,7 @@ using GMessages.Presentation.Main;
 using GMessages.Presentation.Messaging;
 using GMessages.Protocol.Events;
 using GMessages.Protocol.Proto;
+using GMessages.Protocol.Rpc;
 
 namespace GMessages.Presentation.Tests.Main;
 
@@ -143,6 +144,65 @@ public sealed class MainViewModelTests
         vm.ApplyState(ConnectionState.Reconnecting);
         vm.ApplyState(ConnectionState.Connected);
         Assert.IsNull(vm.StatusBanner);
+    }
+
+    /// <summary>
+    /// A list load that failed while the phone slept fills once the phone answers again, and again when the connection
+    /// comes back; both lists reload.
+    /// </summary>
+    [TestMethod]
+    public async Task PhoneRespondingAgainOrConnected_ReloadsBothLists()
+    {
+        using var rig = new MainRig();
+        rig.Client.ListThrows = new PhoneNotRespondingException();
+        using var vm          = new MainViewModel(rig.Controller, rig.Store, TimeProvider.System, a => a());
+        await vm.Inbox.LoadAsync();
+        vm.OpenSpamBlocked();
+        Assert.AreEqual(0, vm.Inbox.Rows.Count);
+
+        // The Phone Answers Again
+        rig.Client.ListThrows = null;
+        rig.Page(MainRig.Conv("a", "Ann", 1), MainRig.Conv("s", "Spammer", 2, status: ConversationStatus.SpamFolder));
+        int calls = rig.Client.ListCalls.Count;
+        vm.ApplyEvent(new PhoneNotResponding());
+        vm.ApplyEvent(new PhoneRespondingAgain());
+        Assert.AreEqual("a", string.Join(",", vm.Inbox.Rows.Select(r => r.Id)));
+        Assert.AreEqual("s", string.Join(",", vm.SpamBlocked!.Rows.Select(r => r.Id)));
+        Assert.AreEqual(calls + 2, rig.Client.ListCalls.Count, "the inbox and spam lists, once each");
+
+        // Back To Connected
+        rig.Page(MainRig.Conv("a", "Ann", 1), MainRig.Conv("b", "Bo", 2));
+        vm.ApplyState(ConnectionState.Reconnecting);
+        vm.ApplyState(ConnectionState.Connected);
+        Assert.AreEqual("a,b", string.Join(",", vm.Inbox.Rows.Select(r => r.Id)));
+        Assert.AreEqual(calls + 4, rig.Client.ListCalls.Count);
+    }
+
+    /// <summary>
+    /// A Start chat that finishes after the window closed (the view model is disposed) opens nothing: no chat is made,
+    /// so nothing stays subscribed to the store or fetches messages.
+    /// </summary>
+    [TestMethod]
+    public async Task Disposed_SelectAndOpenDoNothing()
+    {
+        using var rig = new MainRig();
+        MainViewModel vm = await NewMainAsync(rig);
+        vm.OpenStartChat();
+        int list_calls = rig.Client.ListCalls.Count;
+        vm.Dispose();
+
+        vm.Select("new-1");
+        vm.OpenStartChat();
+        vm.OpenSpamBlocked();
+        vm.ApplyState(ConnectionState.Reconnecting);
+        vm.ApplyState(ConnectionState.Connected);
+        vm.ApplyEvent(new PhoneRespondingAgain());
+
+        Assert.IsNull(vm.Chat);
+        Assert.IsNull(vm.SelectedConversationId);
+        Assert.IsNull(vm.SpamBlocked);
+        Assert.AreEqual(0, rig.Client.FetchCount, "no messages fetched for a chat nobody sees");
+        Assert.AreEqual(list_calls, rig.Client.ListCalls.Count, "no list reloads after closing");
     }
 
     [TestMethod]

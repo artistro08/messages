@@ -3,7 +3,6 @@ using System.ComponentModel;
 using GMessages.Presentation.Messaging;
 using GMessages.Protocol;
 using GMessages.Protocol.Proto;
-using GMessages.Protocol.Rpc;
 
 namespace GMessages.Presentation.Main;
 
@@ -16,7 +15,7 @@ namespace GMessages.Presentation.Main;
 /// the store (which outlives the window), so call <see cref="Dispose"/> when the chat closes.
 /// </para>
 /// <para>
-/// A send adds a bubble at once. If the phone cannot take it (not connected, not answering, refused) the bubble is
+/// A send adds a bubble at once. If it fails for any reason (not connected, not answering, refused, a network error) the bubble is
 /// marked failed and keeps its text so <see cref="RetryAsync"/> can resend it; nothing is thrown at the view.
 /// </para>
 /// </remarks>
@@ -116,7 +115,7 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     /// </summary>
     /// <remarks>
     /// True once after the newest page loads, then only after an older page that added bubbles, while older pages are
-    /// left. A failed load (phone not connected or not answering) stops it until the next successful newest page, so
+    /// left. A failed load (phone not connected or not answering, a network error) stops it until the next successful newest page, so
     /// the view never spins on a phone that can't answer.
     /// </remarks>
     public bool CanFillOlder => _fillOlder && _older is not null;
@@ -144,7 +143,7 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     /// <summary>
     /// Loads the newest page, replacing the bubbles (unsent ones stay), and marks the conversation read when it was unread.
     /// </summary>
-    /// <remarks>Call on the UI thread. While a page is loading the call is remembered and runs once that load ends. When the phone is not connected or not answering the bubbles stay as they were.</remarks>
+    /// <remarks>Call on the UI thread. While a page is loading the call is remembered and runs once that load ends. When the load fails (phone not connected or not answering, a network error) the bubbles stay as they were.</remarks>
     /// <returns>A task that completes when the page is shown.</returns>
     public async Task LoadAsync()
     {
@@ -187,9 +186,10 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
                 await _store.MarkReadAsync(ConversationId, conversation.LatestMessageId, CancellationToken.None);
             }
         }
-        catch (Exception ex) when (IsPhoneProblem(ex))
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            // Not Connected Or Not Answering: The Resync After Reconnecting Reloads
+            // Not Connected, Not Answering Or A Network Error: The Resync After Reconnecting Reloads
+            _store.LogFailure("load messages", ex);
             _fillOlder = false;
         }
         finally
@@ -229,9 +229,10 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
             RefreshSenders();
             _fillOlder = at > 0;
         }
-        catch (Exception ex) when (IsPhoneProblem(ex))
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            // Not Connected Or Not Answering: Scrolling Again Tries Again, Filling Waits For The Next Good Load
+            // Not Connected, Not Answering Or A Network Error: Scrolling Again Tries Again, Filling Waits For The Next Good Load
+            _store.LogFailure("load older messages", ex);
             _fillOlder = false;
         }
         finally
@@ -259,7 +260,7 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     /// <summary>
     /// Sends the draft: a bubble appears at once and the draft clears.
     /// </summary>
-    /// <remarks>A send the phone can't take marks the bubble failed instead of throwing. Does nothing when <see cref="CanSend"/> is false.</remarks>
+    /// <remarks>A send that fails for any reason marks the bubble failed instead of throwing. Does nothing when <see cref="CanSend"/> is false.</remarks>
     /// <returns>A task that completes when the phone answered or the bubble failed.</returns>
     public async Task SendAsync()
     {
@@ -300,15 +301,16 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
         await SendBubbleAsync(failed);
     }
 
-    // Sends A Bubble's Text; Any Phone Problem Fails The Bubble Instead Of Escaping
+    // Sends A Bubble's Text; Any Failure (Phone, Refusal, Network, Timeout, Decode) Fails The Bubble Instead Of Escaping
     private async Task SendBubbleAsync(MessageBubbleViewModel bubble)
     {
         try
         {
             await _store.SendTextAsync(ConversationId, bubble.Text, bubble.TmpId, CancellationToken.None);
         }
-        catch (Exception ex) when (ex is MessageSendException || IsPhoneProblem(ex))
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
+            _store.LogFailure("send", ex);
             bubble.MarkFailed();
         }
     }
@@ -354,9 +356,10 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
         {
             await _store.MarkReadAsync(ConversationId, messageId, CancellationToken.None);
         }
-        catch (Exception ex) when (IsPhoneProblem(ex))
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             // The Phone Learns It The Next Time The Chat Opens Unread
+            _store.LogFailure("mark read", ex);
         }
     }
 
@@ -370,8 +373,6 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     // =========================================================================
     // HELPERS
     // =========================================================================
-
-    private static bool IsPhoneProblem(Exception ex) => ex is MessagingUnavailableException or PhoneNotRespondingException or ConnectionClosedException;
 
     private void ApplyConversation(ConversationInfo? c)
     {

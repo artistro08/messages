@@ -56,6 +56,9 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 916, Level = LogLevel.Information, Message = "Notifications registered")]
     public static partial void NotificationsRegistered(ILogger logger);
 
-    [LoggerMessage(EventId = 951, Level = LogLevel.Information, Message = "Test endpoint {Endpoint}, data folder {DataFolder}")]
+    [LoggerMessage(EventId = 917, Level = LogLevel.Error, Message = "Unhandled error ({ErrorType} 0x{HResult:X8}, handled: {Handled})")]
+    public static partial void UnhandledError(ILogger logger, string errorType, int hResult, bool handled);
+
+    [LoggerMessage(EventId = 951,Level = LogLevel.Information, Message = "Test endpoint {Endpoint}, data folder {DataFolder}")]
     public static partial void TestEndpoint(ILogger logger, string endpoint, string dataFolder);
 }

@@ -128,6 +128,35 @@ public sealed class ConversationListViewModelTests
         Assert.AreEqual("s,k", Ids(list));
     }
 
+    /// <summary>
+    /// A load or load-more that fails with any error (phone asleep, network, server, decode) keeps the rows and never
+    /// throws; the next load fills the list.
+    /// </summary>
+    [TestMethod]
+    public async Task Load_AnyFailure_KeepsRows_NextLoadFills()
+    {
+        foreach (Exception failure in MainRig.Failures())
+        {
+            using var rig = new MainRig();
+            rig.Page(MainRig.Conv("a", "Ann"));
+            rig.Client.ConversationsPage.Cursor = new Cursor { LastItemID = "a" };
+            using var list = NewList(rig);
+            await list.LoadAsync();
+
+            string name           = failure.GetType().Name;
+            rig.Client.ListThrows = failure;
+            await list.LoadAsync();
+            await list.LoadMoreAsync();
+            Assert.AreEqual("a", Ids(list), name);
+            Assert.IsFalse(list.IsLoading, name);
+
+            rig.Client.ListThrows = null;
+            rig.Page(MainRig.Conv("a", "Ann"), MainRig.Conv("n", "Newcomer", minutesAgo: 1));
+            await list.LoadAsync();
+            Assert.AreEqual("a,n", Ids(list), name);
+        }
+    }
+
     [TestMethod]
     public async Task Resynced_Reloads()
     {

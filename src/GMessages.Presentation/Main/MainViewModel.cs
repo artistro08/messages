@@ -31,6 +31,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     private ConnectionState _state;
     private bool _phoneSilent;
 
+    // Closed With The Window: Late Callbacks (A Start Chat That Finishes After Closing) Must Not Open Anything
+    private bool _disposed;
+
     /// <summary>
     /// Creates the view model with the inbox list (not loaded yet) and starts watching the connection.
     /// </summary>
@@ -62,7 +65,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
     /// <summary>
     /// Raised when the connection arrives at <see cref="ConnectionState.Connected"/>, so the window can retry what
-    /// failed while it was down (photos).
+    /// failed while it was down (photos). The lists reload then by themselves, and again when the phone answers after
+    /// a silence.
     /// </summary>
     public event EventHandler? Connected;
 
@@ -142,6 +146,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// <summary>Shows the spam and blocked list, creating and loading it the first time.</summary>
     public void OpenSpamBlocked()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
         if (_spamBlocked is null)
         {
             _spamBlocked = new ConversationListViewModel(_store, ConversationFolder.SpamBlocked, _time, _post);
@@ -160,10 +169,16 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>Opens a conversation (closing Start chat).</summary>
+    /// <remarks>Does nothing once disposed, so a Start chat that finishes after the window closed opens no chat.</remarks>
     /// <param name="conversationId">The conversation ID.</param>
     public void Select(string conversationId)
     {
         ArgumentException.ThrowIfNullOrEmpty(conversationId);
+
+        if (_disposed)
+        {
+            return;
+        }
 
         SelectedConversationId = conversationId;
         IsStartChatOpen        = false;
@@ -198,6 +213,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// <summary>Shows Start chat in place of the open conversation, loading the contacts the first time.</summary>
     public void OpenStartChat()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
         SelectedConversationId = null;
         IsStartChatOpen        = true;
         ReplaceChat(null);
@@ -222,6 +242,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// <inheritdoc />
     public void Dispose()
     {
+        _disposed = true;
         _connection.StateChanged -= OnStateChanged;
         _connection.ClientEvent  -= OnClientEvent;
         Inbox.Dispose();
@@ -287,6 +308,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
     internal void ApplyState(ConnectionState state)
     {
+        if (_disposed)
+        {
+            return;
+        }
+
         // A New State Starts Fresh: The Phone Is Not Silent Until It Says So
         bool arrived = _state != state;
         if (arrived)
@@ -299,12 +325,18 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
         if (arrived && state == ConnectionState.Connected)
         {
+            ReloadLists();
             Connected?.Invoke(this, EventArgs.Empty);
         }
     }
 
     internal void ApplyEvent(object e)
     {
+        if (_disposed)
+        {
+            return;
+        }
+
         switch (e)
         {
             case PhoneNotResponding:
@@ -315,8 +347,17 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             case PhoneRespondingAgain:
                 _phoneSilent = false;
                 Changed();
+                ReloadLists();
                 break;
         }
+    }
+
+    // Back Online Or The Phone Answers Again: A Load That Failed Meanwhile Left The Lists Empty Or Stale. A Reload
+    // Asked For During A Running Load Waits For It, So Overlapping Triggers Cost One Extra Fetch At Most
+    private void ReloadLists()
+    {
+        _ = Inbox.LoadAsync();
+        _ = _spamBlocked?.LoadAsync();
     }
 
     private void Changed() => PropertyChanged?.Invoke(this, AllChanged);

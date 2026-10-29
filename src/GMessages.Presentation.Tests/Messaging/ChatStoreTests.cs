@@ -104,6 +104,47 @@ public sealed class ChatStoreTests
         Assert.IsFalse(got[1].IsNew);
     }
 
+    /// <summary>
+    /// After an unpair (Reset) a newly paired phone whose conversation IDs collide with the old phone's sees none of
+    /// the old conversations, owner, SIMs or notified IDs.
+    /// </summary>
+    [TestMethod]
+    public async Task Reset_NewPhoneSeesNothingOfTheOldOne()
+    {
+        using var rig = new Rig();
+
+        // The Old Phone
+        await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1", "Old Ann", outgoing: "me1")));
+        var settings = new GMessages.Protocol.Proto.Settings();
+        settings.SIMCards.Add(Sim("me1", "old"));
+        await rig.Store.HandleEventAsync(new SettingsChanged(settings));
+        await rig.Store.HandleEventAsync(new MessageReceived(Msg("m1", "c1"), false));
+        Assert.AreEqual("me1", rig.Store.Me?.Id);
+
+        rig.Store.Reset();
+
+        Assert.IsNull(rig.Store.Find("c1"));
+        Assert.IsNull(rig.Store.Me);
+
+        // The New Phone Reuses ID c1 (And A Message ID The Old One Notified)
+        var fresh = new Conversation { ConversationID = "c1", Name = "New Bo", DefaultOutgoingID = "me2", Status = ConversationStatus.Active };
+        fresh.Participants.Add(new Participant { ID = new SmallInfo { ParticipantID = "me2" }, IsMe = true, FullName = "Me Too" });
+        rig.Client.Conversations["c1"] = fresh;
+        MessageArrivedEventArgs? got  = null;
+        rig.Store.MessageArrived     += (_, e) => got = e;
+
+        await rig.Store.HandleEventAsync(new MessageReceived(Msg("m1", "c1"), false));
+
+        Assert.AreEqual("New Bo", got?.Conversation?.Name, "fetched from the new phone, not the old cache");
+        Assert.IsTrue(got!.IsNew, "the notified ring was cleared");
+        Assert.AreEqual("me2", rig.Store.Me?.Id);
+
+        await rig.Store.SendTextAsync("c1", "hi", "tmp-1", Ct);
+        SendMessageRequest req = rig.Client.Sent.Single();
+        Assert.AreEqual("me2", req.MessagePayload.ParticipantID);
+        Assert.IsNull(req.SIMPayload, "the old phone's SIMs are gone");
+    }
+
     [TestMethod]
     public async Task MessageForUnknownConversation_FetchesConversationFirst()
     {

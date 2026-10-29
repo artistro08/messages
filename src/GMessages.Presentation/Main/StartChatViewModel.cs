@@ -2,7 +2,6 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using GMessages.Presentation.Messaging;
 using GMessages.Protocol.Proto;
-using GMessages.Protocol.Rpc;
 
 namespace GMessages.Presentation.Main;
 
@@ -78,7 +77,7 @@ public sealed class StartChatViewModel : INotifyPropertyChanged
     /// <summary>
     /// Loads the top contacts, then the full contact list (once).
     /// </summary>
-    /// <remarks>When the phone is not connected or not answering, what loaded so far stays and a later call tries again.</remarks>
+    /// <remarks>When the load fails (phone not connected or not answering, a network error), what loaded so far stays and a later call tries again.</remarks>
     /// <returns>A task that completes when the contacts are shown.</returns>
     public async Task LoadAsync()
     {
@@ -100,9 +99,10 @@ public sealed class StartChatViewModel : INotifyPropertyChanged
             _loaded = true;
             Refresh();
         }
-        catch (Exception ex) when (IsPhoneProblem(ex))
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            // Not Connected Or Not Answering: Opening Start chat Again Tries Again
+            // Not Connected, Not Answering Or A Network Error: Opening Start chat Again Tries Again
+            _store.LogFailure("load contacts", ex);
         }
     }
 
@@ -139,8 +139,9 @@ public sealed class StartChatViewModel : INotifyPropertyChanged
     /// <remarks>
     /// Ported from the bridge's create flow: each number is sent as <c>ContactNumber { MysteriousInt = 2, Number = n,
     /// Number2 = n }</c>. When the phone answers <c>CreateRcs</c> the request is sent again as an RCS group with an
-    /// empty name. When the phone can't (not connected, not answering, connection closed, or no success with a
-    /// conversation, also after the RCS retry), <see cref="Error"/> says so and everyone stays picked.
+    /// empty name. When it fails for any reason (not connected, not answering, connection closed, a network, timeout,
+    /// server or decode error, or no success with a conversation, also after the RCS retry), <see cref="Error"/> says
+    /// so and everyone stays picked; nothing is thrown.
     /// </remarks>
     /// <returns>The conversation ID, or null when it failed.</returns>
     /// <exception cref="InvalidOperationException">Nobody is picked.</exception>
@@ -156,8 +157,10 @@ public sealed class StartChatViewModel : INotifyPropertyChanged
         {
             return await GetOrCreateAsync();
         }
-        catch (Exception ex) when (IsPhoneProblem(ex))
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
+            // Any Failure (Phone, Network, Timeout, Server, Decode) Is Shown, Never Thrown At The Click Handler
+            _store.LogFailure("start chat", ex);
             Error = ChatCopy.StartFailed;
             return null;
         }
@@ -192,9 +195,6 @@ public sealed class StartChatViewModel : INotifyPropertyChanged
 
         return response.Conversation.ConversationID;
     }
-
-    private static bool IsPhoneProblem(Exception ex) =>
-        ex is MessagingUnavailableException or PhoneNotRespondingException or ConnectionClosedException or MessageSendException;
 
     // =========================================================================
     // FILTERING

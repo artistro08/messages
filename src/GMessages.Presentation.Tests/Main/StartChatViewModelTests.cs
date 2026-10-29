@@ -148,6 +148,27 @@ public sealed class StartChatViewModelTests
     /// <summary>
     /// R11: a start the phone can't do says so in the pane, keeps everyone picked, and the next attempt clears it.
     /// </summary>
+    /// <summary>
+    /// Go never throws at the click handler: every failure (network, timeout, server, decode, phone) shows the error and
+    /// keeps everyone picked.
+    /// </summary>
+    [TestMethod]
+    public async Task Start_AnyFailure_ShowsError_NeverThrows()
+    {
+        foreach (Exception failure in MainRig.Failures())
+        {
+            using var rig = new MainRig();
+            StartChatViewModel vm = await NewPaneAsync(rig);
+            vm.Toggle(vm.Results[0]);
+            rig.Client.CreateThrows = failure;
+
+            string name = failure.GetType().Name;
+            Assert.IsNull(await vm.StartAsync(), name);
+            Assert.AreEqual(ChatCopy.StartFailed, vm.Error, name);
+            Assert.IsTrue(vm.CanStart, name);
+        }
+    }
+
     [TestMethod]
     public async Task Start_PhoneProblem_ShowsError_NextAttemptClears()
     {

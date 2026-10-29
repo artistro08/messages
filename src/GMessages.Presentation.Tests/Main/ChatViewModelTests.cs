@@ -223,6 +223,62 @@ public sealed class ChatViewModelTests
         Assert.AreEqual(chat.Messages[0].TmpId, rig.Client.Sent[0].TmpID);
     }
 
+    /// <summary>
+    /// Every failure (network, timeout, server, decode, not only phone problems) fails the bubble with its text, and a
+    /// retry that fails again fails it again; nothing escapes the fire-and-forget send.
+    /// </summary>
+    [TestMethod]
+    public async Task Send_AnyFailure_BubbleFailedAndRetryable_TextKept()
+    {
+        foreach (Exception failure in MainRig.Failures())
+        {
+            using var rig = new MainRig();
+            using ChatViewModel chat = NewChat(rig);
+            await chat.LoadAsync();
+            rig.Client.SendThrows = failure;
+            chat.Draft            = "hello";
+
+            await chat.SendAsync();
+
+            string name = failure.GetType().Name;
+            Assert.IsTrue(chat.Messages[0].IsFailed, name);
+            Assert.IsFalse(chat.Messages[0].IsSending, name);
+            Assert.AreEqual("hello", chat.Messages[0].Text, name);
+
+            await chat.RetryAsync(chat.Messages[0]);
+            Assert.IsTrue(chat.Messages[0].IsFailed, name + " retry fails again");
+
+            rig.Client.SendThrows = null;
+            await chat.RetryAsync(chat.Messages[0]);
+            Assert.IsTrue(chat.Messages[0].IsSending, name + " retry sends");
+            Assert.AreEqual(3, rig.Client.Sent.Count, name);
+        }
+    }
+
+    /// <summary>
+    /// A load or older-page load that fails with any error (not only phone problems) leaves the bubbles alone and stops
+    /// the short-list fill, so the view never loops.
+    /// </summary>
+    [TestMethod]
+    public async Task Load_AnyFailure_NoThrow_StopsFill()
+    {
+        foreach (Exception failure in MainRig.Failures())
+        {
+            using var rig = new MainRig();
+            using ChatViewModel chat = NewChat(rig, null, Msg("m1", "one"));
+            rig.Client.MessagesPage.Cursor = new Cursor { LastItemID = "m1" };
+            await chat.LoadAsync();
+            Assert.IsTrue(chat.CanFillOlder);
+
+            string name = failure.GetType().Name;
+            rig.Client.OlderFetchThrows = failure;
+            await chat.LoadOlderAsync();
+            Assert.IsFalse(chat.CanFillOlder, name);
+            Assert.IsFalse(chat.IsLoading, name);
+            Assert.AreEqual(1, chat.Messages.Count, name);
+        }
+    }
+
     [TestMethod]
     public async Task Send_PhoneTimeout_BubbleFailed()
     {

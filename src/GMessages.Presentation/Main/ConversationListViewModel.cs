@@ -80,7 +80,7 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
     /// <summary>
     /// Loads the newest page, replacing the rows.
     /// </summary>
-    /// <remarks>Call on the UI thread. While a page is loading the call is remembered and runs once that load ends. When the phone is not connected the rows stay as they were.</remarks>
+    /// <remarks>Call on the UI thread. While a page is loading the call is remembered and runs once that load ends. When the load fails (phone not connected or not answering, a network error) the rows stay as they were.</remarks>
     /// <returns>A task that completes when the page is shown.</returns>
     public async Task LoadAsync()
     {
@@ -102,9 +102,10 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
                 Apply(c);
             }
         }
-        catch (MessagingUnavailableException)
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            // Not Connected: The Resync After Reconnecting Reloads
+            // Not Connected, Not Answering Or A Network Error: Reconnecting Or The Phone Answering Again Reloads
+            _store.LogFailure("load conversations", ex);
         }
         finally
         {
@@ -137,9 +138,10 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
                 Apply(c);
             }
         }
-        catch (MessagingUnavailableException)
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            // Not Connected: Scrolling Again Tries Again
+            // Not Connected, Not Answering Or A Network Error: Scrolling Again Tries Again
+            _store.LogFailure("load more conversations", ex);
         }
         finally
         {

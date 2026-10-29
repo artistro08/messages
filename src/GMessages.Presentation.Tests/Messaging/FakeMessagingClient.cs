@@ -34,9 +34,17 @@ internal sealed class FakeMessagingClient : IMessagingClient
     /// <summary>When set, the next list call returns the page it had when called, but only after this completes.</summary>
     public TaskCompletionSource? ListGate { get; set; }
 
+    /// <summary>When set, listing conversations fails with this.</summary>
+    public Exception? ListThrows { get; set; }
+
     public async Task<ListConversationsResponse> ListConversationsAsync(ListConversationsRequest.Types.Folder folder, long count, Cursor? cursor, CancellationToken ct)
     {
         ListCalls.Add((folder, count));
+        if (ListThrows is { } ex)
+        {
+            throw ex;
+        }
+
         ListConversationsResponse page = ConversationsPage;
 
         if (ListGate is { } gate)

@@ -5,6 +5,7 @@ using GMessages.Protocol.Events;
 using GMessages.Protocol.Http;
 using GMessages.Presentation.Tests.Messaging;
 using GMessages.Protocol.Proto;
+using GMessages.Protocol.Rpc;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace GMessages.Presentation.Tests.Main;
@@ -51,6 +52,22 @@ internal sealed class MainRig : IDisposable
         c.Participants.Add(new Participant { ID = new SmallInfo { ParticipantID = "p-" + id }, FullName = name });
         return c;
     }
+
+    /// <summary>
+    /// Every way a request can fail in the real client: phone problems, plus the raw network, timeout, server and
+    /// decode errors <c>RpcSession</c> lets through.
+    /// </summary>
+    public static Exception[] Failures() =>
+    [
+        new MessagingUnavailableException(),
+        new PhoneNotRespondingException(),
+        new ConnectionClosedException(),
+        new HttpRequestException(),
+        new TaskCanceledException(),
+        new GmRequestException(500, null, []),
+        new InvalidDataException(),
+        new InvalidOperationException(),
+    ];
 
     public void Page(params Conversation[] conversations)
     {

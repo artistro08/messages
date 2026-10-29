@@ -243,6 +243,39 @@ public sealed partial class ChatStore : IDisposable
         ConversationChanged?.Invoke(this, read);
     }
 
+    /// <summary>
+    /// Forgets everything learned from the paired phone: cached conversations, the owner, the SIMs and the notified IDs.
+    /// </summary>
+    /// <remarks>
+    /// Call on unpair or sign-out. Conversation IDs are small per-phone numbers, so a different phone paired later
+    /// would otherwise get the old phone's names, owner and SIMs; it also drops the old account's names and numbers
+    /// from memory.
+    /// </remarks>
+    public void Reset()
+    {
+        _cache.Clear();
+        _me   = null;
+        _sims = [];
+
+        lock (_ringLock)
+        {
+            _ring.Clear();
+            _ringSet.Clear();
+        }
+    }
+
+    /// <summary>
+    /// Logs that a view's request failed, with the error type only (never the message, which can hold content).
+    /// </summary>
+    /// <param name="action">What failed, such as "send".</param>
+    /// <param name="ex">The error.</param>
+    public void LogFailure(string action, Exception ex)
+    {
+        ArgumentNullException.ThrowIfNull(ex);
+
+        LogActionFailed(action, ex.GetType().Name);
+    }
+
     /// <inheritdoc />
     public void Dispose() => _connection.ClientEvent -= OnClientEvent;
 
@@ -365,4 +398,7 @@ public sealed partial class ChatStore : IDisposable
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Could not fetch conversation {ConversationId} ({ErrorType})")]
     private partial void LogConversationFetchFailed(string conversationId, string errorType);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Could not {Action} ({ErrorType})")]
+    private partial void LogActionFailed(string action, string errorType);
 }
