@@ -235,10 +235,106 @@ public sealed class ChatStoreTests
         rig.Client.ConversationsPage = new ListConversationsResponse();
         rig.Client.ConversationsPage.Conversations.Add(Conv("c1", "Ann"));
 
-        IReadOnlyList<ConversationInfo> page = await rig.Store.LoadFolderAsync(ConversationFolder.SpamBlocked, null, Ct);
+        rig.Client.ConversationsPage.Cursor = new Cursor { LastItemID = "next" };
+        var raised = new List<ConversationInfo>();
+        rig.Store.ConversationChanged += (_, c) => raised.Add(c);
 
+        (IReadOnlyList<ConversationInfo> page, Cursor? next) = await rig.Store.LoadFolderAsync(ConversationFolder.SpamBlocked, null, Ct);
+
+        Assert.AreEqual("next", next?.LastItemID);
+        Assert.AreEqual(1, raised.Count);
         Assert.AreEqual(1, page.Count);
         Assert.AreEqual("Ann", rig.Store.Find("c1")?.Name);
         Assert.AreEqual((ListConversationsRequest.Types.Folder.SpamBlocked, 25L), rig.Client.ListCalls.Single());
+    }
+
+    [TestMethod]
+    public async Task SendText_UnknownConversation_NotFound_ThrowsBeforeSending()
+    {
+        using var rig = new Rig();
+
+        await Assert.ThrowsExactlyAsync<MessageSendException>(() => rig.Store.SendTextAsync("nope", "x", "t", Ct));
+
+        Assert.AreEqual(0, rig.Client.Sent.Count);
+    }
+
+    [TestMethod]
+    public async Task SendText_UncachedConversation_IsFetchedCachedAndRaised()
+    {
+        using var rig = new Rig();
+        rig.Client.Conversations["c5"] = Conv("c5", "Bo", outgoing: "me1");
+        var raised = new List<ConversationInfo>();
+        rig.Store.ConversationChanged += (_, c) => raised.Add(c);
+
+        await rig.Store.SendTextAsync("c5", "x", "t", Ct);
+
+        Assert.AreEqual("me1", rig.Client.Sent.Single().MessagePayload.ParticipantID);
+        Assert.AreEqual("Bo", rig.Store.Find("c5")?.Name);
+        Assert.AreEqual(1, raised.Count);
+    }
+
+    // A Single-Threaded Context That Runs Posted Work On One Dedicated Thread
+    private sealed class OneThreadContext : SynchronizationContext, IDisposable
+    {
+        private readonly System.Collections.Concurrent.BlockingCollection<(SendOrPostCallback, object?)> _queue = [];
+        private readonly Thread _thread;
+
+        public OneThreadContext()
+        {
+            _thread = new Thread(() =>
+            {
+                SetSynchronizationContext(this);
+                foreach ((SendOrPostCallback cb, object? state) in _queue.GetConsumingEnumerable())
+                {
+                    cb(state);
+                }
+            });
+            _thread.Start();
+        }
+
+        public int ThreadId => _thread.ManagedThreadId;
+
+        public override void Post(SendOrPostCallback d, object? state) => _queue.Add((d, state));
+
+        public Task RunAsync(Func<Task> work)
+        {
+            var tcs = new TaskCompletionSource();
+            Post(async _ =>
+            {
+                try
+                {
+                    await work();
+                    tcs.SetResult();
+                }
+                catch (Exception ex)
+                {
+                    tcs.SetException(ex);
+                }
+            }, null);
+            return tcs.Task;
+        }
+
+        public void Dispose()
+        {
+            _queue.CompleteAdding();
+            _thread.Join();
+        }
+    }
+
+    [TestMethod]
+    public async Task MessageForUnknownConversation_AsyncFetch_RaisesOnTheCallerThread()
+    {
+        using var rig = new Rig();
+        using var ui  = new OneThreadContext();
+        rig.Client.Conversations["c9"] = Conv("c9", "Fetched");
+        rig.Client.YieldInFetch        = true;
+        var threads                    = new List<int>();
+        rig.Store.ConversationChanged += (_, _) => threads.Add(Environment.CurrentManagedThreadId);
+        rig.Store.MessageArrived      += (_, _) => threads.Add(Environment.CurrentManagedThreadId);
+
+        await ui.RunAsync(() => rig.Store.HandleEventAsync(new MessageReceived(Msg("m1", "c9"), false)));
+
+        Assert.AreEqual(2, threads.Count);
+        Assert.IsTrue(threads.All(t => t == ui.ThreadId));
     }
 }

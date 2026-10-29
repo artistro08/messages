@@ -12,6 +12,8 @@ internal sealed class FakeMessagingClient : IMessagingClient
 
     public bool GetConversationThrows { get; set; }
 
+    public bool YieldInFetch { get; set; }
+
     public List<string> GetConversationCalls { get; } = [];
 
     public ListConversationsResponse ConversationsPage { get; set; } = new();
@@ -30,15 +32,20 @@ internal sealed class FakeMessagingClient : IMessagingClient
         return Task.FromResult(ConversationsPage);
     }
 
-    public Task<Conversation?> GetConversationAsync(string conversationId, CancellationToken ct)
+    public async Task<Conversation?> GetConversationAsync(string conversationId, CancellationToken ct)
     {
+        if (YieldInFetch)
+        {
+            await Task.Delay(20, ct).ConfigureAwait(false);
+        }
+
         GetConversationCalls.Add(conversationId);
         if (GetConversationThrows)
         {
             throw new InvalidOperationException("fetch failed");
         }
 
-        return Task.FromResult(Conversations.GetValueOrDefault(conversationId));
+        return Conversations.GetValueOrDefault(conversationId);
     }
 
     public Task<GetOrCreateConversationResponse> GetOrCreateConversationAsync(GetOrCreateConversationRequest request, CancellationToken ct) => throw new NotSupportedException();

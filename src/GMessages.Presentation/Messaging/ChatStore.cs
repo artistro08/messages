@@ -92,9 +92,9 @@ public sealed partial class ChatStore : IDisposable
     /// <param name="folder">The folder.</param>
     /// <param name="cursor">Where the previous page ended, or null for the newest page.</param>
     /// <param name="ct">Cancels the wait.</param>
-    /// <returns>Up to 25 conversations, newest first.</returns>
+    /// <returns>Up to 25 conversations, newest first, and the cursor for the next page (null when there is none).</returns>
     /// <exception cref="MessagingUnavailableException">Not connected.</exception>
-    public async Task<IReadOnlyList<ConversationInfo>> LoadFolderAsync(ConversationFolder folder, Cursor? cursor, CancellationToken ct)
+    public async Task<(IReadOnlyList<ConversationInfo> Conversations, Cursor? Next)> LoadFolderAsync(ConversationFolder folder, Cursor? cursor, CancellationToken ct)
     {
         IMessagingClient client = RequireClient();
 
@@ -102,17 +102,16 @@ public sealed partial class ChatStore : IDisposable
             ? ListConversationsRequest.Types.Folder.SpamBlocked
             : ListConversationsRequest.Types.Folder.Inbox;
 
-        ListConversationsResponse response = await client.ListConversationsAsync(protocol_folder, PageSize, cursor, ct).ConfigureAwait(false);
+        ListConversationsResponse response = await client.ListConversationsAsync(protocol_folder, PageSize, cursor, ct);
 
+        // No ConfigureAwait(false) Here: ConversationChanged Must Be Raised On The Caller Thread
         List<ConversationInfo> result = [];
         foreach (Conversation c in response.Conversations)
         {
-            ConversationInfo info = ConversationInfo.From(c);
-            Upsert(info);
-            result.Add(info);
+            result.Add(CacheConversation(c));
         }
 
-        return result;
+        return (result, response.Cursor);
     }
 
     /// <summary>
@@ -159,11 +158,16 @@ public sealed partial class ChatStore : IDisposable
         ConversationInfo? conversation = Find(conversationId);
         if (conversation is null)
         {
-            Conversation? fetched = await client.GetConversationAsync(conversationId, ct).ConfigureAwait(false);
-            conversation = fetched is null ? null : ConversationInfo.From(fetched);
+            Conversation? fetched = await client.GetConversationAsync(conversationId, ct);
+            if (fetched is null)
+            {
+                throw new MessageSendException("ConversationNotFound");
+            }
+
+            conversation = CacheConversation(fetched);
         }
 
-        string outgoing_id = conversation?.DefaultOutgoingId ?? string.Empty;
+        string outgoing_id = conversation.DefaultOutgoingId;
         SIMCard? sim       = _sims.FirstOrDefault(s => s.SIMParticipant?.ID == outgoing_id);
 
         var request = new SendMessageRequest
@@ -228,7 +232,7 @@ public sealed partial class ChatStore : IDisposable
                 break;
 
             case MessageReceived received:
-                await HandleMessageAsync(received).ConfigureAwait(false);
+                await HandleMessageAsync(received);
                 break;
 
             case SettingsChanged settings:
@@ -246,6 +250,7 @@ public sealed partial class ChatStore : IDisposable
     {
         ChatMessage message = ChatMessage.From(received.Message);
 
+        // No ConfigureAwait(false) Below: Events Must Be Raised On The Thread That Delivered The Client Event
         // Decide IsNew Before Any Await, So Two Quick Events Of One Message Can't Both Be New
         bool is_new = MarkNotified(message.Id);
 
@@ -254,14 +259,10 @@ public sealed partial class ChatStore : IDisposable
         {
             try
             {
-                Conversation? fetched = await client.GetConversationAsync(message.ConversationId, CancellationToken.None).ConfigureAwait(false);
+                Conversation? fetched = await client.GetConversationAsync(message.ConversationId, CancellationToken.None);
                 if (fetched is not null)
                 {
-                    conversation = ConversationInfo.From(fetched);
-                    if (Upsert(conversation))
-                    {
-                        ConversationChanged?.Invoke(this, conversation);
-                    }
+                    conversation = CacheConversation(fetched);
                 }
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -276,6 +277,18 @@ public sealed partial class ChatStore : IDisposable
     // =========================================================================
     // CACHE
     // =========================================================================
+
+    // Caches A Protocol Conversation And Raises ConversationChanged When The Cache Changed
+    private ConversationInfo CacheConversation(Conversation c)
+    {
+        ConversationInfo info = ConversationInfo.From(c);
+        if (Upsert(info))
+        {
+            ConversationChanged?.Invoke(this, info);
+        }
+
+        return info;
+    }
 
     // Stores A Conversation; True When It Differs From What Was Cached (Participants Compared By Value)
     private bool Upsert(ConversationInfo info)
