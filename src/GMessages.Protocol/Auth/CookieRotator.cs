@@ -193,6 +193,15 @@ public sealed partial class CookieRotator(GmHttpClient http, AuthData auth, GmEn
         try
         {
             using HttpResponseMessage res = await http.SendWithCookiesAsync(request, IsSharedGoogleCookie, ct).ConfigureAwait(false);
+
+            // Diagnosis Of A Refusal: Header Names Only, Never Values, And Which Belong To A Device-Bound Session
+            if (!res.IsSuccessStatusCode)
+            {
+                string[] header_names = [.. res.Headers.Concat(res.Content.Headers).Select(h => h.Key).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase)];
+                string[] bound_names  = [.. header_names.Where(IsBoundSessionHeader)];
+                LogRefusedHeaders(log, string.Join(", ", header_names), bound_names.Length > 0 ? string.Join(", ", bound_names) : "none");
+            }
+
             res.EnsureSuccessStatusCode();
 
             string names = GmHttpClient.DescribeSetCookies(res, time.GetUtcNow(), IsSharedGoogleCookie);
@@ -229,6 +238,25 @@ public sealed partial class CookieRotator(GmHttpClient http, AuthData auth, GmEn
             .Select(a => a.Trim())
             .Any(a => a.StartsWith("Domain=", StringComparison.OrdinalIgnoreCase) && a[7..].TrimStart('.').Equals("google.com", StringComparison.OrdinalIgnoreCase));
     }
+
+    /// <summary>
+    /// Tells whether an HTTP header belongs to Device Bound Session Credentials (DBSC).
+    /// </summary>
+    /// <remarks>
+    /// The W3C draft's <c>Secure-Session-Registration</c>, <c>-Challenge</c>, <c>-Response</c>, <c>-Skipped</c> and
+    /// <c>Sec-Secure-Session-Id</c> (<see href="https://w3c.github.io/webappsec-dbsc/"/>), and the <c>Sec-Session-*</c>
+    /// names of earlier drafts and Chrome's Google-only prototype (<c>Sec-Session-Google-Registration</c>). A bound
+    /// session's <c>__Secure-1PSIDTS</c> can only be renewed with the browser's private key, which this app never has.
+    /// </remarks>
+    /// <param name="name">The header name.</param>
+    /// <returns>True for a DBSC header.</returns>
+    public static bool IsBoundSessionHeader(string name) =>
+        name.StartsWith("Secure-Session-", StringComparison.OrdinalIgnoreCase)
+        || name.StartsWith("Sec-Secure-Session-", StringComparison.OrdinalIgnoreCase)
+        || name.StartsWith("Sec-Session-", StringComparison.OrdinalIgnoreCase);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Cookie rotation answer headers: {Names}; device-bound session headers: {Bound}")]
+    private static partial void LogRefusedHeaders(ILogger logger, string names, string bound);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Cookie rotation skipped: {Name} missing")]
     private static partial void LogSkipped(ILogger logger, string name);

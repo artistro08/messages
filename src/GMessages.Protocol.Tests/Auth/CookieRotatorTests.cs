@@ -286,4 +286,46 @@ public class CookieRotatorTests
         Assert.AreEqual(0, Count(rig.Handler));
         Assert.AreEqual(1, log.Messages.Count(m => m == "Cookie rotation skipped: __Secure-1PSID missing"));
     }
+
+    /// <summary>
+    /// A refused rotation logs the answer's header names, and which of them belong to a device-bound session
+    /// (DBSC), so a live 403 tells a bound session apart from a bad request. Never a header value.
+    /// </summary>
+    [TestMethod]
+    public async Task Rotate_Refused_LogsHeaderNamesAndBoundSessionHeaders_NeverValues()
+    {
+        var log             = new CollectingLogger();
+        Rig rig             = CreateRig(log);
+        rig.Handler.Respond = (_, _) =>
+        {
+            HttpResponseMessage res = FakeHttpHandler.Response(HttpStatusCode.Forbidden, "text/html", "no"u8.ToArray(), "NID=secret-nid; Domain=.google.com; Path=/");
+            res.Headers.TryAddWithoutValidation("Secure-Session-Challenge", "\"secret-challenge\";id=\"secret-id\"");
+            res.Headers.TryAddWithoutValidation("X-Frame-Options", "secret-xfo");
+            return res;
+        };
+
+        await rig.Rotator.RotateIfDueAsync(CancellationToken.None);
+
+        CollectionAssert.Contains(log.Messages, "Cookie rotation failed: HttpRequestException HTTP 403");
+        CollectionAssert.Contains(log.Messages, "Cookie rotation answer headers: Content-Length, Content-Type, Secure-Session-Challenge, Set-Cookie, X-Frame-Options; device-bound session headers: Secure-Session-Challenge", string.Join(" | ", log.Messages));
+        Assert.IsFalse(log.Messages.Any(m => m.Contains("secret", StringComparison.Ordinal)), "a header value was logged");
+    }
+
+    /// <summary>
+    /// The DBSC header names (the W3C draft's <c>Secure-Session-*</c> and <c>Sec-Secure-Session-Id</c>, and
+    /// Chrome's Google-only <c>Sec-Session-Google-*</c>) are recognized, any case; other headers are not.
+    /// </summary>
+    [TestMethod]
+    public void IsBoundSessionHeader_KnowsTheDbscNames()
+    {
+        foreach (string name in new[] { "Secure-Session-Registration", "secure-session-challenge", "Sec-Secure-Session-Id", "Sec-Session-Google-Registration", "Sec-Session-Registration" })
+        {
+            Assert.IsTrue(CookieRotator.IsBoundSessionHeader(name), name);
+        }
+
+        foreach (string name in new[] { "Set-Cookie", "Sec-Fetch-Site", "X-Session" })
+        {
+            Assert.IsFalse(CookieRotator.IsBoundSessionHeader(name), name);
+        }
+    }
 }

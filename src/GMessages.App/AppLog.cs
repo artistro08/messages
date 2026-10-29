@@ -62,6 +62,9 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 917, Level = LogLevel.Error, Message = "Unhandled error ({ErrorType} 0x{HResult:X8}, handled: {Handled})")]
     public static partial void UnhandledError(ILogger logger, string errorType, int hResult, bool handled);
 
+    [LoggerMessage(EventId = 919, Level = LogLevel.Information, Message = "Sign-in device-bound session headers: {Headers}")]
+    public static partial void BoundSessionHeaders(ILogger logger, string headers);
+
     [LoggerMessage(EventId = 951,Level = LogLevel.Information, Message = "Test endpoint {Endpoint}, data folder {DataFolder}")]
     public static partial void TestEndpoint(ILogger logger, string endpoint, string dataFolder);
 }
