@@ -1,7 +1,6 @@
 using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Definitions;
 using FlaUI.UIA3;
-using Microsoft.Win32;
 
 namespace GMessages.App.UITests.Driver;
 
@@ -25,16 +24,6 @@ public sealed class ToastDriver
     /// </summary>
     /// <param name="automation">The UI Automation client.</param>
     public ToastDriver(UIA3Automation automation) => _automation = automation;
-
-    /// <summary>
-    /// Says whether Windows notifications are turned off for every app (Settings &gt; System &gt; Notifications).
-    /// </summary>
-    /// <returns>True when no toast can show.</returns>
-    public static bool ToastsDisabled()
-    {
-        using RegistryKey? settings = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Notifications\Settings");
-        return settings?.GetValue("NOC_GLOBAL_SETTING_TOASTS_ENABLED") is int enabled && enabled == 0;
-    }
 
     /// <summary>
     /// Waits for a toast whose texts include every one of <paramref name="texts"/>.
@@ -112,8 +101,9 @@ public sealed class ToastDriver
             ?? throw new AssertFailedException($"The toast has no reply box. {Describe(toast)}");
         box.Patterns.Value.Pattern.SetValue(text);
 
-        AutomationElement send = AppDriver.Search(toast, e => e.ControlType == ControlType.Button && e.IsEnabled && AppDriver.SafeName(e) == SendButtonName)
-            ?? throw new AssertFailedException($"The toast has no '{SendButtonName}' button. {Describe(toast)}");
+        // Windows' Quick Reply Button Beside The Box Has No Name In UI Automation, Only Its Own ID
+        AutomationElement send = AppDriver.Search(toast, e => e.ControlType == ControlType.Button && e.IsEnabled && e.AutomationId == SendButtonId)
+            ?? throw new AssertFailedException($"The toast has no send button ('{SendButtonId}'). {Describe(toast)}");
         send.Patterns.Invoke.Pattern.Invoke();
     }
 
@@ -125,7 +115,10 @@ public sealed class ToastDriver
     {
         ArgumentNullException.ThrowIfNull(toast);
 
-        toast.Click();
+        // The Title, As A Person Would: The Toast's Own Center Can Land On The Reply Box
+        AutomationElement title = AppDriver.Search(toast, e => e.ControlType == ControlType.Text && e.AutomationId == "Title")
+            ?? throw new AssertFailedException($"The toast has no title. {Describe(toast)}");
+        title.Click();
     }
 
     /// <summary>
@@ -147,7 +140,7 @@ public sealed class ToastDriver
     }
 
     // The Send Button Is The Reply Box's Button; Its Name Comes From Windows
-    private const string SendButtonName = "Send";
+    private const string SendButtonId = "BuddyButton";
 
     // Every Toast Window On The Desktop Root
     private AutomationElement[] Toasts()

@@ -25,19 +25,10 @@ public sealed class NotificationTests : UiTest
     private ToastDriver _toasts = null!;
 
     /// <summary>
-    /// Sets up the toast driver on the app's UI Automation client. With Windows notifications turned off no toast ever
-    /// shows, so the test is inconclusive (the owner's setting is never changed).
+    /// Sets up the toast driver on the app's UI Automation client.
     /// </summary>
     [TestInitialize]
-    public void StartToasts()
-    {
-        if (ToastDriver.ToastsDisabled())
-        {
-            Assert.Inconclusive("Windows notifications are turned off on this PC; turn them on to run the toast tests.");
-        }
-
-        _toasts = new ToastDriver(App.Automation);
-    }
+    public void StartToasts() => _toasts = new ToastDriver(App.Automation);
 
     /// <summary>
     /// A live message in Ann's chat shows a toast titled with her name and the text as its body.

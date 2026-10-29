@@ -266,30 +266,31 @@ foreach ($target in 16, 20, 24, 30, 32, 36, 40, 48, 60, 64, 72, 80, 96, 256) {
     }
 }
 
-# Notification Send Button: the Segoe Fluent Icons Send glyph (E724), for the toast's quick reply button. Per
-# Microsoft's toast content guidance (icons are drawn for 100% scale, with no padding of their own:
-# https://learn.microsoft.com/windows/apps/develop/notifications/app-notifications/app-notifications-content#buttons-with-icons)
-# it's a 16 px icon at 100%, with one file per display scale so Windows never stretches a bigger one: the packaged app
-# names Send.png and Windows picks the Send.scale-*.png that fits. The glyph is drawn at the icon's size (the font's
-# em, as Windows draws its own 16 px icons) and centered on its ink. Toasts follow the system theme, so it's a mid
-# gray that holds on both the light and the dark toast
+# Notification Send Button: the Segoe Fluent Icons filled Send glyph (E725), for the toast's quick reply button.
+# Microsoft's quick reply guidance asks for a 32 px icon at 100% scale
+# (https://learn.microsoft.com/windows/apps/develop/notifications/app-notifications/app-notifications-content#quick-reply-text-box),
+# but Windows stretches the image over the whole button, so a glyph filling it looks oversized and blurry. The glyph is
+# drawn at half the canvas, centered on its ink, with one file per display scale so Windows never stretches a smaller
+# one: the packaged app names Send.png and Windows picks the Send.scale-*.png that fits. Toasts follow the system theme,
+# so it is white, as the guidance asks (white pixels on transparent)
 Get-ChildItem -Path $assets -Filter 'Send*.png' | Remove-Item
 foreach ($scale in 100, 125, 150, 200, 400) {
-    $sendSize = [int](16 * $scale / 100)
-    $sendText = New-Object System.Windows.Media.FormattedText (
-        [string][char]0xE724,
+    $sendCanvas = [int](32 * $scale / 100)
+    $sendSize   = [int](16 * $scale / 100)
+    $sendText   = New-Object System.Windows.Media.FormattedText (
+        [string][char]0xE725,
         [System.Globalization.CultureInfo]::InvariantCulture,
         [System.Windows.FlowDirection]::LeftToRight,
         (New-Object System.Windows.Media.Typeface 'Segoe Fluent Icons'),
         $sendSize,
-        (New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.Color]::FromRgb(128, 128, 128))),
+        (New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.Colors]::White)),
         1.0)
-    $sendInk = $sendText.BuildGeometry((New-Object System.Windows.Point 0, 0)).Bounds
-    $sendVisual = New-Object System.Windows.Media.DrawingVisual
+    $sendInk     = $sendText.BuildGeometry((New-Object System.Windows.Point 0, 0)).Bounds
+    $sendVisual  = New-Object System.Windows.Media.DrawingVisual
     $sendContext = $sendVisual.RenderOpen()
-    $sendContext.DrawText($sendText, (New-Object System.Windows.Point (($sendSize - $sendInk.Width) / 2 - $sendInk.X), (($sendSize - $sendInk.Height) / 2 - $sendInk.Y)))
+    $sendContext.DrawText($sendText, (New-Object System.Windows.Point (($sendCanvas - $sendInk.Width) / 2 - $sendInk.X), (($sendCanvas - $sendInk.Height) / 2 - $sendInk.Y)))
     $sendContext.Close()
-    $sendBitmap = ConvertTo-Bitmap -Visual $sendVisual -Size $sendSize
+    $sendBitmap = ConvertTo-Bitmap -Visual $sendVisual -Size $sendCanvas
     $sendBitmap.Save((Join-Path $assets "Send.scale-$scale.png"), [System.Drawing.Imaging.ImageFormat]::Png)
     $sendBitmap.Dispose()
     Write-Output "Wrote $(Join-Path $assets "Send.scale-$scale.png")"

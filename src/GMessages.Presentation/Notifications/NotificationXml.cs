@@ -44,7 +44,8 @@ public static class NotificationXml
             new XElement("input", new XAttribute("id", "reply"), new XAttribute("type", "text"), new XAttribute("placeHolderContent", ChatCopy.Reply)),
             new XElement("action",
                 new XAttribute("content", string.Empty), new XAttribute("hint-inputId", "reply"), new XAttribute("activationType", "foreground"),
-                new XAttribute("arguments", $"action=reply&{about}"), new XAttribute("imageUri", sendIconUri)),
+                new XAttribute("arguments", $"action=reply&{about}"), new XAttribute("imageUri", sendIconUri),
+                new XAttribute("hint-toolTip", ChatCopy.Send)),
             new XElement("action", new XAttribute("activationType", "foreground"), new XAttribute("arguments", $"action=snooze&{about}"), new XAttribute("content", ChatCopy.Snooze)),
             new XElement("action", new XAttribute("activationType", "system"), new XAttribute("arguments", "dismiss"), new XAttribute("content", string.Empty)));
 

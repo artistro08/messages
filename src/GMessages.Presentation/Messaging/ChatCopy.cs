@@ -38,6 +38,7 @@ public static class ChatCopy
 
     // Notifications And New Chat
     public const string Reply              = "Reply";
+    public const string Send               = "Send";
     public const string StartAConversation = "Start a conversation";
     public const string TypeNameOrNumber   = "Type a name or phone number";
     public const string SendToFormat       = "Send to {0}";

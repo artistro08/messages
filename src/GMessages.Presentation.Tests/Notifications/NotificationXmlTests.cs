@@ -57,6 +57,7 @@ public sealed class NotificationXmlTests
 
         Assert.AreEqual("reply", (string?)reply.Attribute("hint-inputId"));
         Assert.AreEqual(Send, (string?)reply.Attribute("imageUri"));
+        Assert.AreEqual("Send", (string?)reply.Attribute("hint-toolTip"));
     }
 
     [TestMethod]

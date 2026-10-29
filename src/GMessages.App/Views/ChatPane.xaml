@@ -173,50 +173,51 @@
             <FontIcon FontSize="16" Glyph="&#xE74B;" />
         </Button>
 
-        <!-- Compose: the message box (Enter sends, Shift + Enter adds a line) with emoji and send inside it on the right,
-             icons only -->
+        <!-- Compose: the message box (Enter sends, Shift + Enter adds a line), with the emoji icon inside it on the left and
+             send inside it on the right, icons only -->
         <Grid Grid.Row="2" Padding="12,8,12,12">
             <TextBox
                 x:Name="DraftBox"
+                MinHeight="44"
                 MaxHeight="160"
-                Padding="10,5,76,6"
+                Padding="44,11,44,11"
                 AcceptsReturn="True"
                 AutomationProperties.AutomationId="Chat.Draft"
                 AutomationProperties.Name="Message"
                 PreviewKeyDown="OnDraftKeyDown"
                 Text="{x:Bind Chat.Draft, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, FallbackValue=''}"
                 TextWrapping="Wrap" />
-            <StackPanel
-                Margin="0,0,4,0"
+            <Button
+                Width="32"
+                Height="32"
+                Margin="6,0,0,6"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Bottom"
+                AutomationProperties.AutomationId="Chat.Emoji"
+                AutomationProperties.Name="Emoji"
+                Click="OnEmojiClick"
+                Style="{StaticResource IconOnlyButtonStyle}">
+                <FontIcon
+                    FontSize="16"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Glyph="&#xE76E;" />
+            </Button>
+            <Button
+                Width="32"
+                Height="32"
+                Margin="0,0,6,6"
                 HorizontalAlignment="Right"
                 VerticalAlignment="Bottom"
-                Orientation="Horizontal">
-                <Button
-                    Width="32"
-                    Height="32"
-                    AutomationProperties.AutomationId="Chat.Emoji"
-                    AutomationProperties.Name="Emoji"
-                    Click="OnEmojiClick"
-                    Style="{StaticResource IconOnlyButtonStyle}">
-                    <FontIcon
-                        FontSize="16"
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        Glyph="&#xE76E;" />
-                </Button>
-                <Button
-                    Width="32"
-                    Height="32"
-                    AutomationProperties.AutomationId="Chat.Send"
-                    AutomationProperties.Name="Send"
-                    Click="OnSendClick"
-                    IsEnabled="{x:Bind Chat.CanSend, Mode=OneWay, FallbackValue=False}"
-                    Style="{StaticResource IconOnlyButtonStyle}">
-                    <FontIcon
-                        FontSize="16"
-                        Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
-                        Glyph="&#xE724;" />
-                </Button>
-            </StackPanel>
+                AutomationProperties.AutomationId="Chat.Send"
+                AutomationProperties.Name="Send"
+                Click="OnSendClick"
+                IsEnabled="{x:Bind Chat.CanSend, Mode=OneWay, FallbackValue=False}"
+                Style="{StaticResource IconOnlyButtonStyle}">
+                <FontIcon
+                    FontSize="16"
+                    Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                    Glyph="&#xE724;" />
+            </Button>
         </Grid>
     </Grid>
 </UserControl>
