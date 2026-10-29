@@ -5,7 +5,8 @@ using System.Runtime.InteropServices;
 namespace GMessages.App;
 
 /// <summary>
-/// Win32 calls for the tray icon, the tray menu's host window, single instance and memory trim.
+/// Win32 calls for the tray icon, the tray menu's host window, single instance, memory trim and the sign-in helper's
+/// break-away launch.
 /// </summary>
 /// <remarks>
 /// Ported from Magic Buds' <c>NativeMethods.cs</c>, keeping only the members this app uses. Plain
@@ -73,6 +74,11 @@ internal static class NativeMethods
     // GetCurrentPackageFullName's answer when the process has no package identity
     public const int APPMODEL_ERROR_NO_PACKAGE = 15700;
 
+    // Break-Away Launch: a child of a packaged process that runs outside the package (proven by the sign-in spike)
+    public const uint EXTENDED_STARTUPINFO_PRESENT                               = 0x00080000;
+    public const nint PROC_THREAD_ATTRIBUTE_DESKTOP_APP_POLICY                   = 0x00020012;
+    public const int PROCESS_CREATION_DESKTOP_APP_BREAKAWAY_ENABLE_PROCESS_TREE = 0x01;
+
     // =========================================================================
     // STRUCTS AND CALLBACKS
     // =========================================================================
@@ -131,6 +137,46 @@ internal static class NativeMethods
         public RECT rcMonitor;
         public RECT rcWork;
         public uint dwFlags;
+    }
+
+    // Blittable: the string fields are left null as IntPtr.Zero
+    [StructLayout(LayoutKind.Sequential)]
+    public struct STARTUPINFOW
+    {
+        public int cb;
+        public IntPtr lpReserved;
+        public IntPtr lpDesktop;
+        public IntPtr lpTitle;
+        public int dwX;
+        public int dwY;
+        public int dwXSize;
+        public int dwYSize;
+        public int dwXCountChars;
+        public int dwYCountChars;
+        public int dwFillAttribute;
+        public int dwFlags;
+        public short wShowWindow;
+        public short cbReserved2;
+        public IntPtr lpReserved2;
+        public IntPtr hStdInput;
+        public IntPtr hStdOutput;
+        public IntPtr hStdError;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct STARTUPINFOEXW
+    {
+        public STARTUPINFOW StartupInfo;
+        public IntPtr lpAttributeList;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct PROCESS_INFORMATION
+    {
+        public IntPtr hProcess;
+        public IntPtr hThread;
+        public int dwProcessId;
+        public int dwThreadId;
     }
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
@@ -292,6 +338,36 @@ internal static class NativeMethods
 
     [DllImport("kernel32.dll")]
     public static extern IntPtr GetCurrentProcess();
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool InitializeProcThreadAttributeList(IntPtr list, int count, int flags, ref nint size);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool UpdateProcThreadAttribute(IntPtr list, uint flags, nint attribute, IntPtr value, nint size, IntPtr previousValue, IntPtr returnSize);
+
+    [DllImport("kernel32.dll")]
+    public static extern void DeleteProcThreadAttributeList(IntPtr list);
+
+    // The command line must be a writable buffer: CreateProcessW may change it in place
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool CreateProcessW(
+        string? applicationName,
+        char[] commandLine,
+        IntPtr processAttributes,
+        IntPtr threadAttributes,
+        [MarshalAs(UnmanagedType.Bool)] bool inheritHandles,
+        uint creationFlags,
+        IntPtr environment,
+        string? currentDirectory,
+        ref STARTUPINFOEXW startupInfo,
+        out PROCESS_INFORMATION processInformation);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool CloseHandle(IntPtr handle);
 
     // -1, -1 empties the working set
     [DllImport("kernel32.dll")]

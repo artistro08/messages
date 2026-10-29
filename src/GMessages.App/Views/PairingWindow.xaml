@@ -28,12 +28,28 @@
             Message="{x:Bind ViewModel.SignedOutReason}"
             Severity="Warning" />
 
-        <!-- Sign-In: the WebView2 is added in code, fresh for each attempt -->
-        <Border
-            x:Name="SignInHost"
+        <!-- Signing In: Google sign-in runs in its own window (the sign-in helper process) -->
+        <StackPanel
             Grid.Row="2"
-            Margin="0,8,0,0"
-            Visibility="{x:Bind ViewModel.IsSigningIn, Mode=OneWay}" />
+            MaxWidth="440"
+            Padding="16"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center"
+            Spacing="16"
+            Visibility="{x:Bind ViewModel.IsSigningIn, Mode=OneWay}">
+            <ProgressRing
+                Width="48"
+                Height="48"
+                AutomationProperties.AutomationId="Pairing.SignInPending"
+                IsActive="{x:Bind ViewModel.IsSigningIn, Mode=OneWay}" />
+            <TextBlock
+                HorizontalAlignment="Center"
+                AutomationProperties.AutomationId="Pairing.SignInPendingText"
+                Text="Sign in to Google in the window that opened."
+                TextAlignment="Center"
+                TextWrapping="Wrap" />
+        </StackPanel>
+        <!-- /Signing In -->
 
         <!-- Waiting For Phone -->
         <StackPanel
