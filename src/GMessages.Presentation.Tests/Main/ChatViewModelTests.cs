@@ -1009,6 +1009,74 @@ public sealed class ChatViewModelTests
         Assert.IsFalse(chat.IsTyping);
     }
 
+    /// <summary>
+    /// The timeout's post can run after the chat closed: it does nothing instead of touching the disposed timer.
+    /// </summary>
+    // A Fake Clock Whose Timers Throw After Dispose, As System.Threading.Timer Does
+    private sealed class StrictTimeProvider(DateTimeOffset now) : FakeTimeProvider(now)
+    {
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period) =>
+            new StrictTimer(base.CreateTimer(callback, state, dueTime, period));
+
+        private sealed class StrictTimer(ITimer inner) : ITimer
+        {
+            private bool _disposed;
+
+            public bool Change(TimeSpan dueTime, TimeSpan period) => _disposed ? throw new ObjectDisposedException(nameof(ITimer)) : inner.Change(dueTime, period);
+
+            public void Dispose()
+            {
+                _disposed = true;
+                inner.Dispose();
+            }
+
+            public ValueTask DisposeAsync()
+            {
+                Dispose();
+                return ValueTask.CompletedTask;
+            }
+        }
+    }
+
+    [TestMethod]
+    public async Task TypingIn_TimeoutPostedAfterDispose_NoThrow()
+    {
+        var time                        = new StrictTimeProvider(MainRig.Now);
+        using var rig                   = new MainRig();
+        using ChatViewModel typing_chat = await TypingChat(rig, time);
+        typing_chat.Dispose();
+
+        List<Action> posted = [];
+        var chat            = new ChatViewModel(rig.Store, "a", time, posted.Add);
+        await rig.Store.HandleEventAsync(Typing(true));
+        time.Advance(ChatViewModel.TypingTimeout);
+        Assert.AreEqual(1, posted.Count, "the timeout posted");
+
+        chat.Dispose();
+        posted[0]();
+    }
+
+    /// <summary>
+    /// A bubble made before its conversation was cached learns which reaction is mine once the conversation arrives.
+    /// </summary>
+    [TestMethod]
+    public async Task React_ConversationArrivesLater_SameEmojiSendsRemove()
+    {
+        using var rig = new MainRig();
+
+        // Not Cached Yet (The Phone Doesn't Know It Either): The Bubble Is Made Without It
+        using var chat = new ChatViewModel(rig.Store, "a", TimeProvider.System, a => a());
+        await rig.LiveMessage(Reacted("m1", Like, "me"));
+        Assert.IsNull(chat.Messages[0].MyReaction);
+
+        await rig.Live(MainRig.Conv("a", "Ann"));
+        await rig.LiveMessage(Msg("m2", "two"));
+
+        Assert.AreEqual(Like, chat.Messages[0].MyReaction);
+        await chat.ReactAsync(chat.Messages[0], Like);
+        Assert.AreEqual(SendReactionRequest.Types.Action.Remove, rig.Client.Reactions.Single().Action);
+    }
+
     [TestMethod]
     public async Task TypingIn_ClearsOnTheirMessage()
     {

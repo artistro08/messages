@@ -50,6 +50,9 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     private bool _isEncrypted;
     private MessageBubbleViewModel? _replyingTo;
 
+    // Set By Dispose, So A Callback Posted Before It Does Nothing After
+    private bool _disposed;
+
     // Where The Last Older Page Ended; Null Means No More Pages
     private Cursor? _older;
 
@@ -550,7 +553,14 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
-    private void OnResynced(object? sender, EventArgs e) => _post(() => _ = LoadAsync());
+    // Posted, So It Can Run After The Chat Closed: Then It Does Nothing
+    private void OnResynced(object? sender, EventArgs e) => _post(() =>
+    {
+        if (!_disposed)
+        {
+            _ = LoadAsync();
+        }
+    });
 
     // Typing In: A Start Shows The Dots For Up To 15 Seconds, A Stop Hides Them At Once
     private void OnTypingChanged(object? sender, TypingEventArgs e)
@@ -575,7 +585,8 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     // The Timer Fired; A Start That Came Since Moved The Deadline
     private void OnTypingTimeout()
     {
-        if (_time.GetUtcNow() >= _typingUntil)
+        // The Post Can Run After The Chat Closed: The Timer Is Disposed Then
+        if (!_disposed && _time.GetUtcNow() >= _typingUntil)
         {
             StopTyping();
         }
@@ -604,6 +615,7 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     /// <inheritdoc />
     public void Dispose()
     {
+        _disposed = true;
         _store.MessageArrived -= OnMessageArrived;
         _store.Resynced       -= OnResynced;
         _store.TypingChanged  -= OnTypingChanged;
@@ -714,8 +726,9 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
             ParticipantInfo? sender = c?.FindParticipant(b.ParticipantId);
             string name             = c is { IsGroup: true } && !b.FromMe && first_of_run ? ChatFormat.SenderName(sender) : string.Empty;
 
-            // The Name Takes The Color Of The Sender's Letter Circle
+            // The Name Takes The Color Of The Sender's Letter Circle; The Conversation Says Which Reaction Is Mine
             b.SetSender(name.Length > 0 ? name : null, AvatarParts.ColorOf(sender));
+            b.SetConversation(c);
             previous = b;
         }
     }
@@ -749,7 +762,7 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
         string text = quoted.Kind == MessageKind.Text ? quoted.Text : ChatFormat.KindLabel(quoted.Kind);
         _post(() =>
         {
-            if (bubble.ReplyToId == replyToId)
+            if (!_disposed && bubble.ReplyToId == replyToId)
             {
                 bubble.SetQuote(ChatFormat.SenderName(_store.Find(ConversationId)?.FindParticipant(quoted.ParticipantId)), text);
             }

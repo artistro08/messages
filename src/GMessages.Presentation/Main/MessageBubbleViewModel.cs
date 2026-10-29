@@ -17,7 +17,10 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     private static readonly PropertyChangedEventArgs AllChanged = new(string.Empty);
 
     // The Conversation, For Which Reaction Is Mine; Null When Not Known
-    private readonly ConversationInfo? _conversation;
+    private ConversationInfo? _conversation;
+
+    // The Message's Reactions, Kept So MyReaction Can Be Worked Out Again When The Conversation Arrives
+    private IReadOnlyList<ReactionInfo> _reactions = [];
 
     /// <summary>
     /// Creates the bubble from a message.
@@ -154,6 +157,25 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         PropertyChanged?.Invoke(this, AllChanged);
     }
 
+    // A Bubble Made Before Its Conversation Was Cached Learns Which Reaction Is Mine
+    internal void SetConversation(ConversationInfo? conversation)
+    {
+        if (conversation is null || ReferenceEquals(_conversation, conversation))
+        {
+            return;
+        }
+
+        _conversation = conversation;
+        string? mine  = FindMyReaction();
+        if (MyReaction == mine)
+        {
+            return;
+        }
+
+        MyReaction = mine;
+        PropertyChanged?.Invoke(this, AllChanged);
+    }
+
     internal void SetStatusText(string text)
     {
         if (StatusText == text)
@@ -206,10 +228,13 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         Status        = m.Status;
         IsRcs         = m.IsRcs;
         ReactionsText = ChatFormat.ReactionSummary(m.Reactions);
-        MyReaction    = m.Reactions.FirstOrDefault(r => r.ParticipantIds.Any(IsMine))?.Emoji;
+        _reactions    = m.Reactions;
+        MyReaction    = FindMyReaction();
         ReplyToId     = m.ReplyToId;
         LinkUrl       = m.Kind == MessageKind.Text ? FirstLink(m.Text) : null;
     }
+
+    private string? FindMyReaction() => _reactions.FirstOrDefault(r => r.ParticipantIds.Any(IsMine))?.Emoji;
 
     // Mine: Any Participant Marked As Me, Or The ID The Conversation Sends As
     private bool IsMine(string participantId) =>
