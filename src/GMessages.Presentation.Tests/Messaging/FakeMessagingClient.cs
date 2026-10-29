@@ -48,7 +48,15 @@ internal sealed class FakeMessagingClient : IMessagingClient
         return Conversations.GetValueOrDefault(conversationId);
     }
 
-    public Task<GetOrCreateConversationResponse> GetOrCreateConversationAsync(GetOrCreateConversationRequest request, CancellationToken ct) => throw new NotSupportedException();
+    public Queue<GetOrCreateConversationResponse> CreateAnswers { get; } = new();
+
+    public List<GetOrCreateConversationRequest> CreateCalls { get; } = [];
+
+    public Task<GetOrCreateConversationResponse> GetOrCreateConversationAsync(GetOrCreateConversationRequest request, CancellationToken ct)
+    {
+        CreateCalls.Add(request.Clone());
+        return Task.FromResult(CreateAnswers.Dequeue());
+    }
 
     public Task<ListMessagesResponse> FetchMessagesAsync(string conversationId, long count, Cursor? cursor, CancellationToken ct) => Task.FromResult(MessagesPage);
 
@@ -60,9 +68,13 @@ internal sealed class FakeMessagingClient : IMessagingClient
 
     public Task MarkReadAsync(string conversationId, string messageId, CancellationToken ct) => Task.CompletedTask;
 
-    public Task<ListContactsResponse> ListContactsAsync(CancellationToken ct) => throw new NotSupportedException();
+    public ListContactsResponse ContactsAnswer { get; set; } = new();
 
-    public Task<ListTopContactsResponse> ListTopContactsAsync(CancellationToken ct) => throw new NotSupportedException();
+    public ListTopContactsResponse TopContactsAnswer { get; set; } = new();
+
+    public Task<ListContactsResponse> ListContactsAsync(CancellationToken ct) => Task.FromResult(ContactsAnswer);
+
+    public Task<ListTopContactsResponse> ListTopContactsAsync(CancellationToken ct) => Task.FromResult(TopContactsAnswer);
 
     public Task<GetThumbnailResponse> GetParticipantThumbnailAsync(IReadOnlyList<string> participantIds, CancellationToken ct) => throw new NotSupportedException();
 
