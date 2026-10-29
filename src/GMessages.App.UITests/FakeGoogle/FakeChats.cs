@@ -257,7 +257,10 @@ public sealed class FakeChats
 
             if (request.Action is SendReactionRequest.Types.Action.Add or SendReactionRequest.Types.Action.Switch)
             {
-                ReactionEntry? same = message.Reactions.FirstOrDefault(e => e.Data?.Unicode == request.ReactionData?.Unicode);
+                // The Same Reaction Is The Same Type (❤ And ❤️ Are Both RedHeart); Only Custom Ones Compare Their Emoji
+                EmojiType type      = request.ReactionData?.Type ?? EmojiType.ReactionTypeUnspecified;
+                ReactionEntry? same = message.Reactions.FirstOrDefault(e =>
+                    e.Data?.Type == type && (type != EmojiType.Custom || e.Data.Unicode == request.ReactionData?.Unicode));
                 if (same is null)
                 {
                     same = new ReactionEntry { Data = request.ReactionData?.Clone() };

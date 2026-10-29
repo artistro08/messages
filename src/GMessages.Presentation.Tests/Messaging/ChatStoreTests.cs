@@ -803,4 +803,82 @@ public sealed class ChatStoreTests
         Assert.AreEqual(2, threads.Count);
         Assert.IsTrue(threads.All(t => t == ui.ThreadId));
     }
+
+    // =========================================================================
+    // ENCRYPTION, LOOKUP AND TYPING
+    // =========================================================================
+
+    private static Message Tomb(string id, string conversationId, MessageStatusType status, long ts) =>
+        new() { MessageID = id, ConversationID = conversationId, Timestamp = ts, MessageStatus = new MessageStatus { Status = status } };
+
+    [TestMethod]
+    public async Task Store_IsEncrypted_NewestTombstoneWins()
+    {
+        using var rig = new Rig(withDatabase: true);
+        rig.Client.MessagesPage = PageOf(
+            Tomb("t1", "c1", MessageStatusType.TombstoneEncryptedOneOnOneRcsCreated, 1_000_000),
+            Tomb("t2", "c1", MessageStatusType.TombstoneProtocolSwitchToText, 2_000_000));
+        Assert.IsFalse(rig.Store.IsEncrypted("c1"));
+
+        await rig.Store.LoadMessagesAsync("c1", null, Ct);
+        Assert.IsFalse(rig.Store.IsEncrypted("c1"));
+
+        // A Newer Switch Arrives Live, Then An Older One Replays: The Newer Stays
+        await rig.Store.HandleEventAsync(new MessageReceived(Tomb("t3", "c1", MessageStatusType.TombstoneProtocolSwitchToEncryptedRcs, 3_000_000), false));
+        await rig.Store.HandleEventAsync(new MessageReceived(Tomb("t1", "c1", MessageStatusType.TombstoneProtocolSwitchToText, 1_000_000), true));
+        Assert.IsTrue(rig.Store.IsEncrypted("c1"));
+        await rig.Store.FlushAsync();
+
+        // After A Restart The Lock Comes Back From The Database
+        using var restarted = new ChatStore(rig.Controller, () => null, NullLogger.Instance, rig.Database);
+        await restarted.LoadSavedAsync();
+        Assert.IsTrue(restarted.IsEncrypted("c1"));
+    }
+
+    [TestMethod]
+    public async Task Store_FindMessage_MemoryElseDatabase()
+    {
+        using var rig = new Rig(withDatabase: true);
+        rig.Database!.SaveMessages("c1", [Msg("m1", "c1", "saved")]);
+        rig.Client.MessagesPage = PageOf(Msg("m2", "c1", "fresh"));
+        await rig.Store.LoadMessagesAsync("c1", null, Ct);
+
+        Assert.AreEqual("fresh", (await rig.Store.FindMessageAsync("c1", "m2"))?.Text);
+        Assert.AreEqual("saved", (await rig.Store.FindMessageAsync("c1", "m1"))?.Text);
+        Assert.IsNull(await rig.Store.FindMessageAsync("c1", "m9"));
+    }
+
+    [TestMethod]
+    public async Task Store_Typing_MapsNumberToParticipant()
+    {
+        using var rig = new Rig();
+        Conversation c = Conv("c1");
+        c.Participants.Add(new Participant { ID = new SmallInfo { ParticipantID = "p2", Number = "+15550100" }, FullName = "Ann" });
+        await rig.Store.HandleEventAsync(new ConversationUpdated(c));
+        var raised = new List<TypingEventArgs>();
+        rig.Store.TypingChanged += (_, e) => raised.Add(e);
+
+        await rig.Store.HandleEventAsync(new TypingChanged(new TypingData { ConversationID = "c1", User = new User { Number = "+15550100" }, Type = TypingTypes.StartedTyping }));
+        await rig.Store.HandleEventAsync(new TypingChanged(new TypingData { ConversationID = "c1", User = new User { Number = "+15550100" }, Type = TypingTypes.StoppedTyping }));
+
+        Assert.AreEqual(2, raised.Count);
+        Assert.AreEqual("c1", raised[0].ConversationId);
+        Assert.AreEqual("p2", raised[0].ParticipantId);
+        Assert.IsTrue(raised[0].IsTyping);
+        Assert.IsFalse(raised[1].IsTyping);
+    }
+
+    [TestMethod]
+    public async Task Store_Typing_UnknownNumber_NoEvent()
+    {
+        using var rig = new Rig();
+        await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1")));
+        int raised = 0;
+        rig.Store.TypingChanged += (_, _) => raised++;
+
+        await rig.Store.HandleEventAsync(new TypingChanged(new TypingData { ConversationID = "c1", User = new User { Number = "+15559999" }, Type = TypingTypes.StartedTyping }));
+        await rig.Store.HandleEventAsync(new TypingChanged(new TypingData { ConversationID = "c9", User = new User { Number = "+15559999" }, Type = TypingTypes.StartedTyping }));
+
+        Assert.AreEqual(0, raised);
+    }
 }

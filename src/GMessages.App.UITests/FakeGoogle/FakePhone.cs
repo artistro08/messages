@@ -352,14 +352,14 @@ public sealed class FakePhone
     /// </summary>
     /// <param name="message">The message, as <see cref="PushIncoming"/> returned it.</param>
     /// <param name="status">The new status.</param>
+    /// <exception cref="KeyNotFoundException">The fake phone does not store the message.</exception>
     /// <exception cref="InvalidOperationException">Pairing has not reached the client finished message.</exception>
     public void PushStatusUpdate(Message message, MessageStatusType status)
     {
         ArgumentNullException.ThrowIfNull(message);
 
-        Message update       = message.Clone();
-        update.MessageStatus = new MessageStatus { Status = status };
-        PushUpdate(new UpdateEvents { MessageEvent = new MessageEvent { Data = { update } } }, _push);
+        // Through The Store, So The New Status Sticks For Later Fetches
+        PushStatus(message.ConversationID, message.MessageID, status);
     }
 
     /// <summary>

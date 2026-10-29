@@ -136,10 +136,10 @@ public sealed class MessageDatabaseTests
         db.SaveEncryption("c-2", encrypted: false, timestampMicros: 100);
         db.SaveEncryption("c-2", encrypted: true, timestampMicros: 300);
 
-        IReadOnlyDictionary<string, bool> loaded = db.LoadEncryption();
+        IReadOnlyDictionary<string, (bool Encrypted, long At)> loaded = db.LoadEncryption();
 
-        Assert.IsTrue(loaded["c-1"]);
-        Assert.IsTrue(loaded["c-2"]);
+        Assert.AreEqual((true, 200L), loaded["c-1"]);
+        Assert.AreEqual((true, 300L), loaded["c-2"]);
     }
 
     [TestMethod]

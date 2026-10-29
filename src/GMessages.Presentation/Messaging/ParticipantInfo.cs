@@ -13,6 +13,9 @@ namespace GMessages.Presentation.Messaging;
 /// <param name="FormattedNumber">The phone number as shown, or null.</param>
 public sealed record ParticipantInfo(string Id, string FullName, string FirstName, string AvatarHexColor, bool IsMe, string? FormattedNumber)
 {
+    /// <summary>Gets the raw phone number the phone names this participant by in typing events, or empty.</summary>
+    public string Number { get; init; } = string.Empty;
+
     /// <summary>
     /// Copies the fields the app needs out of a protocol participant.
     /// </summary>
@@ -28,6 +31,9 @@ public sealed record ParticipantInfo(string Id, string FullName, string FirstNam
             p.FirstName,
             p.AvatarHexColor,
             p.IsMe,
-            string.IsNullOrEmpty(p.FormattedNumber) ? null : p.FormattedNumber);
+            string.IsNullOrEmpty(p.FormattedNumber) ? null : p.FormattedNumber)
+        {
+            Number = p.ID?.Number ?? string.Empty,
+        };
     }
 }

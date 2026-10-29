@@ -16,14 +16,19 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
 {
     private static readonly PropertyChangedEventArgs AllChanged = new(string.Empty);
 
+    // The Conversation, For Which Reaction Is Mine; Null When Not Known
+    private readonly ConversationInfo? _conversation;
+
     /// <summary>
     /// Creates the bubble from a message.
     /// </summary>
     /// <param name="m">The message.</param>
-    public MessageBubbleViewModel(ChatMessage m)
+    /// <param name="conversation">The conversation it belongs to, which says which reaction is mine; null when not known.</param>
+    public MessageBubbleViewModel(ChatMessage m, ConversationInfo? conversation = null)
     {
         ArgumentNullException.ThrowIfNull(m);
 
+        _conversation = conversation;
         Fill(m);
     }
 
@@ -69,6 +74,42 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     /// <summary>Gets whether the message is still being sent.</summary>
     public bool IsSending { get; private set; }
 
+    /// <summary>Gets whether the message went over RCS (chat) rather than SMS or MMS.</summary>
+    public bool IsRcs { get; private set; }
+
+    /// <summary>Gets the bubble's accessible item type: "Chat message" for RCS, "Text message" for SMS.</summary>
+    public string ItemTypeName => IsRcs ? ChatCopy.ChatMessage : ChatCopy.TextMessage;
+
+    /// <summary>Gets the status line under the bubble ("Sent", "Delivered", "Read"), or empty; set by the chat.</summary>
+    public string StatusText { get; private set; } = string.Empty;
+
+    /// <summary>Gets the reaction chip text, such as "👍😂 3", or empty.</summary>
+    public string ReactionsText { get; private set; } = string.Empty;
+
+    /// <summary>Gets whether anyone reacted.</summary>
+    public bool HasReactions => ReactionsText.Length > 0;
+
+    /// <summary>Gets my reaction's emoji, or null when I didn't react.</summary>
+    public string? MyReaction { get; private set; }
+
+    /// <summary>Gets whether I reacted (for bindings, which skip their function when an argument is null).</summary>
+    public bool HasMyReaction => MyReaction is not null;
+
+    /// <summary>Gets the ID of the message this one replies to, or empty.</summary>
+    public string ReplyToId { get; private set; } = string.Empty;
+
+    /// <summary>Gets the quoted message's sender name; set by the chat.</summary>
+    public string QuoteSender { get; private set; } = string.Empty;
+
+    /// <summary>Gets the quoted message's text, or "Original message" when it isn't loaded; set by the chat.</summary>
+    public string QuoteText { get; private set; } = string.Empty;
+
+    /// <summary>Gets whether the message replies to another one.</summary>
+    public bool HasQuote => ReplyToId.Length > 0;
+
+    /// <summary>Gets the first web link in the text, or null.</summary>
+    public Uri? LinkUrl { get; private set; }
+
     /// <summary>
     /// Copies new message details into the bubble (an echo or a status change).
     /// </summary>
@@ -110,6 +151,29 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         PropertyChanged?.Invoke(this, AllChanged);
     }
 
+    internal void SetStatusText(string text)
+    {
+        if (StatusText == text)
+        {
+            return;
+        }
+
+        StatusText = text;
+        PropertyChanged?.Invoke(this, AllChanged);
+    }
+
+    internal void SetQuote(string sender, string text)
+    {
+        if (QuoteSender == sender && QuoteText == text)
+        {
+            return;
+        }
+
+        QuoteSender = sender;
+        QuoteText   = text;
+        PropertyChanged?.Invoke(this, AllChanged);
+    }
+
     internal void MarkFailed()
     {
         IsFailed  = true;
@@ -136,5 +200,20 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         Time          = m.Time.ToLocalTime().ToString("t", CultureInfo.CurrentCulture);
         IsFailed      = m.IsFailed;
         IsSending     = m.Status == MessageStatusType.OutgoingSending;
+        IsRcs         = m.IsRcs;
+        ReactionsText = ChatFormat.ReactionSummary(m.Reactions);
+        MyReaction    = m.Reactions.FirstOrDefault(r => r.ParticipantIds.Any(IsMine))?.Emoji;
+        ReplyToId     = m.ReplyToId;
+        LinkUrl       = m.Kind == MessageKind.Text ? FirstLink(m.Text) : null;
     }
+
+    // Mine: Any Participant Marked As Me, Or The ID The Conversation Sends As
+    private bool IsMine(string participantId) =>
+        participantId.Length > 0 && _conversation is { } c && (participantId == c.DefaultOutgoingId || c.FindParticipant(participantId)?.IsMe == true);
+
+    // The First Word That Is An Absolute http Or https Link
+    private static Uri? FirstLink(string text) => text
+        .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
+        .Select(word => Uri.TryCreate(word, UriKind.Absolute, out Uri? uri) && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps) ? uri : null)
+        .FirstOrDefault(uri => uri is not null);
 }

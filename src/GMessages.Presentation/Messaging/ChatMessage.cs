@@ -1,3 +1,4 @@
+using GMessages.Protocol;
 using GMessages.Protocol.Proto;
 
 namespace GMessages.Presentation.Messaging;
@@ -39,12 +40,26 @@ public sealed record ChatMessage(
         or MessageStatusType.MessageStatusOutgoingFailedEmergencyProtocolDeterminationMessage
         or MessageStatusType.OutgoingFailedToEncrypt;
 
+    /// <summary>Gets the reactions on the message, one per emoji.</summary>
+    public IReadOnlyList<ReactionInfo> Reactions { get; init; } = [];
+
+    /// <summary>Gets the ID of the message this one replies to, or empty.</summary>
+    public string ReplyToId { get; init; } = string.Empty;
+
+    /// <summary>Gets whether the message went over RCS (chat) rather than SMS or MMS (text).</summary>
+    public bool IsRcs { get; init; }
+
+    /// <summary>Gets the encryption this system line switches the chat to, or null when it says nothing about encryption.</summary>
+    public bool? EncryptionChange { get; init; }
+
     /// <summary>
     /// Copies the fields the app needs out of a protocol message.
     /// </summary>
     /// <remarks>
     /// Kind comes from the first text part, else the first media part (by its format), else Other. A status of
     /// 200 to 299 is a system line (Tombstone). Outgoing statuses are 1 to 99, which includes messages sent from the phone.
+    /// Message types 1, 2 and 3 are SMS and MMS, anything else RCS (<c>IsSMSOrMMS</c> in the Go connector's
+    /// <c>dbmeta.go</c>). Reactions are read as the connector's <c>GetReactions</c> does.
     /// </remarks>
     /// <param name="m">The protocol message.</param>
     /// <returns>The chat record.</returns>
@@ -85,7 +100,37 @@ public sealed record ChatMessage(
             (int)status is >= 1 and <= 99,
             kind,
             text,
-            status);
+            status)
+        {
+            Reactions        = ReactionsOf(m),
+            ReplyToId        = m.ReplyMessage?.MessageID ?? string.Empty,
+            IsRcs            = m.Type is not (1 or 2 or 3),
+            EncryptionChange = ChatFormat.EncryptionOf(status),
+        };
+    }
+
+    // Like GetReactions In The Go Connector: Custom Uses Its Text, Emotify Is Skipped, Any Other Type Uses Its Fixed Emoji
+    private static List<ReactionInfo> ReactionsOf(Message m)
+    {
+        List<ReactionInfo> reactions = [];
+
+        foreach (ReactionEntry entry in m.Reactions)
+        {
+            EmojiType type = entry.Data?.Type ?? EmojiType.ReactionTypeUnspecified;
+            string emoji   = type switch
+            {
+                EmojiType.Emotify => string.Empty,
+                EmojiType.Custom  => entry.Data?.Unicode ?? string.Empty,
+                _                 => EmojiTypes.Unicode(type),
+            };
+
+            if (emoji.Length > 0)
+            {
+                reactions.Add(new ReactionInfo(emoji, [.. entry.ParticipantIDs]));
+            }
+        }
+
+        return reactions;
     }
 
     // Media Kind From The Format Name

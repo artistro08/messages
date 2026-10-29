@@ -67,4 +67,53 @@ public sealed class ChatMessageTests
     [DataRow(MessageStatusType.IncomingDownloadFailed, false)]
     public void IsFailed(MessageStatusType status, bool expected) =>
         Assert.AreEqual(expected, ChatMessage.From(Make(status)).IsFailed);
+
+    [TestMethod]
+    public void From_ReactionsLikeTheConnector()
+    {
+        Message m = Make(MessageStatusType.IncomingComplete, Text("hi"));
+        m.Reactions.Add(new ReactionEntry { Data = new ReactionData { Type = EmojiType.Custom, Unicode = "🦄" }, ParticipantIDs = { "p1" } });
+        m.Reactions.Add(new ReactionEntry { Data = new ReactionData { Type = EmojiType.Emotify, Unicode = "x" }, ParticipantIDs = { "p2" } });
+        m.Reactions.Add(new ReactionEntry { Data = new ReactionData { Type = EmojiType.Like, Unicode = "ignored" }, ParticipantIDs = { "p2", "p3" } });
+        m.Reactions.Add(new ReactionEntry { Data = new ReactionData { Type = EmojiType.ReactionTypeUnspecified }, ParticipantIDs = { "p4" } });
+
+        IReadOnlyList<ReactionInfo> reactions = ChatMessage.From(m).Reactions;
+
+        Assert.AreEqual(2, reactions.Count);
+        Assert.AreEqual("🦄", reactions[0].Emoji);
+        Assert.AreEqual("p1", string.Join(",", reactions[0].ParticipantIds));
+        Assert.AreEqual("👍", reactions[1].Emoji);
+        Assert.AreEqual("p2,p3", string.Join(",", reactions[1].ParticipantIds));
+    }
+
+    [TestMethod]
+    public void From_ReplyToId()
+    {
+        Message m      = Make(MessageStatusType.IncomingComplete, Text("hi"));
+        m.ReplyMessage = new ReplyMessage { MessageID = "m0" };
+
+        Assert.AreEqual("m0", ChatMessage.From(m).ReplyToId);
+        Assert.AreEqual(string.Empty, ChatMessage.From(Make(MessageStatusType.IncomingComplete)).ReplyToId);
+    }
+
+    [TestMethod]
+    [DataRow(1L, false)]
+    [DataRow(2L, false)]
+    [DataRow(3L, false)]
+    [DataRow(4L, true)]
+    [DataRow(0L, true)]
+    public void From_TypeDecidesRcs(long type, bool expected)
+    {
+        Message m = Make(MessageStatusType.IncomingComplete, Text("hi"));
+        m.Type    = type;
+
+        Assert.AreEqual(expected, ChatMessage.From(m).IsRcs);
+    }
+
+    [TestMethod]
+    public void From_EncryptionChangeFromStatus()
+    {
+        Assert.IsTrue(ChatMessage.From(Make(MessageStatusType.TombstoneProtocolSwitchToEncryptedRcs)).EncryptionChange);
+        Assert.IsNull(ChatMessage.From(Make(MessageStatusType.IncomingComplete)).EncryptionChange);
+    }
 }

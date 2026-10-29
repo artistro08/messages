@@ -68,6 +68,9 @@ public sealed partial class ChatStore : IDisposable
     private readonly Lock _pagesLock = new();
     private readonly OrderedDictionary<string, List<ChatMessage>> _pages = [];
 
+    // Newest Encryption Tombstone Seen Per Conversation, With Its Time In Microseconds
+    private readonly ConcurrentDictionary<string, (bool Encrypted, long At)> _encryption = new();
+
     private volatile ParticipantInfo? _me;
     private volatile IReadOnlyList<SIMCard> _sims = [];
 
@@ -103,6 +106,9 @@ public sealed partial class ChatStore : IDisposable
     /// <summary>Raised when the live connection recovered, so open views reload.</summary>
     public event EventHandler? Resynced;
 
+    /// <summary>Raised when someone in a cached conversation starts or stops typing.</summary>
+    public event EventHandler<TypingEventArgs>? TypingChanged;
+
     /// <summary>Gets the first participant marked as the phone's owner in any cached conversation.</summary>
     public ParticipantInfo? Me => _me;
 
@@ -126,6 +132,17 @@ public sealed partial class ChatStore : IDisposable
     /// </summary>
     /// <returns>A copy of the cached conversations.</returns>
     public IReadOnlyList<ConversationInfo> CachedConversations() => [.. _cache.Values];
+
+    /// <summary>
+    /// Gets whether a conversation is end-to-end encrypted.
+    /// </summary>
+    /// <remarks>
+    /// Follows the newest encryption system line seen in any page or live message (see
+    /// <see cref="ChatFormat.EncryptionOf"/>), kept in the database so the lock shows after a restart.
+    /// </remarks>
+    /// <param name="conversationId">The conversation ID.</param>
+    /// <returns>True when the newest such line says encrypted; false when it says not, or none was seen.</returns>
+    public bool IsEncrypted(string conversationId) => _encryption.TryGetValue(conversationId, out (bool Encrypted, long At) state) && state.Encrypted;
 
     /// <summary>
     /// Gets a conversation from the cache, fetching it from the phone when it is not cached.
@@ -153,7 +170,7 @@ public sealed partial class ChatStore : IDisposable
     /// </summary>
     /// <remarks>
     /// Call once start-up ends paired. Reads on the thread pool and raises no events; a conversation the phone
-    /// already sent is kept over the saved copy.
+    /// already sent is kept over the saved copy. Also loads each conversation's saved encryption (see <see cref="IsEncrypted"/>).
     /// </remarks>
     /// <returns>A task that completes when the saved conversations are cached.</returns>
     public Task LoadSavedAsync()
@@ -168,7 +185,8 @@ public sealed partial class ChatStore : IDisposable
                 return;
             }
 
-            IReadOnlyList<Conversation> saved = database.LoadConversations();
+            IReadOnlyList<Conversation> saved                                 = database.LoadConversations();
+            IReadOnlyDictionary<string, (bool Encrypted, long At)> encryption = database.LoadEncryption();
 
             // Under The Reset Lock, So Reset Can't Land Between The Check And The Rows
             lock (_resetLock)
@@ -185,6 +203,12 @@ public sealed partial class ChatStore : IDisposable
                     {
                         _me ??= info.Participants.FirstOrDefault(p => p.IsMe);
                     }
+                }
+
+                // The Lock Of Each Chat, Unless A Newer Line Was Seen Meanwhile
+                foreach ((string id, (bool Encrypted, long At) state) in encryption)
+                {
+                    _encryption.AddOrUpdate(id, state, (_, old) => state.At > old.At ? state : old);
                 }
             }
         });
@@ -262,6 +286,7 @@ public sealed partial class ChatStore : IDisposable
         }
 
         SaveMessages(conversationId, page, generation);
+        NoteEncryption(conversationId, messages, generation);
 
         return (messages, older);
     }
@@ -304,7 +329,9 @@ public sealed partial class ChatStore : IDisposable
         }
 
         // A Page The Phone Sent Meanwhile Wins Over The Saved One
-        CachePage(conversationId, [.. saved.Select(ChatMessage.From)], onlyIfAbsent: true, generation);
+        List<ChatMessage> saved_page = [.. saved.Select(ChatMessage.From)];
+        CachePage(conversationId, saved_page, onlyIfAbsent: true, generation);
+        NoteEncryption(conversationId, saved_page, generation);
         return CachedMessages(conversationId);
     }
 
@@ -326,6 +353,45 @@ public sealed partial class ChatStore : IDisposable
             _pages.Add(conversationId, page);
             return [.. page];
         }
+    }
+
+    /// <summary>
+    /// Finds one message: in the conversation's page in memory, else in the database.
+    /// </summary>
+    /// <remarks>
+    /// For a reply's quote. A memory hit completes at once, without leaving the caller's thread and without counting
+    /// as a use; the database is read on the background queue.
+    /// </remarks>
+    /// <param name="conversationId">The conversation ID.</param>
+    /// <param name="messageId">The message ID.</param>
+    /// <returns>The message, or null when neither memory nor the database has it.</returns>
+    public async Task<ChatMessage?> FindMessageAsync(string conversationId, string messageId)
+    {
+        lock (_pagesLock)
+        {
+            if (_pages.TryGetValue(conversationId, out List<ChatMessage>? page) && page.FirstOrDefault(m => m.Id == messageId) is { } hit)
+            {
+                return hit;
+            }
+        }
+
+        if (_database is null || messageId.Length == 0)
+        {
+            return null;
+        }
+
+        // On The Queue, So A Read Never Reopens (And Recreates) The File After Reset Queued Its Delete
+        int generation = Generation;
+        Message? saved = null;
+        await Enqueue(database =>
+        {
+            if (generation == Generation)
+            {
+                saved = database.LoadMessage(conversationId, messageId);
+            }
+        }).ConfigureAwait(false);
+
+        return saved is null || generation != Generation ? null : ChatMessage.From(saved);
     }
 
     /// <summary>
@@ -441,6 +507,7 @@ public sealed partial class ChatStore : IDisposable
         {
             Interlocked.Increment(ref _generation);
             _cache.Clear();
+            _encryption.Clear();
             _me = null;
         }
 
@@ -508,7 +575,32 @@ public sealed partial class ChatStore : IDisposable
             case ListenRecovered:
                 Resynced?.Invoke(this, EventArgs.Empty);
                 break;
+
+            // Qualified: The Store's Own Event Has The Same Name
+            case GMessages.Protocol.Events.TypingChanged typing:
+                RaiseTyping(typing.Data);
+                break;
         }
+    }
+
+    // Maps The Typing Person's Number To A Participant Of The Cached Conversation, As getPhoneNumberParticipantID Does
+    // In The Go Connector. No Cached Conversation Or No Match Means No Event
+    // ponytail: first match wins; the connector prefers a visible participant, add IsVisible if duplicate numbers show up
+    private void RaiseTyping(TypingData data)
+    {
+        string number = data.User?.Number ?? string.Empty;
+        if (number.Length == 0 || Find(data.ConversationID) is not { } conversation)
+        {
+            return;
+        }
+
+        ParticipantInfo? who = conversation.Participants.FirstOrDefault(p => p.Number == number);
+        if (who is null)
+        {
+            return;
+        }
+
+        TypingChanged?.Invoke(this, new TypingEventArgs(conversation.Id, who.Id, data.Type == TypingTypes.StartedTyping));
     }
 
     // Raises MessageArrived With The Conversation From The Cache, Fetching It On A Miss
@@ -523,6 +615,7 @@ public sealed partial class ChatStore : IDisposable
         bool is_new    = MarkNotified(message.Id) && message.Time >= _time.GetUtcNow() - NewMessageAge;
         CacheMessage(message);
         SaveMessages(message.ConversationId, [received.Message], generation);
+        NoteEncryption(message.ConversationId, [message], generation);
 
         ConversationInfo? conversation = Find(message.ConversationId);
         if (conversation is null && _client() is { } client)
@@ -742,6 +835,28 @@ public sealed partial class ChatStore : IDisposable
             if (generation == Generation)
             {
                 database.SaveMessages(conversationId, saved);
+            }
+        });
+    }
+
+    // Keeps The Newest Encryption Line Of These Messages When It Is Newer Than The One Known, And Queues Its Save (The
+    // Database Keeps Only The Newer Too). Dropped When A Reset Came After The Generation Was Taken
+    private void NoteEncryption(string conversationId, IEnumerable<ChatMessage> messages, int generation)
+    {
+        ChatMessage? newest = messages.Where(m => m.EncryptionChange is not null).MaxBy(m => m.Time);
+        if (newest is null || conversationId.Length == 0 || generation != Generation)
+        {
+            return;
+        }
+
+        (bool Encrypted, long At) state = (newest.EncryptionChange == true, newest.Time.ToUnixTimeMilliseconds() * 1000);
+        _encryption.AddOrUpdate(conversationId, state, (_, old) => state.At > old.At ? state : old);
+
+        _ = Enqueue(database =>
+        {
+            if (generation == Generation)
+            {
+                database.SaveEncryption(conversationId, state.Encrypted, state.At);
             }
         });
     }

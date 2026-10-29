@@ -36,6 +36,9 @@ public sealed record ConversationInfo(
     /// <summary>True for conversations in the main list (not archived, spam or deleted).</summary>
     public bool IsMainView => Status == ConversationStatus.Active;
 
+    /// <summary>Gets whether the conversation is an RCS (chat) conversation rather than SMS.</summary>
+    public bool IsRcs { get; init; }
+
     /// <summary>
     /// Copies the fields the app needs out of a protocol conversation.
     /// </summary>
@@ -59,7 +62,10 @@ public sealed record ConversationInfo(
             c.AvatarHexColor,
             [.. c.Participants.Select(ParticipantInfo.From)],
             c.DefaultOutgoingID,
-            c.LatestMessageID);
+            c.LatestMessageID)
+        {
+            IsRcs = c.Type == ConversationType.Rcs,
+        };
     }
 
     /// <summary>

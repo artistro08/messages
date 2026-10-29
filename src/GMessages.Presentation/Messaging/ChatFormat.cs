@@ -1,4 +1,5 @@
 using System.Globalization;
+using GMessages.Protocol.Proto;
 
 namespace GMessages.Presentation.Messaging;
 
@@ -118,6 +119,74 @@ public static class ChatFormat
     /// <returns>The name, or an empty string when there is none.</returns>
     public static string SenderName(ParticipantInfo? p) =>
         new[] { p?.FullName, p?.FirstName, p?.FormattedNumber }.FirstOrDefault(n => !string.IsNullOrEmpty(n)) ?? string.Empty;
+
+    // TODO: LibGM has no encryption field on Conversation; the lock follows the newest protocol tombstone seen, so a chat whose tombstone is older than every stored page shows no lock until it is scrolled to.
+    /// <summary>
+    /// What a system line says about end-to-end encryption.
+    /// </summary>
+    /// <remarks>
+    /// The protocol tombstones that switch a chat into or out of encryption. The newest one seen decides whether the
+    /// chat shows the lock.
+    /// </remarks>
+    /// <param name="status">The message status.</param>
+    /// <returns>True when the chat is now encrypted, false when it no longer is, null when the status says nothing.</returns>
+    public static bool? EncryptionOf(MessageStatusType status) => status switch
+    {
+        MessageStatusType.TombstoneEncryptedOneOnOneRcsCreated
+            or MessageStatusType.TombstoneProtocolSwitchToEncryptedRcs
+            or MessageStatusType.TombstoneProtocolSwitchToEncryptedRcsInfo
+            or MessageStatusType.MessageStatusTombstoneEncryptedGroupCreated
+            or MessageStatusType.MessageStatusTombstoneGroupProtocolSwitchRcsToE2Ee
+            or MessageStatusType.MessageStatusTombstoneProtocolSwitchTextToE2Ee
+            or MessageStatusType.MessageStatusTombstoneProtocolSwitchRcsToE2Ee => true,
+
+        MessageStatusType.TombstoneProtocolSwitchToText
+            or MessageStatusType.TombstoneProtocolSwitchToRcs
+            or MessageStatusType.TombstoneOneOnOneSmsCreated
+            or MessageStatusType.TombstoneOneOnOneRcsCreated
+            or MessageStatusType.TombstoneRcsGroupCreated
+            or MessageStatusType.TombstoneMmsGroupCreated
+            or MessageStatusType.MessageStatusTombstoneGroupProtocolSwitchE2EeToRcs
+            or MessageStatusType.MessageStatusTombstoneProtocolSwitchE2EeToText
+            or MessageStatusType.MessageStatusTombstoneProtocolSwitchE2EeToRcs => false,
+
+        _ => null,
+    };
+
+    /// <summary>
+    /// The status line under the owner's newest message.
+    /// </summary>
+    /// <param name="status">The message status.</param>
+    /// <returns>"Sent", "Delivered", "Read", or empty for any other status.</returns>
+    public static string StatusText(MessageStatusType status) => status switch
+    {
+        MessageStatusType.OutgoingComplete  => ChatCopy.Sent,
+        MessageStatusType.OutgoingDelivered => ChatCopy.Delivered,
+        MessageStatusType.OutgoingDisplayed => ChatCopy.Read,
+        _                                   => string.Empty,
+    };
+
+    /// <summary>
+    /// The reaction chip under a bubble, the way Google Messages shows it.
+    /// </summary>
+    /// <remarks>Up to 3 emoji, most used first (ties keep first-seen order), then the total count when above 1.</remarks>
+    /// <param name="reactions">The message's reactions.</param>
+    /// <returns>Text such as "👍" or "👍😂 3"; empty when nobody reacted.</returns>
+    public static string ReactionSummary(IReadOnlyList<ReactionInfo> reactions)
+    {
+        ArgumentNullException.ThrowIfNull(reactions);
+
+        // Count Each Emoji, Then Keep The Top 3 (OrderByDescending Is Stable)
+        var counts = reactions
+            .GroupBy(r => r.Emoji)
+            .Select(g => (Emoji: g.Key, Count: g.Sum(r => r.ParticipantIds.Count)))
+            .Where(e => e.Count > 0)
+            .ToList();
+        int total  = counts.Sum(e => e.Count);
+        string top = string.Concat(counts.OrderByDescending(e => e.Count).Take(3).Select(e => e.Emoji));
+
+        return total > 1 ? $"{top} {total.ToString(CultureInfo.CurrentCulture)}" : top;
+    }
 
     // Empty, A Number Or Short Code (Digits And Dialing Marks Only), Or An Email Address (One Word With An @)
     private static bool IsNoName(string name) =>

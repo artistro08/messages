@@ -231,23 +231,23 @@ public sealed partial class MessageDatabase
     // =========================================================================
 
     /// <summary>
-    /// Loads whether each conversation is end-to-end encrypted.
+    /// Loads whether each conversation is end-to-end encrypted, and when the phone reported it.
     /// </summary>
-    /// <returns>Conversation ID to encrypted; empty when none or unreadable.</returns>
-    public IReadOnlyDictionary<string, bool> LoadEncryption() => Run<IReadOnlyDictionary<string, bool>>(connection =>
+    /// <returns>Conversation ID to encrypted and its time in microseconds; empty when none or unreadable.</returns>
+    public IReadOnlyDictionary<string, (bool Encrypted, long At)> LoadEncryption() => Run<IReadOnlyDictionary<string, (bool Encrypted, long At)>>(connection =>
     {
         using SqliteCommand command = connection.CreateCommand();
-        command.CommandText = "SELECT conversation_id, encrypted FROM encryption";
+        command.CommandText = "SELECT conversation_id, encrypted, at FROM encryption";
 
-        Dictionary<string, bool> states = [];
-        using SqliteDataReader reader   = command.ExecuteReader();
+        Dictionary<string, (bool Encrypted, long At)> states = [];
+        using SqliteDataReader reader                        = command.ExecuteReader();
         while (reader.Read())
         {
-            states[reader.GetString(0)] = reader.GetInt64(1) != 0;
+            states[reader.GetString(0)] = (reader.GetInt64(1) != 0, reader.GetInt64(2));
         }
 
         return states;
-    }, new Dictionary<string, bool>());
+    }, new Dictionary<string, (bool Encrypted, long At)>());
 
     /// <summary>
     /// Saves whether a conversation is end-to-end encrypted, only when newer than the state already stored.

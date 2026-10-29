@@ -10,6 +10,22 @@ public static class ChatCopy
     public const string YouPrefix      = "You: ";
     public const string SpamAndBlocked = "Spam & blocked";
 
+    // Message Status (Spec Copy)
+    public const string Sent      = "Sent";
+    public const string Delivered = "Delivered";
+    public const string Read      = "Read";
+
+    // Reactions, Replies, Encryption And Typing (Controller Copy; Owner Signs Off)
+    public const string React             = "React";
+    public const string CancelReply       = "Cancel reply";
+    public const string EndToEndEncrypted = "End-to-end encrypted";
+    public const string Typing            = "Typing";
+    public const string OriginalMessage   = "Original message";
+
+    // A Bubble's Accessible Item Type, RCS Or SMS (Controller Copy; Owner Signs Off)
+    public const string ChatMessage = "Chat message";
+    public const string TextMessage = "Text message";
+
     // Attachment Labels
     public const string Photo              = "Photo";
     public const string Video              = "Video";

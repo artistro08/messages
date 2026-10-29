@@ -57,4 +57,48 @@ public sealed class ChatFormatTests
     [DataRow("#xyz")]
     [DataRow("#ff88")]
     public void ColorFromHex_BadInputFallsBack(string hex) => Assert.AreEqual(7u, ChatFormat.ColorFromHex(hex, 7));
+
+    [TestMethod]
+    [DataRow(MessageStatusType.TombstoneEncryptedOneOnOneRcsCreated, true)]
+    [DataRow(MessageStatusType.TombstoneProtocolSwitchToEncryptedRcs, true)]
+    [DataRow(MessageStatusType.TombstoneProtocolSwitchToEncryptedRcsInfo, true)]
+    [DataRow(MessageStatusType.MessageStatusTombstoneEncryptedGroupCreated, true)]
+    [DataRow(MessageStatusType.MessageStatusTombstoneGroupProtocolSwitchRcsToE2Ee, true)]
+    [DataRow(MessageStatusType.MessageStatusTombstoneProtocolSwitchTextToE2Ee, true)]
+    [DataRow(MessageStatusType.MessageStatusTombstoneProtocolSwitchRcsToE2Ee, true)]
+    [DataRow(MessageStatusType.TombstoneProtocolSwitchToText, false)]
+    [DataRow(MessageStatusType.TombstoneProtocolSwitchToRcs, false)]
+    [DataRow(MessageStatusType.TombstoneOneOnOneSmsCreated, false)]
+    [DataRow(MessageStatusType.TombstoneOneOnOneRcsCreated, false)]
+    [DataRow(MessageStatusType.TombstoneRcsGroupCreated, false)]
+    [DataRow(MessageStatusType.TombstoneMmsGroupCreated, false)]
+    [DataRow(MessageStatusType.MessageStatusTombstoneGroupProtocolSwitchE2EeToRcs, false)]
+    [DataRow(MessageStatusType.MessageStatusTombstoneProtocolSwitchE2EeToText, false)]
+    [DataRow(MessageStatusType.MessageStatusTombstoneProtocolSwitchE2EeToRcs, false)]
+    [DataRow(MessageStatusType.IncomingComplete, null)]
+    public void EncryptionOf_Table(MessageStatusType status, bool? expected) => Assert.AreEqual(expected, ChatFormat.EncryptionOf(status));
+
+    [TestMethod]
+    [DataRow(MessageStatusType.OutgoingComplete, "Sent")]
+    [DataRow(MessageStatusType.OutgoingDelivered, "Delivered")]
+    [DataRow(MessageStatusType.OutgoingDisplayed, "Read")]
+    [DataRow(MessageStatusType.OutgoingSending, "")]
+    [DataRow(MessageStatusType.IncomingComplete, "")]
+    public void StatusText_SpecWords(MessageStatusType status, string expected) => Assert.AreEqual(expected, ChatFormat.StatusText(status));
+
+    [TestMethod]
+    public void ReactionSummary_LikeGoogle()
+    {
+        const string Like  = "👍";
+        const string Laugh = "😂";
+        const string Love  = "😍";
+        const string Sad   = "😥";
+
+        Assert.AreEqual(string.Empty, ChatFormat.ReactionSummary([]));
+        Assert.AreEqual(Like, ChatFormat.ReactionSummary([new ReactionInfo(Like, ["p1"])]));
+        Assert.AreEqual(Like + Laugh + " 3", ChatFormat.ReactionSummary([new ReactionInfo(Laugh, ["p1"]), new ReactionInfo(Like, ["p2", "p3"])]));
+
+        // Ties Keep First-Seen Order, Then Only The Top 3 Show; The Count Is Everyone
+        Assert.AreEqual(Sad + Love + Like + " 4", ChatFormat.ReactionSummary([new ReactionInfo(Sad, ["p1"]), new ReactionInfo(Love, ["p2"]), new ReactionInfo(Like, ["p3"]), new ReactionInfo(Laugh, ["p4"])]));
+    }
 }
