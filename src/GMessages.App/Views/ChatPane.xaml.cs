@@ -169,6 +169,7 @@ public sealed partial class ChatPane : UserControl
         {
             _scroller              = found;
             _scroller.ViewChanged += OnScrolled;
+            _ = ScrollFade.Attach(found);
             Chat?.Trace("scroller hooked");
         }
 

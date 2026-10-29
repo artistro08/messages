@@ -273,6 +273,7 @@ public sealed partial class ChatsView : UserControl
 
         _listScroller              = scroller;
         _listScroller.ViewChanged += OnListScrolled;
+        _ = ScrollFade.Attach(scroller);
     }
 
     // Start Chat Hides While Scrolling Down And Shows Again Scrolling Up Or At The Top, Sliding And Fading (The Button's
