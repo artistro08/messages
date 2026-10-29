@@ -123,7 +123,8 @@ public sealed partial class SessionStore(string filePath, ILogger? logger = null
             };
             if (f.Cookies is not null)
             {
-                data.Cookies.Set(f.Cookies);
+                // Sessions From Older Versions Saved __Secure-1PSIDTS, A Short-Lived Cookie Google Stops Accepting; Sending The Stale Copy Gets The Session Refused
+                data.Cookies.Set(f.Cookies.Where(c => c.Key != "__Secure-1PSIDTS").ToDictionary(c => c.Key, c => c.Value));
             }
 
             return data;
