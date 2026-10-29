@@ -40,12 +40,13 @@ public static class NotificationXml
             new XAttribute("id", "snoozeTime"), new XAttribute("type", "selection"), new XAttribute("defaultInput", "15"),
             Choice("5", ChatCopy.Minutes5), Choice("15", ChatCopy.Minutes15), Choice("60", ChatCopy.Hour1), Choice("240", ChatCopy.Hours4));
 
+        // Every <input> Before Any <action>, As The Toast Schema Requires (Else Windows Shows "New notification")
         var actions = new XElement("actions",
             new XElement("input", new XAttribute("id", "reply"), new XAttribute("type", "text"), new XAttribute("placeHolderContent", ChatCopy.Reply)),
+            snooze,
             new XElement("action",
                 new XAttribute("content", string.Empty), new XAttribute("hint-inputId", "reply"), new XAttribute("activationType", "foreground"),
                 new XAttribute("arguments", $"action=reply&conversation={id}&message={Uri.EscapeDataString(n.Tag)}"), new XAttribute("imageUri", sendIconUri)),
-            snooze,
             new XElement("action", new XAttribute("activationType", "system"), new XAttribute("arguments", "snooze"), new XAttribute("hint-inputId", "snoozeTime"), new XAttribute("content", string.Empty)),
             new XElement("action", new XAttribute("activationType", "system"), new XAttribute("arguments", "dismiss"), new XAttribute("content", string.Empty)));
 

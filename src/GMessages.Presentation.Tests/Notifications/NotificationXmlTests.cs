@@ -43,6 +43,15 @@ public sealed class NotificationXmlTests
     }
 
     [TestMethod]
+    public void Build_InputsComeBeforeActions()
+    {
+        // The Toast Schema Is A Sequence: Every <input> Before Any <action>; Otherwise Windows Shows "New notification"
+        var names = Doc().Descendants("actions").Single().Elements().Select(e => e.Name.LocalName).ToList();
+
+        Assert.AreEqual(names.LastIndexOf("input") + 1, names.IndexOf("action"));
+    }
+
+    [TestMethod]
     public void Build_NoAvatar_HasNoImage() => Assert.IsFalse(Doc().Descendants("image").Any());
 
     [TestMethod]
