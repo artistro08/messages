@@ -17,7 +17,8 @@
         RowDefinitions="Auto,*"
         SizeChanged="OnRootSizeChanged">
 
-        <!-- Title Bar: ☰ on the left, the title from code, the profile picture (the owner's photo, else the default glyph) on the right -->
+        <!-- Title Bar: ☰ on the left, the title from code, the profile picture (the owner's photo, else the default glyph) on the right.
+             Tall (48 px) like the caption buttons, which the window asks for in code -->
         <TitleBar
             x:Name="AppTitleBar"
             AutomationProperties.AutomationId="Main.TitleBar">
@@ -28,9 +29,8 @@
             <!-- Menu Button: collapses and expands the list -->
             <TitleBar.LeftHeader>
                 <Button
-                    Width="40"
-                    Height="32"
-                    Margin="4,0,0,0"
+                    Width="48"
+                    Height="48"
                     Padding="0"
                     AutomationProperties.AutomationId="Main.MenuButton"
                     AutomationProperties.Name="Show or hide conversations"
@@ -44,9 +44,8 @@
             <!-- Profile Button: Spam & blocked, Settings and Unpair -->
             <TitleBar.RightHeader>
                 <Button
-                    Height="32"
-                    Margin="0,0,4,0"
-                    Padding="4,0"
+                    Height="48"
+                    Padding="8,0"
                     AutomationProperties.AutomationId="Main.ProfileButton"
                     AutomationProperties.Name="Account"
                     Background="Transparent"
@@ -89,85 +88,101 @@
             </TitleBar.RightHeader>
         </TitleBar>
 
-        <!-- Panes: wide puts the list and the chat side by side, narrow stretches whichever one shows across both columns -->
-        <Grid Grid.Row="1" ColumnDefinitions="Auto,*">
+        <!-- Panes: the list is the SplitView's pane, so ☰ slides it in and out the way Windows does; the chat is its content.
+             A narrow window widens the pane to the whole window (set in code) and closes it while the chat shows -->
+        <SplitView
+            x:Name="Panes"
+            Grid.Row="1"
+            CompactPaneLength="0"
+            DisplayMode="Inline"
+            IsPaneOpen="{x:Bind local:MainWindow.IsListOpen(ViewModel.IsListCollapsed, ViewModel.ShowChatPane), Mode=OneWay}"
+            OpenPaneLength="360"
+            PaneBackground="Transparent">
 
-            <!-- List Pane -->
-            <Grid
-                x:Name="ListPane"
-                Grid.ColumnSpan="{x:Bind local:MainWindow.PaneSpan(ViewModel.IsNarrow), Mode=OneWay}"
-                Width="{x:Bind local:MainWindow.ListWidth(ViewModel.IsNarrow), Mode=OneWay}"
-                RowDefinitions="Auto,Auto,*"
-                Visibility="{x:Bind local:MainWindow.ListVisibility(ViewModel.IsListCollapsed, ViewModel.ShowChatPane), Mode=OneWay}">
+            <!-- List Pane: on the Mica -->
+            <SplitView.Pane>
+                <Grid x:Name="ListPane" RowDefinitions="Auto,Auto,*">
 
-                <!-- Inbox Header: Start chat -->
-                <Button
-                    Margin="12,8,12,8"
-                    AutomationProperties.AutomationId="Main.StartChat"
-                    Click="OnStartChatClick"
-                    Style="{StaticResource AccentButtonStyle}"
-                    Visibility="{x:Bind local:MainWindow.HiddenIf(ViewModel.IsSpamView), Mode=OneWay}">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <FontIcon FontSize="16" Glyph="&#xE8BD;" />
-                        <TextBlock x:Name="StartChatText" />
-                    </StackPanel>
-                </Button>
-
-                <!-- Spam Header: back and the list title -->
-                <StackPanel
-                    Margin="4,8,12,8"
-                    Orientation="Horizontal"
-                    Spacing="4"
-                    Visibility="{x:Bind ViewModel.IsSpamView, Mode=OneWay}">
+                    <!-- Inbox Header: Start chat -->
                     <Button
-                        Width="40"
-                        Height="36"
-                        Padding="0"
-                        AutomationProperties.AutomationId="Main.SpamBack"
-                        AutomationProperties.Name="Back"
-                        Background="Transparent"
-                        BorderThickness="0"
-                        Click="OnSpamBackClick">
-                        <FontIcon FontSize="16" Glyph="&#xE72B;" />
+                        Margin="12,8,12,8"
+                        AutomationProperties.AutomationId="Main.StartChat"
+                        Click="OnStartChatClick"
+                        Style="{StaticResource AccentButtonStyle}"
+                        Visibility="{x:Bind local:MainWindow.HiddenIf(ViewModel.IsSpamView), Mode=OneWay}">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon FontSize="16" Glyph="&#xE8BD;" />
+                            <TextBlock x:Name="StartChatText" />
+                        </StackPanel>
                     </Button>
+
+                    <!-- Spam Header: back and the list title -->
+                    <StackPanel
+                        Margin="4,8,12,8"
+                        Orientation="Horizontal"
+                        Spacing="4"
+                        Visibility="{x:Bind ViewModel.IsSpamView, Mode=OneWay}">
+                        <Button
+                            Width="40"
+                            Height="36"
+                            Padding="0"
+                            AutomationProperties.AutomationId="Main.SpamBack"
+                            AutomationProperties.Name="Back"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Click="OnSpamBackClick">
+                            <FontIcon FontSize="16" Glyph="&#xE72B;" />
+                        </Button>
+                        <TextBlock
+                            x:Name="ListTitle"
+                            VerticalAlignment="Center"
+                            AutomationProperties.AutomationId="Main.ListTitle"
+                            Style="{StaticResource SubtitleTextBlockStyle}" />
+                    </StackPanel>
+
+                    <!-- Connection Banner: hidden while connected -->
                     <TextBlock
-                        x:Name="ListTitle"
+                        Grid.Row="1"
+                        Margin="16,0,16,8"
+                        AutomationProperties.AutomationId="Main.Status"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Text="{x:Bind ViewModel.StatusBanner, Mode=OneWay}"
+                        Visibility="{x:Bind ViewModel.HasStatusBanner, Mode=OneWay}" />
+
+                    <!-- Conversations -->
+                    <ListView
+                        x:Name="ConversationList"
+                        Grid.Row="2"
+                        AutomationProperties.AutomationId="Main.ConversationList"
+                        ContainerContentChanging="OnContainerContentChanging"
+                        SelectionChanged="OnSelectionChanged"
+                        SelectionMode="Single">
+                        <ListView.ItemTemplate>
+                            <DataTemplate x:DataType="main:ConversationRowViewModel">
+                                <controls:ConversationRow Row="{x:Bind}" />
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+
+                    <!-- Loading: while an empty list (the inbox or Spam & blocked) loads -->
+                    <ProgressRing
+                        Grid.Row="2"
+                        HorizontalAlignment="Center"
                         VerticalAlignment="Center"
-                        AutomationProperties.AutomationId="Main.ListTitle"
-                        Style="{StaticResource SubtitleTextBlockStyle}" />
-                </StackPanel>
-
-                <!-- Connection Banner: hidden while connected -->
-                <TextBlock
-                    Grid.Row="1"
-                    Margin="16,0,16,8"
-                    AutomationProperties.AutomationId="Main.Status"
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                    Text="{x:Bind ViewModel.StatusBanner, Mode=OneWay}"
-                    Visibility="{x:Bind ViewModel.HasStatusBanner, Mode=OneWay}" />
-
-                <!-- Conversations -->
-                <ListView
-                    x:Name="ConversationList"
-                    Grid.Row="2"
-                    AutomationProperties.AutomationId="Main.ConversationList"
-                    ContainerContentChanging="OnContainerContentChanging"
-                    SelectionChanged="OnSelectionChanged"
-                    SelectionMode="Single">
-                    <ListView.ItemTemplate>
-                        <DataTemplate x:DataType="main:ConversationRowViewModel">
-                            <controls:ConversationRow Row="{x:Bind}" />
-                        </DataTemplate>
-                    </ListView.ItemTemplate>
-                </ListView>
-            </Grid>
+                        AutomationProperties.AutomationId="Main.ListLoading"
+                        IsActive="{x:Bind ViewModel.CurrentList.IsLoadingFirstPage, Mode=OneWay}" />
+                </Grid>
+            </SplitView.Pane>
             <!-- /List Pane -->
 
-            <!-- Chat Pane: the empty state, the open conversation or Start chat -->
+            <!-- Chat Pane: the empty state, the open conversation or Start chat, on a layer above the Mica like Windows'
+                 own apps (Settings, File Explorer) -->
             <Grid
                 x:Name="ChatArea"
-                Grid.Column="{x:Bind local:MainWindow.ChatColumn(ViewModel.IsNarrow), Mode=OneWay}"
-                Grid.ColumnSpan="{x:Bind local:MainWindow.PaneSpan(ViewModel.IsNarrow), Mode=OneWay}"
+                Background="{ThemeResource LayerFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="{x:Bind local:MainWindow.LayerBorder(ViewModel.IsNarrow), Mode=OneWay}"
+                CornerRadius="{x:Bind local:MainWindow.LayerCorner(ViewModel.IsNarrow), Mode=OneWay}"
                 Visibility="{x:Bind local:MainWindow.ChatVisibility(ViewModel.IsNarrow, ViewModel.ShowChatPane, ViewModel.IsListCollapsed), Mode=OneWay}">
 
                 <!-- Empty State: a large chat glyph above the prompt -->
@@ -206,7 +221,7 @@
                     Visibility="{x:Bind ViewModel.IsStartChatOpen, Mode=OneWay}" />
             </Grid>
             <!-- /Chat Pane -->
-        </Grid>
+        </SplitView>
 
         <!-- Unpair Confirm -->
         <controls:UnpairDialog x:Name="UnpairDialog" Grid.Row="1" />

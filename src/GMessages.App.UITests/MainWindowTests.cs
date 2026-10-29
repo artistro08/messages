@@ -69,6 +69,25 @@ public sealed class MainWindowTests : UiTest
     }
 
     /// <summary>
+    /// The title bar row and the caption buttons are the same height, and the profile picture sits right beside
+    /// Minimize.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task TitleBar_ProfileBesideCaptionButtons_SameHeight()
+    {
+        await OpenMainAsync();
+
+        System.Drawing.Rectangle menu     = App.Find("Main.MenuButton").BoundingRectangle;
+        System.Drawing.Rectangle profile  = App.Find("Main.ProfileButton").BoundingRectangle;
+        System.Drawing.Rectangle minimize = App.Find("Minimize").BoundingRectangle;
+
+        Assert.IsTrue(Math.Abs(minimize.Height - menu.Height) <= 2, $"Caption buttons are {minimize.Height} px high, ☰ is {menu.Height} px.");
+        Assert.IsTrue(Math.Abs(minimize.Height - profile.Height) <= 2, $"Caption buttons are {minimize.Height} px high, the profile button is {profile.Height} px.");
+        Assert.IsTrue(Math.Abs(minimize.Left - profile.Right) <= 2, $"The profile button ends {minimize.Left - profile.Right} px left of Minimize.");
+    }
+
+    /// <summary>
     /// The profile menu's Spam &amp; blocked swaps the list for the spam conversations under a titled header, and
     /// the back button returns to the inbox.
     /// </summary>

@@ -34,12 +34,19 @@ namespace GMessages.App.Views;
 /// <c>SizeChanged</c>, not an <c>AdaptiveTrigger</c>: visual state triggers never run on a window's root element
 /// (it isn't inside a control), so the panes are laid out with <c>x:Bind</c> on <see cref="MainViewModel.IsNarrow"/>.
 /// </para>
+/// <para>
+/// The list is the pane of an inline <c>SplitView</c>, so opening and closing it plays the Windows pane animation. A
+/// narrow window makes the pane as wide as the window, so closing it (a chat opened) slides the chat in over the whole
+/// width. The chat sits on a layer above the Mica, rounded at the top left beside the list.
+/// </para>
 /// </remarks>
 public sealed partial class MainWindow : Window
 {
-    // Layout: Below This Width (Effective Pixels) One Pane Shows At A Time; The List Pane's Width Beside The Chat
+    // Layout: Below This Width (Effective Pixels) One Pane Shows At A Time; The List Pane's Width Beside The Chat; The
+    // Chat Layer's Top-Left Corner (OverlayCornerRadius, Which Can't Be Read Back Unboxed Under Native AOT)
     private const double NarrowBelow   = 720;
     private const double ListPaneWidth = 360;
+    private const double LayerRadius   = 8;
 
     private readonly SettingsViewModel _settings;
     private readonly AvatarCache _avatars;
@@ -66,6 +73,9 @@ public sealed partial class MainWindow : Window
         AppTitleBar.Title          = Title;
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
+
+        // Tall Caption Buttons, As High As The Title Bar Row (48 px)
+        AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Tall;
         AppWindow.Resize(new Windows.Graphics.SizeInt32(1100, 760));
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"));
 
@@ -80,11 +90,13 @@ public sealed partial class MainWindow : Window
         ViewModel.PropertyChanged              += OnViewModelChanged;
         ViewModel.Connected                    += OnConnected;
         ViewModel.Inbox.Rows.CollectionChanged += OnInboxRowsChanged;
+        AppTitleBar.LayoutUpdated              += OnTitleBarLayoutUpdated;
         Closed                                 += (_, _) =>
         {
             ViewModel.PropertyChanged              -= OnViewModelChanged;
             ViewModel.Connected                    -= OnConnected;
             ViewModel.Inbox.Rows.CollectionChanged -= OnInboxRowsChanged;
+            AppTitleBar.LayoutUpdated              -= OnTitleBarLayoutUpdated;
             Bindings.StopTracking();
             ViewModel.Dispose();
             _settings.Dispose();
@@ -138,34 +150,26 @@ public sealed partial class MainWindow : Window
     // =========================================================================
 
     /// <summary>
-    /// Gives the list pane's width: fixed beside the chat in a wide window, the whole width in a narrow one.
-    /// </summary>
-    /// <param name="isNarrow">True for a narrow window.</param>
-    /// <returns>The width in effective pixels, or NaN to stretch.</returns>
-    public static double ListWidth(bool isNarrow) => isNarrow ? double.NaN : ListPaneWidth;
-
-    /// <summary>
-    /// Gives how many columns a pane spans: one each side by side, both when a narrow window shows one pane.
-    /// </summary>
-    /// <param name="isNarrow">True for a narrow window.</param>
-    /// <returns>The column span.</returns>
-    public static int PaneSpan(bool isNarrow) => isNarrow ? 2 : 1;
-
-    /// <summary>
-    /// Gives the chat pane's column: beside the list in a wide window, the first column in a narrow one.
-    /// </summary>
-    /// <param name="isNarrow">True for a narrow window.</param>
-    /// <returns>The column.</returns>
-    public static int ChatColumn(bool isNarrow) => isNarrow ? 0 : 1;
-
-    /// <summary>
-    /// Shows the list unless ☰ collapsed it or a narrow window shows the chat instead.
+    /// Opens the list pane unless ☰ collapsed it or a narrow window shows the chat instead.
     /// </summary>
     /// <param name="isListCollapsed">True when ☰ collapsed the list.</param>
     /// <param name="showChatPane">True when a narrow window shows the chat.</param>
-    /// <returns>The list pane's visibility.</returns>
-    public static Visibility ListVisibility(bool isListCollapsed, bool showChatPane) =>
-        isListCollapsed || showChatPane ? Visibility.Collapsed : Visibility.Visible;
+    /// <returns>True to open the pane.</returns>
+    public static bool IsListOpen(bool isListCollapsed, bool showChatPane) => !isListCollapsed && !showChatPane;
+
+    /// <summary>
+    /// Gives the chat layer's border: top and left beside the list, only the top in a narrow window.
+    /// </summary>
+    /// <param name="isNarrow">True for a narrow window.</param>
+    /// <returns>The border thickness.</returns>
+    public static Thickness LayerBorder(bool isNarrow) => new(isNarrow ? 0 : 1, 1, 0, 0);
+
+    /// <summary>
+    /// Gives the chat layer's corners: the top left rounded beside the list, square in a narrow window.
+    /// </summary>
+    /// <param name="isNarrow">True for a narrow window.</param>
+    /// <returns>The corner radius.</returns>
+    public static CornerRadius LayerCorner(bool isNarrow) => new(isNarrow ? 0 : LayerRadius, 0, 0, 0);
 
     /// <summary>
     /// Shows the chat pane in a wide window, and in a narrow one when it holds a chat or the list is collapsed.
@@ -231,13 +235,33 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    // Narrow Or Wide From The Window Width (See The Class Remarks); The View Model Needs It For The One-Pane Rule
+    // Narrow Or Wide From The Window Width (See The Class Remarks); The View Model Needs It For The One-Pane Rule, And
+    // A Narrow Window's List Pane Fills The Width
     private void OnRootSizeChanged(object sender, SizeChangedEventArgs e)
     {
-        bool is_narrow = e.NewSize.Width < NarrowBelow;
+        bool is_narrow       = e.NewSize.Width < NarrowBelow;
+        Panes.OpenPaneLength = is_narrow ? e.NewSize.Width : ListPaneWidth;
         if (is_narrow != ViewModel.IsNarrow)
         {
             ViewModel.IsNarrow = is_narrow;
+        }
+    }
+
+    // The TitleBar Control Reserves Room For The Caption Buttons With Their Width In Physical Pixels, As If Effective, So
+    // Above 100% Scale A Gap Opened Between The Profile Picture And Minimize. Its Last Column Is That Reserve: Size It
+    // To The Buttons' Real Width After Each Layout, Since The Control Can Set It Again Whenever The Window Changes
+    private void OnTitleBarLayoutUpdated(object? sender, object e)
+    {
+        if (AppTitleBar.XamlRoot is not { } root || VisualTreeHelper.GetChildrenCount(AppTitleBar) == 0
+            || VisualTreeHelper.GetChild(AppTitleBar, 0) is not Grid { ColumnDefinitions.Count: > 0 } layout)
+        {
+            return;
+        }
+
+        var reserve = new GridLength(AppWindow.TitleBar.RightInset / root.RasterizationScale);
+        if (layout.ColumnDefinitions[^1].Width != reserve)
+        {
+            layout.ColumnDefinitions[^1].Width = reserve;
         }
     }
 

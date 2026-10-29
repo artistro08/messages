@@ -72,6 +72,25 @@
             </ListView.ItemTemplate>
         </ListView>
 
+        <!-- Loading: the history with nothing cached to show yet -->
+        <ProgressRing
+            Grid.Row="1"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center"
+            AutomationProperties.AutomationId="Chat.Loading"
+            IsActive="{x:Bind Chat.IsLoadingHistory, Mode=OneWay, FallbackValue=False}" />
+
+        <!-- Loading Older: a small ring at the top while scrolling up loads more -->
+        <ProgressRing
+            Grid.Row="1"
+            Width="20"
+            Height="20"
+            Margin="0,8,0,0"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Top"
+            AutomationProperties.AutomationId="Chat.LoadingOlder"
+            IsActive="{x:Bind Chat.IsLoadingOlder, Mode=OneWay, FallbackValue=False}" />
+
         <!-- Compose: emoji, the message box (Enter sends, Shift + Enter adds a line), send -->
         <Grid
             Grid.Row="2"

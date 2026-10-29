@@ -113,5 +113,13 @@
                 </DataTemplate>
             </ListView.ItemTemplate>
         </ListView>
+
+        <!-- Loading: while the contacts load, and while Go looks up the conversation -->
+        <ProgressRing
+            Grid.Row="3"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center"
+            AutomationProperties.AutomationId="StartChat.Loading"
+            IsActive="{x:Bind StartChat.IsLoading, Mode=OneWay, FallbackValue=False}" />
     </Grid>
 </UserControl>

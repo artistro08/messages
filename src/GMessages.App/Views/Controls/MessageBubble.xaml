@@ -30,10 +30,10 @@
             </VisualStateGroup>
         </VisualStateManager.VisualStateGroups>
 
-        <!-- Sender: first bubble of a run in a group -->
+        <!-- Sender: first bubble of a run in a group, in the color of their letter circle -->
         <TextBlock
             Margin="12,0"
-            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+            Foreground="{x:Bind local:ColorConverters.ToBrush(Bubble.SenderColor), Mode=OneWay}"
             Style="{StaticResource CaptionTextBlockStyle}"
             Text="{x:Bind Bubble.SenderName, Mode=OneWay, TargetNullValue=''}"
             Visibility="{x:Bind Bubble.HasSenderName, Mode=OneWay, FallbackValue=Collapsed}" />
