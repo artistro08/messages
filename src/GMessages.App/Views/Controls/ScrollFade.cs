@@ -7,6 +7,7 @@ using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Media;
 using Windows.Foundation;
 using Windows.UI;
+using WinRT;
 
 namespace GMessages.App.Views.Controls;
 
@@ -103,14 +104,21 @@ internal sealed class ScrollFade
     /// <returns>The fade, or null when the scroller has no content presenter yet.</returns>
     public static ScrollFade? Attach(ScrollViewer scroller)
     {
-        if (ChatPane.FindPart<ScrollContentPresenter>(scroller, "ScrollContentPresenter") is not { } content || VisualTreeHelper.GetParent(content) is not Panel parent)
+        if (ChatPane.FindPart<ScrollContentPresenter>(scroller, "ScrollContentPresenter") is not { } content
+            || VisualTreeHelper.GetParent(content) is not { } parent_object)
         {
             return null;
         }
 
+        // The Template's Unnamed Grid Holding The Content. A WinRT Cast, Not A Type Test: The Native AOT Build Hands It
+        // Back As A Base Type (See ChatPane.FindScroller)
+        Panel parent = parent_object.As<Panel>();
+
         // The Template's Empty Layer Right Above The Content (Below The Scroll Bars), Else The Scroller Itself
         int at = parent.Children.IndexOf(content);
-        UIElement layer = at + 1 < parent.Children.Count && parent.Children[at + 1] is Panel { Children.Count: 0 } empty ? empty : scroller;
+        UIElement layer = at + 1 < parent.Children.Count && VisualTreeHelper.GetChildrenCount(parent.Children[at + 1]) == 0
+            ? parent.Children[at + 1]
+            : scroller;
 
         return new ScrollFade(scroller, content, layer);
     }

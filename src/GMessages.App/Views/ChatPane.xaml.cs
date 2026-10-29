@@ -51,9 +51,6 @@ public sealed partial class ChatPane : UserControl
     private double _olderTop;
     private int _olderTries;
 
-    // The Last Scroll Decisions Logged (Wave 7 Diagnostics), So Only Changes Are Logged
-    private string? _lastScrollTrace;
-
     /// <summary>
     /// Creates the pane.
     /// </summary>
@@ -117,16 +114,14 @@ public sealed partial class ChatPane : UserControl
         var chat = (ChatViewModel?)e.NewValue;
         BindableList.Show(pane.MessageList, chat?.Messages);
         pane.ShowScrollToBottom(false);
-        pane._lastScrollTrace = null;
-        pane._pinned          = true;
-        pane._toNewest        = false;
-        pane._olderFromEnd    = null;
-        pane._olderBubble     = null;
+        pane._pinned       = true;
+        pane._toNewest     = false;
+        pane._olderFromEnd = null;
+        pane._olderBubble  = null;
 
         // The Last Chat's Content Height Means Nothing Here: Unset, The First Look Counts As A Content Change, Not As The
         // Person Scrolling (Two Chats Of The Same Height Would Otherwise Unpin On The Offset Reset To The Top)
-        pane._lastExtent      = -1;
-        chat?.Trace($"opened in pane (scroller {(pane._scroller is null ? "not yet hooked" : "hooked")})");
+        pane._lastExtent   = -1;
 
         if (chat is not null)
         {
@@ -185,8 +180,7 @@ public sealed partial class ChatPane : UserControl
             _scroller                  = found;
             _scroller.ViewChanged     += OnScrolled;
             MessageList.LayoutUpdated += OnMessageListLayoutUpdated;
-            bool faded = ScrollFade.Attach(found) is not null;
-            Chat?.Trace($"scroller hooked (edge fades {faded})");
+            _                          = ScrollFade.Attach(found);
         }
 
         return _scroller;
@@ -214,7 +208,6 @@ public sealed partial class ChatPane : UserControl
         MessageList.UpdateLayout();
         if (Scroller() is { } scroller && ChatScroll.ShouldLoadOlder(scroller.VerticalOffset, scroller.ScrollableHeight, scroller.ViewportHeight))
         {
-            chat.Trace($"fill older at {scroller.VerticalOffset:0} of {scroller.ScrollableHeight:0}, view {scroller.ViewportHeight:0}");
             _ = chat.LoadOlderAsync();
         }
     }
@@ -254,15 +247,6 @@ public sealed partial class ChatPane : UserControl
 
         bool show_arrow = ChatScroll.ShowScrollToBottom(scroller.VerticalOffset, scroller.ScrollableHeight, scroller.ViewportHeight);
         bool load_older = scroller.ScrollableHeight > 0 && ChatScroll.ShouldLoadOlder(scroller.VerticalOffset, scroller.ScrollableHeight, scroller.ViewportHeight);
-
-        // TODO: Wave 7 Diagnostics (Numbers Only); Remove Once Older Paging Works On The Real Phone. Logged When A
-        // Decision Changes, Not On Every Scroll
-        string trace = $"scroll load older {load_older}, arrow {show_arrow}";
-        if (trace != _lastScrollTrace)
-        {
-            _lastScrollTrace = trace;
-            Chat.Trace($"{trace} at {scroller.VerticalOffset:0} of {scroller.ScrollableHeight:0}, view {scroller.ViewportHeight:0}, {Chat.Messages.Count} shown");
-        }
 
         ShowScrollToBottom(show_arrow);
         if (load_older)

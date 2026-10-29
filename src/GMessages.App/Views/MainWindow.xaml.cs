@@ -10,6 +10,7 @@ using Microsoft.UI.Input;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
+using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
@@ -45,7 +46,7 @@ public sealed partial class MainWindow : Window
     private PairingPage? _pairing;
     private ChatsView? _chats;
     private SettingsPage? _settingsPage;
-    private Control? _focusBeforeSettings;
+    private UIElement? _focusBeforeSettings;
 
     // The Title Bar's Back, Once It Has Shown (The Template Makes It Then)
     private Button? _backButton;
@@ -220,7 +221,7 @@ public sealed partial class MainWindow : Window
         }
 
         // Back Puts Keyboard Focus Where It Was
-        _focusBeforeSettings = RootGrid.XamlRoot is { } root ? FocusManager.GetFocusedElement(root) as Control : null;
+        _focusBeforeSettings = RootGrid.XamlRoot is { } root ? FocusManager.GetFocusedElement(root) as UIElement : null;
 
         _settingsPage                  = new SettingsPage(_settings);
         _settingsPage.UnpairRequested += OnSettingsUnpair;
@@ -474,16 +475,20 @@ public sealed partial class MainWindow : Window
 
     // Every Key Press In The Window Passes Here First. Handled Only When A Shortcut Ran, So Other Keys (And A Shortcut
     // With Nothing To Do, Like "r" With No Chat Open) Reach The Controls. Only For The Chats (Not Pairing Or Settings),
-    // And Skipped While A Dialog Or Menu Is Open
+    // And Skipped While A Dialog Or Menu Is Open. An Open Tooltip Doesn't Count; It Is Told Apart By Its Automation Type,
+    // Not A Type Test (The Native AOT Build Can Hand A Popup's Child Back As A Base Type)
     private void OnRootPreviewKeyDown(object sender, KeyRoutedEventArgs e)
     {
         if (_chats is not { } chats || _settingsPage is not null
-            || VisualTreeHelper.GetOpenPopupsForXamlRoot(RootGrid.XamlRoot).Any(p => p.Child is not ToolTip))
+            || VisualTreeHelper.GetOpenPopupsForXamlRoot(RootGrid.XamlRoot).Any(p => p.Child is null
+                || FrameworkElementAutomationPeer.CreatePeerForElement(p.Child)?.GetAutomationControlType() != AutomationControlType.ToolTip))
         {
             return;
         }
 
-        bool focus_in_text_box = FocusManager.GetFocusedElement(RootGrid.XamlRoot) is TextBox;
+        // Matched By Name, Not By Type (The Native AOT Build Can Hand The Box Back As A Base Type). These Are The App's
+        // Only Text Boxes: A New One Must Be Added Here
+        bool focus_in_text_box = FocusManager.GetFocusedElement(RootGrid.XamlRoot) is FrameworkElement { Name: "DraftBox" or "QueryBox" };
         if (ShortcutMap.Resolve(e.Key, IsDown(VirtualKey.Control), IsDown(VirtualKey.Shift), IsDown(VirtualKey.Menu), focus_in_text_box) is { } command)
         {
             e.Handled = Run(chats, command);

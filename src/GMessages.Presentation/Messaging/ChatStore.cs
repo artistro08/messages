@@ -175,9 +175,6 @@ public sealed partial class ChatStore : IDisposable
         // Milliseconds), As mautrix-gmessages Does. An Empty Page Means There Are No Older Messages
         Cursor? older = response.Cursor ?? (page.Count > 0 ? new Cursor { LastItemID = page[^1].MessageID, LastItemTimestamp = page[^1].Timestamp / 1000 } : null);
 
-        // TODO: Wave 7 Diagnostics (IDs, Counts And Cursor Times Only); Remove Once Older Paging Works On The Real Phone
-        LogMessagesPage(conversationId, cursor, response.Messages.Count, page.Count, response.Cursor, older);
-
         // The Newest Page Is What Reopening The Chat Shows
         if (cursor is null)
         {
@@ -336,14 +333,6 @@ public sealed partial class ChatStore : IDisposable
 
         LogActionFailed(action, ex.GetType().Name);
     }
-
-    /// <summary>
-    /// Logs a step of an open chat's loading or scrolling (a fixed description with IDs and numbers only, never content).
-    /// </summary>
-    /// <remarks>TODO: Wave 7 diagnostics; remove once older paging works on the real phone.</remarks>
-    /// <param name="conversationId">The conversation ID.</param>
-    /// <param name="step">What happened, such as "load started".</param>
-    public void LogChatStep(string conversationId, string step) => LogStep(conversationId, step);
 
     /// <inheritdoc />
     public void Dispose() => _connection.ClientEvent -= OnClientEvent;
@@ -528,10 +517,4 @@ public sealed partial class ChatStore : IDisposable
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Could not {Action} ({ErrorType})")]
     private partial void LogActionFailed(string action, string errorType);
-
-    [LoggerMessage(Level = LogLevel.Information, Message = "Messages page {ConversationId}: asked {Asked}, got {Got}, kept {Kept}, phone cursor {PhoneCursor}, next {Next}")]
-    private partial void LogMessagesPage(string conversationId, Cursor? asked, int got, int kept, Cursor? phoneCursor, Cursor? next);
-
-    [LoggerMessage(Level = LogLevel.Information, Message = "Chat {ConversationId}: {Step}")]
-    private partial void LogStep(string conversationId, string step);
 }

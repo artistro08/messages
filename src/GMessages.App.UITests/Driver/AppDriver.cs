@@ -21,7 +21,17 @@ public sealed class AppDriver : IAsyncDisposable
     /// <summary>The default time a UI wait polls before failing.</summary>
     public static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(20);
 
-    private const string ExeRelativePath = @"GMessages.App\bin\x64\Debug\net10.0-windows10.0.26100.0\win-x64\Messages.exe";
+    // GMESSAGES_UITEST_AOT=1 Drives The Optimized Native AOT Publish Instead: Only It Hands WinUI Objects Back As Base
+    // Types, So Only It Catches A Type Test That Fails In The Shipped App
+    private static readonly bool Aot = Environment.GetEnvironmentVariable("GMESSAGES_UITEST_AOT") == "1";
+
+    private static readonly string ExeRelativePath = Aot
+        ? @"GMessages.App\bin\x64\Debug\net10.0-windows10.0.26100.0\win-x64\publish\Messages.exe"
+        : @"GMessages.App\bin\x64\Debug\net10.0-windows10.0.26100.0\win-x64\Messages.exe";
+
+    private static readonly string BuildCommand = Aot
+        ? "dotnet publish src/GMessages.App -c Debug -p:Platform=x64 -p:Optimize=true"
+        : "dotnet build src/GMessages.App -c Debug -p:Platform=x64";
 
     private static readonly string? FoundExe      = FindExe();
     private const int MaxSearchNodes = 5000;
@@ -40,11 +50,12 @@ public sealed class AppDriver : IAsyncDisposable
     }
 
     /// <summary>
-    /// Gets the full path of the built Debug exe the tests drive.
+    /// Gets the full path of the built Debug exe the tests drive (the optimized Native AOT publish when
+    /// <c>GMESSAGES_UITEST_AOT</c> is <c>1</c>).
     /// </summary>
     /// <exception cref="AssertFailedException">The exe isn't built.</exception>
     public static string ExePath => FoundExe ?? throw new AssertFailedException(
-        $"Messages.exe is not built. Run 'dotnet build src/GMessages.App -c Debug -p:Platform=x64' first. Looked for src\\{ExeRelativePath} in every folder above {AppContext.BaseDirectory}.");
+        $"Messages.exe is not built. Run '{BuildCommand}' first. Looked for src\\{ExeRelativePath} in every folder above {AppContext.BaseDirectory}.");
 
     /// <summary>
     /// Gets the UI Automation client.
