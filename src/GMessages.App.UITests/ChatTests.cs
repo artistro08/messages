@@ -486,6 +486,25 @@ public sealed class ChatTests : UiTest
         Wait.Until(() => App.TryFind("Chat.LoadingOlder") is null, AppDriver.DefaultTimeout, () => "The top ring stayed after the phone answered.");
     }
 
+    /// <summary>
+    /// After a restart, a chat opened before shows its bubbles from the encrypted database, before the phone answers.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Restart_OpensChatFromDatabase_BeforePhoneAnswers()
+    {
+        await OpenAnnAsync();
+
+        await App.RestartAsync();
+
+        // The Phone Slow, So Only The Database Can Show The Bubbles In Time
+        Server.Phone.MessagesDelay = TimeSpan.FromSeconds(5);
+        Tray.LeftClick();
+        App.Find("Row.c-ann").Patterns.SelectionItem.Pattern.Select();
+
+        Wait.Until(() => Bubbles().Count == 3, TimeSpan.FromSeconds(2), () => $"Ann's saved chat showed {Bubbles().Count} bubbles within 2 s, not 3.");
+    }
+
     // =========================================================================
     // HELPERS
     // =========================================================================

@@ -16,11 +16,15 @@ namespace GMessages.Presentation.Messaging;
 /// last 20 opened conversations, so reopening one shows it at once (see <see cref="CachedMessages"/>).
 /// </para>
 /// <para>
-/// <b>Privacy.</b> The message pages live in memory only: never written to disk, dropped by <see cref="Reset"/>.
+/// <b>Privacy.</b> Under the memory caches sits the <see cref="MessageDatabase"/>: conversations and each one's newest
+/// messages, encrypted with DPAPI for the current Windows user, so chats open at once after a restart.
+/// <see cref="Reset"/> clears memory and deletes the database file, and a fetch that started before it writes nothing.
 /// </para>
 /// <para>
 /// <b>Threads.</b> Live events come from <see cref="ConnectionController.ClientEvent"/> on the UI thread. The cache is
-/// safe to read from anywhere. Message text, names and numbers are never logged.
+/// safe to read from anywhere. The database is never touched on the caller's thread: writes go, in order, through one
+/// background queue, and reads run on the thread pool (a locked file can block a call for 30 s). Message text, names
+/// and numbers are never logged.
 /// </para>
 /// </remarks>
 public sealed partial class ChatStore : IDisposable
@@ -33,9 +37,21 @@ public sealed partial class ChatStore : IDisposable
 
     private const int NotifiedRingSize = 256;
 
+    // A Message Older Than This Never Counts As New (A Reaction Or Status Update To An Old Message)
+    private static readonly TimeSpan NewMessageAge = TimeSpan.FromDays(1);
+
     private readonly ConnectionController _connection;
     private readonly Func<IMessagingClient?> _client;
     private readonly ILogger _log;
+    private readonly MessageDatabase? _database;
+    private readonly TimeProvider _time;
+
+    // Bumped By Reset: Work Started Under An Older Generation Belongs To The Old Account And Is Dropped
+    private int _generation;
+
+    // Database Calls, Run One After Another Off The Caller's Thread
+    private readonly Lock _queueLock = new();
+    private Task _queue = Task.CompletedTask;
 
     // Cache Of Slim Conversation Records, By ID
     private readonly ConcurrentDictionary<string, ConversationInfo> _cache = new();
@@ -58,7 +74,9 @@ public sealed partial class ChatStore : IDisposable
     /// <param name="connection">The connection whose <see cref="ConnectionController.ClientEvent"/> feeds the store.</param>
     /// <param name="client">Gets the current phone client, or null when not connected.</param>
     /// <param name="log">The logger.</param>
-    public ChatStore(ConnectionController connection, Func<IMessagingClient?> client, ILogger log)
+    /// <param name="database">The one database for this data folder, or null to keep everything in memory only.</param>
+    /// <param name="time">The clock that decides when a message is too old to be new; the system clock when null.</param>
+    public ChatStore(ConnectionController connection, Func<IMessagingClient?> client, ILogger log, MessageDatabase? database = null, TimeProvider? time = null)
     {
         ArgumentNullException.ThrowIfNull(connection);
         ArgumentNullException.ThrowIfNull(client);
@@ -67,6 +85,8 @@ public sealed partial class ChatStore : IDisposable
         _connection = connection;
         _client     = client;
         _log        = log;
+        _database   = database;
+        _time       = time ?? TimeProvider.System;
 
         _connection.ClientEvent += OnClientEvent;
     }
@@ -119,10 +139,38 @@ public sealed partial class ChatStore : IDisposable
         }
 
         // No ConfigureAwait(false): ConversationChanged Must Be Raised On The Caller Thread
+        int generation        = Generation;
         Conversation? fetched = await RequireClient().GetConversationAsync(conversationId, ct);
 
-        return fetched is null ? null : CacheConversation(fetched);
+        return fetched is null || generation != Generation ? null : CacheConversation(fetched, generation);
     }
+
+    /// <summary>
+    /// Fills the conversation cache from the database, so the list shows at once after a restart.
+    /// </summary>
+    /// <remarks>
+    /// Call once start-up ends paired. Reads on the thread pool and raises no events; a conversation the phone
+    /// already sent is kept over the saved copy.
+    /// </remarks>
+    /// <returns>A task that completes when the saved conversations are cached.</returns>
+    public Task LoadSavedAsync() => Enqueue(database =>
+    {
+        int generation = Generation;
+        IReadOnlyList<Conversation> saved = database.LoadConversations();
+        if (generation != Generation)
+        {
+            return;
+        }
+
+        foreach (Conversation c in saved)
+        {
+            ConversationInfo info = ConversationInfo.From(c);
+            if (_cache.TryAdd(info.Id, info))
+            {
+                _me ??= info.Participants.FirstOrDefault(p => p.IsMe);
+            }
+        }
+    });
 
     /// <summary>
     /// Loads one page of a folder and caches it.
@@ -140,13 +188,20 @@ public sealed partial class ChatStore : IDisposable
             ? ListConversationsRequest.Types.Folder.SpamBlocked
             : ListConversationsRequest.Types.Folder.Inbox;
 
+        int generation                     = Generation;
         ListConversationsResponse response = await client.ListConversationsAsync(protocol_folder, PageSize, cursor, ct);
+
+        // Unpaired Or Signed Out Meanwhile: The Old Account's Page Is Dropped
+        if (generation != Generation)
+        {
+            return ([], null);
+        }
 
         // No ConfigureAwait(false) Here: ConversationChanged Must Be Raised On The Caller Thread
         List<ConversationInfo> result = [];
         foreach (Conversation c in response.Conversations)
         {
-            result.Add(CacheConversation(c));
+            result.Add(CacheConversation(c, generation));
         }
 
         return (result, response.Cursor);
@@ -164,7 +219,14 @@ public sealed partial class ChatStore : IDisposable
     {
         IMessagingClient client = RequireClient();
 
+        int generation                = Generation;
         ListMessagesResponse response = await client.FetchMessagesAsync(conversationId, PageSize, cursor, ct).ConfigureAwait(false);
+
+        // Unpaired Or Signed Out Meanwhile: The Old Account's Page Is Dropped
+        if (generation != Generation)
+        {
+            return ([], null);
+        }
 
         // The Phone Answers Newest First. An Older Page Can Hold The Cursor's Own Message Or Newer Ones, Already Shown Below,
         // So Those Are Dropped (As mautrix-gmessages Does: pkg/connector/backfill.go)
@@ -175,17 +237,52 @@ public sealed partial class ChatStore : IDisposable
         // Milliseconds), As mautrix-gmessages Does. An Empty Page Means There Are No Older Messages
         Cursor? older = response.Cursor ?? (page.Count > 0 ? new Cursor { LastItemID = page[^1].MessageID, LastItemTimestamp = page[^1].Timestamp / 1000 } : null);
 
-        // The Newest Page Is What Reopening The Chat Shows
+        // The Newest Page Is What Reopening The Chat Shows; Every Page Goes To The Database
         if (cursor is null)
         {
-            CachePage(conversationId, messages);
+            CachePage(conversationId, messages, onlyIfAbsent: false, generation);
         }
+
+        SaveMessages(conversationId, page, generation);
 
         return (messages, older);
     }
 
     /// <summary>
-    /// Gets the cached newest page of a conversation, kept from its last load and the messages since.
+    /// Gets the newest page of a conversation from memory, else from the database (then kept in memory).
+    /// </summary>
+    /// <remarks>
+    /// A memory hit completes at once, without leaving the caller's thread; the database is read on the thread pool.
+    /// Counts as a use, so the conversation is the last one the memory cache drops.
+    /// </remarks>
+    /// <param name="conversationId">The conversation ID.</param>
+    /// <returns>A copy of the page, oldest first, or null when neither memory nor the database has it.</returns>
+    public async Task<IReadOnlyList<ChatMessage>?> CachedMessagesAsync(string conversationId)
+    {
+        if (CachedMessages(conversationId) is { } cached)
+        {
+            return cached;
+        }
+
+        if (_database is not { } database)
+        {
+            return null;
+        }
+
+        int generation               = Generation;
+        IReadOnlyList<Message> saved = await Task.Run(() => database.LoadMessages(conversationId, PageSize)).ConfigureAwait(false);
+        if (saved.Count == 0 || generation != Generation)
+        {
+            return null;
+        }
+
+        // A Page The Phone Sent Meanwhile Wins Over The Saved One
+        CachePage(conversationId, [.. saved.Select(ChatMessage.From)], onlyIfAbsent: true, generation);
+        return CachedMessages(conversationId);
+    }
+
+    /// <summary>
+    /// Gets the newest page of a conversation from memory only, kept from its last load and the messages since.
     /// </summary>
     /// <remarks>Counts as a use, so the conversation is the last one the cache drops.</remarks>
     /// <param name="conversationId">The conversation ID.</param>
@@ -225,16 +322,17 @@ public sealed partial class ChatStore : IDisposable
         IMessagingClient client = RequireClient();
 
         // Look Up The Conversation, Fetching It When Not Cached
+        int generation                 = Generation;
         ConversationInfo? conversation = Find(conversationId);
         if (conversation is null)
         {
             Conversation? fetched = await client.GetConversationAsync(conversationId, ct);
-            if (fetched is null)
+            if (fetched is null || generation != Generation)
             {
                 throw new MessageSendException("ConversationNotFound");
             }
 
-            conversation = CacheConversation(fetched);
+            conversation = CacheConversation(fetched, generation);
         }
 
         string outgoing_id = conversation.DefaultOutgoingId;
@@ -264,7 +362,10 @@ public sealed partial class ChatStore : IDisposable
         }
 
         var pending = new ChatMessage(string.Empty, tmpId, conversationId, outgoing_id, DateTimeOffset.UtcNow, true, MessageKind.Text, text, MessageStatusType.OutgoingSending);
-        CacheMessage(pending);
+        if (generation == Generation)
+        {
+            CacheMessage(pending);
+        }
 
         return pending;
     }
@@ -284,9 +385,10 @@ public sealed partial class ChatStore : IDisposable
     public async Task MarkReadAsync(string conversationId, string messageId, CancellationToken ct)
     {
         // No ConfigureAwait(false): ConversationChanged Must Be Raised On The Caller Thread
+        int generation = Generation;
         await RequireClient().MarkReadAsync(conversationId, messageId, ct);
 
-        if (Find(conversationId) is not { Unread: true } cached)
+        if (generation != Generation || Find(conversationId) is not { Unread: true } cached)
         {
             return;
         }
@@ -297,15 +399,20 @@ public sealed partial class ChatStore : IDisposable
     }
 
     /// <summary>
-    /// Forgets everything learned from the paired phone: cached conversations, the owner, the SIMs and the notified IDs.
+    /// Forgets everything learned from the paired phone: cached conversations, the owner, the SIMs, the notified IDs
+    /// and the database.
     /// </summary>
     /// <remarks>
     /// Call on unpair or sign-out. Conversation IDs are small per-phone numbers, so a different phone paired later
     /// would otherwise get the old phone's names, owner and SIMs; it also drops the old account's names and numbers
-    /// from memory.
+    /// from memory and disk. A fetch that started before the reset drops its result: no cache write, no database
+    /// write, no event. The file is deleted on the background queue, after any write already queued.
     /// </remarks>
     public void Reset()
     {
+        Interlocked.Increment(ref _generation);
+        _ = Enqueue(database => database.Delete());
+
         _cache.Clear();
         _me   = null;
         _sims = [];
@@ -356,6 +463,7 @@ public sealed partial class ChatStore : IDisposable
             case ConversationUpdated updated:
                 ConversationInfo info = ConversationInfo.From(updated.Conversation);
                 Upsert(info);
+                SaveConversation(updated.Conversation, Generation);
                 ConversationChanged?.Invoke(this, info);
                 break;
 
@@ -379,9 +487,12 @@ public sealed partial class ChatStore : IDisposable
         ChatMessage message = ChatMessage.From(received.Message);
 
         // No ConfigureAwait(false) Below: Events Must Be Raised On The Thread That Delivered The Client Event
-        // Decide IsNew Before Any Await, So Two Quick Events Of One Message Can't Both Be New
-        bool is_new = MarkNotified(message.Id);
+        // Decide IsNew Before Any Await, So Two Quick Events Of One Message Can't Both Be New. A Message Older Than A Day
+        // Is Never New Either: A Reaction Or Status Update To It Must Not Notify (mautrix-gmessages, GetReactions)
+        int generation = Generation;
+        bool is_new    = MarkNotified(message.Id) && message.Time >= _time.GetUtcNow() - NewMessageAge;
         CacheMessage(message);
+        SaveMessages(message.ConversationId, [received.Message], generation);
 
         ConversationInfo? conversation = Find(message.ConversationId);
         if (conversation is null && _client() is { } client)
@@ -389,15 +500,21 @@ public sealed partial class ChatStore : IDisposable
             try
             {
                 Conversation? fetched = await client.GetConversationAsync(message.ConversationId, CancellationToken.None);
-                if (fetched is not null)
+                if (fetched is not null && generation == Generation)
                 {
-                    conversation = CacheConversation(fetched);
+                    conversation = CacheConversation(fetched, generation);
                 }
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
                 LogConversationFetchFailed(message.ConversationId, ex.GetType().Name);
             }
+        }
+
+        // Unpaired Or Signed Out Meanwhile: Nothing Of The Old Account Is Raised
+        if (generation != Generation)
+        {
+            return;
         }
 
         MessageArrived?.Invoke(this, new MessageArrivedEventArgs(message, conversation, received.IsOld, is_new));
@@ -407,10 +524,11 @@ public sealed partial class ChatStore : IDisposable
     // CACHE
     // =========================================================================
 
-    // Caches A Protocol Conversation And Raises ConversationChanged When The Cache Changed
-    private ConversationInfo CacheConversation(Conversation c)
+    // Caches And Saves A Protocol Conversation, Raising ConversationChanged When The Cache Changed
+    private ConversationInfo CacheConversation(Conversation c, int generation)
     {
         ConversationInfo info = ConversationInfo.From(c);
+        SaveConversation(c, generation);
         if (Upsert(info))
         {
             ConversationChanged?.Invoke(this, info);
@@ -433,11 +551,17 @@ public sealed partial class ChatStore : IDisposable
     }
 
     // Keeps A Conversation's Newest Page As The Most Recently Used, Dropping The Least Recently Used Past 20. Messages
-    // Cached While The Page Was On Its Way (Newer Than Anything In It, And Not In It) Stay Below It
-    private void CachePage(string conversationId, List<ChatMessage> page)
+    // Cached While The Page Was On Its Way (Newer Than Anything In It, And Not In It) Stay Below It. The Generation Is
+    // Checked Under The Lock, So A Page Can't Land After Reset Cleared The Pages
+    private void CachePage(string conversationId, List<ChatMessage> page, bool onlyIfAbsent, int generation)
     {
         lock (_pagesLock)
         {
+            if (generation != Generation || (onlyIfAbsent && _pages.ContainsKey(conversationId)))
+            {
+                return;
+            }
+
             List<ChatMessage> merged = [.. page];
             if (_pages.Remove(conversationId, out List<ChatMessage>? old) && page.Count > 0)
             {
@@ -507,6 +631,89 @@ public sealed partial class ChatStore : IDisposable
 
             return true;
         }
+    }
+
+    // =========================================================================
+    // DATABASE
+    // =========================================================================
+
+    private int Generation => Volatile.Read(ref _generation);
+
+    /// <summary>
+    /// Waits for every database call queued so far (tests).
+    /// </summary>
+    /// <returns>A task that completes when the queue is empty up to now.</returns>
+    internal Task FlushAsync()
+    {
+        lock (_queueLock)
+        {
+            return _queue;
+        }
+    }
+
+    // Runs A Database Call On The Background Queue, After Every One Queued Before It. Without A Database Nothing Runs
+    private Task Enqueue(Action<MessageDatabase> work)
+    {
+        if (_database is not { } database)
+        {
+            return Task.CompletedTask;
+        }
+
+        lock (_queueLock)
+        {
+            _queue = _queue.ContinueWith(
+                _ =>
+                {
+                    try
+                    {
+                        work(database);
+                    }
+                    catch (Exception ex) when (ex is not OutOfMemoryException)
+                    {
+                        LogActionFailed("use the message database", ex.GetType().Name);
+                    }
+                },
+                CancellationToken.None,
+                TaskContinuationOptions.None,
+                TaskScheduler.Default);
+
+            return _queue;
+        }
+    }
+
+    // Queues A Conversation Save, Dropped When A Reset Came After The Generation Was Taken
+    private void SaveConversation(Conversation conversation, int generation)
+    {
+        if (_database is null || conversation.ConversationID.Length == 0)
+        {
+            return;
+        }
+
+        _ = Enqueue(database =>
+        {
+            if (generation == Generation)
+            {
+                database.SaveConversation(conversation);
+            }
+        });
+    }
+
+    // Queues A Message Save, Dropped When A Reset Came After The Generation Was Taken
+    private void SaveMessages(string conversationId, IReadOnlyList<Message> messages, int generation)
+    {
+        List<Message> saved = [.. messages.Where(m => m.MessageID.Length > 0)];
+        if (_database is null || conversationId.Length == 0 || saved.Count == 0)
+        {
+            return;
+        }
+
+        _ = Enqueue(database =>
+        {
+            if (generation == Generation)
+            {
+                database.SaveMessages(conversationId, saved);
+            }
+        });
     }
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Phone refused a send in {ConversationId} ({Status})")]

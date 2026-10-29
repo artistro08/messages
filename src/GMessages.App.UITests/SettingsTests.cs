@@ -117,6 +117,30 @@ public sealed class SettingsTests : UiTest
         Wait.Until(() => !File.Exists(SessionFile), AppDriver.DefaultTimeout, () => "Unpair left session.bin behind.");
     }
 
+    /// <summary>
+    /// Unpairing deletes the message database the opened chat left behind.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Unpair_DeletesMessageDatabase()
+    {
+        string database = Path.Combine(App.DataDir, "messages.db");
+
+        // Opening A Chat Saves It
+        await OpenMainAsync();
+        App.Find("Row.c-ann").Patterns.SelectionItem.Pattern.Select();
+        Wait.Until(() => File.Exists(database), AppDriver.DefaultTimeout, () => "Opening a chat left no messages.db.");
+        CloseMainWindow();
+
+        // Unpair
+        OpenSettings();
+        App.Find("Settings.Unpair").Patterns.Invoke.Pattern.Invoke();
+        App.Find("Settings.UnpairConfirm").Patterns.Invoke.Pattern.Invoke();
+        WaitForPairing();
+
+        Wait.Until(() => !File.Exists(database), AppDriver.DefaultTimeout, () => "Unpair left messages.db behind.");
+    }
+
     // =========================================================================
     // HELPERS
     // =========================================================================

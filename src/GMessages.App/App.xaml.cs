@@ -145,9 +145,10 @@ public partial class App : Application, IDisposable
         _connection   = new ConnectionController(paths, endpoints, TimeProvider.System, new SingleProviderLoggerFactory(_logProvider), a => dispatcher.TryEnqueue(() => a()));
         _connection.StateChanged += (_, _) => OnConnectionStateChanged();
 
-        // Chat Store: outlives the main window; no client until paired and connected
+        // Chat Store: outlives the main window; no client until paired and connected. The one message database for this
+        // data folder sits under it
         var connection = _connection;
-        _store         = new ChatStore(connection, () => connection.Client is { } client ? new GmMessagingClient(client) : null, _logProvider.CreateLogger("GMessages.Chat"));
+        _store         = new ChatStore(connection, () => connection.Client is { } client ? new GmMessagingClient(client) : null, _logProvider.CreateLogger("GMessages.Chat"), new MessageDatabase(paths.MessagesDatabase, _logProvider.CreateLogger("GMessages.Database")));
 
         // Notifications: a toast for each new message, also with the main window closed
         var store      = _store;
@@ -234,6 +235,12 @@ public partial class App : Application, IDisposable
 #pragma warning restore CA1031
         {
             AppLog.ConnectionStartFailed(_logger, ex);
+        }
+
+        // Paired: The Saved Chats Fill The List Before The Phone Answers (Read Off The UI Thread)
+        if (!NeedsPairing() && _store is { } store)
+        {
+            await store.LoadSavedAsync();
         }
 
         // NotPaired is the starting state, so StartAsync raises nothing for it

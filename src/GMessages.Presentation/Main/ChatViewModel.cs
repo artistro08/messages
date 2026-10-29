@@ -174,7 +174,7 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     /// <summary>
     /// Loads the newest page, merging it into the bubbles (unsent ones stay), and marks the conversation read when it was unread.
     /// </summary>
-    /// <remarks>Call on the UI thread. With no bubbles yet, the cached page shows first, before anything is awaited. While a page is loading the call is remembered and runs once that load ends. When the load fails (phone not connected or not answering, a network error) the bubbles stay as they were.</remarks>
+    /// <remarks>Call on the UI thread. With no bubbles yet, the cached page shows first: at once from memory, or after a read of the database off the UI thread. While a page is loading the call is remembered and runs once that load ends. When the load fails (phone not connected or not answering, a network error) the bubbles stay as they were.</remarks>
     /// <returns>A task that completes when the page is shown.</returns>
     public async Task LoadAsync()
     {
@@ -184,13 +184,14 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
-        // Opened Before: The Copy Kept From Then Shows At Once, And The Phone's Page Is Merged In Below
-        if (Messages.Count == 0 && _store.CachedMessages(ConversationId) is { } cached)
+        // Opened Before (Also Before A Restart): The Saved Copy Shows At Once, And The Phone's Page Is Merged In Below. A
+        // Copy In Memory Comes Back Without Awaiting; The Database Is Read Off The UI Thread
+        IsLoading = true;
+        if (Messages.Count == 0 && await _store.CachedMessagesAsync(ConversationId) is { } cached)
         {
             ShowPage(cached);
         }
 
-        IsLoading        = true;
         IsLoadingHistory = Messages.Count == 0;
         IsRefreshing     = Messages.Count > 0;
         try

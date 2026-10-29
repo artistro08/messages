@@ -56,8 +56,17 @@ internal sealed class FakeMessagingClient : IMessagingClient
         return page;
     }
 
+    /// <summary>When set, the next conversation fetch answers only after this completes.</summary>
+    public TaskCompletionSource? GetConversationGate { get; set; }
+
     public async Task<Conversation?> GetConversationAsync(string conversationId, CancellationToken ct)
     {
+        if (GetConversationGate is { } gate)
+        {
+            GetConversationGate = null;
+            await gate.Task;
+        }
+
         if (YieldInFetch)
         {
             await Task.Delay(20, ct).ConfigureAwait(false);

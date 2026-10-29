@@ -5,6 +5,7 @@ using GMessages.Protocol.Events;
 using GMessages.Protocol.Http;
 using GMessages.Protocol.Proto;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 
 namespace GMessages.Presentation.Tests.Messaging;
 
@@ -17,26 +18,52 @@ public sealed class ChatStoreTests
     // RIG
     // =========================================================================
 
+    // The Default Message Time Below (Msg), So Default Messages Are Recent
+    private static readonly DateTimeOffset Now = DateTimeOffset.FromUnixTimeSeconds(1_761_700_000);
+
     private sealed class Rig : IDisposable
     {
-        public Rig(bool connected = true)
+        private readonly string _folder = Path.Combine(Path.GetTempPath(), "chat-test-" + Guid.NewGuid().ToString("N"));
+
+        public Rig(bool connected = true, bool withDatabase = false)
         {
             Controller = new ConnectionController(
-                new AppPaths(Path.Combine(Path.GetTempPath(), "chat-test-" + Guid.NewGuid().ToString("N"))),
+                new AppPaths(_folder),
                 GmEndpoints.Production,
                 TimeProvider.System,
                 NullLoggerFactory.Instance,
                 a => a());
-            Store = new ChatStore(Controller, () => connected ? Client : null, NullLogger.Instance);
+
+            DatabasePath = Path.Combine(_folder, "messages.db");
+            if (withDatabase)
+            {
+                Directory.CreateDirectory(_folder);
+                Database = new MessageDatabase(DatabasePath, NullLogger.Instance);
+            }
+
+            Store = new ChatStore(Controller, () => connected ? Client : null, NullLogger.Instance, Database, Time);
         }
 
         public ConnectionController Controller { get; }
 
         public FakeMessagingClient Client { get; } = new();
 
+        public FakeTimeProvider Time { get; } = new(Now);
+
+        public MessageDatabase? Database { get; }
+
+        public string DatabasePath { get; }
+
         public ChatStore Store { get; }
 
-        public void Dispose() => Store.Dispose();
+        public void Dispose()
+        {
+            Store.Dispose();
+            if (Directory.Exists(_folder))
+            {
+                Directory.Delete(_folder, recursive: true);
+            }
+        }
     }
 
     private static Conversation Conv(string id, string name = "Ann", string outgoing = "me1")
@@ -343,6 +370,152 @@ public sealed class ChatStoreTests
 
         Assert.IsNull(rig.Store.CachedMessages("c1"));
     }
+
+    // =========================================================================
+    // DATABASE
+    // =========================================================================
+
+    /// <summary>
+    /// Saved conversations fill the cache (so the list shows at once after a restart) without raising anything.
+    /// </summary>
+    [TestMethod]
+    public async Task LoadSaved_FillsConversations_NoEvents()
+    {
+        using var rig = new Rig(withDatabase: true);
+        rig.Database!.SaveConversation(Conv("c1", "Ann"));
+        int raised = 0;
+        rig.Store.ConversationChanged += (_, _) => raised++;
+
+        await rig.Store.LoadSavedAsync();
+
+        Assert.AreEqual("Ann", rig.Store.Find("c1")?.Name);
+        Assert.AreEqual("me1", rig.Store.Me?.Id);
+        Assert.AreEqual(0, raised);
+    }
+
+    /// <summary>
+    /// A conversation with no page in memory shows the database's newest messages, which then sit in memory.
+    /// </summary>
+    [TestMethod]
+    public async Task CachedMessages_MemoryMiss_ReadsDatabase()
+    {
+        using var rig = new Rig(withDatabase: true);
+        rig.Database!.SaveMessages("c1", [Msg("m1", "c1", ts: 1_000), Msg("m2", "c1", ts: 2_000)]);
+        Assert.IsNull(rig.Store.CachedMessages("c1"));
+
+        Assert.AreEqual("m1,m2", Ids(await rig.Store.CachedMessagesAsync("c1")));
+        Assert.AreEqual("m1,m2", Ids(rig.Store.CachedMessages("c1")), "now in memory");
+        Assert.IsNull(await rig.Store.CachedMessagesAsync("c2"));
+    }
+
+    [TestMethod]
+    public async Task LiveMessage_IsSaved()
+    {
+        using var rig = new Rig(withDatabase: true);
+
+        await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1", "Ann")));
+        await rig.Store.HandleEventAsync(new MessageReceived(Msg("m1", "c1"), false));
+        await rig.Store.FlushAsync();
+
+        Assert.AreEqual("m1", string.Join(",", rig.Database!.LoadMessages("c1", 25).Select(m => m.MessageID)));
+        Assert.AreEqual("Ann", rig.Database.LoadConversations().Single().Name);
+    }
+
+    [TestMethod]
+    public async Task OlderPage_IsSaved()
+    {
+        using var rig = new Rig(withDatabase: true);
+        rig.Client.MessagesPage = PageOf(Msg("m1", "c1", ts: 1_000_000), Msg("m2", "c1", ts: 2_000_000));
+        await rig.Store.LoadMessagesAsync("c1", null, Ct);
+
+        rig.Client.MessagesPage = PageOf(Msg("m0", "c1", ts: 500_000));
+        await rig.Store.LoadMessagesAsync("c1", new Cursor { LastItemID = "m1", LastItemTimestamp = 1_000 }, Ct);
+        await rig.Store.FlushAsync();
+
+        Assert.AreEqual("m0,m1,m2", string.Join(",", rig.Database!.LoadMessages("c1", 25).Select(m => m.MessageID)));
+    }
+
+    [TestMethod]
+    public async Task Reset_DeletesDatabase()
+    {
+        using var rig = new Rig(withDatabase: true);
+        await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1")));
+        await rig.Store.FlushAsync();
+        Assert.IsTrue(File.Exists(rig.DatabasePath));
+
+        rig.Store.Reset();
+        await rig.Store.FlushAsync();
+
+        Assert.IsFalse(File.Exists(rig.DatabasePath));
+    }
+
+    /// <summary>
+    /// A fetch that started before an unpair or sign-out drops its result: nothing of the old account reaches memory
+    /// or the database, and nothing is raised.
+    /// </summary>
+    [TestMethod]
+    public async Task Reset_DuringFetch_WritesNothing()
+    {
+        using var rig = new Rig(withDatabase: true);
+        int raised = 0;
+        rig.Store.ConversationChanged += (_, _) => raised++;
+        rig.Store.MessageArrived      += (_, _) => raised++;
+
+        // Messages
+        var fetch_gate          = new TaskCompletionSource();
+        rig.Client.MessagesPage = PageOf(Msg("m1", "c1"));
+        rig.Client.FetchGate    = fetch_gate;
+        Task<(IReadOnlyList<ChatMessage> Messages, Cursor? Older)> messages = rig.Store.LoadMessagesAsync("c1", null, Ct);
+
+        // Conversations
+        var list_gate                = new TaskCompletionSource();
+        rig.Client.ConversationsPage = new ListConversationsResponse();
+        rig.Client.ConversationsPage.Conversations.Add(Conv("c2", "Ann"));
+        rig.Client.ListGate = list_gate;
+        Task<(IReadOnlyList<ConversationInfo> Conversations, Cursor? Next)> folder = rig.Store.LoadFolderAsync(ConversationFolder.Inbox, null, Ct);
+
+        // A Live Message Whose Conversation Is Still Being Fetched
+        var conversation_gate          = new TaskCompletionSource();
+        rig.Client.Conversations["c3"] = Conv("c3", "Bo");
+        rig.Client.GetConversationGate = conversation_gate;
+        Task live = rig.Store.HandleEventAsync(new MessageReceived(Msg("m3", "c3"), false));
+
+        rig.Store.Reset();
+        fetch_gate.SetResult();
+        list_gate.SetResult();
+        conversation_gate.SetResult();
+        await messages;
+        await folder;
+        await live;
+        await rig.Store.FlushAsync();
+
+        Assert.IsNull(rig.Store.CachedMessages("c1"));
+        Assert.IsNull(rig.Store.Find("c2"));
+        Assert.IsNull(rig.Store.Find("c3"));
+        Assert.AreEqual(0, raised);
+        Assert.AreEqual(0, rig.Database!.LoadMessages("c1", 25).Count);
+        Assert.AreEqual(0, rig.Database.LoadConversations().Count);
+    }
+
+    /// <summary>
+    /// A status or reaction update for a message older than a day, never seen before (or out of the 256-ID ring),
+    /// is not new, so it never toasts (the mautrix-gmessages rule for reactions to old messages).
+    /// </summary>
+    [TestMethod]
+    public async Task ReactionOnDayOldMessage_IsNotNew()
+    {
+        using var rig = new Rig();
+        await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1")));
+        MessageArrivedEventArgs? got = null;
+        rig.Store.MessageArrived += (_, e) => got = e;
+
+        long two_days_ago = Now.AddDays(-2).ToUnixTimeMilliseconds() * 1000;
+        await rig.Store.HandleEventAsync(new MessageReceived(Msg("m-old", "c1", ts: two_days_ago), false));
+
+        Assert.IsNotNull(got);
+        Assert.IsFalse(got.IsNew);
+    }
+
 
     // =========================================================================
     // SENDING
