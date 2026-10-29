@@ -350,9 +350,9 @@ public sealed class ChatTests : UiTest
     [TestMethod]
     public async Task OlderPage_KeepsVisibleBubblesInPlace()
     {
-        // A Long Chat Whose Older Pages Take A Second, So The Wait Can Be Watched
+        // A Long Chat Whose Older Pages Take Two Seconds: The Baseline Settles (Within One) Before The Page Lands
         Server.Phone.Chats.AddLongChat();
-        Server.Phone.OlderPagesDelay = TimeSpan.FromSeconds(1);
+        Server.Phone.OlderPagesDelay = TimeSpan.FromSeconds(2);
         const string Oldest          = "Bubble.c-history-096";
         const string NextPage        = "Bubble.c-history-071";
 
@@ -388,6 +388,7 @@ public sealed class ChatTests : UiTest
         {
             int? y = BubbleTop(list, Oldest);
             samples.Add(y?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "off");
+            Assert.IsTrue(AnyBubble(list), $"The list showed no bubbles during the older page's arrival. Samples: {string.Join(" ", samples)}.");
             Assert.IsTrue(y is { } top && Math.Abs(top - recorded!.Value) <= 4,
                 $"{Oldest} moved from y={recorded} during the older page's arrival. Samples: {string.Join(" ", samples)}.");
 
@@ -418,6 +419,19 @@ public sealed class ChatTests : UiTest
     // =========================================================================
     // HELPERS
     // =========================================================================
+
+    // True When The List Holds At Least One Bubble (A Blanked List Holds None)
+    private static bool AnyBubble(AutomationElement list)
+    {
+        try
+        {
+            return list.FindFirstDescendant(cf => cf.ByAutomationId("Bubble.", FlaUI.Core.Definitions.PropertyConditionFlags.MatchSubstring)) is not null;
+        }
+        catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or FlaUI.Core.Exceptions.ElementNotAvailableException)
+        {
+            return false;
+        }
+    }
 
     // A Bubble's Screen Top, Or Null When It Is Gone, Off Screen Or Outside The List
     private static int? BubbleTop(AutomationElement list, string automationId)

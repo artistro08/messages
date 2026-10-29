@@ -39,7 +39,7 @@ internal static class TestHooks
     public static GmEndpoints? Endpoints { get; } = Parsed.EndpointBase is { } b ? new GmEndpoints(b, b, b) : null;
 
     /// <summary>
-    /// The toast buttons a probe asked for in <c>{DataDir}	oast-parts.txt</c>, read each time a toast is built, else null.
+    /// The toast buttons a probe asked for in <c>{DataDir}\toast-parts.txt</c>, read each time a toast is built, else null.
     /// </summary>
     /// <remarks>
     /// The file holds a <see cref="ToastParts"/> value such as <c>Reply, Snooze</c> or <c>None</c>. A missing,
