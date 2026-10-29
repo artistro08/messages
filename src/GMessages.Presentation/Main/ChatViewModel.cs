@@ -41,6 +41,9 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
 
     // A Reload Asked For While A Load Was Running; Runs When That Load Ends
     private bool _reloadPending;
+
+    // The Last Reason An Older Load Was Skipped (Wave 7 Diagnostics)
+    private string? _lastSkip;
     private string _draft = string.Empty;
 
     /// <summary>
@@ -172,6 +175,7 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
 
         IsLoading        = true;
         IsLoadingHistory = Messages.Count == 0;
+        Trace($"load started ({Messages.Count} shown)");
         try
         {
             // The Conversation May Not Be Cached Yet (Opened Right After Start Chat)
@@ -200,6 +204,7 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
         {
             IsLoading        = false;
             IsLoadingHistory = false;
+            Trace($"load ended ({Messages.Count} shown, older {(_older is null ? "none" : "set")})");
         }
 
         await RunPendingReloadAsync();
@@ -214,11 +219,22 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     {
         if (IsLoading || _older is null)
         {
+            // TODO: Wave 7 Diagnostics; Remove Once Older Paging Works On The Real Phone. Logged When The Reason Changes,
+            // Not On Every Scroll
+            string skipped = IsLoading ? "older skipped: loading" : "older skipped: no older pages";
+            if (skipped != _lastSkip)
+            {
+                _lastSkip = skipped;
+                Trace(skipped);
+            }
+
             return;
         }
 
+        _lastSkip      = null;
         IsLoading      = true;
         IsLoadingOlder = true;
+        Trace($"older started ({Messages.Count} shown)");
         try
         {
             (IReadOnlyList<ChatMessage> page, Cursor? older) = await _store.LoadMessagesAsync(ConversationId, _older, CancellationToken.None);
@@ -234,6 +250,7 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
 
             RefreshSenders();
             _fillOlder = at > 0;
+            Trace($"older added {at}");
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -351,7 +368,11 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
-    private void OnResynced(object? sender, EventArgs e) => _post(() => _ = LoadAsync());
+    private void OnResynced(object? sender, EventArgs e) => _post(() =>
+    {
+        Trace("resync reload");
+        _ = LoadAsync();
+    });
 
     private async Task MarkReadAsync(string messageId)
     {
@@ -376,6 +397,13 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     // =========================================================================
     // HELPERS
     // =========================================================================
+
+    /// <summary>
+    /// Logs a step of this chat's loading or scrolling: IDs and numbers only, never message content.
+    /// </summary>
+    /// <remarks>TODO: Wave 7 diagnostics; remove once older paging works on the real phone.</remarks>
+    /// <param name="step">What happened, such as "scroller hooked".</param>
+    public void Trace(string step) => _store.LogChatStep(ConversationId, step);
 
     // Match By ID, Then By The Temporary ID Of A Bubble Sent From Here
     private MessageBubbleViewModel? FindBubble(ChatMessage m) =>

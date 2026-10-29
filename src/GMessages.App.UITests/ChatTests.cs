@@ -249,6 +249,50 @@ public sealed class ChatTests : UiTest
         }
     }
 
+    /// <summary>
+    /// Scrolling up with the mouse wheel (real input, not UI Automation) loads older pages, and the scroll-to-bottom
+    /// button shows once far up.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task WheelUp_LoadsOlder_ShowsScrollToBottom()
+    {
+        // Three Pages Of Texts
+        Conversation chat = FakeChats.NewConversation("c-wheel", "Wheel Pal", false, ConversationStatus.Active, false, false, FakeChats.Person("p-wheel", "Wheel Pal", "+15550000007"));
+        long time         = DateTimeOffset.UtcNow.AddDays(-1).ToUnixTimeMilliseconds() * 1000;
+        Message[] texts   = [.. Enumerable.Range(1, ChatStore.PageSize * 3).Select(i => Line($"Line {i}"))];
+        Server.Phone.Chats.Add(chat, texts);
+
+        await OpenMainAsync();
+        App.Find("Row.c-wheel").Patterns.SelectionItem.Pattern.Select();
+        Wait.Until(() => Bubbles().Count >= ChatStore.PageSize, AppDriver.DefaultTimeout, () => $"The wheel chat showed {Bubbles().Count} bubbles.");
+
+        // Wheel Up Over The Bubbles Until The Older Page Comes In And The Button Shows
+        AutomationElement list = App.Find("Chat.Messages");
+        AutomationElement down = App.Find("Chat.ScrollToBottom");
+        System.Drawing.Rectangle over = list.BoundingRectangle;
+        FlaUI.Core.Input.Mouse.MoveTo(over.X + (over.Width / 2), over.Y + (over.Height / 2));
+        Wait.Until(() =>
+        {
+            FlaUI.Core.Input.Mouse.Scroll(5);
+            return Bubbles().Count > ChatStore.PageSize && down.Properties.IsKeyboardFocusable.ValueOrDefault;
+        }, AppDriver.DefaultTimeout, () => $"Wheeling up left {Bubbles().Count} bubbles; Scroll to bottom showed: {down.Properties.IsKeyboardFocusable.ValueOrDefault}.");
+
+        Message Line(string text)
+        {
+            var message = new Message
+            {
+                MessageID      = "w-" + text.Replace(' ', '-'),
+                ConversationID = "c-wheel",
+                ParticipantID  = "p-wheel",
+                Timestamp      = time += 1_000_000,
+                MessageStatus  = new MessageStatus { Status = MessageStatusType.IncomingComplete },
+            };
+            message.MessageInfo.Add(new MessageInfo { MessageContent = new MessageContent { Content = text } });
+            return message;
+        }
+    }
+
     // =========================================================================
     // HELPERS
     // =========================================================================
