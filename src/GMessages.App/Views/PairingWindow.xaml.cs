@@ -141,6 +141,9 @@ public sealed partial class PairingWindow : Window
             web.CoreWebView2.Settings.IsWebMessageEnabled   = false;
             web.CoreWebView2.Settings.AreHostObjectsAllowed = false;
             web.NavigationCompleted            += (_, _) => _ = CheckCookiesAsync(force: false);
+
+            // No Popups: a Google link that opens a new window would outlive sign-in and keep the profile folder locked
+            web.CoreWebView2.NewWindowRequested += (_, e) => e.Handled = true;
             web.CoreWebView2.Navigate(_endpoints.Authentication.AbsoluteUri);
         }
 #pragma warning disable CA1031 // Any Start-Up Failure (No WebView2 Runtime, Bad Folder) Becomes The Failure Screen

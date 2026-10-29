@@ -22,6 +22,9 @@ namespace GMessages.App;
 /// </remarks>
 internal sealed partial class TrayMenuWindow : Window
 {
+    // Hard-Coded Copy Of WinUI's MenuFlyoutItemThemePaddingNarrow: Unboxing The Theme Resource Throws Under Native AOT
+    private static readonly Thickness NarrowPadding = new(11, 4, 11, 7);
+
     private readonly Grid _root       = new();
     private readonly MenuFlyout _menu = new() { ShouldConstrainToRootBounds = false };
     private readonly IntPtr _hwnd;
@@ -130,10 +133,6 @@ internal sealed partial class TrayMenuWindow : Window
 
     // Always the mouse-sized padding. WinUI picks touch padding (taller rows) when it can't
     // tell how the menu was opened, which is often, since the host window never gets input.
-    // Hard-coded copy of WinUI's MenuFlyoutItemThemePaddingNarrow: unboxing the theme resource
-    // throws InvalidCastException under Native AOT.
-    private static readonly Thickness NarrowPadding = new(11, 4, 11, 7);
-
     private static MenuFlyoutItem CreateItem(string text, string glyph, string automationId, Action onClick)
     {
         var item = new MenuFlyoutItem
