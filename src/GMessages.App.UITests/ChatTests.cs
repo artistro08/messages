@@ -478,12 +478,12 @@ public sealed class ChatTests : UiTest
         Server.Phone.MessagesDelay = TimeSpan.FromSeconds(3);
         App.Find("Row.c-ann").Patterns.SelectionItem.Pattern.Select();
 
-        Wait.Until(() => Bubbles().Count == 3 && App.TryFind("Chat.TopRing") is not null, TimeSpan.FromSeconds(2),
+        Wait.Until(() => Bubbles().Count == 3 && App.TryFind("Chat.LoadingOlder") is not null, TimeSpan.FromSeconds(2),
             () => $"Ann's kept bubbles and the top ring didn't show together; bubbles: {Bubbles().Count}.");
-        Assert.IsNull(App.TryFind("Chat.Loading"), "The big ring showed over kept bubbles.");
+        Assert.IsTrue(App.TryFind("Chat.Loading") is not { IsOffscreen: false }, "The big ring showed over kept bubbles.");
 
         // The Phone Answers, The Ring Goes
-        Wait.Until(() => App.TryFind("Chat.TopRing") is null, AppDriver.DefaultTimeout, () => "The top ring stayed after the phone answered.");
+        Wait.Until(() => App.TryFind("Chat.LoadingOlder") is null, AppDriver.DefaultTimeout, () => "The top ring stayed after the phone answered.");
     }
 
     // =========================================================================
