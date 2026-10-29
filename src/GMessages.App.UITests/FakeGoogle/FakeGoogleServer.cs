@@ -19,7 +19,7 @@ namespace GMessages.App.UITests.FakeGoogle;
 /// Serves the paths of <see cref="GmEndpoints"/> when all three bases are <see cref="BaseUrl"/>. Protocol answers are
 /// PBLite (<c>application/json+protobuf</c>), as Google sends them. <c>/web/authentication</c> is a simulated login
 /// page: it sets no cookies until its "Sign in" button (<c>id="signin"</c>) posts to <c>/web/authentication/login</c>.
-/// The long poll answers <c>[[</c> and a startup ack at once, then pushed payloads, with a heartbeat every 10 seconds,
+/// The long poll answers <c>[[</c> and a startup ack (counting the phone's catch-up messages, which come first) at once, then pushed payloads, with a heartbeat every 10 seconds,
 /// and stays open until the client leaves or <see cref="KillLongPoll"/>. <c>SendMessage</c> requests go to
 /// <see cref="Phone"/>, whose answers come back on the long poll. Each request is served on its own task. Binds
 /// 127.0.0.1 only and never contacts anything.
@@ -86,6 +86,7 @@ public sealed class FakeGoogleServer : IAsyncDisposable
     private readonly ConcurrentDictionary<Task, byte> _handlers = new();
     private readonly Lock _lock = new();
     private readonly List<byte[]> _pending = [];
+    private readonly List<byte[]> _catchUp = [];
     private readonly string _configDeviceId = Guid.NewGuid().ToString();
     private readonly string _phoneRegId     = Guid.NewGuid().ToString();
     private Channel<byte[]>? _stream;
@@ -98,7 +99,15 @@ public sealed class FakeGoogleServer : IAsyncDisposable
     /// <exception cref="HttpListenerException">No free port could be bound after several tries.</exception>
     public FakeGoogleServer()
     {
-        Phone = new FakePhone(m => Push(new LongPollingPayload { Data = m }));
+        Phone = new FakePhone(
+            m => Push(new LongPollingPayload { Data = m }),
+            m =>
+            {
+                lock (_lock)
+                {
+                    _catchUp.Add(PbLiteSerializer.Serialize(new LongPollingPayload { Data = m }));
+                }
+            });
 
         // Free Port: Bind Port 0, Release It, Listen; Retry If Someone Took It Meanwhile
         for (int attempt = 1; ; attempt++)
@@ -317,6 +326,7 @@ public sealed class FakeGoogleServer : IAsyncDisposable
     {
         var channel = Channel.CreateUnbounded<byte[]>();
         int kill;
+        int catch_up_count = 0;
         lock (_lock)
         {
             kill = _killStatus;
@@ -333,6 +343,19 @@ public sealed class FakeGoogleServer : IAsyncDisposable
                 }
 
                 _stream = channel;
+
+                // Catch-Up Messages Wait For A Paired Client's Poll, Go First, And Are Counted By The Startup Ack
+                if (Phone.RequestCrypto is not null)
+                {
+                    foreach (byte[] catch_up in _catchUp)
+                    {
+                        channel.Writer.TryWrite(catch_up);
+                    }
+
+                    catch_up_count = _catchUp.Count;
+                    _catchUp.Clear();
+                }
+
                 foreach (byte[] queued in _pending)
                 {
                     channel.Writer.TryWrite(queued);
@@ -354,7 +377,7 @@ public sealed class FakeGoogleServer : IAsyncDisposable
         Stream body          = response.OutputStream;
         try
         {
-            await WriteAsync(body, "[["u8.ToArray(), PbLiteSerializer.Serialize(new LongPollingPayload { Ack = new StartAckMessage { Count = 0 } }));
+            await WriteAsync(body, "[["u8.ToArray(), PbLiteSerializer.Serialize(new LongPollingPayload { Ack = new StartAckMessage { Count = catch_up_count } }));
             byte[] heartbeat = PbLiteSerializer.Serialize(new LongPollingPayload { Heartbeat = new EmptyArr() });
             while (true)
             {

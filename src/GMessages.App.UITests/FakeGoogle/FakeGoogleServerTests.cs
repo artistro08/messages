@@ -24,6 +24,10 @@ public sealed class FakeGoogleServerTests
 {
     private static readonly TimeSpan HangGuard = TimeSpan.FromSeconds(30);
 
+    private static readonly string[] InboxIds = ["c-ann", "c-team"];
+
+    private static readonly string[] SpamIds = ["c-spam"];
+
     private static readonly string[] CookieNames = ["SAPISID", "SID", "HSID", "SSID", "APISID", "OSID", "__Secure-1PSIDTS"];
 
     // =========================================================================
@@ -41,6 +45,11 @@ public sealed class FakeGoogleServerTests
             Client      = GmClient.Create(Auth, new SessionStore(SessionPath), Endpoints, TimeProvider.System, NullLoggerFactory.Instance);
             Client.EventRaised += e =>
             {
+                lock (Events)
+                {
+                    Events.Add(e);
+                }
+
                 if (e is ListenFatalError)
                 {
                     Fatal.TrySetResult();
@@ -57,6 +66,8 @@ public sealed class FakeGoogleServerTests
         public GmClient Client { get; }
 
         public string SessionPath { get; }
+
+        public List<object> Events { get; } = [];
 
         public TaskCompletionSource Fatal { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -293,5 +304,128 @@ public sealed class FakeGoogleServerTests
         Assert.AreEqual(HttpStatusCode.OK, login.StatusCode);
         CollectionAssert.AreEquivalent(CookieNames, names);
         StringAssert.Contains(await login.Content.ReadAsStringAsync(), "Signed in");
+    }
+
+    // =========================================================================
+    // CONVERSATIONS AND MESSAGES
+    // =========================================================================
+
+    // Pairs And Waits Until The Client Is Connected; Events Are Collected From The Start
+    private static async Task<Rig> PairedAsync()
+    {
+        var rig = new Rig();
+        (Task pair, Task<string> shown) = StartPairing(rig);
+        await shown.WaitAsync(HangGuard);
+        await rig.Server.Phone.FinishReceived.WaitAsync(HangGuard);
+        rig.Server.Phone.Tap(true);
+        await pair.WaitAsync(HangGuard);
+        WaitUntil(() => rig.Client.IsConnected, "connected after pairing");
+        return rig;
+    }
+
+    // Waits For The First Event Of A Type That Matches
+    private static T WaitForEvent<T>(List<object> events, Func<T, bool> match, string what)
+    {
+        T? found = default;
+        WaitUntil(() =>
+        {
+            lock (events)
+            {
+                found = events.OfType<T>().FirstOrDefault(match);
+            }
+
+            return found is not null;
+        }, what);
+        return found!;
+    }
+
+    /// <summary>
+    /// The inbox lists the active conversations and leaves the spam one out; the spam folder lists only that.
+    /// </summary>
+    [TestMethod]
+    public async Task ListConversations_Inbox_ExcludesSpam()
+    {
+        await using Rig rig = await PairedAsync();
+
+        ListConversationsResponse inbox = await rig.Client.ListConversationsAsync(ListConversationsRequest.Types.Folder.Inbox, 25, null, CancellationToken.None).WaitAsync(HangGuard);
+        ListConversationsResponse spam  = await rig.Client.ListConversationsAsync(ListConversationsRequest.Types.Folder.SpamBlocked, 25, null, CancellationToken.None).WaitAsync(HangGuard);
+
+        CollectionAssert.AreEquivalent(InboxIds, inbox.Conversations.Select(c => c.ConversationID).ToArray());
+        CollectionAssert.AreEqual(SpamIds, spam.Conversations.Select(c => c.ConversationID).ToArray());
+        Assert.IsTrue(inbox.Conversations.All(c => c.DefaultOutgoingID == "me-1" && c.Participants.Any(p => p.IsMe && p.ID.ParticipantID == "me-1")));
+    }
+
+    /// <summary>
+    /// A send is answered with success, then echoed as a live message with the request's temporary ID, a new message
+    /// ID and the outgoing-complete status.
+    /// </summary>
+    [TestMethod]
+    public async Task SendMessage_EchoesWithTmpId()
+    {
+        await using Rig rig = await PairedAsync();
+        string tmp_id     = GmClient.NewTmpId();
+        var request       = new SendMessageRequest
+        {
+            ConversationID = "c-ann",
+            TmpID          = tmp_id,
+            SIMPayload     = new SIMPayload { SIMNumber = 1 },
+            MessagePayload = new MessagePayload
+            {
+                TmpID                 = tmp_id,
+                ConversationID        = "c-ann",
+                ParticipantID         = "me-1",
+                MessagePayloadContent = new MessagePayloadContent { MessageContent = new MessageContent { Content = "Hello" } },
+            },
+        };
+
+        SendMessageResponse answer = await rig.Client.SendMessageAsync(request, CancellationToken.None).WaitAsync(HangGuard);
+
+        Assert.AreEqual(SendMessageResponse.Types.Status.Success, answer.Status);
+        MessageReceived echo = WaitForEvent<MessageReceived>(rig.Events, e => e.Message.TmpID == tmp_id, "echo");
+        Assert.IsFalse(echo.IsOld);
+        Assert.IsNotEmpty(echo.Message.MessageID);
+        Assert.AreEqual(MessageStatusType.OutgoingComplete, echo.Message.MessageStatus.Status);
+        Assert.AreEqual("Hello", echo.Message.MessageInfo[0].MessageContent.Content);
+        Assert.HasCount(1, rig.Server.Phone.Sent);
+    }
+
+    /// <summary>
+    /// A pushed incoming message arrives live (not old), preceded by the conversation with the new snippet.
+    /// </summary>
+    [TestMethod]
+    public async Task PushIncoming_RaisesLiveMessage()
+    {
+        await using Rig rig = await PairedAsync();
+
+        rig.Server.Phone.PushIncoming("c-team", "Dinner?");
+
+        ConversationUpdated conversation = WaitForEvent<ConversationUpdated>(rig.Events, e => e.Conversation.ConversationID == "c-team", "conversation update");
+        MessageReceived message          = WaitForEvent<MessageReceived>(rig.Events, e => e.Message.ConversationID == "c-team" && e.Message.MessageInfo[0].MessageContent.Content == "Dinner?", "live message");
+        Assert.AreEqual("Dinner?", conversation.Conversation.LatestMessage.DisplayContent);
+        Assert.IsFalse(message.IsOld);
+    }
+
+    /// <summary>
+    /// A message pushed with <c>old</c> before the client connects comes in the startup catch-up batch, so the client
+    /// counts it as old through the startup ack.
+    /// </summary>
+    [TestMethod]
+    public async Task PushIncomingOld_RaisesIsOld()
+    {
+        await using var rig = new Rig();
+
+        (Task pair, Task<string> shown) = StartPairing(rig);
+        await shown.WaitAsync(HangGuard);
+        await rig.Server.Phone.FinishReceived.WaitAsync(HangGuard);
+        rig.Server.Phone.PushIncoming("c-ann", "While you were away", old: true);
+        rig.Server.Phone.Tap(true);
+        await pair.WaitAsync(HangGuard);
+
+        MessageReceived message = WaitForEvent<MessageReceived>(rig.Events, e => e.Message.MessageInfo[0].MessageContent.Content == "While you were away", "catch-up message");
+        Assert.IsTrue(message.IsOld);
+
+        // Live Ones After The Catch-Up Are Not Old
+        rig.Server.Phone.PushIncoming("c-ann", "Now");
+        Assert.IsFalse(WaitForEvent<MessageReceived>(rig.Events, e => e.Message.MessageInfo[0].MessageContent.Content == "Now", "live message").IsOld);
     }
 }

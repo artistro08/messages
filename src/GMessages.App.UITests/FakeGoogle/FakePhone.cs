@@ -21,7 +21,13 @@ namespace GMessages.App.UITests.FakeGoogle;
 /// how the client matches them. Once paired, <c>NOTIFY_DITTO_ACTIVITY</c> pings are answered (encrypted), as a real
 /// phone does, so the app never reports the phone as not responding. Unknown actions are only acked by the HTTP
 /// reply; the phone sends nothing back.
-/// Plan 3 extends it with conversations and messages.
+/// <para>
+/// Once paired it also keeps <see cref="Chats"/> and answers the requests the app sends for them: conversations
+/// by folder, messages, sends (answered, then echoed as a live message with the request's temporary ID, unless
+/// <see cref="FailSends"/>), read marks, single conversations, contacts, top contacts, get-or-create and
+/// thumbnails (always none). A <c>SettingsEvent</c> with one SIM goes out after the first <c>GET_UPDATES</c>.
+/// <see cref="PushIncoming"/> sends a live message, or, with <c>old</c>, one in the startup catch-up batch.
+/// </para>
 /// </remarks>
 public sealed class FakePhone
 {
@@ -30,6 +36,11 @@ public sealed class FakePhone
 
     private readonly Lock _lock = new();
     private readonly Action<IncomingRPCMessage> _push;
+    private readonly Action<IncomingRPCMessage> _pushCatchUp;
+    private readonly List<SendMessageRequest> _sent  = [];
+    private readonly List<MessageReadRequest> _reads = [];
+    private AesCtrHelper? _derivedCrypto;
+    private int _settingsSent;
     private TaskCompletionSource _finishReceived = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private ECParameters _key;
     private byte[] _clientInit = [];
@@ -42,7 +53,50 @@ public sealed class FakePhone
     /// Creates a phone that sends its answers through <paramref name="push"/>.
     /// </summary>
     /// <param name="push">Puts a message on the open long poll.</param>
-    internal FakePhone(Action<IncomingRPCMessage> push) => _push = push;
+    /// <param name="pushCatchUp">Puts a message in the batch the next long poll starts with, which its startup ack counts.</param>
+    internal FakePhone(Action<IncomingRPCMessage> push, Action<IncomingRPCMessage> pushCatchUp)
+    {
+        _push        = push;
+        _pushCatchUp = pushCatchUp;
+    }
+
+    /// <summary>
+    /// Gets the conversations, messages and contacts the phone answers with.
+    /// </summary>
+    public FakeChats Chats { get; } = new();
+
+    /// <summary>
+    /// Gets or sets whether sends are answered with <c>FAILURE_2</c> and no echo, to test failures without the 60 second timeout.
+    /// </summary>
+    public bool FailSends { get; set; }
+
+    /// <summary>
+    /// Gets every <c>SendMessage</c> request so far, in arrival order.
+    /// </summary>
+    public IReadOnlyList<SendMessageRequest> Sent
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return [.. _sent];
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets every <c>MessageRead</c> request so far, in arrival order.
+    /// </summary>
+    public IReadOnlyList<MessageReadRequest> Reads
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return [.. _reads];
+            }
+        }
+    }
 
     /// <summary>
     /// Gets the emoji the phone asks the user to tap, or null before the current attempt's client finished message.
@@ -89,7 +143,7 @@ public sealed class FakePhone
             _heldFinish = null;
             if (correct)
             {
-                RequestCrypto = DeriveRequestKeys(_nextKey);
+                RequestCrypto = _derivedCrypto;
             }
         }
 
@@ -123,10 +177,119 @@ public sealed class FakePhone
                 Reply(data.RequestID, data.Action, new NotifyDittoActivityResponse(), encrypt: true);
                 break;
 
+            // The First Update Request Gets The Settings Event Right After
+            case ActionType.GetUpdates when RequestCrypto is not null:
+                if (Interlocked.Exchange(ref _settingsSent, 1) == 0)
+                {
+                    PushUpdate(new UpdateEvents { SettingsEvent = new Settings { SIMCards = { new SIMCard { SIMParticipant = new SIMParticipant { ID = FakeChats.MyParticipantId } } } } }, _push);
+                }
+
+                break;
+
+            case ActionType.ListConversations when RequestCrypto is not null:
+                var list = Open(data, ListConversationsRequest.Parser);
+                Reply(data.RequestID, data.Action, new ListConversationsResponse { Conversations = { Chats.List(list.Folder) } }, encrypt: true);
+                break;
+
+            case ActionType.ListMessages when RequestCrypto is not null:
+                var messages = Open(data, ListMessagesRequest.Parser);
+                (List<Message> page, Cursor? next) = Chats.Page(messages.ConversationID, messages.Count, messages.Cursor);
+                Reply(data.RequestID, data.Action, new ListMessagesResponse { Messages = { page }, TotalMessages = page.Count, Cursor = next }, encrypt: true);
+                break;
+
+            case ActionType.SendMessage when RequestCrypto is not null:
+                OnSendMessage(data);
+                break;
+
+            case ActionType.MessageRead when RequestCrypto is not null:
+                var read = Open(data, MessageReadRequest.Parser);
+                lock (_lock)
+                {
+                    _reads.Add(read);
+                }
+
+                Chats.MarkRead(read.ConversationID);
+                Reply(data.RequestID, data.Action, new EmptyArr(), encrypt: true);
+                break;
+
+            case ActionType.GetConversation when RequestCrypto is not null:
+                var get = Open(data, GetConversationRequest.Parser);
+                Reply(data.RequestID, data.Action, new GetConversationResponse { Conversation = Chats.Get(get.ConversationID) }, encrypt: true);
+                break;
+
+            case ActionType.ListContacts when RequestCrypto is not null:
+                Reply(data.RequestID, data.Action, new ListContactsResponse { Contacts = { Chats.Contacts() } }, encrypt: true);
+                break;
+
+            case ActionType.ListTopContacts when RequestCrypto is not null:
+                Reply(data.RequestID, data.Action, new ListTopContactsResponse { Contacts = { Chats.Contacts() } }, encrypt: true);
+                break;
+
+            case ActionType.GetOrCreateConversation when RequestCrypto is not null:
+                var create = Open(data, GetOrCreateConversationRequest.Parser);
+                Reply(data.RequestID, data.Action, new GetOrCreateConversationResponse { Conversation = Chats.FindOrCreate(create.Numbers), Status = GetOrCreateConversationResponse.Types.Status.Success }, encrypt: true);
+                break;
+
+            // No Photos: An Empty Thumbnail List
+            case ActionType.GetParticipantsThumbnail or ActionType.GetContactsThumbnail when RequestCrypto is not null:
+                Reply(data.RequestID, data.Action, new GetThumbnailResponse(), encrypt: true);
+                break;
+
             default:
                 break;
         }
     }
+
+    /// <summary>
+    /// Pushes a message from the other side of a conversation, as a live update.
+    /// </summary>
+    /// <remarks>
+    /// The conversation's snippet is updated and it becomes unread. A <c>ConversationEvent</c> with the updated
+    /// conversation goes first, then the <c>MessageEvent</c>. With <paramref name="old"/>, both are put in the startup
+    /// catch-up batch instead: the next long poll of a paired client counts them in its startup ack, so the client
+    /// marks them old. Push those after the client finished message arrived and before <see cref="Tap"/>; a long
+    /// poll that is already open has had its ack.
+    /// </remarks>
+    /// <param name="conversationId">The conversation ID.</param>
+    /// <param name="text">The message text.</param>
+    /// <param name="old">True to send it in the catch-up batch.</param>
+    /// <exception cref="InvalidOperationException">Pairing has not reached the client finished message.</exception>
+    public void PushIncoming(string conversationId, string text, bool old = false)
+    {
+        (Conversation conversation, Message message) = Chats.AddIncoming(conversationId, text);
+        Action<IncomingRPCMessage> push = old ? _pushCatchUp : _push;
+        PushUpdate(new UpdateEvents { ConversationEvent = new ConversationEvent { Data = { conversation } } }, push);
+        PushUpdate(new UpdateEvents { MessageEvent = new MessageEvent { Data = { message } } }, push);
+    }
+
+    // Answers A Send, Then Echoes It As A Live Message With The Request's Temporary ID
+    private void OnSendMessage(OutgoingRPCData data)
+    {
+        var request = Open(data, SendMessageRequest.Parser);
+        lock (_lock)
+        {
+            _sent.Add(request);
+        }
+
+        if (FailSends)
+        {
+            Reply(data.RequestID, data.Action, new SendMessageResponse { Status = SendMessageResponse.Types.Status.Failure2 }, encrypt: true);
+            return;
+        }
+
+        string text     = request.MessagePayload?.MessagePayloadContent?.MessageContent?.Content ?? "";
+        Message message = Chats.AddOutgoing(request.ConversationID, text, request.TmpID);
+        Reply(data.RequestID, data.Action, new SendMessageResponse { Status = SendMessageResponse.Types.Status.Success }, encrypt: true);
+        PushUpdate(new UpdateEvents { MessageEvent = new MessageEvent { Data = { message } } }, _push);
+    }
+
+    // A Live Update: A GET_UPDATES Data Event That Answers No Request
+    private void PushUpdate(UpdateEvents update, Action<IncomingRPCMessage> push) =>
+        Reply(Guid.NewGuid().ToString(), ActionType.GetUpdates, update, encrypt: true, push);
+
+    // The Request's Payload, Decrypted
+    private T Open<T>(OutgoingRPCData data, MessageParser<T> parser) where T : IMessage<T> =>
+        parser.ParseFrom(RequestCrypto!.Decrypt(data.EncryptedProtoData.Span));
 
     // =========================================================================
     // UKEY2 SERVER SIDE
@@ -210,6 +373,9 @@ public sealed class FakePhone
             ShownEmoji      = PairingEmojis.Pick(BinaryPrimitives.ReadUInt32BigEndian(auth_key), 1);
             _heldFinish     = data.RequestID;
 
+            // Derived Now, So A Catch-Up Message Can Be Encrypted Before The Tap
+            _derivedCrypto  = DeriveRequestKeys(_nextKey);
+
             // Continuations Run Asynchronously, So Signaling Inside The Lock Is Safe
             _finishReceived.TrySetResult();
         }
@@ -231,20 +397,20 @@ public sealed class FakePhone
     // =========================================================================
 
     // An Answer Routed To The Request: Data Event, Session ID = Request ID
-    private void Reply(string requestId, ActionType action, IMessage answer, bool encrypt)
+    private void Reply(string requestId, ActionType action, IMessage answer, bool encrypt, Action<IncomingRPCMessage>? push = null)
     {
         byte[] bytes = answer.ToByteArray();
         var data     = new RPCMessageData { SessionID = requestId, Action = action, Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() * 1000 };
         if (encrypt)
         {
-            data.EncryptedData = ByteString.CopyFrom(RequestCrypto!.Encrypt(bytes));
+            data.EncryptedData = ByteString.CopyFrom((RequestCrypto ?? _derivedCrypto ?? throw new InvalidOperationException("Pairing has not reached the client finished message.")).Encrypt(bytes));
         }
         else
         {
             data.UnencryptedData = ByteString.CopyFrom(bytes);
         }
 
-        _push(new IncomingRPCMessage
+        (push ?? _push)(new IncomingRPCMessage
         {
             ResponseID  = Guid.NewGuid().ToString(),
             BugleRoute  = BugleRoute.DataEvent,
