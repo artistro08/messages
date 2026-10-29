@@ -190,13 +190,14 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
 
     /// <summary>
     /// Sends a request that is not a Messages call (Google's cookie rotation) with the jar's cookies, and absorbs the
-    /// <c>Set-Cookie</c> values it returns.
+    /// <c>Set-Cookie</c> values a 2xx answer returns.
     /// </summary>
     /// <remarks>
     /// The caller builds the request with its own headers; only the <c>Cookie</c> header is added (no relay headers,
-    /// no SAPISIDHASH). The answer's cookies that <paramref name="acceptSetCookie"/> keeps go through
-    /// <see cref="CookieJar.UpdateFrom"/> like every other response, so the session is saved. Not retried. The caller
-    /// owns and must dispose the response.
+    /// no SAPISIDHASH). A 2xx answer's cookies that <paramref name="acceptSetCookie"/> keeps go through
+    /// <see cref="CookieJar.UpdateFrom"/> like every other response, so the session is saved. A refused answer's
+    /// cookies are never taken: a cleared <c>__Secure-1PSIDTS</c> there would sign the user out. Not retried. The
+    /// caller owns and must dispose the response.
     /// </remarks>
     /// <param name="request">The request to send.</param>
     /// <param name="acceptSetCookie">Keeps only the raw <c>Set-Cookie</c> lines it returns true for.</param>
@@ -212,7 +213,13 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
 
         cookies.ApplyTo(request, time.GetUtcNow().ToUnixTimeSeconds(), withAuthorization: false);
         HttpResponseMessage res = await http.SendAsync(request, ct).ConfigureAwait(false);
-        cookies.UpdateFrom(res, acceptSetCookie);
+
+        // Only A 2xx Answer's Cookies Reach The Jar
+        if (res.IsSuccessStatusCode)
+        {
+            cookies.UpdateFrom(res, acceptSetCookie);
+        }
+
         return res;
     }
 

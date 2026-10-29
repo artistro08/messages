@@ -312,6 +312,95 @@ public class CookieRotatorTests
     }
 
     /// <summary>
+    /// A refused answer's cookies never reach the jar: a 403 that clears or replaces <c>__Secure-1PSIDTS</c> leaves
+    /// the jar as it was and asks for no save, since a cleared cookie there would sign the user out.
+    /// </summary>
+    [TestMethod]
+    public async Task Rotate_RefusedAnswer_NeverTouchesTheJar()
+    {
+        foreach (string set_cookie in new[] { "__Secure-1PSIDTS=; Domain=.google.com; Max-Age=0; Path=/; Secure", "__Secure-1PSIDTS=refused-value; Domain=.google.com; Path=/; Secure" })
+        {
+            Rig rig                                    = CreateRig();
+            IReadOnlyDictionary<string, string> before = rig.Auth.Cookies.Snapshot();
+            bool changed                               = false;
+            rig.Auth.Cookies.Changed += (_, _) => changed = true;
+            rig.Handler.Respond       = (_, _) => FakeHttpHandler.Response(HttpStatusCode.Forbidden, "text/html", "no"u8.ToArray(), set_cookie, "NID=nid-value; Domain=.google.com; Path=/");
+
+            await rig.Rotator.RotateIfDueAsync(CancellationToken.None);
+
+            CollectionAssert.AreEquivalent(before.ToArray(), rig.Auth.Cookies.Snapshot().ToArray(), set_cookie);
+            Assert.IsFalse(changed, "a refused answer asks for no save");
+        }
+    }
+
+    /// <summary>
+    /// After 3 refusals in a row the rotation backs off to every 6 hours: one Warning per refusal (3, then 1 per
+    /// back-off period) plus one saying it backs off; a connect never sends, starts or waits on a rotation while
+    /// backed off, even one that is due or in flight; the background run tries at the 6 hour mark, and a 2xx there
+    /// returns to the 10 minute cadence.
+    /// </summary>
+    [TestMethod]
+    public async Task Rotate_ThreeRefusals_BackOffToSixHours_Quietly_AndConnectNeverWaits()
+    {
+        var log             = new CollectingLogger();
+        Rig rig             = CreateRig(log);
+        using var release   = new ManualResetEventSlim();
+        using var cts       = new CancellationTokenSource();
+        rig.Handler.Respond = (index, _) =>
+        {
+            if (index < 3)
+            {
+                return FakeHttpHandler.Response(HttpStatusCode.Forbidden, "text/html", "no"u8.ToArray());
+            }
+
+            release.Wait(Wait);
+            return Rotated();
+        };
+
+        // Three Refusals, 10 Minutes Apart
+        DateTimeOffset third = rig.Time.GetUtcNow() + TimeSpan.FromMinutes(20);
+        for (int i = 0; i < 3; i++)
+        {
+            await rig.Rotator.RotateIfDueAsync(CancellationToken.None);
+            rig.Time.Advance(i < 2 ? CookieRotator.Interval : TimeSpan.Zero);
+        }
+
+        Assert.AreEqual(3, Count(rig.Handler));
+        Assert.AreEqual(3, log.Messages.Count(m => m == "Cookie rotation failed: HttpRequestException HTTP 403"));
+        CollectionAssert.Contains(log.Messages, "Cookie rotation refused 3 times in a row; next try in 6 h");
+
+        // Backed Off: A Due-Looking Connect 10 Minutes Later Sends Nothing
+        rig.Time.Advance(CookieRotator.Interval);
+        DateTimeOffset next = await rig.Rotator.RotateIfDueAsync(CancellationToken.None);
+        Assert.AreEqual(3, Count(rig.Handler));
+        Assert.AreEqual(third + CookieRotator.BackOff, next);
+
+        // The Background Run Waits Out The Back-Off
+        Task run = rig.Rotator.RunAsync(cts.Token);
+        Assert.IsTrue(await rig.Time.TimerCreated.WaitAsync(Wait));
+        Assert.AreEqual(CookieRotator.BackOff - CookieRotator.Interval, rig.Time.DueTimes.Last());
+        Assert.AreEqual(3, Count(rig.Handler));
+
+        // At 6 Hours It Tries; A Connect Meanwhile Neither Waits Nor Sends
+        Task advance = Task.Run(() => rig.Time.Advance(CookieRotator.BackOff - CookieRotator.Interval));
+        Assert.IsTrue(SpinWait.SpinUntil(() => Count(rig.Handler) == 4, Wait));
+        Task connect = rig.Rotator.RotateIfDueAsync(CancellationToken.None);
+        Assert.IsTrue(connect.IsCompleted, "a connect never waits on a rotation while backed off");
+        Assert.AreEqual(4, Count(rig.Handler));
+
+        // A 2xx Returns To The 10 Minute Cadence
+        release.Set();
+        await advance.WaitAsync(Wait);
+        Assert.IsTrue(await rig.Time.TimerCreated.WaitAsync(Wait));
+        Assert.AreEqual(CookieRotator.Interval, rig.Time.DueTimes.Last());
+        Assert.AreEqual(NewPsidts, rig.Auth.Cookies.Snapshot()["__Secure-1PSIDTS"]);
+        Assert.AreEqual(3, log.Messages.Count(m => m.StartsWith("Cookie rotation failed", StringComparison.Ordinal)));
+
+        await cts.CancelAsync();
+        await run.WaitAsync(Wait);
+    }
+
+    /// <summary>
     /// The DBSC header names (the W3C draft's <c>Secure-Session-*</c> and <c>Sec-Secure-Session-Id</c>, and
     /// Chrome's Google-only <c>Sec-Session-Google-*</c>) are recognized, any case; other headers are not.
     /// </summary>

@@ -49,6 +49,11 @@ public partial class App : Application, IDisposable
     private static readonly Guid TestTrayGuid     = new("41E044BE-2303-4240-B4ED-C6A29CD3DE24");
 #endif
 
+    /// <summary>
+    /// Gets the app shell's logger, for controls the app doesn't construct (a message bubble's Copy).
+    /// </summary>
+    internal static ILogger ShellLog { get; private set; } = Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance;
+
     private RollingFileLoggerProvider? _logProvider;
     private ILogger _logger = Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance;
     private AppSettings? _settings;
@@ -127,6 +132,7 @@ public partial class App : Application, IDisposable
         var levelSwitch = new LogLevelSwitch { MinimumLevel = _settings.LogLevel };
         _logProvider    = new RollingFileLoggerProvider(paths.LogsFolder, levelSwitch, TimeProvider.System);
         _logger         = _logProvider.CreateLogger("GMessages.App");
+        ShellLog        = _logger;
         AppLog.Started(_logger, AppInfo.DisplayName, AppInfo.Version, AppIdentity.IsPackaged, Program.IsTestRun);
         if (TestHooks.Endpoints is { } fake)
         {

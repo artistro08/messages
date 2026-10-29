@@ -65,6 +65,9 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 919, Level = LogLevel.Information, Message = "Sign-in device-bound session headers: {Headers}")]
     public static partial void BoundSessionHeaders(ILogger logger, string headers);
 
+    [LoggerMessage(EventId = 920, Level = LogLevel.Warning, Message = "Copy failed ({ErrorType}); the clipboard is busy")]
+    public static partial void CopyFailed(ILogger logger, string errorType);
+
     [LoggerMessage(EventId = 951,Level = LogLevel.Information, Message = "Test endpoint {Endpoint}, data folder {DataFolder}")]
     public static partial void TestEndpoint(ILogger logger, string endpoint, string dataFolder);
 }

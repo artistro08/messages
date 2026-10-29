@@ -23,7 +23,10 @@ namespace GMessages.Protocol.Auth;
 /// A rotation is due when none was tried yet or the last try is <see cref="Interval"/> old, so it happens at most
 /// every 10 minutes, whether the last try worked or not. A failure is logged with its error type and HTTP status and
 /// keeps the session; the next interval tries again. That includes a 401, which gemini-webapi raises as an auth error:
-/// here the long poll alone decides a sign-out. Only paired Google accounts (a browser device and a cookie map) that
+/// here the long poll alone decides a sign-out. Only a 2xx answer's cookies reach the jar. After
+/// <see cref="RefusalsBeforeBackOff"/> refused answers in a row (C#-only: Google refuses some accounts every time),
+/// only the background run tries, every <see cref="BackOff"/>, and no connect waits on it; a 2xx returns to the
+/// 10 minute cadence. Only paired Google accounts (a browser device and a cookie map) that
 /// hold <see cref="MainCookie"/> are rotated; without it the rotation is skipped and said once. Every wait uses the <see cref="TimeProvider"/>. Cookie values are never logged, only names and expiry.
 /// </para>
 /// </remarks>
@@ -37,6 +40,12 @@ public sealed partial class CookieRotator(GmHttpClient http, AuthData auth, GmEn
     /// <summary>The time between rotations (gemini-webapi's 600 second default; browsers rotate about this often).</summary>
     public static readonly TimeSpan Interval = TimeSpan.FromMinutes(10);
 
+    /// <summary>The time between rotations after <see cref="RefusalsBeforeBackOff"/> refusals in a row (C#-only).</summary>
+    public static readonly TimeSpan BackOff = TimeSpan.FromHours(6);
+
+    /// <summary>How many refused answers in a row switch the cadence to <see cref="BackOff"/>; a 2xx switches it back.</summary>
+    public const int RefusalsBeforeBackOff = 3;
+
     /// <summary>
     /// How long one rotation request may take (C#-only; the shared client's 100 s would stall a connect).
     /// </summary>
@@ -49,11 +58,20 @@ public sealed partial class CookieRotator(GmHttpClient http, AuthData auth, GmEn
     // The Body Google's Pages Post (gemini-webapi: rotate_1psidts)
     private const string RotateBody = "[000,\"-0000000000000000000\"]";
 
-    // Guards _lastAttempt And _inFlight: The Check, The Stamp And The Start Are One Step
+    // Guards _lastAttempt, _inFlight And _refusals: The Check, The Stamp And The Start Are One Step
     private readonly Lock _lock = new();
     private DateTimeOffset? _lastAttempt;
     private Task? _inFlight;
+    private int _refusals;
     private int _skipLogged;
+
+    // How A Rotation Ended (A Cancel Throws Instead)
+    private enum Outcome
+    {
+        Rotated,
+        Refused,
+        Failed,
+    }
 
     /// <summary>
     /// The main sign-in cookie rotation needs; without it Google answers 403.
@@ -68,16 +86,22 @@ public sealed partial class CookieRotator(GmHttpClient http, AuthData auth, GmEn
     /// Rotates the cookie when the last try is <see cref="Interval"/> old or there was none.
     /// </summary>
     /// <remarks>
-    /// Called before the first request after a start or a resume, and by <see cref="RunAsync"/>. Does nothing for an
-    /// account that isn't paired or has no cookies. A caller that arrives while a rotation is in flight waits for it
-    /// (with its own <paramref name="ct"/>) instead of sending another, so the request it guards goes out with the new
-    /// cookie. A rotation canceled midway clears its stamp, so the next caller rotates; if that cancel came from
-    /// another caller, a waiting caller rotates itself. Never throws for a failed rotation, only when canceled.
+    /// Called before the first request after a start or a resume. Does nothing for an account that isn't paired or
+    /// has no cookies. A caller that arrives while a rotation is in flight waits for it (with its own
+    /// <paramref name="ct"/>) instead of sending another, so the request it guards goes out with the new cookie. A
+    /// rotation canceled midway clears its stamp, so the next caller rotates; if that cancel came from another caller,
+    /// a waiting caller rotates itself. After <see cref="RefusalsBeforeBackOff"/> refusals in a row this returns at
+    /// once, never sending, starting or waiting on a rotation: <see cref="RunAsync"/> alone tries every
+    /// <see cref="BackOff"/>, in the background, so a connect never waits on an answer Google keeps refusing. Never
+    /// throws for a failed rotation, only when canceled.
     /// </remarks>
     /// <param name="ct">Cancels the wait and the request.</param>
     /// <returns>When the next rotation is due.</returns>
     /// <exception cref="OperationCanceledException"><paramref name="ct"/> was canceled.</exception>
-    public async Task<DateTimeOffset> RotateIfDueAsync(CancellationToken ct)
+    public Task<DateTimeOffset> RotateIfDueAsync(CancellationToken ct) => RotateIfDueAsync(backgroundRun: false, ct);
+
+    // The Check Shared By A Connect And The Background Run; Only The Run Rotates While Backed Off
+    private async Task<DateTimeOffset> RotateIfDueAsync(bool backgroundRun, CancellationToken ct)
     {
         while (true)
         {
@@ -105,13 +129,22 @@ public sealed partial class CookieRotator(GmHttpClient http, AuthData auth, GmEn
             TaskCompletionSource? mine = null;
             lock (_lock)
             {
+                bool backed_off = _refusals >= RefusalsBeforeBackOff;
+                TimeSpan period = backed_off ? BackOff : Interval;
+
+                // Backed Off: A Connect Never Waits On Or Starts A Rotation
+                if (backed_off && !backgroundRun)
+                {
+                    return (_lastAttempt ?? now) + period;
+                }
+
                 if (_inFlight is { IsCompleted: false } in_flight)
                 {
                     running = in_flight;
                 }
-                else if (_lastAttempt is { } last && now - last < Interval)
+                else if (_lastAttempt is { } last && now - last < period)
                 {
-                    return last + Interval;
+                    return last + period;
                 }
                 else
                 {
@@ -139,9 +172,31 @@ public sealed partial class CookieRotator(GmHttpClient http, AuthData auth, GmEn
             // Ours
             try
             {
-                await RotateAsync(ct).ConfigureAwait(false);
+                Outcome outcome = await RotateAsync(ct).ConfigureAwait(false);
+                DateTimeOffset next;
+                bool backing_off;
+                lock (_lock)
+                {
+                    // A 2xx Returns To The 10 Minute Cadence; A Refusal Counts Toward The Back-Off; Anything Else Neither
+                    _refusals = outcome switch
+                    {
+                        Outcome.Rotated => 0,
+                        Outcome.Refused => _refusals + 1,
+                        _               => _refusals,
+                    };
+
+                    backing_off = outcome == Outcome.Refused && _refusals == RefusalsBeforeBackOff;
+                    next        = now + (_refusals >= RefusalsBeforeBackOff ? BackOff : Interval);
+                }
+
+                // Said Once, When The Back-Off Starts
+                if (backing_off)
+                {
+                    LogBackingOff(log, RefusalsBeforeBackOff, (int)BackOff.TotalHours);
+                }
+
                 mine!.SetResult();
-                return now + Interval;
+                return next;
             }
             catch (Exception)
             {
@@ -169,7 +224,7 @@ public sealed partial class CookieRotator(GmHttpClient http, AuthData auth, GmEn
         {
             while (!ct.IsCancellationRequested)
             {
-                DateTimeOffset next = await RotateIfDueAsync(ct).ConfigureAwait(false);
+                DateTimeOffset next = await RotateIfDueAsync(backgroundRun: true, ct).ConfigureAwait(false);
                 TimeSpan wait       = next - time.GetUtcNow();
                 await Task.Delay(wait > TimeSpan.Zero ? wait : TimeSpan.Zero, time, ct).ConfigureAwait(false);
             }
@@ -180,8 +235,8 @@ public sealed partial class CookieRotator(GmHttpClient http, AuthData auth, GmEn
         }
     }
 
-    // One Rotation: Post Like The Browser, Keep Whatever Cookies Come Back, Log The Outcome
-    private async Task RotateAsync(CancellationToken ct)
+    // One Rotation: Post Like The Browser, Keep A 2xx Answer's Cookies, Log The Outcome
+    private async Task<Outcome> RotateAsync(CancellationToken ct)
     {
         // Build Request
         using var request = new HttpRequestMessage(HttpMethod.Post, endpoints.RotateCookies) { Content = new StringContent(RotateBody) };
@@ -189,30 +244,34 @@ public sealed partial class CookieRotator(GmHttpClient http, AuthData auth, GmEn
         request.Headers.TryAddWithoutValidation("origin", endpoints.AccountsBase.GetLeftPart(UriPartial.Authority));
         request.Headers.TryAddWithoutValidation("user-agent", GmConstants.UserAgent);
 
-        // Send; The Jar Takes The New Cookies Either Way, Only A 2xx Counts As Rotated
+        // Send; The Jar Takes The New Cookies From A 2xx Only, Which Alone Counts As Rotated
         try
         {
             using HttpResponseMessage res = await http.SendWithCookiesAsync(request, IsSharedGoogleCookie, ct).ConfigureAwait(false);
 
             // Diagnosis Of A Refusal: Header Names Only, Never Values, And Which Belong To A Device-Bound Session
-            if (!res.IsSuccessStatusCode)
+            if (!res.IsSuccessStatusCode && log.IsEnabled(LogLevel.Debug))
             {
                 string[] header_names = [.. res.Headers.Concat(res.Content.Headers).Select(h => h.Key).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase)];
                 string[] bound_names  = [.. header_names.Where(IsBoundSessionHeader)];
-                LogRefusedHeaders(log, string.Join(", ", header_names), bound_names.Length > 0 ? string.Join(", ", bound_names) : "none");
+                string names_text     = string.Join(", ", header_names);
+                string bound_text     = bound_names.Length > 0 ? string.Join(", ", bound_names) : "none";
+                LogRefusedHeaders(log, names_text, bound_text);
             }
 
             res.EnsureSuccessStatusCode();
 
             string names = GmHttpClient.DescribeSetCookies(res, time.GetUtcNow(), IsSharedGoogleCookie);
             LogRotated(log, names.Length > 0 ? names : "none");
+            return Outcome.Rotated;
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {
-            // Diagnosis: Which Failure, And The HTTP Status When There Was One (0 Otherwise)
+            // Diagnosis: Which Failure, And The HTTP Status When There Was One (0 Otherwise); Backed Off, Once Per Period
             int status        = ex is HttpRequestException { StatusCode: { } code } ? (int)code : 0;
             string error_type = ex.GetType().Name;
             LogRotationFailed(log, error_type, status);
+            return status > 0 ? Outcome.Refused : Outcome.Failed;
         }
     }
 
@@ -255,8 +314,11 @@ public sealed partial class CookieRotator(GmHttpClient http, AuthData auth, GmEn
         || name.StartsWith("Sec-Secure-Session-", StringComparison.OrdinalIgnoreCase)
         || name.StartsWith("Sec-Session-", StringComparison.OrdinalIgnoreCase);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Cookie rotation answer headers: {Names}; device-bound session headers: {Bound}")]
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Cookie rotation answer headers: {Names}; device-bound session headers: {Bound}")]
     private static partial void LogRefusedHeaders(ILogger logger, string names, string bound);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Cookie rotation refused {Count} times in a row; next try in {Hours} h")]
+    private static partial void LogBackingOff(ILogger logger, int count, int hours);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Cookie rotation skipped: {Name} missing")]
     private static partial void LogSkipped(ILogger logger, string name);

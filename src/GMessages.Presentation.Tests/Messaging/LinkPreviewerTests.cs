@@ -100,6 +100,8 @@ public sealed class LinkPreviewerTests
     [DataRow("64:ff9b::a00:1")]
     [DataRow("64:ff9b::7f00:1")]
     [DataRow("64:ff9b:1:a00:0:100::")]
+    [DataRow("64:ff9b:1:808:8:800::")]
+    [DataRow("64:ff9b:1::808:808")]
     [DataRow("2002:a00:1::1")]
     [DataRow("2002:c0a8:101::1")]
     [DataRow("2001:0:4136:e378:8000:63bf:3fff:fdd2")]
@@ -118,7 +120,6 @@ public sealed class LinkPreviewerTests
     [DataRow("100.128.0.1")]
     [DataRow("2606:4700::1111")]
     [DataRow("64:ff9b::808:808")]
-    [DataRow("64:ff9b:1:808:8:800::")]
     [DataRow("2002:808:808::1")]
     public void IsPublic_AllowsPublicAddresses(string address)
     {
@@ -157,6 +158,18 @@ public sealed class LinkPreviewerTests
         Assert.AreEqual("Plain Title", title);
         Assert.AreEqual("example.com", site);
         Assert.IsNull(image);
+    }
+
+    /// <summary>
+    /// A host with non-ASCII letters (a Cyrillic look-alike of google.com) shows in its punycode form, so it can't
+    /// pass as the real site.
+    /// </summary>
+    [TestMethod]
+    public void ParseHead_NonAsciiHost_ShowsPunycode()
+    {
+        (_, string site, _) = LinkPreviewer.ParseHead("<title>Sign in</title>", new Uri("https://www.gооgle.com/"))!.Value;
+
+        Assert.AreEqual("xn--ggle-55da.com", site);
     }
 
     [TestMethod]

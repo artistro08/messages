@@ -191,8 +191,8 @@ public sealed partial class LinkPreviewer : IDisposable
     /// False for loopback, private (10/8, 172.16/12, 192.168/16, fc00::/7), link-local (169.254/16, fe80::/10), CGNAT
     /// (100.64/10), unspecified (0/8, ::), multicast and reserved (224/4, 240/4, ff00::/8) and the old IPv6 site-local
     /// range. IPv6 that carries an IPv4 address is judged by that address: IPv4-mapped (<c>::ffff:10.0.0.1</c>), NAT64
-    /// (64:ff9b::/96 and 64:ff9b:1::/48) and 6to4 (2002::/16). Teredo (2001::/32), SIIT (::ffff:0:0/96) and
-    /// IPv4-compatible (::/96) addresses are refused outright.
+    /// (64:ff9b::/96) and 6to4 (2002::/16). Local-use NAT64 (64:ff9b:1::/48, whose layout the network picks),
+    /// Teredo (2001::/32), SIIT (::ffff:0:0/96) and IPv4-compatible (::/96) addresses are refused outright.
     /// </remarks>
     /// <param name="address">The address.</param>
     /// <returns>True when public.</returns>
@@ -226,7 +226,7 @@ public sealed partial class LinkPreviewer : IDisposable
         {
             byte[] b = address.GetAddressBytes();
 
-            // IPv6 Carrying An IPv4 Address: Judged By That Address (6to4, NAT64 Well-Known, NAT64 Local-Use /48)
+            // IPv6 Carrying An IPv4 Address: Judged By That Address (6to4, NAT64 Well-Known)
             if (b is [0x20, 0x02, ..])
             {
                 return IsPublic(new IPAddress(b.AsSpan(2, 4)));
@@ -237,13 +237,9 @@ public sealed partial class LinkPreviewer : IDisposable
                 return IsPublic(new IPAddress(b.AsSpan(12, 4)));
             }
 
-            if (b is [0x00, 0x64, 0xFF, 0x9B, 0x00, 0x01, ..])
-            {
-                return IsPublic(new IPAddress(new byte[] { b[6], b[7], b[9], b[10] }));
-            }
-
-            // Refused Outright: Teredo, SIIT And IPv4-Compatible (::/96, Which Holds :: And ::1 Too)
-            if (b is [0x20, 0x01, 0x00, 0x00, ..]
+            // Refused Outright: NAT64 Local-Use /48 (Its Layout Is The Network's Choice, RFC 8215), Teredo, SIIT And IPv4-Compatible (::/96, Which Holds :: And ::1 Too)
+            if (b is [0x00, 0x64, 0xFF, 0x9B, 0x00, 0x01, ..]
+                || b is [0x20, 0x01, 0x00, 0x00, ..]
                 || b is [0, 0, 0, 0, 0, 0, 0, 0, 0xFF, 0xFF, 0, 0, ..]
                 || b.AsSpan(0, 12).IndexOfAnyExcept((byte)0) < 0)
             {
@@ -335,8 +331,9 @@ public sealed partial class LinkPreviewer : IDisposable
             return null;
         }
 
-        // Site: The Real Host Without www.
-        string site = Cap(page.Host.StartsWith("www.", StringComparison.OrdinalIgnoreCase) ? page.Host[4..] : page.Host);
+        // Site: The Real Host Without www., Punycode For Non-ASCII So A Look-Alike Can't Pass As The Real One
+        string host = page.IdnHost;
+        string site = Cap(host.StartsWith("www.", StringComparison.OrdinalIgnoreCase) ? host[4..] : host);
 
         // Image: Resolved Against The Page, Then Held To The Same Rules As A Link
         Uri? image = og_image is not null
@@ -408,7 +405,6 @@ public sealed partial class LinkPreviewer : IDisposable
         _closing.Cancel();
         _closing.Dispose();
         _http.Dispose();
-
     }
 
     // The Page, Then Its Image; A Page Without A Title Gives Nothing, A Missing Image Only Drops The Image

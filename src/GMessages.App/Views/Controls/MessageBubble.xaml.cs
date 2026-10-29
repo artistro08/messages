@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Runtime.InteropServices;
 using GMessages.Presentation.Main;
 using GMessages.Presentation.Messaging;
 using Microsoft.UI.Xaml;
@@ -277,7 +278,16 @@ public sealed partial class MessageBubble : UserControl
 
         var package = new DataPackage();
         package.SetText(text);
-        Clipboard.SetContent(package);
+
+        // Another App Holding The Clipboard Throws; Copy Then Does Nothing, Logged
+        try
+        {
+            Clipboard.SetContent(package);
+        }
+        catch (COMException ex)
+        {
+            AppLog.CopyFailed(App.ShellLog, ex.GetType().Name);
+        }
     }
 
     private void OnReactClick(object sender, RoutedEventArgs e) => ReactRequested?.Invoke(this, EventArgs.Empty);
