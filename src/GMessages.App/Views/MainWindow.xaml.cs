@@ -180,6 +180,22 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>
+    /// Opens a conversation asked for from outside the window (a toast click): closes the settings page so the chat
+    /// shows. Does nothing while pairing.
+    /// </summary>
+    /// <param name="conversationId">The conversation ID.</param>
+    public void SelectConversation(string conversationId)
+    {
+        if (ViewModel is not { } view)
+        {
+            return;
+        }
+
+        CloseSettings();
+        view.Select(conversationId);
+    }
+
+    /// <summary>
     /// Opens the settings page over the body. Does nothing when it is already open.
     /// </summary>
     public void ShowSettings()

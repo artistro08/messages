@@ -61,7 +61,7 @@ internal sealed partial class TrayMenuWindow : Window
         {
             if (e.WindowActivationState == WindowActivationState.Deactivated)
             {
-                _menu.Hide();
+                HideMenu();
             }
         };
     }
@@ -131,9 +131,20 @@ internal sealed partial class TrayMenuWindow : Window
         _menu.Items.Add(CreateItem("Quit", "", "TrayMenu.Quit", () => QuitRequested?.Invoke(this, EventArgs.Empty)));
     }
 
+    // Closes the menu and hides its host window directly, rather than waiting for the menu's Closed event. An item
+    // that activates an already open window (Settings or Open with the main window up) deactivates the host while the
+    // click is still running, and the host could stay shown. The App only rebuilds a hidden menu for a new theme, so a
+    // host left shown kept the old theme's backdrop (the dark menu after choosing Light)
+    private void HideMenu()
+    {
+        _menu.Hide();
+        AppWindow?.Hide();
+    }
+
     // Always the mouse-sized padding. WinUI picks touch padding (taller rows) when it can't
     // tell how the menu was opened, which is often, since the host window never gets input.
-    private static MenuFlyoutItem CreateItem(string text, string glyph, string automationId, Action onClick)
+    // The host hides before the item's action runs, so the action can activate another window
+    private MenuFlyoutItem CreateItem(string text, string glyph, string automationId, Action onClick)
     {
         var item = new MenuFlyoutItem
         {
@@ -142,7 +153,11 @@ internal sealed partial class TrayMenuWindow : Window
             Padding = NarrowPadding,
         };
         AutomationProperties.SetAutomationId(item, automationId);
-        item.Click += (_, _) => onClick();
+        item.Click += (_, _) =>
+        {
+            HideMenu();
+            onClick();
+        };
         return item;
     }
 

@@ -306,14 +306,14 @@ public partial class App : Application, IDisposable
     // Selected Once Connected, Or Right Away When The Conversation Is Already Cached
     private void SelectPendingConversation()
     {
-        if (_pendingConversationId is not { } id || _mainWindow?.ViewModel is not { } view
+        if (_pendingConversationId is not { } id || _mainWindow is not { ViewModel: not null } window
             || (_connection?.State != ConnectionState.Connected && _store?.Find(id) is null))
         {
             return;
         }
 
         _pendingConversationId = null;
-        view.Select(id);
+        window.SelectConversation(id);
     }
 
     // =========================================================================

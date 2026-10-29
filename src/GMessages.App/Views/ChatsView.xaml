@@ -60,7 +60,8 @@
 
                 <!-- Connection Banner: hidden while connected -->
                 <TextBlock
-                                Margin="16,0,16,8"
+                    Grid.Row="1"
+                    Margin="16,0,16,8"
                     AutomationProperties.AutomationId="Main.Status"
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                     Text="{x:Bind ViewModel.StatusBanner, Mode=OneWay}"

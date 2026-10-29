@@ -135,6 +135,25 @@ public sealed class NotificationTests : UiTest
     }
 
     /// <summary>
+    /// Clicking a toast's body while the main window shows Settings closes Settings and shows that conversation.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task ToastBodyClick_WhileSettingsOpen_ShowsConversation()
+    {
+        await OpenMainAsync();
+        InvokeTrayMenu("TrayMenu.Settings");
+        WaitForSettings();
+
+        Server.Phone.PushIncoming("c-ann", "hey there");
+        AutomationElement toast = _toasts.WaitFor(AppDriver.DefaultTimeout, "Ann Lee", "hey there");
+        ToastDriver.ClickBody(toast);
+
+        WaitForGone("Settings.Back");
+        App.WaitForText("Chat.Header", "Ann Lee");
+    }
+
+    /// <summary>
     /// The chat that's open in the focused window doesn't notify, until "Notify for the chat I'm viewing" is on.
     /// </summary>
     /// <returns>A task for the test.</returns>
