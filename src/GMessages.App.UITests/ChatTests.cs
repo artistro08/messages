@@ -198,15 +198,20 @@ public sealed class ChatTests : UiTest
         // Three Pages Of Texts
         Conversation chat = FakeChats.NewConversation("c-long", "Long Pal", false, ConversationStatus.Active, false, false, FakeChats.Person("p-long", "Long Pal", "+15550000006"));
         long time         = DateTimeOffset.UtcNow.AddDays(-1).ToUnixTimeMilliseconds() * 1000;
-        Message[] texts   = [.. Enumerable.Range(1, ChatStore.PageSize * 3).Select(i => Line($"Line {i}"))];
+        // Mixed Heights, Like A Real Chat: Every Third Message Wraps Over Several Lines
+        Message[] texts   = [.. Enumerable.Range(1, ChatStore.PageSize * 3).Select(i => Line(i % 3 == 0 ? $"Line {i} " + string.Concat(Enumerable.Repeat("wrapping words ", 30)) : $"Line {i}"))];
         Server.Phone.Chats.Add(chat, texts);
 
         await OpenMainAsync();
         App.Find("Row.c-long").Patterns.SelectionItem.Pattern.Select();
         Wait.Until(() => Bubbles().Count >= ChatStore.PageSize, AppDriver.DefaultTimeout, () => $"The long chat showed {Bubbles().Count} bubbles.");
 
-        // Up To The Top: The Older Page Comes In, And The Button Shows
+        // Opened, It Settles On The Newest Message And Stays There (No Scroll Up, So No Bottom Fade Or Button)
         var scroll = App.Find("Chat.Messages").Patterns.Scroll.Pattern;
+        Thread.Sleep(2000);
+        AssertAtNewest("Opening the chat");
+
+        // Up To The Top: The Older Page Comes In, And The Button Shows
         Wait.Until(() =>
         {
             // -1: Leave The Horizontal Position Alone (UI Automation's NoScroll)
@@ -225,9 +230,11 @@ public sealed class ChatTests : UiTest
         CloseMainWindow();
         Tray.LeftClick();
         Wait.Until(() => Bubbles().Count >= ChatStore.PageSize, AppDriver.DefaultTimeout, () => $"The reopened chat showed {Bubbles().Count} bubbles.");
-        int shown = Bubbles().Count;
         scroll = App.Find("Chat.Messages").Patterns.Scroll.Pattern;
         down   = App.Find("Chat.ScrollToBottom");
+        Thread.Sleep(2000);
+        AssertAtNewest("Reopening the chat");
+        int shown = Bubbles().Count;
         Wait.Until(() =>
         {
             scroll.SetScrollPercent(-1, 0);
@@ -238,7 +245,7 @@ public sealed class ChatTests : UiTest
         {
             var message = new Message
             {
-                MessageID      = "m-" + text.Replace(' ', '-'),
+                MessageID      = "m-" + text.Split(' ')[1],
                 ConversationID = "c-long",
                 ParticipantID  = "p-long",
                 Timestamp      = time += 1_000_000,
@@ -260,7 +267,8 @@ public sealed class ChatTests : UiTest
         // Three Pages Of Texts
         Conversation chat = FakeChats.NewConversation("c-wheel", "Wheel Pal", false, ConversationStatus.Active, false, false, FakeChats.Person("p-wheel", "Wheel Pal", "+15550000007"));
         long time         = DateTimeOffset.UtcNow.AddDays(-1).ToUnixTimeMilliseconds() * 1000;
-        Message[] texts   = [.. Enumerable.Range(1, ChatStore.PageSize * 3).Select(i => Line($"Line {i}"))];
+        // Mixed Heights, Like A Real Chat: Every Third Message Wraps Over Several Lines
+        Message[] texts   = [.. Enumerable.Range(1, ChatStore.PageSize * 3).Select(i => Line(i % 3 == 0 ? $"Line {i} " + string.Concat(Enumerable.Repeat("wrapping words ", 30)) : $"Line {i}"))];
         Server.Phone.Chats.Add(chat, texts);
 
         await OpenMainAsync();
@@ -282,7 +290,7 @@ public sealed class ChatTests : UiTest
         {
             var message = new Message
             {
-                MessageID      = "w-" + text.Replace(' ', '-'),
+                MessageID      = "w-" + text.Split(' ')[1],
                 ConversationID = "c-wheel",
                 ParticipantID  = "p-wheel",
                 Timestamp      = time += 1_000_000,
@@ -296,6 +304,18 @@ public sealed class ChatTests : UiTest
     // =========================================================================
     // HELPERS
     // =========================================================================
+
+    // The Message List Sits On Its Newest Message: Less Than A Pixel Short Of Its End, So No Bottom Fade Or Arrow
+    private void AssertAtNewest(string what)
+    {
+        AutomationElement list = App.Find("Chat.Messages");
+        var scroll             = list.Patterns.Scroll.Pattern;
+        double view_size       = scroll.VerticalViewSize.ValueOrDefault;
+        double viewport        = list.BoundingRectangle.Height;
+        double scrollable      = view_size is > 0 and < 100 ? viewport * 100 / view_size - viewport : 0;
+        double short_by        = (100 - scroll.VerticalScrollPercent.ValueOrDefault) / 100 * scrollable;
+        Assert.IsTrue(short_by < 1, $"{what} left the list {short_by:0.0} px short of the newest message.");
+    }
 
     // Opens The Main Window, Then Ann's Chat, And Waits For Her Three Messages
     private async Task OpenAnnAsync()

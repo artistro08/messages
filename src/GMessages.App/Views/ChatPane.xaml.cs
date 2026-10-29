@@ -37,6 +37,10 @@ public sealed partial class ChatPane : UserControl
 
     private ScrollViewer? _scroller;
 
+    // Pinned To The Newest Message (See ChatScroll.StaysPinned), And The Content Height Last Seen
+    private bool _pinned = true;
+    private double _lastExtent;
+
     // The Last Scroll Decisions Logged (Wave 7 Diagnostics), So Only Changes Are Logged
     private string? _lastScrollTrace;
 
@@ -104,6 +108,7 @@ public sealed partial class ChatPane : UserControl
         BindableList.Show(pane.MessageList, chat?.Messages);
         pane.ShowScrollToBottom(false);
         pane._lastScrollTrace = null;
+        pane._pinned          = true;
         chat?.Trace($"opened in pane (scroller {(pane._scroller is null ? "not yet hooked" : "hooked")})");
 
         if (chat is not null)
@@ -152,8 +157,9 @@ public sealed partial class ChatPane : UserControl
     {
         if (_scroller is null && FindScroller(MessageList) is { } found)
         {
-            _scroller              = found;
-            _scroller.ViewChanged += OnScrolled;
+            _scroller                  = found;
+            _scroller.ViewChanged     += OnScrolled;
+            MessageList.LayoutUpdated += OnMessageListLayoutUpdated;
             bool faded = ScrollFade.Attach(found) is not null;
             Chat?.Trace($"scroller hooked (edge fades {faded})");
         }
@@ -197,6 +203,14 @@ public sealed partial class ChatPane : UserControl
             return;
         }
 
+        // The Same Content Height Means The Person (Or The Arrow) Moved The List; A New One Is Bubbles Measuring Or A Page
+        bool content_changed = ContentChanged(scroller);
+        _pinned              = ChatScroll.StaysPinned(_pinned, content_changed, scroller.VerticalOffset, scroller.ScrollableHeight);
+        if (content_changed)
+        {
+            KeepPinned(scroller);
+        }
+
         bool show_arrow = ChatScroll.ShowScrollToBottom(scroller.VerticalOffset, scroller.ScrollableHeight, scroller.ViewportHeight);
         bool load_older = scroller.ScrollableHeight > 0 && ChatScroll.ShouldLoadOlder(scroller.VerticalOffset, scroller.ScrollableHeight, scroller.ViewportHeight);
 
@@ -217,6 +231,17 @@ public sealed partial class ChatPane : UserControl
     }
 
     private void OnScrollToBottomClick(object sender, RoutedEventArgs e) => _scroller?.ChangeView(null, _scroller.ScrollableHeight, null);
+
+    // Bubbles Measure Their Real Heights After They Show (The List Only Estimates Them First), So A Just-Opened Chat Would
+    // Stop A Few Pixels Short Of Its Newest Message, Showing The Bottom Fade. While Pinned, Each Change In Content Height
+    // Puts It Back At The Bottom. Scrolling (Same Height) Is Left To OnScrolled
+    private void OnMessageListLayoutUpdated(object? sender, object e)
+    {
+        if (_scroller is { } scroller && ContentChanged(scroller))
+        {
+            KeepPinned(scroller);
+        }
+    }
 
     // Enter Or Space On A Focused Bubble Shows Or Hides Its Time, Like A Click (Not On Its Retry Link, Which Has Focus Then).
     // The Row Is Matched As A ContentControl Holding A Bubble: In The Native AOT Build It Arrives As A ContentControl, Not
@@ -300,6 +325,23 @@ public sealed partial class ChatPane : UserControl
     // =========================================================================
     // HELPERS
     // =========================================================================
+
+    // Notes The Content Height; True When It Differs From The Last One Seen
+    private bool ContentChanged(ScrollViewer scroller)
+    {
+        bool changed = Math.Abs(scroller.ExtentHeight - _lastExtent) >= 0.5;
+        _lastExtent  = scroller.ExtentHeight;
+        return changed;
+    }
+
+    // Back To The Newest Message At Once (No Animation) While Pinned And Short Of It
+    private void KeepPinned(ScrollViewer scroller)
+    {
+        if (_pinned && !ChatScroll.IsAtBottom(scroller.VerticalOffset, scroller.ScrollableHeight))
+        {
+            scroller.ChangeView(null, scroller.ScrollableHeight, null, true);
+        }
+    }
 
     // Fades The Scroll-To-Bottom Button In Or Out (Its OpacityTransition Animates It); Hidden, It Takes No Clicks Or Focus
     private void ShowScrollToBottom(bool show)

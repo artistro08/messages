@@ -26,4 +26,28 @@ public static class ChatScroll
     /// <returns>True to show the button.</returns>
     public static bool ShowScrollToBottom(double offset, double scrollable, double viewport) =>
         viewport > 0 && scrollable - offset > viewport;
+
+    /// <summary>
+    /// Says whether the list stays pinned to its newest message after its view changed.
+    /// </summary>
+    /// <remarks>
+    /// A chat opens pinned. While its content is still changing size (bubbles measuring their real heights, a page
+    /// arriving) the pin holds, and the list is put back at the bottom; otherwise the person moved it, and it is pinned
+    /// only if they left it at the bottom.
+    /// </remarks>
+    /// <param name="pinned">Whether it was pinned.</param>
+    /// <param name="contentChanged">True when the content's height changed since the last check.</param>
+    /// <param name="offset">How far down the list is scrolled.</param>
+    /// <param name="scrollable">How far down the list can scroll.</param>
+    /// <returns>True when it stays pinned.</returns>
+    public static bool StaysPinned(bool pinned, bool contentChanged, double offset, double scrollable) =>
+        contentChanged ? pinned : IsAtBottom(offset, scrollable);
+
+    /// <summary>
+    /// Says whether the list is at its newest message, within a pixel (layout rounding).
+    /// </summary>
+    /// <param name="offset">How far down the list is scrolled.</param>
+    /// <param name="scrollable">How far down the list can scroll.</param>
+    /// <returns>True at the bottom.</returns>
+    public static bool IsAtBottom(double offset, double scrollable) => scrollable - offset <= 1;
 }
