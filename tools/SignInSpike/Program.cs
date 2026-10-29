@@ -28,6 +28,13 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        // Break Away: started inside a package, relaunch outside it with the other switches
+        if (args.Contains("--break-away"))
+        {
+            Breakaway.Relaunch(string.Join(' ', args.Where(a => a != "--break-away")));
+            return;
+        }
+
         // Parse Switches
         bool use_chrome_ua = args.Contains("--chrome-ua");
         bool no_dbsc       = args.Contains("--no-dbsc");
@@ -98,7 +105,7 @@ internal static class Program
             this.use_chrome_ua = use_chrome_ua;
             this.no_dbsc       = no_dbsc;
 
-            Text = "Sign-in Spike";
+            Text = $"Sign-in Spike (packaged: {Breakaway.IsPackaged()})";
             Width  = 1000;
             Height = 800;
             Controls.Add(web_view);
@@ -142,7 +149,9 @@ internal static class Program
 
             // Navigate
             web_view.NavigationCompleted += async (_, _) => await CheckCookiesAsync();
-            web_view.CoreWebView2.Navigate("https://messages.google.com/web/authentication");
+            // Probe Override: --url=<address> loads another page (diagnostics only)
+            string? url = Environment.GetCommandLineArgs().FirstOrDefault(a => a.StartsWith("--url=", StringComparison.Ordinal))?[6..];
+            web_view.CoreWebView2.Navigate(url ?? "https://messages.google.com/web/authentication");
         }
 
         /// <summary>
