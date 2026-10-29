@@ -130,13 +130,17 @@ internal sealed partial class TrayMenuWindow : Window
 
     // Always the mouse-sized padding. WinUI picks touch padding (taller rows) when it can't
     // tell how the menu was opened, which is often, since the host window never gets input.
+    // Hard-coded copy of WinUI's MenuFlyoutItemThemePaddingNarrow: unboxing the theme resource
+    // throws InvalidCastException under Native AOT.
+    private static readonly Thickness NarrowPadding = new(11, 4, 11, 7);
+
     private static MenuFlyoutItem CreateItem(string text, string glyph, string automationId, Action onClick)
     {
         var item = new MenuFlyoutItem
         {
             Text    = text,
             Icon    = new FontIcon { Glyph = glyph },
-            Padding = (Thickness)Application.Current.Resources["MenuFlyoutItemThemePaddingNarrow"],
+            Padding = NarrowPadding,
         };
         AutomationProperties.SetAutomationId(item, automationId);
         item.Click += (_, _) => onClick();
