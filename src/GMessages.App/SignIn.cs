@@ -22,6 +22,12 @@ internal static class SignIn
     /// <summary>The cookie that means the user is signed in.</summary>
     public const string SignedInCookie = "SAPISID";
 
-    /// <summary>The cookies pairing needs (all six must be present before capture, as in LibGM's login); every other cookie is ignored.</summary>
-    public static readonly string[] WantedNames = ["SID", "HSID", "SSID", "OSID", "APISID", SignedInCookie];
+    /// <summary>The fresh-session cookie waited for (up to <see cref="SessionCookieWait"/>) once signed in.</summary>
+    public const string SessionCookie = "__Secure-1PSIDTS";
+
+    /// <summary>How long to wait for <see cref="SessionCookie"/> after <see cref="SignedInCookie"/> appears.</summary>
+    public static readonly TimeSpan SessionCookieWait = TimeSpan.FromSeconds(5);
+
+    /// <summary>The cookies pairing needs; every other cookie is ignored.</summary>
+    public static readonly string[] WantedNames = ["SID", "HSID", "SSID", "OSID", "APISID", SignedInCookie, SessionCookie];
 }

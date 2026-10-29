@@ -51,7 +51,7 @@ public sealed class PairingTests : UiTest
         Tray.FindIcon(AppDriver.DefaultTimeout);
         Tray.CloseOverflow();
 
-        // Which Cookies WebView2 Kept Over http://127.0.0.1
+        // Which Cookies WebView2 Kept Over http://127.0.0.1 (Is __Secure-1PSIDTS Among Them?)
         string captured = ReadLog().Split('\n').FirstOrDefault(l => l.Contains("Sign-in cookies captured", StringComparison.Ordinal)) ?? "(not logged)";
         TestContext.WriteLine(captured.Trim());
     }

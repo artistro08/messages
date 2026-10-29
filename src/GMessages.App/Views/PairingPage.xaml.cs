@@ -25,8 +25,8 @@ namespace GMessages.App.Views;
 /// <para>
 /// <b>Cookie capture.</b> After every navigation the wanted cookies are read for the authentication page's origin
 /// and, in production, <c>https://google.com</c> (ported from the sign-in spike). Capture happens once
-/// all six wanted cookies are there (<c>__Secure-1PSIDTS</c> is deliberately not captured: it expires about 2 hours after
-/// sign-in and no response renews it). The cookies go straight to the view model, because Google rejects
+/// <c>SAPISID</c> and <c>__Secure-1PSIDTS</c> are both there, or <see cref="SignIn.SessionCookieWait"/> after
+/// <c>SAPISID</c> appears without the other. The cookies go straight to the view model, because Google rejects
 /// cookies a few hours old; then the WebView2 is closed and its profile folder (a live Google session) deleted.
 /// Cookie values are never logged.
 /// </para>
@@ -39,6 +39,7 @@ public sealed partial class PairingPage : UserControl
 {
     private readonly GmEndpoints _endpoints;
     private readonly ILogger _log;
+    private readonly DispatcherQueueTimer _sessionCookieTimer;
 
     // The Current Attempt's Browser And Profile Folder; Null Once Closed
     private WebView2? _webView;
@@ -58,6 +59,12 @@ public sealed partial class PairingPage : UserControl
         _endpoints = endpoints;
         _log       = log;
         InitializeComponent();
+
+        // Grace Wait For The Session Cookie
+        _sessionCookieTimer             = DispatcherQueue.CreateTimer();
+        _sessionCookieTimer.Interval    = SignIn.SessionCookieWait;
+        _sessionCookieTimer.IsRepeating = false;
+        _sessionCookieTimer.Tick       += (_, _) => _ = CheckCookiesAsync(force: true);
 
         // Behavior
         ViewModel.PropertyChanged += OnViewModelChanged;
@@ -124,7 +131,7 @@ public sealed partial class PairingPage : UserControl
             web.CoreWebView2.Settings.UserAgent             = SignIn.ChromeUserAgent;
             web.CoreWebView2.Settings.IsWebMessageEnabled   = false;
             web.CoreWebView2.Settings.AreHostObjectsAllowed = false;
-            web.NavigationCompleted            += (_, _) => _ = CheckCookiesAsync();
+            web.NavigationCompleted            += (_, _) => _ = CheckCookiesAsync(force: false);
 
             // No Popups: a Google link that opens a new window would outlive sign-in and keep the profile folder locked
             web.CoreWebView2.NewWindowRequested += (_, e) => e.Handled = true;
@@ -146,8 +153,8 @@ public sealed partial class PairingPage : UserControl
         }
     }
 
-    // Reads The Wanted Cookies; Captures Once Signed In
-    private async Task CheckCookiesAsync()
+    // Reads The Wanted Cookies; Captures Once Signed In (Or Forced By The Grace Timer With SAPISID Present)
+    private async Task CheckCookiesAsync(bool force)
     {
         WebView2? web = _webView;
         if (_captured || web?.CoreWebView2 is null)
@@ -177,8 +184,19 @@ public sealed partial class PairingPage : UserControl
             }
 
             // Re-Check After The Awaits: Another Navigation May Have Captured First, Or The Page Closed
-            if (_captured || _webView != web || !SignIn.WantedNames.All(jar.ContainsKey))
+            if (_captured || _webView != web || !jar.ContainsKey(SignIn.SignedInCookie))
             {
+                return;
+            }
+
+            // Signed In Without The Session Cookie Yet: Give It A Few Seconds
+            if (!force && !jar.ContainsKey(SignIn.SessionCookie))
+            {
+                if (!_sessionCookieTimer.IsRunning)
+                {
+                    _sessionCookieTimer.Start();
+                }
+
                 return;
             }
 
@@ -189,6 +207,12 @@ public sealed partial class PairingPage : UserControl
 #pragma warning restore CA1031
         {
             AppLog.CookieReadFailed(_log, ex.GetType().Name);
+
+            // The Forced Read Failed: Try Again Later, Since No Navigation May Come To Retry It
+            if (force && !_captured && _webView == web)
+            {
+                _sessionCookieTimer.Start();
+            }
         }
     }
 
@@ -219,6 +243,7 @@ public sealed partial class PairingPage : UserControl
     private void Capture(Dictionary<string, string> cookies, Dictionary<string, string> expiries)
     {
         _captured = true;
+        _sessionCookieTimer.Stop();
         string names = string.Join(", ", cookies.Keys.Select(name => $"{name} ({expiries[name]})"));
         AppLog.CookiesCaptured(_log, names);
 
@@ -229,6 +254,7 @@ public sealed partial class PairingPage : UserControl
     // Closes The WebView2 And Deletes Its Profile Folder Off The UI Thread
     private void CloseSignIn()
     {
+        _sessionCookieTimer.Stop();
         WebView2? web    = _webView;
         string? folder   = _profileFolder;
         _webView         = null;
