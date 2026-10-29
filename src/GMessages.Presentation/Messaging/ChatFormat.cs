@@ -91,4 +91,26 @@ public static class ChatFormat
 
         return 0xFF000000u | rgb;
     }
+
+    /// <summary>
+    /// The label that stands in for a message that has no text.
+    /// </summary>
+    /// <param name="kind">What the message shows.</param>
+    /// <returns>"Photo", "Video", "Voice message", "File" or "Unsupported message".</returns>
+    public static string KindLabel(MessageKind kind) => kind switch
+    {
+        MessageKind.Photo => ChatCopy.Photo,
+        MessageKind.Video => ChatCopy.Video,
+        MessageKind.Audio => ChatCopy.VoiceMessage,
+        MessageKind.File  => ChatCopy.File,
+        _                 => ChatCopy.UnsupportedMessage,
+    };
+
+    /// <summary>
+    /// How a participant is named: full name, else first name, else phone number.
+    /// </summary>
+    /// <param name="p">The participant, or null.</param>
+    /// <returns>The name, or an empty string when there is none.</returns>
+    public static string SenderName(ParticipantInfo? p) =>
+        new[] { p?.FullName, p?.FirstName, p?.FormattedNumber }.FirstOrDefault(n => !string.IsNullOrEmpty(n)) ?? string.Empty;
 }

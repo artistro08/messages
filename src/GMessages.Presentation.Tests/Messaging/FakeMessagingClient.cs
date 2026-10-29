@@ -24,6 +24,11 @@ internal sealed class FakeMessagingClient : IMessagingClient
 
     public List<SendMessageRequest> Sent { get; } = [];
 
+    /// <summary>When set, sending throws this instead of answering.</summary>
+    public Exception? SendThrows { get; set; }
+
+    public List<(string ConversationId, string MessageId)> MarkedRead { get; } = [];
+
     public List<(ListConversationsRequest.Types.Folder Folder, long Count)> ListCalls { get; } = [];
 
     /// <summary>When set, the next list call returns the page it had when called, but only after this completes.</summary>
@@ -74,10 +79,14 @@ internal sealed class FakeMessagingClient : IMessagingClient
     public Task<SendMessageResponse> SendMessageAsync(SendMessageRequest request, CancellationToken ct)
     {
         Sent.Add(request);
-        return Task.FromResult(SendAnswer);
+        return SendThrows is { } ex ? Task.FromException<SendMessageResponse>(ex) : Task.FromResult(SendAnswer);
     }
 
-    public Task MarkReadAsync(string conversationId, string messageId, CancellationToken ct) => Task.CompletedTask;
+    public Task MarkReadAsync(string conversationId, string messageId, CancellationToken ct)
+    {
+        MarkedRead.Add((conversationId, messageId));
+        return Task.CompletedTask;
+    }
 
     public ListContactsResponse ContactsAnswer { get; set; } = new();
 

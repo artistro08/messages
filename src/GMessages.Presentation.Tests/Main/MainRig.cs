@@ -24,10 +24,13 @@ internal sealed class MainRig : IDisposable
             TimeProvider.System,
             NullLoggerFactory.Instance,
             a => a());
-        Store = new ChatStore(Controller, () => Client, NullLogger.Instance);
+        Store = new ChatStore(Controller, () => Connected ? Client : null, NullLogger.Instance);
     }
 
     public ConnectionController Controller { get; }
+
+    /// <summary>Gets or sets whether the store sees a phone client.</summary>
+    public bool Connected { get; set; } = true;
 
     public FakeMessagingClient Client { get; } = new();
 
@@ -54,6 +57,8 @@ internal sealed class MainRig : IDisposable
         Client.ConversationsPage = new ListConversationsResponse();
         Client.ConversationsPage.Conversations.AddRange(conversations);
     }
+
+    public Task LiveMessage(Message m) => Store.HandleEventAsync(new MessageReceived(m, false));
 
     public Task Live(Conversation c) => Store.HandleEventAsync(new ConversationUpdated(c));
 

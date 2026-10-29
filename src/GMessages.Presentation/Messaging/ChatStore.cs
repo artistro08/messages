@@ -87,6 +87,26 @@ public sealed partial class ChatStore : IDisposable
     public ConversationInfo? Find(string conversationId) => _cache.GetValueOrDefault(conversationId);
 
     /// <summary>
+    /// Gets a conversation from the cache, fetching it from the phone when it is not cached.
+    /// </summary>
+    /// <param name="conversationId">The conversation ID.</param>
+    /// <param name="ct">Cancels the wait.</param>
+    /// <returns>The conversation, or null when the phone does not know it.</returns>
+    /// <exception cref="MessagingUnavailableException">Not cached and not connected.</exception>
+    public async Task<ConversationInfo?> GetAsync(string conversationId, CancellationToken ct)
+    {
+        if (Find(conversationId) is { } cached)
+        {
+            return cached;
+        }
+
+        // No ConfigureAwait(false): ConversationChanged Must Be Raised On The Caller Thread
+        Conversation? fetched = await RequireClient().GetConversationAsync(conversationId, ct);
+
+        return fetched is null ? null : CacheConversation(fetched);
+    }
+
+    /// <summary>
     /// Loads one page of a folder and caches it.
     /// </summary>
     /// <param name="folder">The folder.</param>

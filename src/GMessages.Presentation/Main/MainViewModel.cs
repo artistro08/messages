@@ -90,7 +90,18 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>Gets or sets whether the window has focus (set by the view).</summary>
-    public bool IsWindowFocused { get; set; }
+    public bool IsWindowFocused
+    {
+        get;
+        set
+        {
+            field = value;
+            UpdateChatActive();
+        }
+    }
+
+    /// <summary>Gets the open conversation's chat, or null when none is open.</summary>
+    public ChatViewModel? Chat { get; private set; }
 
     /// <summary>Gets whether Start chat shows in place of a conversation.</summary>
     public bool IsStartChatOpen { get; private set; }
@@ -138,6 +149,14 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
         SelectedConversationId = conversationId;
         IsStartChatOpen        = false;
+
+        // Picking The Open Conversation Again Keeps Its Chat (And The Draft)
+        if (Chat?.ConversationId != conversationId)
+        {
+            ReplaceChat(conversationId);
+        }
+
+        UpdateChatActive();
         Changed();
     }
 
@@ -146,6 +165,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     {
         SelectedConversationId = null;
         IsStartChatOpen        = false;
+        ReplaceChat(null);
         Changed();
     }
 
@@ -160,6 +180,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     {
         SelectedConversationId = null;
         IsStartChatOpen        = true;
+        ReplaceChat(null);
         Changed();
     }
 
@@ -177,6 +198,30 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _connection.ClientEvent  -= OnClientEvent;
         Inbox.Dispose();
         _spamBlocked?.Dispose();
+        Chat?.Dispose();
+    }
+
+    // Disposes The Open Chat And Opens One For The New Selection (Null Closes It)
+    private void ReplaceChat(string? conversationId)
+    {
+        Chat?.Dispose();
+        Chat = null;
+
+        if (conversationId is not null)
+        {
+            Chat = new ChatViewModel(_store, conversationId, _time, _post);
+            _ = Chat.LoadAsync();
+        }
+
+        UpdateChatActive();
+    }
+
+    private void UpdateChatActive()
+    {
+        if (Chat is not null)
+        {
+            Chat.IsActive = IsWindowFocused && Chat.ConversationId == SelectedConversationId;
+        }
     }
 
     // Moves The Open Conversation By One Row, Stopping At Either End

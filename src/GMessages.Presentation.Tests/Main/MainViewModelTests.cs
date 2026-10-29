@@ -123,6 +123,51 @@ public sealed class MainViewModelTests
     }
 
     [TestMethod]
+    public async Task Select_CreatesChat_NewSelectionReplaces_ExitClears()
+    {
+        using var rig = new MainRig();
+        using MainViewModel vm = await NewMainAsync(rig);
+        Assert.IsNull(vm.Chat);
+
+        vm.Select("a");
+        ChatViewModel first = vm.Chat!;
+        Assert.AreEqual("a", first.ConversationId);
+
+        // Same Conversation Again Keeps The Chat
+        vm.Select("a");
+        Assert.AreSame(first, vm.Chat);
+
+        vm.Select("b");
+        Assert.AreEqual("b", vm.Chat!.ConversationId);
+        Assert.AreNotSame(first, vm.Chat);
+
+        vm.ExitConversation();
+        Assert.IsNull(vm.Chat);
+
+        vm.Select("a");
+        vm.OpenStartChat();
+        Assert.IsNull(vm.Chat);
+    }
+
+    [TestMethod]
+    public async Task Chat_IsActiveOnlyWhenWindowFocused()
+    {
+        using var rig = new MainRig();
+        using MainViewModel vm = await NewMainAsync(rig);
+        vm.Select("a");
+        Assert.IsFalse(vm.Chat!.IsActive);
+
+        vm.IsWindowFocused = true;
+        Assert.IsTrue(vm.Chat.IsActive);
+
+        vm.Select("b");
+        Assert.IsTrue(vm.Chat.IsActive);
+
+        vm.IsWindowFocused = false;
+        Assert.IsFalse(vm.Chat.IsActive);
+    }
+
+    [TestMethod]
     public async Task ToggleList_Flips()
     {
         using var rig = new MainRig();

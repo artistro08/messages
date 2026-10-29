@@ -24,21 +24,12 @@ public sealed record NotificationContent(string Tag, string Group, string Title,
         ArgumentNullException.ThrowIfNull(m);
         ArgumentNullException.ThrowIfNull(c);
 
-        string body = m.Kind switch
-        {
-            MessageKind.Text  => m.Text,
-            MessageKind.Photo => ChatCopy.Photo,
-            MessageKind.Video => ChatCopy.Video,
-            MessageKind.Audio => ChatCopy.VoiceMessage,
-            MessageKind.File  => ChatCopy.File,
-            _                 => ChatCopy.UnsupportedMessage,
-        };
+        string body = m.Kind == MessageKind.Text ? m.Text : ChatFormat.KindLabel(m.Kind);
 
         // Name The Sender In Groups
         if (c.IsGroup)
         {
-            ParticipantInfo? sender = c.FindParticipant(m.ParticipantId);
-            string name             = new[] { sender?.FullName, sender?.FirstName, sender?.FormattedNumber }.FirstOrDefault(n => !string.IsNullOrEmpty(n)) ?? string.Empty;
+            string name = ChatFormat.SenderName(c.FindParticipant(m.ParticipantId));
 
             if (name.Length > 0)
             {
