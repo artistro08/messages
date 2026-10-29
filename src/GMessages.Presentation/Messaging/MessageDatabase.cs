@@ -19,7 +19,8 @@ namespace GMessages.Presentation.Messaging;
 /// Runs on Windows' own <c>winsqlite3.dll</c>. A connection opens per call with pooling off, so nothing is held while
 /// idle; one lock serializes every call. The database is a cache, never a reason to fail: a damaged file, a file from
 /// another schema version, or a row that won't decrypt or parse deletes the file, logs only the error type, and the
-/// call answers empty (loads) or drops the write (saves). Content is never logged.
+/// call answers empty (loads) or drops the write (saves). A passing problem (the file locked by another process, disk
+/// full, an I/O error) fails only that call the same way and keeps the file. Content is never logged.
 /// </para>
 /// </remarks>
 public sealed partial class MessageDatabase
@@ -60,13 +61,19 @@ public sealed partial class MessageDatabase
     /// <param name="path">The database file (<see cref="AppPaths.MessagesDatabase"/>).</param>
     /// <param name="log">Gets error type names only.</param>
     public MessageDatabase(string path, ILogger log)
+        : this(path, log, busyTimeoutSeconds: 30)
+    {
+    }
+
+    // Tests Shorten How Long A Call Waits On A File Another Process Has Locked
+    internal MessageDatabase(string path, ILogger log, int busyTimeoutSeconds)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
         ArgumentNullException.ThrowIfNull(log);
 
         _path             = path;
         _log              = log;
-        _connectionString = new SqliteConnectionStringBuilder { DataSource = path, Pooling = false }.ToString();
+        _connectionString = new SqliteConnectionStringBuilder { DataSource = path, Pooling = false, DefaultTimeout = busyTimeoutSeconds }.ToString();
     }
 
     // =========================================================================
@@ -99,6 +106,7 @@ public sealed partial class MessageDatabase
     public void SaveConversation(Conversation conversation)
     {
         ArgumentNullException.ThrowIfNull(conversation);
+        ArgumentException.ThrowIfNullOrEmpty(conversation.ConversationID, nameof(conversation));
 
         Run(connection =>
         {
@@ -122,7 +130,16 @@ public sealed partial class MessageDatabase
     /// <param name="conversationId">The conversation ID.</param>
     /// <param name="count">How many of the newest to load.</param>
     /// <returns>The newest <paramref name="count"/> messages, oldest first; empty when none or unreadable.</returns>
-    public IReadOnlyList<Message> LoadMessages(string conversationId, int count) => Run<IReadOnlyList<Message>>(connection =>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> is negative.</exception>
+    public IReadOnlyList<Message> LoadMessages(string conversationId, int count)
+    {
+        // SQLite Reads A Negative LIMIT As No Limit
+        ArgumentOutOfRangeException.ThrowIfNegative(count);
+
+        return Run<IReadOnlyList<Message>>(connection => LoadMessages(connection, conversationId, count), []);
+    }
+
+    private static List<Message> LoadMessages(SqliteConnection connection, string conversationId, int count)
     {
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
@@ -140,7 +157,7 @@ public sealed partial class MessageDatabase
         }
 
         return messages;
-    }, []);
+    }
 
     /// <summary>
     /// Loads one message.
@@ -333,7 +350,8 @@ public sealed partial class MessageDatabase
         return (long)command.ExecuteScalar()!;
     }
 
-    // Runs One Call Under The Lock; A Damaged File Or Row Deletes The Database And Answers The Fallback
+    // Runs One Call Under The Lock. A Damaged Or Foreign File Or Row Deletes The Database; A Passing Problem (Locked,
+    // Disk Full, I/O) Only Fails This Call. Either Way The Call Answers The Fallback
     private T Run<T>(Func<SqliteConnection, T> work, T fallback)
     {
         lock (_lock)
@@ -343,7 +361,12 @@ public sealed partial class MessageDatabase
                 using SqliteConnection connection = Open();
                 return work(connection);
             }
-            catch (Exception ex) when (ex is SqliteException or CryptographicException or InvalidProtocolBufferException)
+            catch (SqliteException ex) when (!IsDamage(ex))
+            {
+                LogCallFailed(ex.GetType().Name, ex.SqliteErrorCode);
+                return fallback;
+            }
+            catch (Exception ex) when (ex is SqliteException or CryptographicException or InvalidProtocolBufferException or InvalidDataException)
             {
                 LogReset(ex.GetType().Name);
                 DeleteFiles();
@@ -352,11 +375,20 @@ public sealed partial class MessageDatabase
         }
     }
 
+    // SQLITE_ERROR (Missing Table Or Column), SQLITE_CORRUPT, SQLITE_CONSTRAINT, SQLITE_MISMATCH, SQLITE_NOTADB: The File
+    // Isn't Ours Or Is Broken. Anything Else (BUSY, LOCKED, IOERR, FULL, CANTOPEN, ...) May Pass On Its Own
+    private static bool IsDamage(SqliteException ex) =>
+        (ex.SqliteErrorCode & 0xFF) is 1 or 11 or 19 or 20 or 26;
+
     private static byte[] Protect(IMessage value) =>
         ProtectedData.Protect(value.ToByteArray(), null, DataProtectionScope.CurrentUser);
 
+    // A Body That Isn't A Blob (NULL, Text, Number) Is A Bad Row
     private static byte[] Unprotect(SqliteDataReader reader) =>
-        ProtectedData.Unprotect((byte[])reader[0], null, DataProtectionScope.CurrentUser);
+        ProtectedData.Unprotect(reader.GetValue(0) as byte[] ?? throw new InvalidDataException("Body is not a blob"), null, DataProtectionScope.CurrentUser);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Message database call failed; file kept ({ErrorType} {ErrorCode})")]
+    private partial void LogCallFailed(string errorType, int errorCode);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Message database reset ({ErrorType})")]
     private partial void LogReset(string errorType);

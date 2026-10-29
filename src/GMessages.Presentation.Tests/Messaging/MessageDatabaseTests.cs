@@ -1,6 +1,7 @@
 using System.Text;
 using GMessages.Presentation.Messaging;
 using GMessages.Protocol.Proto;
+using GMessages.Protocol.Tests.Fakes;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -203,5 +204,54 @@ public sealed class MessageDatabaseTests
 
         Assert.AreEqual(0, db.LoadMessages("c-1", 10).Count);
         Assert.AreEqual(0, db.LoadMessages("c-1", 10).Count);
+    }
+
+    [TestMethod]
+    public void NonBlobBody_StartsEmpty()
+    {
+        var db = Db();
+        db.SaveMessages("c-1", Range(3));
+        db.SaveConversation(new Conversation { ConversationID = "c-1", LastMessageTimestamp = BaseTime });
+        RawSql("UPDATE conversations SET body = 'plain text'");
+
+        Assert.AreEqual(0, db.LoadConversations().Count);
+        Assert.AreEqual(0, db.LoadMessages("c-1", 10).Count);
+    }
+
+    [TestMethod]
+    public void LockedFile_FailsTheCall_KeepsTheDatabase()
+    {
+        var log = new CollectingLogger();
+        var db  = new MessageDatabase(_path, log, busyTimeoutSeconds: 1);
+        db.SaveMessages("c-1", Range(3));
+
+        // Another Process Holds An Exclusive Lock
+        using (var holder = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = _path, Pooling = false }.ToString()))
+        {
+            holder.Open();
+            using SqliteCommand command = holder.CreateCommand();
+            command.CommandText = "BEGIN EXCLUSIVE";
+            command.ExecuteNonQuery();
+
+            Assert.AreEqual(0, db.LoadMessages("c-1", 10).Count);
+            Assert.IsNull(db.LoadMessage("c-1", "m-1"));
+            db.SaveMessages("c-1", [Msg("m-new", BaseTime + 100)]);
+        }
+
+        Assert.IsTrue(File.Exists(_path));
+        CollectionAssert.AreEqual(Range(3), db.LoadMessages("c-1", 10).ToList());
+        Assert.AreEqual(3, log.Messages.Length);
+        Assert.IsTrue(log.Messages.All(m => m == "Message database call failed; file kept (SqliteException 5)"), string.Join(" | ", log.Messages));
+    }
+
+    [TestMethod]
+    public void Arguments_EmptyIdAndNegativeCount_Throw()
+    {
+        var db = Db();
+        db.SaveMessages("c-1", Range(3));
+
+        Assert.ThrowsExactly<ArgumentException>(() => db.SaveConversation(new Conversation { LastMessageTimestamp = BaseTime }));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => db.LoadMessages("c-1", -1));
+        Assert.AreEqual(0, db.LoadMessages("c-1", 0).Count);
     }
 }
