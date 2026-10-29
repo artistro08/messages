@@ -170,6 +170,32 @@ public sealed class ChatViewModelTests
         Assert.AreEqual("m9", chat.Messages[0].Id);
     }
 
+    /// <summary>
+    /// Sending adds one bubble and the phone's echo and delivery update that same bubble: the bubbles already shown are
+    /// never cleared, removed, moved or replaced, so the list only animates the new one in.
+    /// </summary>
+    [TestMethod]
+    public async Task Send_AddsOneBubble_EchoAndDeliveryChangeItInPlace_NothingRebuilt()
+    {
+        using var rig = new MainRig();
+        using ChatViewModel chat = NewChat(rig, null, Msg("m1", "hi"), Msg("m2", "there"));
+        await chat.LoadAsync();
+        MessageBubbleViewModel[] shown = [.. chat.Messages];
+        List<System.Collections.Specialized.NotifyCollectionChangedAction> changes = [];
+        chat.Messages.CollectionChanged += (_, e) => changes.Add(e.Action);
+
+        chat.Draft = "hello";
+        await chat.SendAsync();
+        MessageBubbleViewModel sent = chat.Messages[^1];
+        await rig.LiveMessage(Mine("m9", "hello", sent.TmpId, MessageStatusType.OutgoingSending));
+        await rig.LiveMessage(Mine("m9", "hello", sent.TmpId, MessageStatusType.OutgoingDelivered));
+
+        Assert.AreEqual("Add", string.Join(",", changes), "Only the sent bubble's Add: no Reset, Remove, Move or Replace.");
+        CollectionAssert.AreEqual(shown.Append(sent).ToArray(), chat.Messages.ToArray());
+        Assert.AreEqual("m9", sent.Id);
+        Assert.IsFalse(sent.IsSending);
+    }
+
     [TestMethod]
     public async Task Send_StatusUpdatesSameId_UpdateInPlace()
     {

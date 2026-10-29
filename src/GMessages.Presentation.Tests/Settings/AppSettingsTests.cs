@@ -23,6 +23,17 @@ public sealed class AppSettingsTests
         Assert.IsTrue(settings.NotificationsEnabled);
         Assert.IsFalse(settings.NotifyForViewedChat);
         Assert.AreEqual(LogLevel.Information, settings.LogLevel);
+        Assert.AreEqual(15, settings.SnoozeMinutes);
+        Assert.IsNull(settings.ListWidth);
+    }
+
+    [TestMethod]
+    public void SnoozeMinutes_OutsideTheChoices_Gives15()
+    {
+        var store = new InMemorySettingsStore();
+        store.SetString("SnoozeMinutes", "7");
+
+        Assert.AreEqual(15, new AppSettings(store).SnoozeMinutes);
     }
 
     [TestMethod]
@@ -35,6 +46,8 @@ public sealed class AppSettingsTests
             NotificationsEnabled = false,
             NotifyForViewedChat  = true,
             LogLevel             = LogLevel.Debug,
+            SnoozeMinutes        = 60,
+            ListWidth            = 412.5,
         };
 
         var reloaded = new AppSettings(new JsonFileSettingsStore(path));
@@ -43,6 +56,8 @@ public sealed class AppSettingsTests
         Assert.IsFalse(reloaded.NotificationsEnabled);
         Assert.IsTrue(reloaded.NotifyForViewedChat);
         Assert.AreEqual(LogLevel.Debug, reloaded.LogLevel);
+        Assert.AreEqual(60, reloaded.SnoozeMinutes);
+        Assert.AreEqual(412.5, reloaded.ListWidth);
     }
 
     [TestMethod]

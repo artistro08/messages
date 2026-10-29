@@ -67,7 +67,7 @@ public sealed class ConversationListViewModelTests
         Assert.AreEqual("B", group.Initial);
         Assert.AreEqual(0xFF1A73E8u, group.AvatarColor);
         Assert.AreEqual("p-bo", group.PhotoId);
-        Assert.AreEqual("+", group.SecondInitial);
+        Assert.AreEqual(string.Empty, group.SecondInitial, "A number with no saved name gets the person icon, not its first digit.");
         Assert.AreNotEqual(0u, group.SecondColor);
         Assert.AreEqual("p-cy", group.SecondPhotoId);
 

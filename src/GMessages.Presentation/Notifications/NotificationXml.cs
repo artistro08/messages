@@ -11,7 +11,7 @@ namespace GMessages.Presentation.Notifications;
 public static class NotificationXml
 {
     /// <summary>
-    /// Builds the toast: title, body, optional avatar, reply box, snooze picker and dismiss.
+    /// Builds the toast: title, body, optional avatar, reply box, Snooze and Dismiss.
     /// </summary>
     /// <remarks>
     /// Every value goes in through <see cref="XElement"/>/<see cref="XAttribute"/>, so markup in a message is escaped.
@@ -35,19 +35,17 @@ public static class NotificationXml
             binding.Add(new XElement("image", new XAttribute("placement", "appLogoOverride"), new XAttribute("hint-crop", "circle"), new XAttribute("src", avatarFileUri)));
         }
 
-        // Actions
-        var snooze = new XElement("input",
-            new XAttribute("id", "snoozeTime"), new XAttribute("type", "selection"), new XAttribute("defaultInput", "15"),
-            Choice("5", ChatCopy.Minutes5), Choice("15", ChatCopy.Minutes15), Choice("60", ChatCopy.Hour1), Choice("240", ChatCopy.Hours4));
-
-        // Every <input> Before Any <action>, As The Toast Schema Requires (Else Windows Shows "New notification")
-        var actions = new XElement("actions",
+        // Actions: Windows' Quick Reply (A Text Input With A Button Tied To It By hint-inputId, Its Icon From imageUri),
+        // The App's Own Snooze (Its Length Is A Setting, Which Windows' System Snooze Can't Take Without A Picker) And
+        // Windows' Dismiss. Every <input> Before Any <action>, As The Toast Schema Requires (Else Windows Shows "New
+        // notification")
+        string about = $"conversation={id}&message={Uri.EscapeDataString(n.Tag)}";
+        var actions  = new XElement("actions",
             new XElement("input", new XAttribute("id", "reply"), new XAttribute("type", "text"), new XAttribute("placeHolderContent", ChatCopy.Reply)),
-            snooze,
             new XElement("action",
                 new XAttribute("content", string.Empty), new XAttribute("hint-inputId", "reply"), new XAttribute("activationType", "foreground"),
-                new XAttribute("arguments", $"action=reply&conversation={id}&message={Uri.EscapeDataString(n.Tag)}"), new XAttribute("imageUri", sendIconUri)),
-            new XElement("action", new XAttribute("activationType", "system"), new XAttribute("arguments", "snooze"), new XAttribute("hint-inputId", "snoozeTime"), new XAttribute("content", string.Empty)),
+                new XAttribute("arguments", $"action=reply&{about}"), new XAttribute("imageUri", sendIconUri)),
+            new XElement("action", new XAttribute("activationType", "foreground"), new XAttribute("arguments", $"action=snooze&{about}"), new XAttribute("content", ChatCopy.Snooze)),
             new XElement("action", new XAttribute("activationType", "system"), new XAttribute("arguments", "dismiss"), new XAttribute("content", string.Empty)));
 
         var toast = new XElement("toast",
@@ -96,7 +94,4 @@ public static class NotificationXml
 
         return kept.ToString();
     }
-
-    // One Snooze Choice
-    private static XElement Choice(string id, string content) => new("selection", new XAttribute("id", id), new XAttribute("content", content));
 }

@@ -65,13 +65,17 @@ public static class ChatFormat
     /// <summary>
     /// The first visible character of a name, for avatars.
     /// </summary>
+    /// <remarks>
+    /// A name with no letter in it is no name at all: the phone shows a phone number or a short code (such as "59538")
+    /// for a contact nobody saved. Those get an empty initial, and the avatar shows the generic person icon instead.
+    /// </remarks>
     /// <param name="name">The name.</param>
-    /// <returns>The first text element in upper case, or "#" when the name is empty.</returns>
+    /// <returns>The first text element in upper case, or empty when the name has no letters.</returns>
     public static string Initial(string name)
     {
         string trimmed = (name ?? string.Empty).Trim();
 
-        return trimmed.Length == 0 ? "#" : StringInfo.GetNextTextElement(trimmed).ToUpperInvariant();
+        return trimmed.Any(char.IsLetter) ? StringInfo.GetNextTextElement(trimmed).ToUpperInvariant() : string.Empty;
     }
 
     /// <summary>

@@ -33,13 +33,30 @@ public sealed class NotificationXmlTests
     }
 
     [TestMethod]
-    public void Build_HasSystemSnoozeAndDismiss()
+    public void Build_HasAppSnoozeAndSystemDismiss_NoSnoozePicker()
     {
         var actions = Doc().Descendants("action").ToList();
 
-        Assert.IsTrue(actions.Any(a => (string?)a.Attribute("activationType") == "system" && (string?)a.Attribute("arguments") == "snooze" && (string?)a.Attribute("hint-inputId") == "snoozeTime"));
+        // Snooze: The App's Own Button (The Length Is A Setting), Parsed Back To The Toast's Conversation And Message
+        XElement snooze = actions.Single(a => NotificationArgs.Parse((string?)a.Attribute("arguments") ?? "")?.Action == "snooze");
+        Assert.AreEqual(new NotificationArgs("snooze", "c1", "m1"), NotificationArgs.Parse((string)snooze.Attribute("arguments")!));
+        Assert.AreEqual("Snooze", (string?)snooze.Attribute("content"));
+        Assert.AreEqual("foreground", (string?)snooze.Attribute("activationType"));
+        Assert.IsNull(snooze.Attribute("hint-inputId"));
+
         Assert.IsTrue(actions.Any(a => (string?)a.Attribute("activationType") == "system" && (string?)a.Attribute("arguments") == "dismiss"));
-        Assert.AreEqual(4, Doc().Descendants("selection").Count());
+        Assert.IsFalse(Doc().Descendants("selection").Any());
+        Assert.AreEqual("reply", (string?)Doc().Descendants("input").Single().Attribute("id"));
+    }
+
+    [TestMethod]
+    public void Build_ReplyIsWindowsQuickReply()
+    {
+        // Microsoft's Quick Reply: A Text Input And A Button Tied To It With hint-inputId, Its Icon From imageUri
+        XElement reply = Doc().Descendants("action").First();
+
+        Assert.AreEqual("reply", (string?)reply.Attribute("hint-inputId"));
+        Assert.AreEqual(Send, (string?)reply.Attribute("imageUri"));
     }
 
     [TestMethod]

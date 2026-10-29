@@ -31,6 +31,11 @@ public static class ChatCopy
     public const string Hour1     = "1 hour";
     public const string Hours4    = "4 hours";
 
+    // Snooze (Toast Button And Its Settings Card; Owner Signs Off)
+    public const string Snooze                  = "Snooze";
+    public const string SnoozeLength            = "Snooze length";
+    public const string SnoozeLengthDescription = "How long Snooze on a notification waits before showing it again.";
+
     // Notifications And New Chat
     public const string Reply              = "Reply";
     public const string StartAConversation = "Start a conversation";

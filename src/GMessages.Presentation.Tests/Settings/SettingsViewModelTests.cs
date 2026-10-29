@@ -53,6 +53,26 @@ public sealed class SettingsViewModelTests
     // =========================================================================
 
     /// <summary>
+    /// The snooze length starts at 15 minutes; picking a choice saves its minutes, and an index past the choices is
+    /// ignored.
+    /// </summary>
+    [TestMethod]
+    public void SnoozeIndex_DefaultsTo15Minutes_SavesTheChoice()
+    {
+        var store = new InMemorySettingsStore();
+        var vm    = Create(store);
+
+        Assert.AreEqual(1, vm.SnoozeIndex);
+        Assert.AreEqual("5 minutes|15 minutes|1 hour|4 hours", string.Join("|", vm.SnoozeChoices));
+
+        vm.SnoozeIndex = 3;
+        vm.SnoozeIndex = 9;
+
+        Assert.AreEqual(240, new AppSettings(store).SnoozeMinutes);
+        Assert.AreEqual(3, Create(store).SnoozeIndex);
+    }
+
+    /// <summary>
     /// Theme and both notification switches land in the store and survive a reload.
     /// </summary>
     [TestMethod]

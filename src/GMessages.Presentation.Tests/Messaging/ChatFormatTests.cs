@@ -36,7 +36,9 @@ public sealed class ChatFormatTests
 
     [TestMethod]
     [DataRow("  ann", "A")]
-    [DataRow("", "#")]
+    [DataRow("", "")]
+    [DataRow("59538", "")]
+    [DataRow("+1 (555) 010-0100", "")]
     [DataRow("\U0001F600 Bo", "\U0001F600")]
     public void Initial(string name, string expected) => Assert.AreEqual(expected, ChatFormat.Initial(name));
 

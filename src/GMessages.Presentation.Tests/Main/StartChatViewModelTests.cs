@@ -55,6 +55,7 @@ public sealed class StartChatViewModelTests
         vm.Query = "+15559998888";
         Assert.IsTrue(vm.Results[0].IsSendTo);
         Assert.AreEqual("Send to +15559998888", vm.Results[0].Name);
+        Assert.AreEqual(string.Empty, vm.Results[0].Initial, "A typed number has no name, so it gets the person icon.");
 
         vm.Query = "me@example.com";
         Assert.IsTrue(vm.Results[0].IsSendTo);

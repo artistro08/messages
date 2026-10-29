@@ -26,7 +26,7 @@ public sealed class ContactRowViewModel
         Name        = string.Format(CultureInfo.CurrentCulture, SendToFormat, query);
         Number      = query.Trim();
         Digits      = DigitsOf(Number);
-        Initial     = "#";
+        Initial     = string.Empty;
         AvatarColor = FallbackColor;
         IsSendTo    = true;
     }
@@ -63,7 +63,7 @@ public sealed class ContactRowViewModel
     /// <summary>Gets only the digits of <see cref="Number"/>, for matching.</summary>
     public string Digits { get; }
 
-    /// <summary>Gets the avatar letter.</summary>
+    /// <summary>Gets the avatar letter, or empty for no name (a typed or unsaved number), which shows the person icon.</summary>
     public string Initial { get; }
 
     /// <summary>Gets the avatar color as opaque ARGB.</summary>

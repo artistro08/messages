@@ -153,6 +153,44 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged, IDisposa
         }
     }
 
+    /// <summary>
+    /// Gets the snooze length dropdown's items, in <see cref="AppSettings.SnoozeChoices"/> order.
+    /// </summary>
+    public IReadOnlyList<string> SnoozeChoices { get; } = [ChatCopy.Minutes5, ChatCopy.Minutes15, ChatCopy.Hour1, ChatCopy.Hours4];
+
+    /// <summary>
+    /// Gets or sets the snooze length dropdown's selection: how long a toast's Snooze waits before showing it again.
+    /// Any index outside the choices is ignored.
+    /// </summary>
+    public int SnoozeIndex
+    {
+        get => AppSettings.SnoozeChoices.ToList().IndexOf(_settings.SnoozeMinutes);
+        set
+        {
+            if (value < 0 || value >= AppSettings.SnoozeChoices.Count || value == SnoozeIndex)
+            {
+                return;
+            }
+
+            _settings.SnoozeMinutes = AppSettings.SnoozeChoices[value];
+            Raise();
+        }
+    }
+
+    // =========================================================================
+    // MAIN WINDOW
+    // =========================================================================
+
+    /// <summary>
+    /// Gets or sets the conversation list's width as the user last dragged it, or null until they do (see
+    /// <see cref="AppSettings.ListWidth"/>). Not on the settings page: the main window reads and writes it.
+    /// </summary>
+    public double? ListWidth
+    {
+        get => _settings.ListWidth;
+        set => _settings.ListWidth = value;
+    }
+
     // =========================================================================
     // START WITH WINDOWS
     // =========================================================================
