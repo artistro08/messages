@@ -178,7 +178,7 @@ public sealed class MainWindowTests : UiTest
         App.Find("Main.ListSplitter").Focus();
         FlaUI.Core.Input.Keyboard.Type(FlaUI.Core.WindowsAPI.VirtualKeyShort.RIGHT);
         FlaUI.Core.Input.Keyboard.Type(FlaUI.Core.WindowsAPI.VirtualKeyShort.RIGHT);
-        double scale = App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).BoundingRectangle.Width / 1100.0;
+        double scale = DpiSetup.ScaleOf(App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout));
         Wait.Until(() => Math.Abs(ListWidth() - before - (32 * scale)) <= 2, AppDriver.DefaultTimeout, () => $"The list is {ListWidth()} px wide, not {before} + 32 effective px.");
         int widened = ListWidth();
 
@@ -240,7 +240,7 @@ public sealed class MainWindowTests : UiTest
         Assert.IsTrue(over.Right - button.Right < 40 && over.Bottom - button.Bottom < 40, $"Start chat ({button}) isn't at the list's bottom right ({over}).");
 
         // The Standard Accent Button's Size (About 32 Effective Pixels Tall), Not The Old 48 Pixel Pill
-        double scale = App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).BoundingRectangle.Width / 1100.0;
+        double scale = DpiSetup.ScaleOf(App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout));
         Assert.IsTrue(button.Height / scale < 40, $"Start chat is {button.Height / scale:0} effective pixels tall, not the standard button's size.");
 
         // Down Hides It, Up Shows It

@@ -28,7 +28,23 @@ public static partial class DpiSetup
         }
     }
 
+    /// <summary>
+    /// The display scale of a window: 1.0 at 100%, 1.25 at 125%.
+    /// </summary>
+    /// <remarks>UI Automation sizes are physical pixels; divide by this to get effective pixels.</remarks>
+    /// <param name="window">The window.</param>
+    /// <returns>The window's scale.</returns>
+    public static double ScaleOf(FlaUI.Core.AutomationElements.AutomationElement window)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+
+        return GetDpiForWindow(window.Properties.NativeWindowHandle.Value) / 96.0;
+    }
+
     [LibraryImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool SetProcessDpiAwarenessContext(IntPtr value);
+
+    [LibraryImport("user32.dll")]
+    private static partial uint GetDpiForWindow(IntPtr window);
 }
