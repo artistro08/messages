@@ -89,7 +89,7 @@ public sealed class MainWindowTests : UiTest
 
     /// <summary>
     /// The profile menu's Spam &amp; blocked swaps the list for the spam conversations under a titled header, and
-    /// the back button returns to the inbox.
+    /// the title bar's back button, in place of ☰, returns to the inbox.
     /// </summary>
     /// <returns>A task for the test.</returns>
     [TestMethod]
@@ -102,15 +102,19 @@ public sealed class MainWindowTests : UiTest
         InvokeProfileItem("Main.Profile.SpamBlocked");
         App.WaitForText("Main.ListTitle", ChatCopy.SpamAndBlocked);
         WaitForRows(["Row.c-spam"]);
+        AssertBackInTitleBar("Main.SpamBack");
 
         // Back To The Inbox
         Invoke("Main.SpamBack");
         WaitForRows(InboxRows);
         Wait.Until(() => App.TryFind("Main.ListTitle") is null, AppDriver.DefaultTimeout, () => "The Spam & blocked title stayed after going back.");
+        WaitForGone("Main.SpamBack");
+        App.Find("Main.MenuButton");
     }
 
     /// <summary>
-    /// The profile menu's Settings opens the settings page over the chats in the same window; Back returns to them.
+    /// The profile menu's Settings opens the settings page over the chats in the same window; the title bar's back
+    /// button, in place of ☰, returns to them.
     /// </summary>
     /// <returns>A task for the test.</returns>
     [TestMethod]
@@ -121,10 +125,65 @@ public sealed class MainWindowTests : UiTest
         InvokeProfileItem("Main.Profile.Settings");
         WaitForSettings();
         WaitForGone("Main.ConversationList");
+        AssertBackInTitleBar("Settings.Back");
 
         App.Find("Settings.Back").Patterns.Invoke.Pattern.Invoke();
         WaitForGone("Settings.Back");
         WaitForRows(InboxRows);
+        App.Find("Main.MenuButton");
+    }
+
+    /// <summary>
+    /// The settings page's About names the app, its version and its maker, and links to the repository.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Settings_About_NamesAppVersionMakerAndRepository()
+    {
+        await OpenMainAsync();
+
+        InvokeProfileItem("Main.Profile.Settings");
+        WaitForSettings();
+
+        App.WaitForText("Settings.AppName", AppInfo.DisplayName);
+        App.WaitForText("Settings.Version", "Version " + AppInfo.Version);
+        StringAssert.Contains(AppDriver.SafeName(App.Find("Settings.Author")), "artistro08", "About doesn't name the maker.");
+        App.Find("Settings.Repository");
+    }
+
+    /// <summary>
+    /// Start chat floats at the bottom right over the conversation list; scrolling the list down hides it and scrolling
+    /// back up shows it again.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task StartChat_FloatsOverList_HidesOnScrollDown_ShowsOnScrollUp()
+    {
+        // Enough Conversations To Scroll
+        for (int i = 0; i < 30; i++)
+        {
+            string id = "c-more-" + i;
+            Server.Phone.Chats.Add(FakeChats.NewConversation(id, "More " + i, false, ConversationStatus.Active, false, false, FakeChats.Person("p-" + id, "More " + i, "+1555100" + i.ToString("D4", System.Globalization.CultureInfo.InvariantCulture))));
+        }
+
+        await OpenMainAsync();
+        AutomationElement list  = App.Find("Main.ConversationList");
+        AutomationElement start = App.Find("Main.StartChat");
+        Wait.Until(() => list.FindAllChildren(cf => cf.ByControlType(ControlType.ListItem)).Length > 20, AppDriver.DefaultTimeout, () => "The extra conversations never showed.");
+
+        // Over The List, At Its Bottom Right
+        System.Drawing.Rectangle over   = list.BoundingRectangle;
+        System.Drawing.Rectangle button = start.BoundingRectangle;
+        Assert.IsTrue(over.Contains(button), $"Start chat ({button}) isn't over the list ({over}).");
+        Assert.IsTrue(over.Right - button.Right < 40 && over.Bottom - button.Bottom < 40, $"Start chat ({button}) isn't at the list's bottom right ({over}).");
+
+        // Down Hides It, Up Shows It
+        list.Patterns.Scroll.Pattern.SetScrollPercent(-1, 50);
+        Wait.Until(() => StartChatStatus() == "Hidden", AppDriver.DefaultTimeout, () => "Scrolling down didn't hide Start chat.");
+        list.Patterns.Scroll.Pattern.SetScrollPercent(-1, 10);
+        Wait.Until(() => StartChatStatus() != "Hidden", AppDriver.DefaultTimeout, () => "Scrolling up didn't show Start chat.");
+
+        string StartChatStatus() => App.Find("Main.StartChat").Properties.ItemStatus.ValueOrDefault ?? "";
     }
 
     /// <summary>
@@ -172,6 +231,15 @@ public sealed class MainWindowTests : UiTest
     // =========================================================================
 
     private void Invoke(string automationId) => App.Find(automationId).Patterns.Invoke.Pattern.Invoke();
+
+    // Back Shows In The Title Bar Row, Where ☰ Was, And ☰ Is Gone
+    private void AssertBackInTitleBar(string automationId)
+    {
+        System.Drawing.Rectangle back      = App.Find(automationId).BoundingRectangle;
+        System.Drawing.Rectangle title_bar = App.Find("Main.TitleBar").BoundingRectangle;
+        Assert.IsTrue(title_bar.Contains(back), $"Back ({back}) isn't in the title bar ({title_bar}).");
+        WaitForGone("Main.MenuButton");
+    }
 
     // Opens The Profile Flyout, Then Picks One Of Its Items
     private void InvokeProfileItem(string automationId)

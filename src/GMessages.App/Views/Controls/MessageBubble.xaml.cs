@@ -2,6 +2,7 @@ using GMessages.Presentation.Main;
 using GMessages.Presentation.Messaging;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 
 namespace GMessages.App.Views.Controls;
 
@@ -13,6 +14,11 @@ namespace GMessages.App.Views.Controls;
 /// The text carries the AutomationId <c>Bubble.{id}</c>, or <c>Bubble.{tmpId}</c> until the phone has echoed a sent
 /// message. A failed bubble shows the "Not sent" link (<c>Bubble.{id}.Retry</c>) in place of the time; clicking it
 /// raises <see cref="RetryRequested"/> for the chat to send it again.
+/// </para>
+/// <para>
+/// The time (<c>Bubble.{id}.Time</c>) is hidden until the bubble is clicked, and a second click hides it. The click is
+/// caught even when it lands on the text, whose selection marks the pointer handled. The chat pane does the same for
+/// Enter and Space on a focused bubble.
 /// </para>
 /// <para>
 /// The side is a visual state so its brushes stay theme resources and follow the window's light or dark theme.
@@ -30,7 +36,13 @@ public sealed partial class MessageBubble : UserControl
     /// <summary>
     /// Creates the bubble.
     /// </summary>
-    public MessageBubble() => InitializeComponent();
+    public MessageBubble()
+    {
+        InitializeComponent();
+
+        // Behavior
+        Back.AddHandler(TappedEvent, new TappedEventHandler(OnBackTapped), handledEventsToo: true);
+    }
 
     /// <summary>
     /// Asks the chat to send this failed bubble again.
@@ -68,6 +80,23 @@ public sealed partial class MessageBubble : UserControl
     public static string RetryIdOf(string id, string tmpId) => AutomationIdOf(id, tmpId) + ".Retry";
 
     /// <summary>
+    /// Gives the time's AutomationId.
+    /// </summary>
+    /// <param name="id">The message ID, or empty.</param>
+    /// <param name="tmpId">The temporary ID, or empty.</param>
+    /// <returns>The AutomationId.</returns>
+    public static string TimeIdOf(string id, string tmpId) => AutomationIdOf(id, tmpId) + ".Time";
+
+    /// <summary>
+    /// Shows the time once the bubble was clicked, unless the retry link takes its place.
+    /// </summary>
+    /// <param name="isTimeShown">True once clicked.</param>
+    /// <param name="isFailed">True when the send failed.</param>
+    /// <returns>The time's visibility.</returns>
+    public static Visibility TimeVisibility(bool isTimeShown, bool isFailed) =>
+        isTimeShown && !isFailed ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>
     /// Fades a bubble that is still being sent.
     /// </summary>
     /// <param name="isSending">True while sending.</param>
@@ -85,6 +114,8 @@ public sealed partial class MessageBubble : UserControl
         bool sent = view.Bubble?.FromMe == true;
         VisualStateManager.GoToState(view, sent ? "Sent" : "Received", false);
     }
+
+    private void OnBackTapped(object sender, TappedRoutedEventArgs e) => Bubble?.ToggleTime();
 
     private void OnRetryClick(object sender, RoutedEventArgs e) => RetryRequested?.Invoke(this, EventArgs.Empty);
 }

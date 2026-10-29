@@ -52,6 +52,7 @@
             Padding="12,8"
             AutomationProperties.AutomationId="Chat.Messages"
             Loaded="OnMessageListLoaded"
+            PreviewKeyDown="OnMessageListKeyDown"
             SelectionMode="None">
             <ListView.ItemsPanel>
                 <ItemsPanelTemplate>

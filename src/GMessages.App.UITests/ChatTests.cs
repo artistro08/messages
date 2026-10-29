@@ -34,6 +34,29 @@ public sealed class ChatTests : UiTest
     }
 
     /// <summary>
+    /// A bubble's time is hidden until the bubble is clicked (on its text), and Enter on the focused bubble hides it
+    /// again.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task BubbleClick_ShowsTime_EnterHidesIt()
+    {
+        await OpenAnnAsync();
+        string id = Bubbles()[^1].Id;
+        Assert.IsNull(App.TryFind(id + ".Time"), "The time showed before the bubble was clicked.");
+
+        // Click Shows It
+        App.Find(id).Click();
+        App.Find(id + ".Time");
+
+        // Enter On The Focused Bubble Hides It
+        AutomationElement[] rows = App.Find("Chat.Messages").FindAllChildren(cf => cf.ByControlType(FlaUI.Core.Definitions.ControlType.ListItem));
+        rows[^1].Focus();
+        Keyboard.Type(VirtualKeyShort.RETURN);
+        WaitForGone(id + ".Time");
+    }
+
+    /// <summary>
     /// Typing a message (Shift + Enter for a new line) and pressing Enter shows the bubble, the phone gets the text,
     /// and the phone's echo turns the same bubble into the sent message (no second bubble).
     /// </summary>
@@ -206,7 +229,7 @@ public sealed class ChatTests : UiTest
         {
             return [.. list.FindAllDescendants()
                 .Select(e => (Id: e.Properties.AutomationId.ValueOrDefault ?? "", Text: AppDriver.SafeName(e)))
-                .Where(b => b.Id.StartsWith("Bubble.", StringComparison.Ordinal) && !b.Id.EndsWith(".Retry", StringComparison.Ordinal))];
+                .Where(b => b.Id.StartsWith("Bubble.", StringComparison.Ordinal) && !b.Id.EndsWith(".Retry", StringComparison.Ordinal) && !b.Id.EndsWith(".Time", StringComparison.Ordinal))];
         }
         catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or FlaUI.Core.Exceptions.ElementNotAvailableException)
         {

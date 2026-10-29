@@ -68,6 +68,9 @@ public partial class App : Application, IDisposable
     private bool _connectionStarted;
     private string? _heldShowSource;
     private string? _pendingConversationId;
+
+    // The Chat That Was Open When The Window Closed, Opened Again (From The Message Cache) In The Next One
+    private string? _lastConversationId;
     private RegisteredWaitHandle? _quitWait;
     private RegisteredWaitHandle? _showWait;
     private bool _quitting;
@@ -263,6 +266,7 @@ public partial class App : Application, IDisposable
             // The Chats Go (Showing Pairing Drops Them First), And Nothing Of The Old Phone (Names, Numbers, Owner, SIMs)
             // Is Kept For Whichever Phone Pairs Next
             _pendingConversationId = null;
+            _lastConversationId    = null;
             ShowMainWindow();
             _store?.Reset();
             return;
@@ -357,7 +361,9 @@ public partial class App : Application, IDisposable
             _mainWindow.SettingsRequested += (_, _) => ShowSettings();
             _mainWindow.Closed            += (_, _) =>
             {
-                // A Toast's Conversation Not Yet Shown Goes With The Window, So A Later Open Doesn't Jump To It
+                // A Toast's Conversation Not Yet Shown Goes With The Window, So A Later Open Doesn't Jump To It. The Open
+                // Chat Is Remembered For The Next Window
+                _lastConversationId    = _mainWindow?.LastConversationId;
                 _mainWindow            = null;
                 _pendingConversationId = null;
                 ScheduleTrim();
@@ -385,7 +391,12 @@ public partial class App : Application, IDisposable
         }
         else if (!NeedsPairing() && window.ViewModel is null)
         {
+            // The List And The Last Open Chat Show At Once From What The Store Already Has, Then Refresh Quietly
             window.ShowChats(new MainViewModel(connection, store, TimeProvider.System, a => dispatcher.TryEnqueue(() => a())));
+            if (_lastConversationId is { } last)
+            {
+                window.SelectConversation(last);
+            }
         }
     }
 

@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Numerics;
 using GMessages.App.Views.Controls;
 using GMessages.Presentation.Main;
 using GMessages.Presentation.Messaging;
@@ -28,16 +29,26 @@ namespace GMessages.App.Views;
 /// <para>
 /// The list is the pane of an inline <c>SplitView</c>, so opening and closing it plays the Windows pane animation. A
 /// narrow view makes the pane as wide as the view, so closing it (a chat opened) slides the chat in over the whole
-/// width. The chat sits on a layer above the Mica, rounded at the top left beside the list.
+/// width. The chat sits on an island above the Mica, rounded, with a gap to the window's right and bottom edges.
+/// </para>
+/// <para>
+/// Start chat floats over the inbox's bottom right. Scrolling the list down slides it away; scrolling up (or reaching
+/// the top) brings it back.
 /// </para>
 /// </remarks>
 public sealed partial class ChatsView : UserControl
 {
     // Layout: Below This Width (Effective Pixels) One Pane Shows At A Time; The List Pane's Width Beside The Chat; The
-    // Chat Layer's Top-Left Corner (OverlayCornerRadius, Which Can't Be Read Back Unboxed Under Native AOT)
+    // Gap Around The Chat Island; How Far Start Chat Slides Down To Hide, And Its Shadow's Lift
     private const double NarrowBelow   = 720;
     private const double ListPaneWidth = 360;
-    private const double LayerRadius   = 8;
+    private const double IslandGap     = 8;
+    private const float StartChatDrop  = 96;
+    private const float StartChatLift  = 16;
+
+    // The List's Scroller (Found Once The List Has Its Template) And Where It Was Last, For The Scroll Direction
+    private ScrollViewer? _listScroller;
+    private double _lastListOffset;
 
     /// <summary>
     /// Creates the view and starts loading the inbox.
@@ -69,6 +80,11 @@ public sealed partial class ChatsView : UserControl
     /// </summary>
     public void Close()
     {
+        if (_listScroller is not null)
+        {
+            _listScroller.ViewChanged -= OnListScrolled;
+        }
+
         ViewModel.PropertyChanged -= OnViewModelChanged;
         Bindings.StopTracking();
         ViewModel.Dispose();
@@ -87,18 +103,12 @@ public sealed partial class ChatsView : UserControl
     public static bool IsListOpen(bool isListCollapsed, bool showChatPane) => !isListCollapsed && !showChatPane;
 
     /// <summary>
-    /// Gives the chat layer's border: top and left beside the list, only the top in a narrow window.
+    /// Gives the chat island's gap: clear of the window's right and bottom edges, and of the left edge too in a narrow
+    /// window, where no list sits beside it.
     /// </summary>
     /// <param name="isNarrow">True for a narrow window.</param>
-    /// <returns>The border thickness.</returns>
-    public static Thickness LayerBorder(bool isNarrow) => new(isNarrow ? 0 : 1, 1, 0, 0);
-
-    /// <summary>
-    /// Gives the chat layer's corners: the top left rounded beside the list, square in a narrow window.
-    /// </summary>
-    /// <param name="isNarrow">True for a narrow window.</param>
-    /// <returns>The corner radius.</returns>
-    public static CornerRadius LayerCorner(bool isNarrow) => new(isNarrow ? 0 : LayerRadius, 0, 0, 0);
+    /// <returns>The margin.</returns>
+    public static Thickness LayerMargin(bool isNarrow) => new(isNarrow ? IslandGap : 0, 0, IslandGap, IslandGap);
 
     /// <summary>
     /// Shows the chat pane in a wide window, and in a narrow one when it holds a chat or the list is collapsed.
@@ -164,13 +174,42 @@ public sealed partial class ChatsView : UserControl
 
     private void OnStartChatClick(object sender, RoutedEventArgs e) => ViewModel.OpenStartChat();
 
+    // The List's Scroller Exists Once Its Template Is Applied
+    private void OnConversationListLoaded(object sender, RoutedEventArgs e)
+    {
+        if (_listScroller is not null || ChatPane.FindScroller(ConversationList) is not { } scroller)
+        {
+            return;
+        }
+
+        _listScroller              = scroller;
+        _listScroller.ViewChanged += OnListScrolled;
+    }
+
+    // Start Chat Hides While Scrolling Down And Shows Again Scrolling Up Or At The Top, Sliding And Fading (The Button's
+    // Transitions Animate It). Hidden, It Takes No Clicks Or Tab Stops, And UI Automation Reads "Hidden" As Its Status
+    private void OnListScrolled(object? sender, ScrollViewerViewChangedEventArgs e)
+    {
+        if (_listScroller is not { } scroller || scroller.VerticalOffset == _lastListOffset)
+        {
+            return;
+        }
+
+        bool show       = scroller.VerticalOffset < _lastListOffset || scroller.VerticalOffset <= 0;
+        _lastListOffset = scroller.VerticalOffset;
+
+        StartChatButton.Opacity          = show ? 1 : 0;
+        StartChatButton.Translation      = new Vector3(0, show ? 0 : StartChatDrop, StartChatLift);
+        StartChatButton.IsHitTestVisible = show;
+        StartChatButton.IsTabStop        = show;
+        AutomationProperties.SetItemStatus(StartChatButton, show ? string.Empty : "Hidden");
+    }
+
     // Start Chat Opened (Or Found) The Conversation: Show It In Place Of Start Chat
     private void OnChatStarted(object? sender, string conversationId) => ViewModel.Select(conversationId);
 
     // The Back Arrow Of A Narrow Window Closes The Chat Or Start Chat, Which Shows The List
     private void OnPaneBack(object? sender, EventArgs e) => ViewModel.ExitConversation();
-
-    private void OnSpamBackClick(object sender, RoutedEventArgs e) => ViewModel.BackToInbox();
 
     // Picking A Row Opens It; A Cleared Selection (List Swapped, Row Moved) Keeps The Open Conversation
     private void OnSelectionChanged(object sender, SelectionChangedEventArgs e)

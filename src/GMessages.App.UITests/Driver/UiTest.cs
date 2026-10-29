@@ -104,7 +104,8 @@ public abstract class UiTest
     }
 
     /// <summary>
-    /// Waits for the main window showing the settings page (its Back button is there) and returns the window.
+    /// Waits for the main window showing the settings page (the title bar's Back, named Settings.Back, is there) and returns
+    /// the window.
     /// </summary>
     /// <returns>The main window.</returns>
     protected Window WaitForSettings()

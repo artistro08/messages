@@ -4,100 +4,252 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:GMessages.App.Views">
 
-    <Grid RowDefinitions="Auto,*">
+    <UserControl.Resources>
+        <!-- Settings Card: Windows Settings' card, from Magic Buds' SettingsCardStyle (icon, header and description
+             on the left, the control on the right) -->
+        <Style x:Key="SettingsCardStyle" TargetType="Border">
+            <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+            <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{StaticResource OverlayCornerRadius}" />
+            <Setter Property="Padding" Value="16" />
+            <Setter Property="MinHeight" Value="68" />
+        </Style>
 
-        <!-- Header: back to the chats or pairing, styled like the Spam & blocked back button -->
-        <Button
-            x:Name="BackButton"
-            Width="40"
-            Height="36"
-            Margin="4,8,12,8"
-            Padding="0"
-            AutomationProperties.AutomationId="Settings.Back"
-            AutomationProperties.Name="Back"
-            Background="Transparent"
-            BorderThickness="0"
-            Click="OnBackClick">
-            <FontIcon FontSize="16" Glyph="&#xE72B;" />
-        </Button>
+        <!-- Clickable Card: the whole card is the button, like Windows Settings' cards that open something -->
+        <Style
+            x:Key="SettingsCardButtonStyle"
+            BasedOn="{StaticResource DefaultButtonStyle}"
+            TargetType="Button">
+            <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+            <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+            <Setter Property="CornerRadius" Value="{StaticResource OverlayCornerRadius}" />
+            <Setter Property="Padding" Value="16" />
+            <Setter Property="MinHeight" Value="68" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        </Style>
 
-        <ScrollViewer Grid.Row="1">
+        <!-- Card Switch: no On/Off text beside it, so the switch sits flush right like the other controls on a card -->
+        <Style
+            x:Key="CardToggleSwitchStyle"
+            BasedOn="{StaticResource DefaultToggleSwitchStyle}"
+            TargetType="ToggleSwitch">
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="HorizontalAlignment" Value="Right" />
+            <Setter Property="OnContent" Value="" />
+            <Setter Property="OffContent" Value="" />
+        </Style>
+
+        <!-- Card Icon -->
+        <Style x:Key="CardIconStyle" TargetType="FontIcon">
+            <Setter Property="FontSize" Value="20" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <!-- Group Header: above each group of cards -->
+        <Style
+            x:Key="GroupHeaderStyle"
+            BasedOn="{StaticResource BodyStrongTextBlockStyle}"
+            TargetType="TextBlock">
+            <Setter Property="Margin" Value="0,20,0,4" />
+        </Style>
+
+        <!-- Card Description -->
+        <Style
+            x:Key="CardDescriptionStyle"
+            BasedOn="{StaticResource CaptionTextBlockStyle}"
+            TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+    </UserControl.Resources>
+
+    <!-- Page: the whole window's width; the cards center at up to 1000 wide like Windows Settings, and the scrollbar
+         stays on the window edge -->
+    <ScrollViewer>
+        <Grid Padding="36,4,36,36">
             <StackPanel
-                MaxWidth="560"
-                Padding="24"
-                Spacing="20">
+                MaxWidth="1000"
+                HorizontalAlignment="Stretch"
+                Spacing="4">
 
                 <!-- Appearance -->
-                <StackPanel Spacing="8">
-                    <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Appearance" />
-                    <ComboBox
-                        AutomationProperties.AutomationId="Settings.Theme"
-                        Header="Theme"
-                        MinWidth="220"
-                        SelectedIndex="{x:Bind ViewModel.ThemeIndex, Mode=TwoWay}">
-                        <ComboBoxItem Content="Use system setting" />
-                        <ComboBoxItem Content="Light" />
-                        <ComboBoxItem Content="Dark" />
-                    </ComboBox>
-                </StackPanel>
+                <TextBlock Style="{StaticResource GroupHeaderStyle}" Text="Appearance" />
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
+                        <FontIcon Glyph="&#xE790;" Style="{StaticResource CardIconStyle}" />
+                        <TextBlock
+                            Grid.Column="1"
+                            VerticalAlignment="Center"
+                            Text="Theme" />
+                        <ComboBox
+                            Grid.Column="2"
+                            MinWidth="220"
+                            VerticalAlignment="Center"
+                            AutomationProperties.AutomationId="Settings.Theme"
+                            AutomationProperties.Name="Theme"
+                            SelectedIndex="{x:Bind ViewModel.ThemeIndex, Mode=TwoWay}">
+                            <ComboBoxItem Content="Use system setting" />
+                            <ComboBoxItem Content="Light" />
+                            <ComboBoxItem Content="Dark" />
+                        </ComboBox>
+                    </Grid>
+                </Border>
 
                 <!-- Startup -->
-                <StackPanel Spacing="8">
-                    <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Startup" />
-                    <ToggleSwitch
-                        AutomationProperties.AutomationId="Settings.StartWithWindows"
-                        Header="Start with Windows"
-                        IsOn="{x:Bind ViewModel.StartWithWindows, Mode=TwoWay}" />
+                <TextBlock Style="{StaticResource GroupHeaderStyle}" Text="Startup" />
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
+                        <FontIcon Glyph="&#xE7E8;" Style="{StaticResource CardIconStyle}" />
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock Text="Start with Windows" />
 
-                    <!-- Startup Refused: why the switch went back off -->
-                    <TextBlock
-                        AutomationProperties.AutomationId="Settings.StartupMessage"
-                        Foreground="{ThemeResource SystemFillColorCautionBrush}"
-                        Text="{x:Bind ViewModel.StartupMessage, Mode=OneWay, TargetNullValue=''}"
-                        TextWrapping="Wrap"
-                        Visibility="{x:Bind ViewModel.HasStartupMessage, Mode=OneWay}" />
-                </StackPanel>
+                            <!-- Startup Refused: why the switch went back off -->
+                            <TextBlock
+                                AutomationProperties.AutomationId="Settings.StartupMessage"
+                                Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                Style="{StaticResource CardDescriptionStyle}"
+                                Text="{x:Bind ViewModel.StartupMessage, Mode=OneWay, TargetNullValue=''}"
+                                Visibility="{x:Bind ViewModel.HasStartupMessage, Mode=OneWay}" />
+                        </StackPanel>
+                        <ToggleSwitch
+                            Grid.Column="2"
+                            AutomationProperties.AutomationId="Settings.StartWithWindows"
+                            AutomationProperties.Name="Start with Windows"
+                            IsOn="{x:Bind ViewModel.StartWithWindows, Mode=TwoWay}"
+                            Style="{StaticResource CardToggleSwitchStyle}" />
+                    </Grid>
+                </Border>
 
                 <!-- Notifications -->
-                <StackPanel Spacing="8">
-                    <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Notifications" />
-                    <ToggleSwitch
-                        AutomationProperties.AutomationId="Settings.Notifications"
-                        Header="Show notifications for new messages"
-                        IsOn="{x:Bind ViewModel.NotificationsEnabled, Mode=TwoWay}" />
-                    <ToggleSwitch
-                        AutomationProperties.AutomationId="Settings.NotifyViewedChat"
-                        Header="Notify for the chat I'm viewing"
-                        IsOn="{x:Bind ViewModel.NotifyForViewedChat, Mode=TwoWay}" />
-                </StackPanel>
+                <TextBlock Style="{StaticResource GroupHeaderStyle}" Text="Notifications" />
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
+                        <FontIcon Glyph="&#xEA8F;" Style="{StaticResource CardIconStyle}" />
+                        <TextBlock
+                            Grid.Column="1"
+                            VerticalAlignment="Center"
+                            Text="Show notifications for new messages"
+                            TextWrapping="Wrap" />
+                        <ToggleSwitch
+                            Grid.Column="2"
+                            AutomationProperties.AutomationId="Settings.Notifications"
+                            AutomationProperties.Name="Show notifications for new messages"
+                            IsOn="{x:Bind ViewModel.NotificationsEnabled, Mode=TwoWay}"
+                            Style="{StaticResource CardToggleSwitchStyle}" />
+                    </Grid>
+                </Border>
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
+                        <FontIcon Glyph="&#xE8BD;" Style="{StaticResource CardIconStyle}" />
+                        <TextBlock
+                            Grid.Column="1"
+                            VerticalAlignment="Center"
+                            Text="Notify for the chat I'm viewing"
+                            TextWrapping="Wrap" />
+                        <ToggleSwitch
+                            Grid.Column="2"
+                            AutomationProperties.AutomationId="Settings.NotifyViewedChat"
+                            AutomationProperties.Name="Notify for the chat I'm viewing"
+                            IsOn="{x:Bind ViewModel.NotifyForViewedChat, Mode=TwoWay}"
+                            Style="{StaticResource CardToggleSwitchStyle}" />
+                    </Grid>
+                </Border>
 
                 <!-- Account And Logs -->
-                <StackPanel Spacing="8">
-                    <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Account" />
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <!-- Unpair: hidden once unpaired, busy with a ring while it runs -->
-                        <Button
-                            AutomationProperties.AutomationId="Settings.Unpair"
-                            AutomationProperties.Name="Unpair this PC"
-                            Click="OnUnpairClick"
-                            IsEnabled="{x:Bind local:SettingsPage.Not(ViewModel.IsUnpairing), Mode=OneWay}"
-                            Visibility="{x:Bind ViewModel.CanUnpair, Mode=OneWay}">
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <ProgressRing
-                                    Width="16"
-                                    Height="16"
-                                    IsActive="{x:Bind ViewModel.IsUnpairing, Mode=OneWay}"
-                                    Visibility="{x:Bind ViewModel.IsUnpairing, Mode=OneWay}" />
-                                <TextBlock Text="Unpair this PC" />
-                            </StackPanel>
-                        </Button>
-                        <Button
-                            AutomationProperties.AutomationId="Settings.OpenLogs"
-                            Click="OnOpenLogsClick"
-                            Content="Open logs folder" />
-                    </StackPanel>
-                </StackPanel>
+                <TextBlock Style="{StaticResource GroupHeaderStyle}" Text="Account" />
+
+                <!-- Unpair: hidden once unpaired, busy with a ring while it runs -->
+                <Button
+                    AutomationProperties.AutomationId="Settings.Unpair"
+                    AutomationProperties.Name="Unpair this PC"
+                    Click="OnUnpairClick"
+                    IsEnabled="{x:Bind local:SettingsPage.Not(ViewModel.IsUnpairing), Mode=OneWay}"
+                    Style="{StaticResource SettingsCardButtonStyle}"
+                    Visibility="{x:Bind ViewModel.CanUnpair, Mode=OneWay}">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
+                        <FontIcon Glyph="&#xE8C9;" Style="{StaticResource CardIconStyle}" />
+                        <TextBlock
+                            Grid.Column="1"
+                            VerticalAlignment="Center"
+                            Text="Unpair this PC" />
+                        <ProgressRing
+                            Grid.Column="2"
+                            Width="16"
+                            Height="16"
+                            IsActive="{x:Bind ViewModel.IsUnpairing, Mode=OneWay}"
+                            Visibility="{x:Bind ViewModel.IsUnpairing, Mode=OneWay}" />
+                    </Grid>
+                </Button>
+
+                <!-- Logs Folder: opens in File Explorer -->
+                <Button
+                    AutomationProperties.AutomationId="Settings.OpenLogs"
+                    AutomationProperties.Name="Open logs folder"
+                    Click="OnOpenLogsClick"
+                    Style="{StaticResource SettingsCardButtonStyle}">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
+                        <FontIcon Glyph="&#xE8B7;" Style="{StaticResource CardIconStyle}" />
+                        <TextBlock
+                            Grid.Column="1"
+                            VerticalAlignment="Center"
+                            Text="Open logs folder" />
+                        <FontIcon
+                            Grid.Column="2"
+                            FontSize="12"
+                            Glyph="&#xE8A7;" />
+                    </Grid>
+                </Button>
+
+                <!-- About: from Magic Buds' About page -->
+                <TextBlock Style="{StaticResource GroupHeaderStyle}" Text="About" />
+
+                <!-- App: name, version and who made it -->
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="16">
+                        <Image
+                            Width="32"
+                            Height="32"
+                            VerticalAlignment="Center"
+                            Source="ms-appx:///Assets/AppIcon.ico" />
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock
+                                AutomationProperties.AutomationId="Settings.AppName"
+                                Style="{StaticResource BodyStrongTextBlockStyle}"
+                                Text="{x:Bind local:SettingsPage.AppName}" />
+                            <TextBlock
+                                AutomationProperties.AutomationId="Settings.Version"
+                                Style="{StaticResource CardDescriptionStyle}"
+                                Text="{x:Bind local:SettingsPage.VersionText}" />
+                            <TextBlock Style="{StaticResource CardDescriptionStyle}">
+                                <Run Text="By " /><Hyperlink AutomationProperties.AutomationId="Settings.Author" NavigateUri="https://github.com/artistro08">
+                                    artistro08
+                                </Hyperlink>
+                            </TextBlock>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Repository -->
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
+                        <FontIcon Glyph="&#xE943;" Style="{StaticResource CardIconStyle}" />
+                        <TextBlock
+                            Grid.Column="1"
+                            VerticalAlignment="Center"
+                            Text="{x:Bind local:SettingsPage.RepositoryText}"
+                            TextWrapping="Wrap" />
+                        <HyperlinkButton
+                            Grid.Column="2"
+                            VerticalAlignment="Center"
+                            AutomationProperties.AutomationId="Settings.Repository"
+                            Content="View on GitHub"
+                            NavigateUri="https://github.com/artistro08/messages" />
+                    </Grid>
+                </Border>
+                <!-- /About -->
             </StackPanel>
-        </ScrollViewer>
-    </Grid>
+        </Grid>
+    </ScrollViewer>
 </UserControl>

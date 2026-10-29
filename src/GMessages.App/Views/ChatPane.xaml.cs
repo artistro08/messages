@@ -190,6 +190,18 @@ public sealed partial class ChatPane : UserControl
         _ = Chat.LoadOlderAsync();
     }
 
+    // Enter Or Space On A Focused Bubble Shows Or Hides Its Time, Like A Click (Not On Its Retry Link, Which Has Focus Then)
+    private void OnMessageListKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.Key is not (VirtualKey.Enter or VirtualKey.Space) || e.OriginalSource is not ListViewItem { Content: MessageBubbleViewModel bubble })
+        {
+            return;
+        }
+
+        e.Handled = true;
+        bubble.ToggleTime();
+    }
+
     private void OnBackClick(object sender, RoutedEventArgs e) => BackRequested?.Invoke(this, EventArgs.Empty);
 
     private void OnSendClick(object sender, RoutedEventArgs e) => _ = Chat?.SendAsync();
@@ -266,8 +278,12 @@ public sealed partial class ChatPane : UserControl
     private static bool IsDown(VirtualKey key) =>
         InputKeyboardSource.GetKeyStateForCurrentThread(key).HasFlag(CoreVirtualKeyStates.Down);
 
-    // First ScrollViewer Under An Element (A ListView's Template Holds One)
-    private static ScrollViewer? FindScroller(DependencyObject root)
+    /// <summary>
+    /// Finds the first <see cref="ScrollViewer"/> under an element (a list's template holds one).
+    /// </summary>
+    /// <param name="root">The element to search under.</param>
+    /// <returns>The scroller, or null before the element has its template.</returns>
+    internal static ScrollViewer? FindScroller(DependencyObject root)
     {
         for (int i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
         {

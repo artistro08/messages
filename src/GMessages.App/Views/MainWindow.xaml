@@ -15,11 +15,13 @@
         PreviewKeyDown="OnRootPreviewKeyDown"
         RowDefinitions="Auto,*">
 
-        <!-- Title Bar: ☰ on the left, the title from code, the profile picture (the owner's photo, else the default glyph) on the right.
-             Tall (48 px) like the caption buttons, which the window asks for in code. ☰ and the profile hide while pairing -->
+        <!-- Title Bar: ☰ on the left (the title bar's own Back in its place on Settings and Spam & blocked), the title from
+             code, the profile picture (the owner's photo, else the default glyph) beside the caption buttons. Tall (48 px)
+             like the caption buttons, which the window asks for in code. ☰ and the profile hide while pairing -->
         <TitleBar
             x:Name="AppTitleBar"
-            AutomationProperties.AutomationId="Main.TitleBar">
+            AutomationProperties.AutomationId="Main.TitleBar"
+            BackRequested="OnTitleBarBackRequested">
             <TitleBar.IconSource>
                 <ImageIconSource ImageSource="ms-appx:///Assets/AppIcon.ico" />
             </TitleBar.IconSource>
@@ -40,59 +42,77 @@
                 </Button>
             </TitleBar.LeftHeader>
 
-            <!-- Profile Button: Spam & blocked, Settings and Unpair -->
-            <TitleBar.RightHeader>
-                <Button
-                    x:Name="ProfileButton"
-                    Height="48"
-                    Padding="8,0"
-                    AutomationProperties.AutomationId="Main.ProfileButton"
-                    AutomationProperties.Name="Account"
-                    Background="Transparent"
-                    BorderThickness="0">
-                    <PersonPicture
-                        x:Name="ProfilePicture"
-                        Width="28"
-                        Height="28" />
-                    <Button.Flyout>
-                        <MenuFlyout Placement="BottomEdgeAlignedRight">
-                            <MenuFlyoutItem
-                                x:Name="ProfileSpamBlocked"
-                                AutomationProperties.AutomationId="Main.Profile.SpamBlocked"
-                                Click="OnSpamBlockedClick">
-                                <MenuFlyoutItem.Icon>
-                                    <FontIcon Glyph="&#xE8F8;" />
-                                </MenuFlyoutItem.Icon>
-                            </MenuFlyoutItem>
-                            <MenuFlyoutItem
-                                AutomationProperties.AutomationId="Main.Profile.Settings"
-                                Click="OnSettingsClick"
-                                Text="Settings">
-                                <MenuFlyoutItem.Icon>
-                                    <FontIcon Glyph="&#xE713;" />
-                                </MenuFlyoutItem.Icon>
-                            </MenuFlyoutItem>
-                            <MenuFlyoutItem
-                                AutomationProperties.AutomationId="Main.Profile.Unpair"
-                                Click="OnUnpairClick"
-                                IsEnabled="{x:Bind local:SettingsPage.Not(Settings.IsUnpairing), Mode=OneWay}"
-                                Text="Unpair"
-                                Visibility="{x:Bind Settings.CanUnpair, Mode=OneWay}">
-                                <MenuFlyoutItem.Icon>
-                                    <FontIcon Glyph="&#xE8C9;" />
-                                </MenuFlyoutItem.Icon>
-                            </MenuFlyoutItem>
-                        </MenuFlyout>
-                    </Button.Flyout>
-                </Button>
-            </TitleBar.RightHeader>
+            <!-- Profile Button: Spam & blocked, Settings and Unpair. Just the picture, no hover or pressed background. It
+                 sits at the right end of the title bar's content, which fills the space up to the caption buttons, so it
+                 moves with the window edge in the same layout pass (Leaf Calendar's way, see the window's code) -->
+            <TitleBar.Content>
+                <Grid x:Name="TitleBarContent" SizeChanged="OnTitleBarContentSizeChanged">
+                    <Button
+                        x:Name="ProfileButton"
+                        Height="48"
+                        Padding="8,0"
+                        HorizontalAlignment="Right"
+                        AutomationProperties.AutomationId="Main.ProfileButton"
+                        AutomationProperties.Name="Account">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <ContentPresenter
+                                    Padding="{TemplateBinding Padding}"
+                                    Background="Transparent"
+                                    Content="{TemplateBinding Content}" />
+                            </ControlTemplate>
+                        </Button.Template>
+                        <PersonPicture
+                            x:Name="ProfilePicture"
+                            Width="28"
+                            Height="28" />
+                        <Button.Flyout>
+                            <MenuFlyout Placement="BottomEdgeAlignedRight">
+                                <MenuFlyoutItem
+                                    x:Name="ProfileSpamBlocked"
+                                    AutomationProperties.AutomationId="Main.Profile.SpamBlocked"
+                                    Click="OnSpamBlockedClick">
+                                    <MenuFlyoutItem.Icon>
+                                        <FontIcon Glyph="&#xE8F8;" />
+                                    </MenuFlyoutItem.Icon>
+                                </MenuFlyoutItem>
+                                <MenuFlyoutItem
+                                    AutomationProperties.AutomationId="Main.Profile.Settings"
+                                    Click="OnSettingsClick"
+                                    Text="Settings">
+                                    <MenuFlyoutItem.Icon>
+                                        <FontIcon Glyph="&#xE713;" />
+                                    </MenuFlyoutItem.Icon>
+                                </MenuFlyoutItem>
+                                <MenuFlyoutItem
+                                    AutomationProperties.AutomationId="Main.Profile.Unpair"
+                                    Click="OnUnpairClick"
+                                    IsEnabled="{x:Bind local:SettingsPage.Not(Settings.IsUnpairing), Mode=OneWay}"
+                                    Text="Unpair"
+                                    Visibility="{x:Bind Settings.CanUnpair, Mode=OneWay}">
+                                    <MenuFlyoutItem.Icon>
+                                        <FontIcon Glyph="&#xE8C9;" />
+                                    </MenuFlyoutItem.Icon>
+                                </MenuFlyoutItem>
+                            </MenuFlyout>
+                        </Button.Flyout>
+                    </Button>
+                </Grid>
+            </TitleBar.Content>
         </TitleBar>
 
         <!-- Body: the pairing steps until paired, then the chats (set from code) -->
         <Border x:Name="BodyHost" Grid.Row="1" />
 
-        <!-- Settings: over the whole body while open, Back closes it (set from code) -->
-        <Border x:Name="SettingsHost" Grid.Row="1" />
+        <!-- Settings: over the whole body while open, entering with the standard page entrance; the title bar's Back closes
+             it (set from code) -->
+        <Border x:Name="SettingsHost" Grid.Row="1">
+            <Border.ChildTransitions>
+                <TransitionCollection>
+                    <EntranceThemeTransition />
+                </TransitionCollection>
+            </Border.ChildTransitions>
+        </Border>
 
         <!-- Unpair Confirm -->
         <controls:UnpairDialog x:Name="UnpairDialog" Grid.Row="1" />

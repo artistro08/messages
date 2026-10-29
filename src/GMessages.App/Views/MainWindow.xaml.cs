@@ -1,4 +1,5 @@
 using System.Collections.Specialized;
+using System.ComponentModel;
 using GMessages.App.Views.Controls;
 using GMessages.Presentation;
 using GMessages.Presentation.Main;
@@ -8,6 +9,7 @@ using GMessages.Presentation.Shortcuts;
 using Microsoft.UI.Input;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
@@ -29,7 +31,9 @@ namespace GMessages.App.Views;
 /// </para>
 /// <para>
 /// The settings page covers the body but keeps it running (a sign-in in progress, the open chat), so Back returns to it
-/// as it was. ☰ and the profile picture hide while pairing, since there is nothing for them yet.
+/// as it was. ☰ and the profile picture hide while pairing, since there is nothing for them yet. On Settings and on Spam
+/// &amp; blocked the title bar's own Back button shows in place of ☰, carrying the AutomationId <c>Settings.Back</c> or
+/// <c>Main.SpamBack</c>.
 /// </para>
 /// </remarks>
 public sealed partial class MainWindow : Window
@@ -42,6 +46,9 @@ public sealed partial class MainWindow : Window
     private ChatsView? _chats;
     private SettingsPage? _settingsPage;
     private Control? _focusBeforeSettings;
+
+    // The Title Bar's Back, Once It Has Shown (The Template Makes It Then)
+    private Button? _backButton;
     private bool _isActive;
 
     // The Owner's Photo Is Asked For Once A Load Names The Owner, And Again After An Answer Without One
@@ -79,10 +86,8 @@ public sealed partial class MainWindow : Window
             _isActive = e.WindowActivationState != WindowActivationState.Deactivated;
             ShowChatFocus();
         };
-        AppTitleBar.LayoutUpdated += OnTitleBarLayoutUpdated;
-        Closed                    += (_, _) =>
+        Closed += (_, _) =>
         {
-            AppTitleBar.LayoutUpdated -= OnTitleBarLayoutUpdated;
             CloseSettings();
             DropBody();
             Bindings.StopTracking();
@@ -106,6 +111,12 @@ public sealed partial class MainWindow : Window
     /// Gets whether the window shows the pairing steps.
     /// </summary>
     public bool IsPairing => _pairing is not null;
+
+    /// <summary>
+    /// Gets the conversation that was open when the chats were last dropped (the window closed), or null, so the App can
+    /// open it again in the next window.
+    /// </summary>
+    public string? LastConversationId { get; private set; }
 
     /// <summary>
     /// Gets the settings state the profile menu's Unpair binds to.
@@ -153,13 +164,14 @@ public sealed partial class MainWindow : Window
         CloseSettings();
         DropBody();
         _avatars.Clear();
+        LastConversationId            = null;
         _profileAsked                 = false;
         ProfilePicture.ProfilePicture = null;
 
         _pairing              = page;
         page.CancelRequested += OnPairingCancel;
         BodyHost.Child        = page;
-        ShowTitleBarButtons(false);
+        ShowTitleBarButtons();
     }
 
     /// <summary>
@@ -173,9 +185,10 @@ public sealed partial class MainWindow : Window
         DropBody();
         _chats                                  = new ChatsView(viewModel);
         viewModel.Connected                    += OnConnected;
+        viewModel.PropertyChanged              += OnChatsChanged;
         viewModel.Inbox.Rows.CollectionChanged += OnInboxRowsChanged;
         BodyHost.Child                          = _chats;
-        ShowTitleBarButtons(true);
+        ShowTitleBarButtons();
         ShowChatFocus();
     }
 
@@ -209,11 +222,13 @@ public sealed partial class MainWindow : Window
         _focusBeforeSettings = RootGrid.XamlRoot is { } root ? FocusManager.GetFocusedElement(root) as Control : null;
 
         _settingsPage                  = new SettingsPage(_settings);
-        _settingsPage.BackRequested   += OnSettingsBack;
         _settingsPage.UnpairRequested += OnSettingsUnpair;
         SettingsHost.Child             = _settingsPage;
         BodyHost.Visibility            = Visibility.Collapsed;
         ShowChatFocus();
+
+        // Keyboard Focus Moves To Back, So Tab Doesn't Start In The Hidden Body
+        ShowTitleBarButtons()?.Focus(FocusState.Programmatic);
     }
 
     // Back (Or A Switch To Pairing): The Body Shows Again
@@ -224,13 +239,13 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        page.BackRequested   -= OnSettingsBack;
         page.UnpairRequested -= OnSettingsUnpair;
         page.Close();
         _settingsPage       = null;
         SettingsHost.Child  = null;
         BodyHost.Visibility = Visibility.Visible;
         ShowChatFocus();
+        ShowTitleBarButtons();
 
         _focusBeforeSettings?.Focus(FocusState.Programmatic);
         _focusBeforeSettings = null;
@@ -248,7 +263,9 @@ public sealed partial class MainWindow : Window
 
         if (_chats is { } chats)
         {
+            LastConversationId                            = chats.ViewModel.SelectedConversationId;
             chats.ViewModel.Connected                    -= OnConnected;
+            chats.ViewModel.PropertyChanged              -= OnChatsChanged;
             chats.ViewModel.Inbox.Rows.CollectionChanged -= OnInboxRowsChanged;
             chats.Close();
             _chats = null;
@@ -257,11 +274,36 @@ public sealed partial class MainWindow : Window
         BodyHost.Child = null;
     }
 
-    // ☰ And The Profile Picture Have Nothing To Show While Pairing
-    private void ShowTitleBarButtons(bool show)
+    // ☰ And The Profile Picture Have Nothing To Show While Pairing. Settings And Spam & Blocked Show The Title Bar's Back
+    // In Place Of ☰, Named For The Page It Leaves (The Tests Find It By That). Returns Back While It Shows
+    private Button? ShowTitleBarButtons()
     {
-        MenuButton.Visibility    = show ? Visibility.Visible : Visibility.Collapsed;
-        ProfileButton.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        bool show_back = _settingsPage is not null || ViewModel?.IsSpamView == true;
+
+        AppTitleBar.IsBackButtonVisible = show_back;
+        MenuButton.Visibility           = _chats is not null && !show_back ? Visibility.Visible : Visibility.Collapsed;
+        ProfileButton.Visibility        = _chats is not null ? Visibility.Visible : Visibility.Collapsed;
+        if (!show_back)
+        {
+            return null;
+        }
+
+        // Back Is Made The First Time It Shows (Deferred In The Template), So The Layout Runs First
+        if (_backButton is null)
+        {
+            AppTitleBar.UpdateLayout();
+            if (VisualTreeHelper.GetChildrenCount(AppTitleBar) > 0 && VisualTreeHelper.GetChild(AppTitleBar, 0) is Grid layout)
+            {
+                _backButton = layout.FindName("PART_BackButton") as Button;
+            }
+        }
+
+        if (_backButton is not null)
+        {
+            AutomationProperties.SetAutomationId(_backButton, _settingsPage is not null ? "Settings.Back" : "Main.SpamBack");
+        }
+
+        return _backButton;
     }
 
     // The Open Chat Counts As Viewed Only While The Window Is Active And Settings Doesn't Cover It
@@ -295,22 +337,40 @@ public sealed partial class MainWindow : Window
     // EVENT HANDLERS
     // =========================================================================
 
-    // The TitleBar Control Reserves Room For The Caption Buttons With Their Width In Physical Pixels, As If Effective, So
-    // Above 100% Scale A Gap Opened Between The Profile Picture And Minimize. Its Last Column Is That Reserve: Size It
-    // To The Buttons' Real Width After Each Layout, Since The Control Can Set It Again Whenever The Window Changes
-    private void OnTitleBarLayoutUpdated(object? sender, object e)
+    // Leaf Calendar's Way: The Profile Picture Rides The Right End Of The Title Bar's Content, Which Stretches With The
+    // Window In The Same Layout Pass, So It Never Trails The Edge. The TitleBar Control Reserves The Caption Buttons'
+    // Width In Physical Pixels As If Effective, So Above 100% Scale The Content Stops Short Of Minimize; The Gap Is
+    // Measured, Not Assumed, And A Negative Right Margin Closes It. It Only Changes With The Scale
+    private void OnTitleBarContentSizeChanged(object sender, SizeChangedEventArgs e)
     {
-        if (AppTitleBar.XamlRoot is not { } root || VisualTreeHelper.GetChildrenCount(AppTitleBar) == 0
-            || VisualTreeHelper.GetChild(AppTitleBar, 0) is not Grid { ColumnDefinitions.Count: > 0 } layout)
+        if (RootGrid.XamlRoot is not { } root || TitleBarContent.ActualWidth <= 0)
         {
             return;
         }
 
-        var reserve = new GridLength(AppWindow.TitleBar.RightInset / root.RasterizationScale);
-        if (layout.ColumnDefinitions[^1].Width != reserve)
+        double scale       = root.RasterizationScale;
+        double caption     = AppWindow.TitleBar.RightInset / scale;
+        double content_end = TitleBarContent.TransformToVisual(RootGrid).TransformPoint(new Windows.Foundation.Point(TitleBarContent.ActualWidth, 0)).X;
+        double overhang    = Math.Round((content_end - (RootGrid.ActualWidth - caption)) * scale) / scale;
+        if (ProfileButton.Margin.Right != overhang)
         {
-            layout.ColumnDefinitions[^1].Width = reserve;
+            ProfileButton.Margin = new Thickness(0, 0, overhang, 0);
         }
+    }
+
+    // Spam & Blocked Opened Or Closed: Back Or ☰
+    private void OnChatsChanged(object? sender, PropertyChangedEventArgs e) => ShowTitleBarButtons();
+
+    // The Title Bar's Back: Leaves Settings, Else Spam & Blocked
+    private void OnTitleBarBackRequested(TitleBar sender, object args)
+    {
+        if (_settingsPage is not null)
+        {
+            CloseSettings();
+            return;
+        }
+
+        ViewModel?.BackToInbox();
     }
 
     // Rows Came In, So A Conversation May Now Name The Owner: Show Their Photo
@@ -358,8 +418,6 @@ public sealed partial class MainWindow : Window
     }
 
     private void OnSettingsClick(object sender, RoutedEventArgs e) => SettingsRequested?.Invoke(this, EventArgs.Empty);
-
-    private void OnSettingsBack(object? sender, EventArgs e) => CloseSettings();
 
     // Pairing's Cancel Closes The Window, Which Cancels The Pairing
     private void OnPairingCancel(object? sender, EventArgs e) => Close();
