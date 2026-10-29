@@ -115,8 +115,9 @@ public sealed class CookieJar
     /// released, if any value was added or changed.
     /// </remarks>
     /// <param name="res">The response to read.</param>
+    /// <param name="accept">Keeps only the raw <c>Set-Cookie</c> lines it returns true for; null keeps all.</param>
     /// <exception cref="ArgumentNullException"><paramref name="res"/> is null.</exception>
-    public void UpdateFrom(HttpResponseMessage res)
+    public void UpdateFrom(HttpResponseMessage res, Func<string, bool>? accept = null)
     {
         ArgumentNullException.ThrowIfNull(res);
 
@@ -135,7 +136,7 @@ public sealed class CookieJar
 
             foreach (string line in lines)
             {
-                if (!TryParseSetCookie(line, out string name, out string value))
+                if ((accept is not null && !accept(line)) || !TryParseSetCookie(line, out string name, out string value))
                 {
                     continue;
                 }

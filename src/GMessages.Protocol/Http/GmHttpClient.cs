@@ -194,22 +194,25 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
     /// </summary>
     /// <remarks>
     /// The caller builds the request with its own headers; only the <c>Cookie</c> header is added (no relay headers,
-    /// no SAPISIDHASH). The answer's cookies go through <see cref="CookieJar.UpdateFrom"/> like every other response,
-    /// so the session is saved. Not retried. The caller owns and must dispose the response.
+    /// no SAPISIDHASH). The answer's cookies that <paramref name="acceptSetCookie"/> keeps go through
+    /// <see cref="CookieJar.UpdateFrom"/> like every other response, so the session is saved. Not retried. The caller
+    /// owns and must dispose the response.
     /// </remarks>
     /// <param name="request">The request to send.</param>
+    /// <param name="acceptSetCookie">Keeps only the raw <c>Set-Cookie</c> lines it returns true for.</param>
     /// <param name="ct">Cancels the request.</param>
     /// <returns>The response, whatever its status.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="request"/> is null.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="request"/> or <paramref name="acceptSetCookie"/> is null.</exception>
     /// <exception cref="HttpRequestException">The request failed before any response arrived.</exception>
-    /// <exception cref="OperationCanceledException"><paramref name="ct"/> was canceled.</exception>
-    public async Task<HttpResponseMessage> SendWithCookiesAsync(HttpRequestMessage request, CancellationToken ct)
+    /// <exception cref="OperationCanceledException"><paramref name="ct"/> was canceled, or the client timed out.</exception>
+    public async Task<HttpResponseMessage> SendWithCookiesAsync(HttpRequestMessage request, Func<string, bool> acceptSetCookie, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(acceptSetCookie);
 
         cookies.ApplyTo(request, time.GetUtcNow().ToUnixTimeSeconds(), withAuthorization: false);
         HttpResponseMessage res = await http.SendAsync(request, ct).ConfigureAwait(false);
-        cookies.UpdateFrom(res);
+        cookies.UpdateFrom(res, acceptSetCookie);
         return res;
     }
 
@@ -219,8 +222,9 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
     /// <remarks>The same text as the <c>Cookies set by</c> diagnostics, for example <c>SIDCC (expires 2027-10-29T12:00:00Z)</c>.</remarks>
     /// <param name="res">The response to read.</param>
     /// <param name="now">The current time, for <c>Max-Age</c>.</param>
+    /// <param name="accept">Describes only the raw <c>Set-Cookie</c> lines it returns true for; null describes all.</param>
     /// <returns>The names with expiry, comma separated; empty when the response sets none.</returns>
-    public static string DescribeSetCookies(HttpResponseMessage res, DateTimeOffset now) => string.Join(", ", ParseSetCookies(res, now).Select(c => $"{c.Name} ({c.When})"));
+    public static string DescribeSetCookies(HttpResponseMessage res, DateTimeOffset now, Func<string, bool>? accept = null) => string.Join(", ", ParseSetCookies(res, now, accept).Select(c => $"{c.Name} ({c.When})"));
 
     // =========================================================================
     // HELPERS
@@ -280,7 +284,7 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
     }
 
     // The Name, Readable Expiry And Raw Expiry Attribute Of Each Set-Cookie Line; Values Are Never Read
-    private static List<(string Name, string When, string Stamp)> ParseSetCookies(HttpResponseMessage res, DateTimeOffset now)
+    private static List<(string Name, string When, string Stamp)> ParseSetCookies(HttpResponseMessage res, DateTimeOffset now, Func<string, bool>? accept = null)
     {
         var set = new List<(string Name, string When, string Stamp)>();
         if (!res.Headers.TryGetValues("Set-Cookie", out IEnumerable<string>? lines))
@@ -288,7 +292,7 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
             return set;
         }
 
-        foreach (string line in lines)
+        foreach (string line in lines.Where(l => accept is null || accept(l)))
         {
             string[] parts = line.Split(';');
             int eq         = parts[0].IndexOf('=');

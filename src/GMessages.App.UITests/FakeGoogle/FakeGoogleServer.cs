@@ -285,9 +285,9 @@ public sealed class FakeGoogleServer : IAsyncDisposable
                     break;
 
                 case "/RotateCookies" when request.HttpMethod == "POST":
-                    // Google's Cookie Rotation: A Fresh __Secure-1PSIDTS Each Time
+                    // Google's Cookie Rotation: A Fresh __Secure-1PSIDTS For All Of google.com Each Time
                     int rotation = Interlocked.Increment(ref _rotations);
-                    context.Response.Headers.Add("Set-Cookie", $"__Secure-1PSIDTS=fake-1psidts-rotated-{rotation}; Max-Age=31536000; Path=/; Secure; HttpOnly");
+                    context.Response.Headers.Add("Set-Cookie", $"__Secure-1PSIDTS=fake-1psidts-rotated-{rotation}; Domain=.google.com; Max-Age=31536000; Path=/; Secure; HttpOnly");
                     await RespondAsync(context.Response, 200, "application/json", "[]"u8.ToArray());
                     break;
 

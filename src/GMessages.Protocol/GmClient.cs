@@ -48,6 +48,7 @@ public sealed partial class GmClient : IAsyncDisposable
     private readonly ILogger _log;
     private readonly HttpClient _httpClient;
     private readonly HttpClient _longPollClient;
+    private readonly HttpClient _rotationClient;
     private readonly HttpMessageHandler? _ownedHandler;
     private readonly TokenRefresher _refresher;
     private readonly CookieRotator _rotator;
@@ -77,7 +78,7 @@ public sealed partial class GmClient : IAsyncDisposable
     private bool _savesSuspended;
     private int _saveCount;
 
-    private GmClient(AuthData auth, SessionStore store, GmEndpoints endpoints, TimeProvider time, ILoggerFactory logs, HttpMessageHandler handler, bool ownsHandler)
+    private GmClient(AuthData auth, SessionStore store, GmEndpoints endpoints, TimeProvider time, ILoggerFactory logs, HttpMessageHandler handler, bool ownsHandler, HttpMessageHandler? rotationHandler = null)
     {
         _auth           = auth;
         _store          = store;
@@ -87,11 +88,14 @@ public sealed partial class GmClient : IAsyncDisposable
         _httpClient     = new HttpClient(handler, disposeHandler: false);
         _longPollClient = new HttpClient(handler, disposeHandler: false) { Timeout = GmHttpClient.LongPollTimeout };
 
+        // Cookie Rotation Gets Its Own Client: A Short Timeout, And (On The Real Network) No Redirects
+        _rotationClient = new HttpClient(rotationHandler ?? handler, disposeHandler: rotationHandler is not null) { Timeout = CookieRotator.RequestTimeout };
+
         // Wire The Pieces
         var http    = new GmHttpClient(_httpClient, _longPollClient, auth.Cookies, time, logs.CreateLogger<GmHttpClient>());
         Rpc         = new RpcSession(http, auth, endpoints, time, logs.CreateLogger<RpcSession>());
         _refresher  = new TokenRefresher(http, auth, endpoints, time, logs.CreateLogger<TokenRefresher>());
-        _rotator    = new CookieRotator(http, auth, endpoints, time, logs.CreateLogger<CookieRotator>());
+        _rotator    = new CookieRotator(new GmHttpClient(_rotationClient, _rotationClient, auth.Cookies, time, logs.CreateLogger<GmHttpClient>()), auth, endpoints, time, logs.CreateLogger<CookieRotator>());
         _dispatcher = new UpdateDispatcher(Rpc, logs.CreateLogger<UpdateDispatcher>());
         _loop       = new LongPollLoop(http, Rpc, auth, endpoints, _refresher, _dispatcher, time, logs.CreateLogger<LongPollLoop>()) { Rotator = _rotator };
         _signIn     = new GaiaSignIn(http, auth, endpoints, time, logs.CreateLogger<GaiaSignIn>());
@@ -175,7 +179,15 @@ public sealed partial class GmClient : IAsyncDisposable
             UseCookies             = false,
             AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate | DecompressionMethods.Brotli,
         };
-        return new GmClient(auth, store, endpoints, time, logs, socket_handler, ownsHandler: true);
+
+        // Cookie Rotation: The Cookie Header Is Set By Hand, So A Redirect Must Never Carry It Elsewhere
+        var rotation_handler = new SocketsHttpHandler
+        {
+            UseCookies             = false,
+            AllowAutoRedirect      = false,
+            AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate | DecompressionMethods.Brotli,
+        };
+        return new GmClient(auth, store, endpoints, time, logs, socket_handler, ownsHandler: true, rotation_handler);
     }
 
     // =========================================================================
@@ -482,6 +494,7 @@ public sealed partial class GmClient : IAsyncDisposable
             _loop.EventRaised      -= Raise;
             _httpClient.Dispose();
             _longPollClient.Dispose();
+            _rotationClient.Dispose();
             _ownedHandler?.Dispose();
         }
     }

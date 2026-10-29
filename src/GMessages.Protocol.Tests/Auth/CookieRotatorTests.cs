@@ -40,12 +40,15 @@ public class CookieRotatorTests
 
         var time    = new SignalingTimeProvider();
         var handler = new FakeHttpHandler { Time = time };
-        handler.Respond = (_, _) => FakeHttpHandler.Response(HttpStatusCode.OK, "application/json", "[]"u8.ToArray(), $"__Secure-1PSIDTS={NewPsidts}; Max-Age=31536000; Path=/; Secure; HttpOnly");
+        handler.Respond = (_, _) => Rotated();
 
         var http    = new GmHttpClient(new HttpClient(handler), new HttpClient(handler), auth.Cookies, time, NullLogger.Instance);
         var rotator = new CookieRotator(http, auth, GmEndpoints.Production, time, log ?? NullLogger.Instance);
         return new Rig(rotator, auth, handler, time);
     }
+
+    // Google's Answer: A New __Secure-1PSIDTS For All Of google.com
+    private static HttpResponseMessage Rotated(params string[] more) => FakeHttpHandler.Response(HttpStatusCode.OK, "application/json", "[]"u8.ToArray(), [$"__Secure-1PSIDTS={NewPsidts}; Domain=.google.com; Max-Age=31536000; Path=/; Secure; HttpOnly", .. more]);
 
     private static int Count(FakeHttpHandler handler)
     {
@@ -183,5 +186,81 @@ public class CookieRotatorTests
         rig.Auth.ClearPairing();
         await rig.Rotator.RotateIfDueAsync(CancellationToken.None);
         Assert.AreEqual(1, Count(rig.Handler));
+    }
+
+    /// <summary>
+    /// A caller that arrives while a rotation is in flight (the resume reconnect racing the wake timer) waits for it
+    /// and returns with the new cookie in the jar; no second request goes out.
+    /// </summary>
+    [TestMethod]
+    public async Task Rotate_SecondCallerWaitsForTheOneInFlight()
+    {
+        Rig rig             = CreateRig();
+        using var release   = new ManualResetEventSlim();
+        rig.Handler.Respond = (_, _) =>
+        {
+            release.Wait(Wait);
+            return Rotated();
+        };
+
+        // First Caller Is Stuck On The Wire
+        Task first = Task.Run(() => rig.Rotator.RotateIfDueAsync(CancellationToken.None));
+        Assert.IsTrue(SpinWait.SpinUntil(() => Count(rig.Handler) == 1, Wait));
+
+        // Second Caller Waits Instead Of Returning With The Old Cookie
+        Task second = rig.Rotator.RotateIfDueAsync(CancellationToken.None);
+        await Task.Delay(50);
+        Assert.IsFalse(second.IsCompleted, "the second caller waits for the rotation in flight");
+        Assert.AreEqual(OldPsidts, rig.Auth.Cookies.Snapshot()["__Secure-1PSIDTS"]);
+
+        release.Set();
+        await second.WaitAsync(Wait);
+        Assert.AreEqual(NewPsidts, rig.Auth.Cookies.Snapshot()["__Secure-1PSIDTS"]);
+        await first.WaitAsync(Wait);
+        Assert.AreEqual(1, Count(rig.Handler));
+    }
+
+    /// <summary>
+    /// A rotation canceled midway (the run stopping) is not counted as a try: a caller waiting on it with its own
+    /// token rotates itself instead of going out with the old cookie.
+    /// </summary>
+    [TestMethod]
+    public async Task Rotate_CanceledMidway_NextCallerRotates()
+    {
+        Rig rig          = CreateRig();
+        using var cts    = new CancellationTokenSource();
+        rig.Handler.Hang = _ => Count(rig.Handler) == 1;
+
+        Task first = rig.Rotator.RotateIfDueAsync(cts.Token);
+        Assert.IsTrue(SpinWait.SpinUntil(() => Count(rig.Handler) == 1, Wait));
+        Task second = rig.Rotator.RotateIfDueAsync(CancellationToken.None);
+
+        // Cancel The First: It Throws, The Waiting Caller Rotates
+        await cts.CancelAsync();
+        await Assert.ThrowsAsync<OperationCanceledException>(() => first.WaitAsync(Wait));
+        await second.WaitAsync(Wait);
+        Assert.AreEqual(2, Count(rig.Handler));
+        Assert.AreEqual(NewPsidts, rig.Auth.Cookies.Snapshot()["__Secure-1PSIDTS"]);
+    }
+
+    /// <summary>
+    /// Only cookies for all of google.com are kept from the rotation answer: host-only cookies (<c>__Host-*</c>,
+    /// accounts.google.com-only ones) never reach the jar, so they are never sent to the Messages hosts.
+    /// </summary>
+    [TestMethod]
+    public async Task Rotate_KeepsOnlyGoogleWideCookies()
+    {
+        var log             = new CollectingLogger();
+        Rig rig             = CreateRig(log);
+        rig.Handler.Respond = (_, _) => Rotated("__Host-GAPS=host-value; Path=/; Secure", "ACCOUNT_CHOOSER=chooser-value; Domain=accounts.google.com; Path=/", "LSID=lsid-value; Path=/; Secure");
+
+        await rig.Rotator.RotateIfDueAsync(CancellationToken.None);
+
+        IReadOnlyDictionary<string, string> jar = rig.Auth.Cookies.Snapshot();
+        Assert.AreEqual(NewPsidts, jar["__Secure-1PSIDTS"]);
+        Assert.IsFalse(jar.ContainsKey("__Host-GAPS"));
+        Assert.IsFalse(jar.ContainsKey("ACCOUNT_CHOOSER"));
+        Assert.IsFalse(jar.ContainsKey("LSID"));
+        Assert.IsTrue(log.Messages.Any(m => m.StartsWith("Cookies rotated: __Secure-1PSIDTS (expires ", StringComparison.Ordinal) && !m.Contains(',', StringComparison.Ordinal)));
     }
 }

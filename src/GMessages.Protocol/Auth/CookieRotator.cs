@@ -26,7 +26,7 @@ namespace GMessages.Protocol.Auth;
 /// are rotated. Every wait uses the <see cref="TimeProvider"/>. Cookie values are never logged, only names and expiry.
 /// </para>
 /// </remarks>
-/// <param name="http">Sends the request with the session's cookie jar.</param>
+/// <param name="http">Sends the request with the session's cookie jar; built on a client with <see cref="RequestTimeout"/> and no automatic redirects (see <c>GmClient.Create</c>).</param>
 /// <param name="auth">The account whose cookies are rotated.</param>
 /// <param name="endpoints">The server addresses.</param>
 /// <param name="time">The clock for the cadence.</param>
@@ -36,47 +36,103 @@ public sealed partial class CookieRotator(GmHttpClient http, AuthData auth, GmEn
     /// <summary>The time between rotations (gemini-webapi's 600 second default; browsers rotate about this often).</summary>
     public static readonly TimeSpan Interval = TimeSpan.FromMinutes(10);
 
+    /// <summary>
+    /// How long one rotation request may take (C#-only; the shared client's 100 s would stall a connect).
+    /// </summary>
+    /// <remarks>
+    /// The rotation client's <see cref="HttpClient.Timeout"/>, so it runs on real time, like every
+    /// <see cref="HttpClient"/> timeout. A timeout is a failed rotation, tried again at the next interval.
+    /// </remarks>
+    public static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(15);
+
     // The Body Google's Pages Post (gemini-webapi: rotate_1psidts)
     private const string RotateBody = "[000,\"-0000000000000000000\"]";
 
-    // Guards _lastAttempt: The Check And The Stamp Are One Step, So Two Callers Never Both Rotate
+    // Guards _lastAttempt And _inFlight: The Check, The Stamp And The Start Are One Step
     private readonly Lock _lock = new();
     private DateTimeOffset? _lastAttempt;
+    private Task? _inFlight;
 
     /// <summary>
     /// Rotates the cookie when the last try is <see cref="Interval"/> old or there was none.
     /// </summary>
     /// <remarks>
     /// Called before the first request after a start or a resume, and by <see cref="RunAsync"/>. Does nothing for an
-    /// account that isn't paired or has no cookies. The try is stamped before it is sent, so a second caller meanwhile
-    /// returns at once instead of sending another. Never throws for a failed rotation, only when canceled.
+    /// account that isn't paired or has no cookies. A caller that arrives while a rotation is in flight waits for it
+    /// (with its own <paramref name="ct"/>) instead of sending another, so the request it guards goes out with the new
+    /// cookie. A rotation canceled midway clears its stamp, so the next caller rotates; if that cancel came from
+    /// another caller, a waiting caller rotates itself. Never throws for a failed rotation, only when canceled.
     /// </remarks>
-    /// <param name="ct">Cancels the request.</param>
+    /// <param name="ct">Cancels the wait and the request.</param>
     /// <returns>When the next rotation is due.</returns>
     /// <exception cref="OperationCanceledException"><paramref name="ct"/> was canceled.</exception>
     public async Task<DateTimeOffset> RotateIfDueAsync(CancellationToken ct)
     {
-        DateTimeOffset now = time.GetUtcNow();
-
-        // Not Paired Or Not A Google Account: Nothing To Keep Fresh
-        if (auth.Browser is null || !auth.Cookies.HasCookies)
+        while (true)
         {
-            return now + Interval;
-        }
+            DateTimeOffset now = time.GetUtcNow();
 
-        // Not Due Yet
-        lock (_lock)
-        {
-            if (_lastAttempt is { } last && now - last < Interval)
+            // Not Paired Or Not A Google Account: Nothing To Keep Fresh
+            if (auth.Browser is null || !auth.Cookies.HasCookies)
             {
-                return last + Interval;
+                return now + Interval;
             }
 
-            _lastAttempt = now;
-        }
+            // Wait For The One In Flight, Return When Not Due, Or Start One
+            Task? running = null;
+            TaskCompletionSource? mine = null;
+            lock (_lock)
+            {
+                if (_inFlight is { IsCompleted: false } in_flight)
+                {
+                    running = in_flight;
+                }
+                else if (_lastAttempt is { } last && now - last < Interval)
+                {
+                    return last + Interval;
+                }
+                else
+                {
+                    mine         = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                    _inFlight    = mine.Task;
+                    _lastAttempt = now;
+                }
+            }
 
-        await RotateAsync(ct).ConfigureAwait(false);
-        return now + Interval;
+            // Someone Else's Rotation: Wait, Then Check Again (A Canceled One Leaves It Due)
+            if (running is not null)
+            {
+                try
+                {
+                    await running.WaitAsync(ct).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+                {
+                    // Their Cancel, Not Ours
+                }
+
+                continue;
+            }
+
+            // Ours
+            try
+            {
+                await RotateAsync(ct).ConfigureAwait(false);
+                mine!.SetResult();
+                return now + Interval;
+            }
+            catch (Exception)
+            {
+                // Canceled Midway (The Only Way Out Of RotateAsync): Not A Try, So The Next Caller (A Reconnect) Rotates
+                lock (_lock)
+                {
+                    _lastAttempt = null;
+                }
+
+                mine!.SetCanceled(CancellationToken.None);
+                throw;
+            }
+        }
     }
 
     /// <summary>
@@ -114,10 +170,10 @@ public sealed partial class CookieRotator(GmHttpClient http, AuthData auth, GmEn
         // Send; The Jar Takes The New Cookies Either Way, Only A 2xx Counts As Rotated
         try
         {
-            using HttpResponseMessage res = await http.SendWithCookiesAsync(request, ct).ConfigureAwait(false);
+            using HttpResponseMessage res = await http.SendWithCookiesAsync(request, IsSharedGoogleCookie, ct).ConfigureAwait(false);
             res.EnsureSuccessStatusCode();
 
-            string names = GmHttpClient.DescribeSetCookies(res, time.GetUtcNow());
+            string names = GmHttpClient.DescribeSetCookies(res, time.GetUtcNow(), IsSharedGoogleCookie);
             LogRotated(log, names.Length > 0 ? names : "none");
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
@@ -127,6 +183,29 @@ public sealed partial class CookieRotator(GmHttpClient http, AuthData auth, GmEn
             string error_type = ex.GetType().Name;
             LogRotationFailed(log, error_type, status);
         }
+    }
+
+    /// <summary>
+    /// Tells whether a rotation answer's <c>Set-Cookie</c> line is a cookie for all of <c>google.com</c>.
+    /// </summary>
+    /// <remarks>
+    /// The jar sends every cookie it holds to messages.google.com and the googleapis.com hosts, so only cookies a
+    /// browser would send there too are kept: <c>Domain=.google.com</c> (or <c>google.com</c>). Host-only cookies,
+    /// such as <c>__Host-*</c> and other accounts.google.com-only ones, are dropped.
+    /// </remarks>
+    /// <param name="line">The raw <c>Set-Cookie</c> value.</param>
+    /// <returns>True to keep it.</returns>
+    internal static bool IsSharedGoogleCookie(string line)
+    {
+        string[] parts = line.Split(';');
+        if (parts[0].TrimStart().StartsWith("__Host-", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        return parts.Skip(1)
+            .Select(a => a.Trim())
+            .Any(a => a.StartsWith("Domain=", StringComparison.OrdinalIgnoreCase) && a[7..].TrimStart('.').Equals("google.com", StringComparison.OrdinalIgnoreCase));
     }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Cookies rotated: {Names}")]
