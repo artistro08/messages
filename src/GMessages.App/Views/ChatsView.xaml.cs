@@ -1,3 +1,5 @@
+using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Numerics;
 using GMessages.App.Views.Controls;
@@ -61,6 +63,9 @@ public sealed partial class ChatsView : UserControl
     // The List's Scroller, Found Once The List Has Its Template
     private ScrollViewer? _listScroller;
 
+    // The Rows On Show, Watched So A Moved Open Row Gets Its Highlight Back
+    private ObservableCollection<ConversationRowViewModel>? _shownRows;
+
     // The List's Width Beside The Chat (Saved Or Default), And What It Was When A Resize Started
     private double _listWidth;
     private double? _widthAtResize;
@@ -101,6 +106,11 @@ public sealed partial class ChatsView : UserControl
         if (_listScroller is not null)
         {
             _listScroller.ViewChanged -= OnListScrolled;
+        }
+
+        if (_shownRows is not null)
+        {
+            _shownRows.CollectionChanged -= OnRowsChanged;
         }
 
         ViewModel.PropertyChanged -= OnViewModelChanged;
@@ -160,11 +170,31 @@ public sealed partial class ChatsView : UserControl
 
     // Inbox Or Spam & Blocked: Rewrapped Only When The List Itself Changes, So Other Changes Keep The Selection
     // (See BindableList For Why The Rows Aren't Bound Directly)
-    private void ShowCurrentList() => BindableList.Show(ConversationList, ViewModel.CurrentList.Rows);
+    private void ShowCurrentList()
+    {
+        ObservableCollection<ConversationRowViewModel> rows = ViewModel.CurrentList.Rows;
+        BindableList.Show(ConversationList, rows);
+        if (rows == _shownRows)
+        {
+            return;
+        }
+
+        if (_shownRows is not null)
+        {
+            _shownRows.CollectionChanged -= OnRowsChanged;
+        }
+
+        _shownRows                    = rows;
+        _shownRows.CollectionChanged += OnRowsChanged;
+    }
 
     // The List Highlights The Open Conversation: Picking A Row Opens It, And This Follows Opens From Elsewhere
     // (Ctrl + . And Ctrl + ,, Start Chat, Escape), Scrolling The Row Into View
-    private void ShowSelection()
+    private void ShowSelection() => SelectOpenRow(scroll: true);
+
+    // Selects The Open Conversation's Row (None When It Isn't In The List). Selecting It Opens Nothing: The Row Is
+    // Already The Open Chat, So OnSelectionChanged Ignores It (No Second Open, No Second Mark Read)
+    private void SelectOpenRow(bool scroll)
     {
         ConversationRowViewModel? row = ViewModel.CurrentList.Rows.FirstOrDefault(r => r.Id == ViewModel.SelectedConversationId);
         if (ConversationList.SelectedItem == row)
@@ -173,11 +203,23 @@ public sealed partial class ChatsView : UserControl
         }
 
         ConversationList.SelectedItem = row;
-        if (row is not null)
+        if (scroll && row is not null)
         {
             ConversationList.ScrollIntoView(row);
         }
     }
+
+    // A Row Moved (A New Message Lifts It), Came Or Went: The List Applies A Move As A Remove Plus An Insert, Which Drops
+    // The Open Row's Highlight. It Is Put Back A Turn Later, Once The List Has Finished The Change, Without Scrolling, So
+    // A List Scrolled Down Isn't Pulled To The Top On Every New Message
+    private void OnRowsChanged(object? sender, NotifyCollectionChangedEventArgs e) =>
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            if (sender == _shownRows)
+            {
+                SelectOpenRow(scroll: false);
+            }
+        });
 
     // Narrow Or Wide From The Width (See The Class Remarks); The View Model Needs It For The One-Pane Rule, And A Narrow
     // View's List Pane Fills The Width

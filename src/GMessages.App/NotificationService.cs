@@ -24,7 +24,8 @@ namespace GMessages.App;
 /// Snooze is the app's own button, because its length is a setting (<see cref="AppSettings.SnoozeMinutes"/>) and
 /// Windows' system snooze only takes a length from a picker on the toast. Windows takes the toast away on the click;
 /// the app shows the same toast again once the length has passed, unless its chat was opened meanwhile. To show it
-/// again it keeps the latest toasts' payloads in memory only (never on disk).
+/// again it keeps the latest toasts' payloads, and the snoozed ones apart from them, in memory only (never on disk;
+/// see <see cref="ToastMemory"/>).
 /// </para>
 /// <para>
 /// Each toast's tag is the message ID and its group the conversation ID, so opening a chat clears its toasts with
@@ -51,7 +52,7 @@ internal sealed class NotificationService(ChatStore store, AppSettings settings,
     private const int SnoozableToasts = 20;
 
     private readonly AppNotificationManager _manager = AppNotificationManager.Default;
-    private readonly List<ShownToast> _shown = [];
+    private readonly ToastMemory _toasts = new(SnoozableToasts);
     private bool _registered;
 
     /// <summary>
@@ -106,7 +107,7 @@ internal sealed class NotificationService(ChatStore store, AppSettings settings,
             avatars.Clear();
 
             string xml = NotificationXml.Build(content, avatar, SendIconUri);
-            Remember(new ShownToast(content.Tag, content.Group, xml));
+            _toasts.Remember(new ShownToast(content.Tag, content.Group, xml));
             Show(xml, content.Tag, content.Group);
         }
 #pragma warning disable CA1031 // A message that can't become a toast must not take the tray down; the failure is logged
@@ -124,7 +125,7 @@ internal sealed class NotificationService(ChatStore store, AppSettings settings,
     public void RemoveConversation(string conversationId)
     {
         // A Snoozed Toast Of This Chat Stays Away Too
-        _shown.RemoveAll(t => t.Group == conversationId);
+        _toasts.RemoveConversation(conversationId);
         _ = RunAsync("remove", () => _manager.RemoveByGroupAsync(conversationId).AsTask());
     }
 
@@ -134,7 +135,7 @@ internal sealed class NotificationService(ChatStore store, AppSettings settings,
     /// <returns>A task that completes once they're gone. It never throws.</returns>
     public Task RemoveAllAsync()
     {
-        _shown.Clear();
+        _toasts.Clear();
         return RunAsync("remove all", () => _manager.RemoveAllAsync().AsTask());
     }
 
@@ -241,26 +242,15 @@ internal sealed class NotificationService(ChatStore store, AppSettings settings,
     // (ScheduledToastNotification) would survive a quit if that ever matters
     private async Task SnoozeAsync(NotificationArgs args)
     {
-        if (_shown.Find(t => t.Tag == args.MessageId && t.Group == args.ConversationId) is not { } toast)
+        if (_toasts.Snooze(args.MessageId, args.ConversationId) is not { } toast)
         {
             return;
         }
 
         await Task.Delay(TimeSpan.FromMinutes(settings.SnoozeMinutes));
-        if (_shown.Contains(toast))
+        if (_toasts.Wake(toast))
         {
             Show(toast.Xml, toast.Tag, toast.Group);
-        }
-    }
-
-    // Keeps A Shown Toast's Payload So Snooze Can Show It Again; Only The Latest Few, The Oldest Dropped First
-    private void Remember(ShownToast toast)
-    {
-        _shown.RemoveAll(t => t.Tag == toast.Tag && t.Group == toast.Group);
-        _shown.Add(toast);
-        if (_shown.Count > SnoozableToasts)
-        {
-            _shown.RemoveAt(0);
         }
     }
 
@@ -280,7 +270,4 @@ internal sealed class NotificationService(ChatStore store, AppSettings settings,
             AppLog.NotificationFailed(logger, action, ex.GetType().Name, ex.HResult);
         }
     }
-
-    // A Toast As Shown: Its Message (Tag), Conversation (Group) And Payload
-    private sealed record ShownToast(string Tag, string Group, string Xml);
 }

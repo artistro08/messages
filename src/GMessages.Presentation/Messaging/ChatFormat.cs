@@ -66,16 +66,17 @@ public static class ChatFormat
     /// The first visible character of a name, for avatars.
     /// </summary>
     /// <remarks>
-    /// A name with no letter in it is no name at all: the phone shows a phone number or a short code (such as "59538")
-    /// for a contact nobody saved. Those get an empty initial, and the avatar shows the generic person icon instead.
+    /// A phone number, a short code (such as "59538") or an email address is no name at all: it's what the phone shows
+    /// for someone nobody saved. Those get an empty initial, and the avatar shows the generic person icon instead.
+    /// Anything else, an emoji-only name or one starting with a digit ("2Pac") included, keeps its first character.
     /// </remarks>
     /// <param name="name">The name.</param>
-    /// <returns>The first text element in upper case, or empty when the name has no letters.</returns>
+    /// <returns>The first text element in upper case, or empty for no name.</returns>
     public static string Initial(string name)
     {
         string trimmed = (name ?? string.Empty).Trim();
 
-        return trimmed.Any(char.IsLetter) ? StringInfo.GetNextTextElement(trimmed).ToUpperInvariant() : string.Empty;
+        return IsNoName(trimmed) ? string.Empty : StringInfo.GetNextTextElement(trimmed).ToUpperInvariant();
     }
 
     /// <summary>
@@ -117,4 +118,10 @@ public static class ChatFormat
     /// <returns>The name, or an empty string when there is none.</returns>
     public static string SenderName(ParticipantInfo? p) =>
         new[] { p?.FullName, p?.FirstName, p?.FormattedNumber }.FirstOrDefault(n => !string.IsNullOrEmpty(n)) ?? string.Empty;
+
+    // Empty, A Number Or Short Code (Digits And Dialing Marks Only), Or An Email Address (One Word With An @)
+    private static bool IsNoName(string name) =>
+        name.Length == 0
+        || name.All(c => char.IsAsciiDigit(c) || c is '+' or '-' or '(' or ')' or '.' or ' ' or '#' or '*')
+        || (name.Contains('@', StringComparison.Ordinal) && !name.Any(char.IsWhiteSpace));
 }
