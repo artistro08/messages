@@ -21,6 +21,7 @@ public static class ChatCopy
     public const string EndToEndEncrypted = "End-to-end encrypted";
     public const string Typing            = "Typing";
     public const string OriginalMessage   = "Original message";
+    public const string Copy              = "Copy";
 
     // A Bubble's Accessible Item Type, RCS Or SMS (Controller Copy; Owner Signs Off)
     public const string ChatMessage = "Chat message";

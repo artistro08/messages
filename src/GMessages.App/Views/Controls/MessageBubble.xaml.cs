@@ -4,6 +4,7 @@ using GMessages.Presentation.Messaging;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Windows.ApplicationModel.DataTransfer;
 
 namespace GMessages.App.Views.Controls;
 
@@ -52,7 +53,7 @@ public sealed partial class MessageBubble : UserControl
         // Behavior
         Back.AddHandler(TappedEvent, new TappedEventHandler(OnBackTapped), handledEventsToo: true);
 
-        // The Text's Own Menu (Copy) Would Win A Right-Click On It, So It Gets The Bubble Menu Too
+        // The Text's Own Menu Would Win A Right-Click On It, So It Gets The Bubble Menu Too (Which Has Copy)
         Body.ContextFlyout = Menu;
     }
 
@@ -73,6 +74,9 @@ public sealed partial class MessageBubble : UserControl
 
     /// <summary>Gets the "Not sent" link text.</summary>
     public static string NotSentText => ChatCopy.NotSentRetry;
+
+    /// <summary>Gets the menu's Copy text.</summary>
+    public static string CopyText => ChatCopy.Copy;
 
     /// <summary>Gets the menu's React text.</summary>
     public static string ReactText => ChatCopy.React;
@@ -197,6 +201,20 @@ public sealed partial class MessageBubble : UserControl
     private void OnBackTapped(object sender, TappedRoutedEventArgs e) => Bubble?.ToggleTime();
 
     private void OnRetryClick(object sender, RoutedEventArgs e) => RetryRequested?.Invoke(this, EventArgs.Empty);
+
+    // Copies The Selected Text, Or The Whole Text When Nothing Is Selected, As The Text's Own Copy Did
+    private void OnCopyClick(object sender, RoutedEventArgs e)
+    {
+        string text = Body.SelectedText.Length > 0 ? Body.SelectedText : Body.Text;
+        if (text.Length == 0)
+        {
+            return;
+        }
+
+        var package = new DataPackage();
+        package.SetText(text);
+        Clipboard.SetContent(package);
+    }
 
     private void OnReactClick(object sender, RoutedEventArgs e) => ReactRequested?.Invoke(this, EventArgs.Empty);
 

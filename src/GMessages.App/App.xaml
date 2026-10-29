@@ -9,16 +9,21 @@
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
             </ResourceDictionary.MergedDictionaries>
 
-            <!-- Sent SMS Bubble: a lighter (Light) or darker (Dark) shade of the accent, with the regular text color on it -->
+            <!-- Sent SMS Bubble: a lighter (Light) or darker (Dark) shade of the accent, with the regular text color on it.
+                 Its border matches the fill there; in high contrast the fill is the window color, so the border is the
+                 text color to keep the bubble's edge -->
             <ResourceDictionary.ThemeDictionaries>
                 <ResourceDictionary x:Key="Light">
                     <SolidColorBrush x:Key="SmsBubbleBrush" Color="{ThemeResource SystemAccentColorLight2}" />
+                    <SolidColorBrush x:Key="SmsBubbleBorderBrush" Color="{ThemeResource SystemAccentColorLight2}" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
                     <SolidColorBrush x:Key="SmsBubbleBrush" Color="{ThemeResource SystemAccentColorDark1}" />
+                    <SolidColorBrush x:Key="SmsBubbleBorderBrush" Color="{ThemeResource SystemAccentColorDark1}" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="HighContrast">
                     <SolidColorBrush x:Key="SmsBubbleBrush" Color="{ThemeResource SystemColorWindowColor}" />
+                    <SolidColorBrush x:Key="SmsBubbleBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
         </ResourceDictionary>

@@ -18,6 +18,14 @@
         <StackPanel.ContextFlyout>
             <MenuFlyout x:Name="Menu">
                 <MenuFlyoutItem
+                    AutomationProperties.AutomationId="Bubble.Copy"
+                    Click="OnCopyClick"
+                    Text="{x:Bind local:MessageBubble.CopyText}">
+                    <MenuFlyoutItem.Icon>
+                        <FontIcon Glyph="&#xE8C8;" />
+                    </MenuFlyoutItem.Icon>
+                </MenuFlyoutItem>
+                <MenuFlyoutItem
                     AutomationProperties.AutomationId="Bubble.React"
                     Click="OnReactClick"
                     KeyboardAcceleratorTextOverride="Shift + +"
@@ -60,7 +68,7 @@
                     <VisualState.Setters>
                         <Setter Target="Root.HorizontalAlignment" Value="Right" />
                         <Setter Target="Back.Background" Value="{ThemeResource SmsBubbleBrush}" />
-                        <Setter Target="Back.BorderThickness" Value="0" />
+                        <Setter Target="Back.BorderBrush" Value="{ThemeResource SmsBubbleBorderBrush}" />
                         <Setter Target="Body.Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
                         <Setter Target="Pill.HorizontalAlignment" Value="Left" />
                         <Setter Target="Footer.HorizontalAlignment" Value="Right" />
@@ -175,6 +183,7 @@
             Margin="12,0"
             HorizontalAlignment="Right"
             AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Status.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+            AutomationProperties.LiveSetting="Polite"
             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
             Style="{StaticResource CaptionTextBlockStyle}"
             Text="{x:Bind Bubble.StatusText, Mode=OneWay, FallbackValue=''}"

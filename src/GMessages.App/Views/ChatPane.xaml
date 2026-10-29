@@ -112,7 +112,8 @@
                     <StackPanel
                         x:Name="ReactionButtons"
                         Orientation="Horizontal"
-                        Spacing="2">
+                        Spacing="2"
+                        XYFocusKeyboardNavigation="Enabled">
                         <StackPanel.Resources>
                             <Style BasedOn="{StaticResource DefaultButtonStyle}" TargetType="Button">
                                 <Setter Property="MinWidth" Value="40" />
@@ -233,6 +234,7 @@
             Visibility="{x:Bind Chat.IsTyping, Mode=OneWay, FallbackValue=Collapsed}">
             <TextBlock
                 AutomationProperties.AutomationId="Chat.Typing"
+                AutomationProperties.LiveSetting="Polite"
                 AutomationProperties.Name="{x:Bind local:ChatPane.TypingText}"
                 FontFamily="{ThemeResource SymbolThemeFontFamily}"
                 FontSize="16"

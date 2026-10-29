@@ -101,6 +101,27 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
+    /// Shift + F10 on a focused bubble opens its menu, and Copy puts the bubble's text on the clipboard (pasted into the
+    /// message box to check).
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Copy_FromKeyboardMenu_CopiesText()
+    {
+        await OpenChatAsync("Row.c-ann");
+        FocusLastRow();
+
+        Keyboard.TypeSimultaneously(VirtualKeyShort.SHIFT, VirtualKeyShort.F10);
+        App.Find("Bubble.Copy").Patterns.Invoke.Pattern.Invoke();
+
+        App.Find("Chat.Draft").Focus();
+        Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_V);
+        string last = "";
+        Wait.Until(() => (last = App.TryFind("Chat.Draft")?.Patterns.Value.Pattern.Value.ValueOrDefault ?? "") == AnnLast, AppDriver.DefaultTimeout,
+            () => $"The message box read '{last}' after pasting, not '{AnnLast}'.");
+    }
+
+    /// <summary>
     /// Shift + + on a focused bubble opens the reaction picker.
     /// </summary>
     /// <returns>A task for the test.</returns>
