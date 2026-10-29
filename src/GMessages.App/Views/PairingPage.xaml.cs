@@ -1,5 +1,5 @@
-using System.Globalization;
 using System.ComponentModel;
+using System.Globalization;
 using GMessages.Presentation.Pairing;
 using GMessages.Protocol.Http;
 using Microsoft.Extensions.Logging;
@@ -175,7 +175,9 @@ public sealed partial class PairingPage : UserControl
                         if (jar.TryAdd(cookie.Name, cookie.Value))
                         {
                             // Name And Expiry Only, For The Log; A Session Cookie Has No Expiry
-                            expiries[cookie.Name] = cookie.IsSession ? "session" : "expires " + DateTimeOffset.FromUnixTimeSeconds((long)cookie.Expires).UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
+                            expiries[cookie.Name] = cookie.IsSession
+                                ? "session"
+                                : ExpiryText(cookie.Expires);
                         }
                     }
                 }
@@ -221,6 +223,19 @@ public sealed partial class PairingPage : UserControl
         if (_endpoints.MessagesBase == GmEndpoints.Production.MessagesBase)
         {
             yield return SignIn.GoogleOrigin;
+        }
+    }
+
+    // Logging Must Never Fail Sign-In: An Out-Of-Range Expiry Is Shown As Unknown
+    private static string ExpiryText(double expires)
+    {
+        try
+        {
+            return "expires " + DateTimeOffset.FromUnixTimeSeconds((long)expires).UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            return "expires ?";
         }
     }
 

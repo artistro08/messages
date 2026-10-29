@@ -79,6 +79,46 @@ public class GmHttpClientTests
         Assert.IsFalse(log.Messages.Any(m => m.Contains("secret", StringComparison.Ordinal)));
     }
 
+    /// <summary>
+    /// Two identical Set-Cookie responses log the cookie line once; a changed expiry logs again.
+    /// </summary>
+    [TestMethod]
+    public async Task SetCookie_SameResponseTwice_LogsOnce()
+    {
+        var log = new CollectingLogger();
+        Rig rig = CreateRig(new Dictionary<string, string>(GoCookies), log);
+        string cookie = "SID=v; Expires=Fri, 30 Oct 2026 15:07:55 GMT; Path=/";
+        rig.Handler.Respond = (_, _) => FakeHttpHandler.Response(HttpStatusCode.OK, "application/json+protobuf", "[]"u8.ToArray(), cookie);
+
+        using HttpResponseMessage a = await rig.Client.PostAsync(new Uri("https://messages.google.com/x/Ping"), RelayBody, GmContentType.PbLite, false, CancellationToken.None);
+        using HttpResponseMessage b = await rig.Client.PostAsync(new Uri("https://messages.google.com/x/Ping"), RelayBody, GmContentType.PbLite, false, CancellationToken.None);
+        Assert.AreEqual(1, log.Messages.Count(m => m.StartsWith("Cookies set by", StringComparison.Ordinal)));
+
+        cookie = "SID=v; Expires=Sat, 31 Oct 2026 15:07:55 GMT; Path=/";
+        using HttpResponseMessage c = await rig.Client.PostAsync(new Uri("https://messages.google.com/x/Ping"), RelayBody, GmContentType.PbLite, false, CancellationToken.None);
+        Assert.AreEqual(2, log.Messages.Count(m => m.StartsWith("Cookies set by", StringComparison.Ordinal)));
+    }
+
+    /// <summary>
+    /// An absurd Max-Age or Expires never throws into the request; the cookie is logged with an unknown expiry.
+    /// </summary>
+    [TestMethod]
+    public async Task SetCookie_AbsurdExpiry_DoesNotFailTheRequest()
+    {
+        var log = new CollectingLogger();
+        Rig rig = CreateRig(new Dictionary<string, string>(GoCookies), log);
+        rig.Handler.Respond = (_, _) => FakeHttpHandler.Response(
+            HttpStatusCode.OK,
+            "application/json+protobuf",
+            "[]"u8.ToArray(),
+            "A=v; Max-Age=9223372036854775807; Path=/");
+
+        using HttpResponseMessage res = await rig.Client.PostAsync(new Uri("https://messages.google.com/x/Ping"), RelayBody, GmContentType.PbLite, false, CancellationToken.None);
+
+        Assert.AreEqual(HttpStatusCode.OK, res.StatusCode);
+        Assert.IsTrue(log.Messages.Any(m => m == "Cookies set by /x/Ping: A (expires ?)"), string.Join("\n", log.Messages));
+    }
+
     private static long GoTimestamp(string authorization) =>
         long.Parse(authorization["SAPISIDHASH ".Length..authorization.IndexOf('_', StringComparison.Ordinal)], CultureInfo.InvariantCulture);
 

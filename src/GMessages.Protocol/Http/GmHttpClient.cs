@@ -54,6 +54,9 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
     private const string ProtobufMime = "application/x-protobuf";
     private const string PbLiteMime   = "application/json+protobuf";
 
+    // The Last Cookie Line Logged Per Set Of Cookie Names, So An Unchanged Response Stays Quiet
+    private readonly Dictionary<string, string> _loggedCookies = [];
+
     /// <summary>
     /// Creates the client used for long polls.
     /// </summary>
@@ -208,49 +211,90 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
         h.TryAddWithoutValidation("accept-language", "en-US,en;q=0.9");
     }
 
-    // Diagnosis: Logs The Names And Expiry Times Of Cookies A Response Sets, Never The Values
+    // Diagnosis: Logs The Names And Expiry Times Of Cookies A Response Sets, Never The Values; Logging Must Never Fail A Request
     private void LogSetCookies(HttpResponseMessage res, string path)
     {
-        if (!res.Headers.TryGetValues("Set-Cookie", out IEnumerable<string>? lines))
+        try
         {
-            return;
-        }
-
-        DateTimeOffset now = time.GetUtcNow();
-        var names          = new List<string>();
-        foreach (string line in lines)
-        {
-            string[] parts = line.Split(';');
-            int eq         = parts[0].IndexOf('=');
-            if (eq <= 0)
+            if (!res.Headers.TryGetValues("Set-Cookie", out IEnumerable<string>? lines))
             {
-                continue;
+                return;
             }
 
-            // Max-Age Wins Over Expires, As In RFC 6265
-            DateTimeOffset? expires = null;
-            foreach (string attr in parts.Skip(1).Select(a => a.Trim()))
+            DateTimeOffset now = time.GetUtcNow();
+            var names          = new List<string>();
+            var signature      = new List<string>();
+            foreach (string line in lines)
             {
-                if (attr.StartsWith("Max-Age=", StringComparison.OrdinalIgnoreCase) && long.TryParse(attr[8..], NumberStyles.Integer, CultureInfo.InvariantCulture, out long seconds))
+                string[] parts = line.Split(';');
+                int eq         = parts[0].IndexOf('=');
+                if (eq <= 0)
                 {
-                    expires = now.AddSeconds(seconds);
-                    break;
+                    continue;
                 }
 
-                if (attr.StartsWith("Expires=", StringComparison.OrdinalIgnoreCase) && DateTimeOffset.TryParse(attr[8..], CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out DateTimeOffset date))
+                // Max-Age Wins Over Expires, As In RFC 6265; The Raw Attribute Is What Tells Two Responses Apart
+                string when  = "session";
+                string stamp = "session";
+                foreach (string attr in parts.Skip(1).Select(a => a.Trim()))
                 {
-                    expires = date;
+                    if (attr.StartsWith("Max-Age=", StringComparison.OrdinalIgnoreCase) && long.TryParse(attr[8..], NumberStyles.Integer, CultureInfo.InvariantCulture, out long seconds))
+                    {
+                        when  = FormatExpiry(() => now.AddSeconds(seconds));
+                        stamp = attr;
+                        break;
+                    }
+
+                    if (attr.StartsWith("Expires=", StringComparison.OrdinalIgnoreCase) && DateTimeOffset.TryParse(attr[8..], CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out DateTimeOffset date))
+                    {
+                        when  = FormatExpiry(() => date);
+                        stamp = attr;
+                    }
                 }
+
+                string name = parts[0][..eq].Trim();
+                names.Add($"{name} ({when})");
+                signature.Add($"{name}|{stamp}");
             }
 
-            string when = expires is { } e ? "expires " + e.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture) : "session";
-            names.Add($"{parts[0][..eq].Trim()} ({when})");
-        }
+            if (names.Count == 0)
+            {
+                return;
+            }
 
-        if (names.Count > 0)
+            // Only A Change Is News: The Same Cookie Names With The Same Expiry Attributes As Last Time Stay Quiet
+            string name_set = string.Join(",", signature.Select(x => x[..x.IndexOf('|', StringComparison.Ordinal)]).Order(StringComparer.Ordinal));
+            string current  = string.Join(",", signature.Order(StringComparer.Ordinal));
+            lock (_loggedCookies)
+            {
+                if (_loggedCookies.TryGetValue(name_set, out string? last) && last == current)
+                {
+                    return;
+                }
+
+                _loggedCookies[name_set] = current;
+            }
+
+            string line_text = string.Join(", ", names);
+            LogCookiesSet(log, path, line_text);
+        }
+        catch (Exception ex)
         {
-            string joined = string.Join(", ", names);
-            LogCookiesSet(log, path, joined);
+            string error_type = ex.GetType().Name;
+            LogCookiesNotLogged(log, error_type);
+        }
+    }
+
+    // An Absurd Expiry (Out Of Range) Is Shown As Unknown Instead Of Throwing
+    private static string FormatExpiry(Func<DateTimeOffset> expires)
+    {
+        try
+        {
+            return "expires " + expires().UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            return "expires ?";
         }
     }
 
@@ -314,6 +358,9 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Cookies set by {Path}: {Names}")]
     private static partial void LogCookiesSet(ILogger logger, string path, string names);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Cookie diagnostics skipped: {ErrorType}")]
+    private static partial void LogCookiesNotLogged(ILogger logger, string errorType);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Error response body (status {StatusCode}) did not decode")]
     private static partial void LogErrorBodyNotDecoded(ILogger logger, int statusCode, Exception exception);
