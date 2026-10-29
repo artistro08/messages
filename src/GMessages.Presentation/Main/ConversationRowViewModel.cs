@@ -80,6 +80,13 @@ public sealed class ConversationRowViewModel : INotifyPropertyChanged
         PropertyChanged?.Invoke(this, AllChanged);
     }
 
+    /// <summary>
+    /// Gives the row's accessible name: the conversation name, plus "Unread" while it has unread messages.
+    /// </summary>
+    /// <remarks>A list item with no name of its own reads this through UI Automation (Narrator and the UI tests).</remarks>
+    /// <returns>The name.</returns>
+    public override string ToString() => IsUnread ? $"{Name}, Unread" : Name;
+
     private void Fill(ConversationInfo c, DateTimeOffset now)
     {
         Name            = c.Name;

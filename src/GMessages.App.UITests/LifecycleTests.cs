@@ -47,7 +47,7 @@ public sealed class LifecycleTests : UiTest
         }
 
         // The First Copy Shows Its Main Window; Still One Process
-        App.WaitForText("Main.Status", "Connected");
+        App.Find("Main.ConversationList");
         CollectionAssert.AreEqual(new[] { App.Process.Id }, AppDriver.RunningTestExeIds().ToArray(), "Expected exactly the first Messages process.");
     }
 

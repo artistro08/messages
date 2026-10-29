@@ -5,6 +5,8 @@ using GMessages.App.Views;
 using GMessages.Presentation;
 using GMessages.Presentation.Connection;
 using GMessages.Presentation.Logging;
+using GMessages.Presentation.Main;
+using GMessages.Presentation.Messaging;
 using GMessages.Presentation.Pairing;
 using GMessages.Presentation.Settings;
 using GMessages.Protocol.Http;
@@ -51,6 +53,7 @@ public partial class App : Application, IDisposable
     private TrayMenuWindow? _trayMenu;
     private MemoryTrim? _memoryTrim;
     private ConnectionController? _connection;
+    private ChatStore? _store;
     private PairingWindow? _pairingWindow;
     private MainWindow? _mainWindow;
     private SettingsWindow? _settingsWindow;
@@ -123,6 +126,11 @@ public partial class App : Application, IDisposable
         var endpoints = TestHooks.Endpoints ?? GmEndpoints.Production;
         _connection   = new ConnectionController(paths, endpoints, TimeProvider.System, new SingleProviderLoggerFactory(_logProvider), a => dispatcher.TryEnqueue(() => a()));
         _connection.StateChanged += (_, _) => OnConnectionStateChanged();
+
+        // Chat Store: outlives the main window; no client until paired and connected
+        var connection = _connection;
+        _store         = new ChatStore(connection, () => connection.Client is { } client ? new GmMessagingClient(client) : null, _logProvider.CreateLogger("GMessages.Chat"));
+
         _ = StartConnectionAsync();
 
         // Resume And Network: reconnect right away instead of waiting out the long poll's retry
@@ -258,7 +266,7 @@ public partial class App : Application, IDisposable
     // Made when needed and destroyed on close, then the memory it used goes back to Windows
     private void ShowMainWindow()
     {
-        if (_quitting || _connection is null)
+        if (_quitting || _connection is null || _store is null || _settings is null)
         {
             return;
         }
@@ -269,8 +277,11 @@ public partial class App : Application, IDisposable
             return;
         }
 
-        _mainWindow = new MainWindow(_connection);
-        _mainWindow.ApplyTheme(_settings?.Theme ?? AppTheme.System);
+        var dispatcher = DispatcherQueue.GetForCurrentThread();
+        var viewModel  = new MainViewModel(_connection, _store, TimeProvider.System, a => dispatcher.TryEnqueue(() => a()));
+        _mainWindow    = new MainWindow(viewModel, NewSettingsViewModel());
+        _mainWindow.ApplyTheme(_settings.Theme);
+        _mainWindow.SettingsRequested += (_, _) => ShowSettingsWindow();
         _mainWindow.Closed += (_, _) =>
         {
             _mainWindow = null;
@@ -294,8 +305,7 @@ public partial class App : Application, IDisposable
             return;
         }
 
-        var viewModel   = new SettingsViewModel(_settings, _startup, _connection, OpenFolder, _paths.LogsFolder, _logger);
-        _settingsWindow = new SettingsWindow(viewModel);
+        _settingsWindow = new SettingsWindow(NewSettingsViewModel());
         _settingsWindow.ApplyTheme(_settings.Theme);
         _settingsWindow.Closed += (_, _) =>
         {
@@ -304,6 +314,9 @@ public partial class App : Application, IDisposable
         };
         _settingsWindow.Activate();
     }
+
+    // The Settings Window's State; The Main Window Borrows One For Its Unpair
+    private SettingsViewModel NewSettingsViewModel() => new(_settings!, _startup!, _connection!, OpenFolder, _paths!.LogsFolder, _logger);
 
     // Theme: every open window and the tray menu follow the setting live
     private void OnSettingChanged(object? sender, PropertyChangedEventArgs e)
@@ -493,6 +506,7 @@ public partial class App : Application, IDisposable
         _trayIcon?.Dispose();
         _trayMenu?.Close();
         CloseWindows();
+        _store?.Dispose();
         _logProvider?.Dispose();
         GC.SuppressFinalize(this);
     }

@@ -1,0 +1,46 @@
+<UserControl
+    x:Class="GMessages.App.Views.Controls.Avatar"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:GMessages.App.Views.Controls">
+
+    <!-- Avatar: one circle, or two stacked circles for a group -->
+    <Grid Width="40" Height="40">
+
+        <!-- Back Circle (Groups Only) -->
+        <Grid
+            Width="28"
+            Height="28"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Top"
+            Visibility="{x:Bind local:Avatar.ShownIfColor(SecondColor), Mode=OneWay}">
+            <Ellipse Fill="{x:Bind local:ColorConverters.ToBrush(SecondColor), Mode=OneWay}" />
+            <TextBlock
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                FontSize="12"
+                Foreground="White"
+                Text="{x:Bind SecondInitial, Mode=OneWay}" />
+        </Grid>
+
+        <!-- Front Circle: the photo over the colored initial -->
+        <Grid
+            Width="{x:Bind local:Avatar.FrontSize(SecondColor), Mode=OneWay}"
+            Height="{x:Bind local:Avatar.FrontSize(SecondColor), Mode=OneWay}"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Bottom">
+            <Ellipse Fill="{x:Bind local:ColorConverters.ToBrush(Color), Mode=OneWay}" />
+            <TextBlock
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                FontSize="{x:Bind local:Avatar.InitialSize(SecondColor), Mode=OneWay}"
+                Foreground="White"
+                Text="{x:Bind Initial, Mode=OneWay}" />
+            <Ellipse Visibility="{x:Bind local:Avatar.ShownIfImage(Image), Mode=OneWay}">
+                <Ellipse.Fill>
+                    <ImageBrush ImageSource="{x:Bind Image, Mode=OneWay}" Stretch="UniformToFill" />
+                </Ellipse.Fill>
+            </Ellipse>
+        </Grid>
+    </Grid>
+</UserControl>

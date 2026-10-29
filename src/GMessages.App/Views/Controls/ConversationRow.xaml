@@ -1,0 +1,54 @@
+<UserControl
+    x:Class="GMessages.App.Views.Controls.ConversationRow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:GMessages.App.Views.Controls">
+
+    <!-- Row: avatar, name and snippet, then the time and pin -->
+    <Grid
+        Padding="0,10"
+        ColumnDefinitions="Auto,*,Auto"
+        ColumnSpacing="12">
+
+        <!-- Avatar -->
+        <local:Avatar
+            VerticalAlignment="Center"
+            Color="{x:Bind Row.AvatarColor, Mode=OneWay}"
+            Initial="{x:Bind Row.Initial, Mode=OneWay}"
+            SecondColor="{x:Bind local:ColorConverters.GroupBackColor(Row.IsGroup), Mode=OneWay}" />
+
+        <!-- Name And Snippet: bold while unread -->
+        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+            <TextBlock
+                FontWeight="{x:Bind local:ColorConverters.Weight(Row.IsUnread), Mode=OneWay}"
+                MaxLines="1"
+                Text="{x:Bind Row.Name, Mode=OneWay}"
+                TextTrimming="CharacterEllipsis" />
+            <TextBlock
+                FontWeight="{x:Bind local:ColorConverters.Weight(Row.IsUnread), Mode=OneWay}"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                MaxLines="1"
+                Text="{x:Bind Row.Snippet, Mode=OneWay}"
+                TextTrimming="CharacterEllipsis" />
+        </StackPanel>
+
+        <!-- Time And Pin -->
+        <StackPanel
+            Grid.Column="2"
+            VerticalAlignment="Center"
+            Spacing="4">
+            <TextBlock
+                HorizontalAlignment="Right"
+                FontWeight="{x:Bind local:ColorConverters.Weight(Row.IsUnread), Mode=OneWay}"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                Style="{StaticResource CaptionTextBlockStyle}"
+                Text="{x:Bind Row.Time, Mode=OneWay}" />
+            <FontIcon
+                HorizontalAlignment="Right"
+                FontSize="12"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                Glyph="&#xE718;"
+                Visibility="{x:Bind Row.IsPinned, Mode=OneWay}" />
+        </StackPanel>
+    </Grid>
+</UserControl>

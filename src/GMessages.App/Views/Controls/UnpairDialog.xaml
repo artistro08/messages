@@ -1,0 +1,16 @@
+<!-- Unpair Confirm: keep DefaultButton="Close". Primary would replace PrimaryButtonStyle and drop the Settings.UnpairConfirm AutomationId -->
+<ContentDialog
+    x:Class="GMessages.App.Views.Controls.UnpairDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="Unpair this PC?"
+    CloseButtonText="Cancel"
+    Content="You'll stop getting texts here until you pair again."
+    DefaultButton="Close"
+    PrimaryButtonText="Unpair">
+    <ContentDialog.PrimaryButtonStyle>
+        <Style BasedOn="{StaticResource DefaultButtonStyle}" TargetType="Button">
+            <Setter Property="AutomationProperties.AutomationId" Value="Settings.UnpairConfirm" />
+        </Style>
+    </ContentDialog.PrimaryButtonStyle>
+</ContentDialog>

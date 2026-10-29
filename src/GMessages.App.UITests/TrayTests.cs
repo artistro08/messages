@@ -46,7 +46,7 @@ public sealed class TrayTests : UiTest
     }
 
     /// <summary>
-    /// Once paired, a left-click on the icon opens the main window, which shows Connected.
+    /// Once paired, a left-click on the icon opens the main window with its conversation list.
     /// </summary>
     /// <returns>A task for the test.</returns>
     [TestMethod]
@@ -55,7 +55,7 @@ public sealed class TrayTests : UiTest
         await PairAsync();
 
         Tray.LeftClick();
-        App.WaitForText("Main.Status", "Connected");
+        App.Find("Main.ConversationList");
         Assert.AreEqual(AppInfo.DisplayName, AppDriver.SafeName(App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout)));
         AssertTitleBar("Main.TitleBar", AppInfo.DisplayName);
     }

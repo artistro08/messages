@@ -1,36 +1,199 @@
 <Window
     x:Class="GMessages.App.Views.MainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:GMessages.App.Views.Controls"
+    xmlns:local="using:GMessages.App.Views"
+    xmlns:main="using:GMessages.Presentation.Main">
 
     <!-- Mica Background -->
     <Window.SystemBackdrop>
         <MicaBackdrop />
     </Window.SystemBackdrop>
 
-    <!-- Placeholder: Plan 3 replaces this with the conversations -->
-    <Grid x:Name="RootGrid" RowDefinitions="Auto,*">
+    <Grid
+        x:Name="RootGrid"
+        RowDefinitions="Auto,*"
+        SizeChanged="OnRootSizeChanged">
 
-        <!-- Title Bar: the title is set from code; Plan 3 adds the menu button and profile picture here -->
+        <!-- Title Bar: ☰ on the left, the title from code, the profile picture on the right -->
         <TitleBar
             x:Name="AppTitleBar"
             AutomationProperties.AutomationId="Main.TitleBar">
             <TitleBar.IconSource>
                 <ImageIconSource ImageSource="ms-appx:///Assets/AppIcon.ico" />
             </TitleBar.IconSource>
+
+            <!-- Menu Button: collapses and expands the list -->
+            <TitleBar.LeftHeader>
+                <Button
+                    Width="40"
+                    Height="32"
+                    Margin="4,0,0,0"
+                    Padding="0"
+                    AutomationProperties.AutomationId="Main.MenuButton"
+                    AutomationProperties.Name="Show or hide conversations"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Click="OnMenuClick">
+                    <FontIcon FontSize="16" Glyph="&#xE700;" />
+                </Button>
+            </TitleBar.LeftHeader>
+
+            <!-- Profile Button: Spam & blocked, Settings and Unpair -->
+            <TitleBar.RightHeader>
+                <Button
+                    Height="32"
+                    Margin="0,0,4,0"
+                    Padding="4,0"
+                    AutomationProperties.AutomationId="Main.ProfileButton"
+                    AutomationProperties.Name="Account"
+                    Background="Transparent"
+                    BorderThickness="0">
+                    <PersonPicture Width="28" Height="28" />
+                    <Button.Flyout>
+                        <MenuFlyout Placement="BottomEdgeAlignedRight">
+                            <MenuFlyoutItem
+                                x:Name="ProfileSpamBlocked"
+                                AutomationProperties.AutomationId="Main.Profile.SpamBlocked"
+                                Click="OnSpamBlockedClick">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE8F8;" />
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            <MenuFlyoutItem
+                                AutomationProperties.AutomationId="Main.Profile.Settings"
+                                Click="OnSettingsClick"
+                                Text="Settings">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE713;" />
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            <MenuFlyoutItem
+                                AutomationProperties.AutomationId="Main.Profile.Unpair"
+                                Click="OnUnpairClick"
+                                Text="Unpair">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE8C9;" />
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                        </MenuFlyout>
+                    </Button.Flyout>
+                </Button>
+            </TitleBar.RightHeader>
         </TitleBar>
 
-        <StackPanel
-            Grid.Row="1"
-            Padding="24"
-            HorizontalAlignment="Center"
-            VerticalAlignment="Center"
-            Spacing="8">
-            <TextBlock
-                x:Name="StatusText"
-                HorizontalAlignment="Center"
-                AutomationProperties.AutomationId="Main.Status"
-                Style="{StaticResource BodyStrongTextBlockStyle}" />
-        </StackPanel>
+        <!-- Panes: wide puts the list and the chat side by side, narrow stretches whichever one shows across both columns -->
+        <Grid Grid.Row="1" ColumnDefinitions="Auto,*">
+
+            <!-- List Pane -->
+            <Grid
+                x:Name="ListPane"
+                Grid.ColumnSpan="{x:Bind local:MainWindow.PaneSpan(ViewModel.IsNarrow), Mode=OneWay}"
+                Width="{x:Bind local:MainWindow.ListWidth(ViewModel.IsNarrow), Mode=OneWay}"
+                RowDefinitions="Auto,Auto,*"
+                Visibility="{x:Bind local:MainWindow.ListVisibility(ViewModel.IsListCollapsed, ViewModel.ShowChatPane), Mode=OneWay}">
+
+                <!-- Inbox Header: Start chat -->
+                <Button
+                    Margin="12,8,12,8"
+                    AutomationProperties.AutomationId="Main.StartChat"
+                    Click="OnStartChatClick"
+                    Style="{StaticResource AccentButtonStyle}"
+                    Visibility="{x:Bind local:MainWindow.HiddenIf(ViewModel.IsSpamView), Mode=OneWay}">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon FontSize="16" Glyph="&#xE8BD;" />
+                        <TextBlock x:Name="StartChatText" />
+                    </StackPanel>
+                </Button>
+
+                <!-- Spam Header: back and the list title -->
+                <StackPanel
+                    Margin="4,8,12,8"
+                    Orientation="Horizontal"
+                    Spacing="4"
+                    Visibility="{x:Bind ViewModel.IsSpamView, Mode=OneWay}">
+                    <Button
+                        Width="40"
+                        Height="36"
+                        Padding="0"
+                        AutomationProperties.AutomationId="Main.SpamBack"
+                        AutomationProperties.Name="Back"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Click="OnSpamBackClick">
+                        <FontIcon FontSize="16" Glyph="&#xE72B;" />
+                    </Button>
+                    <TextBlock
+                        x:Name="ListTitle"
+                        VerticalAlignment="Center"
+                        AutomationProperties.AutomationId="Main.ListTitle"
+                        Style="{StaticResource SubtitleTextBlockStyle}" />
+                </StackPanel>
+
+                <!-- Connection Banner: hidden while connected -->
+                <TextBlock
+                    Grid.Row="1"
+                    Margin="16,0,16,8"
+                    AutomationProperties.AutomationId="Main.Status"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Text="{x:Bind ViewModel.StatusBanner, Mode=OneWay}"
+                    Visibility="{x:Bind local:MainWindow.ShownIfText(ViewModel.StatusBanner), Mode=OneWay}" />
+
+                <!-- Conversations -->
+                <ListView
+                    x:Name="ConversationList"
+                    Grid.Row="2"
+                    AutomationProperties.AutomationId="Main.ConversationList"
+                    ContainerContentChanging="OnContainerContentChanging"
+                    SelectionChanged="OnSelectionChanged"
+                    SelectionMode="Single">
+                    <ListView.ItemTemplate>
+                        <DataTemplate x:DataType="main:ConversationRowViewModel">
+                            <controls:ConversationRow Row="{x:Bind}" />
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+            </Grid>
+            <!-- /List Pane -->
+
+            <!-- Chat Pane: the empty state until something opens; Task 10 fills the conversation and Start chat -->
+            <Grid
+                x:Name="ChatPane"
+                Grid.Column="{x:Bind local:MainWindow.ChatColumn(ViewModel.IsNarrow), Mode=OneWay}"
+                Grid.ColumnSpan="{x:Bind local:MainWindow.PaneSpan(ViewModel.IsNarrow), Mode=OneWay}"
+                Visibility="{x:Bind local:MainWindow.ChatVisibility(ViewModel.IsNarrow, ViewModel.ShowChatPane, ViewModel.IsListCollapsed), Mode=OneWay}">
+
+                <!-- Empty State: a large chat glyph above the prompt -->
+                <StackPanel
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Spacing="16"
+                    Visibility="{x:Bind local:MainWindow.EmptyStateVisibility(ViewModel.SelectedConversationId, ViewModel.IsStartChatOpen), Mode=OneWay}">
+                    <FontIcon
+                        FontSize="96"
+                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                        Glyph="&#xE8BD;" />
+                    <TextBlock
+                        x:Name="EmptyStateText"
+                        HorizontalAlignment="Center"
+                        AutomationProperties.AutomationId="Main.EmptyState"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Style="{StaticResource SubtitleTextBlockStyle}" />
+                </StackPanel>
+
+                <!-- Chat Placeholder: the open conversation's name until Task 10's chat pane replaces it -->
+                <TextBlock
+                    Margin="24,16"
+                    AutomationProperties.AutomationId="Chat.Header"
+                    Style="{StaticResource SubtitleTextBlockStyle}"
+                    Text="{x:Bind ViewModel.Chat.Title, Mode=OneWay, FallbackValue=''}"
+                    Visibility="{x:Bind local:MainWindow.ShownIfText(ViewModel.SelectedConversationId), Mode=OneWay}" />
+            </Grid>
+            <!-- /Chat Pane -->
+        </Grid>
+
+        <!-- Unpair Confirm -->
+        <controls:UnpairDialog x:Name="UnpairDialog" Grid.Row="1" />
     </Grid>
 </Window>

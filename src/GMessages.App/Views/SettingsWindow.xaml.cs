@@ -2,7 +2,6 @@ using GMessages.Presentation;
 using GMessages.Presentation.Settings;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
 
 namespace GMessages.App.Views;
 
@@ -76,13 +75,7 @@ public sealed partial class SettingsWindow : Window
     private async void OnUnpairClick(object sender, RoutedEventArgs e)
     {
         UnpairDialog.RequestedTheme = RootGrid.RequestedTheme;
-        if (await UnpairDialog.ShowAsync() != ContentDialogResult.Primary)
-        {
-            return;
-        }
-
-        await ViewModel.UnpairAsync();
-        if (!_closed)
+        if (await UnpairDialog.ConfirmAndUnpairAsync(ViewModel) && !_closed)
         {
             Close();
         }

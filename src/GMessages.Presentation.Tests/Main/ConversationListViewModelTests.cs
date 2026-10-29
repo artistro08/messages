@@ -33,6 +33,16 @@ public sealed class ConversationListViewModelTests
     }
 
     [TestMethod]
+    public void Row_ToString_NamesAndFlagsUnread()
+    {
+        ConversationInfo read   = ConversationInfo.From(MainRig.Conv("a", "Ann"));
+        ConversationInfo unread = read with { Unread = true };
+
+        Assert.AreEqual("Ann", new ConversationRowViewModel(read, MainRig.Now).ToString());
+        Assert.AreEqual("Ann, Unread", new ConversationRowViewModel(unread, MainRig.Now).ToString());
+    }
+
+    [TestMethod]
     public async Task LiveUpdate_MovesRowToTop_UpdatesSnippet()
     {
         using var rig = new MainRig();
