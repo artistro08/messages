@@ -5,7 +5,7 @@ using Microsoft.Extensions.Logging;
 namespace GMessages.Presentation.Logging;
 
 /// <summary>
-/// Writes log lines to {DisplayName}.log and keeps the newest files. Ported from Magic Buds.
+/// Writes log lines to {DisplayName}.log (or another base name) and keeps the newest files. Ported from Magic Buds.
 /// </summary>
 /// <remarks>
 /// When the current file would pass <c>maxFileBytes</c>, it becomes {DisplayName}.1.log, the
@@ -14,8 +14,7 @@ namespace GMessages.Presentation.Logging;
 /// </remarks>
 public sealed class RollingFileLoggerProvider : ILoggerProvider
 {
-    private static readonly string BaseName = AppInfo.DisplayName;
-
+    private readonly string _baseName;
     private readonly string _directory;
     private readonly LogLevelSwitch _levelSwitch;
     private readonly long _maxFileBytes;
@@ -31,8 +30,10 @@ public sealed class RollingFileLoggerProvider : ILoggerProvider
     /// <param name="timeProvider">Clock for line timestamps.</param>
     /// <param name="maxFileBytes">Size at which the current file rolls.</param>
     /// <param name="maxFiles">Total files kept, including the current one.</param>
-    public RollingFileLoggerProvider(string directory, LogLevelSwitch levelSwitch, TimeProvider timeProvider, long maxFileBytes = 1_048_576, int maxFiles = 5)
+    /// <param name="baseName">The file name without <c>.log</c>; null is <see cref="AppInfo.DisplayName"/>. The sign-in helper uses its own.</param>
+    public RollingFileLoggerProvider(string directory, LogLevelSwitch levelSwitch, TimeProvider timeProvider, long maxFileBytes = 1_048_576, int maxFiles = 5, string? baseName = null)
     {
+        _baseName = baseName ?? AppInfo.DisplayName;
         _directory = directory;
         _levelSwitch = levelSwitch;
         _timeProvider = timeProvider;
@@ -44,7 +45,7 @@ public sealed class RollingFileLoggerProvider : ILoggerProvider
     /// <summary>
     /// The file being written.
     /// </summary>
-    public string CurrentFilePath => Path.Combine(_directory, BaseName + ".log");
+    public string CurrentFilePath => Path.Combine(_directory, _baseName + ".log");
 
     /// <inheritdoc />
     public ILogger CreateLogger(string categoryName) => new RollingFileLogger(this, categoryName);
@@ -89,7 +90,7 @@ public sealed class RollingFileLoggerProvider : ILoggerProvider
         }
     }
 
-    private string NumberedPath(int number) => Path.Combine(_directory, $"{BaseName}.{number}.log");
+    private string NumberedPath(int number) => Path.Combine(_directory, $"{_baseName}.{number}.log");
 
     private void RollIfNeeded(int incomingBytes)
     {

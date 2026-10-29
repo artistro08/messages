@@ -10,7 +10,7 @@ namespace GMessages.Presentation.Pairing;
 /// </summary>
 public enum PairingStep
 {
-    /// <summary>The Google sign-in page is showing.</summary>
+    /// <summary>The Google sign-in window (the sign-in helper) is open.</summary>
     SigningIn,
 
     /// <summary>Signed in; waiting for the phone to answer before the emoji is known.</summary>
@@ -52,6 +52,9 @@ public sealed class PairingViewModel : INotifyPropertyChanged
     private const string NotAcceptedText = "Google didn't accept the sign-in. Try again.";
     private const string GenericText     = "Something went wrong while pairing. Try again.";
 
+    // Sign-In Window Closed Without Signing In (Controller Copy; The Owner May Edit It)
+    private const string SignInClosedText = "Sign-in was closed. Try again.";
+
     private static readonly PropertyChangedEventArgs AllChanged = new(string.Empty);
 
     private readonly ConnectionController _controller;
@@ -91,7 +94,7 @@ public sealed class PairingViewModel : INotifyPropertyChanged
     /// <summary>Gets why Google signed the user out, shown above the sign-in; null for a first pairing.</summary>
     public string? SignedOutReason { get; }
 
-    /// <summary>Gets whether the sign-in page shows.</summary>
+    /// <summary>Gets whether the sign-in window is open (the pairing window says to use it).</summary>
     public bool IsSigningIn => Step == PairingStep.SigningIn;
 
     /// <summary>Gets whether the window waits for the phone before the emoji is known.</summary>
@@ -158,10 +161,16 @@ public sealed class PairingViewModel : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Shows the generic failure when the sign-in page itself can't load (for example, no WebView2 runtime).
+    /// Shows the generic failure when the sign-in can't run (the helper didn't start, crashed or sent a bad message).
     /// </summary>
     /// <remarks>Call on the UI thread.</remarks>
     public void SignInFailed() => Update(PairingStep.Failed, null, GenericText);
+
+    /// <summary>
+    /// Shows that the sign-in window was closed without signing in, with Try again.
+    /// </summary>
+    /// <remarks>Call on the UI thread.</remarks>
+    public void SignInClosed() => Update(PairingStep.Failed, null, SignInClosedText);
 
     /// <summary>
     /// Goes back to the sign-in after a failure.
