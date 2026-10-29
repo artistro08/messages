@@ -420,6 +420,48 @@ public sealed class ChatStoreTests
     }
 
     [TestMethod]
+    public async Task LoadMessages_NoCursorFromPhone_OlderCursorIsTheOldestMessage()
+    {
+        // Google Usually Sends No Cursor; Like mautrix-gmessages, The Oldest Message (Its Time In Milliseconds) Is One
+        using var rig = new Rig();
+        rig.Client.MessagesPage = new ListMessagesResponse();
+        rig.Client.MessagesPage.Messages.Add(Msg("m3", "c1", ts: 3_000_000));
+        rig.Client.MessagesPage.Messages.Add(Msg("m2", "c1", ts: 2_000_000));
+
+        (_, Cursor? older) = await rig.Store.LoadMessagesAsync("c1", null, Ct);
+
+        Assert.AreEqual("m2", older?.LastItemID);
+        Assert.AreEqual(2_000, older?.LastItemTimestamp);
+    }
+
+    [TestMethod]
+    public async Task LoadMessages_EmptyPage_NoOlderCursor()
+    {
+        using var rig = new Rig();
+        rig.Client.MessagesPage = new ListMessagesResponse();
+
+        (_, Cursor? older) = await rig.Store.LoadMessagesAsync("c1", new Cursor { LastItemID = "m1", LastItemTimestamp = 1_000 }, Ct);
+
+        Assert.IsNull(older);
+    }
+
+    [TestMethod]
+    public async Task LoadMessages_OlderPage_DropsTheCursorMessageAndNewer()
+    {
+        // The Phone Can Answer With The Cursor's Own Message, Or Newer Ones, Already Shown Below
+        using var rig = new Rig();
+        rig.Client.MessagesPage = new ListMessagesResponse();
+        rig.Client.MessagesPage.Messages.Add(Msg("m3", "c1", ts: 3_000_000));
+        rig.Client.MessagesPage.Messages.Add(Msg("m2", "c1", ts: 2_000_000));
+        rig.Client.MessagesPage.Messages.Add(Msg("m1", "c1", ts: 1_000_000));
+
+        (IReadOnlyList<ChatMessage> messages, Cursor? older) = await rig.Store.LoadMessagesAsync("c1", new Cursor { LastItemID = "m2", LastItemTimestamp = 2_000 }, Ct);
+
+        Assert.AreEqual("m1", Ids(messages));
+        Assert.AreEqual("m1", older?.LastItemID);
+    }
+
+    [TestMethod]
     public async Task LoadFolder_FillsCache_AndAsks25()
     {
         using var rig = new Rig();

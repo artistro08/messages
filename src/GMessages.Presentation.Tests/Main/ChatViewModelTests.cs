@@ -580,25 +580,27 @@ public sealed class ChatViewModelTests
     }
 
     [TestMethod]
-    public async Task LoadOlder_InsertsAboveInOrder_StopsWhenCursorRunsOut()
+    public async Task LoadOlder_InsertsAboveInOrder_StopsAtAnEmptyPage()
     {
         using var rig = new MainRig();
         using ChatViewModel chat = NewChat(rig, null, Msg("m3", "three"), Msg("m4", "four"));
         rig.Client.MessagesPage.Cursor = new Cursor { LastItemID = "older" };
         await chat.LoadAsync();
 
-        // The Older Page Is Newest First, With No Cursor Left
+        // The Older Page Is Newest First, With No Cursor (As Google Sends It), Then An Empty Page: The End
         var older = new ListMessagesResponse();
         older.Messages.Add(Msg("m2", "two"));
         older.Messages.Add(Msg("m1", "one"));
         rig.Client.MessagePages.Enqueue(older);
+        rig.Client.MessagePages.Enqueue(new ListMessagesResponse());
         int fetches = rig.Client.FetchCount;
 
         await chat.LoadOlderAsync();
         await chat.LoadOlderAsync();
+        await chat.LoadOlderAsync();
 
         Assert.AreEqual("one,two,three,four", string.Join(",", chat.Messages.Select(b => b.Text)));
-        Assert.AreEqual(fetches + 1, rig.Client.FetchCount);
+        Assert.AreEqual(fetches + 2, rig.Client.FetchCount);
     }
 
     [TestMethod]

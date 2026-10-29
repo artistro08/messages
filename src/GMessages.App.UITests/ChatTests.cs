@@ -221,6 +221,19 @@ public sealed class ChatTests : UiTest
         Wait.Until(() => scroll.VerticalScrollPercent.ValueOrDefault >= 99, AppDriver.DefaultTimeout, () => $"Scroll to bottom left the list at {scroll.VerticalScrollPercent.ValueOrDefault:0}%.");
         Wait.Until(() => !down.Properties.IsKeyboardFocusable.ValueOrDefault, AppDriver.DefaultTimeout, () => "Scroll to bottom stayed at the bottom of the chat.");
 
+        // Reopened, The Window Shows The Same Chat From What The App Kept: Scrolling Up Works There Too
+        CloseMainWindow();
+        Tray.LeftClick();
+        Wait.Until(() => Bubbles().Count >= ChatStore.PageSize, AppDriver.DefaultTimeout, () => $"The reopened chat showed {Bubbles().Count} bubbles.");
+        int shown = Bubbles().Count;
+        scroll = App.Find("Chat.Messages").Patterns.Scroll.Pattern;
+        down   = App.Find("Chat.ScrollToBottom");
+        Wait.Until(() =>
+        {
+            scroll.SetScrollPercent(-1, 0);
+            return Bubbles().Count > shown && down.Properties.IsKeyboardFocusable.ValueOrDefault;
+        }, AppDriver.DefaultTimeout, () => $"In the reopened chat, scrolling up left {Bubbles().Count} bubbles (was {shown}) and Scroll to bottom showed: {down.Properties.IsKeyboardFocusable.ValueOrDefault}.");
+
         Message Line(string text)
         {
             var message = new Message

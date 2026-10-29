@@ -166,8 +166,14 @@ public sealed partial class ChatStore : IDisposable
 
         ListMessagesResponse response = await client.FetchMessagesAsync(conversationId, PageSize, cursor, ct).ConfigureAwait(false);
 
-        // The Phone Answers Newest First
-        List<ChatMessage> messages = [.. response.Messages.Select(ChatMessage.From).Reverse()];
+        // The Phone Answers Newest First. An Older Page Can Hold The Cursor's Own Message Or Newer Ones, Already Shown Below,
+        // So Those Are Dropped (As mautrix-gmessages Does: pkg/connector/backfill.go)
+        List<Message> page = [.. response.Messages.Where(m => cursor is null || (m.MessageID != cursor.LastItemID && (cursor.LastItemTimestamp <= 0 || m.Timestamp / 1000 < cursor.LastItemTimestamp)))];
+        List<ChatMessage> messages = [.. page.Select(ChatMessage.From).Reverse()];
+
+        // Google Usually Sends No Cursor: The Next Older Page Then Starts At This Page's Oldest Message (Its Time In
+        // Milliseconds), As mautrix-gmessages Does. An Empty Page Means There Are No Older Messages
+        Cursor? older = response.Cursor ?? (page.Count > 0 ? new Cursor { LastItemID = page[^1].MessageID, LastItemTimestamp = page[^1].Timestamp / 1000 } : null);
 
         // The Newest Page Is What Reopening The Chat Shows
         if (cursor is null)
@@ -175,7 +181,7 @@ public sealed partial class ChatStore : IDisposable
             CachePage(conversationId, messages);
         }
 
-        return (messages, response.Cursor);
+        return (messages, older);
     }
 
     /// <summary>

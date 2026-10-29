@@ -129,7 +129,8 @@ public sealed class FakeChats
         }
     }
 
-    // One Page Of Messages, Newest First, After The Cursor; The Returned Cursor Is Null On The Last Page
+    // One Page Of Messages, Newest First, After The Cursor. Like Google, It Sends No Cursor Back: The App Must Page On
+    // From The Oldest Message It Got, And An Empty Page Is The End
     internal (List<Message> Page, Cursor? Next) Page(string conversationId, long count, Cursor? cursor)
     {
         lock (_lock)
@@ -142,8 +143,7 @@ public sealed class FakeChats
 
             List<Message> rest = [.. newest_first];
             List<Message> page = count > 0 ? [.. rest.Take((int)count)] : rest;
-            Cursor? next       = page.Count < rest.Count ? new Cursor { LastItemID = page[^1].MessageID, LastItemTimestamp = page[^1].Timestamp } : null;
-            return ([.. page.Select(m => m.Clone())], next);
+            return ([.. page.Select(m => m.Clone())], null);
         }
     }
 
