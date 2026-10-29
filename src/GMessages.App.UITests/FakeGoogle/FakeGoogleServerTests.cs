@@ -41,7 +41,7 @@ public sealed class FakeGoogleServerTests
             Auth = AuthData.CreateNew();
             Auth.Cookies.Set(FakeGoogleServer.SignInCookies);
             SessionPath = Path.Combine(Path.GetTempPath(), "fake-google-test-" + Guid.NewGuid().ToString("N") + ".bin");
-            Endpoints   = new GmEndpoints(Server.BaseUrl, Server.BaseUrl, Server.BaseUrl);
+            Endpoints   = new GmEndpoints(Server.BaseUrl, Server.BaseUrl, Server.BaseUrl) { AccountsBase = Server.BaseUrl };
             Client      = GmClient.Create(Auth, new SessionStore(SessionPath), Endpoints, TimeProvider.System, NullLoggerFactory.Instance);
             Client.EventRaised += e =>
             {

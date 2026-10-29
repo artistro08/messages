@@ -96,6 +96,15 @@ public sealed partial class LongPollLoop(
     public bool IsConnected => Volatile.Read(ref _connected) != 0;
 
     /// <summary>
+    /// Gets or inits the cookie rotator that keeps <c>__Secure-1PSIDTS</c> fresh while logged in, or null for none.
+    /// </summary>
+    /// <remarks>
+    /// C#-only (owner-approved spec exception). A logged-in run checks it before each connect, so the first request
+    /// after a start or resume goes out with a fresh cookie, and runs its 10 minute loop until the run ends.
+    /// </remarks>
+    public CookieRotator? Rotator { get; init; }
+
+    /// <summary>
     /// Gets whether a run is active, from the start of <see cref="RunAsync"/> until it ends (reconnects included).
     /// </summary>
     internal bool IsRunning
@@ -154,7 +163,7 @@ public sealed partial class LongPollLoop(
             dispatcher.Pinger = pinger;
             rpc.PhoneSlow     += OnPhoneSlow;
             _pinger            = pinger;
-            background         = Task.WhenAll(pinger.RunAsync(stop), FlushAcksLoopAsync(stop));
+            background         = Task.WhenAll(pinger.RunAsync(stop), FlushAcksLoopAsync(stop), Rotator?.RunAsync(stop) ?? Task.CompletedTask);
         }
 
         dispatcher.StopToken    = stop;
@@ -275,6 +284,12 @@ public sealed partial class LongPollLoop(
 
             try
             {
+                // Rotate Cookies When Due (First Request After A Start Or Resume)
+                if (loggedIn && Rotator is not null)
+                {
+                    await Rotator.RotateIfDueAsync(stop).ConfigureAwait(false);
+                }
+
                 // Refresh Token
                 Exception? error = null;
                 try

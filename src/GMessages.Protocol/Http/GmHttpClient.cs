@@ -188,6 +188,40 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
         return await ReadTypedAsync<T>(res, ct).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Sends a request that is not a Messages call (Google's cookie rotation) with the jar's cookies, and absorbs the
+    /// <c>Set-Cookie</c> values it returns.
+    /// </summary>
+    /// <remarks>
+    /// The caller builds the request with its own headers; only the <c>Cookie</c> header is added (no relay headers,
+    /// no SAPISIDHASH). The answer's cookies go through <see cref="CookieJar.UpdateFrom"/> like every other response,
+    /// so the session is saved. Not retried. The caller owns and must dispose the response.
+    /// </remarks>
+    /// <param name="request">The request to send.</param>
+    /// <param name="ct">Cancels the request.</param>
+    /// <returns>The response, whatever its status.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="request"/> is null.</exception>
+    /// <exception cref="HttpRequestException">The request failed before any response arrived.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="ct"/> was canceled.</exception>
+    public async Task<HttpResponseMessage> SendWithCookiesAsync(HttpRequestMessage request, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        cookies.ApplyTo(request, time.GetUtcNow().ToUnixTimeSeconds(), withAuthorization: false);
+        HttpResponseMessage res = await http.SendAsync(request, ct).ConfigureAwait(false);
+        cookies.UpdateFrom(res);
+        return res;
+    }
+
+    /// <summary>
+    /// Describes the cookies a response sets by name and expiry, never by value.
+    /// </summary>
+    /// <remarks>The same text as the <c>Cookies set by</c> diagnostics, for example <c>SIDCC (expires 2027-10-29T12:00:00Z)</c>.</remarks>
+    /// <param name="res">The response to read.</param>
+    /// <param name="now">The current time, for <c>Max-Age</c>.</param>
+    /// <returns>The names with expiry, comma separated; empty when the response sets none.</returns>
+    public static string DescribeSetCookies(HttpResponseMessage res, DateTimeOffset now) => string.Join(", ", ParseSetCookies(res, now).Select(c => $"{c.Name} ({c.When})"));
+
     // =========================================================================
     // HELPERS
     // =========================================================================
@@ -216,55 +250,15 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
     {
         try
         {
-            if (!res.Headers.TryGetValues("Set-Cookie", out IEnumerable<string>? lines))
-            {
-                return;
-            }
-
-            DateTimeOffset now = time.GetUtcNow();
-            var names          = new List<string>();
-            var signature      = new List<string>();
-            foreach (string line in lines)
-            {
-                string[] parts = line.Split(';');
-                int eq         = parts[0].IndexOf('=');
-                if (eq <= 0)
-                {
-                    continue;
-                }
-
-                // Max-Age Wins Over Expires, As In RFC 6265; The Raw Attribute Is What Tells Two Responses Apart
-                string when  = "session";
-                string stamp = "session";
-                foreach (string attr in parts.Skip(1).Select(a => a.Trim()))
-                {
-                    if (attr.StartsWith("Max-Age=", StringComparison.OrdinalIgnoreCase) && long.TryParse(attr[8..], NumberStyles.Integer, CultureInfo.InvariantCulture, out long seconds))
-                    {
-                        when  = FormatExpiry(() => now.AddSeconds(seconds));
-                        stamp = attr;
-                        break;
-                    }
-
-                    if (attr.StartsWith("Expires=", StringComparison.OrdinalIgnoreCase) && DateTimeOffset.TryParse(attr[8..], CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out DateTimeOffset date))
-                    {
-                        when  = FormatExpiry(() => date);
-                        stamp = attr;
-                    }
-                }
-
-                string name = parts[0][..eq].Trim();
-                names.Add($"{name} ({when})");
-                signature.Add($"{name}|{stamp}");
-            }
-
-            if (names.Count == 0)
+            List<(string Name, string When, string Stamp)> set = ParseSetCookies(res, time.GetUtcNow());
+            if (set.Count == 0)
             {
                 return;
             }
 
             // Only A Change Is News: The Same Cookie Names With The Same Expiry Attributes As Last Time Stay Quiet
-            string name_set = string.Join(",", signature.Select(x => x[..x.IndexOf('|', StringComparison.Ordinal)]).Order(StringComparer.Ordinal));
-            string current  = string.Join(",", signature.Order(StringComparer.Ordinal));
+            string name_set = string.Join(",", set.Select(c => c.Name).Order(StringComparer.Ordinal));
+            string current  = string.Join(",", set.Select(c => $"{c.Name}|{c.Stamp}").Order(StringComparer.Ordinal));
             lock (_loggedCookies)
             {
                 if (_loggedCookies.TryGetValue(name_set, out string? last) && last == current)
@@ -275,7 +269,7 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
                 _loggedCookies[name_set] = current;
             }
 
-            string line_text = string.Join(", ", names);
+            string line_text = string.Join(", ", set.Select(c => $"{c.Name} ({c.When})"));
             LogCookiesSet(log, path, line_text);
         }
         catch (Exception ex)
@@ -283,6 +277,49 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
             string error_type = ex.GetType().Name;
             LogCookiesNotLogged(log, error_type);
         }
+    }
+
+    // The Name, Readable Expiry And Raw Expiry Attribute Of Each Set-Cookie Line; Values Are Never Read
+    private static List<(string Name, string When, string Stamp)> ParseSetCookies(HttpResponseMessage res, DateTimeOffset now)
+    {
+        var set = new List<(string Name, string When, string Stamp)>();
+        if (!res.Headers.TryGetValues("Set-Cookie", out IEnumerable<string>? lines))
+        {
+            return set;
+        }
+
+        foreach (string line in lines)
+        {
+            string[] parts = line.Split(';');
+            int eq         = parts[0].IndexOf('=');
+            if (eq <= 0)
+            {
+                continue;
+            }
+
+            // Max-Age Wins Over Expires, As In RFC 6265; The Raw Attribute Is What Tells Two Responses Apart
+            string when  = "session";
+            string stamp = "session";
+            foreach (string attr in parts.Skip(1).Select(a => a.Trim()))
+            {
+                if (attr.StartsWith("Max-Age=", StringComparison.OrdinalIgnoreCase) && long.TryParse(attr[8..], NumberStyles.Integer, CultureInfo.InvariantCulture, out long seconds))
+                {
+                    when  = FormatExpiry(() => now.AddSeconds(seconds));
+                    stamp = attr;
+                    break;
+                }
+
+                if (attr.StartsWith("Expires=", StringComparison.OrdinalIgnoreCase) && DateTimeOffset.TryParse(attr[8..], CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out DateTimeOffset date))
+                {
+                    when  = FormatExpiry(() => date);
+                    stamp = attr;
+                }
+            }
+
+            set.Add((parts[0][..eq].Trim(), when, stamp));
+        }
+
+        return set;
     }
 
     // An Absurd Expiry (Out Of Range) Is Shown As Unknown Instead Of Throwing

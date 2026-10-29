@@ -148,6 +148,10 @@ public class GmClientTests
             sent = [.. rig.Handler.Requests];
         }
 
+        // C#-Only Cookie Rotation Goes First (Checked In CookieRotatorTests); The Rest Is Go's Connect
+        Assert.AreEqual(GmEndpoints.Production.RotateCookies.AbsoluteUri, sent[0].Url, "cookie rotation first");
+        sent = sent[1..];
+
         Assert.AreEqual(go_reqs.Length, sent.Length, "request count");
         for (int i = 0; i < go_reqs.Length; i++)
         {

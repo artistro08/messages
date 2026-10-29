@@ -35,7 +35,7 @@ internal static class TestHooks
     /// Every server address pointed at <see cref="EndpointBase"/>, else null (use the real servers).
     /// </summary>
     /// <remarks>Authentication resolves to <c>{base}/web/authentication</c>.</remarks>
-    public static GmEndpoints? Endpoints { get; } = Parsed.EndpointBase is { } b ? new GmEndpoints(b, b, b) : null;
+    public static GmEndpoints? Endpoints { get; } = Parsed.EndpointBase is { } b ? new GmEndpoints(b, b, b) { AccountsBase = b } : null;
 }
 #else
 /// <summary>

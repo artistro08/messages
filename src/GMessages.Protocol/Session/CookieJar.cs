@@ -74,8 +74,9 @@ public sealed class CookieJar
     /// </remarks>
     /// <param name="req">The request to modify.</param>
     /// <param name="unixSeconds">The current time in Unix seconds, used for the SAPISIDHASH.</param>
+    /// <param name="withAuthorization">False to send only the cookies, as a browser does outside Messages (cookie rotation).</param>
     /// <exception cref="ArgumentNullException"><paramref name="req"/> is null.</exception>
-    public void ApplyTo(HttpRequestMessage req, long unixSeconds)
+    public void ApplyTo(HttpRequestMessage req, long unixSeconds, bool withAuthorization = true)
     {
         ArgumentNullException.ThrowIfNull(req);
 
@@ -99,7 +100,7 @@ public sealed class CookieJar
         }
 
         // Authorization Header
-        if (sapisid is not null)
+        if (withAuthorization && sapisid is not null)
         {
             req.Headers.TryAddWithoutValidation("Authorization", SapisidHash("https://messages.google.com", sapisid, unixSeconds));
         }
