@@ -80,6 +80,12 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 924, Level = LogLevel.Information, Message = "Bubble animated in ({MessageId})")]
     public static partial void BubbleAnimatedIn(ILogger logger, string messageId);
 
+    [LoggerMessage(EventId = 925, Level = LogLevel.Information, Message = "Taskbar badge set to {Count}")]
+    public static partial void BadgeSet(ILogger logger, int count);
+
+    [LoggerMessage(EventId = 926, Level = LogLevel.Warning, Message = "Taskbar badge failed ({ErrorType} 0x{HResult:X8})")]
+    public static partial void BadgeFailed(ILogger logger, string errorType, int hResult);
+
     [LoggerMessage(EventId = 951,Level = LogLevel.Information, Message = "Test endpoint {Endpoint}, data folder {DataFolder}")]
     public static partial void TestEndpoint(ILogger logger, string endpoint, string dataFolder);
 }
