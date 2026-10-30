@@ -68,11 +68,11 @@ public sealed class ConversationActionTests : UiTest
     {
         await OpenListAsync();
 
-        // The Pointer Onto The Row, Then Onto The ⋮ (Hidden And 0 px Wide Until Then, So It Takes No Clicks)
+        // The Pointer Onto The Row, Then Onto The ⋮ (Collapsed Until Then, So It Takes No Clicks)
         System.Drawing.Rectangle row = App.Find("Row.c-ann").BoundingRectangle;
-        AutomationElement more       = App.Find("Row.More.c-ann");
         PointerInput.Hover(row);
-        PointerInput.Hover(ShownBounds(more));
+        AutomationElement more = ShownMore("Row.More.c-ann");
+        PointerInput.Hover(more.BoundingRectangle);
 
         // Settle Wait For The ⋮'s Fade In (167 ms), Which Turns On Its Clicks
         Thread.Sleep(500);
@@ -94,14 +94,14 @@ public sealed class ConversationActionTests : UiTest
         await OpenListAsync();
 
         AutomationElement row   = App.Find("Row.c-ann");
-        AutomationElement more  = App.Find("Row.More.c-ann");
         AutomationElement? name = null;
         Wait.Until(() => (name = AppDriver.Search(row, e => e.ControlType == ControlType.Text && AppDriver.SafeName(e) == "Ann Lee")) is not null,
             AppDriver.DefaultTimeout, () => "Ann's row shows no name.");
 
         // Name, Then Blank Space Left Of The ⋮ On The Lower Line (Under The Time, Where No Icon Shows)
         PointerInput.Hover(name!.BoundingRectangle);
-        System.Drawing.Rectangle more_rect = ShownBounds(more);
+        AutomationElement more             = ShownMore("Row.More.c-ann");
+        System.Drawing.Rectangle more_rect = more.BoundingRectangle;
         System.Drawing.Rectangle row_rect  = row.BoundingRectangle;
         PointerInput.Hover(new System.Drawing.Rectangle(more_rect.Left - 20, row_rect.Bottom - 16, 2, 2));
 
@@ -126,14 +126,13 @@ public sealed class ConversationActionTests : UiTest
 
         System.Drawing.Rectangle row = App.Find("Row.c-ann").BoundingRectangle;
         System.Drawing.Rectangle win = App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).BoundingRectangle;
-        AutomationElement more       = App.Find("Row.More.c-ann");
         PointerInput.Hover(row);
-        System.Drawing.Rectangle more_rect = ShownBounds(more);
+        System.Drawing.Rectangle more_rect = ShownMore("Row.More.c-ann").BoundingRectangle;
 
         PointerInput.LeaveLeft(win);
 
-        // A Click Where The ⋮ Was (It Takes No Space Once Hidden)
-        Thread.Sleep(500);
+        // A Click Where The ⋮ Was, Once It Has Collapsed
+        WaitForGone("Row.More.c-ann");
         FlaUI.Core.Input.Mouse.Click(new System.Drawing.Point(more_rect.X + (more_rect.Width / 2), more_rect.Y + (more_rect.Height / 2)));
 
         App.Find("Chat.Draft");
@@ -141,8 +140,8 @@ public sealed class ConversationActionTests : UiTest
     }
 
     /// <summary>
-    /// With no row hovered, Ann's time sits at the row's right edge (within the row's right padding) and her ⋮ takes no
-    /// space.
+    /// With no row hovered, Ann's time sits at the row's right edge (within the row's right padding) and her ⋮ is
+    /// collapsed (no space, and not in the UI Automation tree).
     /// </summary>
     /// <returns>A task for the test.</returns>
     [TestMethod]
@@ -153,10 +152,9 @@ public sealed class ConversationActionTests : UiTest
 
         System.Drawing.Rectangle row  = App.Find("Row.c-ann").BoundingRectangle;
         System.Drawing.Rectangle time = App.Find("Row.Time.c-ann").BoundingRectangle;
-        System.Drawing.Rectangle more = App.Find("Row.More.c-ann").BoundingRectangle;
 
         Assert.IsLessThanOrEqualTo(RowRightPadding, row.Right - time.Right, $"Ann's time ends at {time.Right}, not at the row's right edge ({row.Right}).");
-        Assert.AreEqual(0, more.Width, "The hidden ⋮ still takes space.");
+        Assert.IsNull(App.TryFind("Row.More.c-ann"), "The hidden ⋮ isn't collapsed.");
     }
 
     /// <summary>
@@ -177,7 +175,7 @@ public sealed class ConversationActionTests : UiTest
 
     /// <summary>
     /// Hovering Ann's row gives her ⋮ its space at the right edge and slides only her time left to make room; Team's
-    /// time stays put. Once the pointer leaves the window, Ann's time is back at the right edge and the ⋮ takes no space.
+    /// time stays put. Once the pointer leaves the window, the ⋮ collapses and Ann's time is back at the right edge.
     /// </summary>
     /// <returns>A task for the test.</returns>
     [TestMethod]
@@ -189,25 +187,22 @@ public sealed class ConversationActionTests : UiTest
         System.Drawing.Rectangle win  = App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).BoundingRectangle;
         AutomationElement ann_time    = App.Find("Row.Time.c-ann");
         AutomationElement team_time   = App.Find("Row.Time.c-team");
-        AutomationElement more        = App.Find("Row.More.c-ann");
         int ann_right                 = ann_time.BoundingRectangle.Right;
         int team_right                = team_time.BoundingRectangle.Right;
 
-        // Hovered: Only Ann's Time Slides Left, And The ⋮ Sits Past It
+        // Hovered: Only Ann's Time Slides Left, Until It Ends Where The ⋮ Starts
         PointerInput.Hover(row);
-        Thread.Sleep(500);
-        System.Drawing.Rectangle hovered_time = ann_time.BoundingRectangle;
-        System.Drawing.Rectangle hovered_more = more.BoundingRectangle;
-        Assert.IsGreaterThan(0, hovered_more.Width, "The hovered ⋮ takes no space.");
-        Assert.IsGreaterThanOrEqualTo(32, ann_right - hovered_time.Right,$"Ann's time only moved from {ann_right} to {hovered_time.Right}.");
-        Assert.IsGreaterThanOrEqualTo(hovered_time.Right, hovered_more.Left, $"The ⋮ ({hovered_more}) overlaps Ann's time ({hovered_time}).");
+        System.Drawing.Rectangle hovered_more = ShownMore("Row.More.c-ann").BoundingRectangle;
+        Wait.Until(() => ann_time.BoundingRectangle.Right <= hovered_more.Left, AppDriver.DefaultTimeout,
+            () => $"Ann's time ({ann_time.BoundingRectangle}) still overlaps the ⋮ ({hovered_more}).");
+        int hovered_right = ann_time.BoundingRectangle.Right;
+        Assert.IsGreaterThanOrEqualTo(32, ann_right - hovered_right, $"Ann's time only moved from {ann_right} to {hovered_right}.");
         Assert.IsLessThanOrEqualTo(1, Math.Abs(team_time.BoundingRectangle.Right - team_right), "Team's time moved while Ann's row was hovered.");
 
-        // Left: Back At The Right Edge
+        // Left: The ⋮ Collapses Once The Time Is Back At The Right Edge
         PointerInput.LeaveLeft(win);
-        Thread.Sleep(500);
+        WaitForGone("Row.More.c-ann");
         Assert.IsLessThanOrEqualTo(1, Math.Abs(ann_time.BoundingRectangle.Right - ann_right), "Ann's time didn't slide back.");
-        Assert.AreEqual(0, more.BoundingRectangle.Width, "The ⋮ still takes space after the pointer left.");
     }
 
     /// <summary>
@@ -666,12 +661,13 @@ public sealed class ConversationActionTests : UiTest
         Invoke(itemId);
     }
 
-    // A Row's ⋮ Bounds Once The Hover Has Given It Its Space (Until Then It's 0 px Wide, And UIA Reports It Empty)
-    private static System.Drawing.Rectangle ShownBounds(AutomationElement more)
+    // A Row's ⋮ Once The Hover Has Shown It (Collapsed Until Then, So Not Found) And Given It Its Space
+    private AutomationElement ShownMore(string automationId)
     {
-        System.Drawing.Rectangle bounds = default;
-        Wait.Until(() => (bounds = more.BoundingRectangle).Width > 0, AppDriver.DefaultTimeout, () => "The hovered row's ⋮ never took its space.");
-        return bounds;
+        AutomationElement? more = null;
+        Wait.Until(() => (more = App.TryFind(automationId)) is not null && more.BoundingRectangle.Width > 0, AppDriver.DefaultTimeout,
+            () => $"The hovered row's ⋮ ('{automationId}') never showed.");
+        return more!;
     }
 
     // Widens The List With Its Resize Edge (Six Steps Of 16 Effective Pixels), So A Row That Only Sizes To Its Text Ends

@@ -13,7 +13,7 @@ namespace GMessages.App.Views.Controls;
 /// </summary>
 /// <remarks>
 /// Unread rows draw the name, snippet and time bold. The row view model raises one change for every update, so every
-/// <c>x:Bind</c> here re-reads it. The ⋮ (<c>Row.More.{id}</c>) takes no space until the pointer is over the row; then it
+/// <c>x:Bind</c> here re-reads it. The ⋮ (<c>Row.More.{id}</c>) is collapsed until the pointer is over the row; then it
 /// takes 32 px at the right edge and fades in while this row's time and icons slide left (the <c>Hover</c> visual states
 /// on the root element, snapped when Windows animations are off). It raises <see cref="MoreRequested"/> when clicked.
 /// </remarks>
@@ -25,6 +25,9 @@ public sealed partial class ConversationRow : UserControl
 
     // Reads The Windows Animation Setting Live (Settings > Accessibility > Visual Effects)
     private static readonly UISettings Ui = new();
+
+    // How Far The Time Slides Left For The ⋮ (Its Width)
+    private const double MoreWidth = 32;
 
     // The Pointer Is Over The Row; The ⋮'s Menu Is Open, So The ⋮ Stays While The Pointer Is In The Menu
     private bool _pointerOver;
@@ -76,8 +79,31 @@ public sealed partial class ConversationRow : UserControl
         _keepShown = keep;
         if (!keep && !_pointerOver)
         {
-            VisualStateManager.GoToState(this, "Hidden", Ui.AnimationsEnabled);
+            HideMore(Ui.AnimationsEnabled);
         }
+    }
+
+    // =========================================================================
+    // HOVER STATES
+    // =========================================================================
+
+    // Shows The ⋮. From Rest It Takes Its Space At Once, So The Time Starts Where It Was (32 px Right Of Its New Spot) And
+    // Slides Left; Mid Slide-Back The ⋮ Still Has Its Space, So The Slide Just Turns Around From Where The Time Is
+    private void ShowMore()
+    {
+        if (MoreButton.Visibility == Visibility.Collapsed)
+        {
+            TimeShift.X = MoreWidth;
+        }
+
+        VisualStateManager.GoToState(this, "Shown", Ui.AnimationsEnabled);
+    }
+
+    // Hides The ⋮: The Time Slides Back From Where It Is, And Rests At 0 Once The ⋮ Collapses
+    private void HideMore(bool useTransitions)
+    {
+        TimeShift.X = 0;
+        VisualStateManager.GoToState(this, "Hidden", useTransitions);
     }
 
     // =========================================================================
@@ -90,13 +116,13 @@ public sealed partial class ConversationRow : UserControl
         var view          = (ConversationRow)d;
         view._pointerOver = false;
         view._keepShown   = false;
-        VisualStateManager.GoToState(view, "Hidden", false);
+        view.HideMore(false);
     }
 
     private void OnPointerEntered(object sender, PointerRoutedEventArgs e)
     {
         _pointerOver = true;
-        VisualStateManager.GoToState(this, "Shown", Ui.AnimationsEnabled);
+        ShowMore();
     }
 
     // The Pointer Left The Row. Moving Between The Name, Avatar And Icons Raises No Exit Here (Checked In The UI Tests),
@@ -107,7 +133,7 @@ public sealed partial class ConversationRow : UserControl
         _pointerOver = false;
         if (!_keepShown)
         {
-            VisualStateManager.GoToState(this, "Hidden", Ui.AnimationsEnabled);
+            HideMore(Ui.AnimationsEnabled);
         }
     }
 
