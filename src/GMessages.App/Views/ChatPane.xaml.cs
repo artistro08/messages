@@ -224,7 +224,6 @@ public sealed partial class ChatPane : UserControl
 
             // Ready To Type: The Message Box Takes Focus Once The Pane Shows (A Turn Later; A Hidden Box Can't Take It). This
             // Is Focus Inside The Window Only: It Never Activates The Window Or Takes The Foreground, So A Window Opened In The
-            // Background Stays There, And Shows The Cursor In The Box Once The Person Brings It Up
             // Background Stays There, And Shows The Cursor In The Box Once The Person Brings It Up. Browsing The List With
             // The Arrow Keys Opens Each Chat But Keeps The Focus On The List
             bool keep_focus = pane._keepFocus;

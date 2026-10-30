@@ -69,6 +69,9 @@ public sealed partial class ChatsView : UserControl
     // The Rows On Show, Watched So A Moved Open Row Gets Its Highlight Back
     private ObservableCollection<ConversationRowViewModel>? _shownRows;
 
+    // A Navigation Key In The List Is Moving Its Selection (See OnListPreviewKeyDown)
+    private bool _selectingWithKeys;
+
     // The List's Width Beside The Chat (Saved Or Default), And What It Was When A Resize Started
     private double _listWidth;
     private double? _widthAtResize;
@@ -93,6 +96,7 @@ public sealed partial class ChatsView : UserControl
         // Behavior
         ViewModel.PropertyChanged += OnViewModelChanged;
         ConversationList.AddHandler(KeyDownEvent, new KeyEventHandler(OnListKeyDown), handledEventsToo: true);
+        ConversationList.PreviewKeyDown += OnListPreviewKeyDown;
         ShowCurrentList();
         _ = ViewModel.Inbox.LoadAsync();
     }
@@ -310,14 +314,30 @@ public sealed partial class ChatsView : UserControl
             return;
         }
 
-        // Arrowing Through The List Opens Each Chat But Keeps The Focus On The List; A Click (Or Anything Else) Moves It To
-        // The Message Box
-        if (IsBrowsingWithKeys())
+        // Arrowing Through The List Opens Each Chat But Keeps The Focus On The List; A Click, A Shortcut, A Toast, Start Chat
+        // Or A Screen Reader's Select Moves It To The Message Box
+        if (_selectingWithKeys)
         {
+            _selectingWithKeys = false;
             ChatView.KeepFocusOnNextOpen();
         }
 
         ViewModel.Select(row.Id);
+    }
+
+    // A Navigation Key Pressed In The List (Before The List Moves Its Selection): The Selection Change It Makes Keeps The
+    // Focus On The List. The Mark Is Dropped Once The Key Is Done (A Turn Later), So A Key That Moved Nothing (The End Of
+    // The List) Leaves No Mark For The Next Click
+    private void OnListPreviewKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.Key is not (VirtualKey.Up or VirtualKey.Down or VirtualKey.Home or VirtualKey.End or VirtualKey.PageUp or VirtualKey.PageDown
+            or VirtualKey.GamepadDPadUp or VirtualKey.GamepadDPadDown))
+        {
+            return;
+        }
+
+        _selectingWithKeys = true;
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => _selectingWithKeys = false);
     }
 
     // Enter On A Row Moves To The Open Chat's Message Box (The Arrow Keys Opened It But Left The Focus Here). Caught Even
