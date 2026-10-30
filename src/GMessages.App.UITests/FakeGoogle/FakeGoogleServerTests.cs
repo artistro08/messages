@@ -694,4 +694,59 @@ public sealed class FakeGoogleServerTests
         rig.Server.Phone.PushIncoming("c-ann", "Now");
         Assert.IsFalse(WaitForEvent<MessageReceived>(rig.Events, e => e.Message.MessageInfo[0].MessageContent.Content == "Now", "live message").IsOld);
     }
+
+    // =========================================================================
+    // MEDIA
+    // =========================================================================
+
+    /// <summary>
+    /// A file uploaded through the fake server downloads back as the same bytes, and the seeded photo in c-ann
+    /// downloads as the blue PNG.
+    /// </summary>
+    [TestMethod]
+    public async Task Media_UploadThenDownload_RoundTrips()
+    {
+        await using Rig rig = await PairedAsync();
+        byte[] plain = new byte[70000];
+        Random.Shared.NextBytes(plain);
+
+        // Upload, Then Download
+        MediaContent uploaded = await rig.Client.UploadMediaAsync(plain, "file.bin", "application/octet-stream", null, CancellationToken.None).WaitAsync(HangGuard);
+        byte[] downloaded     = await rig.Client.DownloadMediaAsync(uploaded.MediaID, uploaded.DecryptionKey.Memory, CancellationToken.None).WaitAsync(HangGuard);
+        CollectionAssert.AreEqual(plain, downloaded);
+
+        // The Seeded Photo
+        ListMessagesResponse page = await rig.Client.FetchMessagesAsync("c-ann", 10, null, CancellationToken.None).WaitAsync(HangGuard);
+        MediaContent photo        = page.Messages.SelectMany(m => m.MessageInfo).Single(p => p.MediaContent is not null).MediaContent;
+        byte[] png                = await rig.Client.DownloadMediaAsync(photo.MediaID, photo.DecryptionKey.Memory, CancellationToken.None).WaitAsync(HangGuard);
+        CollectionAssert.AreEqual(Convert.FromBase64String(FakeChats.BluePng), png);
+        Assert.AreEqual("image/png", photo.MimeType);
+
+        // An Unknown ID Is Refused
+        await Assert.ThrowsExactlyAsync<GmRequestException>(() => rig.Client.DownloadMediaAsync("media-none", uploaded.DecryptionKey.Memory, CancellationToken.None).WaitAsync(HangGuard));
+    }
+
+    /// <summary>
+    /// A thumbnail-only photo comes back with its full media ID after a full-size request, and the full file downloads.
+    /// </summary>
+    [TestMethod]
+    public async Task GetFullSizeImage_RepushesWithFullId()
+    {
+        await using Rig rig = await PairedAsync();
+        byte[] bytes = Convert.FromBase64String(FakeChats.BluePng);
+
+        // Thumbnail Only
+        Message pushed = rig.Server.Phone.PushIncomingMedia("c-ann", "image/png", bytes, "pic.png", withThumbnail: true);
+        MessageReceived first = WaitForEvent<MessageReceived>(rig.Events, e => e.Message.MessageID == pushed.MessageID, "thumbnail-only photo");
+        MediaContent thumb    = first.Message.MessageInfo[0].MediaContent;
+        Assert.AreEqual("", thumb.MediaID);
+        Assert.IsNotEmpty(thumb.ThumbnailMediaID);
+        CollectionAssert.AreEqual(bytes, await rig.Client.DownloadMediaAsync(thumb.ThumbnailMediaID, thumb.ThumbnailDecryptionKey.Memory, CancellationToken.None).WaitAsync(HangGuard));
+
+        // Ask For The Full Size
+        await rig.Client.GetFullSizeImageAsync(pushed.MessageID, pushed.MessageID, CancellationToken.None).WaitAsync(HangGuard);
+        MessageReceived full = WaitForEvent<MessageReceived>(rig.Events, e => e.Message.MessageID == pushed.MessageID && e.Message.MessageInfo[0].MediaContent.MediaID.Length > 0, "photo with its full ID");
+        MediaContent content = full.Message.MessageInfo[0].MediaContent;
+        CollectionAssert.AreEqual(bytes, await rig.Client.DownloadMediaAsync(content.MediaID, content.DecryptionKey.Memory, CancellationToken.None).WaitAsync(HangGuard));
+    }
 }

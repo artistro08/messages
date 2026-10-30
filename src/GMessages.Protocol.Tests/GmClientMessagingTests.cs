@@ -225,6 +225,33 @@ public class GmClientMessagingTests
     }
 
     /// <summary>
+    /// GetFullSizeImage is user-initiated (five seconds without an answer raises PhoneSlow) and sends action 36 with
+    /// both IDs, as in Go's methods.go.
+    /// </summary>
+    [TestMethod]
+    public async Task GetFullSizeImage_IsUserInitiated()
+    {
+        await using Rig rig = CreateRig();
+        int slow_count = 0;
+        rig.Client.Rpc.PhoneSlow += (_, _) => Interlocked.Increment(ref slow_count);
+
+        Task call = rig.Client.GetFullSizeImageAsync("m-7", "a-7", CancellationToken.None);
+        Sent sent = Captured(rig, 0);
+
+        // Five Seconds With No Answer
+        Assert.IsTrue(SpinWait.SpinUntil(() => rig.Time.CountTimers(RpcSession.PhoneSlowTimeout) > 0, HangGuard), "slow timer");
+        rig.Time.Advance(RpcSession.PhoneSlowTimeout);
+        Assert.IsTrue(SpinWait.SpinUntil(() => Volatile.Read(ref slow_count) > 0, HangGuard), "PhoneSlow raised");
+
+        Answer(rig, sent, new GetFullSizeImageResponse());
+        await call.WaitAsync(HangGuard);
+
+        Assert.AreEqual(ActionType.GetFullSizeImage, sent.Data.Action);
+        Assert.AreEqual(36, (int)sent.Data.Action);
+        Assert.AreEqual(new GetFullSizeImageRequest { MessageID = "m-7", ActionMessageID = "a-7" }, sent.Payload(GetFullSizeImageRequest.Parser));
+    }
+
+    /// <summary>
     /// UpdateConversation is user-initiated: five seconds without an answer raises PhoneSlow once; the request goes out
     /// as given and the typed answer is returned.
     /// </summary>

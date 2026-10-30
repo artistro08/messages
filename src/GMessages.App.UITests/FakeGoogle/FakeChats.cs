@@ -1,4 +1,7 @@
+using GMessages.Protocol;
+using GMessages.Protocol.Crypto;
 using GMessages.Protocol.Proto;
+using Google.Protobuf;
 
 namespace GMessages.App.UITests.FakeGoogle;
 
@@ -7,7 +10,7 @@ namespace GMessages.App.UITests.FakeGoogle;
 /// </summary>
 /// <remarks>
 /// Starts with three conversations: <c>c-ann</c> (Ann Lee, one on one over RCS, an encrypted-chat tombstone then three
-/// messages, unread), <c>c-team</c> (Team, an SMS/MMS group with Bo and Cy, pinned) and <c>c-spam</c> (Prize Bot, in
+/// messages, unread, with a photo from Ann before the last one), <c>c-team</c> (Team, an SMS/MMS group with Bo and Cy, pinned) and <c>c-spam</c> (Prize Bot, in
 /// the spam folder), plus the contacts Ann, Bo and Cy. Texts in RCS conversations have message type 4, in SMS ones 2
 /// (a downloaded MMS), as <c>Message.type</c> in conversations.proto documents.
 /// Use <see cref="Clear"/>, <see cref="Add"/> and <see cref="AddContact"/> to seed something else. Every conversation
@@ -19,10 +22,15 @@ public sealed class FakeChats
     /// <summary>The phone's own participant ID, also the ID of its one SIM.</summary>
     public const string MyParticipantId = "me-1";
 
+    /// <summary>A 1x1 blue PNG: Ann's contact photo and the photo seeded in <c>c-ann</c>.</summary>
+    public const string BluePng = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGOQKn4BAAIgAXZmNuK1AAAAAElFTkSuQmCC";
+
     private readonly Lock _lock = new();
     private readonly List<Conversation> _conversations = [];
     private readonly Dictionary<string, List<Message>> _messages = [];
     private readonly List<Contact> _contacts = [];
+    private readonly Dictionary<string, byte[]> _media = [];
+    private readonly Dictionary<string, (string MediaId, ByteString Key)> _heldFull = [];
     private long _clock = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() * 1000;
     private int _nextId;
 
@@ -35,9 +43,14 @@ public sealed class FakeChats
         AddContact("p-bo", "Bo", "+15550000002");
         AddContact("p-cy", "Cy", "+15550000003");
 
-        // Ann: An RCS Chat That Starts Encrypted, Three Messages, The Last One Unread
+        // Ann: An RCS Chat That Starts Encrypted, Three Messages And A Photo, The Last One Unread; The Photo Comes
+        // Before Her Last Text, So The Snippet Stays "Are you free later?"
         Conversation ann = NewConversation("c-ann", "Ann Lee", false, ConversationStatus.Active, false, true, Person("p-ann", "Ann Lee", "+15550000001"));
-        Add(ann, NewTombstone(ann, MessageStatusType.TombstoneEncryptedOneOnOneRcsCreated), NewMessage(ann, "p-ann", "Hi, it's Ann"), NewMessage(ann, MyParticipantId, "Hey Ann"), NewMessage(ann, "p-ann", "Are you free later?"));
+        Message tombstone = NewTombstone(ann, MessageStatusType.TombstoneEncryptedOneOnOneRcsCreated);
+        Message hi        = NewMessage(ann, "p-ann", "Hi, it's Ann");
+        Message hey       = NewMessage(ann, MyParticipantId, "Hey Ann");
+        Message photo     = NewMediaMessage(ann, "p-ann", StoreMedia(Convert.FromBase64String(BluePng), "photo.png", "image/png"));
+        Add(ann, tombstone, hi, hey, photo, NewMessage(ann, "p-ann", "Are you free later?"));
 
         // Team: A Pinned SMS/MMS Group
         Conversation team = NewConversation("c-team", "Team", true, ConversationStatus.Active, true, false, Person("p-bo", "Bo", "+15550000002"), Person("p-cy", "Cy", "+15550000003"));
@@ -63,6 +76,8 @@ public sealed class FakeChats
             _conversations.Clear();
             _messages.Clear();
             _contacts.Clear();
+            _media.Clear();
+            _heldFull.Clear();
         }
     }
 
@@ -199,13 +214,20 @@ public sealed class FakeChats
     // CHANGES
     // =========================================================================
 
-    // The Phone's Own Message, Sent From The App; A Reply Carries The Quoted Message's ID, As The Phone's Echo Does
-    internal Message AddOutgoing(string conversationId, string text, string tmpId, string? replyToId = null)
+    // The Phone's Own Message, Sent From The App; A Reply Carries The Quoted Message's ID, As The Phone's Echo Does.
+    // A Send With Media Keeps The Request's Parts (Media, Then Any Caption) As They Came
+    internal Message AddOutgoing(string conversationId, string text, string tmpId, string? replyToId = null, IReadOnlyList<MessageInfo>? parts = null)
     {
         lock (_lock)
         {
             Conversation conversation = Find(conversationId);
             Message message           = NewMessage(conversation, MyParticipantId, text, tmpId);
+            if (parts?.Any(p => p.MediaContent is not null) == true)
+            {
+                message.MessageInfo.Clear();
+                message.MessageInfo.AddRange(parts.Select(p => p.Clone()));
+            }
+
             if (replyToId is not null)
             {
                 message.ReplyMessage = new ReplyMessage { MessageID = replyToId, ConversationID = conversationId };
@@ -214,6 +236,72 @@ public sealed class FakeChats
             _messages[conversationId].Add(message);
             Refresh(conversation, message);
             return message.Clone();
+        }
+    }
+
+    // An Attachment From The Other Side, Which Leaves The Conversation Unread. With A Thumbnail, Only The Thumbnail Is
+    // Sent; The Full Media ID Is Held Until The App Asks For It (ReleaseFullSize)
+    internal (Conversation Conversation, Message Message) AddIncomingMedia(string conversationId, string mime, byte[] bytes, string fileName, bool withThumbnail)
+    {
+        lock (_lock)
+        {
+            Conversation conversation = Find(conversationId);
+            string sender             = conversation.OtherParticipants.FirstOrDefault() ?? "p-unknown";
+            MediaContent content      = StoreMedia(bytes, fileName, mime);
+            Message message           = NewMediaMessage(conversation, sender, content);
+            if (withThumbnail)
+            {
+                // ponytail: the thumbnail is the same bytes as the full file; a real phone sends a smaller one
+                MediaContent thumbnail         = StoreMedia(bytes, fileName, mime);
+                _heldFull[message.MessageID]   = (content.MediaID, content.DecryptionKey);
+                content.ThumbnailMediaID       = thumbnail.MediaID;
+                content.ThumbnailDecryptionKey = thumbnail.DecryptionKey;
+                content.MediaID                = "";
+                content.DecryptionKey          = ByteString.Empty;
+            }
+
+            _messages[conversationId].Add(message);
+            Refresh(conversation, message);
+            conversation.Unread = true;
+            return (conversation.Clone(), message.Clone());
+        }
+    }
+
+    // The Full Media ID And Key Of A Thumbnail-Only Message, Put In The Stored Message; Null When None Is Held
+    internal Message? ReleaseFullSize(string messageId)
+    {
+        lock (_lock)
+        {
+            Message? message = _messages.Values.SelectMany(m => m).FirstOrDefault(m => m.MessageID == messageId);
+            if (message is null || !_heldFull.Remove(messageId, out (string MediaId, ByteString Key) full))
+            {
+                return null;
+            }
+
+            MediaContent content  = message.MessageInfo.First(p => p.MediaContent is not null).MediaContent;
+            content.MediaID       = full.MediaId;
+            content.DecryptionKey = full.Key;
+            return message.Clone();
+        }
+    }
+
+    // An Uploaded (Already Encrypted) File, Stored Under A New Media ID
+    internal string StoreUpload(byte[] encrypted)
+    {
+        lock (_lock)
+        {
+            string id  = "media-" + Guid.NewGuid().ToString("N");
+            _media[id] = encrypted;
+            return id;
+        }
+    }
+
+    // The Encrypted Bytes Of A Media ID, Or Null
+    internal byte[]? MediaBytes(string mediaId)
+    {
+        lock (_lock)
+        {
+            return _media.GetValueOrDefault(mediaId);
         }
     }
 
@@ -427,6 +515,30 @@ public sealed class FakeChats
         };
         message.MessageInfo.Add(new MessageInfo { MessageContent = new MessageContent { Content = text } });
         return message;
+    }
+
+    // A Message Whose Only Part Is An Attachment
+    private Message NewMediaMessage(Conversation conversation, string participantId, MediaContent content)
+    {
+        Message message = NewMessage(conversation, participantId, "");
+        message.MessageInfo.Clear();
+        message.MessageInfo.Add(new MessageInfo { MediaContent = content });
+        return message;
+    }
+
+    // Encrypts A File With A Fresh Key (As The Phone Would), Stores It And Describes It As A Message Would
+    private MediaContent StoreMedia(byte[] bytes, string fileName, string mime)
+    {
+        byte[] key = MediaCrypto.GenerateKey();
+        return new MediaContent
+        {
+            Format        = MediaFormatsMap.FromMime(mime),
+            MediaID       = StoreUpload(MediaCrypto.Encrypt(bytes, key)),
+            MediaName     = fileName,
+            Size          = bytes.Length,
+            DecryptionKey = ByteString.CopyFrom(key),
+            MimeType      = mime,
+        };
     }
 
     // A Tombstone (A System Line Such As The Chat Becoming Encrypted): A Status And No Content

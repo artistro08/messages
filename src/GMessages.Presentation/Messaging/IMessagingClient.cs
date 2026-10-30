@@ -46,4 +46,13 @@ public interface IMessagingClient
 
     /// <summary>Gets the photos of contacts.</summary>
     Task<GetThumbnailResponse> GetContactThumbnailAsync(IReadOnlyList<string> contactIds, CancellationToken ct);
+
+    /// <summary>Encrypts and uploads an attachment; the result goes in a sent message.</summary>
+    Task<MediaContent> UploadMediaAsync(ReadOnlyMemory<byte> plain, string fileName, string mime, IProgress<double>? progress, CancellationToken ct);
+
+    /// <summary>Downloads and decrypts an attachment.</summary>
+    Task<byte[]> DownloadMediaAsync(string mediaId, ReadOnlyMemory<byte> key, CancellationToken ct);
+
+    /// <summary>Asks the phone for the full-size version of an image that arrived as a thumbnail only.</summary>
+    Task GetFullSizeImageAsync(string messageId, string actionMessageId, CancellationToken ct);
 }
