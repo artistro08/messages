@@ -328,13 +328,16 @@ public sealed class FakePhone
                 Reply(data.RequestID, data.Action, new GetOrCreateConversationResponse { Conversation = Chats.FindOrCreate(create.Numbers), Status = GetOrCreateConversationResponse.Types.Status.Success }, encrypt: true);
                 break;
 
-            // Photos: Ann Has A 1x1 PNG, Everyone Else None
+            // Photos: Ann And The Phone's Owner Have A 1x1 PNG, Everyone Else None
             case ActionType.GetParticipantsThumbnail when RequestCrypto is not null:
                 var thumbnails = Open(data, GetThumbnailRequest.Parser);
                 var photos     = new GetThumbnailResponse();
-                if (thumbnails.Identifiers.Contains("p-ann"))
+                foreach (string with_photo in (string[])["p-ann", FakeChats.MyParticipantId])
                 {
-                    photos.Thumbnail.Add(new GetThumbnailResponse.Types.Thumbnail { Identifier = "p-ann", Data = new ThumbnailData { ImageBuffer = ByteString.FromBase64(FakeChats.BluePng) } });
+                    if (thumbnails.Identifiers.Contains(with_photo))
+                    {
+                        photos.Thumbnail.Add(new GetThumbnailResponse.Types.Thumbnail { Identifier = with_photo, Data = new ThumbnailData { ImageBuffer = ByteString.FromBase64(FakeChats.BluePng) } });
+                    }
                 }
 
                 Reply(data.RequestID, data.Action, photos, encrypt: true);

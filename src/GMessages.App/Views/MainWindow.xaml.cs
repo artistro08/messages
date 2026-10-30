@@ -170,8 +170,9 @@ public sealed partial class MainWindow : Window
         LastConversationId            = null;
         _profileAsked                 = false;
         ProfilePicture.ProfilePicture = null;
+        AutomationProperties.SetItemStatus(ProfileButton, string.Empty);
 
-        _pairing              = page;
+        _pairing            = page;
         page.CancelRequested += OnPairingCancel;
         BodyHost.Child        = page;
         ShowTitleBarButtons();
@@ -193,6 +194,10 @@ public sealed partial class MainWindow : Window
         BodyHost.Child                          = _chats;
         ShowTitleBarButtons();
         ShowChatFocus();
+
+        // The List Can Show From The Store's Cache Before These Handlers Exist, And An Unchanged Refresh Moves No Row,
+        // So Ask For The Owner's Photo Now Too
+        _ = ShowProfilePhotoAsync();
     }
 
     /// <summary>
@@ -449,7 +454,9 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        // UI Automation Can't See A Picture, So The Button Says It Shows One
         ProfilePicture.ProfilePicture = await Avatar.ToImageAsync(photo);
+        AutomationProperties.SetItemStatus(ProfileButton, "Photo");
     }
 
     private void OnMenuClick(object sender, RoutedEventArgs e) => ViewModel?.ToggleList();
