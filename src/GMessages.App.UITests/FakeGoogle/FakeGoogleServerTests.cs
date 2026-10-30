@@ -728,6 +728,49 @@ public sealed class FakeGoogleServerTests
     }
 
     /// <summary>
+    /// The fake refuses with 400 a finalize to a session it never started, a finalize at another offset, and any upload
+    /// request that carries a cookie or the api key.
+    /// </summary>
+    [TestMethod]
+    public async Task Media_UploadChecks_RefuseBadRequests()
+    {
+        await using var server = new FakeGoogleServer();
+        using var handler      = new HttpClientHandler { UseCookies = false };
+        using var http         = new HttpClient(handler);
+        Uri upload             = new(server.BaseUrl, "/upload");
+
+        // Unknown Session
+        Assert.AreEqual(HttpStatusCode.BadRequest, await SendAsync(new Uri(server.BaseUrl, "/upload/session/never"), "upload, finalize", ("x-goog-upload-offset", "0")));
+
+        // Known Session, Wrong Offset (The Session Is Spent Either Way)
+        using HttpResponseMessage started = await SendRawAsync(upload, "start");
+        Uri session = new(started.Headers.GetValues("x-goog-upload-url").Single());
+        Assert.AreEqual(HttpStatusCode.BadRequest, await SendAsync(session, "upload, finalize", ("x-goog-upload-offset", "5")));
+
+        // Credentials On Any Upload Request
+        Assert.AreEqual(HttpStatusCode.BadRequest, await SendAsync(upload, "start", ("cookie", "SID=x")));
+        Assert.AreEqual(HttpStatusCode.BadRequest, await SendAsync(upload, "start", ("x-goog-api-key", "k")));
+
+        async Task<HttpStatusCode> SendAsync(Uri url, string command, params (string Name, string Value)[] headers)
+        {
+            using HttpResponseMessage res = await SendRawAsync(url, command, headers);
+            return res.StatusCode;
+        }
+
+        async Task<HttpResponseMessage> SendRawAsync(Uri url, string command, params (string Name, string Value)[] headers)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, url) { Content = new ByteArrayContent([]) };
+            request.Headers.TryAddWithoutValidation("x-goog-upload-command", command);
+            foreach ((string name, string value) in headers)
+            {
+                request.Headers.TryAddWithoutValidation(name, value);
+            }
+
+            return await http.SendAsync(request).WaitAsync(HangGuard);
+        }
+    }
+
+    /// <summary>
     /// A thumbnail-only photo comes back with its full media ID after a full-size request, and the full file downloads.
     /// </summary>
     [TestMethod]

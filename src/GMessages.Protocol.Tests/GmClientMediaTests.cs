@@ -155,6 +155,70 @@ public class GmClientMediaTests
     }
 
     /// <summary>
+    /// Upload start needs exactly HTTP 200, as Go's does: another 2xx fails before anything is finalized.
+    /// </summary>
+    /// <param name="status">The start answer's status.</param>
+    [TestMethod]
+    [DataRow(201)]
+    [DataRow(204)]
+    public async Task Upload_StartNot200_Throws(int status)
+    {
+        await using Rig rig = CreateRig((_, _) =>
+        {
+            HttpResponseMessage res = StartAnswer();
+            res.StatusCode          = (HttpStatusCode)status;
+            return res;
+        });
+
+        GmRequestException refused = await Assert.ThrowsExactlyAsync<GmRequestException>(() => rig.Client.UploadMediaAsync(new byte[10], "f.png", "image/png", null, CancellationToken.None));
+        Assert.AreEqual(status, refused.StatusCode);
+        Assert.HasCount(1, rig.Handler.Requests);
+    }
+
+    /// <summary>
+    /// A finalize answer that looks like base64 but has bad padding fails as invalid data, not a format error.
+    /// </summary>
+    [TestMethod]
+    public async Task Upload_BadBase64Padding_ThrowsInvalidData()
+    {
+        await using Rig rig = CreateRig((i, _) => i == 0 ? StartAnswer() : FakeHttpHandler.Response(HttpStatusCode.OK, "text/plain", "A==="u8.ToArray()));
+
+        await Assert.ThrowsExactlyAsync<InvalidDataException>(() => rig.Client.UploadMediaAsync(new byte[10], "f.png", "image/png", null, CancellationToken.None));
+    }
+
+    /// <summary>
+    /// A download whose declared length is over the cap fails before the body is read.
+    /// </summary>
+    [TestMethod]
+    public async Task Download_DeclaredOverCap_Throws()
+    {
+        await using Rig rig = CreateRig((_, _) =>
+        {
+            HttpResponseMessage res          = FakeHttpHandler.Response(HttpStatusCode.OK, "application/octet-stream", new byte[16]);
+            res.Content.Headers.ContentLength = GmHttpClient.MaxMediaBodyBytes + 1;
+            return res;
+        });
+
+        await Assert.ThrowsExactlyAsync<InvalidDataException>(() => rig.Client.DownloadMediaAsync("media-1", MediaCrypto.GenerateKey(), CancellationToken.None));
+    }
+
+    /// <summary>
+    /// A streamed download with no declared length fails once it crosses the cap.
+    /// </summary>
+    [TestMethod]
+    public async Task Download_StreamedOverCap_Throws()
+    {
+        await using Rig rig = CreateRig((_, _) =>
+        {
+            HttpResponseMessage res = FakeHttpHandler.Response(HttpStatusCode.OK);
+            res.Content             = new StreamContent(new ZeroStream(GmHttpClient.MaxMediaBodyBytes + 1));
+            return res;
+        });
+
+        await Assert.ThrowsExactlyAsync<InvalidDataException>(() => rig.Client.DownloadMediaAsync("media-1", MediaCrypto.GenerateKey(), CancellationToken.None));
+    }
+
+    /// <summary>
     /// A refused download throws with its status instead of decrypting an error page.
     /// </summary>
     [TestMethod]
@@ -215,5 +279,39 @@ public class GmClientMediaTests
     private sealed class SyncProgress(Action<double> report) : IProgress<double>
     {
         public void Report(double value) => report(value);
+    }
+
+    // A Non-Seekable Stream Of Zeros With No Declared Length
+    private sealed class ZeroStream(long length) : Stream
+    {
+        private long _left = length;
+
+        public override bool CanRead => true;
+
+        public override bool CanSeek => false;
+
+        public override bool CanWrite => false;
+
+        public override long Length => throw new NotSupportedException();
+
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            int read = (int)Math.Min(count, _left);
+            Array.Clear(buffer, offset, read);
+            _left -= read;
+            return read;
+        }
+
+        public override void Flush()
+        {
+        }
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 }

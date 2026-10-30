@@ -51,6 +51,9 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
     /// <summary>The long-poll client timeout (Go: <c>WithGlobalTimeout(30 * time.Minute)</c>).</summary>
     public static readonly TimeSpan LongPollTimeout = TimeSpan.FromMinutes(30);
 
+    /// <summary>The largest media response body read: LibGM's 100 MiB file limit plus 4 MiB for encryption overhead.</summary>
+    public const long MaxMediaBodyBytes = (100L + 4L) * 1024 * 1024;
+
     private const string ProtobufMime = "application/x-protobuf";
     private const string PbLiteMime   = "application/json+protobuf";
 
@@ -195,20 +198,23 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
     /// Media requests carry LibGM's upload headers alone (Go: <c>NewMediaUploadHeaders</c> and <c>BuildUploadHeaders</c>
     /// in util/func.go): no api key, no <c>x-user-agent</c> and no cookies, so the jar is neither read nor updated. A
     /// header that belongs on the content, such as <c>content-type</c>, goes there. Unlike Go's download, the status is
-    /// always checked. Sent on the long-poll client (30 minute timeout), since a big file can outlast the normal 100 s. Not
-    /// retried, as in Go. Bodies and headers are never logged.
+    /// always checked: upload start and finalize need exactly 200, as Go's do, and a download needs any 2xx. A body over
+    /// <see cref="MaxMediaBodyBytes"/> is refused while it is read. Sent on the long-poll client (30 minute timeout),
+    /// since a big file can outlast the normal 100 s. Not retried, as in Go. Bodies and headers are never logged.
     /// </remarks>
     /// <param name="method">The HTTP method.</param>
     /// <param name="url">The target URL.</param>
     /// <param name="headers">Every header to send.</param>
     /// <param name="content">The body, or null for none; the request disposes it.</param>
+    /// <param name="requireOk">True when only HTTP 200 counts as success (upload start and finalize).</param>
     /// <param name="ct">Cancels the request.</param>
     /// <returns>The status, the response headers (case-insensitive, content headers included) and the body.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="method"/>, <paramref name="url"/> or <paramref name="headers"/> is null.</exception>
-    /// <exception cref="GmRequestException">The status was not 2xx.</exception>
+    /// <exception cref="GmRequestException">The status was not 200 (<paramref name="requireOk"/>) or not 2xx.</exception>
+    /// <exception cref="InvalidDataException">The body is larger than <see cref="MaxMediaBodyBytes"/>.</exception>
     /// <exception cref="HttpRequestException">The request failed before any response arrived.</exception>
     /// <exception cref="OperationCanceledException"><paramref name="ct"/> was canceled.</exception>
-    public async Task<GmMediaResponse> SendMediaAsync(HttpMethod method, Uri url, IEnumerable<KeyValuePair<string, string>> headers, HttpContent? content, CancellationToken ct)
+    public async Task<GmMediaResponse> SendMediaAsync(HttpMethod method, Uri url, IEnumerable<KeyValuePair<string, string>> headers, HttpContent? content, bool requireOk, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(method);
         ArgumentNullException.ThrowIfNull(url);
@@ -226,9 +232,9 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
 
         // Send And Read On The Long-Poll Client: A Big File Can Take Longer Than The Normal 100 s Timeout
         using HttpResponseMessage res = await longPollHttp.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
-        byte[] body = await res.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
+        byte[] body = await ReadCappedAsync(res.Content, MaxMediaBodyBytes, ct).ConfigureAwait(false);
         int status  = (int)res.StatusCode;
-        if (status is < 200 or >= 300)
+        if (requireOk ? status != 200 : status is < 200 or >= 300)
         {
             throw new GmRequestException(status, null, body);
         }
@@ -261,6 +267,31 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
     // =========================================================================
     // HELPERS
     // =========================================================================
+
+    // Reads A Body Up To A Cap: A Declared Length Over It Fails At Once, A Streamed One Fails When It Crosses It
+    private static async Task<byte[]> ReadCappedAsync(HttpContent content, long max, CancellationToken ct)
+    {
+        if (content.Headers.ContentLength > max)
+        {
+            throw new InvalidDataException("The media response is too large.");
+        }
+
+        await using Stream stream = await content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+        using var buffer          = new MemoryStream();
+        byte[] chunk              = new byte[81920];
+        int read;
+        while ((read = await stream.ReadAsync(chunk, ct).ConfigureAwait(false)) > 0)
+        {
+            if (buffer.Length + read > max)
+            {
+                throw new InvalidDataException("The media response is too large.");
+            }
+
+            buffer.Write(chunk, 0, read);
+        }
+
+        return buffer.ToArray();
+    }
 
     // Port Of util.BuildRelayHeaders (Content-Type Is Added By The Caller)
     private static void AddRelayHeaders(HttpRequestMessage req, string accept)
