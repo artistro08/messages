@@ -367,6 +367,49 @@ public sealed class ChatTests : UiTest
     }
 
     /// <summary>
+    /// The message box shows one color (its focused, active fill) at rest, under the pointer and focused, and typing
+    /// still works after those changes (owner's call).
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task DraftBox_KeepsOneColor_AtRestHoverAndFocused()
+    {
+        await OpenAnnAsync();
+        AutomationElement draft         = App.Find("Chat.Draft");
+        System.Drawing.Rectangle box    = draft.BoundingRectangle;
+        System.Drawing.Rectangle header = App.Find("Chat.Header").BoundingRectangle;
+
+        // An Empty Spot In The Box: Left Of Send, Away From The Caret And The Bottom Accent Line
+        System.Drawing.Rectangle spot = new(box.Right - 60, box.Top + (box.Height / 2), 1, 1);
+
+        // Focused, Pointer Away
+        PointerInput.Hover(header);
+        System.Drawing.Color focused = SettledPixel(spot);
+
+        // At Rest: The Focus On A Bubble, Pointer Away
+        AutomationElement[] rows = App.Find("Chat.Messages").FindAllChildren(cf => cf.ByControlType(FlaUI.Core.Definitions.ControlType.ListItem));
+        rows[^1].Focus();
+        Wait.Until(() => !draft.Properties.HasKeyboardFocus.ValueOrDefault, AppDriver.DefaultTimeout, () => "The message box kept the focus.");
+        System.Drawing.Color rest = SettledPixel(spot);
+
+        // Under The Pointer, Not Focused
+        PointerInput.Hover(box);
+        System.Drawing.Color hover = SettledPixel(spot);
+
+        TestContext.WriteLine($"Message box: focused {focused}, at rest {rest}, hover {hover}.");
+        Assert.IsTrue(Near(rest, focused), $"At rest the message box was {rest}, not its focused {focused}.");
+        Assert.IsTrue(Near(hover, focused), $"Under the pointer the message box was {hover}, not its focused {focused}.");
+
+        // Typing Still Works
+        draft.Click();
+        Keyboard.Type("Hi");
+        Wait.Until(() => draft.Patterns.Value.Pattern.Value.ValueOrDefault == "Hi", AppDriver.DefaultTimeout,
+            () => "Typing in the message box after the hover and focus changes didn't show the text.");
+
+        static bool Near(System.Drawing.Color a, System.Drawing.Color b) => Math.Abs(a.R - b.R) <= 2 && Math.Abs(a.G - b.G) <= 2 && Math.Abs(a.B - b.B) <= 2;
+    }
+
+    /// <summary>
     /// While an older page loads and lands, the bubbles on screen stay where they are: no blanking, no jump. The
     /// oldest shown bubble keeps its place on screen (within 4 px) from the loading ring showing until a second after
     /// the page landed.
@@ -665,6 +708,15 @@ public sealed class ChatTests : UiTest
     }
 
     private static double Luma(System.Drawing.Color pixel) => (0.299 * pixel.R) + (0.587 * pixel.G) + (0.114 * pixel.B);
+
+    // One Screen Pixel, Read After The Control's Brush Transitions Have Had Time To Finish
+    private System.Drawing.Color SettledPixel(System.Drawing.Rectangle spot)
+    {
+        App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).SetForeground();
+        Thread.Sleep(500);
+        using FlaUI.Core.Capturing.CaptureImage capture = FlaUI.Core.Capturing.Capture.Rectangle(spot);
+        return capture.Bitmap.GetPixel(0, 0);
+    }
 
     // Scrolls Up Until The Loading Ring Shows, Then Checks The Bubble Stays Put (Within 4 px) Every 50 ms From Its Settled
     // Place Until The Ring Has Been Gone A Second: The Page Lands Above Without Moving It, Blanking The List Or Asking

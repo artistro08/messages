@@ -321,7 +321,30 @@
                 CornerRadius="{x:Bind local:ChatPane.DraftCorners(Chat.IsReplying), Mode=OneWay}"
                 PreviewKeyDown="OnDraftKeyDown"
                 Text="{x:Bind Chat.Draft, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, FallbackValue=''}"
-                TextWrapping="Wrap" />
+                TextWrapping="Wrap">
+
+                <!-- One Color: the box keeps its focused (active) fill at rest and on hover too, so it never changes color.
+                     The border and the bottom accent line keep their normal Fluent focus look. High contrast keeps the
+                     system's own TextBox colors -->
+                <TextBox.Resources>
+                    <ResourceDictionary>
+                        <ResourceDictionary.ThemeDictionaries>
+                            <ResourceDictionary x:Key="Default">
+                                <StaticResource x:Key="TextControlBackground" ResourceKey="ControlFillColorInputActiveBrush" />
+                                <StaticResource x:Key="TextControlBackgroundPointerOver" ResourceKey="ControlFillColorInputActiveBrush" />
+                            </ResourceDictionary>
+                            <ResourceDictionary x:Key="Light">
+                                <StaticResource x:Key="TextControlBackground" ResourceKey="ControlFillColorInputActiveBrush" />
+                                <StaticResource x:Key="TextControlBackgroundPointerOver" ResourceKey="ControlFillColorInputActiveBrush" />
+                            </ResourceDictionary>
+                            <ResourceDictionary x:Key="HighContrast">
+                                <StaticResource x:Key="TextControlBackground" ResourceKey="SystemControlBackgroundAltMediumLowBrush" />
+                                <StaticResource x:Key="TextControlBackgroundPointerOver" ResourceKey="SystemControlBackgroundAltMediumBrush" />
+                            </ResourceDictionary>
+                        </ResourceDictionary.ThemeDictionaries>
+                    </ResourceDictionary>
+                </TextBox.Resources>
+            </TextBox>
             <Button
                 Width="32"
                 Height="32"
