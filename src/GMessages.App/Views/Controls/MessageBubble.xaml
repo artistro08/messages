@@ -42,6 +42,8 @@
                         <Setter Target="QuoteBar.Background" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
                         <Setter Target="QuoteSender.Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
                         <Setter Target="QuoteText.Foreground" Value="{ThemeResource TextOnAccentFillColorSecondaryBrush}" />
+                        <Setter Target="FileCard.Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                        <Setter Target="FileDetail.Foreground" Value="{ThemeResource TextOnAccentFillColorSecondaryBrush}" />
                         <Setter Target="Pill.HorizontalAlignment" Value="Left" />
                         <Setter Target="Footer.HorizontalAlignment" Value="Right" />
                         <Setter Target="StatusRow.HorizontalAlignment" Value="Right" />
@@ -269,6 +271,43 @@
                             </Grid>
                         </Button>
                         <!-- /Photo -->
+
+                        <!-- File Card: a video or file, with its thumbnail when one came (else its type's icon), its name, and its
+                             size as Explorer writes it, or "Downloading…" while it opens, or the failure. A click (or Enter or
+                             Space) downloads it and opens it in its default app. Named by the file name -->
+                        <Button
+                            x:Name="FileCard"
+                            Padding="0"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Stretch"
+                            AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Bubble.File.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                            AutomationProperties.Name="{x:Bind Bubble.FileName, Mode=OneWay, FallbackValue=''}"
+                            Click="OnFileClick"
+                            Style="{StaticResource IconButtonStyle}"
+                            Visibility="{x:Bind Bubble.HasFileCard, Mode=OneWay, FallbackValue=Collapsed}">
+                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                                <Grid
+                                    Width="40"
+                                    Height="40"
+                                    Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                    CornerRadius="6">
+                                    <FontIcon FontSize="20" Glyph="{x:Bind local:MessageBubble.FileGlyph(Bubble.Kind), Mode=OneWay, FallbackValue=''}" />
+                                    <Border x:Name="FileThumb" CornerRadius="6" />
+                                </Grid>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock
+                                        MaxLines="1"
+                                        Style="{StaticResource BodyStrongTextBlockStyle}"
+                                        Text="{x:Bind Bubble.FileName, Mode=OneWay, FallbackValue=''}"
+                                        TextTrimming="CharacterEllipsis" />
+                                    <TextBlock
+                                        x:Name="FileDetail"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}" />
+                                </StackPanel>
+                            </Grid>
+                        </Button>
+                        <!-- /File Card -->
 
                         <!-- Text: while the preview card shows, without the card's link (Bubble.BodyText); a message that was
                              only the link shows the card alone -->

@@ -74,6 +74,11 @@ namespace GMessages.App.Views.Controls;
 /// click opens it in the default photo app, as does the menu's Open (<c>Bubble.Open</c>); Save as (<c>Bubble.SaveAs</c>)
 /// saves a copy where the person picks.
 /// </para>
+/// <para>
+/// A video or file shows as a card (<c>Bubble.File.{id}</c>, named by the file name): its thumbnail when one came, else
+/// its type's icon, the name, and the size as Explorer writes it. A click shows "Downloading…" while it downloads, then
+/// opens it in its default app; a failure reads "Couldn't open this file." until the next click.
+/// </para>
 /// </remarks>
 public sealed partial class MessageBubble : UserControl
 {
@@ -112,6 +117,9 @@ public sealed partial class MessageBubble : UserControl
 
     // A Photo's Blurred Look: Its Thumbnail Decoded This Wide, Then Stretched To The Photo's Size
     private const int BlurDecodeWidth = 24;
+
+    // The File Card's Thumbnail Width (Its 40 px Square, Sharp At 200% Scale)
+    private const int FileThumbWidth = 80;
 
     // A Photo's Caption Sits This Far Inside The Bubble; The Back's Usual Padding Otherwise
     private static readonly Thickness CaptionInset = new(12, 6, 12, 8);
@@ -157,6 +165,11 @@ public sealed partial class MessageBubble : UserControl
 
     // The Widest A Photo May Be: The Bubble's Width Cap Inside Its Border (Set At Measure)
     private double _photoMaxWidth = MaxBubbleWidth - 2;
+
+    // The File The Card Shows, And Whether It Is Opening Or Its Last Open Failed
+    private MediaPart? _filePart;
+    private bool _fileOpening;
+    private bool _fileFailed;
 
     /// <summary>
     /// Creates the bubble.
@@ -433,6 +446,30 @@ public sealed partial class MessageBubble : UserControl
     }
 
     /// <summary>
+    /// Gives the file card's icon: a video's, or a document's for any other file.
+    /// </summary>
+    /// <param name="kind">The message's kind.</param>
+    /// <returns>The Segoe Fluent Icons glyph.</returns>
+    public static string FileGlyph(MessageKind kind) => kind == MessageKind.Video ? "\uE714" : "\uE8A5";
+
+    /// <summary>
+    /// Writes a file size the way Explorer does ("1.20 MB", "940 bytes"), through Windows' own formatter.
+    /// </summary>
+    /// <param name="bytes">The size in bytes.</param>
+    /// <returns>The size, or empty when it is unknown (0).</returns>
+    public static string SizeText(long bytes)
+    {
+        if (bytes <= 0)
+        {
+            return string.Empty;
+        }
+
+        char[] buffer = new char[32];
+        int result    = NativeMethods.StrFormatByteSizeEx((ulong)bytes, NativeMethods.SFBS_FLAGS_ROUND_TO_NEAREST_DISPLAYED_DIGIT, buffer, (uint)buffer.Length);
+        return result < 0 ? string.Empty : new string(buffer).TrimEnd('\0');
+    }
+
+    /// <summary>
     /// Fades a bubble that is still being sent.
     /// </summary>
     /// <param name="isSending">True while sending.</param>
@@ -493,6 +530,7 @@ public sealed partial class MessageBubble : UserControl
         view.ShowStates();
         view.ShowPreviewImage();
         view.ShowPhoto();
+        view.ShowFile();
     }
 
     // An Echo Can Make A Sending Bubble RCS, My Reaction Comes And Goes, And A Preview Card Arrives
@@ -502,6 +540,7 @@ public sealed partial class MessageBubble : UserControl
         ShowStates();
         ShowPreviewImage();
         ShowPhoto();
+        ShowFile();
         ShowHoverStrip();
     }
 
@@ -707,6 +746,80 @@ public sealed partial class MessageBubble : UserControl
     }
 
     // =========================================================================
+    // FILE CARD
+    // =========================================================================
+
+    // Another File: Its Size, And Its Thumbnail When One Came
+    private async void ShowFile()
+    {
+        MediaPart? part = Bubble is { HasFileCard: true } bubble ? bubble.Media : null;
+        if (ReferenceEquals(part, _filePart))
+        {
+            return;
+        }
+
+        _filePart            = part;
+        _fileOpening         = false;
+        _fileFailed          = false;
+        FileThumb.Background = null;
+        ShowFileDetail();
+        if (part is not { ThumbnailId.Length: > 0 } || (Application.Current as App)?.Media is not { } media)
+        {
+            return;
+        }
+
+        // A Thumbnail That Won't Load Leaves The Icon
+        try
+        {
+            byte[] bytes      = await media.GetAsync(part, thumbnail: true, CancellationToken.None);
+            ImageSource image = await Avatar.ToImageAsync(bytes, FileThumbWidth) ?? throw new InvalidDataException();
+            if (ReferenceEquals(part, _filePart))
+            {
+                FileThumb.Background = new ImageBrush { ImageSource = image, Stretch = Stretch.UniformToFill };
+            }
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            AppLog.MediaFailed(App.ShellLog, "thumbnail", Bubble?.Id ?? string.Empty, ex.GetType().Name);
+        }
+    }
+
+    // The Line Under The Name: Downloading, The Failure, Or The Size
+    private void ShowFileDetail()
+    {
+        (FileDetail.Text, string state) = (_fileOpening, _fileFailed) switch
+        {
+            (true, _) => (ChatCopy.Downloading, "Downloading"),
+            (_, true) => (ChatCopy.FileOpenFailed, "Failed"),
+            _         => (SizeText(_filePart?.Size ?? 0), "Ready"),
+        };
+        TestHooks.ShowState(FileCard, state);
+    }
+
+    // Downloads, Then Opens In The Default App; Once At A Time
+    private async void OnFileClick(object sender, RoutedEventArgs e)
+    {
+        if (_filePart is not { IsPending: false } part || _fileOpening)
+        {
+            return;
+        }
+
+        _fileOpening = true;
+        _fileFailed  = false;
+        ShowFileDetail();
+
+        bool opened = await OpenMediaAsync(part);
+        if (!ReferenceEquals(part, _filePart))
+        {
+            return;
+        }
+
+        _fileOpening = false;
+        _fileFailed  = !opened;
+        ShowFileDetail();
+    }
+
+    // =========================================================================
     // OPEN AND SAVE
     // =========================================================================
 
@@ -740,10 +853,14 @@ public sealed partial class MessageBubble : UserControl
         }
     }
 
-    // The Menu's Open: As A Click On The Photo
+    // The Menu's Open: As A Click On The Photo Or The Card
     private void OnOpenClick(object sender, RoutedEventArgs e)
     {
-        if (Bubble?.Media is { IsPending: false } part)
+        if (Bubble?.HasFileCard == true)
+        {
+            OnFileClick(sender, e);
+        }
+        else if (Bubble?.Media is { IsPending: false } part)
         {
             _ = OpenMediaAsync(part);
         }
