@@ -10,7 +10,7 @@ namespace GMessages.App.UITests.FakeGoogle;
 /// </summary>
 /// <remarks>
 /// Starts with three conversations: <c>c-ann</c> (Ann Lee, one on one over RCS, an encrypted-chat tombstone then three
-/// messages, unread, with a photo from Ann before the last one), <c>c-team</c> (Team, an SMS/MMS group with Bo and Cy, pinned) and <c>c-spam</c> (Prize Bot, in
+/// messages, unread), <c>c-team</c> (Team, an SMS/MMS group with Bo and Cy, pinned) and <c>c-spam</c> (Prize Bot, in
 /// the spam folder), plus the contacts Ann, Bo and Cy. Texts in RCS conversations have message type 4, in SMS ones 2
 /// (a downloaded MMS), as <c>Message.type</c> in conversations.proto documents.
 /// Use <see cref="Clear"/>, <see cref="Add"/> and <see cref="AddContact"/> to seed something else. Every conversation
@@ -22,7 +22,7 @@ public sealed class FakeChats
     /// <summary>The phone's own participant ID, also the ID of its one SIM.</summary>
     public const string MyParticipantId = "me-1";
 
-    /// <summary>A 1x1 blue PNG: Ann's contact photo and the photo seeded in <c>c-ann</c>.</summary>
+    /// <summary>A 1x1 blue PNG: Ann's contact photo and the photo <see cref="AddPhotoChat"/> seeds.</summary>
     public const string BluePng = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGOQKn4BAAIgAXZmNuK1AAAAAElFTkSuQmCC";
 
     private readonly Lock _lock = new();
@@ -43,14 +43,9 @@ public sealed class FakeChats
         AddContact("p-bo", "Bo", "+15550000002");
         AddContact("p-cy", "Cy", "+15550000003");
 
-        // Ann: An RCS Chat That Starts Encrypted, Three Messages And A Photo, The Last One Unread; The Photo Comes
-        // Before Her Last Text, So The Snippet Stays "Are you free later?"
+        // Ann: An RCS Chat That Starts Encrypted, Three Messages, The Last One Unread
         Conversation ann = NewConversation("c-ann", "Ann Lee", false, ConversationStatus.Active, false, true, Person("p-ann", "Ann Lee", "+15550000001"));
-        Message tombstone = NewTombstone(ann, MessageStatusType.TombstoneEncryptedOneOnOneRcsCreated);
-        Message hi        = NewMessage(ann, "p-ann", "Hi, it's Ann");
-        Message hey       = NewMessage(ann, MyParticipantId, "Hey Ann");
-        Message photo     = NewMediaMessage(ann, "p-ann", StoreMedia(Convert.FromBase64String(BluePng), "photo.png", "image/png"));
-        Add(ann, tombstone, hi, hey, photo, NewMessage(ann, "p-ann", "Are you free later?"));
+        Add(ann, NewTombstone(ann, MessageStatusType.TombstoneEncryptedOneOnOneRcsCreated), NewMessage(ann, "p-ann", "Hi, it's Ann"), NewMessage(ann, MyParticipantId, "Hey Ann"), NewMessage(ann, "p-ann", "Are you free later?"));
 
         // Team: A Pinned SMS/MMS Group
         Conversation team = NewConversation("c-team", "Team", true, ConversationStatus.Active, true, false, Person("p-bo", "Bo", "+15550000002"), Person("p-cy", "Cy", "+15550000003"));
@@ -115,6 +110,17 @@ public sealed class FakeChats
         {
             _contacts.Add(new Contact { ParticipantID = participantId, Name = name, NameAgain = name, ContactID = "ct-" + participantId, Number = new ContactNumber { Number = number } });
         }
+    }
+
+    /// <summary>
+    /// Adds a one-on-one chat with Mia Media holding one received photo (<see cref="BluePng"/>), for media
+    /// tests. The default chats stay as they are, so tests that count Ann's bubbles or rows aren't affected.
+    /// </summary>
+    /// <param name="id">The conversation ID.</param>
+    public void AddPhotoChat(string id = "c-media")
+    {
+        Conversation chat = NewConversation(id, "Mia Media", false, ConversationStatus.Active, false, false, Person("p-mia", "Mia Media", "+15550000004"));
+        Add(chat, NewMediaMessage(chat, "p-mia", StoreMedia(Convert.FromBase64String(BluePng), "photo.png", "image/png")));
     }
 
     /// <summary>
