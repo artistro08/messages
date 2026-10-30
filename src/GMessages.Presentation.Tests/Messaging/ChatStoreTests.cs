@@ -755,6 +755,75 @@ public sealed class ChatStoreTests
         Assert.IsNull(rig.Client.Sent[1].Reply);
     }
 
+    /// <summary>
+    /// An attachment uploads, then goes as the first MessageInfo with the caption as a second one (SMS and MMS).
+    /// </summary>
+    [TestMethod]
+    public async Task SendMedia_BuildsMediaMessageInfo()
+    {
+        using var rig = new Rig();
+        await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1")));
+        double reported = -1;
+
+        ChatMessage sent = await rig.Store.SendMediaAsync("c1", new byte[] { 1, 2, 3 }, "cat.png", "image/png", "look", "tmp-1", new InlineProgress(p => reported = p), Ct);
+
+        SendMessageRequest req = rig.Client.Sent.Single();
+        Assert.AreEqual("tmp-1", req.TmpID);
+        Assert.AreEqual("me1", req.MessagePayload.ParticipantID);
+        Assert.AreEqual(2, req.MessagePayload.MessageInfo.Count);
+        Assert.AreEqual("media-1", req.MessagePayload.MessageInfo[0].MediaContent.MediaID);
+        Assert.AreEqual("cat.png", req.MessagePayload.MessageInfo[0].MediaContent.MediaName);
+        Assert.AreEqual("look", req.MessagePayload.MessageInfo[1].MessageContent.Content);
+        CollectionAssert.AreEqual(new byte[] { 1, 2, 3 }, rig.Client.Media["media-1"]);
+        Assert.AreEqual(1, reported);
+        Assert.AreEqual(MessageKind.Photo, sent.Kind);
+        Assert.AreEqual("media-1", sent.Media?.MediaId);
+        Assert.AreEqual("look", sent.Text);
+    }
+
+    /// <summary>
+    /// RCS refuses captions on media: the media goes alone, and the caption follows as its own text message.
+    /// </summary>
+    [TestMethod]
+    public async Task SendMedia_RcsCaption_SeparateText()
+    {
+        using var rig = new Rig();
+        Conversation conv = Conv("c1");
+        conv.Type         = ConversationType.Rcs;
+        await rig.Store.HandleEventAsync(new ConversationUpdated(conv));
+
+        ChatMessage sent = await rig.Store.SendMediaAsync("c1", new byte[] { 1 }, "a.pdf", "application/pdf", "read this", "tmp-1", null, Ct);
+
+        Assert.HasCount(2, rig.Client.Sent);
+        Assert.AreEqual(1, rig.Client.Sent[0].MessagePayload.MessageInfo.Count);
+        Assert.AreEqual("media-1", rig.Client.Sent[0].MessagePayload.MessageInfo[0].MediaContent.MediaID);
+        Assert.AreEqual("read this", rig.Client.Sent[1].MessagePayload.MessageInfo.Single().MessageContent.Content);
+        Assert.AreNotEqual("tmp-1", rig.Client.Sent[1].TmpID);
+        Assert.AreEqual(string.Empty, sent.Text);
+    }
+
+    /// <summary>
+    /// A file over 100 MiB is refused before anything uploads or sends.
+    /// </summary>
+    [TestMethod]
+    public async Task SendMedia_TooBig_Refused()
+    {
+        using var rig = new Rig();
+        await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1")));
+        byte[] big = new byte[ChatStore.MaxAttachmentBytes + 1];
+
+        await Assert.ThrowsExactlyAsync<AttachmentTooBigException>(() => rig.Store.SendMediaAsync("c1", big, "big.bin", "application/octet-stream", null, "tmp-1", null, Ct));
+
+        Assert.IsEmpty(rig.Client.Media);
+        Assert.IsEmpty(rig.Client.Sent);
+    }
+
+    // Reports As It Is Called, Unlike Progress<T>, Which Posts
+    private sealed class InlineProgress(Action<double> report) : IProgress<double>
+    {
+        public void Report(double value) => report(value);
+    }
+
     [TestMethod]
     public async Task SendReaction_UsesSimExceptForRemove_RefusalThrows()
     {

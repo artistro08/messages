@@ -49,4 +49,10 @@ public enum ShortcutCommand
 
     /// <summary>Opens the open conversation's Details dialog.</summary>
     ShowDetails,
+
+    /// <summary>Opens the file picker to attach any files to the open conversation.</summary>
+    AttachFiles,
+
+    /// <summary>Opens the file picker filtered to photos.</summary>
+    AttachPhotos,
 }

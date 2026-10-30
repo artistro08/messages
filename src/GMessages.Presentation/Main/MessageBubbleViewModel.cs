@@ -253,6 +253,24 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     /// <returns>True when the ring shows.</returns>
     public static bool ShowsFocusRing(bool focused, bool byPointer, bool highContrast) => focused && !byPointer && !highContrast;
 
+    /// <summary>
+    /// Gets whether the bubble holds a file of mine not uploaded yet: the attachment's own bytes, shown and sent from
+    /// here (see <see cref="ChatViewModel.SendAsync"/>), until the phone's echo brings its media ID.
+    /// </summary>
+    public bool IsLocalMedia => FromMe && Media is { MediaId.Length: 0, ThumbnailId.Length: 0, InlineData.Length: > 0 };
+
+    /// <summary>Gets whether the upload bar shows: a file of mine still being sent from here.</summary>
+    public bool IsUploading => IsSending && IsLocalMedia;
+
+    /// <summary>Gets how much of the attachment has uploaded, in whole percent (0 to 100).</summary>
+    public double UploadPercent { get; private set; }
+
+    /// <summary>Gets the failed send's retry link text: the attachment's own for a photo or file, else the text's.</summary>
+    public string NotSentText => HasMediaFile ? ChatCopy.AttachSendFailed : ChatCopy.NotSentRetry;
+
+    // The Caption Sent With The Media (Empty Without One), As Typed
+    internal string Caption => Media is null ? string.Empty : _message.Text;
+
     /// <summary>Gets the card's file name: the sender's, or the kind label ("Video", "File") without one.</summary>
     public string FileName => Media is { Name.Length: > 0 } media ? media.Name : ChatFormat.KindLabel(Kind);
 
@@ -356,7 +374,7 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     /// </summary>
     /// <remarks>A XAML list item reads its item's <c>ToString()</c> as its UI Automation name, so screen readers hear this.</remarks>
     /// <returns>The text to read out.</returns>
-    public override string ToString() => IsFailed ? $"{Text}, {ChatCopy.NotSentRetry}" : Text;
+    public override string ToString() => IsFailed ? $"{Text}, {NotSentText}" : Text;
 
     /// <summary>
     /// Shows the time under the bubble, or hides it again (a click on the bubble). On the newest bubble it hides its caption
@@ -511,10 +529,24 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
 
     internal void MarkSending(string tmpId)
     {
-        TmpId     = tmpId;
-        IsFailed  = false;
-        IsSending = true;
+        TmpId         = tmpId;
+        IsFailed      = false;
+        IsSending     = true;
+        UploadPercent = 0;
         PropertyChanged?.Invoke(this, AllChanged);
+    }
+
+    // The Upload Moved On: Raised Only When The Whole Percent Changes, So A Big File Doesn't Flood The View
+    internal void SetUploadShare(double share)
+    {
+        double percent = Math.Floor(Math.Clamp(share, 0, 1) * 100);
+        if (percent == UploadPercent)
+        {
+            return;
+        }
+
+        UploadPercent = percent;
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(UploadPercent)));
     }
 
     private void Fill(ChatMessage m)
@@ -541,7 +573,7 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         Preview       = Preview?.Url == LinkUrl ? Preview : null;
         _message      = m;
         Kind          = m.Kind;
-        Media         = m.Media;
+        Media         = KeepSize(m.Media, Media);
         HasPhoto      = m.Media is not null && m.Kind == MessageKind.Photo;
         HasFileCard   = m.Media is not null && m.Kind is MessageKind.Video or MessageKind.File;
         HasCopyText   = m.Media is null || m.Text.Length > 0;
@@ -549,6 +581,13 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         // A Photo Or Card Shows Only Its Caption Under It, Not The Kind Label
         BodyText      = HasMediaFile && m.Text.Length == 0 ? string.Empty : BodyOf(Text, DisplayText, _link, Preview);
     }
+
+    // An Echo Without Dimensions (An Upload Carries None) Keeps The Ones Already Known (The Picked Photo's), So The
+    // Sent Photo Keeps Its Shape
+    private static MediaPart? KeepSize(MediaPart? incoming, MediaPart? known) =>
+        incoming is { Width: 0, Height: 0 } && known is { Width: > 0, Height: > 0 }
+            ? incoming with { Width = known.Width, Height = known.Height }
+            : incoming;
 
     // The Text Shown In The Bubble: Without The Card's Link While The Card Shows. The Space On Either Side Of The Address
     // Goes With It; What Was On Each Side Joins With One Space, Or One Line Break When Either Side Was Its Own Line, And

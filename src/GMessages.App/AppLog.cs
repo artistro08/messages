@@ -86,6 +86,9 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 926, Level = LogLevel.Warning, Message = "Taskbar badge failed ({ErrorType} 0x{HResult:X8})")]
     public static partial void BadgeFailed(ILogger logger, string errorType, int hResult);
 
+    [LoggerMessage(EventId = 927, Level = LogLevel.Information, Message = "Picked {Picked} files in {ConversationId}; {Attached} attachments wait")]
+    public static partial void AttachmentsPicked(ILogger logger, string conversationId, int picked, int attached);
+
     [LoggerMessage(EventId = 951,Level = LogLevel.Information, Message = "Test endpoint {Endpoint}, data folder {DataFolder}")]
     public static partial void TestEndpoint(ILogger logger, string endpoint, string dataFolder);
 }

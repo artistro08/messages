@@ -1,9 +1,11 @@
 using System.IO.Compression;
 using FlaUI.Core.AutomationElements;
+using FlaUI.Core.WindowsAPI;
 using GMessages.App.UITests.Driver;
 using GMessages.Presentation;
 using GMessages.Presentation.Messaging;
 using GMessages.Protocol.Proto;
+using Keyboard = FlaUI.Core.Input.Keyboard;
 
 namespace GMessages.App.UITests;
 
@@ -14,7 +16,7 @@ namespace GMessages.App.UITests;
 [TestClass]
 [TestCategory("UI")]
 [DoNotParallelize]
-public sealed class MediaTests : UiTest
+public sealed partial class MediaTests : UiTest
 {
     // The Photo Bubble's Load States, As The Test Hooks Report Them In Its Item Status
     private const string Blurred = "Blurred";
@@ -153,10 +155,140 @@ public sealed class MediaTests : UiTest
         Wait.Until(() => card.Properties.ItemStatus.ValueOrDefault == "Ready" && HasText(card, "27 bytes"), AppDriver.DefaultTimeout,
             () => $"The card stayed '{card.Properties.ItemStatus.ValueOrDefault}' after opening.");
     }
+    /// <summary>
+    /// A picked photo shows as a chip; Send uploads it, the phone gets it as a media message and then the text as its own
+    /// message (Mia's chat is RCS, which refuses captions), the bubble shows the photo in its shape, and the chip is gone.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Attach_Photo_SendsAndShows()
+    {
+        await OpenMediaChatAsync();
+        byte[] bytes = Png(300, 200, SplitColors);
+        Pick(("split.png", bytes));
+
+        App.Find("Chat.Attach").Patterns.Invoke.Pattern.Invoke();
+        AutomationElement chip = App.Find("Chat.Attachment.1");
+        Assert.AreEqual("split.png", AppDriver.SafeName(chip), "The chip isn't named by the file name.");
+
+        App.Find("Chat.Draft").Patterns.Value.Pattern.SetValue("Look");
+        App.Find("Chat.Send").Patterns.Invoke.Pattern.Invoke();
+
+        Wait.Until(() => Server.Phone.Sent.Count == 2, AppDriver.DefaultTimeout, () => $"The phone got {Server.Phone.Sent.Count} sends, not the photo and the text.");
+        MessageInfo media = Server.Phone.Sent[0].MessagePayload.MessageInfo.Single();
+        Assert.AreEqual("split.png", media.MediaContent.MediaName, "The phone got another attachment.");
+        Assert.AreEqual("image/png", media.MediaContent.MimeType, "The photo went with another type.");
+        Assert.AreEqual("Look", FakeGoogle.FakePhone.SentText(Server.Phone.Sent[1]), "The text didn't follow the photo.");
+        Wait.Until(() => App.TryFind("Chat.Attachment.1") is null, AppDriver.DefaultTimeout, () => "The chip stayed after Send.");
+
+        // The Photo's Echo (Before The Text's) Downloads And Shows The Photo, In The Photo's Shape
+        string echo_id          = Server.Phone.Chats.Page("c-media", 2, null).Page[1].MessageID;
+        AutomationElement photo = App.Find("Bubble.Photo." + echo_id);
+        WaitForStatus(photo, Full);
+        System.Drawing.Rectangle box = photo.BoundingRectangle;
+        Assert.AreEqual(1.5, (double)box.Width / box.Height, 0.03, $"The sent photo's box {box} doesn't keep its 3:2 shape.");
+    }
+
+    /// <summary>
+    /// Two picked files show as two chips; each chip's remove button drops only it, and with none left Send turns off.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Attach_RemoveChip()
+    {
+        await OpenMediaChatAsync();
+        Pick(("blue.png", Png(20, 20, (_, _, _) => (40, 60, 220))), ("notes.pdf", System.Text.Encoding.UTF8.GetBytes("%PDF-1.4 notes")));
+
+        App.Find("Chat.Attach").Patterns.Invoke.Pattern.Invoke();
+        App.Find("Chat.Attachment.1");
+        Assert.AreEqual("notes.pdf", AppDriver.SafeName(App.Find("Chat.Attachment.2")), "The file chip isn't named by the file name.");
+        Assert.AreEqual(ChatCopy.RemoveAttachment, AppDriver.SafeName(App.Find("Chat.RemoveAttachment.1")), "The remove button has another name.");
+        Assert.IsTrue(App.Find("Chat.Send").IsEnabled, "Send is off with attachments waiting.");
+
+        App.Find("Chat.RemoveAttachment.1").Patterns.Invoke.Pattern.Invoke();
+        Wait.Until(() => App.TryFind("Chat.Attachment.1") is null, AppDriver.DefaultTimeout, () => "The removed chip stayed.");
+        Assert.IsNotNull(App.TryFind("Chat.Attachment.2"), "Removing one chip took the other too.");
+
+        App.Find("Chat.RemoveAttachment.2").Patterns.Invoke.Pattern.Invoke();
+        Wait.Until(() => !App.Find("Chat.Send").IsEnabled, AppDriver.DefaultTimeout, () => "Send stayed on with nothing to send.");
+        Assert.IsEmpty(Server.Phone.Sent, "Removing chips sent something.");
+    }
+
+    /// <summary>
+    /// Ctrl + Shift + a opens the picker for any files, and Ctrl + Shift + p the photo picker, whose pick becomes a chip.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task CtrlShiftA_OpensPicker()
+    {
+        await OpenMediaChatAsync();
+        App.Find("Chat.Draft").Focus();
+        string opened       = Path.Combine(App.DataDir, "picker.txt");
+        List<string> expect = [];
+
+        // Another App's Global Hotkey Takes Ctrl + Shift + a Before Any Window Sees It: Then Only Ctrl + Shift + p Is Tried
+        if (HotkeyFree(VirtualKeyShort.KEY_A))
+        {
+            Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.SHIFT, VirtualKeyShort.KEY_A);
+            expect.Add("files");
+            Wait.Until(() => File.Exists(opened) && File.ReadAllLines(opened).SequenceEqual(expect), AppDriver.DefaultTimeout,
+                () => "Ctrl + Shift + a didn't open the file picker.");
+        }
+        else
+        {
+            TestContext.WriteLine("Ctrl + Shift + a is another app's global hotkey on this PC; only Ctrl + Shift + p was tried.");
+        }
+
+        Pick(("blue.png", Png(20, 20, (_, _, _) => (40, 60, 220))));
+        Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.SHIFT, VirtualKeyShort.KEY_P);
+        expect.Add("photos");
+        Wait.Until(() => File.Exists(opened) && File.ReadAllLines(opened).SequenceEqual(expect), AppDriver.DefaultTimeout,
+            () => "Ctrl + Shift + p didn't open the photo picker.");
+        Assert.AreEqual("blue.png", AppDriver.SafeName(App.Find("Chat.Attachment.1")), "The photo picked didn't become a chip.");
+    }
 
     // =========================================================================
     // HELPERS
     // =========================================================================
+
+    // Whether Ctrl + Shift + The Key Is Free: No Other App Holds It As A Global Hotkey (Which Windows Would Hand That App)
+    private static bool HotkeyFree(VirtualKeyShort key)
+    {
+        const uint ControlShiftNoRepeat = 0x0002 | 0x0004 | 0x4000;
+        const int ProbeId               = 0x7A11;
+
+        if (!RegisterHotKey(IntPtr.Zero, ProbeId, ControlShiftNoRepeat, (uint)key))
+        {
+            return false;
+        }
+
+        UnregisterHotKey(IntPtr.Zero, ProbeId);
+        return true;
+    }
+
+    [System.Runtime.InteropServices.LibraryImport("user32.dll")]
+    [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+    private static partial bool RegisterHotKey(IntPtr window, int id, uint modifiers, uint key);
+
+    [System.Runtime.InteropServices.LibraryImport("user32.dll")]
+    [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+    private static partial bool UnregisterHotKey(IntPtr window, int id);
+
+    // Writes Files For The App's Next Pick (The Test Hook Answers The Picker With Them)
+    private void Pick(params (string Name, byte[] Bytes)[] files)
+    {
+        string folder = Path.Combine(App.DataDir, "picks", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        List<string> paths = [];
+        foreach ((string name, byte[] bytes) in files)
+        {
+            string path = Path.Combine(folder, name);
+            File.WriteAllBytes(path, bytes);
+            paths.Add(path);
+        }
+
+        File.WriteAllLines(Path.Combine(App.DataDir, "pick.txt"), paths);
+    }
 
     // Two Halves: Red Left, Blue Right
     private static (byte R, byte G, byte B) SplitColors(int x, int y, int width) => x < width / 2 ? ((byte)220, (byte)40, (byte)40) : ((byte)40, (byte)60, (byte)220);

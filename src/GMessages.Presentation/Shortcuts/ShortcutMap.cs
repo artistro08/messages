@@ -25,7 +25,9 @@ public static class ShortcutMap
         ("Ctrl + k", "Start new conversation"),
         ("Ctrl + Shift + k", "Focus on conversation list"),
         ("r", "Focus on message box"),
+        ("Ctrl + Shift + a", "Attach files"),
         ("Ctrl + Shift + e", "Show/hide emoji picker"),
+        ("Ctrl + Shift + p", "Show/hide photos picker"),
         ("Shift + +", "Open reactions selector"),
         ("Ctrl + j", "Focus on messages in conversation"),
         ("Escape", "Exit current conversation"),
@@ -104,6 +106,8 @@ public static class ShortcutMap
                 VirtualKey.K => ShortcutCommand.FocusConversationList,
                 VirtualKey.E => ShortcutCommand.ToggleEmoji,
                 VirtualKey.O => ShortcutCommand.ShowDetails,
+                VirtualKey.A => ShortcutCommand.AttachFiles,
+                VirtualKey.P => ShortcutCommand.AttachPhotos,
                 Slash        => ShortcutCommand.ShowHelp,
                 _ => null,
             };

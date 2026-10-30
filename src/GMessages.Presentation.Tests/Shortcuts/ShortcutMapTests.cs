@@ -24,6 +24,8 @@ public sealed class ShortcutMapTests
     [DataRow(VirtualKey.Enter, true, false, ShortcutCommand.ReplyToMessage)]
     [DataRow(VirtualKey.D, true, false, ShortcutCommand.DeleteConversation)]
     [DataRow(VirtualKey.O, true, true, ShortcutCommand.ShowDetails)]
+    [DataRow(VirtualKey.A, true, true, ShortcutCommand.AttachFiles)]
+    [DataRow(VirtualKey.P, true, true, ShortcutCommand.AttachPhotos)]
     public void Resolve_MapsKey(VirtualKey key, bool ctrl, bool shift, ShortcutCommand expected)
     {
         Assert.AreEqual(expected, ShortcutMap.Resolve(key, ctrl, shift, false, false, false));
@@ -88,7 +90,9 @@ public sealed class ShortcutMapTests
             ("Ctrl + k", "Start new conversation"),
             ("Ctrl + Shift + k", "Focus on conversation list"),
             ("r", "Focus on message box"),
+            ("Ctrl + Shift + a", "Attach files"),
             ("Ctrl + Shift + e", "Show/hide emoji picker"),
+            ("Ctrl + Shift + p", "Show/hide photos picker"),
             ("Shift + +", "Open reactions selector"),
             ("Ctrl + j", "Focus on messages in conversation"),
             ("Escape", "Exit current conversation"),
@@ -102,7 +106,7 @@ public sealed class ShortcutMapTests
             ("Ctrl + ?", "Open keyboard shortcut help"),
         ];
 
-        Assert.HasCount(15, expected);
+        Assert.HasCount(17, expected);
         CollectionAssert.AreEqual(expected, ShortcutMap.HelpRows.ToArray());
     }
 }

@@ -322,6 +322,14 @@
                         </Button>
                         <!-- /File Card -->
 
+                        <!-- Upload: how much of my photo or file has gone up, while it sends from here -->
+                        <ProgressBar
+                            Margin="10,6"
+                            AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Upload.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                            Maximum="100"
+                            Value="{x:Bind Bubble.UploadPercent, Mode=OneWay, FallbackValue=0}"
+                            Visibility="{x:Bind Bubble.IsUploading, Mode=OneWay, FallbackValue=Collapsed}" />
+
                         <!-- Text: while the preview card shows, without the card's link (Bubble.BodyText); a message that was
                              only the link shows the card alone -->
                         <TextBlock
@@ -532,7 +540,7 @@
                         Padding="0"
                         AutomationProperties.AutomationId="{x:Bind local:MessageBubble.RetryIdOf(Bubble.Id, Bubble.TmpId), Mode=OneWay}"
                         Click="OnRetryClick"
-                        Content="{x:Bind local:MessageBubble.NotSentText}"
+                        Content="{x:Bind Bubble.NotSentText, Mode=OneWay, FallbackValue=''}"
                         FontSize="12"
                         Foreground="{ThemeResource SystemFillColorCriticalBrush}" />
                 </StackPanel>
