@@ -16,6 +16,7 @@
                  accent, faint; on the full accent (SMS) it is the text-on-accent color, faint, with a bar of that color. In
                  high contrast the quote takes the bubble's own color (window, or highlight on SMS) and a highlight bar.
                  Reaction Pill Edge: none (clear) in Light and Dark; the text color in high contrast, so the pill keeps an edge.
+                 Reaction Pill Mine: a soft accent tint as the fill (no ring).
                  Here, not in the pill's own resources: a ThemeResource on an element can't see keys its own Resources define
                  after it, and the failed lookup crashed the app as soon as a bubble was made -->
             <ResourceDictionary.ThemeDictionaries>
@@ -26,6 +27,7 @@
                     <SolidColorBrush x:Key="QuoteBarBrush" Color="{ThemeResource SystemAccentColorDark1}" />
                     <SolidColorBrush x:Key="QuoteOnAccentFillBrush" Opacity="0.18" Color="{ThemeResource TextOnAccentFillColorPrimary}" />
                     <SolidColorBrush x:Key="ReactionPillBorderBrush" Color="Transparent" />
+                    <SolidColorBrush x:Key="ReactionPillMineBrush" Color="{ThemeResource SystemAccentColorLight3}" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
                     <SolidColorBrush x:Key="RcsBubbleBrush" Color="{ThemeResource SystemAccentColorDark1}" />
@@ -34,6 +36,7 @@
                     <SolidColorBrush x:Key="QuoteBarBrush" Color="{ThemeResource SystemAccentColorLight2}" />
                     <SolidColorBrush x:Key="QuoteOnAccentFillBrush" Opacity="0.18" Color="{ThemeResource TextOnAccentFillColorPrimary}" />
                     <SolidColorBrush x:Key="ReactionPillBorderBrush" Color="Transparent" />
+                    <SolidColorBrush x:Key="ReactionPillMineBrush" Color="{ThemeResource SystemAccentColorDark2}" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="HighContrast">
                     <SolidColorBrush x:Key="RcsBubbleBrush" Color="{ThemeResource SystemColorWindowColor}" />
@@ -42,6 +45,7 @@
                     <SolidColorBrush x:Key="QuoteBarBrush" Color="{ThemeResource SystemColorHighlightColor}" />
                     <SolidColorBrush x:Key="QuoteOnAccentFillBrush" Color="{ThemeResource SystemColorHighlightColor}" />
                     <SolidColorBrush x:Key="ReactionPillBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+                    <SolidColorBrush x:Key="ReactionPillMineBrush" Color="{ThemeResource SystemColorWindowColor}" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
         </ResourceDictionary>

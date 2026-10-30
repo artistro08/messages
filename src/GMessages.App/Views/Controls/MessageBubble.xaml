@@ -45,12 +45,12 @@
                 </VisualState>
             </VisualStateGroup>
 
-            <!-- My Reaction: the pill gets an accent border -->
+            <!-- My Reaction: the pill gets a soft accent fill (ReactionPillMineBrush in App.xaml), no ring -->
             <VisualStateGroup x:Name="Reaction">
                 <VisualState x:Name="NotMine" />
                 <VisualState x:Name="Mine">
                     <VisualState.Setters>
-                        <Setter Target="Pill.BorderBrush" Value="{ThemeResource AccentFillColorDefaultBrush}" />
+                        <Setter Target="Pill.Background" Value="{ThemeResource ReactionPillMineBrush}" />
                     </VisualState.Setters>
                 </VisualState>
             </VisualStateGroup>
