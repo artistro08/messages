@@ -970,6 +970,18 @@ public sealed partial class ChatStore : IDisposable
     /// <returns>The fields joined by spaces in wire order, or an empty string when there are none.</returns>
     internal static string DescribeUnknownFields(Conversation conversation)
     {
+        try
+        {
+            return DescribeUnknownFieldsCore(conversation);
+        }
+        catch (InvalidProtocolBufferException)
+        {
+            return "";
+        }
+    }
+
+    private static string DescribeUnknownFieldsCore(Conversation conversation)
+    {
         List<string> parts = [];
         CodedInputStream input = new(conversation.ToByteArray());
         uint tag;
@@ -1027,7 +1039,13 @@ public sealed partial class ChatStore : IDisposable
                     return head;
                 }
 
-                inner.Add($"{WireFormat.GetTagFieldNumber(tag)}={nested.ReadUInt64()}");
+                // Small Values Only: Larger Ones Could Be Text Bytes
+                ulong value = nested.ReadUInt64();
+                inner.Add($"{WireFormat.GetTagFieldNumber(tag)}={(value <= 3 ? value.ToString(System.Globalization.CultureInfo.InvariantCulture) : "n")}");
+                if (inner.Count >= 8)
+                {
+                    break;
+                }
             }
         }
         catch (InvalidProtocolBufferException)
@@ -1038,11 +1056,17 @@ public sealed partial class ChatStore : IDisposable
         return inner.Count == 0 ? head : $"{head}{{{string.Join(' ', inner)}}}";
     }
 
+    private readonly ConcurrentDictionary<string, string> _unknownFields = new();
+
     private void LogUnknownFields(Conversation conversation)
     {
         string fields = DescribeUnknownFields(conversation);
-        if (fields.Length > 0)
+
+        // Log Only When A Conversation's Description Changed
+        string previous = _unknownFields.GetValueOrDefault(conversation.ConversationID, "");
+        if (fields.Length > 0 && fields != previous)
         {
+            _unknownFields[conversation.ConversationID] = fields;
             LogConversationUnknownFields(conversation.ConversationID, fields);
         }
     }

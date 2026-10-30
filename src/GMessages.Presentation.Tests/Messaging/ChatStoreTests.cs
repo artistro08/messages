@@ -35,6 +35,18 @@ public sealed class ChatStoreTests
     }
 
     [TestMethod]
+    public void DescribeUnknownFields_TextLookingNested_NeverLogsDigits()
+    {
+        // "x5" And "h1x2" Parse As Varint Pairs; Their Values Must Not Print
+        byte[] extra = [0xCA, 0x02, 0x02, .. "x5"u8.ToArray(), 0xD2, 0x02, 0x04, .. "h1x2"u8.ToArray()];
+        Conversation conversation = Conversation.Parser.ParseFrom(extra);
+
+        string text = ChatStore.DescribeUnknownFields(conversation);
+
+        Assert.AreEqual("41=len2{15=n} 42=len4{13=n 15=n}", text);
+    }
+
+    [TestMethod]
     public void DescribeUnknownFields_None_Empty()
     {
         Assert.AreEqual("", ChatStore.DescribeUnknownFields(new Conversation { ConversationID = "c1" }));
