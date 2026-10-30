@@ -135,6 +135,7 @@ public sealed partial class GmClient
 
         // Download And Decrypt
         GmMediaResponse res = await _http.SendMediaAsync(HttpMethod.Get, _endpoints.UploadMedia, DownloadHeaders(metadata_header), null, requireOk: false, ct).ConfigureAwait(false);
+        ct.ThrowIfCancellationRequested();
         return MediaCrypto.Decrypt(res.Body, key.Span);
     }
 

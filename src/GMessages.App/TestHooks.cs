@@ -120,6 +120,25 @@ internal static class TestHooks
         string microphone = Path.Combine(DataDir, "microphone.txt");
         return File.Exists(microphone) ? File.ReadAllText(microphone).Trim() : "none";
     }
+
+    /// <summary>
+    /// When pointed at the fake server, shortens a wait for a test: <c>{data folder}\{name}.txt</c> holds the seconds
+    /// (such as <c>download-timeout</c> or <c>full-size-wait</c>). Read each time the wait starts.
+    /// </summary>
+    /// <param name="name">The wait's file name, without <c>.txt</c>.</param>
+    /// <returns>The shortened wait, or null when the file is missing or on a normal run (use the real wait).</returns>
+    public static TimeSpan? ShortWait(string name)
+    {
+        if (!BlockLaunches || DataDir is null)
+        {
+            return null;
+        }
+
+        string wait = Path.Combine(DataDir, name + ".txt");
+        return File.Exists(wait) && double.TryParse(File.ReadAllText(wait).Trim(), System.Globalization.CultureInfo.InvariantCulture, out double seconds)
+            ? TimeSpan.FromSeconds(seconds)
+            : null;
+    }
 }
 #else
 /// <summary>
@@ -165,5 +184,10 @@ internal static class TestHooks
     /// <summary>Always null in Release: the real microphone records.</summary>
     /// <returns>Null.</returns>
     public static string? FakeMicrophone() => null;
+
+    /// <summary>Always null in Release: every wait is its real length.</summary>
+    /// <param name="name">The wait's name.</param>
+    /// <returns>Null.</returns>
+    public static TimeSpan? ShortWait(string name) => null;
 }
 #endif

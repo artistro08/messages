@@ -142,10 +142,11 @@ public sealed class MediaStoreTests
     }
 
     /// <summary>
-    /// A Clear during a download still hands the caller its bytes, but keeps nothing: the next ask downloads again.
+    /// A Clear (sign-out) during a download aborts its request: the caller gets a cancel, nothing is kept, and the next
+    /// ask downloads again.
     /// </summary>
     [TestMethod]
-    public async Task Clear_DuringDownload_NotCached()
+    public async Task Clear_DuringDownload_CancelsRequest()
     {
         using var rig           = new Rig();
         rig.Client.Media["m-1"] = [1, 2, 3];
@@ -153,11 +154,44 @@ public sealed class MediaStoreTests
 
         Task<byte[]> held = rig.Store.GetAsync(Part("m-1"), thumbnail: false, Ct);
         rig.Store.Clear();
-        rig.Client.DownloadGate.SetResult();
 
-        CollectionAssert.AreEqual(new byte[] { 1, 2, 3 }, await held);
+        await Assert.ThrowsAsync<OperationCanceledException>(() => held.WaitAsync(TimeSpan.FromSeconds(5)));
+        rig.Client.DownloadGate.SetResult();
         CollectionAssert.AreEqual(new byte[] { 1, 2, 3 }, await rig.Store.GetAsync(Part("m-1"), thumbnail: false, Ct));
         Assert.HasCount(2, rig.Client.DownloadCalls);
+    }
+
+    /// <summary>
+    /// A download that never answers gives up after the download timeout with a <see cref="TimeoutException"/> (which
+    /// the photo shows as failed), and a later ask tries again.
+    /// </summary>
+    [TestMethod]
+    public async Task StalledDownload_TimesOut()
+    {
+        using var rig             = new Rig();
+        rig.Client.Media["m-1"]   = [1, 2, 3];
+        rig.Client.DownloadGate   = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        rig.Store.DownloadTimeout = () => TimeSpan.FromMilliseconds(200);
+
+        Task<byte[]> stalled = rig.Store.GetAsync(Part("m-1"), thumbnail: false, Ct);
+        Assert.AreSame(stalled, await Task.WhenAny(stalled, Task.Delay(TimeSpan.FromSeconds(5))), "The stalled download never gave up.");
+        await Assert.ThrowsExactlyAsync<TimeoutException>(() => stalled);
+
+        rig.Client.DownloadGate.SetResult();
+        CollectionAssert.AreEqual(new byte[] { 1, 2, 3 }, await rig.Store.GetAsync(Part("m-1"), thumbnail: false, Ct));
+    }
+
+    /// <summary>
+    /// Seeded bytes answer their media ID with no download.
+    /// </summary>
+    [TestMethod]
+    public async Task Seed_AnswersWithoutDownload()
+    {
+        using var rig = new Rig();
+        rig.Store.Seed("m-1", [4, 5]);
+
+        CollectionAssert.AreEqual(new byte[] { 4, 5 }, await rig.Store.GetAsync(Part("m-1"), thumbnail: false, Ct));
+        Assert.IsEmpty(rig.Client.DownloadCalls);
     }
 
     /// <summary>
@@ -174,7 +208,7 @@ public sealed class MediaStoreTests
         rig.Store.Clear();
         rig.Client.DownloadGate.SetResult();
 
-        await Assert.ThrowsExactlyAsync<OperationCanceledException>(() => save);
+        await Assert.ThrowsAsync<OperationCanceledException>(() => save);
         Assert.IsFalse(Directory.Exists(rig.Folder) && Directory.EnumerateFileSystemEntries(rig.Folder).Any());
     }
 

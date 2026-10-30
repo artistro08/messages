@@ -25,10 +25,15 @@ namespace GMessages.Presentation.Messaging;
 /// types are never logged; only counts and error type names are. Safe to call from any thread.
 /// </para>
 /// </remarks>
+#pragma warning disable CA1001 // Lives As Long As The App; Clear Cancels Its Token Source And Replaces It
 public sealed partial class MediaStore
+#pragma warning restore CA1001
 {
     /// <summary>How many bytes of decrypted media stay in memory.</summary>
     public const long MemoryCapBytes = 64L * 1024 * 1024;
+
+    /// <summary>How long one download may take before it fails, unless <see cref="DownloadTimeout"/> says otherwise.</summary>
+    public static readonly TimeSpan DefaultDownloadTimeout = TimeSpan.FromMinutes(2);
 
     /// <summary>The longest file name written to the temp folder, extension included.</summary>
     public const int MaxNameLength = 100;
@@ -76,6 +81,9 @@ public sealed partial class MediaStore
     // Bumped By Clear: A Download Started Before It Is Not Cached
     private int _generation;
 
+    // Canceled And Replaced By Clear: Aborts Every Download Started Before It
+    private CancellationTokenSource _generationCancel = new();
+
     /// <summary>
     /// Creates the store.
     /// </summary>
@@ -96,6 +104,13 @@ public sealed partial class MediaStore
     /// <summary>Gets the private temp folder (emptied by <see cref="Clear"/>), where voice recordings go too.</summary>
     public string TempFolder => _tempFolder;
 
+    /// <summary>
+    /// Gets or sets how long one download may take, read as each download starts. Past it the request is aborted and
+    /// the download fails with a <see cref="TimeoutException"/>. Defaults to <see cref="DefaultDownloadTimeout"/>; the
+    /// UI test hooks shorten it.
+    /// </summary>
+    public Func<TimeSpan> DownloadTimeout { get; set; } = static () => DefaultDownloadTimeout;
+
     // =========================================================================
     // MEDIA
     // =========================================================================
@@ -110,7 +125,8 @@ public sealed partial class MediaStore
     /// <exception cref="ArgumentNullException"><paramref name="part"/> is null.</exception>
     /// <exception cref="MediaPendingException">The part has no media ID, thumbnail or inline data yet.</exception>
     /// <exception cref="MessagingUnavailableException">Not connected.</exception>
-    /// <exception cref="OperationCanceledException"><paramref name="ct"/> was canceled.</exception>
+    /// <exception cref="TimeoutException">The download took longer than <see cref="DownloadTimeout"/>.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="ct"/> was canceled, or <see cref="Clear"/> aborted the download.</exception>
     public Task<byte[]> GetAsync(MediaPart part, bool thumbnail, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(part);
@@ -140,11 +156,39 @@ public sealed partial class MediaStore
                 // Started Off This Thread, So It Can't Finish (And Leave _inFlight) Before It Is Added
                 IMessagingClient client = _client() ?? throw new MessagingUnavailableException();
                 int generation          = _generation;
-                download                = Task.Run(() => DownloadAsync(client, id, key, generation), CancellationToken.None);
+                CancellationToken clear = _generationCancel.Token;
+                download                = Task.Run(() => DownloadAsync(client, id, key, generation, clear), CancellationToken.None);
                 _inFlight[id]           = download;
             }
 
             return download.WaitAsync(ct);
+        }
+    }
+
+    /// <summary>
+    /// Keeps bytes this device already has under a media ID, so asking for that ID later downloads nothing.
+    /// </summary>
+    /// <remarks>
+    /// Used when a sent attachment's echo arrives: the phone gives the file a media ID, and the bytes that were sent are
+    /// that file. An ID already kept is left as it is. Kept under the same memory cap as downloads.
+    /// </remarks>
+    /// <param name="mediaId">The media ID.</param>
+    /// <param name="bytes">The decrypted bytes.</param>
+    public void Seed(string mediaId, byte[] bytes)
+    {
+        ArgumentNullException.ThrowIfNull(bytes);
+
+        if (string.IsNullOrEmpty(mediaId) || bytes.Length == 0)
+        {
+            return;
+        }
+
+        lock (_lock)
+        {
+            if (!_cache.ContainsKey(mediaId))
+            {
+                Keep(mediaId, bytes);
+            }
         }
     }
 
@@ -271,14 +315,17 @@ public sealed partial class MediaStore
     /// </summary>
     /// <remarks>
     /// A file another app still holds open can't be deleted; it is left and counted in the log, and the next clear tries
-    /// again. A download that finishes after the clear is handed to its caller but not kept, and no file is written for it.
-    /// So a file another app still holds open survives sign-out until the next start or quit.
+    /// again. A download on its way is aborted: its request stops, nothing is decrypted, and its callers get an
+    /// <see cref="OperationCanceledException"/>. So a file another app still holds open survives sign-out until the
+    /// next start or quit.
     /// </remarks>
     public void Clear()
     {
         lock (_lock)
         {
             _generation++;
+            _generationCancel.Cancel();
+            _generationCancel = new CancellationTokenSource();
             _cache.Clear();
             _cachedBytes = 0;
             _inFlight.Clear();
@@ -415,12 +462,25 @@ public sealed partial class MediaStore
         return part.ThumbnailId.Length > 0 ? (part.ThumbnailId, part.ThumbnailKey) : (string.Empty, []);
     }
 
-    // Downloads One Media ID For Everyone Waiting On It, Then Keeps It Unless Clear Ran Meanwhile
-    private async Task<byte[]> DownloadAsync(IMessagingClient client, string id, byte[] key, int generation)
+    // Downloads One Media ID For Everyone Waiting On It, Then Keeps It Unless Clear Ran Meanwhile. Clear Aborts It; A
+    // Stalled One Gives Up After DownloadTimeout
+    private async Task<byte[]> DownloadAsync(IMessagingClient client, string id, byte[] key, int generation, CancellationToken clear)
     {
+        using var limit = CancellationTokenSource.CreateLinkedTokenSource(clear);
         try
         {
-            byte[] bytes = await client.DownloadMediaAsync(id, key, CancellationToken.None).ConfigureAwait(false);
+            limit.CancelAfter(DownloadTimeout());
+
+            byte[] bytes;
+            try
+            {
+                bytes = await client.DownloadMediaAsync(id, key, limit.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (!clear.IsCancellationRequested)
+            {
+                throw new TimeoutException("The media download took too long.");
+            }
+
             lock (_lock)
             {
                 if (generation == _generation)

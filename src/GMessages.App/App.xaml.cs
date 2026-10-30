@@ -169,6 +169,7 @@ public partial class App : Application, IDisposable
             ? Path.Combine(ApplicationData.Current.TemporaryFolder.Path, "Media")
             : Path.Combine(paths.DataFolder, "Temp", "Media");
         _media                            = new MediaStore(messaging, media_folder, _logProvider.CreateLogger("GMessages.Media"));
+        _media.DownloadTimeout            = static () => TestHooks.ShortWait("download-timeout") ?? MediaStore.DefaultDownloadTimeout;
         _media.Clear();
 
         // Chat Store: outlives the main window; no client until paired and connected. The one message database for this
