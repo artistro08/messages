@@ -44,7 +44,8 @@ public sealed class ChatStoreTests
                 Database = new MessageDatabase(DatabasePath, NullLogger.Instance);
             }
 
-            Store = new ChatStore(Controller, () => connected ? Client : null, NullLogger.Instance, Database, Time);
+            Media = new MediaStore(() => connected ? Client : null, Path.Combine(_folder, "Media"), NullLogger.Instance);
+            Store = new ChatStore(Controller, () => connected ? Client : null, NullLogger.Instance, Database, Time, Media);
         }
 
         public ConnectionController Controller { get; }
@@ -54,6 +55,8 @@ public sealed class ChatStoreTests
         public FakeTimeProvider Time { get; } = new(Now);
 
         public MessageDatabase? Database { get; }
+
+        public MediaStore Media { get; }
 
         public string DatabasePath { get; }
 
@@ -404,6 +407,24 @@ public sealed class ChatStoreTests
         rig.Store.Reset();
 
         Assert.IsNull(rig.Store.CachedMessages("c1"));
+    }
+
+    /// <summary>
+    /// Reset (sign-out or unpair) clears the decrypted media: memory and the temp folder (Review Focus 3).
+    /// </summary>
+    [TestMethod]
+    public async Task Reset_Clears()
+    {
+        using var rig           = new Rig();
+        rig.Client.Media["m-1"] = [1, 2, 3];
+        var part                = new MediaPart("m-1", new byte[32], "", [], [], "a.bin", 3, 0, 0, MessageKind.File, "application/octet-stream");
+        string path             = await rig.Store.Media!.SaveToTempAsync(part, Ct);
+
+        rig.Store.Reset();
+
+        Assert.IsFalse(File.Exists(path));
+        await rig.Store.Media.GetAsync(part, thumbnail: false, Ct);
+        Assert.HasCount(2, rig.Client.DownloadCalls);
     }
 
     // =========================================================================

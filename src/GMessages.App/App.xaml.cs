@@ -62,6 +62,7 @@ public partial class App : Application, IDisposable
     private MemoryTrim? _memoryTrim;
     private ConnectionController? _connection;
     private ChatStore? _store;
+    private MediaStore? _media;
     private NotificationService? _notifications;
     private AppNotificationActivatedEventArgs? _launchNotification;
     private DispatcherQueueTimer? _launchNotificationTimeout;
@@ -154,10 +155,19 @@ public partial class App : Application, IDisposable
         _connection   = new ConnectionController(paths, endpoints, TimeProvider.System, new SingleProviderLoggerFactory(_logProvider), a => dispatcher.TryEnqueue(() => a()));
         _connection.StateChanged += (_, _) => OnConnectionStateChanged();
 
+        // Media: decrypted files for other apps go to the package's temp folder (Temp\Media under the data folder
+        // when unpackaged); whatever the last run left there goes now
+        var connection                    = _connection;
+        Func<IMessagingClient?> messaging = () => connection.Client is { } client ? new GmMessagingClient(client) : null;
+        string media_folder               = AppIdentity.IsPackaged
+            ? Path.Combine(ApplicationData.Current.TemporaryFolder.Path, "Media")
+            : Path.Combine(paths.DataFolder, "Temp", "Media");
+        _media                            = new MediaStore(messaging, media_folder, _logProvider.CreateLogger("GMessages.Media"));
+        _media.Clear();
+
         // Chat Store: outlives the main window; no client until paired and connected. The one message database for this
-        // data folder sits under it
-        var connection = _connection;
-        _store         = new ChatStore(connection, () => connection.Client is { } client ? new GmMessagingClient(client) : null, _logProvider.CreateLogger("GMessages.Chat"), new MessageDatabase(paths.MessagesDatabase, _logProvider.CreateLogger("GMessages.Database")));
+        // data folder and the media cache sit under it
+        _store = new ChatStore(connection, messaging, _logProvider.CreateLogger("GMessages.Chat"), new MessageDatabase(paths.MessagesDatabase, _logProvider.CreateLogger("GMessages.Database")), media: _media);
 
         // Notifications: a toast for each new message, also with the main window closed
         var store      = _store;
@@ -709,6 +719,8 @@ public partial class App : Application, IDisposable
         }
         finally
         {
+            // No Decrypted File Outlives The App
+            _media?.Clear();
             Dispose();
             Exit();
         }

@@ -42,6 +42,9 @@ public sealed record MediaPart(
     /// <summary>Gets whether the media is still on its way: no media ID, no thumbnail ID and no inline data.</summary>
     public bool IsPending => MediaId.Length == 0 && ThumbnailId.Length == 0 && InlineData.Length == 0;
 
+    /// <summary>Gets the ID of the message part that holds the media, which a full-size image request names, or empty.</summary>
+    public string ActionMessageId { get; init; } = string.Empty;
+
     /// <summary>
     /// Copies a protocol media part.
     /// </summary>
