@@ -1,0 +1,421 @@
+using System.Text;
+using Microsoft.Extensions.Logging;
+
+namespace GMessages.Presentation.Messaging;
+
+/// <summary>
+/// Downloads, decrypts and caches photos, videos, voice messages and files, and writes them to a private temp folder
+/// for opening in other apps.
+/// </summary>
+/// <remarks>
+/// <para>
+/// A part downloads in the Go connector's order (handlegmessages.go): the full file, else the thumbnail, else the
+/// inline data, which comes back as it is, with no download and no decrypting. A thumbnail asked for prefers the
+/// thumbnail, then the inline data, then the full file. A pending part throws <see cref="MediaPendingException"/>.
+/// </para>
+/// <para>
+/// Decrypted bytes stay in memory, newest used kept, up to 64 MB in all (a bigger file is handed back but not kept).
+/// Asking for a media ID already on its way shares that download. <see cref="RequestFullSizeAsync"/> asks the phone
+/// once per message for the full-size image; the phone then sends the message again with the full media ID.
+/// </para>
+/// <para>
+/// <b>Privacy.</b> Media is decrypted only on this device, and lives only in memory or in the temp folder given (in the
+/// app, <c>ApplicationData.Current.TemporaryFolder\Media</c>). <see cref="Clear"/> empties both: the app calls it at
+/// start, on quit, and on sign-out or unpair (through <see cref="ChatStore.Reset"/>). Bytes, keys, file names and mime
+/// types are never logged; only counts and error type names are. Safe to call from any thread.
+/// </para>
+/// </remarks>
+public sealed partial class MediaStore
+{
+    /// <summary>How many bytes of decrypted media stay in memory.</summary>
+    public const long MemoryCapBytes = 64L * 1024 * 1024;
+
+    /// <summary>The longest file name written to the temp folder, extension included.</summary>
+    public const int MaxNameLength = 100;
+
+    // A Name With Nothing Usable Left
+    private const string FallbackName = "attachment";
+
+    // Windows Device Names, Refused As A File Name With Or Without An Extension
+    private static readonly HashSet<string> ReservedNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "CON", "PRN", "AUX", "NUL",
+        "COM0", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+        "LPT0", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+    };
+
+    private readonly Func<IMessagingClient?> _client;
+    private readonly string _tempFolder;
+    private readonly ILogger _log;
+    private readonly Lock _lock = new();
+
+    // Memory Cache By Media ID: The Dictionary Order Is Least Recently Used First
+    private readonly OrderedDictionary<string, byte[]> _cache = [];
+    private long _cachedBytes;
+
+    // Downloads On Their Way, By Media ID
+    private readonly Dictionary<string, Task<byte[]>> _inFlight = [];
+
+    // Messages Whose Full-Size Image Was Asked For
+    private readonly HashSet<string> _fullSizeAsked = [];
+
+    // Bumped By Clear: A Download Started Before It Is Not Cached
+    private int _generation;
+
+    /// <summary>
+    /// Creates the store.
+    /// </summary>
+    /// <param name="client">Gets the current phone client, or null when not connected.</param>
+    /// <param name="tempFolder">The private folder files are written to for other apps; emptied by <see cref="Clear"/>.</param>
+    /// <param name="log">The logger.</param>
+    public MediaStore(Func<IMessagingClient?> client, string tempFolder, ILogger log)
+    {
+        ArgumentNullException.ThrowIfNull(client);
+        ArgumentException.ThrowIfNullOrEmpty(tempFolder);
+        ArgumentNullException.ThrowIfNull(log);
+
+        _client     = client;
+        _tempFolder = tempFolder;
+        _log        = log;
+    }
+
+    // =========================================================================
+    // MEDIA
+    // =========================================================================
+
+    /// <summary>
+    /// Gets a part's decrypted bytes, from memory or downloaded.
+    /// </summary>
+    /// <param name="part">The media part.</param>
+    /// <param name="thumbnail">True to prefer the thumbnail (a photo's first, blurred look).</param>
+    /// <param name="ct">Cancels the wait (not a download another caller shares).</param>
+    /// <returns>The decrypted bytes.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="part"/> is null.</exception>
+    /// <exception cref="MediaPendingException">The part has no media ID, thumbnail or inline data yet.</exception>
+    /// <exception cref="MessagingUnavailableException">Not connected.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="ct"/> was canceled.</exception>
+    public Task<byte[]> GetAsync(MediaPart part, bool thumbnail, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(part);
+
+        if (part.IsPending)
+        {
+            throw new MediaPendingException();
+        }
+
+        // Pick The Source; Inline Data Needs No Download
+        (string id, byte[] key) = Source(part, thumbnail);
+        if (id.Length == 0)
+        {
+            return Task.FromResult(part.InlineData);
+        }
+
+        lock (_lock)
+        {
+            if (_cache.Remove(id, out byte[]? cached))
+            {
+                _cache.Add(id, cached);
+                return Task.FromResult(cached);
+            }
+
+            if (!_inFlight.TryGetValue(id, out Task<byte[]>? download))
+            {
+                // Started Off This Thread, So It Can't Finish (And Leave _inFlight) Before It Is Added
+                IMessagingClient client = _client() ?? throw new MessagingUnavailableException();
+                int generation          = _generation;
+                download                = Task.Run(() => DownloadAsync(client, id, key, generation), CancellationToken.None);
+                _inFlight[id]           = download;
+            }
+
+            return download.WaitAsync(ct);
+        }
+    }
+
+    /// <summary>
+    /// Writes a part's decrypted file to the temp folder, so another app can open it.
+    /// </summary>
+    /// <remarks>
+    /// Each file gets its own random folder, <c>{temp}\{random}\{name}</c>, so two files with one name never clash.
+    /// The name is the sender's, made safe by <see cref="SanitizeName"/>.
+    /// </remarks>
+    /// <param name="part">The media part.</param>
+    /// <param name="ct">Cancels the wait and the write.</param>
+    /// <returns>The full path of the written file.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="part"/> is null.</exception>
+    /// <exception cref="MediaPendingException">The part has no media ID, thumbnail or inline data yet.</exception>
+    /// <exception cref="MessagingUnavailableException">Not connected.</exception>
+    /// <exception cref="IOException">The file could not be written.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="ct"/> was canceled.</exception>
+    public async Task<string> SaveToTempAsync(MediaPart part, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(part);
+
+        byte[] bytes  = await GetAsync(part, thumbnail: false, ct).ConfigureAwait(false);
+        string folder = Path.Combine(_tempFolder, Guid.NewGuid().ToString("N"));
+        string path   = Path.Combine(folder, SanitizeName(part.Name, part.Mime));
+
+        Directory.CreateDirectory(folder);
+        await File.WriteAllBytesAsync(path, bytes, ct).ConfigureAwait(false);
+        return path;
+    }
+
+    /// <summary>
+    /// Asks the phone for the full-size image of a message that has only a thumbnail, once per message.
+    /// </summary>
+    /// <remarks>
+    /// The phone answers by sending the message again with its full media ID, which replaces the bubble's media part.
+    /// A message that already has its full file, has no thumbnail, or was asked for before is left alone. A failed ask
+    /// is forgotten, so it can be tried again.
+    /// </remarks>
+    /// <param name="m">The message.</param>
+    /// <returns>A task that completes when the phone accepted the request, or at once when nothing is asked.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="m"/> is null.</exception>
+    /// <exception cref="MessagingUnavailableException">Not connected.</exception>
+    public async Task RequestFullSizeAsync(ChatMessage m)
+    {
+        ArgumentNullException.ThrowIfNull(m);
+
+        if (m.Media is not { MediaId.Length: 0, ThumbnailId.Length: > 0 } media || m.Id.Length == 0)
+        {
+            return;
+        }
+
+        IMessagingClient client;
+        lock (_lock)
+        {
+            client = _client() ?? throw new MessagingUnavailableException();
+            if (!_fullSizeAsked.Add(m.Id))
+            {
+                return;
+            }
+        }
+
+        try
+        {
+            await client.GetFullSizeImageAsync(m.Id, media.ActionMessageId, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            lock (_lock)
+            {
+                _fullSizeAsked.Remove(m.Id);
+            }
+
+            LogFullSizeFailed(m.Id, ex.GetType().Name);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Forgets every decrypted file: the memory cache, the downloads on their way, the full-size asks, and the temp folder.
+    /// </summary>
+    /// <remarks>
+    /// A file another app still holds open can't be deleted; it is left and counted in the log, and the next clear tries
+    /// again. A download that finishes after the clear is handed to its caller but not kept.
+    /// </remarks>
+    public void Clear()
+    {
+        lock (_lock)
+        {
+            _generation++;
+            _cache.Clear();
+            _cachedBytes = 0;
+            _inFlight.Clear();
+            _fullSizeAsked.Clear();
+        }
+
+        // Empty The Temp Folder, Keeping Whatever Another App Still Holds Open
+        if (!Directory.Exists(_tempFolder))
+        {
+            return;
+        }
+
+        int left = 0;
+        try
+        {
+            foreach (string entry in Directory.EnumerateFileSystemEntries(_tempFolder))
+            {
+                try
+                {
+                    if (Directory.Exists(entry))
+                    {
+                        Directory.Delete(entry, recursive: true);
+                    }
+                    else
+                    {
+                        File.Delete(entry);
+                    }
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    left++;
+                }
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // The Folder Itself Went Or Can't Be Read: Nothing Here To Empty
+            LogTempUnreadable(ex.GetType().Name);
+        }
+
+        if (left > 0)
+        {
+            LogTempLeft(left);
+        }
+    }
+
+    /// <summary>
+    /// Makes a sender's file name safe to write.
+    /// </summary>
+    /// <remarks>
+    /// Path separators, characters Windows refuses and control characters become <c>_</c>, as does any <c>..</c>.
+    /// Leading and trailing dots and spaces go. A Windows device name (<c>CON</c>, <c>NUL</c>, <c>COM1</c>...), with or
+    /// without an extension, gets a <c>_</c> in front. The name is cut to <see cref="MaxNameLength"/>, keeping its
+    /// extension. An empty name becomes <c>attachment</c> with an extension from the mime type.
+    /// </remarks>
+    /// <param name="name">The sender's file name.</param>
+    /// <param name="mime">The mime type, for the extension of an empty name.</param>
+    /// <returns>A file name with no folder part.</returns>
+    public static string SanitizeName(string name, string mime)
+    {
+        // Replace Separators, Refused And Control Characters, And Any Parent-Folder Step
+        char[] invalid = Path.GetInvalidFileNameChars();
+        var built      = new StringBuilder(name ?? string.Empty);
+        for (int i = 0; i < built.Length; i++)
+        {
+            if (char.IsControl(built[i]) || built[i] is '/' or '\\' || Array.IndexOf(invalid, built[i]) >= 0)
+            {
+                built[i] = '_';
+            }
+        }
+
+        string safe = built.ToString().Replace("..", "__", StringComparison.Ordinal).Trim(' ', '.');
+        if (safe.Length == 0)
+        {
+            safe = FallbackName + ExtensionOf(mime);
+        }
+
+        // Device Names Are Refused Whatever Follows The First Dot
+        int dot     = safe.IndexOf('.', StringComparison.Ordinal);
+        string stem = dot < 0 ? safe : safe[..dot];
+        if (ReservedNames.Contains(stem.TrimEnd(' ')))
+        {
+            safe = "_" + safe;
+        }
+
+        // Cut To Length, Keeping A Short Extension
+        if (safe.Length > MaxNameLength)
+        {
+            string extension = Path.GetExtension(safe);
+            extension        = extension.Length is > 0 and <= 16 ? extension : string.Empty;
+            safe             = safe[..(MaxNameLength - extension.Length)].TrimEnd(' ', '.') + extension;
+        }
+
+        return safe;
+    }
+
+    // =========================================================================
+    // HELPERS
+    // =========================================================================
+
+    // The ID And Key To Download, Or An Empty ID For The Inline Data
+    private static (string Id, byte[] Key) Source(MediaPart part, bool thumbnail)
+    {
+        if (thumbnail && part.ThumbnailId.Length > 0)
+        {
+            return (part.ThumbnailId, part.ThumbnailKey);
+        }
+
+        if (thumbnail && part.InlineData.Length > 0)
+        {
+            return (string.Empty, []);
+        }
+
+        if (part.MediaId.Length > 0)
+        {
+            return (part.MediaId, part.Key);
+        }
+
+        return part.ThumbnailId.Length > 0 ? (part.ThumbnailId, part.ThumbnailKey) : (string.Empty, []);
+    }
+
+    // Downloads One Media ID For Everyone Waiting On It, Then Keeps It Unless Clear Ran Meanwhile
+    private async Task<byte[]> DownloadAsync(IMessagingClient client, string id, byte[] key, int generation)
+    {
+        try
+        {
+            byte[] bytes = await client.DownloadMediaAsync(id, key, CancellationToken.None).ConfigureAwait(false);
+            lock (_lock)
+            {
+                if (generation == _generation)
+                {
+                    Keep(id, bytes);
+                }
+            }
+
+            return bytes;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            LogDownloadFailed(id, ex.GetType().Name);
+            throw;
+        }
+        finally
+        {
+            lock (_lock)
+            {
+                if (generation == _generation)
+                {
+                    _inFlight.Remove(id);
+                }
+            }
+        }
+    }
+
+    // Adds To The Memory Cache, Dropping The Least Recently Used Past The Cap; A File Over The Cap Is Not Kept
+    private void Keep(string id, byte[] bytes)
+    {
+        if (bytes.LongLength > MemoryCapBytes)
+        {
+            return;
+        }
+
+        _cache.Add(id, bytes);
+        _cachedBytes += bytes.LongLength;
+        while (_cachedBytes > MemoryCapBytes)
+        {
+            _cachedBytes -= _cache.GetAt(0).Value.LongLength;
+            _cache.RemoveAt(0);
+        }
+    }
+
+    // ponytail: a short guess from the mime subtype (jpeg as jpg, audio/mp4 as m4a); a full table if other apps choke
+    private static string ExtensionOf(string mime)
+    {
+        string type    = mime ?? string.Empty;
+        string subtype = type[(type.IndexOf('/', StringComparison.Ordinal) + 1)..];
+
+        return type switch
+        {
+            "image/jpeg" => ".jpg",
+            "audio/mp4"  => ".m4a",
+            _            => subtype.Length is > 0 and <= 5 && subtype.All(char.IsAsciiLetterOrDigit) ? "." + subtype : string.Empty,
+        };
+    }
+
+    // =========================================================================
+    // LOGGING
+    // =========================================================================
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Could not download media {MediaId} ({ErrorType})")]
+    private partial void LogDownloadFailed(string mediaId, string errorType);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Could not ask for the full-size image of {MessageId} ({ErrorType})")]
+    private partial void LogFullSizeFailed(string messageId, string errorType);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "{Count} media temp entries are still open in another app")]
+    private partial void LogTempLeft(int count);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Could not empty the media temp folder ({ErrorType})")]
+    private partial void LogTempUnreadable(string errorType);
+}

@@ -251,8 +251,26 @@ internal sealed class FakeMessagingClient : IMessagingClient
         return Task.FromResult(new MediaContent { MediaID = id, MediaName = fileName, MimeType = mime, Size = plain.Length, Format = GMessages.Protocol.MediaFormatsMap.FromMime(mime) });
     }
 
-    public Task<byte[]> DownloadMediaAsync(string mediaId, ReadOnlyMemory<byte> key, CancellationToken ct) =>
-        Media.TryGetValue(mediaId, out byte[]? bytes) ? Task.FromResult(bytes) : Task.FromException<byte[]>(new KeyNotFoundException(mediaId));
+    /// <summary>Every media ID a download asked for, in order (downloads run on the thread pool, so lock it to read).</summary>
+    public List<string> DownloadCalls { get; } = [];
+
+    /// <summary>When set, downloads wait for it before answering.</summary>
+    public TaskCompletionSource? DownloadGate { get; set; }
+
+    public async Task<byte[]> DownloadMediaAsync(string mediaId, ReadOnlyMemory<byte> key, CancellationToken ct)
+    {
+        lock (DownloadCalls)
+        {
+            DownloadCalls.Add(mediaId);
+        }
+
+        if (DownloadGate is { } gate)
+        {
+            await gate.Task.WaitAsync(ct);
+        }
+
+        return Media.TryGetValue(mediaId, out byte[]? bytes) ? bytes : throw new KeyNotFoundException(mediaId);
+    }
 
     public Task GetFullSizeImageAsync(string messageId, string actionMessageId, CancellationToken ct)
     {

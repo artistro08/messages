@@ -26,3 +26,14 @@ public sealed class MessageSendException : Exception
     /// <summary>Gets the status the phone answered with.</summary>
     public string Status { get; }
 }
+
+/// <summary>
+/// Thrown when media is asked for that hasn't reached the phone's servers yet (no media ID, thumbnail or inline data).
+/// </summary>
+public sealed class MediaPendingException : Exception
+{
+    /// <summary>Creates the exception.</summary>
+    public MediaPendingException() : base("The attachment hasn't arrived yet.")
+    {
+    }
+}

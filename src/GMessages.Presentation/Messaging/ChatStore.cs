@@ -46,6 +46,7 @@ public sealed partial class ChatStore : IDisposable
     private readonly ILogger _log;
     private readonly MessageDatabase? _database;
     private readonly TimeProvider _time;
+    private readonly MediaStore? _media;
 
     // Bumped By Reset: Work Started Under An Older Generation Belongs To The Old Account And Is Dropped
     private int _generation;
@@ -86,7 +87,8 @@ public sealed partial class ChatStore : IDisposable
     /// <param name="log">The logger.</param>
     /// <param name="database">The one database for this data folder, or null to keep everything in memory only.</param>
     /// <param name="time">The clock that decides when a message is too old to be new; the system clock when null.</param>
-    public ChatStore(ConnectionController connection, Func<IMessagingClient?> client, ILogger log, MessageDatabase? database = null, TimeProvider? time = null)
+    /// <param name="media">The decrypted media cache, cleared by <see cref="Reset"/>; null for none.</param>
+    public ChatStore(ConnectionController connection, Func<IMessagingClient?> client, ILogger log, MessageDatabase? database = null, TimeProvider? time = null, MediaStore? media = null)
     {
         ArgumentNullException.ThrowIfNull(connection);
         ArgumentNullException.ThrowIfNull(client);
@@ -97,6 +99,7 @@ public sealed partial class ChatStore : IDisposable
         _log        = log;
         _database   = database;
         _time       = time ?? TimeProvider.System;
+        _media      = media;
 
         _connection.ClientEvent += OnClientEvent;
     }
@@ -125,6 +128,9 @@ public sealed partial class ChatStore : IDisposable
     /// window closing; <see cref="Reset"/> clears it.
     /// </summary>
     public bool IsPhoneBatteryLow => Volatile.Read(ref _batteryLow);
+
+    /// <summary>Gets the decrypted media cache, or null when the store was made without one.</summary>
+    public MediaStore? Media => _media;
 
     /// <summary>Gets the first participant marked as the phone's owner in any cached conversation.</summary>
     public ParticipantInfo? Me => _me;
@@ -714,8 +720,8 @@ public sealed partial class ChatStore : IDisposable
     };
 
     /// <summary>
-    /// Forgets everything learned from the paired phone: cached conversations, the owner, the SIMs, the notified IDs
-    /// and the database.
+    /// Forgets everything learned from the paired phone: cached conversations, the owner, the SIMs, the notified IDs,
+    /// the decrypted media (memory and temp folder) and the database.
     /// </summary>
     /// <remarks>
     /// Call on unpair or sign-out. Conversation IDs are small per-phone numbers, so a different phone paired later
@@ -747,6 +753,8 @@ public sealed partial class ChatStore : IDisposable
         {
             _pages.Clear();
         }
+
+        _media?.Clear();
     }
 
     /// <summary>

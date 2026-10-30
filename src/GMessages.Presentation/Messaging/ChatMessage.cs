@@ -78,7 +78,7 @@ public sealed record ChatMessage(
         // Media Decides The Kind; Text Is The Message, Or The Media's Caption
         MessageInfo? text_part  = m.MessageInfo.FirstOrDefault(i => i.DataCase == MessageInfo.DataOneofCase.MessageContent);
         MessageInfo? media_part = m.MessageInfo.FirstOrDefault(i => i.DataCase == MessageInfo.DataOneofCase.MediaContent);
-        MediaPart? media        = media_part is null ? null : MediaPart.From(media_part.MediaContent);
+        MediaPart? media        = media_part is null ? null : MediaPart.From(media_part.MediaContent) with { ActionMessageId = media_part.ActionMessageID };
 
         if (text_part is not null)
         {
