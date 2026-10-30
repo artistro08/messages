@@ -176,10 +176,11 @@ internal sealed class VoiceRecorder : IDisposable
     /// <c>MediaCapture</c> did in 0.5.1. An <see cref="AudioGraph"/> alone is only refused.
     /// </para>
     /// <para>
-    /// Allowed records. Undecided asks through <see cref="MicrophoneConsent"/>, then checks again, and
-    /// <see cref="MicrophoneAccess.CanRecord"/> decides. Refused, off for the whole PC, or not declared throws at once.
-    /// Anything that can't record throws <see cref="MicrophoneUnavailableException"/>, and the chat pane shows its own
-    /// dialog that opens Windows' microphone settings.
+    /// Allowed records. Anything else asks through <see cref="MicrophoneConsent"/> (Windows prompts when the user can
+    /// still decide, and answers at once when they can't), then checks again, and <see cref="MicrophoneAccess.CanRecord"/>
+    /// decides. The first check alone isn't trusted: it read "DeniedByUser" in the owner's 0.5.5 log while Windows'
+    /// consent store said "Prompt". Anything that can't record throws <see cref="MicrophoneUnavailableException"/>, and the
+    /// chat pane shows its own dialog that opens Windows' microphone settings.
     /// </para>
     /// </remarks>
     /// <returns>A task that completes once access is on.</returns>
@@ -200,18 +201,13 @@ internal sealed class VoiceRecorder : IDisposable
 
         MicrophoneConsent.Log("check before", before.ToString());
 
-        // Decided Already: Allowed Records, Anything Else Shows The Settings Dialog
+        // Allowed Already: Record
         if (!MicrophoneAccess.ShouldAsk(AccessOf(before)))
         {
-            if (before != AppCapabilityAccessStatus.Allowed)
-            {
-                throw new MicrophoneUnavailableException(before.ToString());
-            }
-
             return;
         }
 
-        // Undecided: Windows Shows Its Prompt, Then Check Again
+        // Not Allowed Yet: Windows Shows Its Prompt If The User Can Still Decide, Then Check Again
         int activated = await MicrophoneConsent.RequestAsync();
         AppCapabilityAccessStatus after;
         try
