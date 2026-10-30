@@ -77,11 +77,26 @@ public sealed class TrayDriver
     /// <summary>
     /// Right-clicks the icon with the real mouse, which opens the app's tray menu.
     /// </summary>
+    /// <remarks>
+    /// Another app's notification can sit over the icon (with the taskbar at the top, toasts show over the overflow), and
+    /// a reminder stays until it's answered. Then the click would land on the notification, so the icon gets the
+    /// keyboard's context menu key instead, which sends the app the same menu request.
+    /// </remarks>
     public void RightClick()
     {
-        AutomationElement icon = FindIcon(AppDriver.DefaultTimeout);
+        AutomationElement icon          = FindIcon(AppDriver.DefaultTimeout);
         System.Drawing.Rectangle bounds = icon.BoundingRectangle;
-        Mouse.Click(new System.Drawing.Point(bounds.X + (bounds.Width / 2), bounds.Y + (bounds.Height / 2)), MouseButton.Right);
+        var center                      = new System.Drawing.Point(bounds.X + (bounds.Width / 2), bounds.Y + (bounds.Height / 2));
+
+        // Covered: The Context Menu Key On The Focused Icon
+        if (!icon.Equals(_automation.FromPoint(center)))
+        {
+            icon.Focus();
+            Keyboard.Type(FlaUI.Core.WindowsAPI.VirtualKeyShort.APPS);
+            return;
+        }
+
+        Mouse.Click(center, MouseButton.Right);
     }
 
     /// <summary>
