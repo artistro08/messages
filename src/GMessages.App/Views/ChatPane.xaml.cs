@@ -32,8 +32,9 @@ using WinRT;
 namespace GMessages.App.Views;
 
 /// <summary>
-/// The open conversation: the header with the lock, the message bubbles, the typing dots, the reply chip and the
-/// message box with its emoji and send buttons.
+/// The open conversation: the header with the lock, the message bubbles, the typing dots, and the compose area: the
+/// chips (the voice preview, then the attachments), the reply chip, and the message box with its emoji, attach and mic
+/// buttons, the recording bar over it, and Send.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -46,6 +47,13 @@ namespace GMessages.App.Views;
 /// Opening a chat puts the cursor in the message box. Enter sends the draft and Shift + Enter adds a line. The emoji
 /// button opens the Windows emoji panel on the message box. While replying, the reply chip and the message box join into
 /// one control.
+/// </para>
+/// <para>
+/// The paperclip inside the box's right edge (<c>Chat.Attach</c>, or Ctrl + Shift + a; Ctrl + Shift + p for photos)
+/// opens the file picker; each picked file becomes a chip above the box, read only at Send. The mic beside it
+/// (<c>Chat.Record</c>) records a voice message: the recording bar covers the box with the time, the live waveform,
+/// Cancel recording and Stop. A stopped recording waits as the first chip (the voice preview, which plays and seeks)
+/// and sends first.
 /// </para>
 /// <para>
 /// One reaction picker (<c>ReactionPicker</c>, buttons <c>ReactionPicker.1</c> to <c>.7</c>) serves every bubble: a
@@ -142,6 +150,9 @@ public sealed partial class ChatPane : UserControl
 
     // The Next Chat Opens From The List's Arrow Keys: The Focus Stays On The List (See KeepFocusOnNextOpen)
     private bool _keepFocus;
+
+    // A File Picker Is Open (Or Its Files Are Being Added): Another Ask Waits For It To Finish
+    private bool _picking;
 
     // An Older Page Going In Above (See KeepOlderAnchor): How Far The View's Top Sat From The Content's End Before It (Null
     // Once Used), The Bubble At The View's Top Then (Null When Done), Every Shown Bubble Then With Its Top In The View, And
@@ -327,19 +338,20 @@ public sealed partial class ChatPane : UserControl
     /// Ctrl + Shift + p).
     /// </summary>
     /// <remarks>
-    /// Several files may be picked. Each one's size is checked before it is read, so a file over 100 MB is refused
-    /// with a note and never read in. Under the test hooks the picked files come from the test (see
-    /// <see cref="TestHooks.PickFiles"/>) and no picker opens.
+    /// Several files may be picked. Each one's size is checked, and none is read until Send: a file over 100 MB, or one
+    /// taking the chips past 200 MB, is refused with a note. Only one picker opens at a time. Under the test hooks the
+    /// picked files come from the test (see <see cref="TestHooks.PickFiles"/>) and no picker opens.
     /// </remarks>
     /// <param name="photos">True for the photo picker (the spec's photo types only).</param>
-    /// <returns>True when the picker was asked for (false while no chat shows).</returns>
+    /// <returns>True when the picker was asked for (false while no chat shows or a picker is already open).</returns>
     public bool OpenAttachPicker(bool photos)
     {
-        if (Chat is not { } chat)
+        if (Chat is not { } chat || _picking)
         {
             return false;
         }
 
+        _picking = true;
         _ = PickAttachmentsAsync(chat, photos);
         return true;
     }
@@ -357,22 +369,32 @@ public sealed partial class ChatPane : UserControl
     public static string ChipIdOf(string prefix, int id) => prefix + id.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
     /// <summary>
-    /// Gives a photo chip its picture, decoded small; the image fills in once decoded. A file chip gets none.
+    /// Gives a photo chip its picture, decoded small straight from the file (never read whole); the image fills in once
+    /// decoded. A file chip gets none.
     /// </summary>
-    /// <param name="bytes">The photo's bytes.</param>
+    /// <param name="open">Opens the picked file (<see cref="PendingAttachment.Open"/>).</param>
     /// <param name="isPhoto">True for a photo.</param>
     /// <returns>The image, or null for a file.</returns>
-    public static ImageSource? ChipImage(byte[] bytes, bool isPhoto)
+    public static ImageSource? ChipImage(Func<Task<Stream>> open, bool isPhoto)
     {
-        if (!isPhoto)
+        if (!isPhoto || open is null)
         {
             return null;
         }
 
         var image = new BitmapImage { DecodePixelHeight = ChipSide, DecodePixelType = DecodePixelType.Logical };
-        _ = LoadChipImageAsync(image, bytes);
+        _ = LoadChipImageAsync(image, open);
         return image;
     }
+
+    /// <summary>
+    /// Shows the chip strip while a recording waits in the preview chip or any attachment does.
+    /// </summary>
+    /// <param name="hasAttachments">True while attachments wait.</param>
+    /// <param name="isPreview">True while a recording waits.</param>
+    /// <returns>Visible when either waits, else Collapsed.</returns>
+    public static Visibility AnyChips(bool hasAttachments, bool isPreview) =>
+        hasAttachments || isPreview ? Visibility.Visible : Visibility.Collapsed;
 
     /// <summary>
     /// Shows an element when the flag is off.
@@ -619,6 +641,7 @@ public sealed partial class ChatPane : UserControl
         if (e.PropertyName == nameof(ChatViewModel.Voice) && sender == Chat && Chat is { } chat)
         {
             PreviewBars.Show(chat.Voice.Wave?.Peaks);
+            PreviewBars.Length = chat.Voice.Wave?.Length ?? TimeSpan.Zero;
             if (!chat.Voice.IsPreview && _voice?.Key == PreviewKey)
             {
                 StopVoice();
@@ -960,8 +983,9 @@ public sealed partial class ChatPane : UserControl
     // ATTACHING
     // =========================================================================
 
-    // The Picked Files (The Test's, Or The Picker's Over This Window), Each Checked For Size Before It Is Read, Then
-    // Added As Chips In Order. A File That Can't Be Read Is Skipped And Logged By Its Error Type Only
+    // The Picked Files (The Test's, Or The Picker's Over This Window), Each Checked For Size, Then Added As Chips In
+    // Order. Only A Photo's Header Is Read Now (For Its Shape); Send Reads The Files. A File That Can't Be Opened Is
+    // Skipped And Logged By Its Error Type Only
     private async Task PickAttachmentsAsync(ChatViewModel chat, bool photos)
     {
         try
@@ -983,10 +1007,9 @@ public sealed partial class ChatPane : UserControl
                     continue;
                 }
 
-                byte[] bytes            = (await FileIO.ReadBufferAsync(file)).ToArray();
                 string mime             = PhotoMimes.GetValueOrDefault(file.FileType) ?? (file.ContentType.Length > 0 ? file.ContentType : "application/octet-stream");
-                (int width, int height) = mime.StartsWith("image/", StringComparison.Ordinal) ? await PhotoSizeAsync(bytes) : (0, 0);
-                chat.Attach(file.Name, mime, bytes, width, height);
+                (int width, int height) = mime.StartsWith("image/", StringComparison.Ordinal) ? await PhotoSizeAsync(file) : (0, 0);
+                chat.Attach(file.Name, mime, (long)properties.Size, () => file.OpenStreamForReadAsync(), width, height);
             }
 
             AppLog.AttachmentsPicked(App.ShellLog, chat.ConversationId, files.Count, chat.Attachments.Count);
@@ -994,6 +1017,10 @@ public sealed partial class ChatPane : UserControl
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             AppLog.MediaFailed(App.ShellLog, "attach", chat.ConversationId, ex.GetType().Name);
+        }
+        finally
+        {
+            _picking = false;
         }
 
         DraftBox.Focus(FocusState.Programmatic);
@@ -1022,14 +1049,13 @@ public sealed partial class ChatPane : UserControl
         return await picker.PickMultipleFilesAsync();
     }
 
-    // A Photo's Size As Shown (Turned By Its EXIF Orientation), So Its Bubble Keeps Its Shape; 0 x 0 When It Won't Decode
-    private static async Task<(int Width, int Height)> PhotoSizeAsync(byte[] bytes)
+    // A Photo's Size As Shown (Turned By Its EXIF Orientation), So Its Bubble Keeps Its Shape, Read From The File's
+    // Header Without Decoding It; 0 x 0 When It Won't Decode
+    private static async Task<(int Width, int Height)> PhotoSizeAsync(StorageFile file)
     {
         try
         {
-            using var stream = new InMemoryRandomAccessStream();
-            await stream.WriteAsync(bytes.AsBuffer());
-            stream.Seek(0);
+            using IRandomAccessStreamWithContentType stream = await file.OpenReadAsync();
             BitmapDecoder decoder = await BitmapDecoder.CreateAsync(stream);
             return ((int)decoder.OrientedPixelWidth, (int)decoder.OrientedPixelHeight);
         }
@@ -1039,14 +1065,13 @@ public sealed partial class ChatPane : UserControl
         }
     }
 
-    // A Photo Chip's Picture; Bytes Windows Can't Read Leave The Chip Blank
-    private static async Task LoadChipImageAsync(BitmapImage image, byte[] bytes)
+    // A Photo Chip's Picture, Decoded Small From The File; A File Windows Can't Read Leaves The Chip Blank
+    private static async Task LoadChipImageAsync(BitmapImage image, Func<Task<Stream>> open)
     {
         try
         {
-            using var stream = new InMemoryRandomAccessStream();
-            await stream.WriteAsync(bytes.AsBuffer());
-            stream.Seek(0);
+            await using Stream file = await open();
+            using IRandomAccessStream stream = file.AsRandomAccessStream();
             await image.SetSourceAsync(stream);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)

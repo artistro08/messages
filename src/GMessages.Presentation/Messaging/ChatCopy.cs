@@ -117,8 +117,11 @@ public static class ChatCopy
     public const string Attach           = "Attach";
     public const string AttachPhoto      = "Attach photo";
     public const string RemoveAttachment = "Remove attachment";
-    public const string AttachTooBig     = "This file is too big to send (100 MB max).";
     public const string AttachSendFailed = "Couldn't send this attachment. Try again.";
+
+    // Attachment Limits (Owner Copy, Verbatim)
+    public const string AttachTooBig      = "Your attachment is too big (100 MB max).";
+    public const string AttachTotalTooBig = "Your attachment is too big (200 MB max).";
 
     // Voice Messages (Plan 6; Controller Copy, The Owner Signs Off At The Gate)
     public const string RecordVoiceMessage = "Record voice message";

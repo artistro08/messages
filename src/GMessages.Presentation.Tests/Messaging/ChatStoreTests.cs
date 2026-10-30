@@ -803,6 +803,25 @@ public sealed class ChatStoreTests
     }
 
     /// <summary>
+    /// When only the RCS caption's own message fails, the media still counts as sent (no throw), so it is never sent
+    /// twice by a retry.
+    /// </summary>
+    [TestMethod]
+    public async Task SendMedia_RcsCaptionFails_MediaStillSent()
+    {
+        using var rig = new Rig();
+        Conversation conv = Conv("c1");
+        conv.Type         = ConversationType.Rcs;
+        await rig.Store.HandleEventAsync(new ConversationUpdated(conv));
+        rig.Client.SendFails = r => r.MessagePayload.MessageInfo.Any(i => i.MessageContent is not null);
+
+        ChatMessage sent = await rig.Store.SendMediaAsync("c1", new byte[] { 1 }, "a.pdf", "application/pdf", "read this", "tmp-1", null, Ct);
+
+        Assert.HasCount(2, rig.Client.Sent);
+        Assert.AreEqual("tmp-1", sent.TmpId);
+    }
+
+    /// <summary>
     /// A file over 100 MiB is refused before anything uploads or sends.
     /// </summary>
     [TestMethod]

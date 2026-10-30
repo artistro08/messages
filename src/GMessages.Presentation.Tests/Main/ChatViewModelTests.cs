@@ -467,7 +467,7 @@ public sealed class ChatViewModelTests
         await chat.LoadAsync();
 
         Assert.IsFalse(chat.CanAttach(ChatStore.MaxAttachmentBytes + 1));
-        Assert.AreEqual("This file is too big to send (100 MB max).", chat.AttachError);
+        Assert.AreEqual("Your attachment is too big (100 MB max).", chat.AttachError);
         Assert.IsFalse(chat.CanSend);
 
         Assert.IsTrue(chat.Attach("a.png", "image/png", [1]));
@@ -482,6 +482,72 @@ public sealed class ChatViewModelTests
         Assert.IsFalse(chat.CanAttach(ChatStore.MaxAttachmentBytes + 1));
         chat.ClearAttachError();
         Assert.IsFalse(chat.HasAttachError);
+    }
+
+    /// <summary>
+    /// The chips together hold at most 200 MiB: a file that would take them past it is refused with the owner's note.
+    /// </summary>
+    [TestMethod]
+    public async Task Attach_TotalOver200MB_Refused()
+    {
+        using var rig = new MainRig();
+        using ChatViewModel chat = NewChat(rig);
+        await chat.LoadAsync();
+        static Task<Stream> Unread() => throw new AssertFailedException("A chip was read before Send.");
+
+        Assert.IsTrue(chat.Attach("a.bin", "application/octet-stream", ChatStore.MaxAttachmentBytes, Unread));
+        Assert.IsTrue(chat.Attach("b.bin", "application/octet-stream", ChatStore.MaxAttachmentBytes, Unread));
+        Assert.IsFalse(chat.Attach("c.bin", "application/octet-stream", 1, Unread));
+
+        Assert.AreEqual("Your attachment is too big (200 MB max).", chat.AttachError);
+        Assert.HasCount(2, chat.Attachments);
+    }
+
+    /// <summary>
+    /// A picked file is read only at Send, once; a file that can't be read by then stays as its chip with the note.
+    /// </summary>
+    [TestMethod]
+    public async Task Attach_ReadOnlyAtSend()
+    {
+        using var rig = new MainRig();
+        using ChatViewModel chat = NewChat(rig);
+        await chat.LoadAsync();
+        int opened = 0;
+        chat.Attach("a.png", "image/png", 2, () =>
+        {
+            opened++;
+            return Task.FromResult<Stream>(new MemoryStream([5, 6]));
+        });
+        chat.Attach("gone.pdf", "application/pdf", 1, () => Task.FromException<Stream>(new FileNotFoundException()));
+        Assert.AreEqual(0, opened);
+
+        await chat.SendAsync();
+
+        Assert.AreEqual(1, opened);
+        CollectionAssert.AreEqual(new byte[] { 5, 6 }, chat.Messages.Single().Media!.InlineData);
+        Assert.AreEqual("gone.pdf", chat.Attachments.Single().Name);
+        Assert.AreEqual("Couldn't send this attachment. Try again.", chat.AttachError);
+    }
+
+    /// <summary>
+    /// A reply sent with attachments and no text rides on the first attachment's message, which shows the quote.
+    /// </summary>
+    [TestMethod]
+    public async Task Reply_AttachmentsOnly_RidesOnFirstMedia()
+    {
+        using var rig            = new MainRig();
+        using ChatViewModel chat = await RcsChat(rig, TimeProvider.System, Msg("m1", "one"));
+        chat.StartReply(chat.Messages[0]);
+        chat.Attach("a.png", "image/png", [1]);
+        chat.Attach("b.png", "image/png", [2]);
+
+        await chat.SendAsync();
+
+        Assert.HasCount(2, rig.Client.Sent);
+        Assert.AreEqual("m1", rig.Client.Sent[0].Reply?.MessageID);
+        Assert.IsNull(rig.Client.Sent[1].Reply);
+        Assert.IsTrue(chat.Messages[1].HasQuote);
+        Assert.IsFalse(chat.IsReplying);
     }
 
     /// <summary>
