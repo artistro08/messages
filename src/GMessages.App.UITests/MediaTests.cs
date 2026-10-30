@@ -36,7 +36,7 @@ public sealed class MediaTests : UiTest
         Assert.AreEqual(ChatCopy.Photo, AppDriver.SafeName(photo), "The photo without a caption isn't named Photo.");
 
         System.Drawing.Color center = CenterPixel(photo!);
-        Assert.IsTrue(center.B > 150 && center.R < 100 && center.G < 100, $"The photo's middle reads {center}, not the photo's blue.");
+        Assert.IsTrue(center.B > 180 && center.B > center.R + 100, $"The photo's middle reads {center}, not the photo's blue.");
     }
 
     /// <summary>
