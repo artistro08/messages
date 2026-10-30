@@ -272,8 +272,8 @@ public sealed partial class ChatPane : UserControl
     }
 
     // The New Chat's Bubbles Fade In From Clear, Already Pinned To The Newest, So No Frame Shows Them Being Laid Out Or
-    // Their First Composition Frame (The Owner Saw A Gray Frame Over The List On A Switch). A Composition Animation, Not The
-    // Opacity Property: It Starts From Clear At Once, Before The Next Frame Draws
+    // Their First Composition Frame (The Gray Frame The Owner Saw Was The List's Scrolling Placeholders, Now Off In The
+    // XAML). A Composition Animation, Not The Opacity Property: It Starts From Clear At Once, Before The Next Frame Draws
     private void FadeInMessages()
     {
         Visual visual = ElementCompositionPreview.GetElementVisual(MessageList);
