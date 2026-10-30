@@ -37,12 +37,10 @@
                     x:Name="MenuButton"
                     Width="48"
                     Height="48"
-                    Padding="0"
                     AutomationProperties.AutomationId="Main.MenuButton"
                     AutomationProperties.Name="Show or hide conversations"
-                    Background="Transparent"
-                    BorderThickness="0"
-                    Click="OnMenuClick">
+                    Click="OnMenuClick"
+                    Style="{StaticResource IconButtonStyle}">
                     <FontIcon FontSize="16" Glyph="&#xE700;" />
                 </Button>
             </TitleBar.LeftHeader>
@@ -50,24 +48,18 @@
             <!-- Profile Button: Archived, Spam & blocked, Settings and Unpair. Just the picture, no hover or pressed background. It
                  sits at the right end of the title bar's content, which fills the space up to the caption buttons, so it
                  moves with the window edge in the same layout pass (Leaf Calendar's way, see the window's code). Only
-                 the picture takes clicks; the empty content around it drags the window -->
+                 the picture takes clicks; the empty content around it drags the window. The icon button style's clear 1 px
+                 border plus 7 px padding keep the picture 8 px from each side, where it sat before -->
             <TitleBar.Content>
                 <Grid x:Name="TitleBarContent" SizeChanged="OnTitleBarContentSizeChanged">
                     <Button
                         x:Name="ProfileButton"
                         Height="48"
-                        Padding="8,0"
+                        Padding="7,0"
                         HorizontalAlignment="Right"
                         AutomationProperties.AutomationId="Main.ProfileButton"
-                        AutomationProperties.Name="Account">
-                        <Button.Template>
-                            <ControlTemplate TargetType="Button">
-                                <ContentPresenter
-                                    Padding="{TemplateBinding Padding}"
-                                    Background="Transparent"
-                                    Content="{TemplateBinding Content}" />
-                            </ControlTemplate>
-                        </Button.Template>
+                        AutomationProperties.Name="Account"
+                        Style="{StaticResource IconButtonStyle}">
                         <PersonPicture
                             x:Name="ProfilePicture"
                             Width="28"

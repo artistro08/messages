@@ -61,6 +61,9 @@ public sealed partial class ChatPane : UserControl
     private const double ComposeInset = 12;
     private const double ComposeTop   = 8;
 
+    // A Disabled Icon That Keeps Its Own Color Shows At This Opacity
+    private const double DisabledOpacity = 0.4;
+
     // Another Chat Fades In Over WinUI's Normal Control Animation Time
     private static readonly TimeSpan ChatFadeIn = TimeSpan.FromMilliseconds(250);
 
@@ -213,6 +216,14 @@ public sealed partial class ChatPane : UserControl
     /// <returns>The corners.</returns>
     public static CornerRadius DraftCorners(bool isReplying) =>
         isReplying ? new CornerRadius(0, 0, DraftCorner, DraftCorner) : new CornerRadius(DraftCorner);
+
+    /// <summary>
+    /// Dims an icon that keeps its own color (send's accent) while its button is disabled, as the icon buttons did before
+    /// they took the shared icon button style.
+    /// </summary>
+    /// <param name="isEnabled">True while the button is enabled.</param>
+    /// <returns>The icon's opacity.</returns>
+    public static double EnabledOpacity(bool isEnabled) => isEnabled ? 1 : DisabledOpacity;
 
     // =========================================================================
     // EVENT HANDLERS

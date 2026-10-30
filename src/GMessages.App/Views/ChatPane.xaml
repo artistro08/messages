@@ -6,43 +6,6 @@
     xmlns:local="using:GMessages.App.Views"
     xmlns:main="using:GMessages.Presentation.Main">
 
-    <UserControl.Resources>
-
-        <!-- Icon Button: just the icon, no background or hover; dimmed while disabled -->
-        <Style x:Key="IconOnlyButtonStyle" TargetType="Button">
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Padding" Value="0" />
-            <Setter Property="UseSystemFocusVisuals" Value="True" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <ContentPresenter
-                            x:Name="ContentPresenter"
-                            Padding="{TemplateBinding Padding}"
-                            HorizontalContentAlignment="Center"
-                            VerticalContentAlignment="Center"
-                            Background="Transparent"
-                            Content="{TemplateBinding Content}">
-                            <VisualStateManager.VisualStateGroups>
-                                <VisualStateGroup x:Name="CommonStates">
-                                    <VisualState x:Name="Normal" />
-                                    <VisualState x:Name="PointerOver" />
-                                    <VisualState x:Name="Pressed" />
-                                    <VisualState x:Name="Disabled">
-                                        <VisualState.Setters>
-                                            <Setter Target="ContentPresenter.Opacity" Value="0.4" />
-                                        </VisualState.Setters>
-                                    </VisualState>
-                                </VisualStateGroup>
-                            </VisualStateManager.VisualStateGroups>
-                        </ContentPresenter>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-    </UserControl.Resources>
-
     <Grid RowDefinitions="Auto,*,Auto,Auto,Auto">
 
         <!-- Header: avatar and name, with the lock after it in an encrypted chat (a narrow window's back is the title bar's),
@@ -95,12 +58,11 @@
                 Grid.Column="2"
                 Width="32"
                 Height="32"
-                Padding="0"
                 VerticalAlignment="Center"
                 AutomationProperties.AutomationId="Chat.More"
                 AutomationProperties.Name="{x:Bind local:ChatPane.MoreOptionsText}"
                 Click="OnMoreClick"
-                Style="{StaticResource SubtleButtonStyle}"
+                Style="{StaticResource IconButtonStyle}"
                 ToolTipService.ToolTip="{x:Bind local:ChatPane.MoreOptionsText}">
                 <FontIcon FontSize="16" Glyph="&#xE712;" />
             </Button>
@@ -234,6 +196,27 @@
             IsTabStop="False"
             Opacity="0"
             Translation="0,0,16">
+
+            <!-- No Hover Or Press Background (Task 22): the circle keeps its own fill and edge; high contrast keeps the
+                 system's own hover and press colors -->
+            <Button.Resources>
+                <ResourceDictionary>
+                    <ResourceDictionary.ThemeDictionaries>
+                        <ResourceDictionary x:Key="Default">
+                            <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="AcrylicInAppFillColorDefaultBrush" />
+                            <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="AcrylicInAppFillColorDefaultBrush" />
+                            <StaticResource x:Key="ButtonBorderBrushPointerOver" ResourceKey="CardStrokeColorDefaultBrush" />
+                            <StaticResource x:Key="ButtonBorderBrushPressed" ResourceKey="CardStrokeColorDefaultBrush" />
+                        </ResourceDictionary>
+                        <ResourceDictionary x:Key="Light">
+                            <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="AcrylicInAppFillColorDefaultBrush" />
+                            <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="AcrylicInAppFillColorDefaultBrush" />
+                            <StaticResource x:Key="ButtonBorderBrushPointerOver" ResourceKey="CardStrokeColorDefaultBrush" />
+                            <StaticResource x:Key="ButtonBorderBrushPressed" ResourceKey="CardStrokeColorDefaultBrush" />
+                        </ResourceDictionary>
+                    </ResourceDictionary.ThemeDictionaries>
+                </ResourceDictionary>
+            </Button.Resources>
             <Button.Shadow>
                 <ThemeShadow />
             </Button.Shadow>
@@ -295,13 +278,11 @@
                 Grid.Column="2"
                 Width="32"
                 Height="32"
-                Padding="0"
                 VerticalAlignment="Center"
                 AutomationProperties.AutomationId="Chat.CancelReply"
                 AutomationProperties.Name="{x:Bind local:ChatPane.CancelReplyText}"
-                Background="Transparent"
-                BorderThickness="0"
                 Click="OnCancelReplyClick"
+                Style="{StaticResource IconButtonStyle}"
                 ToolTipService.ToolTip="{x:Bind local:ChatPane.CancelReplyText}">
                 <FontIcon FontSize="12" Glyph="&#xE711;" />
             </Button>
@@ -354,7 +335,7 @@
                 AutomationProperties.AutomationId="Chat.Emoji"
                 AutomationProperties.Name="Emoji"
                 Click="OnEmojiClick"
-                Style="{StaticResource IconOnlyButtonStyle}">
+                Style="{StaticResource IconButtonStyle}">
                 <FontIcon
                     FontSize="16"
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
@@ -370,11 +351,13 @@
                 AutomationProperties.Name="Send"
                 Click="OnSendClick"
                 IsEnabled="{x:Bind Chat.CanSend, Mode=OneWay, FallbackValue=False}"
-                Style="{StaticResource IconOnlyButtonStyle}">
+                Style="{StaticResource IconButtonStyle}">
+                <!-- Dimmed While Disabled: the icon keeps its own accent color, so the button's disabled color can't reach it -->
                 <FontIcon
                     FontSize="16"
                     Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
-                    Glyph="&#xE724;" />
+                    Glyph="&#xE724;"
+                    Opacity="{x:Bind local:ChatPane.EnabledOpacity(Chat.CanSend), Mode=OneWay, FallbackValue=0.4}" />
             </Button>
         </Grid>
     </Grid>

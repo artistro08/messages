@@ -172,14 +172,13 @@
             Grid.Column="3"
             Width="32"
             Height="32"
-            Padding="0"
             VerticalAlignment="Center"
             AutomationProperties.AutomationId="{x:Bind local:ConversationRow.PartId('Row.More.', Row.Id), Mode=OneWay, FallbackValue=''}"
             Click="OnMoreClick"
             IsHitTestVisible="False"
             IsTabStop="False"
             Opacity="0"
-            Style="{StaticResource SubtleButtonStyle}"
+            Style="{StaticResource IconButtonStyle}"
             Visibility="Collapsed">
             <FontIcon FontSize="16" Glyph="&#xE712;" />
         </Button>

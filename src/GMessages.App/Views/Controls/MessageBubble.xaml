@@ -273,39 +273,36 @@
                         x:Name="HoverReact"
                         Width="32"
                         Height="32"
-                        Padding="0"
                         VerticalAlignment="Center"
                         AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('HoverReact.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
                         Click="OnHoverReactClick"
                         IsHitTestVisible="False"
                         IsTabStop="False"
-                        Style="{StaticResource SubtleButtonStyle}">
+                        Style="{StaticResource IconButtonStyle}">
                         <FontIcon FontSize="16" Glyph="&#xE76E;" />
                     </Button>
                     <Button
                         x:Name="HoverReply"
                         Width="32"
                         Height="32"
-                        Padding="0"
                         VerticalAlignment="Center"
                         AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('HoverReply.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
                         Click="OnHoverReplyClick"
                         IsHitTestVisible="False"
                         IsTabStop="False"
-                        Style="{StaticResource SubtleButtonStyle}">
+                        Style="{StaticResource IconButtonStyle}">
                         <FontIcon FontSize="16" Glyph="&#xE97A;" />
                     </Button>
                     <Button
                         x:Name="HoverMore"
                         Width="32"
                         Height="32"
-                        Padding="0"
                         VerticalAlignment="Center"
                         AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('HoverMore.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
                         Click="OnHoverMoreClick"
                         IsHitTestVisible="False"
                         IsTabStop="False"
-                        Style="{StaticResource SubtleButtonStyle}">
+                        Style="{StaticResource IconButtonStyle}">
                         <FontIcon FontSize="16" Glyph="&#xE712;" />
                     </Button>
                 </StackPanel>
