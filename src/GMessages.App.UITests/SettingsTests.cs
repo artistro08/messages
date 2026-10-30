@@ -77,6 +77,36 @@ public sealed class SettingsTests : UiTest
     }
 
     /// <summary>
+    /// A second open of settings, after a microphone was picked, still shows the theme, the snooze length and that
+    /// microphone (the reopened page once threw on the saved microphone and left the dropdowns blank).
+    /// </summary>
+    [TestMethod]
+    public void Settings_Reopen_AfterPickingMicrophone_ShowsEveryValue()
+    {
+        OpenSettings();
+
+        // Pick The First Named Microphone (This PC Needs One)
+        ComboBox microphone = App.Find("Settings.Microphone").AsComboBox();
+        microphone.Expand();
+        Wait.Until(() => microphone.Items.Length > 1, AppDriver.DefaultTimeout, () => "This PC has no microphone to pick.");
+        string picked = AppDriver.SafeName(microphone.Items[1]);
+        microphone.Select(1);
+        microphone.Collapse();
+        Wait.Until(() => Microphone() == picked, AppDriver.DefaultTimeout, () => $"Microphone shows '{Microphone()}', not the one picked.");
+
+        // Back, Then Settings Again
+        App.Find("Settings.Back").Patterns.Invoke.Pattern.Invoke();
+        WaitForGone("Settings.Back");
+        OpenSettings();
+
+        // Every Dropdown Shows Its Value
+        Wait.Until(() => Microphone() == picked, AppDriver.DefaultTimeout, () => $"Microphone came back as '{Microphone()}', not the one picked.");
+        Wait.Until(() => ThemeIndex() == 0, AppDriver.DefaultTimeout, () => $"Theme came back as index {ThemeIndex()}, not 'Use system setting'.");
+        Wait.Until(() => SnoozeLength() == ChatCopy.Minutes15, AppDriver.DefaultTimeout, () => $"Snooze length came back as '{SnoozeLength()}', not 15 minutes.");
+        WaitForToggle("Settings.Notifications", ToggleState.On);
+    }
+
+    /// <summary>
     /// Settings covers pairing, keeping its sign-in alive; Back returns to the same sign-in.
     /// </summary>
     [TestMethod]

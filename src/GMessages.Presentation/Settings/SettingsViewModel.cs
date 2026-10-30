@@ -213,8 +213,8 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged, IDisposa
     }
 
     /// <summary>
-    /// Sets the microphones the dropdown offers. The settings page calls it each time it opens, with Windows' active
-    /// audio capture devices.
+    /// Sets the microphones the dropdown offers. The settings page calls it each time it opens: first with none (its box
+    /// holds only "Windows default" then), and again with Windows' active audio capture devices once found.
     /// </summary>
     /// <param name="microphones">Each microphone's Windows device ID and friendly name, in the order to show them.</param>
     public void SetMicrophones(IReadOnlyList<(string Id, string Name)> microphones)
