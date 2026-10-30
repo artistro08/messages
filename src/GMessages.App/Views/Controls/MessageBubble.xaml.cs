@@ -180,9 +180,11 @@ public sealed partial class MessageBubble : UserControl
     // The Full Photo's Fade In Over The Blurred One
     private readonly ScalarTransition _photoFade = new();
 
-    // The Photo Shown (Or Loading) And Its Message; Each Load Gets A Number, So One Overtaken By A Newer Load Stops
+    // The Photo Shown (Or Loading) And Its Bubble; Each Load Gets A Number, So One Overtaken By A Newer Load Stops. The
+    // Bubble Is The View Model Itself: It Stays One Object Through Its Echo (Its ID Arrives) And A Retry (A New Temporary
+    // ID), While A Recycled Container Gets Another One
     private MediaPart? _photoPart;
-    private string _photoMessage = string.Empty;
+    private MessageBubbleViewModel? _photoBubble;
     private int _photoLoad;
     private bool _photoFailed;
 
@@ -194,13 +196,16 @@ public sealed partial class MessageBubble : UserControl
 
     // The File The Card Shows, Its Message, And Whether It Is Opening Or Its Last Open Failed
     private MediaPart? _filePart;
-    private string _fileMessage = string.Empty;
+    private MessageBubbleViewModel? _fileBubble;
     private bool _fileOpening;
     private bool _fileFailed;
 
-    // The Voice Message Shown, Its Message, And Its Audio And Waveform Once Read
+    // The Voice Message Shown, Its Bubble, Its Player Key (Kept Through The Echo), Its Load Number (Bumped When Another
+    // Message Shows, So A Late Load Or Player Update Stops), And Its Audio And Waveform Once Read
     private MediaPart? _voicePart;
-    private string _voiceMessage = string.Empty;
+    private MessageBubbleViewModel? _voiceBubble;
+    private string _voiceKey = string.Empty;
+    private int _voiceLoad;
     private byte[]? _voiceAudio;
     private VoiceWave? _voiceWave;
 
@@ -705,21 +710,28 @@ public sealed partial class MessageBubble : UserControl
     // =========================================================================
 
     // Another Photo, Or The Same One With Its Full Size Now (The Phone's Edit Swaps The Media Part): Load It. The Same
-    // Message Keeps Its Blurred Look While The Full Image Loads; Another One Starts Clear
+    // Message Keeps Its Blurred Look While The Full Image Loads; Another One Starts Clear. The Echo Of A Photo Sent From
+    // Here Keeps What Shows: Its Bytes Are The Photo, So They Go In The Cache Under Its New Media ID Instead Of A Download
     private void ShowPhoto()
     {
         MediaPart? part = Bubble is { HasPhoto: true } bubble ? bubble.Media : null;
-        if (SameMedia(part, _photoPart) && (Bubble?.Id ?? string.Empty) == _photoMessage)
+        if (SameMedia(part, _photoPart) && ReferenceEquals(Bubble, _photoBubble))
         {
             return;
         }
 
-        string message_id = Bubble?.Id ?? string.Empty;
-        bool same_message = part is not null && message_id.Length > 0 && message_id == _photoMessage;
-        _photoPart        = part;
-        _photoMessage     = message_id;
-        _photoFailed      = false;
-        int load          = NextPhotoLoad();
+        bool same_message = part is not null && Bubble is not null && ReferenceEquals(Bubble, _photoBubble);
+        if (same_message && KeepSentMedia(_photoPart, part))
+        {
+            _photoPart = part;
+            SizePhoto();
+            return;
+        }
+
+        _photoPart   = part;
+        _photoBubble = Bubble;
+        _photoFailed = false;
+        int load     = NextPhotoLoad();
 
         // Another Message, Or None (A Bubble Without A Photo): Let Go Of The Old Images
         if (!same_message)
@@ -738,10 +750,25 @@ public sealed partial class MessageBubble : UserControl
         }
     }
 
-    // The Same Media Though The Bubble's Update Built A New Part (A Status Or Reaction Change): Nothing To Load Again
+    // The Same Media Though The Bubble's Update Built A New Part (A Status Or Reaction Change): Nothing To Load Again.
+    // Inline Bytes Count By Reference, So Two Pending Parts With One Name Still Differ
     private static bool SameMedia(MediaPart? a, MediaPart? b) =>
         a is null || b is null ? a is null && b is null
-            : a.MediaId == b.MediaId && a.ThumbnailId == b.ThumbnailId && a.Name == b.Name;
+            : a.MediaId == b.MediaId && a.ThumbnailId == b.ThumbnailId && a.Name == b.Name
+              && (ReferenceEquals(a.InlineData, b.InlineData) || (a.InlineData.Length == 0 && b.InlineData.Length == 0));
+
+    // The Echo Of An Attachment Sent From Here: The Shown Part Held Its Bytes, And The New One Has The Media ID They
+    // Uploaded As. The Bytes Go In The Cache Under That ID, So Nothing Downloads Again; True When So
+    private static bool KeepSentMedia(MediaPart? shown, MediaPart? echo)
+    {
+        if (shown is not { InlineData.Length: > 0 } local || echo is not { MediaId.Length: > 0, InlineData.Length: 0 })
+        {
+            return false;
+        }
+
+        (Application.Current as App)?.Media?.Seed(echo.MediaId, local.InlineData);
+        return true;
+    }
 
     // Starts A Photo Load: Its Number, With An Older Load's Wait For The Full Size Cancelled
     private int NextPhotoLoad()
@@ -813,7 +840,7 @@ public sealed partial class MessageBubble : UserControl
                     _cancelPhotoWait = wait.Cancel;
                     try
                     {
-                        await Task.Delay(FullSizeWait, wait.Token);
+                        await Task.Delay(TestHooks.ShortWait("full-size-wait") ?? FullSizeWait, wait.Token);
                     }
                     finally
                     {
@@ -898,13 +925,20 @@ public sealed partial class MessageBubble : UserControl
     private async void ShowFile()
     {
         MediaPart? part = Bubble is { HasFileCard: true } bubble ? bubble.Media : null;
-        if (SameMedia(part, _filePart) && (Bubble?.Id ?? string.Empty) == _fileMessage)
+        if (SameMedia(part, _filePart) && ReferenceEquals(Bubble, _fileBubble))
         {
             return;
         }
 
+        // The Echo Of A File Sent From Here: Keep The Card As It Is
+        if (part is not null && Bubble is not null && ReferenceEquals(Bubble, _fileBubble) && KeepSentMedia(_filePart, part))
+        {
+            _filePart = part;
+            return;
+        }
+
         _filePart            = part;
-        _fileMessage         = Bubble?.Id ?? string.Empty;
+        _fileBubble          = Bubble;
         _fileOpening         = false;
         _fileFailed          = false;
         FileThumb.Background = null;
@@ -954,8 +988,9 @@ public sealed partial class MessageBubble : UserControl
         _fileFailed  = false;
         ShowFileDetail();
 
-        bool opened = await OpenMediaAsync(part);
-        if (!ReferenceEquals(part, _filePart))
+        MessageBubbleViewModel? bubble = _fileBubble;
+        bool opened                    = await OpenMediaAsync(part);
+        if (!ReferenceEquals(bubble, _fileBubble))
         {
             return;
         }
@@ -969,21 +1004,31 @@ public sealed partial class MessageBubble : UserControl
     // VOICE
     // =========================================================================
 
-    // Another Voice Message: Shown Stopped, Then Downloaded And Its Waveform And Length Read (Once Per File, In Memory)
+    // Another Voice Message: Shown Stopped, Then Downloaded And Its Waveform And Length Read (Once Per File, In Memory).
+    // The Echo Of One Sent From Here Keeps Its Audio, Waveform And Play State, So A Playing Message Plays On
     private async void ShowVoice()
     {
         MediaPart? part = Bubble is { HasVoice: true } bubble ? bubble.Media : null;
-        if (SameMedia(part, _voicePart) && (Bubble?.Id ?? string.Empty) == _voiceMessage)
+        if (SameMedia(part, _voicePart) && ReferenceEquals(Bubble, _voiceBubble))
         {
             return;
         }
 
+        if (part is not null && Bubble is not null && ReferenceEquals(Bubble, _voiceBubble) && KeepSentMedia(_voicePart, part))
+        {
+            _voicePart = part;
+            return;
+        }
+
         _voicePart        = part;
-        _voiceMessage     = Bubble?.Id ?? string.Empty;
+        _voiceBubble      = Bubble;
+        _voiceKey         = Bubble is { } shown ? (shown.TmpId.Length > 0 ? shown.TmpId : shown.Id) : string.Empty;
+        _voiceLoad++;
         _voiceAudio       = null;
         _voiceWave        = null;
         VoiceLength.Text  = string.Empty;
         VoiceBars.Show(null);
+        VoiceBars.Length  = TimeSpan.Zero;
         ShowVoicePlaying(false, 0);
         if (part is not { IsPending: false } || (Application.Current as App)?.Media is not { } media)
         {
@@ -992,9 +1037,10 @@ public sealed partial class MessageBubble : UserControl
 
         try
         {
+            int load       = _voiceLoad;
             byte[] audio   = await media.GetAsync(part, thumbnail: false, CancellationToken.None);
             VoiceWave wave = await WaveformReader.ReadAsync(audio);
-            if (!ReferenceEquals(part, _voicePart))
+            if (load != _voiceLoad)
             {
                 return;
             }
@@ -1003,6 +1049,7 @@ public sealed partial class MessageBubble : UserControl
             _voiceWave       = wave;
             VoiceLength.Text = VoiceWave.LengthText(wave.Length);
             VoiceBars.Show(wave.Peaks);
+            VoiceBars.Length = wave.Length;
             TestHooks.ShowState(VoiceLength, "Ready");
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -1025,11 +1072,11 @@ public sealed partial class MessageBubble : UserControl
             return;
         }
 
-        // Only While This View Still Shows The Message (A Recycled Row Moves On)
-        MediaPart? part = _voicePart;
-        VoiceRequested?.Invoke(this, new VoiceRequest(PartIdOf(string.Empty, Bubble?.Id ?? string.Empty, Bubble?.TmpId ?? string.Empty), audio, wave.Length, seekTo, (playing, share) =>
+        // Only While This View Still Shows The Message (A Recycled Row Moves On; Its Echo Doesn't)
+        int load = _voiceLoad;
+        VoiceRequested?.Invoke(this, new VoiceRequest(_voiceKey, audio, wave.Length, seekTo, (playing, share) =>
         {
-            if (ReferenceEquals(part, _voicePart))
+            if (load == _voiceLoad)
             {
                 ShowVoicePlaying(playing, share);
             }
