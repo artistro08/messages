@@ -19,15 +19,15 @@
 
         <!-- List Pane: on the Mica -->
         <SplitView.Pane>
-            <Grid x:Name="ListPane" RowDefinitions="Auto,Auto,*">
+            <Grid x:Name="ListPane" RowDefinitions="Auto,Auto,Auto,*">
 
-                <!-- Spam Header: the list title (the title bar's Back returns to the inbox) -->
+                <!-- Folder Header: Archived or Spam & blocked (the title bar's Back returns to the inbox) -->
                 <TextBlock
-                    x:Name="ListTitle"
                     Margin="16,8,12,8"
                     AutomationProperties.AutomationId="Main.ListTitle"
                     Style="{StaticResource SubtitleTextBlockStyle}"
-                    Visibility="{x:Bind ViewModel.IsSpamView, Mode=OneWay}" />
+                    Text="{x:Bind local:ChatsView.FolderTitle(ViewModel.IsArchivedView), Mode=OneWay}"
+                    Visibility="{x:Bind ViewModel.IsFolderView, Mode=OneWay, FallbackValue=Collapsed}" />
 
                 <!-- Connection Banner: hidden while connected -->
                 <TextBlock
@@ -38,27 +38,39 @@
                     Text="{x:Bind ViewModel.StatusBanner, Mode=OneWay}"
                     Visibility="{x:Bind ViewModel.HasStatusBanner, Mode=OneWay}" />
 
+                <!-- Action Failure Banner: a conversation action the phone didn't make; closing it dismisses it -->
+                <InfoBar
+                    Grid.Row="2"
+                    Margin="16,0,16,8"
+                    AutomationProperties.AutomationId="Main.ActionError"
+                    CloseButtonClick="OnActionErrorClosed"
+                    IsClosable="True"
+                    IsOpen="{x:Bind ViewModel.HasActionError, Mode=OneWay}"
+                    Message="{x:Bind ViewModel.ActionError, Mode=OneWay, FallbackValue=''}"
+                    Severity="Error" />
+
                 <!-- Conversations: room at the bottom so Start chat never covers the last row, and a lane on the right where
                      the scrollbar sits, between the rows and the chat island -->
                 <ListView
                     x:Name="ConversationList"
-                    Grid.Row="2"
+                    Grid.Row="3"
                     Padding="0,0,8,64"
                     AutomationProperties.AutomationId="Main.ConversationList"
                     ContainerContentChanging="OnContainerContentChanging"
+                    ContextRequested="OnConversationListContextRequested"
                     Loaded="OnConversationListLoaded"
                     SelectionChanged="OnSelectionChanged"
                     SelectionMode="Single">
                     <ListView.ItemTemplate>
                         <DataTemplate x:DataType="main:ConversationRowViewModel">
-                            <controls:ConversationRow Row="{x:Bind}" />
+                            <controls:ConversationRow MoreRequested="OnRowMoreRequested" Row="{x:Bind}" />
                         </DataTemplate>
                     </ListView.ItemTemplate>
                 </ListView>
 
-                <!-- Loading: while an empty list (the inbox or Spam & blocked) loads -->
+                <!-- Loading: while an empty list (the inbox, Archived or Spam & blocked) loads -->
                 <ProgressRing
-                    Grid.Row="2"
+                    Grid.Row="3"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center"
                     AutomationProperties.AutomationId="Main.ListLoading"
@@ -68,7 +80,7 @@
                      slides it away, scrolling up brings it back (set from code, animated by its transitions) -->
                 <Button
                     x:Name="StartChatButton"
-                    Grid.Row="2"
+                    Grid.Row="3"
                     Margin="0,0,16,16"
                     HorizontalAlignment="Right"
                     VerticalAlignment="Bottom"
@@ -76,7 +88,7 @@
                     Click="OnStartChatClick"
                     Style="{StaticResource AccentButtonStyle}"
                     Translation="0,0,16"
-                    Visibility="{x:Bind local:MainWindow.HiddenIf(ViewModel.IsSpamView), Mode=OneWay}">
+                    Visibility="{x:Bind local:MainWindow.HiddenIf(ViewModel.IsFolderView), Mode=OneWay}">
                     <Button.Shadow>
                         <ThemeShadow />
                     </Button.Shadow>

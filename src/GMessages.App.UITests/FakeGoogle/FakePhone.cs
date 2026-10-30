@@ -469,8 +469,10 @@ public sealed class FakePhone
             _                                                                         => updated,
         };
 
+        // Archive, Unarchive And Mute Carry The ID Only In The Update Data (LibGM's conversation_builder.go)
+        string id                     = request.ConversationID.Length > 0 ? request.ConversationID : request.UpdateData?.ConversationID ?? "";
         ConversationMuteStatus? muted = request.UpdateData?.DataCase == UpdateConversationData.DataOneofCase.Mute ? request.UpdateData.Mute : null;
-        Conversation? conversation    = Chats.SetConversationStatus(request.ConversationID, status, muted);
+        Conversation? conversation    = Chats.SetConversationStatus(id, status, muted);
         Reply(data.RequestID, data.Action, new UpdateConversationResponse { Success = conversation is not null }, encrypt: true);
         if (conversation is not null)
         {
