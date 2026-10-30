@@ -295,8 +295,8 @@ public sealed class FakeChats
         }
     }
 
-    // A New Status On A Conversation (Null Keeps It); The Conversation After, Or Null For An Unknown One
-    internal Conversation? SetConversationStatus(string conversationId, ConversationStatus? status)
+    // A New Status Or Mute State On A Conversation (Null Keeps It); The Conversation After, Or Null For An Unknown One
+    internal Conversation? SetConversationStatus(string conversationId, ConversationStatus? status, ConversationMuteStatus? muted = null)
     {
         lock (_lock)
         {
@@ -309,6 +309,11 @@ public sealed class FakeChats
             if (status is { } new_status)
             {
                 conversation.Status = new_status;
+            }
+
+            if (muted is { } new_muted)
+            {
+                conversation.Muted = new_muted;
             }
 
             return conversation.Clone();

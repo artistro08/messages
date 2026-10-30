@@ -3,7 +3,6 @@ using GMessages.Presentation.Connection;
 using GMessages.Protocol;
 using GMessages.Protocol.Events;
 using GMessages.Protocol.Proto;
-using Google.Protobuf;
 using Microsoft.Extensions.Logging;
 
 namespace GMessages.Presentation.Messaging;
@@ -249,8 +248,6 @@ public sealed partial class ChatStore : IDisposable
         List<ConversationInfo> result = [];
         foreach (Conversation c in response.Conversations)
         {
-            // TODO: Plan 5 Task 4 removes the mute probe
-            LogUnknownFields(c);
             result.Add(CacheConversation(c, generation));
         }
 
@@ -584,7 +581,7 @@ public sealed partial class ChatStore : IDisposable
     /// </summary>
     /// <remarks>
     /// Sends the request <see cref="BuildRequest"/> builds. Only once the phone says it succeeded does the cached
-    /// conversation take its new status (<see cref="StatusAfter"/>), in memory only, raising
+    /// conversation take its new status (<see cref="StatusAfter"/>) or mute state, in memory only, raising
     /// <see cref="ConversationChanged"/> so the lists move it at once; the phone's echo is what gets saved. A
     /// <see cref="Reset"/> while the phone is answering applies nothing. A refusal is logged here;
     /// callers log every other failure, as they do for the other writers.
@@ -610,13 +607,16 @@ public sealed partial class ChatStore : IDisposable
             throw new MessageSendException("ConversationUpdateRefused");
         }
 
-        // Unpaired Or Signed Out Meanwhile, Or Nothing To Show Locally (Mute Is Kept Elsewhere)
-        if (generation != Generation || StatusAfter(action) is not { } status || Find(conversationId) is not { } cached)
+        // Unpaired Or Signed Out Meanwhile
+        if (generation != Generation || Find(conversationId) is not { } cached)
         {
             return;
         }
 
-        ConversationInfo updated = cached with { Status = status };
+        // Mute And Unmute Leave The Status Alone
+        ConversationInfo updated = StatusAfter(action) is { } status
+            ? cached with { Status = status }
+            : cached with { IsMuted = action == ConversationAction.Mute };
         if (Upsert(updated))
         {
             ConversationChanged?.Invoke(this, updated);
@@ -764,8 +764,6 @@ public sealed partial class ChatStore : IDisposable
         switch (e)
         {
             case ConversationUpdated updated:
-                // TODO: Plan 5 Task 4 removes the mute probe
-                LogUnknownFields(updated.Conversation);
                 ConversationInfo info = ConversationInfo.From(updated.Conversation);
                 Upsert(info);
                 SaveConversation(updated.Conversation, Generation);
@@ -1077,124 +1075,6 @@ public sealed partial class ChatStore : IDisposable
             }
         });
     }
-
-    // =========================================================================
-    // MUTE PROBE (Plan 5 Task 1; Task 4 removes it)
-    // =========================================================================
-
-    /// <summary>
-    /// Describes the top-level conversation fields LibGM doesn't name, without any content.
-    /// </summary>
-    /// <remarks>
-    /// Varints print as <c>n=value</c>, length-delimited fields as <c>n=lenL</c> (plus <c>{v ...}</c> when the bytes parse as a message of only varints), fixed-width fields as <c>n=fixed</c>. Strings are never printed.
-    /// </remarks>
-    /// <param name="conversation">The conversation as the phone sent it.</param>
-    /// <returns>The fields joined by spaces in wire order, or an empty string when there are none.</returns>
-    internal static string DescribeUnknownFields(Conversation conversation)
-    {
-        try
-        {
-            return DescribeUnknownFieldsCore(conversation);
-        }
-        catch (InvalidProtocolBufferException)
-        {
-            return "";
-        }
-    }
-
-    private static string DescribeUnknownFieldsCore(Conversation conversation)
-    {
-        List<string> parts = [];
-        CodedInputStream input = new(conversation.ToByteArray());
-        uint tag;
-        while ((tag = input.ReadTag()) != 0)
-        {
-            int number = WireFormat.GetTagFieldNumber(tag);
-            bool known = Conversation.Descriptor.FindFieldByNumber(number) != null;
-
-            switch (WireFormat.GetTagWireType(tag))
-            {
-                case WireFormat.WireType.Varint:
-                    ulong value = input.ReadUInt64();
-                    if (!known) { parts.Add($"{number}={(value <= 15 ? value.ToString(System.Globalization.CultureInfo.InvariantCulture) : "n")}"); }
-                    break;
-
-                case WireFormat.WireType.LengthDelimited:
-                    ByteString bytes = input.ReadBytes();
-                    if (!known) { parts.Add(DescribeBytes(number, bytes)); }
-                    break;
-
-                case WireFormat.WireType.Fixed32:
-                    input.ReadFixed32();
-                    if (!known) { parts.Add($"{number}=fixed"); }
-                    break;
-
-                case WireFormat.WireType.Fixed64:
-                    input.ReadFixed64();
-                    if (!known) { parts.Add($"{number}=fixed"); }
-                    break;
-
-                default:
-                    input.SkipLastField();
-                    if (!known) { parts.Add($"{number}=other"); }
-                    break;
-            }
-        }
-
-        return string.Join(' ', parts);
-    }
-
-    private static string DescribeBytes(int number, ByteString bytes)
-    {
-        string head = $"{number}=len{bytes.Length}";
-
-        // Nested Varints Only: Anything Else Might Be Text
-        List<string> inner = [];
-        try
-        {
-            CodedInputStream nested = new(bytes.ToByteArray());
-            uint tag;
-            while ((tag = nested.ReadTag()) != 0)
-            {
-                if (WireFormat.GetTagWireType(tag) != WireFormat.WireType.Varint)
-                {
-                    return head;
-                }
-
-                // Small Values Only: Larger Ones Could Be Text Bytes
-                ulong value = nested.ReadUInt64();
-                inner.Add(value <= 3 ? value.ToString(System.Globalization.CultureInfo.InvariantCulture) : "n");
-                if (inner.Count >= 8)
-                {
-                    break;
-                }
-            }
-        }
-        catch (InvalidProtocolBufferException)
-        {
-            return head;
-        }
-
-        return inner.Count == 0 ? head : $"{head}{{{string.Join(' ', inner)}}}";
-    }
-
-    private readonly ConcurrentDictionary<string, string> _unknownFields = new();
-
-    private void LogUnknownFields(Conversation conversation)
-    {
-        string fields = DescribeUnknownFields(conversation);
-
-        // Log Only When A Conversation's Description Changed
-        string previous = _unknownFields.GetValueOrDefault(conversation.ConversationID, "");
-        if (fields.Length > 0 && fields != previous)
-        {
-            _unknownFields[conversation.ConversationID] = fields;
-            LogConversationUnknownFields(conversation.ConversationID, fields);
-        }
-    }
-
-    [LoggerMessage(Level = LogLevel.Information, Message = "Conversation {ConversationId} unknown fields: {Fields}")]
-    private partial void LogConversationUnknownFields(string conversationId, string fields);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Phone refused a send in {ConversationId} ({Status})")]
     private partial void LogSendRefused(string conversationId, string status);

@@ -28,7 +28,7 @@ public sealed class NotificationPolicyTests
     [TestMethod] public void ViewedAndFocused_DoesNotNotify() => Assert.IsFalse(Run(viewed: "c1", focused: true));
     [TestMethod] public void ViewedAndFocused_NotifyForViewedOn_Notifies() => Assert.IsTrue(Run(viewed: "c1", focused: true, notifyViewed: true));
     [TestMethod] public void ViewedButUnfocused_Notifies() => Assert.IsTrue(Run(viewed: "c1", focused: false));
-
+    [TestMethod] public void Muted_DoesNotNotify() => Assert.IsFalse(Run(c: Conv() with { IsMuted = true }));
     private static ConversationInfo Read(bool unread = false) => Conv() with { Unread = unread };
 
     [TestMethod] public void Read_DismissesToasts() => Assert.IsTrue(NotificationPolicy.ShouldDismissOnRead(Read(), null, false, false));

@@ -202,7 +202,7 @@ message UpdateConversationData {
     string conversationID = 1;
     oneof data {
         conversations.ConversationStatus status = 12;
-        ConversationMuteStatus mute = 7;
+        conversations.ConversationMuteStatus mute = 7;
     }
 }
 
@@ -212,11 +212,6 @@ enum ConversationActionStatus {
     UNBLOCK = 2;
     BLOCK = 7;
     BLOCK_AND_REPORT = 8;
-}
-
-enum ConversationMuteStatus {
-    UNMUTE = 0;
-    MUTE = 1;
 }
 
 message UpdateConversationResponse {

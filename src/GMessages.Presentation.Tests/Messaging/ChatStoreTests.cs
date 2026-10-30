@@ -1,6 +1,7 @@
 using Google.Protobuf;
 using GMessages.Presentation.Connection;
 using GMessages.Presentation.Messaging;
+using GMessages.Presentation.Notifications;
 using GMessages.Protocol;
 using GMessages.Protocol.Events;
 using GMessages.Protocol.Http;
@@ -15,60 +16,6 @@ namespace GMessages.Presentation.Tests.Messaging;
 public sealed class ChatStoreTests
 {
     private static readonly CancellationToken Ct = CancellationToken.None;
-
-    // =========================================================================
-    // MUTE PROBE
-    // =========================================================================
-
-    [TestMethod]
-    public void DescribeUnknownFields_ListsNumbersAndInts_NeverStrings()
-    {
-        // Known Field Plus Unknown 40 (Varint 1), 41 (String), 42 (Nested {1: 1})
-        byte[] extra = [0xC0, 0x02, 0x01, 0xCA, 0x02, 0x0B, .. "secret-name"u8.ToArray(), 0xD2, 0x02, 0x02, 0x08, 0x01];
-        byte[] known = new Conversation { ConversationID = "c1" }.ToByteArray();
-        Conversation conversation = Conversation.Parser.ParseFrom([.. known, .. extra]);
-
-        string text = ChatStore.DescribeUnknownFields(conversation);
-
-        Assert.AreEqual("40=1 41=len11 42=len2{1}", text);
-        Assert.IsFalse(text.Contains("secret"));
-    }
-
-    [TestMethod]
-    public void DescribeUnknownFields_TextLookingNested_NeverLogsDigits()
-    {
-        // "x5" And "h1x2" Parse As Varint Pairs; Their Values Must Not Print
-        byte[] extra = [0xCA, 0x02, 0x02, .. "x5"u8.ToArray(), 0xD2, 0x02, 0x04, .. "h1x2"u8.ToArray()];
-        Conversation conversation = Conversation.Parser.ParseFrom(extra);
-
-        string text = ChatStore.DescribeUnknownFields(conversation);
-
-        Assert.AreEqual("41=len2{n} 42=len4{n n}", text);
-    }
-
-    [TestMethod]
-    public void DescribeUnknownFields_LargeTopLevelVarint_Capped()
-    {
-        // Field 43 = 3195551234
-        byte[] extra = [0xD8, 0x02, .. EncodeVarint(3195551234UL)];
-        string text = ChatStore.DescribeUnknownFields(Conversation.Parser.ParseFrom(extra));
-
-        Assert.AreEqual("43=n", text);
-    }
-
-    private static byte[] EncodeVarint(ulong value)
-    {
-        List<byte> bytes = [];
-        for (; value >= 0x80; value >>= 7) { bytes.Add((byte)(value | 0x80)); }
-        bytes.Add((byte)value);
-        return [.. bytes];
-    }
-
-    [TestMethod]
-    public void DescribeUnknownFields_None_Empty()
-    {
-        Assert.AreEqual("", ChatStore.DescribeUnknownFields(new Conversation { ConversationID = "c1" }));
-    }
 
     // =========================================================================
     // RIG
@@ -895,6 +842,63 @@ public sealed class ChatStoreTests
 
         Assert.AreEqual(ConversationStatus.Active, rig.Store.Find("c1")?.Status);
         Assert.AreEqual(0, raised);
+    }
+
+    [TestMethod]
+    public async Task Update_Mute_SetsIsMutedAndRaisesChanged()
+    {
+        using var rig = new Rig();
+        await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1")));
+        var raised = new List<ConversationInfo>();
+        rig.Store.ConversationChanged += (_, c) => raised.Add(c);
+
+        await rig.Store.UpdateConversationAsync("c1", ConversationAction.Mute, Ct);
+
+        Assert.IsTrue(rig.Store.Find("c1")?.IsMuted);
+        Assert.IsTrue(raised.Single().IsMuted);
+        Assert.AreEqual(ConversationStatus.Active, raised.Single().Status);
+    }
+
+    /// <summary>
+    /// A message in a chat muted here doesn't notify; once it's unmuted here, the next one does (Review Focus 3).
+    /// </summary>
+    [TestMethod]
+    public async Task Unmuted_NotifiesAgain()
+    {
+        using var rig = new Rig();
+        await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1")));
+        var arrived = new List<MessageArrivedEventArgs>();
+        rig.Store.MessageArrived += (_, e) => arrived.Add(e);
+        Message first  = Msg("m1", "c1");
+        Message second = Msg("m2", "c1");
+        first.MessageStatus.Status  = MessageStatusType.IncomingComplete;
+        second.MessageStatus.Status = MessageStatusType.IncomingComplete;
+
+        await rig.Store.UpdateConversationAsync("c1", ConversationAction.Mute, Ct);
+        await rig.Store.HandleEventAsync(new MessageReceived(first, false));
+        await rig.Store.UpdateConversationAsync("c1", ConversationAction.Unmute, Ct);
+        await rig.Store.HandleEventAsync(new MessageReceived(second, false));
+
+        Assert.IsFalse(NotificationPolicy.ShouldNotify(arrived[0], true, null, false, false), "muted");
+        Assert.IsTrue(NotificationPolicy.ShouldNotify(arrived[1], true, null, false, false), "unmuted");
+    }
+
+    /// <summary>
+    /// The phone's own word wins: its echo (or a mute made on the phone) sets the state.
+    /// </summary>
+    [TestMethod]
+    public async Task PhoneEcho_MuteField_SetsIsMuted()
+    {
+        using var rig = new Rig();
+        Conversation muted = Conv("c1");
+        muted.Muted        = ConversationMuteStatus.Mute;
+
+        await rig.Store.HandleEventAsync(new ConversationUpdated(muted));
+        bool after_mute = rig.Store.Find("c1")?.IsMuted == true;
+        await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1")));
+
+        Assert.IsTrue(after_mute);
+        Assert.IsFalse(rig.Store.Find("c1")?.IsMuted);
     }
 
     // =========================================================================

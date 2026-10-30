@@ -43,6 +43,22 @@ public sealed class ConversationListViewModelTests
     }
 
     [TestMethod]
+    public void Row_IsMuted_FollowsConversation()
+    {
+        ConversationInfo c = ConversationInfo.From(MainRig.Conv("a", "Ann"));
+        var row            = new ConversationRowViewModel(c with { IsMuted = true }, MainRig.Now);
+        bool created_muted = row.IsMuted;
+        int raised         = 0;
+        row.PropertyChanged += (_, _) => raised++;
+
+        row.Update(c, MainRig.Now);
+
+        Assert.IsTrue(created_muted);
+        Assert.IsFalse(row.IsMuted);
+        Assert.AreEqual(1, raised);
+    }
+
+    [TestMethod]
     public void Row_Avatar_OneOnOneHasOnePhoto_GroupStacksTwoPeople()
     {
         ParticipantInfo me    = new("me", "Me", "Me", "", true, null);

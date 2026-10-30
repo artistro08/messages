@@ -193,6 +193,8 @@ message Conversation {
     LatestMessage latestMessage = 4;
     int64 lastMessageTimestamp = 5;
     bool unread = 6;
+    // Not in LibGM: the Plan 5 probe saw the phone send 7 = 1 when a chat was muted and drop it on unmute
+    ConversationMuteStatus muted = 7;
 
     bool isGroupChat = 10; // not certain
     string defaultOutgoingID = 11;
@@ -218,6 +220,12 @@ message Conversation {
     string groupAvatarURL = 34;
     AnotherMessageID latestMessageAnotherID = 35;
     // index 37 has an unknown byte string (\001)
+}
+
+// Moved here from client.proto (client imports this file) so Conversation can use it
+enum ConversationMuteStatus {
+    UNMUTE = 0;
+    MUTE = 1;
 }
 
 message Participant {

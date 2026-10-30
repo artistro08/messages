@@ -443,8 +443,8 @@ public sealed class FakePhone
         PushUpdate(new UpdateEvents { ConversationEvent = new ConversationEvent { Data = { conversation } } }, _push);
     }
 
-    // Answers A Conversation Update, Applies It And Sends The Conversation Again; Mute Is Only Recorded. Failed Or
-    // Unknown Conversations Are Answered Without Success And Change Nothing
+    // Answers A Conversation Update, Applies It (Status Or Mute) And Sends The Conversation Again. Failed Or Unknown
+    // Conversations Are Answered Without Success And Change Nothing
     private void OnUpdateConversation(OutgoingRPCData data)
     {
         var request = Open(data, UpdateConversationRequest.Parser);
@@ -469,7 +469,8 @@ public sealed class FakePhone
             _                                                                         => updated,
         };
 
-        Conversation? conversation = Chats.SetConversationStatus(request.ConversationID, status);
+        ConversationMuteStatus? muted = request.UpdateData?.DataCase == UpdateConversationData.DataOneofCase.Mute ? request.UpdateData.Mute : null;
+        Conversation? conversation    = Chats.SetConversationStatus(request.ConversationID, status, muted);
         Reply(data.RequestID, data.Action, new UpdateConversationResponse { Success = conversation is not null }, encrypt: true);
         if (conversation is not null)
         {

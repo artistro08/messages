@@ -49,6 +49,9 @@ public sealed class ConversationRowViewModel : INotifyPropertyChanged
     /// <summary>Gets whether the conversation is pinned.</summary>
     public bool IsPinned { get; private set; }
 
+    /// <summary>Gets whether the conversation is muted.</summary>
+    public bool IsMuted { get; private set; }
+
     /// <summary>Gets whether the conversation is a group chat.</summary>
     public bool IsGroup { get; private set; }
 
@@ -103,6 +106,7 @@ public sealed class ConversationRowViewModel : INotifyPropertyChanged
         Time            = ChatFormat.ListTime(c.LastMessageTime, now, CultureInfo.CurrentCulture);
         IsUnread        = c.Unread;
         IsPinned        = c.Pinned;
+        IsMuted         = c.IsMuted;
         IsGroup         = c.IsGroup;
         LastMessageTime = c.LastMessageTime;
         ParticipantIds  = [.. c.Participants.Where(p => !p.IsMe).Take(c.IsGroup ? 2 : 1).Select(p => p.Id)];

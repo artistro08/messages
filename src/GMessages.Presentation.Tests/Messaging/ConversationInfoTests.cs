@@ -37,6 +37,20 @@ public sealed class ConversationInfoTests
         Assert.IsNull(info.FindParticipant("nope"));
     }
 
+    /// <summary>
+    /// The phone's mute field as the Plan 5 probe saw it: 7 = 1 (varint) when muted, absent when not.
+    /// </summary>
+    [TestMethod]
+    public void From_MuteField_SetsIsMuted()
+    {
+        Conversation muted   = Conversation.Parser.ParseFrom([0x0A, 0x02, (byte)'c', (byte)'1', 0x38, 0x01]);
+        Conversation unmuted = Conversation.Parser.ParseFrom([0x0A, 0x02, (byte)'c', (byte)'1']);
+
+        Assert.IsTrue(ConversationInfo.MutedOf(muted));
+        Assert.IsTrue(ConversationInfo.From(muted).IsMuted);
+        Assert.IsFalse(ConversationInfo.From(unmuted).IsMuted);
+    }
+
     [TestMethod]
     public void IsMainView_TrueOnlyWhenActive()
     {
