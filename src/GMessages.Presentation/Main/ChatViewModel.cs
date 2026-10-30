@@ -833,15 +833,16 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
         });
     }
 
-    // "Sent", "Delivered" Or "Read" (Google's Icon, Named So) Under The Newest Of My Bubbles That Is Neither Failed Nor
-    // Sending, With The Lock In An Encrypted Chat; None Elsewhere
+    // The Caption Row Goes Under The Chat's Newest Bubble Only, Mine Or Received, With The Lock In An Encrypted Chat. When
+    // It Is Mine: "Sent", "Delivered" Or "Read" (Google's Icon, Named So), Or The Clock While Sending
     private void RefreshStatus(bool encrypted)
     {
-        MessageBubbleViewModel? newest = Messages.LastOrDefault(b => b.FromMe && !b.IsFailed && !b.IsSending);
+        MessageBubbleViewModel? newest = Messages.Count > 0 ? Messages[^1] : null;
 
         foreach (MessageBubbleViewModel b in Messages)
         {
-            b.SetStatus(b == newest ? ChatFormat.StatusText(b.Status) : string.Empty, b == newest && encrypted);
+            bool is_newest = b == newest;
+            b.SetStatus(is_newest, is_newest && b.FromMe ? ChatFormat.StatusText(b.Status) : string.Empty, is_newest && encrypted);
         }
     }
 

@@ -34,15 +34,36 @@ public sealed class ChatTests : UiTest
     }
 
     /// <summary>
-    /// A bubble's time is hidden until the bubble is clicked (on its text), and Enter on the focused bubble hides it
-    /// again.
+    /// The newest bubble shows its caption row (the time) and no other bubble does; a click on the newest hides the row,
+    /// and a second click shows it again.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task NewestBubble_ShowsCaption_ClickHidesAndShowsIt()
+    {
+        await OpenAnnAsync();
+        List<(string Id, string Text)> bubbles = Bubbles();
+        string id                              = bubbles[^1].Id;
+        string caption                         = "Caption." + id["Bubble.".Length..];
+        App.Find(caption);
+        Assert.IsNull(App.TryFind("Caption." + bubbles[^2].Id["Bubble.".Length..]), "An older bubble showed a caption row.");
+
+        App.Find(id).Click();
+        WaitForGone(caption);
+        App.Find(id).Click();
+        App.Find(caption);
+    }
+
+    /// <summary>
+    /// An older bubble's time is hidden until the bubble is clicked (on its text), and Enter on the focused bubble hides
+    /// it again.
     /// </summary>
     /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task BubbleClick_ShowsTime_EnterHidesIt()
     {
         await OpenAnnAsync();
-        string id = Bubbles()[^1].Id;
+        string id = Bubbles()[^2].Id;
         Assert.IsNull(App.TryFind(id + ".Time"), "The time showed before the bubble was clicked.");
 
         // Click Shows It
@@ -51,7 +72,7 @@ public sealed class ChatTests : UiTest
 
         // Enter On The Focused Bubble Hides It
         AutomationElement[] rows = App.Find("Chat.Messages").FindAllChildren(cf => cf.ByControlType(FlaUI.Core.Definitions.ControlType.ListItem));
-        rows[^1].Focus();
+        rows[^2].Focus();
         Keyboard.Type(VirtualKeyShort.RETURN);
         WaitForGone(id + ".Time");
     }

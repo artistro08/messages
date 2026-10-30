@@ -22,19 +22,20 @@ namespace GMessages.App.Views.Controls;
 /// raises <see cref="RetryRequested"/> for the chat to send it again.
 /// </para>
 /// <para>
-/// The time (<c>Bubble.{id}.Time</c>) is hidden until the bubble is clicked, and a second click hides it. The click is
-/// caught even when it lands on the text, whose selection marks the pointer handled. The chat pane does the same for
-/// Enter and Space on a focused bubble.
+/// The time (<c>Bubble.{id}.Time</c>) is hidden until the bubble is clicked, and a second click hides it; on the chat's
+/// newest bubble the click hides its caption row instead, and a second one shows it again. The click is caught even
+/// when it lands on the text, whose selection marks the pointer handled. The chat pane does the same for Enter and
+/// Space on a focused bubble.
 /// </para>
 /// <para>
 /// The side is a visual state so its brushes stay theme resources and follow the window's light or dark theme. So is
 /// the reaction pill's accent border for my reaction. Both follow the bubble's changes (an echo turns a sending bubble
-/// into the sent one).
+/// into the sent one). Their groups sit on the control's root element (<c>Row</c>), the only place GoToState looks.
 /// </para>
 /// <para>
 /// The reply quote shows above the text (<c>Quote.{id}</c>), the reaction pill (<c>Reactions.{id}</c>) over the bottom
-/// corner and, under my newest message, the caption row: the time, Google's drawn delivery icon (named
-/// <c>Status.{id}</c>: "Sent", "Delivered" or "Read") and the lock in an encrypted chat. A link's preview card (<c>Preview.{id}</c>), named by its
+/// corner and, under the chat's newest message, the caption row: the time (<c>Caption.{id}</c>), on my message the
+/// owner's delivery icon (named <c>Status.{id}</c>: "Sent", "Delivered" or "Read"), and the lock in an encrypted chat. A link's preview card (<c>Preview.{id}</c>), named by its
 /// title, shows under the text once fetched; clicking it opens the link in the default browser. The pill and the menu's React raise
 /// <see cref="ReactRequested"/>, and the menu's Reply raises <see cref="ReplyRequested"/>, for the chat to act on.
 /// </para>

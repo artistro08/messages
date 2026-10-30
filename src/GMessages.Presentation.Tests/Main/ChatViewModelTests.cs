@@ -965,19 +965,26 @@ public sealed class ChatViewModelTests
         Assert.AreEqual(string.Empty, chat.Messages[0].QuoteSender);
     }
 
+    /// <summary>
+    /// Only the chat's newest bubble shows the caption row, mine or received; a received one shows no delivery status.
+    /// </summary>
     [TestMethod]
-    public async Task Status_OnlyNewestSentBubble()
+    public async Task Status_OnlyNewestBubble()
     {
         using var rig            = new MainRig();
         using ChatViewModel chat = await RcsChat(rig, TimeProvider.System, Mine("m1", "one", "t1", MessageStatusType.OutgoingDelivered), Msg("m2", "two"));
-        Assert.AreEqual(ChatCopy.Delivered, chat.Messages[0].StatusText);
+        Assert.IsFalse(chat.Messages[0].ShowsStatusRow);
+        Assert.AreEqual(string.Empty, chat.Messages[0].StatusText);
+        Assert.IsTrue(chat.Messages[1].ShowsStatusRow);
+        Assert.AreEqual(MessageStatusIcon.None, chat.Messages[1].StatusIcon);
 
-        // A Newer Send Still Sending: The Older One Keeps Its Status
+        // A Newer Send Still Sending: It Takes The Row, With The Clock
         chat.Draft = "three";
         await chat.SendAsync();
         MessageBubbleViewModel sent = chat.Messages[^1];
-        Assert.AreEqual(ChatCopy.Delivered, chat.Messages[0].StatusText);
-        Assert.AreEqual(string.Empty, sent.StatusText);
+        Assert.IsFalse(chat.Messages[1].ShowsStatusRow);
+        Assert.IsTrue(sent.ShowsStatusRow);
+        Assert.AreEqual(MessageStatusIcon.Sending, sent.StatusIcon);
 
         // The Phone's Echo: The Newer One Takes The Status, The Older One Loses It
         await rig.LiveMessage(Mine("m3", "three", sent.TmpId, MessageStatusType.OutgoingComplete));
@@ -1276,8 +1283,8 @@ public sealed class ChatViewModelTests
     }
 
     /// <summary>
-    /// The newest sent bubble's status shows as Google's icon, with the lock in an encrypted chat; a bubble being sent
-    /// shows the clock; the others show none.
+    /// The newest bubble's status shows as Google's icon when it is mine; a bubble being sent shows the clock; the
+    /// others show none.
     /// </summary>
     [TestMethod]
     public async Task StatusIcon_FollowsTheStatus()
@@ -1288,12 +1295,50 @@ public sealed class ChatViewModelTests
         Assert.AreEqual(MessageStatusIcon.Sent, chat.Messages[1].StatusIcon);
         Assert.IsFalse(chat.Messages[1].ShowsLock);
 
+        await rig.LiveMessage(Mine("m2", "two", "t2", MessageStatusType.OutgoingDisplayed));
+        Assert.AreEqual(MessageStatusIcon.Read, chat.Messages[1].StatusIcon);
+
         chat.Draft = "three";
         await chat.SendAsync();
         Assert.AreEqual(MessageStatusIcon.Sending, chat.Messages[^1].StatusIcon);
+        Assert.AreEqual(MessageStatusIcon.None, chat.Messages[1].StatusIcon);
+    }
 
-        await rig.LiveMessage(Mine("m2", "two", "t2", MessageStatusType.OutgoingDisplayed));
-        Assert.AreEqual(MessageStatusIcon.Read, chat.Messages[1].StatusIcon);
+    /// <summary>
+    /// In an encrypted chat the newest bubble's caption row shows the lock, a received one too; the others show none.
+    /// </summary>
+    [TestMethod]
+    public async Task Lock_OnlyOnNewestBubble_MineOrReceived()
+    {
+        using var rig            = new MainRig();
+        Message on               = Msg("t1", string.Empty, status: MessageStatusType.TombstoneProtocolSwitchToEncryptedRcs, ts: 1_000_000);
+        using ChatViewModel chat = await RcsChat(rig, TimeProvider.System, on, Mine("m1", "one", "x1", MessageStatusType.OutgoingComplete), Msg("m2", "two"));
+
+        Assert.IsFalse(chat.Messages[0].ShowsLock);
+        Assert.IsTrue(chat.Messages[1].ShowsLock);
+        Assert.IsTrue(chat.Messages[1].ShowsStatusRow);
+    }
+
+    /// <summary>
+    /// A click on the newest bubble hides its caption row and a second click shows it again; another bubble's click
+    /// still shows and hides its own time.
+    /// </summary>
+    [TestMethod]
+    public async Task ToggleTime_OnNewest_HidesThenShowsCaptionRow()
+    {
+        using var rig            = new MainRig();
+        using ChatViewModel chat = await RcsChat(rig, TimeProvider.System, Msg("m1", "one"), Mine("m2", "two", "t2", MessageStatusType.OutgoingComplete));
+        MessageBubbleViewModel newest = chat.Messages[1];
+
+        newest.ToggleTime();
+        Assert.IsFalse(newest.ShowsStatusRow);
+        Assert.IsFalse(newest.IsTimeShown);
+        newest.ToggleTime();
+        Assert.IsTrue(newest.ShowsStatusRow);
+
+        chat.Messages[0].ToggleTime();
+        Assert.IsTrue(chat.Messages[0].IsTimeShown);
+        Assert.IsFalse(chat.Messages[0].ShowsStatusRow);
     }
 
     /// <summary>

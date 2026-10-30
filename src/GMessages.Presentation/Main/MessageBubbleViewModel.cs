@@ -92,6 +92,12 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     /// <summary>Gets whether the time shows under the bubble: hidden until the bubble is clicked (see <see cref="ToggleTime"/>).</summary>
     public bool IsTimeShown { get; private set; }
 
+    /// <summary>Gets whether this is the chat's newest bubble, which shows the caption row until clicked; set by the chat.</summary>
+    public bool IsNewest { get; private set; }
+
+    /// <summary>Gets whether a click hid the newest bubble's caption row (see <see cref="ToggleTime"/>).</summary>
+    public bool IsCaptionHidden { get; private set; }
+
     /// <summary>Gets whether the message was not sent.</summary>
     public bool IsFailed { get; private set; }
 
@@ -104,22 +110,29 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     /// <summary>Gets the bubble's accessible item type: "Chat message" for RCS, "Text message" for SMS.</summary>
     public string ItemTypeName => IsRcs ? ChatCopy.ChatMessage : ChatCopy.TextMessage;
 
-    /// <summary>Gets the status under the bubble ("Sent", "Delivered", "Read"), or empty; set by the chat. The icon's accessible name.</summary>
+    /// <summary>Gets the status of my newest bubble ("Sent", "Delivered", "Read"), or empty; set by the chat. The icon's accessible name.</summary>
     public string StatusText { get; private set; } = string.Empty;
 
-    /// <summary>Gets the delivery icon under the bubble: the clock while sending, else the status of my newest bubble.</summary>
-    public MessageStatusIcon StatusIcon => IsSending ? MessageStatusIcon.Sending : StatusText.Length == 0 ? MessageStatusIcon.None : Status switch
+    /// <summary>Gets the delivery icon in the caption row: when the newest bubble is mine, the clock while sending, else its status.</summary>
+    public MessageStatusIcon StatusIcon => !IsNewest || !FromMe ? MessageStatusIcon.None : IsSending ? MessageStatusIcon.Sending : StatusText.Length == 0 ? MessageStatusIcon.None : Status switch
     {
         MessageStatusType.OutgoingDelivered => MessageStatusIcon.Delivered,
         MessageStatusType.OutgoingDisplayed => MessageStatusIcon.Read,
         _                                   => MessageStatusIcon.Sent,
     };
 
-    /// <summary>Gets whether the caption row (time, delivery icon and lock) shows under the bubble.</summary>
-    public bool ShowsStatusRow => StatusIcon != MessageStatusIcon.None;
+    /// <summary>
+    /// Gets whether the caption row shows under the bubble: only under the chat's newest bubble (mine or received), unless
+    /// it failed to send (the retry link shows) or a click hid it. Mine shows the time, the delivery icon and the lock; a
+    /// received one the time and the lock.
+    /// </summary>
+    public bool ShowsStatusRow => IsNewest && !IsFailed && !IsCaptionHidden;
 
-    /// <summary>Gets whether the lock shows in the caption row: the newest status row of an end-to-end encrypted chat.</summary>
+    /// <summary>Gets whether the lock shows in the caption row: the newest bubble of an end-to-end encrypted chat.</summary>
     public bool ShowsLock { get; private set; }
+
+    /// <summary>Gets whether the dot after the caption row's time shows: only when the delivery icon or the lock follows it.</summary>
+    public bool ShowsCaptionDot => StatusIcon != MessageStatusIcon.None || ShowsLock;
 
     /// <summary>Gets the reaction chip text, such as "👍😂 3", or empty.</summary>
     public string ReactionsText { get; private set; } = string.Empty;
@@ -181,11 +194,20 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     public override string ToString() => IsFailed ? $"{Text}, {ChatCopy.NotSentRetry}" : Text;
 
     /// <summary>
-    /// Shows the time under the bubble, or hides it again (a click on the bubble).
+    /// Shows the time under the bubble, or hides it again (a click on the bubble). On the newest bubble it hides its caption
+    /// row instead, or shows it again.
     /// </summary>
     public void ToggleTime()
     {
-        IsTimeShown = !IsTimeShown;
+        if (IsNewest)
+        {
+            IsCaptionHidden = !IsCaptionHidden;
+        }
+        else
+        {
+            IsTimeShown = !IsTimeShown;
+        }
+
         PropertyChanged?.Invoke(this, AllChanged);
     }
 
@@ -208,15 +230,19 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         PropertyChanged?.Invoke(this, AllChanged);
     }
 
-    internal void SetStatus(string text, bool showsLock)
+    // The Newest Bubble Shows The Caption Row; One That Stops Being The Newest Forgets A Click That Hid It
+    internal void SetStatus(bool isNewest, string text, bool showsLock)
     {
-        if (StatusText == text && ShowsLock == showsLock)
+        bool hidden = isNewest && IsCaptionHidden;
+        if (IsNewest == isNewest && StatusText == text && ShowsLock == showsLock && IsCaptionHidden == hidden)
         {
             return;
         }
 
-        StatusText = text;
-        ShowsLock  = showsLock;
+        IsNewest        = isNewest;
+        IsCaptionHidden = hidden;
+        StatusText      = text;
+        ShowsLock       = showsLock;
         PropertyChanged?.Invoke(this, AllChanged);
     }
 
