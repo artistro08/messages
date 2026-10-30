@@ -128,6 +128,24 @@ public sealed class ConversationListViewModelTests
         Assert.AreEqual("s,k", Ids(list));
     }
 
+    [TestMethod]
+    public async Task ArchivedList_ShowsArchivedAndKeepArchived()
+    {
+        using var rig = new MainRig();
+        rig.Page(
+            MainRig.Conv("a", "Archived", status: ConversationStatus.Archived),
+            MainRig.Conv("k", "Kept", minutesAgo: 1, status: ConversationStatus.KeepArchived),
+            MainRig.Conv("x", "Active", minutesAgo: 2),
+            MainRig.Conv("s", "Spam", minutesAgo: 3, status: ConversationStatus.SpamFolder));
+        using var list = NewList(rig, ConversationFolder.Archived);
+        await list.LoadAsync();
+
+        await rig.Live(MainRig.Conv("y", "Active Too"));
+
+        Assert.AreEqual("a,k", Ids(list));
+        Assert.AreEqual(ListConversationsRequest.Types.Folder.Archive, rig.Client.ListCalls.Single().Folder);
+    }
+
     /// <summary>
     /// A load or load-more that fails with any error (phone asleep, network, server, decode) keeps the rows and never
     /// throws; the next load fills the list.

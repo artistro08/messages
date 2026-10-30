@@ -228,9 +228,12 @@ public sealed partial class ChatStore : IDisposable
     {
         IMessagingClient client = RequireClient();
 
-        ListConversationsRequest.Types.Folder protocol_folder = folder == ConversationFolder.SpamBlocked
-            ? ListConversationsRequest.Types.Folder.SpamBlocked
-            : ListConversationsRequest.Types.Folder.Inbox;
+        ListConversationsRequest.Types.Folder protocol_folder = folder switch
+        {
+            ConversationFolder.SpamBlocked => ListConversationsRequest.Types.Folder.SpamBlocked,
+            ConversationFolder.Archived    => ListConversationsRequest.Types.Folder.Archive,
+            _                              => ListConversationsRequest.Types.Folder.Inbox,
+        };
 
         int generation                     = Generation;
         ListConversationsResponse response = await client.ListConversationsAsync(protocol_folder, PageSize, cursor, ct);
@@ -574,6 +577,128 @@ public sealed partial class ChatStore : IDisposable
         Upsert(read);
         ConversationChanged?.Invoke(this, read);
     }
+
+    /// <summary>
+    /// Archives, unarchives, mutes, unmutes, blocks, unblocks or deletes a conversation on the phone.
+    /// </summary>
+    /// <remarks>
+    /// Sends the request <see cref="BuildRequest"/> builds. Only once the phone says it succeeded does the cached
+    /// conversation take its new status (<see cref="StatusAfter"/>), in memory only, raising
+    /// <see cref="ConversationChanged"/> so the lists move it at once; the phone's echo is what gets saved. A
+    /// <see cref="Reset"/> while the phone is answering applies nothing. Failures are logged by type only.
+    /// </remarks>
+    /// <param name="conversationId">The conversation ID.</param>
+    /// <param name="action">What to do.</param>
+    /// <param name="ct">Cancels the wait.</param>
+    /// <returns>A task that completes when the phone answered.</returns>
+    /// <exception cref="MessagingUnavailableException">Not connected.</exception>
+    /// <exception cref="MessageSendException">The phone refused the update, or the conversation is unknown.</exception>
+    public async Task UpdateConversationAsync(string conversationId, ConversationAction action, CancellationToken ct)
+    {
+        try
+        {
+            IMessagingClient client = RequireClient();
+
+            // No ConfigureAwait(false): ConversationChanged Must Be Raised On The Caller Thread
+            int generation                = Generation;
+            ConversationInfo conversation = await RequireConversationAsync(client, conversationId, generation, ct);
+
+            UpdateConversationResponse response = await client.UpdateConversationAsync(BuildRequest(conversation, action), ct);
+            if (!response.Success)
+            {
+                throw new MessageSendException("ConversationUpdateRefused");
+            }
+
+            // Unpaired Or Signed Out Meanwhile, Or Nothing To Show Locally (Mute Is Kept Elsewhere)
+            if (generation != Generation || StatusAfter(action) is not { } status || Find(conversationId) is not { } cached)
+            {
+                return;
+            }
+
+            ConversationInfo updated = cached with { Status = status };
+            if (Upsert(updated))
+            {
+                ConversationChanged?.Invoke(this, updated);
+            }
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            LogFailure($"{action} conversation {conversationId}", ex);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Builds the phone request for a conversation action, the way LibGM and the Go connector do.
+    /// </summary>
+    /// <remarks>
+    /// Archive, unarchive, mute and unmute fill only <c>UpdateData</c> (LibGM's <c>conversation_builder.go</c>).
+    /// Delete, block and unblock set the action and the ID and fill <c>DeleteData</c> with the other person's number
+    /// (<c>DeleteConversation</c> in <c>methods.go</c>, <c>HandleMatrixBlockUser</c>); a block also sends
+    /// <c>Action5</c>. The number is the first visible participant that isn't me and has one, in a one-on-one chat
+    /// only (<c>findPhoneForConversation</c>); otherwise it is left unset.
+    /// </remarks>
+    /// <param name="conversation">The conversation.</param>
+    /// <param name="action">What to do.</param>
+    /// <returns>The request.</returns>
+    internal static UpdateConversationRequest BuildRequest(ConversationInfo conversation, ConversationAction action)
+    {
+        string id = conversation.Id;
+
+        // Archive And Mute
+        switch (action)
+        {
+            case ConversationAction.Archive or ConversationAction.Unarchive:
+                ConversationStatus status = action == ConversationAction.Archive ? ConversationStatus.Archived : ConversationStatus.Active;
+                return new UpdateConversationRequest { UpdateData = new UpdateConversationData { ConversationID = id, Status = status } };
+
+            case ConversationAction.Mute or ConversationAction.Unmute:
+                ConversationMuteStatus mute = action == ConversationAction.Mute ? ConversationMuteStatus.Mute : ConversationMuteStatus.Unmute;
+                return new UpdateConversationRequest { UpdateData = new UpdateConversationData { ConversationID = id, Mute = mute } };
+        }
+
+        // Delete, Block And Unblock
+        var delete_data = new DeleteConversationData { ConversationID = id };
+        string? phone   = conversation.IsGroup ? null : conversation.Participants.FirstOrDefault(p => p.IsVisible && !p.IsMe && p.Number.Length > 0)?.Number;
+        if (phone is not null)
+        {
+            delete_data.Phone = phone;
+        }
+
+        var request = new UpdateConversationRequest
+        {
+            Action = action switch
+            {
+                ConversationAction.Delete         => ConversationActionStatus.Delete,
+                ConversationAction.Block          => ConversationActionStatus.Block,
+                ConversationAction.BlockAndReport => ConversationActionStatus.BlockAndReport,
+                _                                 => ConversationActionStatus.Unblock,
+            },
+            ConversationID = id,
+            DeleteData     = delete_data,
+        };
+
+        if (action is ConversationAction.Block or ConversationAction.BlockAndReport)
+        {
+            request.Action5 = new ConversationAction5 { Field2 = true };
+        }
+
+        return request;
+    }
+
+    /// <summary>
+    /// Gets the status a conversation has once the phone accepted an action.
+    /// </summary>
+    /// <param name="action">The action.</param>
+    /// <returns>The new status, or null when the action leaves the status alone (mute and unmute).</returns>
+    internal static ConversationStatus? StatusAfter(ConversationAction action) => action switch
+    {
+        ConversationAction.Archive                                      => ConversationStatus.Archived,
+        ConversationAction.Unarchive or ConversationAction.Unblock      => ConversationStatus.Active,
+        ConversationAction.Block or ConversationAction.BlockAndReport   => ConversationStatus.BlockedFolder,
+        ConversationAction.Delete                                       => ConversationStatus.Deleted,
+        _                                                               => null,
+    };
 
     /// <summary>
     /// Forgets everything learned from the paired phone: cached conversations, the owner, the SIMs, the notified IDs

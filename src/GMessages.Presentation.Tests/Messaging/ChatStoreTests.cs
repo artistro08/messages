@@ -712,6 +712,178 @@ public sealed class ChatStoreTests
     }
 
     // =========================================================================
+    // CONVERSATION ACTIONS
+    // =========================================================================
+
+    private static Participant Person(string id, string number, bool isMe = false, bool isVisible = true) =>
+        new() { ID = new SmallInfo { ParticipantID = id, Number = number }, IsMe = isMe, IsVisible = isVisible };
+
+    // A One-On-One Chat: Me, Then The Other Person, Both Visible With Numbers
+    private static ConversationInfo Dm()
+    {
+        var c = new Conversation { ConversationID = "c1", Status = ConversationStatus.Active };
+        c.Participants.Add(Person("me1", "+15550000", isMe: true));
+        c.Participants.Add(Person("p1", "+15550001"));
+        return ConversationInfo.From(c);
+    }
+
+    /// <summary>
+    /// Each action builds the LibGM request: archive and mute fill <c>UpdateData</c> only (conversation_builder.go),
+    /// delete, block and unblock fill <c>DeleteData</c> with the other person's number (methods.go, handlematrix.go),
+    /// and only a block carries <c>Action5</c>.
+    /// </summary>
+    [TestMethod]
+    [DataRow(ConversationAction.Archive, UpdateConversationRequest.DataOneofCase.UpdateData, ConversationActionStatus.UnknownActionStatus, false, "Status=Archived")]
+    [DataRow(ConversationAction.Unarchive, UpdateConversationRequest.DataOneofCase.UpdateData, ConversationActionStatus.UnknownActionStatus, false, "Status=Active")]
+    [DataRow(ConversationAction.Mute, UpdateConversationRequest.DataOneofCase.UpdateData, ConversationActionStatus.UnknownActionStatus, false, "Mute=Mute")]
+    [DataRow(ConversationAction.Unmute, UpdateConversationRequest.DataOneofCase.UpdateData, ConversationActionStatus.UnknownActionStatus, false, "Mute=Unmute")]
+    [DataRow(ConversationAction.Delete, UpdateConversationRequest.DataOneofCase.DeleteData, ConversationActionStatus.Delete, false, "Phone=+15550001")]
+    [DataRow(ConversationAction.Block, UpdateConversationRequest.DataOneofCase.DeleteData, ConversationActionStatus.Block, true, "Phone=+15550001")]
+    [DataRow(ConversationAction.BlockAndReport, UpdateConversationRequest.DataOneofCase.DeleteData, ConversationActionStatus.BlockAndReport, true, "Phone=+15550001")]
+    [DataRow(ConversationAction.Unblock, UpdateConversationRequest.DataOneofCase.DeleteData, ConversationActionStatus.Unblock, false, "Phone=+15550001")]
+    public void BuildRequest_Table(ConversationAction action, UpdateConversationRequest.DataOneofCase data, ConversationActionStatus status, bool action5, string inner)
+    {
+        UpdateConversationRequest request = ChatStore.BuildRequest(Dm(), action);
+
+        Assert.AreEqual(data, request.DataCase);
+        Assert.AreEqual(status, request.Action);
+        Assert.AreEqual(action5, request.Action5 is not null);
+        if (action5)
+        {
+            Assert.IsTrue(request.Action5!.Field2);
+        }
+
+        string got = request.DataCase == UpdateConversationRequest.DataOneofCase.UpdateData
+            ? request.UpdateData.DataCase == UpdateConversationData.DataOneofCase.Status ? $"Status={request.UpdateData.Status}" : $"Mute={request.UpdateData.Mute}"
+            : $"Phone={request.DeleteData.Phone}";
+        Assert.AreEqual(inner, got);
+
+        // Archive And Mute Leave The Top-Level ID Unset; The Others Set It Twice
+        if (data == UpdateConversationRequest.DataOneofCase.UpdateData)
+        {
+            Assert.AreEqual("c1", request.UpdateData.ConversationID);
+            Assert.AreEqual(string.Empty, request.ConversationID);
+        }
+        else
+        {
+            Assert.AreEqual("c1", request.DeleteData.ConversationID);
+            Assert.AreEqual("c1", request.ConversationID);
+        }
+    }
+
+    [TestMethod]
+    public void BuildRequest_Unmute_SerializesMuteField()
+    {
+        // Unmute Is Proto3's Zero Value; Inside A Oneof It Must Still Go On The Wire
+        byte[] wire = ChatStore.BuildRequest(Dm(), ConversationAction.Unmute).ToByteArray();
+
+        UpdateConversationRequest parsed = UpdateConversationRequest.Parser.ParseFrom(wire);
+
+        Assert.AreEqual(UpdateConversationData.DataOneofCase.Mute, parsed.UpdateData.DataCase);
+        Assert.AreEqual(ConversationMuteStatus.Unmute, parsed.UpdateData.Mute);
+    }
+
+    [TestMethod]
+    public void BuildRequest_Group_NoPhone()
+    {
+        // Members With Visible Numbers: Only The Group Check Leaves The Phone Unset (findPhoneForConversation Is DM Only)
+        var c = new Conversation { ConversationID = "g1", IsGroupChat = true };
+        c.Participants.Add(Person("me1", "+15550000", isMe: true));
+        c.Participants.Add(Person("p1", "+15550001"));
+        c.Participants.Add(Person("p2", "+15550002"));
+        ConversationInfo group = ConversationInfo.From(c);
+
+        Assert.IsFalse(ChatStore.BuildRequest(group, ConversationAction.Delete).DeleteData.HasPhone);
+        Assert.IsFalse(ChatStore.BuildRequest(group, ConversationAction.Block).DeleteData.HasPhone);
+    }
+
+    [TestMethod]
+    public void BuildRequest_DmHiddenOrMe_SkipsThem()
+    {
+        // Me First, Then A Hidden Participant, Then A Visible One With No Number, Then The Other Person
+        var c = new Conversation { ConversationID = "c1" };
+        c.Participants.Add(Person("me1", "+15550000", isMe: true));
+        c.Participants.Add(Person("p0", "+15550009", isVisible: false));
+        c.Participants.Add(Person("p2", string.Empty));
+        c.Participants.Add(Person("p1", "+15550001"));
+
+        UpdateConversationRequest request = ChatStore.BuildRequest(ConversationInfo.From(c), ConversationAction.Block);
+
+        Assert.AreEqual("+15550001", request.DeleteData.Phone);
+    }
+
+    [TestMethod]
+    public async Task Update_Archive_AppliesStatusAndRaisesChanged()
+    {
+        using var rig = new Rig();
+        await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1")));
+        var raised = new List<ConversationInfo>();
+        rig.Store.ConversationChanged += (_, c) => raised.Add(c);
+
+        await rig.Store.UpdateConversationAsync("c1", ConversationAction.Archive, Ct);
+
+        Assert.AreEqual(ConversationStatus.Archived, rig.Client.ConversationUpdates.Single().UpdateData.Status);
+        Assert.AreEqual(ConversationStatus.Archived, rig.Store.Find("c1")?.Status);
+        Assert.AreEqual(ConversationStatus.Archived, raised.Single().Status);
+    }
+
+    [TestMethod]
+    public async Task Update_PhoneRefuses_NoLocalChange()
+    {
+        using var rig = new Rig();
+        await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1")));
+        int raised = 0;
+        rig.Store.ConversationChanged += (_, _) => raised++;
+        rig.Client.RefuseUpdates       = true;
+
+        MessageSendException refused = await Assert.ThrowsExactlyAsync<MessageSendException>(() => rig.Store.UpdateConversationAsync("c1", ConversationAction.Archive, Ct));
+
+        Assert.AreEqual("ConversationUpdateRefused", refused.Status);
+        Assert.AreEqual(1, rig.Client.ConversationUpdates.Count);
+        Assert.AreEqual(ConversationStatus.Active, rig.Store.Find("c1")?.Status);
+        Assert.AreEqual(0, raised);
+    }
+
+    [TestMethod]
+    public async Task Update_NotConnected_Throws()
+    {
+        using var rig = new Rig(connected: false);
+        await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1")));
+        int raised = 0;
+        rig.Store.ConversationChanged += (_, _) => raised++;
+
+        await Assert.ThrowsExactlyAsync<MessagingUnavailableException>(() => rig.Store.UpdateConversationAsync("c1", ConversationAction.Archive, Ct));
+
+        Assert.AreEqual(0, rig.Client.ConversationUpdates.Count);
+        Assert.AreEqual(ConversationStatus.Active, rig.Store.Find("c1")?.Status);
+        Assert.AreEqual(0, raised);
+    }
+
+    /// <summary>
+    /// An unpair or sign-out while the phone is answering applies nothing, even to a new phone's conversation with
+    /// the same ID.
+    /// </summary>
+    [TestMethod]
+    public async Task Update_ResetDuringRequest_AppliesNothing()
+    {
+        using var rig = new Rig();
+        await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1", "Old Ann")));
+        var gate              = new TaskCompletionSource();
+        rig.Client.UpdateGate = gate;
+        Task update           = rig.Store.UpdateConversationAsync("c1", ConversationAction.Archive, Ct);
+
+        rig.Store.Reset();
+        await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1", "New Ann")));
+        int raised = 0;
+        rig.Store.ConversationChanged += (_, _) => raised++;
+        gate.SetResult();
+        await update;
+
+        Assert.AreEqual(ConversationStatus.Active, rig.Store.Find("c1")?.Status);
+        Assert.AreEqual(0, raised);
+    }
+
+    // =========================================================================
     // LOADING AND CONNECTION
     // =========================================================================
 

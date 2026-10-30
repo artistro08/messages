@@ -10,4 +10,7 @@ public enum ConversationFolder
 
     /// <summary>Spam and blocked conversations.</summary>
     SpamBlocked,
+
+    /// <summary>Archived conversations.</summary>
+    Archived,
 }
