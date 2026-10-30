@@ -106,6 +106,57 @@ public static class ChatFormat
     }
 
     /// <summary>
+    /// Gives the part of the original text that a selection in the shown text (see <see cref="WithColorEmoji"/>) covers, so
+    /// a copy carries none of the VS16 added for showing.
+    /// </summary>
+    /// <remarks>
+    /// The selection is found in the shown text (its first match), then both ends are walked back to the original, where
+    /// every character is the same except the added VS16. A selection not found in the shown text is given back as it is.
+    /// </remarks>
+    /// <param name="original">The text as sent.</param>
+    /// <param name="selected">The selected part of <c>WithColorEmoji(original)</c>.</param>
+    /// <returns>The same part of <paramref name="original"/>.</returns>
+    public static string OriginalOf(string original, string selected)
+    {
+        ArgumentNullException.ThrowIfNull(original);
+        ArgumentNullException.ThrowIfNull(selected);
+
+        string shown = WithColorEmoji(original);
+        int start    = selected.Length == 0 ? -1 : shown.IndexOf(selected, StringComparison.Ordinal);
+        if (start < 0 || ReferenceEquals(shown, original))
+        {
+            return selected;
+        }
+
+        // Walk Both Texts Together; A VS16 In The Shown Text With None At The Same Place In The Original Was Added
+        int end  = start + selected.Length;
+        int from = -1;
+        int to   = original.Length;
+        int j    = 0;
+        for (int i = 0; i <= shown.Length; i++)
+        {
+            if (i == start)
+            {
+                from = j;
+            }
+
+            if (i == end)
+            {
+                to = j;
+                break;
+            }
+
+            bool added = shown[i] == '\uFE0F' && (j >= original.Length || original[j] != '\uFE0F');
+            if (!added)
+            {
+                j++;
+            }
+        }
+
+        return original[from..to];
+    }
+
+    /// <summary>
     /// The list time, in the current culture. See <see cref="ListTime(DateTimeOffset, DateTimeOffset, CultureInfo)"/>.
     /// </summary>
     /// <param name="time">When the message arrived.</param>
@@ -273,8 +324,31 @@ public static class ChatFormat
         return total > 1 ? $"{top} {total.ToString(CultureInfo.CurrentCulture)}" : top;
     }
 
-    private static bool IsTextDefaultEmoji(int code) =>
-        code >= 0x203C && Array.Exists(TextDefaultEmoji, r => code >= r.First && code <= r.Last);
+    // Binary Search Over The Sorted Ranges, With No Allocation (Runs For Every Character Shown)
+    private static bool IsTextDefaultEmoji(int code)
+    {
+        int low  = 0;
+        int high = TextDefaultEmoji.Length - 1;
+        while (low <= high)
+        {
+            int middle            = (low + high) / 2;
+            (int first, int last) = TextDefaultEmoji[middle];
+            if (code < first)
+            {
+                high = middle - 1;
+            }
+            else if (code > last)
+            {
+                low = middle + 1;
+            }
+            else
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     // VS16 Or VS15 Already, Or A Skin Tone Modifier (U+1F3FB To U+1F3FF) Follows
     private static bool TakesNoVs16(string text, int at) =>

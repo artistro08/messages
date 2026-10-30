@@ -151,4 +151,30 @@ public sealed class ChatFormatTests
     [DataRow("\U0001F441", "\U0001F441\uFE0F")]                            // Eye (Astral, Text Default)
     public void WithColorEmoji_AddsVs16ToTextDefaultEmoji(string text, string expected) =>
         Assert.AreEqual(expected, ChatFormat.WithColorEmoji(text));
+
+    /// <summary>
+    /// The lookup finds both ends of the ranges and nothing in the gaps between them.
+    /// </summary>
+    [TestMethod]
+    [DataRow("\u203C", "\u203C\uFE0F")]                      // First Range
+    [DataRow("\U0001F6F3", "\U0001F6F3\uFE0F")]              // Last Range
+    [DataRow("\u2199", "\u2199\uFE0F")]                      // A Range's End
+    [DataRow("\u219A", "\u219A")]                            // Just After It
+    [DataRow("\u203B", "\u203B")]                            // Just Before The First
+    [DataRow("\U0001F6F4", "\U0001F6F4")]                    // Just After The Last (Emoji Style Already)
+    public void WithColorEmoji_RangeEdges(string text, string expected) =>
+        Assert.AreEqual(expected, ChatFormat.WithColorEmoji(text));
+
+    /// <summary>
+    /// A selection in the shown text copies as the original text: the VS16 added for showing is dropped, one the sender
+    /// typed is kept.
+    /// </summary>
+    [TestMethod]
+    [DataRow("I \u2764 it", "\u2764\uFE0F it", "\u2764 it")]
+    [DataRow("I \u2764 it", "I \u2764\uFE0F it", "I \u2764 it")]
+    [DataRow("\u2764\uFE0F and \u2600", "\u2764\uFE0F and \u2600\uFE0F", "\u2764\uFE0F and \u2600")]
+    [DataRow("plain", "lai", "lai")]
+    [DataRow("I \u2764 it", "it", "it")]
+    public void OriginalOf_DropsOnlyTheAddedVs16(string original, string selected, string expected) =>
+        Assert.AreEqual(expected, ChatFormat.OriginalOf(original, selected));
 }

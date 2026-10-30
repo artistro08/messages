@@ -63,7 +63,7 @@
                 <TextBlock
                     x:Name="EmojiText"
                     HorizontalAlignment="Center"
-                    AutomationProperties.AutomationId="Pairing.Emoji"
+                    AutomationProperties.AutomationId="Pairing.EmojiText"
                     FontSize="96"
                     Text="{x:Bind ViewModel.Emoji, Mode=OneWay}" />
             </Grid>

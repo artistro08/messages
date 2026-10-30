@@ -4,36 +4,18 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:GMessages.App.Views.Controls">
 
-    <!-- Row: the avatar lane (received bubbles in a group chat, the avatar beside a group's last bubble), then the bubble.
-         Bubbles of one group sit 2 px apart, groups further -->
+    <!-- Row: the bubble, with an avatar lane on its left for received bubbles in a group chat (the avatar beside a group's
+         last bubble). Bubbles of one group sit 2 px apart, groups further -->
     <Grid
         x:Name="Row"
-        Margin="{x:Bind local:MessageBubble.GroupMargin(Bubble.IsFirstInGroup, Bubble.IsLastInGroup), Mode=OneWay}"
-        ColumnDefinitions="Auto,*">
-
-        <!-- Avatar Lane: the sender's avatar at the group's bottom, made only where it shows -->
-        <Grid Width="{x:Bind local:MessageBubble.LaneWidth(Bubble.HasAvatarLane), Mode=OneWay}">
-            <Viewbox
-                x:Name="SenderAvatar"
-                Width="28"
-                Height="28"
-                Margin="0,0,0,2"
-                HorizontalAlignment="Left"
-                VerticalAlignment="Bottom"
-                x:Load="{x:Bind Bubble.ShowsAvatar, Mode=OneWay, FallbackValue=False}">
-                <local:Avatar
-                    Color="{x:Bind Bubble.SenderColor, Mode=OneWay, FallbackValue=0}"
-                    Initial="{x:Bind Bubble.AvatarInitial, Mode=OneWay, FallbackValue=''}"
-                    PhotoId="{x:Bind Bubble.AvatarPhotoId, Mode=OneWay, FallbackValue=''}" />
-            </Viewbox>
-        </Grid>
+        Margin="{x:Bind local:MessageBubble.GroupMargin(Bubble.IsFirstInGroup, Bubble.IsLastInGroup), Mode=OneWay}">
 
         <!-- Bubble: sender name, the quote, text and link preview on its colored back, the reaction pill on its bottom corner, then the
              time (once clicked) or the retry link, and the caption row (time, delivery icon and lock) under my newest message.
              As wide as its content, up to 70% of the chat (560 px at most; set from code) -->
         <StackPanel
             x:Name="Root"
-            Grid.Column="1"
+            Padding="{x:Bind local:MessageBubble.LanePadding(Bubble.HasAvatarLane), Mode=OneWay}"
             HorizontalAlignment="Left"
             Opacity="{x:Bind local:MessageBubble.SendingOpacity(Bubble.IsSending), Mode=OneWay}"
             Spacing="2">
@@ -121,102 +103,126 @@
                 Text="{x:Bind Bubble.SenderName, Mode=OneWay, TargetNullValue=''}"
                 Visibility="{x:Bind Bubble.HasSenderName, Mode=OneWay, FallbackValue=Collapsed}" />
 
-            <!-- Text: a click shows or hides the time -->
-            <Border
-                x:Name="Back"
-                Padding="12,8"
-                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                BorderThickness="1"
-                CornerRadius="{x:Bind local:MessageBubble.CornersOf(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup), Mode=OneWay}">
-                <StackPanel>
+            <!-- Bubble Back With The Avatar Lane: the lane reaches out into the row's left padding, so the avatar sits beside the
+                 bubble itself, bottoms aligned (not beside the pill, time or caption row below it) -->
+            <Grid
+                Margin="{x:Bind local:MessageBubble.LaneOverhang(Bubble.HasAvatarLane), Mode=OneWay}"
+                ColumnDefinitions="Auto,*">
 
-                    <!-- Quote: the message this one replies to on a tint of the bubble's color, after an accent bar; sender in
-                         caption style and at most two lines of text -->
-                    <Grid
-                        x:Name="Quote"
-                        Margin="-4,0,-4,6"
-                        Padding="0,0,8,0"
-                        Background="{ThemeResource QuoteFillBrush}"
-                        ColumnDefinitions="Auto,*"
-                        ColumnSpacing="8"
-                        CornerRadius="8"
-                        Visibility="{x:Bind Bubble.HasQuote, Mode=OneWay, FallbackValue=Collapsed}">
-                        <Border
-                            x:Name="QuoteBar"
-                            Width="3"
-                            Background="{ThemeResource QuoteBarBrush}" />
-                        <StackPanel Grid.Column="1" Padding="0,6">
-                            <TextBlock
-                                x:Name="QuoteSender"
-                                MaxLines="1"
-                                Style="{StaticResource CaptionTextBlockStyle}"
-                                Text="{x:Bind Bubble.QuoteSender, Mode=OneWay, FallbackValue=''}"
-                                TextTrimming="CharacterEllipsis"
-                                Visibility="{x:Bind local:MessageBubble.ShownIfText(Bubble.QuoteSender), Mode=OneWay, FallbackValue=Collapsed}" />
-                            <TextBlock
-                                x:Name="QuoteText"
-                                AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Quote.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                MaxLines="2"
-                                Text="{x:Bind Bubble.QuoteText, Mode=OneWay, FallbackValue=''}"
-                                TextTrimming="CharacterEllipsis"
-                                TextWrapping="Wrap" />
-                        </StackPanel>
-                    </Grid>
+                <!-- Avatar Lane: the sender's avatar at the group's last bubble, made only where it shows -->
+                <Grid Width="{x:Bind local:MessageBubble.LaneWidth(Bubble.HasAvatarLane), Mode=OneWay}">
+                    <Viewbox
+                        x:Name="SenderAvatar"
+                        Width="28"
+                        Height="28"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Bottom"
+                        x:Load="{x:Bind Bubble.ShowsAvatar, Mode=OneWay, FallbackValue=False}">
+                        <local:Avatar
+                            Color="{x:Bind Bubble.SenderColor, Mode=OneWay, FallbackValue=0}"
+                            Initial="{x:Bind Bubble.AvatarInitial, Mode=OneWay, FallbackValue=''}"
+                            PhotoId="{x:Bind Bubble.AvatarPhotoId, Mode=OneWay, FallbackValue=''}" />
+                    </Viewbox>
+                </Grid>
 
-                    <TextBlock
-                        x:Name="Body"
-                        AutomationProperties.AutomationId="{x:Bind local:MessageBubble.AutomationIdOf(Bubble.Id, Bubble.TmpId), Mode=OneWay}"
-                        AutomationProperties.ItemType="{x:Bind Bubble.ItemTypeName, Mode=OneWay, FallbackValue=''}"
-                        IsTextSelectionEnabled="True"
-                        IsColorFontEnabled="True"
-                        Text="{x:Bind Bubble.DisplayText, Mode=OneWay}"
-                        TextWrapping="Wrap" />
+                <!-- Text: a click shows or hides the time -->
+                <Border
+                    x:Name="Back"
+                    Grid.Column="1"
+                    Padding="12,8"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="{x:Bind local:MessageBubble.CornersOf(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup), Mode=OneWay}">
+                    <StackPanel>
 
-                    <!-- Link Preview: the page's image, its title (two lines at most) and its site in caption style; a click,
-                         Enter or Space opens the link in the default browser -->
-                    <Button
-                        x:Name="Preview"
-                        Margin="0,8,0,0"
-                        Padding="0"
-                        HorizontalContentAlignment="Stretch"
-                        AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Preview.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
-                        AutomationProperties.Name="{x:Bind Bubble.Preview.Title, Mode=OneWay, FallbackValue=''}"
-                        Click="OnPreviewClick"
-                        CornerRadius="8"
-                        Visibility="{x:Bind Bubble.HasPreview, Mode=OneWay, FallbackValue=Collapsed}">
-                        <StackPanel MaxWidth="240">
-                            <Image
-                                x:Name="PreviewImage"
-                                MaxWidth="240"
-                                Stretch="Uniform"
-                                Visibility="Collapsed" />
-                            <StackPanel Padding="10,6,10,8" Spacing="2">
+                        <!-- Quote: the message this one replies to on a tint of the bubble's color, after an accent bar; sender in
+                             caption style and at most two lines of text -->
+                        <Grid
+                            x:Name="Quote"
+                            Margin="-4,0,-4,6"
+                            Padding="0,0,8,0"
+                            Background="{ThemeResource QuoteFillBrush}"
+                            ColumnDefinitions="Auto,*"
+                            ColumnSpacing="8"
+                            CornerRadius="8"
+                            Visibility="{x:Bind Bubble.HasQuote, Mode=OneWay, FallbackValue=Collapsed}">
+                            <Border
+                                x:Name="QuoteBar"
+                                Width="3"
+                                Background="{ThemeResource QuoteBarBrush}" />
+                            <StackPanel Grid.Column="1" Padding="0,6">
                                 <TextBlock
-                                    MaxLines="2"
-                                    Style="{StaticResource BodyStrongTextBlockStyle}"
-                                    Text="{x:Bind Bubble.Preview.Title, Mode=OneWay, FallbackValue=''}"
-                                    TextTrimming="CharacterEllipsis"
-                                    TextWrapping="Wrap" />
-                                <TextBlock
-                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    x:Name="QuoteSender"
                                     MaxLines="1"
                                     Style="{StaticResource CaptionTextBlockStyle}"
-                                    Text="{x:Bind Bubble.Preview.Site, Mode=OneWay, FallbackValue=''}"
-                                    TextTrimming="CharacterEllipsis" />
+                                    Text="{x:Bind Bubble.QuoteSender, Mode=OneWay, FallbackValue=''}"
+                                    TextTrimming="CharacterEllipsis"
+                                    Visibility="{x:Bind local:MessageBubble.ShownIfText(Bubble.QuoteSender), Mode=OneWay, FallbackValue=Collapsed}" />
+                                <TextBlock
+                                    x:Name="QuoteText"
+                                    AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Quote.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    MaxLines="2"
+                                    Text="{x:Bind Bubble.QuoteText, Mode=OneWay, FallbackValue=''}"
+                                    TextTrimming="CharacterEllipsis"
+                                    TextWrapping="Wrap" />
                             </StackPanel>
-                        </StackPanel>
-                    </Button>
-                </StackPanel>
-            </Border>
+                        </Grid>
 
-            <!-- Reactions: a pill over the bubble's bottom corner; a click opens the reaction picker. A whole-pixel height with
-                 corners of exactly half of it, and its fill under the stroke, so the ends draw as smooth half circles at any scale -->
+                        <TextBlock
+                            x:Name="Body"
+                            AutomationProperties.AutomationId="{x:Bind local:MessageBubble.AutomationIdOf(Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                            AutomationProperties.ItemType="{x:Bind Bubble.ItemTypeName, Mode=OneWay, FallbackValue=''}"
+                            IsTextSelectionEnabled="True"
+                            IsColorFontEnabled="True"
+                            Text="{x:Bind Bubble.DisplayText, Mode=OneWay}"
+                            TextWrapping="Wrap" />
+
+                        <!-- Link Preview: the page's image, its title (two lines at most) and its site in caption style; a click,
+                             Enter or Space opens the link in the default browser -->
+                        <Button
+                            x:Name="Preview"
+                            Margin="0,8,0,0"
+                            Padding="0"
+                            HorizontalContentAlignment="Stretch"
+                            AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Preview.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                            AutomationProperties.Name="{x:Bind Bubble.Preview.Title, Mode=OneWay, FallbackValue=''}"
+                            Click="OnPreviewClick"
+                            CornerRadius="8"
+                            Visibility="{x:Bind Bubble.HasPreview, Mode=OneWay, FallbackValue=Collapsed}">
+                            <StackPanel MaxWidth="240">
+                                <Image
+                                    x:Name="PreviewImage"
+                                    MaxWidth="240"
+                                    Stretch="Uniform"
+                                    Visibility="Collapsed" />
+                                <StackPanel Padding="10,6,10,8" Spacing="2">
+                                    <TextBlock
+                                        MaxLines="2"
+                                        Style="{StaticResource BodyStrongTextBlockStyle}"
+                                        Text="{x:Bind Bubble.Preview.Title, Mode=OneWay, FallbackValue=''}"
+                                        TextTrimming="CharacterEllipsis"
+                                        TextWrapping="Wrap" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        MaxLines="1"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        Text="{x:Bind Bubble.Preview.Site, Mode=OneWay, FallbackValue=''}"
+                                        TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- Reactions: a pill over the bubble's bottom corner; a click opens the reaction picker. A whole-pixel height (24,
+                 more for large text) with corners of half of it, and its fill under the stroke, so the ends draw as smooth half
+                 circles at any scale -->
             <Button
                 x:Name="Pill"
-                Height="24"
-                MinHeight="0"
+                MinHeight="24"
                 Margin="12,-8,12,0"
                 Padding="8,0"
                 HorizontalAlignment="Right"

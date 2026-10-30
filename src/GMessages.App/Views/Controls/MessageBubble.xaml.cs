@@ -235,6 +235,22 @@ public sealed partial class MessageBubble : UserControl
     public static double LaneWidth(bool hasLane) => hasLane ? AvatarLane : 0;
 
     /// <summary>
+    /// Gives the bubble's left padding: the avatar lane's width when it has one, so the name, pill and time line up with the
+    /// bubble's back.
+    /// </summary>
+    /// <param name="hasLane">True for a received bubble in a group chat.</param>
+    /// <returns>The padding.</returns>
+    public static Thickness LanePadding(bool hasLane) => new(LaneWidth(hasLane), 0, 0, 0);
+
+    /// <summary>
+    /// Gives the back's row a negative left margin of the lane's width, so the lane (with the avatar) sits in the padding,
+    /// beside the back.
+    /// </summary>
+    /// <param name="hasLane">True for a received bubble in a group chat.</param>
+    /// <returns>The margin.</returns>
+    public static Thickness LaneOverhang(bool hasLane) => new(-LaneWidth(hasLane), 0, 0, 0);
+
+    /// <summary>
     /// Fades a bubble that is still being sent.
     /// </summary>
     /// <param name="isSending">True while sending.</param>
@@ -354,10 +370,12 @@ public sealed partial class MessageBubble : UserControl
 
     private void OnRetryClick(object sender, RoutedEventArgs e) => RetryRequested?.Invoke(this, EventArgs.Empty);
 
-    // Copies The Selected Text, Or The Whole Text As Sent When Nothing Is Selected, As The Text's Own Copy Did
+    // Copies The Selected Text, Or The Whole Text When Nothing Is Selected, As The Text's Own Copy Did; Always As Sent,
+    // Without The VS16 Added For Showing Color Emoji
     private void OnCopyClick(object sender, RoutedEventArgs e)
     {
-        string text = Body.SelectedText.Length > 0 ? Body.SelectedText : Bubble?.Text ?? string.Empty;
+        string original = Bubble?.Text ?? string.Empty;
+        string text     = Body.SelectedText.Length > 0 ? ChatFormat.OriginalOf(original, Body.SelectedText) : original;
         if (text.Length == 0)
         {
             return;
