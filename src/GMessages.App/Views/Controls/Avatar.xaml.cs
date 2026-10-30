@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices.WindowsRuntime;
 using GMessages.Presentation.Messaging;
 using Microsoft.UI.Xaml;
@@ -54,6 +55,11 @@ public sealed partial class Avatar : UserControl
 
     // Photos Are Decoded At Twice The 40 px Circle, Enough For 200% Scaling
     private const int PhotoDecodeWidth = 80;
+
+    // Photos Already Decoded, By Their Bytes: The Photo Cache Hands Back The Same Array For An ID, So A Photo Shown Before
+    // Shows Again At Once (Switching Chats Showed The Letter For A Few Frames While It Decoded Again). An Entry Lives As
+    // Long As The Photo Cache Keeps Its Bytes
+    private static readonly ConditionalWeakTable<byte[], ImageSource> Decoded = [];
 
     // Circle Sizes: One Avatar Fills The 40 px Square; A Group's Two Circles Overlap Inside It
     private const double FullSize  = 40;
@@ -226,23 +232,37 @@ public sealed partial class Avatar : UserControl
     private static void OnPhotoIdChanged(DependencyObject d, DependencyPropertyChangedEventArgs e) =>
         _ = ((Avatar)d).LoadPhotoAsync(front: e.Property == PhotoIdProperty);
 
-    // Clears The Circle's Photo, Then Shows The New One Unless The ID Changed Meanwhile
+    // Shows A Photo Already Decoded At Once; Otherwise Clears The Circle's Photo, Then Shows The New One Unless The ID
+    // Changed Meanwhile
     private async Task LoadPhotoAsync(bool front)
     {
         string id = front ? PhotoId : SecondPhotoId;
-        SetPhoto(front, null);
         if (string.IsNullOrEmpty(id) || Cache is not { } cache)
         {
+            SetPhoto(front, null);
             return;
         }
 
-        byte[]? photo = await cache.GetAsync(id, CancellationToken.None);
+        Task<byte[]?> lookup = cache.GetAsync(id, CancellationToken.None);
+        if (lookup.IsCompletedSuccessfully && lookup.Result is { } known && Decoded.TryGetValue(known, out ImageSource? shown))
+        {
+            SetPhoto(front, shown);
+            return;
+        }
+
+        SetPhoto(front, null);
+        byte[]? photo = await lookup;
         if (photo is null || id != (front ? PhotoId : SecondPhotoId))
         {
             return;
         }
 
         ImageSource? image = await ToImageAsync(photo);
+        if (image is not null)
+        {
+            Decoded.AddOrUpdate(photo, image);
+        }
+
         if (id == (front ? PhotoId : SecondPhotoId))
         {
             SetPhoto(front, image);

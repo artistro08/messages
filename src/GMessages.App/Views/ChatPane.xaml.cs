@@ -6,10 +6,12 @@ using GMessages.Presentation.Main;
 using GMessages.Presentation.Messaging;
 using GMessages.Protocol;
 using GMessages.Protocol.Proto;
+using Microsoft.UI.Composition;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Windows.System;
@@ -53,6 +55,9 @@ public sealed partial class ChatPane : UserControl
     private const double DraftCorner  = 4;
     private const double ComposeInset = 12;
     private const double ComposeTop   = 8;
+
+    // Another Chat Fades In Over WinUI's Normal Control Animation Time
+    private static readonly TimeSpan ChatFadeIn = TimeSpan.FromMilliseconds(250);
 
     private ScrollViewer? _scroller;
 
@@ -203,6 +208,10 @@ public sealed partial class ChatPane : UserControl
 
         var chat = (ChatViewModel?)e.NewValue;
         BindableList.Show(pane.MessageList, chat?.Messages);
+        if (chat is not null)
+        {
+            pane.FadeInMessages();
+        }
         pane.ShowScrollToBottom(false);
         pane._pinned       = true;
         pane._toNewest     = false;
@@ -237,6 +246,19 @@ public sealed partial class ChatPane : UserControl
         }
 
         pane._keepFocus = false;
+    }
+
+    // The New Chat's Bubbles Fade In From Clear, Already Pinned To The Newest, So No Frame Shows Them Being Laid Out Or
+    // Their First Composition Frame (The Owner Saw A Gray Frame Over The List On A Switch). A Composition Animation, Not The
+    // Opacity Property: It Starts From Clear At Once, Before The Next Frame Draws
+    private void FadeInMessages()
+    {
+        Visual visual = ElementCompositionPreview.GetElementVisual(MessageList);
+        ScalarKeyFrameAnimation fade = visual.Compositor.CreateScalarKeyFrameAnimation();
+        fade.InsertKeyFrame(0, 0);
+        fade.InsertKeyFrame(1, 1);
+        fade.Duration = ChatFadeIn;
+        visual.StartAnimation(nameof(Visual.Opacity), fade);
     }
 
     /// <summary>
