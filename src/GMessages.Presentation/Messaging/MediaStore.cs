@@ -48,12 +48,14 @@ public sealed partial class MediaStore
     private static readonly HashSet<string> ProgramExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ".exe", ".com", ".scr", ".pif", ".cpl", ".msc", ".dll", ".ocx", ".sys", ".drv",
-        ".bat", ".cmd", ".ps1", ".psm1", ".psd1", ".ps1xml", ".psc1", ".vb", ".vbs", ".vbe", ".js", ".jse", ".ws",
-        ".wsf", ".wsc", ".wsh", ".hta", ".jar", ".py", ".pyw", ".pyc", ".pl", ".rb",
-        ".msi", ".msp", ".mst", ".msix", ".msixbundle", ".appx", ".appxbundle", ".appinstaller", ".application",
-        ".appref-ms", ".xbap", ".gadget",
-        ".lnk", ".url", ".scf", ".inf", ".reg", ".chm", ".hlp", ".settingcontent-ms", ".library-ms", ".search-ms",
-        ".searchconnector-ms", ".diagcab", ".xll", ".iso", ".img", ".vhd", ".vhdx", ".cab",
+        ".bat", ".cmd", ".ps1", ".psm1", ".psd1", ".ps1xml", ".ps2", ".ps2xml", ".psc1", ".psc2", ".vb", ".vbs", ".vbe",
+        ".vbscript", ".js", ".jse", ".ws", ".wsf", ".wsc", ".wsh", ".hta", ".jar", ".jnlp", ".py", ".pyw", ".pyc", ".pl",
+        ".rb", ".shs", ".sct", ".msh", ".msh1", ".msh2", ".mshxml",
+        ".msi", ".msp", ".mst", ".msu", ".msix", ".msixbundle", ".appx", ".appxbundle", ".appinstaller", ".application",
+        ".appref-ms", ".xbap", ".gadget", ".vsto",
+        ".lnk", ".url", ".website", ".scf", ".inf", ".ins", ".isp", ".its", ".job", ".mmc", ".reg", ".rdp", ".chm", ".hlp",
+        ".settingcontent-ms", ".library-ms", ".search-ms", ".searchconnector-ms", ".diagcab", ".xll", ".ade", ".adp",
+        ".mde", ".iso", ".img", ".vhd", ".vhdx", ".cab",
     };
 
     private readonly Func<IMessagingClient?> _client;
@@ -183,7 +185,29 @@ public sealed partial class MediaStore
 
         Directory.CreateDirectory(folder);
         await File.WriteAllBytesAsync(path, bytes, ct).ConfigureAwait(false);
+        MarkFromInternet(path);
         return path;
+    }
+
+    /// <summary>
+    /// Marks a written file as downloaded from the internet (the mark of the web), as a browser download is.
+    /// </summary>
+    /// <remarks>
+    /// Writes the <c>Zone.Identifier</c> stream with <c>ZoneId=3</c>, so Windows applies SmartScreen, Office's Protected
+    /// View and its "downloaded from the internet" warnings to the file. Only this method writes the stream: the name
+    /// sanitizer refuses <c>:</c> in names. A drive that can't hold the stream (not NTFS) logs the error type and moves on.
+    /// </remarks>
+    /// <param name="path">The full path of the file.</param>
+    public void MarkFromInternet(string path)
+    {
+        try
+        {
+            File.WriteAllText(path + ":Zone.Identifier", "[ZoneTransfer]\r\nZoneId=3\r\n");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or ArgumentException)
+        {
+            LogMarkFailed(ex.GetType().Name);
+        }
     }
 
     /// <summary>
@@ -461,6 +485,9 @@ public sealed partial class MediaStore
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Could not ask for the full-size image of {MessageId} ({ErrorType})")]
     private partial void LogFullSizeFailed(string messageId, string errorType);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Could not mark a media file as from the internet ({ErrorType})")]
+    private partial void LogMarkFailed(string errorType);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "{Count} media temp entries are still open in another app")]
     private partial void LogTempLeft(int count);
