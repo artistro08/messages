@@ -47,7 +47,8 @@
                         <Setter Target="VoicePlay.Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
                         <Setter Target="VoiceLength.Foreground" Value="{ThemeResource TextOnAccentFillColorSecondaryBrush}" />
                         <Setter Target="VoiceBars.BarBrush" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
-                        <Setter Target="Preview.Background" Value="{ThemeResource QuoteOnAccentFillBrush}" />
+                        <Setter Target="PreviewCard.Background" Value="{ThemeResource QuoteOnAccentFillBrush}" />
+                        <Setter Target="PreviewCard.BorderThickness" Value="0" />
                         <Setter Target="PreviewTitle.Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
                         <Setter Target="PreviewSite.Foreground" Value="{ThemeResource TextOnAccentFillColorSecondaryBrush}" />
                         <Setter Target="Pill.HorizontalAlignment" Value="Left" />
@@ -384,16 +385,20 @@
 
                         <!-- Link Preview: the page's image, its title (two lines at most) and its site in caption style; a click,
                              Enter or Space opens the link in the default browser. Named by its title and the link's host.
-                             Right-click, the Application key or Shift + F10 opens its own menu, with Copy link -->
+                             Right-click, the Application key or Shift + F10 opens its own menu, with Copy link. The card's
+                             look lives on PreviewCard; the button itself has no hover or press fill (IconButtonStyle), so
+                             pointing at it never flashes a different color (owner report) -->
                         <Button
                             x:Name="Preview"
                             Margin="{x:Bind local:MessageBubble.PreviewMargin(Bubble.HasBodyText), Mode=OneWay}"
                             Padding="0"
+                            HorizontalAlignment="Stretch"
                             HorizontalContentAlignment="Stretch"
                             AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Preview.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
                             AutomationProperties.Name="{x:Bind Bubble.PreviewName, Mode=OneWay, FallbackValue=''}"
                             Click="OnPreviewClick"
                             CornerRadius="8"
+                            Style="{StaticResource IconButtonStyle}"
                             Visibility="{x:Bind Bubble.HasPreview, Mode=OneWay, FallbackValue=Collapsed}">
                             <Button.ContextFlyout>
                                 <MenuFlyout>
@@ -407,29 +412,36 @@
                                     </MenuFlyoutItem>
                                 </MenuFlyout>
                             </Button.ContextFlyout>
-                            <StackPanel MaxWidth="240">
-                                <Image
-                                    x:Name="PreviewImage"
-                                    MaxWidth="240"
-                                    Stretch="Uniform"
-                                    Visibility="Collapsed" />
-                                <StackPanel Padding="10,6,10,8" Spacing="2">
-                                    <TextBlock
-                                        x:Name="PreviewTitle"
-                                        MaxLines="2"
-                                        Style="{StaticResource BodyStrongTextBlockStyle}"
-                                        Text="{x:Bind Bubble.Preview.Title, Mode=OneWay, FallbackValue=''}"
-                                        TextTrimming="CharacterEllipsis"
-                                        TextWrapping="Wrap" />
-                                    <TextBlock
-                                        x:Name="PreviewSite"
-                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                        MaxLines="1"
-                                        Style="{StaticResource CaptionTextBlockStyle}"
-                                        Text="{x:Bind Bubble.Preview.Site, Mode=OneWay, FallbackValue=''}"
-                                        TextTrimming="CharacterEllipsis" />
+                            <Border
+                                x:Name="PreviewCard"
+                                Background="{ThemeResource ControlFillColorDefaultBrush}"
+                                BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8">
+                                <StackPanel MaxWidth="240">
+                                    <Image
+                                        x:Name="PreviewImage"
+                                        MaxWidth="240"
+                                        Stretch="Uniform"
+                                        Visibility="Collapsed" />
+                                    <StackPanel Padding="10,6,10,8" Spacing="2">
+                                        <TextBlock
+                                            x:Name="PreviewTitle"
+                                            MaxLines="2"
+                                            Style="{StaticResource BodyStrongTextBlockStyle}"
+                                            Text="{x:Bind Bubble.Preview.Title, Mode=OneWay, FallbackValue=''}"
+                                            TextTrimming="CharacterEllipsis"
+                                            TextWrapping="Wrap" />
+                                        <TextBlock
+                                            x:Name="PreviewSite"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            MaxLines="1"
+                                            Style="{StaticResource CaptionTextBlockStyle}"
+                                            Text="{x:Bind Bubble.Preview.Site, Mode=OneWay, FallbackValue=''}"
+                                            TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
                                 </StackPanel>
-                            </StackPanel>
+                            </Border>
                         </Button>
                     </StackPanel>
                 </Border>

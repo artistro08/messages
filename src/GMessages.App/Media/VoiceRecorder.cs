@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices.WindowsRuntime;
 using GMessages.Presentation.Messaging;
 using Windows.Devices.Enumeration;
+using Windows.Media.Devices;
 using Windows.Media;
 using Windows.Media.Audio;
 using Windows.Media.Capture;
@@ -142,6 +143,9 @@ internal sealed class VoiceRecorder : IDisposable
                 throw new MicrophoneUnavailableException(input.Status.ToString());
             }
 
+            // TODO: Diagnostic (Owner: The Chosen Microphone Isn't Used); Trim Once The Cause Is Known
+            LogOpenedDevice(input.DeviceInputNode.Device?.Id, microphoneId);
+
             // The File (M4A, AAC) And The Levels
             await File.WriteAllBytesAsync(path, []);
             StorageFile storage                      = await StorageFile.GetFileFromPathAsync(path);
@@ -208,6 +212,20 @@ internal sealed class VoiceRecorder : IDisposable
         // The Chosen Microphone
         MicrophoneConsent.Log("device", "chosen");
         return await graph.CreateDeviceInputNodeAsync(MediaCategory.Other, null, device);
+    }
+
+    // Which Device The Graph Really Opened, Against The Chosen One And Windows' Defaults; Names And IDs Never Logged
+    private static void LogOpenedDevice(string? openedId, string? chosenId)
+    {
+        string default_id       = MediaDevice.GetDefaultAudioCaptureId(AudioDeviceRole.Default);
+        string communication_id = MediaDevice.GetDefaultAudioCaptureId(AudioDeviceRole.Communications);
+        string opened           = openedId is null ? "unknown"
+            : string.Equals(openedId, chosenId, StringComparison.OrdinalIgnoreCase) ? "chosen"
+            : string.Equals(openedId, default_id, StringComparison.OrdinalIgnoreCase) ? "default"
+            : string.Equals(openedId, communication_id, StringComparison.OrdinalIgnoreCase) ? "communications default"
+            : "other";
+
+        MicrophoneConsent.Log("opened", $"{opened}; chosen is default: {string.Equals(chosenId, default_id, StringComparison.OrdinalIgnoreCase)}");
     }
 
     /// <summary>
