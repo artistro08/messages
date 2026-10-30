@@ -97,6 +97,12 @@ public sealed class FakePhone
     public TimeSpan OlderPagesDelay { get; set; }
 
     /// <summary>
+    /// Gets or sets how long the phone waits after a full-size image request before it sends the photo again with its
+    /// full media ID (zero by default).
+    /// </summary>
+    public TimeSpan FullSizeDelay { get; set; }
+
+    /// <summary>
     /// Gets every <c>SendMessage</c> request so far, in arrival order.
     /// </summary>
     public IReadOnlyList<SendMessageRequest> Sent
@@ -341,7 +347,8 @@ public sealed class FakePhone
                 Reply(data.RequestID, data.Action, new GetFullSizeImageResponse(), encrypt: true);
                 if (full is not null)
                 {
-                    PushUpdate(new UpdateEvents { MessageEvent = new MessageEvent { Data = { full } } }, _push);
+                    TimeSpan full_delay = FullSizeDelay;
+                    _ = Task.Delay(full_delay).ContinueWith(_ => PushUpdate(new UpdateEvents { MessageEvent = new MessageEvent { Data = { full } } }, _push), TaskScheduler.Default);
                 }
 
                 break;
@@ -398,11 +405,12 @@ public sealed class FakePhone
     /// <param name="bytes">The file's bytes.</param>
     /// <param name="fileName">The file name.</param>
     /// <param name="withThumbnail">True to send a thumbnail only and hold the full media ID until it is asked for.</param>
+    /// <param name="caption">A caption sent with it, or null for none.</param>
     /// <returns>The message as pushed.</returns>
     /// <exception cref="InvalidOperationException">Pairing has not reached the client finished message.</exception>
-    public Message PushIncomingMedia(string conversationId, string mime, byte[] bytes, string fileName, bool withThumbnail = false)
+    public Message PushIncomingMedia(string conversationId, string mime, byte[] bytes, string fileName, bool withThumbnail = false, string? caption = null)
     {
-        (Conversation conversation, Message message) = Chats.AddIncomingMedia(conversationId, mime, bytes, fileName, withThumbnail);
+        (Conversation conversation, Message message) = Chats.AddIncomingMedia(conversationId, mime, bytes, fileName, withThumbnail, caption);
         PushUpdate(new UpdateEvents { ConversationEvent = new ConversationEvent { Data = { conversation } } }, _push);
         PushUpdate(new UpdateEvents { MessageEvent = new MessageEvent { Data = { message } } }, _push);
         return message;

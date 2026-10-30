@@ -247,7 +247,7 @@ public sealed class FakeChats
 
     // An Attachment From The Other Side, Which Leaves The Conversation Unread. With A Thumbnail, Only The Thumbnail Is
     // Sent; The Full Media ID Is Held Until The App Asks For It (ReleaseFullSize)
-    internal (Conversation Conversation, Message Message) AddIncomingMedia(string conversationId, string mime, byte[] bytes, string fileName, bool withThumbnail)
+    internal (Conversation Conversation, Message Message) AddIncomingMedia(string conversationId, string mime, byte[] bytes, string fileName, bool withThumbnail, string? caption = null)
     {
         lock (_lock)
         {
@@ -264,6 +264,11 @@ public sealed class FakeChats
                 content.ThumbnailDecryptionKey = thumbnail.DecryptionKey;
                 content.MediaID                = "";
                 content.DecryptionKey          = ByteString.Empty;
+            }
+
+            if (caption is not null)
+            {
+                message.MessageInfo.Add(new MessageInfo { MessageContent = new MessageContent { Content = caption } });
             }
 
             _messages[conversationId].Add(message);
@@ -544,8 +549,15 @@ public sealed class FakeChats
             Size          = bytes.Length,
             DecryptionKey = ByteString.CopyFrom(key),
             MimeType      = mime,
+            Dimensions    = PngSize(bytes),
         };
     }
+
+    // A PNG's Width And Height From Its Header, As A Phone Reports A Photo's Dimensions; Null For Anything Else
+    private static Dimensions? PngSize(byte[] bytes) =>
+        bytes.Length >= 24 && bytes[1] == 'P' && bytes[2] == 'N' && bytes[3] == 'G'
+            ? new Dimensions { Width = System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(16)), Height = System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(20)) }
+            : null;
 
     // A Tombstone (A System Line Such As The Chat Becoming Encrypted): A Status And No Content
     private Message NewTombstone(Conversation conversation, MessageStatusType status) => new()

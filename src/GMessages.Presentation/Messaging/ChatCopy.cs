@@ -104,6 +104,14 @@ public static class ChatCopy
     // Start Chat Failure (R11; Controller Copy, The Owner May Edit It)
     public const string StartFailed = "Couldn't start this conversation. Try again.";
 
+    // Media In The Chat (Plan 6; Controller Copy, The Owner Signs Off At The Gate)
+    public const string Open            = "Open";
+    public const string SaveAs          = "Save as…";
+    public const string Downloading     = "Downloading…";
+    public const string PhotoLoadFailed = "Couldn't load this photo.";
+    public const string FileOpenFailed  = "Couldn't open this file.";
+    public const string PhotoPending    = "Waiting for the photo from your phone…";
+
     // Startup
     public const string StartupRefused = "You'll have to manually enable startup. Turn it on in Settings > Apps > Startup.";
 }

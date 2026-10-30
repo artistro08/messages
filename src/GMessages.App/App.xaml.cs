@@ -110,6 +110,11 @@ public partial class App : Application, IDisposable
     internal NotificationService? Notifications => _notifications;
 
     /// <summary>
+    /// Gets the media store, so a bubble can show its photo or open its file. Null before launch.
+    /// </summary>
+    internal MediaStore? Media => _media;
+
+    /// <summary>
     /// Sets up logging, settings and the tray icon, then starts watching for quit and show requests.
     /// </summary>
     /// <param name="args">Launch details (unused; the command line is read by <see cref="Program"/>).</param>

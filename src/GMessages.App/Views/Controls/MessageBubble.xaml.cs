@@ -10,6 +10,8 @@ using Microsoft.UI.Xaml.Documents;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Windows.ApplicationModel.DataTransfer;
+using Windows.Storage;
+using Windows.Storage.Pickers;
 using Windows.System;
 using Windows.UI.ViewManagement;
 
@@ -62,6 +64,16 @@ namespace GMessages.App.Views.Controls;
 /// (<c>HoverReact.{id}</c>), reply (<c>HoverReply.{id}</c>) and the ⋮ (<c>HoverMore.{id}</c>) beside its back, as in
 /// Google Messages for web, through the <c>Hover</c> visual states. Their space is always kept, so nothing moves.
 /// </para>
+/// <para>
+/// A photo (<c>Bubble.Photo.{id}</c>, named by its caption or "Photo") fills the bubble edge to edge, with its caption
+/// under it. Its size comes from the photo's dimensions before anything loads, so the chat never jumps. Its thumbnail
+/// shows first, decoded tiny and stretched so it looks blurred (a Composition blur needs Win2D, which this app doesn't
+/// carry), then the full image fades in over it. A thumbnail-only photo asks the phone for the full size, which arrives
+/// as an edit of the message. While the phone hasn't sent the photo it reads "Waiting for the photo from your phone…";
+/// a failure (or a full size that never comes) reads "Couldn't load this photo." and a click tries again. Otherwise a
+/// click opens it in the default photo app, as does the menu's Open (<c>Bubble.Open</c>); Save as (<c>Bubble.SaveAs</c>)
+/// saves a copy where the person picks.
+/// </para>
 /// </remarks>
 public sealed partial class MessageBubble : UserControl
 {
@@ -98,6 +110,16 @@ public sealed partial class MessageBubble : UserControl
     // The Hover Strip: Three 32 px Buttons With 4 px Either Side (MessageBubble.xaml)
     private const double HoverStripWidth = 104;
 
+    // A Photo's Blurred Look: Its Thumbnail Decoded This Wide, Then Stretched To The Photo's Size
+    private const int BlurDecodeWidth = 24;
+
+    // A Photo's Caption Sits This Far Inside The Bubble; The Back's Usual Padding Otherwise
+    private static readonly Thickness CaptionInset = new(12, 6, 12, 8);
+    private static readonly Thickness TextPadding  = new(12, 8, 12, 8);
+
+    // How Long A Thumbnail-Only Photo Waits For The Phone's Full Size Before It Offers To Try Again
+    private static readonly TimeSpan FullSizeWait = TimeSpan.FromSeconds(30);
+
     // Reads The Windows Animation Setting Live (Settings > Accessibility > Visual Effects)
     private static readonly UISettings Ui = new();
 
@@ -124,6 +146,18 @@ public sealed partial class MessageBubble : UserControl
     // The Text's Links, Kept In The Text's Color
     private readonly List<Hyperlink> _links = [];
 
+    // The Full Photo's Fade In Over The Blurred One
+    private readonly ScalarTransition _photoFade = new();
+
+    // The Photo Shown (Or Loading) And Its Message; Each Load Gets A Number, So One Overtaken By A Newer Load Stops
+    private MediaPart? _photoPart;
+    private string _photoMessage = string.Empty;
+    private int _photoLoad;
+    private bool _photoFailed;
+
+    // The Widest A Photo May Be: The Bubble's Width Cap Inside Its Border (Set At Measure)
+    private double _photoMaxWidth = MaxBubbleWidth - 2;
+
     /// <summary>
     /// Creates the bubble.
     /// </summary>
@@ -146,6 +180,9 @@ public sealed partial class MessageBubble : UserControl
         ToolTipService.SetToolTip(HoverReply, ChatCopy.Reply);
         AutomationProperties.SetName(HoverMore, ChatCopy.MoreOptions);
         ToolTipService.SetToolTip(HoverMore, ChatCopy.MoreOptions);
+
+        // The Photo's Layers Take The Photo's Rounded Corners (Bound Once, On The Button)
+        Photo.RegisterPropertyChangedCallback(Control.CornerRadiusProperty, (_, _) => PhotoBlur.CornerRadius = PhotoFull.CornerRadius = Photo.CornerRadius);
 
         // Links Follow The Text's Color: Its Side's State And The Theme Set It
         Body.RegisterPropertyChangedCallback(TextBlock.ForegroundProperty, (_, _) => ColorLinks());
@@ -181,6 +218,12 @@ public sealed partial class MessageBubble : UserControl
 
     /// <summary>Gets the preview card menu's Copy link text.</summary>
     public static string CopyLinkText => ChatCopy.CopyLink;
+
+    /// <summary>Gets the menu's Open text.</summary>
+    public static string OpenText => ChatCopy.Open;
+
+    /// <summary>Gets the menu's Save as text.</summary>
+    public static string SaveAsText => ChatCopy.SaveAs;
 
     /// <summary>Gets the caption row lock's tooltip and name.</summary>
     public static string EncryptedText => ChatCopy.EndToEndEncrypted;
@@ -357,6 +400,39 @@ public sealed partial class MessageBubble : UserControl
     public static Thickness PreviewMargin(bool hasText) => new(0, hasText ? PreviewGap : 0, 0, 0);
 
     /// <summary>
+    /// Gives the back's padding: none around a photo, which fills the bubble edge to edge; the text's padding otherwise.
+    /// </summary>
+    /// <param name="hasPhoto">True when the bubble shows a photo.</param>
+    /// <returns>The padding.</returns>
+    public static Thickness BackPadding(bool hasPhoto) => hasPhoto ? default : TextPadding;
+
+    /// <summary>
+    /// Gives the text's margin: under a photo the caption keeps the bubble's usual inset; otherwise the back's padding does.
+    /// </summary>
+    /// <param name="hasPhoto">True when the bubble shows a photo.</param>
+    /// <returns>The margin.</returns>
+    public static Thickness CaptionMargin(bool hasPhoto) => hasPhoto ? CaptionInset : default;
+
+    /// <summary>
+    /// Rounds a photo to the inside of its bubble's corners (one pixel in, for the border), square at the bottom when its
+    /// caption follows.
+    /// </summary>
+    /// <param name="fromMe">True for a sent bubble.</param>
+    /// <param name="isFirst">True for the first bubble of its group.</param>
+    /// <param name="isLast">True for the last bubble of its group.</param>
+    /// <param name="hasCaption">True when a caption shows under the photo.</param>
+    /// <returns>The corners.</returns>
+    public static CornerRadius PhotoCorners(bool fromMe, bool isFirst, bool isLast, bool hasCaption)
+    {
+        CornerRadius outer = CornersOf(fromMe, isFirst, isLast);
+        return new CornerRadius(
+            outer.TopLeft - 1,
+            outer.TopRight - 1,
+            hasCaption ? 0 : outer.BottomRight - 1,
+            hasCaption ? 0 : outer.BottomLeft - 1);
+    }
+
+    /// <summary>
     /// Fades a bubble that is still being sent.
     /// </summary>
     /// <param name="isSending">True while sending.</param>
@@ -374,11 +450,16 @@ public sealed partial class MessageBubble : UserControl
     {
         if (double.IsFinite(availableSize.Width))
         {
-            double max_width = Math.Min(MaxBubbleWidth, Math.Floor(availableSize.Width * MaxWidthShare)) + HoverStripWidth;
+            double cap       = Math.Min(MaxBubbleWidth, Math.Floor(availableSize.Width * MaxWidthShare));
+            double max_width = cap + HoverStripWidth;
             if (Root.MaxWidth != max_width)
             {
                 Root.MaxWidth = max_width;
             }
+
+            // The Photo Fits Inside The Back's Border, Beside The Avatar Lane
+            _photoMaxWidth = cap - LaneWidth(Bubble?.HasAvatarLane == true) - 2;
+            SizePhoto();
         }
 
         return base.MeasureOverride(availableSize);
@@ -411,6 +492,7 @@ public sealed partial class MessageBubble : UserControl
         view.ShowText();
         view.ShowStates();
         view.ShowPreviewImage();
+        view.ShowPhoto();
     }
 
     // An Echo Can Make A Sending Bubble RCS, My Reaction Comes And Goes, And A Preview Card Arrives
@@ -419,6 +501,7 @@ public sealed partial class MessageBubble : UserControl
         ShowText();
         ShowStates();
         ShowPreviewImage();
+        ShowPhoto();
         ShowHoverStrip();
     }
 
@@ -462,6 +545,244 @@ public sealed partial class MessageBubble : UserControl
 
         PreviewImage.Source     = image;
         PreviewImage.Visibility = Visibility.Visible;
+    }
+
+    // =========================================================================
+    // PHOTO
+    // =========================================================================
+
+    // Another Photo, Or The Same One With Its Full Size Now (The Phone's Edit Swaps The Media Part): Load It. The Same
+    // Message Keeps Its Blurred Look While The Full Image Loads; Another One Starts Clear
+    private void ShowPhoto()
+    {
+        MediaPart? part = Bubble is { HasPhoto: true } bubble ? bubble.Media : null;
+        if (ReferenceEquals(part, _photoPart))
+        {
+            return;
+        }
+
+        string message_id = Bubble?.Id ?? string.Empty;
+        bool same_message = part is not null && message_id.Length > 0 && message_id == _photoMessage;
+        _photoPart        = part;
+        _photoMessage     = message_id;
+        _photoFailed      = false;
+        int load          = ++_photoLoad;
+
+        if (!same_message)
+        {
+            PhotoBlur.Background        = null;
+            PhotoFull.Background        = null;
+            PhotoFull.OpacityTransition = null;
+            PhotoFull.Opacity           = 0;
+        }
+
+        ShowPhotoNote(null, string.Empty);
+        SizePhoto();
+        if (part is not null)
+        {
+            _ = LoadPhotoAsync(part, load, again: false);
+        }
+    }
+
+    // The Photo's Size From Its Dimensions, Fitted To The Bubble (See MessageBubbleViewModel.PhotoSize)
+    private void SizePhoto()
+    {
+        if (Bubble is not { HasPhoto: true, Media: { } media })
+        {
+            return;
+        }
+
+        (double width, double height) = MessageBubbleViewModel.PhotoSize(media.Width, media.Height, _photoMaxWidth);
+        if (Photo.Width != width || Photo.Height != height)
+        {
+            Photo.Width  = width;
+            Photo.Height = height;
+        }
+    }
+
+    // Blurred First, Then Sharp. A Thumbnail-Only Photo Asks The Phone For Its Full Size Instead, Which Comes Back As A New
+    // Media Part (ShowPhoto Then Loads Again); If It Never Comes, The Photo Offers To Try Again. Any Failure Keeps What
+    // Shows And Says So; A Click Tries Again
+    private async Task LoadPhotoAsync(MediaPart part, int load, bool again)
+    {
+        if (part.IsPending)
+        {
+            ShowPhotoNote(ChatCopy.PhotoPending, "Pending");
+            return;
+        }
+
+        if (Bubble is not { } bubble || (Application.Current as App)?.Media is not { } media)
+        {
+            return;
+        }
+
+        try
+        {
+            // Blurred: The Thumbnail (Or The Photo Itself When No Thumbnail Came), Decoded Tiny And Stretched
+            if (PhotoBlur.Background is null)
+            {
+                byte[] small     = await media.GetAsync(part, thumbnail: true, CancellationToken.None);
+                ImageSource blur = await Avatar.ToImageAsync(small, BlurDecodeWidth) ?? throw new InvalidDataException();
+                if (load != _photoLoad)
+                {
+                    return;
+                }
+
+                PhotoBlur.Background = new ImageBrush { ImageSource = blur, Stretch = Stretch.UniformToFill };
+                TestHooks.ShowState(Photo, "Blurred");
+            }
+
+            // Only The Thumbnail Came: Ask For The Full Size, And Offer To Try Again If It Doesn't Come
+            if (part is { MediaId.Length: 0, ThumbnailId.Length: > 0 })
+            {
+                await bubble.RequestFullSizeAsync(media, again);
+                await Task.Delay(FullSizeWait);
+                if (load == _photoLoad)
+                {
+                    ShowPhotoFailed();
+                }
+
+                return;
+            }
+
+            // Sharp: Decoded At The Photo's Size. One Already In Memory (A Recycled Row Showing It Again) Shows At Once
+            Task<byte[]> full_task = media.GetAsync(part, thumbnail: false, CancellationToken.None);
+            bool at_once           = full_task.IsCompleted;
+            byte[] full            = await full_task;
+            ImageSource image      = await Avatar.ToImageAsync(full, (int)Math.Ceiling(Photo.Width)) ?? throw new InvalidDataException();
+            if (load != _photoLoad)
+            {
+                return;
+            }
+
+            PhotoFull.Background        = new ImageBrush { ImageSource = image, Stretch = Stretch.UniformToFill };
+            PhotoFull.OpacityTransition = at_once || !Ui.AnimationsEnabled ? null : _photoFade;
+            PhotoFull.Opacity           = 1;
+            TestHooks.ShowState(Photo, "Full");
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            if (load != _photoLoad)
+            {
+                return;
+            }
+
+            AppLog.MediaFailed(App.ShellLog, "photo", bubble.Id, ex.GetType().Name);
+            ShowPhotoFailed();
+        }
+    }
+
+    private void ShowPhotoFailed()
+    {
+        _photoFailed = true;
+        ShowPhotoNote(ChatCopy.PhotoLoadFailed, "Failed");
+    }
+
+    // The Note Over The Photo (Waiting, Or Failed), Or None
+    private void ShowPhotoNote(string? text, string state)
+    {
+        PhotoNote.Text           = text ?? string.Empty;
+        PhotoNoteBack.Visibility = text is null ? Visibility.Collapsed : Visibility.Visible;
+        TestHooks.ShowState(Photo, state);
+    }
+
+    // After A Failure, Try Again (Asking The Phone Again For A Full Size That Never Came); While Waiting For The Phone,
+    // Nothing; Otherwise Open It In The Default Photo App
+    private void OnPhotoClick(object sender, RoutedEventArgs e)
+    {
+        if (_photoPart is not { IsPending: false } part)
+        {
+            return;
+        }
+
+        if (_photoFailed)
+        {
+            _photoFailed = false;
+            ShowPhotoNote(null, string.Empty);
+            _ = LoadPhotoAsync(part, ++_photoLoad, again: true);
+            return;
+        }
+
+        _ = OpenMediaAsync(part);
+    }
+
+    // =========================================================================
+    // OPEN AND SAVE
+    // =========================================================================
+
+    // Writes The File To The Private Temp Folder And Opens It In Its Default App (A Test Run Only Notes The Path). Never
+    // Logs The Name Or Path: Only The Message ID. True When Opened
+    private async Task<bool> OpenMediaAsync(MediaPart part)
+    {
+        if ((Application.Current as App)?.Media is not { } media)
+        {
+            return false;
+        }
+
+        string message_id = Bubble?.Id ?? string.Empty;
+        try
+        {
+            string path = await media.SaveToTempAsync(part, CancellationToken.None);
+            bool launch = !TestHooks.RecordLaunch(path);
+            if (launch && !await Launcher.LaunchFileAsync(await StorageFile.GetFileFromPathAsync(path)))
+            {
+                AppLog.MediaFailed(App.ShellLog, "open", message_id, "NoApp");
+                return false;
+            }
+
+            AppLog.MediaOpened(App.ShellLog, message_id, launch);
+            return true;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            AppLog.MediaFailed(App.ShellLog, "open", message_id, ex.GetType().Name);
+            return false;
+        }
+    }
+
+    // The Menu's Open: As A Click On The Photo
+    private void OnOpenClick(object sender, RoutedEventArgs e)
+    {
+        if (Bubble?.Media is { IsPending: false } part)
+        {
+            _ = OpenMediaAsync(part);
+        }
+    }
+
+    // The Menu's Save As: The Windows Save Dialog Over This Window, Named As The Sender Named It (Made Safe)
+    private async void OnSaveAsClick(object sender, RoutedEventArgs e)
+    {
+        if (Bubble?.Media is not { IsPending: false } part || (Application.Current as App)?.Media is not { } media
+            || XamlRoot?.ContentIslandEnvironment is not { } island)
+        {
+            return;
+        }
+
+        string name      = MediaStore.SanitizeName(part.Name, part.Mime);
+        string extension = Path.GetExtension(name);
+        var picker       = new FileSavePicker
+        {
+            SuggestedFileName      = Path.GetFileNameWithoutExtension(name),
+            SuggestedStartLocation = PickerLocationId.Downloads,
+        };
+        picker.FileTypeChoices.Add(ChatCopy.File, [extension.Length > 1 ? extension : ".bin"]);
+        WinRT.Interop.InitializeWithWindow.Initialize(picker, Microsoft.UI.Win32Interop.GetWindowFromWindowId(island.AppWindowId));
+
+        string message_id = Bubble.Id;
+        try
+        {
+            if (await picker.PickSaveFileAsync() is not { } file)
+            {
+                return;
+            }
+
+            byte[] bytes = await media.GetAsync(part, thumbnail: false, CancellationToken.None);
+            await FileIO.WriteBytesAsync(file, bytes);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            AppLog.MediaFailed(App.ShellLog, "save", message_id, ex.GetType().Name);
+        }
     }
 
     private void ShowStates()

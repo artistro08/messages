@@ -168,10 +168,11 @@ public sealed partial class MediaStore
     /// is forgotten, so it can be tried again.
     /// </remarks>
     /// <param name="m">The message.</param>
+    /// <param name="again">True to ask again though asked before (the photo never came, and the person retries).</param>
     /// <returns>A task that completes when the phone accepted the request, or at once when nothing is asked.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="m"/> is null.</exception>
     /// <exception cref="MessagingUnavailableException">Not connected.</exception>
-    public async Task RequestFullSizeAsync(ChatMessage m)
+    public async Task RequestFullSizeAsync(ChatMessage m, bool again = false)
     {
         ArgumentNullException.ThrowIfNull(m);
 
@@ -184,6 +185,11 @@ public sealed partial class MediaStore
         lock (_lock)
         {
             client = _client() ?? throw new MessagingUnavailableException();
+            if (again)
+            {
+                _fullSizeAsked.Remove(m.Id);
+            }
+
             if (!_fullSizeAsked.Add(m.Id))
             {
                 return;

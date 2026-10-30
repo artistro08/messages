@@ -211,4 +211,62 @@ public sealed class MessageBubbleViewModelTests
         bubble.MarkFailed();
         Assert.IsFalse(bubble.CanAct);
     }
+
+    private static ChatMessage MediaMessage(MessageKind kind, string caption = "") =>
+        Message(caption) with
+        {
+            Kind  = kind,
+            Media = new MediaPart("media-1", [], string.Empty, [], [], "clip.mp4", 1234, 400, 300, kind, "video/mp4"),
+        };
+
+    [TestMethod]
+    public void Bubble_Photo_NoCaption_ShowsNoText()
+    {
+        var bubble = new MessageBubbleViewModel(MediaMessage(MessageKind.Photo) with { Text = string.Empty });
+
+        Assert.IsTrue(bubble.HasPhoto);
+        Assert.IsFalse(bubble.HasFileCard);
+        Assert.IsTrue(bubble.HasMediaFile);
+        Assert.IsFalse(bubble.HasBodyText);
+        Assert.AreEqual(ChatCopy.Photo, bubble.PhotoName);
+        Assert.AreEqual(ChatCopy.Photo, bubble.ToString());
+    }
+
+    [TestMethod]
+    public void Bubble_PhotoWithCaption_ShowsCaption()
+    {
+        var bubble = new MessageBubbleViewModel(MediaMessage(MessageKind.Photo, "At the beach"));
+
+        Assert.AreEqual("At the beach", bubble.BodyText);
+        Assert.AreEqual("At the beach", bubble.PhotoName);
+    }
+
+    [TestMethod]
+    public void Bubble_VideoAndFile_AreCards()
+    {
+        var video = new MessageBubbleViewModel(MediaMessage(MessageKind.Video) with { Text = string.Empty });
+        var file  = new MessageBubbleViewModel(MediaMessage(MessageKind.File) with { Text = string.Empty });
+
+        Assert.IsTrue(video.HasFileCard);
+        Assert.IsTrue(file.HasFileCard);
+        Assert.IsFalse(video.HasPhoto);
+        Assert.AreEqual("clip.mp4", video.FileName);
+        Assert.AreEqual(1234, video.FileSize);
+        Assert.IsFalse(video.HasBodyText);
+    }
+
+    [TestMethod]
+    [DataRow(400, 300, 560, 400, 300)]
+    [DataRow(1200, 900, 560, 480, 360)]
+    [DataRow(2000, 500, 560, 560, 140)]
+    [DataRow(1, 1, 560, 120, 120)]
+    [DataRow(0, 0, 560, 240, 240)]
+    [DataRow(0, 0, 200, 200, 200)]
+    public void PhotoSize_FitsTheBubble(int width, int height, double maxWidth, double expectedWidth, double expectedHeight)
+    {
+        (double w, double h) = MessageBubbleViewModel.PhotoSize(width, height, maxWidth);
+
+        Assert.AreEqual(expectedWidth, w);
+        Assert.AreEqual(expectedHeight, h);
+    }
 }

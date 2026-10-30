@@ -25,6 +25,16 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     // The First Link As Sent And Where It Sits In The Text: The Card's Link, Which The Card Replaces
     private TextLink? _link;
 
+    // The Message As Last Filled, For The Full-Size Photo Request
+    private ChatMessage _message = null!;
+
+    // The Photo Bubble's Height Cap, And The Size A Tiny Photo Grows To, In Effective Pixels
+    private const double MaxPhotoHeight = 360;
+    private const double MinPhotoSide   = 120;
+
+    // A Photo Without Dimensions Reserves A Square Of This Side
+    private const double UnknownPhotoSide = 240;
+
     /// <summary>
     /// Creates the bubble from a message.
     /// </summary>
@@ -200,6 +210,33 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     public string PreviewName => Preview is null || LinkUrl is null ? string.Empty
         : Preview.Title.Length > 0 ? $"{Preview.Title}, {LinkUrl.Host}" : LinkUrl.Host;
 
+    /// <summary>Gets the photo, video, voice message or file the message carries, or null.</summary>
+    public MediaPart? Media { get; private set; }
+
+    /// <summary>Gets whether the bubble shows a photo (a received or sent image).</summary>
+    public bool HasPhoto { get; private set; }
+
+    /// <summary>Gets whether the bubble shows a card for a video or a file.</summary>
+    public bool HasFileCard { get; private set; }
+
+    /// <summary>Gets whether the bubble shows a photo or a card, so its menu has Open and Save as.</summary>
+    public bool HasMediaFile => HasPhoto || HasFileCard;
+
+    /// <summary>Gets the card's file name: the sender's, or the kind label ("Video", "File") without one.</summary>
+    public string FileName => Media is { Name.Length: > 0 } media ? media.Name : ChatFormat.KindLabel(Kind);
+
+    /// <summary>Gets the size in bytes of the file the card shows, or 0 when unknown.</summary>
+    public long FileSize => Media?.Size ?? 0;
+
+    /// <summary>Gets the kind of message (Text, Photo, Video, File...).</summary>
+    public MessageKind Kind { get; private set; }
+
+    /// <summary>Gets whether the photo is still on its way from the phone (no media ID, thumbnail or inline data yet).</summary>
+    public bool IsMediaPending => Media?.IsPending == true;
+
+    /// <summary>Gets the photo's accessible name: its caption, else "Photo".</summary>
+    public string PhotoName => HasBodyText ? Text : ChatCopy.Photo;
+
     // The Link The Chat Asked A Preview For, So It Asks Once Per Link
     internal Uri? PreviewAskedFor { get; set; }
 
@@ -220,6 +257,55 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
 
         Fill(m);
         PropertyChanged?.Invoke(this, AllChanged);
+    }
+
+    /// <summary>
+    /// Gives the size a photo bubble reserves before its image loads, so nothing moves when it arrives.
+    /// </summary>
+    /// <remarks>
+    /// The photo's own <c>Dimensions</c>, scaled down to fit the bubble's width and 360 px of height with its aspect
+    /// kept. A tiny photo (both sides under 120 px) grows until its longer side is 120 px. Unknown dimensions reserve a
+    /// 240 px square (narrower when the bubble is), which the image then fills, cropped.
+    /// </remarks>
+    /// <param name="width">The photo's width in pixels, or 0 when unknown.</param>
+    /// <param name="height">The photo's height in pixels, or 0 when unknown.</param>
+    /// <param name="maxWidth">The widest the photo may be in the bubble, in effective pixels.</param>
+    /// <returns>The width and height to reserve, in whole effective pixels.</returns>
+    public static (double Width, double Height) PhotoSize(int width, int height, double maxWidth)
+    {
+        maxWidth = Math.Max(1, maxWidth);
+        if (width <= 0 || height <= 0)
+        {
+            double side = Math.Floor(Math.Min(UnknownPhotoSide, maxWidth));
+            return (side, side);
+        }
+
+        double scale = Math.Min(maxWidth / width, MaxPhotoHeight / height);
+        if (Math.Max(width, height) < MinPhotoSide)
+        {
+            scale = Math.Min(scale, MinPhotoSide / Math.Max(width, height));
+        }
+        else
+        {
+            scale = Math.Min(scale, 1);
+        }
+
+        return (Math.Max(1, Math.Floor(width * scale)), Math.Max(1, Math.Floor(height * scale)));
+    }
+
+    /// <summary>
+    /// Asks the phone for the full-size photo when only its thumbnail came (see <see cref="MediaStore.RequestFullSizeAsync"/>).
+    /// </summary>
+    /// <param name="media">The media store.</param>
+    /// <param name="again">True to ask again though asked before (a retry after the photo never came).</param>
+    /// <returns>A task that completes when the phone accepted the request, or at once when nothing is asked.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="media"/> is null.</exception>
+    /// <exception cref="MessagingUnavailableException">Not connected.</exception>
+    public Task RequestFullSizeAsync(MediaStore media, bool again = false)
+    {
+        ArgumentNullException.ThrowIfNull(media);
+
+        return media.RequestFullSizeAsync(_message, again);
     }
 
     /// <summary>
@@ -407,7 +493,14 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         _link         = m.Kind == MessageKind.Text ? LinkPreviewer.FirstTextLink(m.Text) : null;
         LinkUrl       = _link?.Url;
         Preview       = Preview?.Url == LinkUrl ? Preview : null;
-        BodyText      = BodyOf(Text, DisplayText, _link, Preview);
+        _message      = m;
+        Kind          = m.Kind;
+        Media         = m.Media;
+        HasPhoto      = m.Media is not null && m.Kind == MessageKind.Photo;
+        HasFileCard   = m.Media is not null && m.Kind is MessageKind.Video or MessageKind.File;
+
+        // A Photo Or Card Shows Only Its Caption Under It, Not The Kind Label
+        BodyText      = HasMediaFile && m.Text.Length == 0 ? string.Empty : BodyOf(Text, DisplayText, _link, Preview);
     }
 
     // The Text Shown In The Bubble: Without The Card's Link While The Card Shows. The Space On Either Side Of The Address
