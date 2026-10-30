@@ -68,6 +68,12 @@ public sealed class ShortcutMapTests
     [DataRow(false, true)]
     public void AltH_WithoutExactlyCtrl_IsNull(bool ctrl, bool shift) => Assert.IsNull(ShortcutMap.Resolve(VirtualKey.H, ctrl, shift, true, false));
 
+    // Ruling R5-7: AltGr Is Left Ctrl + Right Alt, So With Right Alt Down The Key Is Left To The Layout
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public void CtrlRightAltH_IsNull(bool focusInTextBox) => Assert.IsNull(ShortcutMap.Resolve(VirtualKey.H, true, false, true, focusInTextBox, rightAlt: true));
+
     [TestMethod]
     public void CtrlH_WithoutAlt_IsNull() => Assert.IsNull(ShortcutMap.Resolve(VirtualKey.H, true, false, false, false));
 

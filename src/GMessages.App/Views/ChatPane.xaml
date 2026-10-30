@@ -45,13 +45,17 @@
 
     <Grid RowDefinitions="Auto,*,Auto,Auto,Auto">
 
-        <!-- Header: avatar and name, with the lock after it in an encrypted chat (a narrow window's back is the title bar's) -->
+        <!-- Header: avatar and name, with the lock after it in an encrypted chat (a narrow window's back is the title bar's),
+             and the ⋮ at the right edge. Transparent, so a right-click anywhere on it opens the same menu -->
         <Grid
-            Padding="12,8,16,8"
+            x:Name="HeaderBar"
+            Padding="12,8,8,8"
+            Background="Transparent"
             BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
             BorderThickness="0,0,0,1"
-            ColumnDefinitions="Auto,*"
-            ColumnSpacing="12">
+            ColumnDefinitions="Auto,*,Auto"
+            ColumnSpacing="12"
+            ContextRequested="OnHeaderContextRequested">
             <controls:Avatar
                 VerticalAlignment="Center"
                 Color="{x:Bind Chat.AvatarColor, Mode=OneWay, FallbackValue=0}"
@@ -84,7 +88,24 @@
                     ToolTipService.ToolTip="{x:Bind local:ChatPane.EncryptedText}"
                     Visibility="{x:Bind Chat.IsEncrypted, Mode=OneWay, FallbackValue=Collapsed}" />
             </Grid>
+
+            <!-- More Options: the ⋮, styled like a list row's -->
+            <Button
+                x:Name="MoreButton"
+                Grid.Column="2"
+                Width="32"
+                Height="32"
+                Padding="0"
+                VerticalAlignment="Center"
+                AutomationProperties.AutomationId="Chat.More"
+                AutomationProperties.Name="{x:Bind local:ChatPane.MoreOptionsText}"
+                Click="OnMoreClick"
+                Style="{StaticResource SubtleButtonStyle}"
+                ToolTipService.ToolTip="{x:Bind local:ChatPane.MoreOptionsText}">
+                <FontIcon FontSize="16" Glyph="&#xE712;" />
+            </Button>
         </Grid>
+        <!-- /Header -->
 
         <!-- Messages: oldest at the top, kept scrolled to the newest; reaching the top loads older ones -->
         <ListView

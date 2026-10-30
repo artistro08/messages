@@ -175,8 +175,8 @@ internal static class ConversationMenuFlyout
         return dialog;
     }
 
-    // Shows The Dialog Unless Another Is Open; True When Its Primary Button Was Picked
-    private static async Task<bool> ShowAsync(ContentDialog dialog)
+    // Shows The Dialog Unless Another Is Open (Details Shows Through Here Too); True When Its Primary Button Was Picked
+    internal static async Task<bool> ShowAsync(ContentDialog dialog)
     {
         if (_dialogOpen)
         {

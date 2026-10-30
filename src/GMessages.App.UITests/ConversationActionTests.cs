@@ -328,8 +328,233 @@ public sealed partial class ConversationActionTests : UiTest
     }
 
     // =========================================================================
+    // CHAT HEADER AND DETAILS
+    // =========================================================================
+
+    /// <summary>
+    /// The chat header's ⋮ (named More options) opens Ann's menu with Details first, then her actions; a right-click on
+    /// the header opens the same menu.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task HeaderMenu_HasDetailsAndActions()
+    {
+        await OpenChatAsync("Row.c-ann");
+
+        // The ⋮
+        AutomationElement more = App.Find("Chat.More");
+        Assert.AreEqual(ChatCopy.MoreOptions, AppDriver.SafeName(more));
+        more.Patterns.Invoke.Pattern.Invoke();
+        foreach (string item in (string[])["Details", "Archive", "Mute", "BlockAndReport", "MoveToTrash"])
+        {
+            App.Find("Conversation." + item);
+        }
+
+        Keyboard.Type(VirtualKeyShort.ESCAPE);
+        WaitForGone("Conversation.Details");
+
+        // Right-Click On The Header
+        App.Find("Chat.Header").RightClick();
+        App.Find("Conversation.Details");
+        App.Find("Conversation.MoveToTrash");
+        Keyboard.Type(VirtualKeyShort.ESCAPE);
+    }
+
+    /// <summary>
+    /// Move to trash from the header's menu, once confirmed, closes the chat: the empty state shows and the header goes.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task HeaderTrash_ClosesChat()
+    {
+        await OpenChatAsync("Row.c-ann");
+
+        Invoke("Chat.More");
+        Invoke("Conversation.MoveToTrash");
+        DialogButton(App.Find("Dialog.Trash"), ChatCopy.MoveToTrash).Patterns.Invoke.Pattern.Invoke();
+
+        WaitForUpdates(1);
+        Assert.AreEqual(ConversationActionStatus.Delete, Server.Phone.ConversationUpdates[0].Action);
+        App.Find("Main.EmptyState");
+        WaitForGone("Chat.Header");
+    }
+
+    /// <summary>
+    /// Team's Details lists Bo and Cy with their numbers, shows Mute off, and offers no Block &amp; report spam.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Details_Team_ListsBoAndCy_NoBlock()
+    {
+        await OpenChatAsync("Row.c-team");
+
+        Invoke("Chat.More");
+        Invoke("Conversation.Details");
+
+        AutomationElement dialog = App.Find("Dialog.Details");
+        foreach (string text in (string[])[ChatCopy.People, "Bo", "+15550000002", "Cy", "+15550000003"])
+        {
+            Wait.Until(() => AppDriver.Search(dialog, e => AppDriver.SafeName(e) == text) is not null, AppDriver.DefaultTimeout,
+                () => $"Details didn't show '{text}'.");
+        }
+
+        Assert.AreEqual(ToggleState.Off, App.Find("Details.Mute").Patterns.Toggle.Pattern.ToggleState.Value);
+        Assert.IsNull(App.TryFind("Details.Block"), "Team's Details offered Block & report spam.");
+
+        DialogButton(dialog, ChatCopy.Close).Patterns.Invoke.Pattern.Invoke();
+        WaitForGone("Dialog.Details");
+    }
+
+    /// <summary>
+    /// Flipping Details' Mute on sends the phone a mute at once, and the row shows the muted icon.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Details_MuteToggle_SendsMute()
+    {
+        await OpenChatAsync("Row.c-ann");
+        Invoke("Chat.More");
+        Invoke("Conversation.Details");
+
+        App.Find("Details.Mute").Patterns.Toggle.Pattern.Toggle();
+
+        WaitForUpdates(1);
+        Assert.AreEqual(ConversationMuteStatus.Mute, Server.Phone.ConversationUpdates[0].UpdateData.Mute);
+        App.Find("Row.Muted.c-ann");
+        Assert.AreEqual(ToggleState.On, App.Find("Details.Mute").Patterns.Toggle.Pattern.ToggleState.Value);
+    }
+
+    /// <summary>
+    /// When the phone refuses the mute, Details' toggle flips back off without sending a second request.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Details_MuteFails_TogglesBack()
+    {
+        await OpenChatAsync("Row.c-ann");
+        Server.Phone.FailConversationUpdates = true;
+        Invoke("Chat.More");
+        Invoke("Conversation.Details");
+
+        AutomationElement toggle = App.Find("Details.Mute");
+        toggle.Patterns.Toggle.Pattern.Toggle();
+
+        WaitForUpdates(1);
+        Wait.Until(() => toggle.Patterns.Toggle.Pattern.ToggleState.Value == ToggleState.Off, AppDriver.DefaultTimeout,
+            () => "Mute stayed on after the phone refused.");
+        Thread.Sleep(500);
+        Assert.HasCount(1, Server.Phone.ConversationUpdates, "Flipping the toggle back sent the phone another update.");
+    }
+
+    /// <summary>
+    /// Details' Block &amp; report spam closes Details, then asks as the menu does; Block sends a block-and-report.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Details_Block_ClosesThenAsks()
+    {
+        await OpenChatAsync("Row.c-ann");
+        Invoke("Chat.More");
+        Invoke("Conversation.Details");
+
+        Invoke("Details.Block");
+        AutomationElement dialog = App.Find("Dialog.Block");
+        Assert.IsNull(App.TryFind("Dialog.Details"), "Details stayed open under the Block dialog.");
+        DialogButton(dialog, ChatCopy.Block).Patterns.Invoke.Pattern.Invoke();
+
+        WaitForUpdates(1);
+        Assert.AreEqual(ConversationActionStatus.BlockAndReport, Server.Phone.ConversationUpdates[0].Action);
+    }
+
+    // =========================================================================
+    // SHORTCUTS
+    // =========================================================================
+
+    /// <summary>
+    /// Ctrl + Shift + o in the message box opens the open chat's Details.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task CtrlShiftO_OpensDetails()
+    {
+        await OpenChatAsync("Row.c-ann");
+
+        Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.SHIFT, VirtualKeyShort.KEY_O);
+
+        App.Find("Dialog.Details");
+        App.Find("Details.Block");
+    }
+
+    /// <summary>
+    /// Ctrl + d asks first; Move to trash sends a delete and closes the chat.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task CtrlD_AsksThenTrashes()
+    {
+        await OpenChatAsync("Row.c-ann");
+
+        Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_D);
+        DialogButton(App.Find("Dialog.Trash"), ChatCopy.MoveToTrash).Patterns.Invoke.Pattern.Invoke();
+
+        WaitForUpdates(1);
+        Assert.AreEqual(ConversationActionStatus.Delete, Server.Phone.ConversationUpdates[0].Action);
+        App.Find("Main.EmptyState");
+        WaitForGone("Row.c-ann");
+    }
+
+    /// <summary>
+    /// A second Ctrl + d while the trash dialog is open opens no second dialog: once Cancel closes it, none is left and
+    /// nothing was sent.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task CtrlD_Twice_OneDialog()
+    {
+        await OpenChatAsync("Row.c-ann");
+
+        Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_D);
+        AutomationElement dialog = App.Find("Dialog.Trash");
+        Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_D);
+        Thread.Sleep(500);
+
+        DialogButton(dialog, ChatCopy.Cancel).Patterns.Invoke.Pattern.Invoke();
+        WaitForGone("Dialog.Trash");
+        Thread.Sleep(500);
+        Assert.IsNull(App.TryFind("Dialog.Trash"), "A second trash dialog showed after the first closed.");
+        Assert.IsEmpty(Server.Phone.ConversationUpdates, "Cancel still sent the phone an update.");
+        App.Find("Chat.Draft");
+    }
+
+    /// <summary>
+    /// Ctrl + Alt + h in the message box archives the open chat, which closes it.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task CtrlAltH_Archives()
+    {
+        await OpenChatAsync("Row.c-ann");
+
+        Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.ALT, VirtualKeyShort.KEY_H);
+
+        WaitForUpdates(1);
+        Assert.AreEqual(ConversationStatus.Archived, Server.Phone.ConversationUpdates[0].UpdateData.Status);
+        App.Find("Main.EmptyState");
+        WaitForGone("Row.c-ann");
+    }
+
+    // =========================================================================
     // HELPERS
     // =========================================================================
+
+    // Opens A Row's Chat From The List; Opening It Puts The Cursor In The Message Box, Where Keys Then Go
+    private async Task OpenChatAsync(string rowId)
+    {
+        await OpenListAsync();
+        App.Find(rowId).Patterns.SelectionItem.Pattern.Select();
+        Wait.Until(() => App.TryFind("Chat.Draft")?.Properties.HasKeyboardFocus.ValueOrDefault == true, AppDriver.DefaultTimeout,
+            () => "The message box never took focus.");
+    }
 
     // Pairs, Opens The Window And Brings It To The Front (Mouse And Keys Go To The Foreground Window)
     private async Task OpenListAsync()

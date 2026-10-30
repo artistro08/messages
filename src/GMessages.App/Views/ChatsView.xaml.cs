@@ -51,8 +51,9 @@ namespace GMessages.App.Views;
 /// </para>
 /// <para>
 /// A row's menu (archive, mute, block &amp; report spam, move to trash) opens on right-click, the Application key or
-/// Shift + F10 on the row, and from the ⋮ the row shows on hover (<see cref="ConversationMenuFlyout"/>). A failed action
-/// shows the banner above the list.
+/// Shift + F10 on the row, and from the ⋮ the row shows on hover (<see cref="ConversationMenuFlyout"/>). The open chat's
+/// header has the same menu with Details first (<see cref="ConversationDetailsDialog"/>); Ctrl + Shift + o, Ctrl + d
+/// and Ctrl + Alt + h run its Details, Move to trash and Archive. A failed action shows the banner above the list.
 /// </para>
 /// </remarks>
 public sealed partial class ChatsView : UserControl
@@ -103,6 +104,7 @@ public sealed partial class ChatsView : UserControl
         ViewModel.PropertyChanged += OnViewModelChanged;
         ConversationList.AddHandler(KeyDownEvent, new KeyEventHandler(OnListKeyDown), handledEventsToo: true);
         ConversationList.PreviewKeyDown += OnListPreviewKeyDown;
+        ChatView.MenuRequested          += OnChatMenuRequested;
         ShowCurrentList();
         _ = ViewModel.Inbox.LoadAsync();
     }
@@ -433,16 +435,25 @@ public sealed partial class ChatsView : UserControl
         return element;
     }
 
+    // The Chat Header's ⋮ Or Right-Click: The Open Chat's Menu, With Details
+    private void OnChatMenuRequested(object? sender, (FrameworkElement Target, Windows.Foundation.Point? Position) e)
+    {
+        if (ViewModel.Chat is { } chat)
+        {
+            ShowConversationMenu(chat.ConversationId, e.Target, e.Position, from: null, inHeader: true);
+        }
+    }
+
     // Opens A Conversation's Menu, Read Fresh From The Store So It Matches The Conversation Now (Archived, Muted). Opened
     // From A Row's ⋮, That ⋮ Stays Shown Until The Menu Closes
-    private void ShowConversationMenu(string conversationId, FrameworkElement target, Windows.Foundation.Point? position, ConversationRow? from)
+    private void ShowConversationMenu(string conversationId, FrameworkElement target, Windows.Foundation.Point? position, ConversationRow? from, bool inHeader = false)
     {
         if (ViewModel.FindConversation(conversationId) is not { } c || XamlRoot is not { } root)
         {
             return;
         }
 
-        MenuFlyout menu = ConversationMenuFlyout.Build(ConversationMenu.For(c, inHeader: false), item => RunMenuItem(root, c, item));
+        MenuFlyout menu = ConversationMenuFlyout.Build(ConversationMenu.For(c, inHeader), item => RunMenuItem(root, c, item));
         if (from is not null)
         {
             from.KeepShown(true);
@@ -455,7 +466,43 @@ public sealed partial class ChatsView : UserControl
     // Async Void Like A Click Handler, So A Failure Reaches The App's Unhandled Error Log (The Action's Own Failures Show
     // The Banner)
     private async void RunMenuItem(XamlRoot root, ConversationInfo c, ConversationMenuItem item) =>
-        await ConversationMenuFlyout.RunAsync(ViewModel, root, c, item, showDetails: null);
+        await ConversationMenuFlyout.RunAsync(ViewModel, root, c, item, () => ShowDetailsAsync(root, c.Id));
+
+    // Details, Read Fresh From The Store (One Dialog At A Time, As The Menu's). Its Block & Report Spam Closes It, Then
+    // Asks As The Menu Does
+    private async Task ShowDetailsAsync(XamlRoot root, string conversationId)
+    {
+        if (ViewModel.FindConversation(conversationId) is not { } c)
+        {
+            return;
+        }
+
+        var dialog = new ConversationDetailsDialog(ViewModel, c)
+        {
+            XamlRoot       = root,
+            RequestedTheme = root.Content.As<FrameworkElement>().ActualTheme,
+        };
+        await ConversationMenuFlyout.ShowAsync(dialog);
+
+        if (dialog.IsBlockPicked && ViewModel.FindConversation(conversationId) is { } now)
+        {
+            await ConversationMenuFlyout.RunAsync(ViewModel, root, now, ConversationMenuItem.BlockAndReport, showDetails: null);
+        }
+    }
+
+    // A Conversation Shortcut On The Open Chat, Read Fresh From The Store; Not Handled With No Chat Open. Archive Only
+    // From The Inbox
+    private bool RunOnOpenChat(ConversationMenuItem item)
+    {
+        if (!ViewModel.IsChatOpen || ViewModel.Chat is not { } chat || ViewModel.FindConversation(chat.ConversationId) is not { } c
+            || XamlRoot is not { } root || (item == ConversationMenuItem.Archive && !c.IsMainView))
+        {
+            return false;
+        }
+
+        RunMenuItem(root, c, item);
+        return true;
+    }
 
     // A List Width That Fits: No Narrower Than Its Minimum, No Wider Than Half The View (Unless That Is Below The Minimum)
     private static double FitListWidth(double width, double viewWidth) =>
@@ -512,6 +559,16 @@ public sealed partial class ChatsView : UserControl
             case ShortcutCommand.PreviousConversation:
                 ViewModel.PreviousConversation();
                 return true;
+
+            // The Open Chat's Menu Items: Details, Move To Trash (Asks First) And Archive
+            case ShortcutCommand.ShowDetails:
+                return RunOnOpenChat(ConversationMenuItem.Details);
+
+            case ShortcutCommand.DeleteConversation:
+                return RunOnOpenChat(ConversationMenuItem.MoveToTrash);
+
+            case ShortcutCommand.ArchiveConversation:
+                return RunOnOpenChat(ConversationMenuItem.Archive);
 
             default:
                 return false;
