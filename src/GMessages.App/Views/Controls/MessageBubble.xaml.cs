@@ -97,6 +97,9 @@ public sealed partial class MessageBubble : UserControl
     private bool _pointerOver;
     private bool _keepShown;
 
+    // Whether The Bubble Took The Strip When Last Seen, So A Change (Sending To Sent) Shows Or Hides It Under The Pointer
+    private bool _canAct;
+
     // The Image Bytes The Card Shows (Or Is Decoding), So A Change Decodes Once
     private byte[]? _previewImage;
 
@@ -372,6 +375,7 @@ public sealed partial class MessageBubble : UserControl
         var view          = (MessageBubble)d;
         view._pointerOver = false;
         view._keepShown   = false;
+        view._canAct      = view.Bubble?.CanAct == true;
         VisualStateManager.GoToState(view, "Hidden", false);
 
         if (e.OldValue is MessageBubbleViewModel old_bubble)
@@ -395,6 +399,21 @@ public sealed partial class MessageBubble : UserControl
         ShowText();
         ShowStates();
         ShowPreviewImage();
+        ShowHoverStrip();
+    }
+
+    // A Bubble Under The Pointer That Starts Or Stops Taking The Strip (An Echo Turns Sending Into Sent) Shows Or Hides
+    // It Without The Pointer Moving
+    private void ShowHoverStrip()
+    {
+        bool can_act = Bubble?.CanAct == true;
+        if (can_act == _canAct)
+        {
+            return;
+        }
+
+        _canAct = can_act;
+        VisualStateManager.GoToState(this, can_act && (_pointerOver || _keepShown) ? "Shown" : "Hidden", Ui.AnimationsEnabled);
     }
 
     // Decodes The Card's Image From Its Bytes; Bytes Windows Can't Read Leave The Card Without One
@@ -580,10 +599,31 @@ public sealed partial class MessageBubble : UserControl
     // The Pill Or The Menu's React: The Picker Opens Over The Back
     private void OnReactClick(object sender, RoutedEventArgs e) => ReactRequested?.Invoke(this, Back);
 
-    // The Strip's React: The Picker Opens Over The Button
-    private void OnHoverReactClick(object sender, RoutedEventArgs e) => ReactRequested?.Invoke(this, HoverReact);
+    // The Strip's Buttons Act Only While The Bubble Takes Them (A Click Can Race A Change). Its React Opens The Picker
+    // Over The Button
+    private void OnHoverReactClick(object sender, RoutedEventArgs e)
+    {
+        if (Bubble?.CanAct == true)
+        {
+            ReactRequested?.Invoke(this, HoverReact);
+        }
+    }
 
-    private void OnHoverMoreClick(object sender, RoutedEventArgs e) => ShowMenu(HoverMore);
+    private void OnHoverReplyClick(object sender, RoutedEventArgs e)
+    {
+        if (Bubble?.CanAct == true)
+        {
+            ReplyRequested?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    private void OnHoverMoreClick(object sender, RoutedEventArgs e)
+    {
+        if (Bubble?.CanAct == true)
+        {
+            ShowMenu(HoverMore);
+        }
+    }
 
     // Only A Bubble That Can Take Them Shows The Strip
     private void OnPointerEntered(object sender, PointerRoutedEventArgs e)
