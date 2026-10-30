@@ -84,24 +84,6 @@ public sealed class VoiceDraftTests
     }
 
     /// <summary>
-    /// The microphone off (or missing) goes back to Idle with the settings message, deleting any file; the next start hides it.
-    /// </summary>
-    [TestMethod]
-    public void MicrophoneOff_IdleWithMessage_UntilNextStart()
-    {
-        var voice = new VoiceDraft();
-        voice.Start(_path);
-
-        voice.MicrophoneOff();
-        Assert.IsTrue(voice.IsIdle);
-        Assert.IsTrue(voice.IsMicrophoneOff);
-        Assert.IsFalse(File.Exists(_path));
-
-        voice.Start(_path);
-        Assert.IsFalse(voice.IsMicrophoneOff);
-    }
-
-    /// <summary>
     /// Send sends the recording first as "Voice message.m4a" (audio/mp4), then the text; closing the chat drops a
     /// recording in progress with its file.
     /// </summary>

@@ -80,6 +80,29 @@ internal static class TestHooks
     }
 
     /// <summary>
+    /// When pointed at the fake server, writes a part's internal state to <c>{data folder}\{name}.txt</c> (replacing it),
+    /// for the tests to read, such as the voice player's real playback state and position. Does nothing on a normal run.
+    /// </summary>
+    /// <param name="name">The file's name, without <c>.txt</c>.</param>
+    /// <param name="state">The state, one line.</param>
+    public static void NoteState(string name, string state)
+    {
+        if (!BlockLaunches || DataDir is null)
+        {
+            return;
+        }
+
+        try
+        {
+            File.WriteAllText(Path.Combine(DataDir, name + ".txt"), state);
+        }
+        catch (IOException)
+        {
+            // The Test Is Reading It: The Next Note Lands
+        }
+    }
+
+    /// <summary>
     /// When pointed at the fake server, stands in for the file picker: notes which picker opened ("files" or "photos")
     /// in <c>{data folder}\picker.txt</c>, and answers with the full paths in <c>{data folder}\pick.txt</c> (one per
     /// line), which it then deletes. No real picker ever opens in a test.
@@ -174,6 +197,13 @@ internal static class TestHooks
     /// <param name="element">The element.</param>
     /// <param name="state">The state's name.</param>
     public static void ShowState(Microsoft.UI.Xaml.DependencyObject element, string state)
+    {
+    }
+
+    /// <summary>Does nothing in Release.</summary>
+    /// <param name="name">The file's name.</param>
+    /// <param name="state">The state.</param>
+    public static void NoteState(string name, string state)
     {
     }
 

@@ -22,7 +22,9 @@ public sealed record VoiceRequest(string Key, byte[] Audio, TimeSpan Length, dou
 /// <para>
 /// The audio plays from memory (never from disk). While a message plays, its <see cref="VoiceRequest.Show"/> hears how
 /// much has played ten times a second; when it pauses, ends or another message starts, it hears that too. The player
-/// stays off the system media controls, so no message shows there. A test run plays muted.
+/// stays off the system media controls, so no message shows there. It plays as media, so it reaches the default
+/// speakers (a communications stream goes to the default communications device instead). A test run plays muted, and
+/// notes the player's real state for the tests (<see cref="TestHooks.NoteState"/>).
 /// </para>
 /// <para>
 /// The pane disposes it on a chat switch and when it unloads, which stops the playing message and lets go of the
@@ -110,7 +112,8 @@ internal sealed class VoicePlayer : IDisposable
 
         if (_player is not null)
         {
-            _player.MediaEnded -= OnMediaEnded;
+            _player.MediaEnded  -= OnMediaEnded;
+            _player.MediaFailed -= OnMediaFailed;
             _player.Dispose();
             _player = null;
         }
@@ -123,7 +126,9 @@ internal sealed class VoicePlayer : IDisposable
     /// <inheritdoc/>
     public void Dispose() => Stop();
 
-    // A New Player Over The Audio In Memory, Starting At The Seek (Off The System Media Controls; Muted In A Test Run)
+    // A New Player Over The Audio In Memory, Starting At The Seek (Off The System Media Controls; Muted In A Test Run).
+    // Media, Not Communications: Windows Sends A Communications Stream To The Default Communications Device (Often A
+    // Headset Or A USB Microphone's Jack), So It Was Silent On The Speakers
     private void Load(VoiceRequest request)
     {
         _key    = request.Key;
@@ -134,13 +139,18 @@ internal sealed class VoicePlayer : IDisposable
         var source = MediaSource.CreateFromStream(_stream, "audio/mp4");
         _player    = new MediaPlayer
         {
-            AudioCategory = MediaPlayerAudioCategory.Communications,
+            AudioCategory = MediaPlayerAudioCategory.Media,
             IsMuted       = TestHooks.BlockLaunches,
             Source        = new MediaPlaybackItem(source, _length * (request.SeekTo ?? 0)),
         };
         _player.CommandManager.IsEnabled = false;
         _player.MediaEnded              += OnMediaEnded;
+        _player.MediaFailed             += OnMediaFailed;
     }
+
+    // Raised Off The UI Thread: The Audio Couldn't Play
+    private void OnMediaFailed(MediaPlayer sender, MediaPlayerFailedEventArgs args) =>
+        TestHooks.NoteState("voice-failed", FormattableString.Invariant($"{args.Error} 0x{args.ExtendedErrorCode?.HResult ?? 0:X8}"));
 
     // Raised Off The UI Thread: Back To The Start, Shown Stopped
     private void OnMediaEnded(MediaPlayer sender, object args) => _queue.TryEnqueue(() =>
@@ -182,6 +192,10 @@ internal sealed class VoicePlayer : IDisposable
         {
             return;
         }
+
+        // Test Run: The Player's Real State, Position And Length (Seconds)
+        MediaPlaybackSession session = player.PlaybackSession;
+        TestHooks.NoteState("voice-player", FormattableString.Invariant($"{session.PlaybackState} {session.Position.TotalSeconds:0.00} {session.NaturalDuration.TotalSeconds:0.00} {player.AudioCategory}"));
 
         double total = Duration().TotalSeconds;
         show(_playing, total > 0 ? player.PlaybackSession.Position.TotalSeconds / total : 0);

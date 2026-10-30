@@ -40,6 +40,28 @@ public sealed class VoiceWaveTests
     }
 
     /// <summary>
+    /// The live level of a frame of 32-bit float samples is its loudest sample: a 440 Hz sine at 0.5 reads 0.5,
+    /// clipping caps at 1, and silence, no samples or a partial sample read 0.
+    /// </summary>
+    [TestMethod]
+    public void Level_LoudestFloatSample()
+    {
+        // A 440 Hz Sine At Half Volume, 48 kHz Stereo, 10 ms
+        float[] sine = new float[480 * 2];
+        for (int i = 0; i < sine.Length; i++)
+        {
+            sine[i] = (float)(0.5 * Math.Sin(2 * Math.PI * 440 * (i / 2) / 48000.0));
+        }
+
+        Assert.AreEqual(0.5f, VoiceWave.LevelOf(Floats(sine)), 0.01f);
+        Assert.AreEqual(0.8f, VoiceWave.LevelOf(Floats(0.1f, -0.8f, 0.3f)), 0.0001f);
+        Assert.AreEqual(1f, VoiceWave.LevelOf(Floats(1.7f, -0.2f)));
+        Assert.AreEqual(0f, VoiceWave.LevelOf(Floats(0f, 0f)));
+        Assert.AreEqual(0f, VoiceWave.LevelOf([]));
+        Assert.AreEqual(0f, VoiceWave.LevelOf([1, 2, 3]));
+    }
+
+    /// <summary>
     /// A WAV file gives its bars and its length from the sample rate; an unfinished one (data size 0) reads to the end.
     /// </summary>
     [TestMethod]
@@ -91,6 +113,10 @@ public sealed class VoiceWaveTests
 
         return bytes;
     }
+
+    // 32-Bit Float Samples, As An Audio Graph's Frame Holds Them
+    private static byte[] Floats(params float[] samples) =>
+        System.Runtime.InteropServices.MemoryMarshal.AsBytes(samples.AsSpan()).ToArray();
 
     // A Mono 16-Bit PCM WAV File, With A LIST Chunk Before The Samples As Some Writers Add
     private static byte[] Wav(byte[] samples, int rate, uint dataSize)

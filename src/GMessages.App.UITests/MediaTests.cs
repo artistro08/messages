@@ -364,6 +364,7 @@ public sealed partial class MediaTests : UiTest
         play.Patterns.Invoke.Pattern.Invoke();
         WaitForStatus(play, "Playing");
         Assert.AreEqual(ChatCopy.Pause, AppDriver.SafeName(play), "The playing message's button isn't Pause.");
+        WaitForPlayback();
 
         play.Patterns.Invoke.Pattern.Invoke();
         WaitForStatus(play, "Paused");
@@ -383,13 +384,30 @@ public sealed partial class MediaTests : UiTest
         Assert.AreEqual(ChatCopy.RecordVoiceMessage, AppDriver.SafeName(App.Find("Chat.Record")), "The mic has another name.");
 
         App.Find("Chat.Record").Patterns.Invoke.Pattern.Invoke();
-        App.Find("Chat.RecordTimer");
+        AutomationElement timer = App.Find("Chat.RecordTimer");
         Wait.Until(() => VoiceTempFiles().Length == 1, AppDriver.DefaultTimeout, () => "Recording wrote no temp file.");
+
+        // The Live Waveform Moves (The Fake Recorder's Level Follows A Wave) And The Timer Runs
+        string level_file    = Path.Combine(App.DataDir, "record-level.txt");
+        HashSet<string> seen = [];
+        Wait.Until(() =>
+        {
+            string level = File.Exists(level_file) ? ReadShared(level_file) : string.Empty;
+            if (double.TryParse(level, System.Globalization.CultureInfo.InvariantCulture, out double value) && value > 0)
+            {
+                seen.Add(level);
+            }
+
+            return seen.Count >= 3;
+        }, AppDriver.DefaultTimeout, () => $"The live waveform didn't move: levels seen {string.Join(", ", seen)}.");
+        Wait.Until(() => AppDriver.SafeName(timer) == "0:01", AppDriver.DefaultTimeout, () => $"The timer stayed '{AppDriver.SafeName(timer)}'.");
         App.Find("Chat.StopRecording").Patterns.Invoke.Pattern.Invoke();
 
         AutomationElement length = App.Find("Chat.VoiceLength");
         Wait.Until(() => AppDriver.SafeName(length) == "0:03", AppDriver.DefaultTimeout, () => $"The preview chip shows '{AppDriver.SafeName(length)}', not 0:03.");
         Assert.AreEqual(ChatCopy.Play, AppDriver.SafeName(App.Find("Chat.VoicePlay")), "The preview's play button has another name.");
+        App.Find("Chat.VoicePlay").Patterns.Invoke.Pattern.Invoke();
+        WaitForPlayback();
 
         App.Find("Chat.Send").Patterns.Invoke.Pattern.Invoke();
         Wait.Until(() => Server.Phone.Sent.Count == 1, AppDriver.DefaultTimeout, () => $"The phone got {Server.Phone.Sent.Count} sends, not the voice message.");
@@ -423,40 +441,49 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// With microphone access off, the mic shows the settings message with its link to Windows' microphone privacy
-    /// settings, and no recording starts.
+    /// With microphone access off, the mic shows the app's microphone dialog (title and text), no recording starts,
+    /// and Cancel closes it without opening anything.
     /// </summary>
     /// <returns>A task for the test.</returns>
     [TestMethod]
-    public async Task MicDenied_ShowsSettingsLink()
+    public async Task MicDenied_ShowsMicrophoneDialog()
     {
         File.WriteAllText(Path.Combine(App.DataDir, "microphone.txt"), "denied");
         await OpenMediaChatAsync();
 
         App.Find("Chat.Record").Patterns.Invoke.Pattern.Invoke();
-        AutomationElement error = App.Find("Chat.MicError");
-        Assert.AreEqual(ChatCopy.MicrophoneOff, AppDriver.SafeName(error), "The microphone message reads otherwise.");
-        Assert.AreEqual("Settings > Privacy & security > Microphone", AppDriver.SafeName(App.Find("Chat.MicSettings")), "The settings link reads otherwise.");
+        AutomationElement dialog = App.Find("Dialog.Microphone");
+        foreach (string text in (string[])[ChatCopy.MicrophoneTitle, ChatCopy.MicrophoneText])
+        {
+            Wait.Until(() => AppDriver.Search(dialog, e => AppDriver.SafeName(e) == text) is not null, AppDriver.DefaultTimeout,
+                () => $"The microphone dialog didn't show '{text}'.");
+        }
+
         Assert.IsNull(App.TryFind("Chat.StopRecording"), "A recording started with the microphone off.");
         Assert.IsEmpty(VoiceTempFiles(), "A refused recording left a temp file.");
+
+        DialogButton(dialog, ChatCopy.Cancel).Patterns.Invoke.Pattern.Invoke();
+        WaitForGone("Dialog.Microphone");
+        Assert.IsFalse(File.Exists(Path.Combine(App.DataDir, "launched.txt")), "Cancel opened something.");
+        Assert.IsTrue(App.Find("Chat.Record").IsEnabled, "The mic isn't back after Cancel.");
     }
 
     /// <summary>
-    /// The settings message's link opens Windows' microphone privacy page (the test hook notes the address instead of
-    /// launching it).
+    /// The microphone dialog's Open settings opens Windows' microphone privacy page (the test hook notes the address
+    /// instead of launching it).
     /// </summary>
     /// <returns>A task for the test.</returns>
     [TestMethod]
-    public async Task MicDenied_SettingsLink_OpensMicrophonePage()
+    public async Task MicDenied_OpenSettings_OpensMicrophonePage()
     {
         File.WriteAllText(Path.Combine(App.DataDir, "microphone.txt"), "denied");
         await OpenMediaChatAsync();
 
         App.Find("Chat.Record").Patterns.Invoke.Pattern.Invoke();
-        App.Find("Chat.MicSettings").Patterns.Invoke.Pattern.Invoke();
+        DialogButton(App.Find("Dialog.Microphone"), ChatCopy.OpenSettings).Patterns.Invoke.Pattern.Invoke();
         string launched = Path.Combine(App.DataDir, "launched.txt");
-        Wait.Until(() => File.Exists(launched), AppDriver.DefaultTimeout, () => "The settings link opened nothing.");
-        Assert.AreEqual("ms-settings:privacy-microphone", File.ReadAllLines(launched)[^1], "The settings link opened another page.");
+        Wait.Until(() => File.Exists(launched), AppDriver.DefaultTimeout, () => "Open settings opened nothing.");
+        Assert.AreEqual("ms-settings:privacy-microphone", File.ReadAllLines(launched)[^1], "Open settings opened another page.");
     }
 
     // =========================================================================
@@ -469,6 +496,49 @@ public sealed partial class MediaTests : UiTest
         string fixture = Path.Combine(App.DataDir, "voice-fixture.m4a");
         await File.WriteAllBytesAsync(fixture, await VoiceFixtureAsync());
         await File.WriteAllTextAsync(Path.Combine(App.DataDir, "microphone.txt"), fixture);
+    }
+
+    // The Voice Player Really Plays: Its Own State Is Playing, Its Position Passes 0.3 s, It Knows Its Length, And It Plays
+    // As Media (A Communications Stream Goes To The Communications Device, Silent On The Owner's Speakers)
+    private void WaitForPlayback()
+    {
+        string state  = Path.Combine(App.DataDir, "voice-player.txt");
+        string failed = Path.Combine(App.DataDir, "voice-failed.txt");
+        string last   = string.Empty;
+        Wait.Until(() =>
+        {
+            Assert.IsFalse(File.Exists(failed), $"The voice player failed: {(File.Exists(failed) ? File.ReadAllText(failed) : string.Empty)}.");
+            last = File.Exists(state) ? ReadShared(state) : string.Empty;
+            string[] parts = last.Split(' ');
+            return parts.Length == 4
+                && parts[0] == "Playing"
+                && double.Parse(parts[1], System.Globalization.CultureInfo.InvariantCulture) > 0.3
+                && double.Parse(parts[2], System.Globalization.CultureInfo.InvariantCulture) > 0
+                && parts[3] == "Media";
+        }, AppDriver.DefaultTimeout, () => $"The voice player never played: '{last}'.");
+    }
+
+    // A Dialog's Button, By Name
+    private static AutomationElement DialogButton(AutomationElement dialog, string name)
+    {
+        AutomationElement? button = null;
+        Wait.Until(() => (button = AppDriver.Search(dialog, e => e.ControlType == FlaUI.Core.Definitions.ControlType.Button && AppDriver.SafeName(e) == name)) is not null,
+            AppDriver.DefaultTimeout, () => $"The dialog has no '{name}' button.");
+        return button!;
+    }
+
+    // A File The App May Be Writing
+    private static string ReadShared(string path)
+    {
+        try
+        {
+            using var reader = new StreamReader(new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete));
+            return reader.ReadToEnd();
+        }
+        catch (IOException)
+        {
+            return string.Empty;
+        }
     }
 
     // Recordings Waiting In The App's Private Temp Folder

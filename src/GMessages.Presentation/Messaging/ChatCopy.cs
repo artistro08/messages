@@ -129,7 +129,11 @@ public static class ChatCopy
     public const string CancelRecording    = "Cancel recording";
     public const string Play               = "Play";
     public const string Pause              = "Pause";
-    public const string MicrophoneOff      = "Microphone access is off. Turn it on in Settings > Privacy & security > Microphone.";
+
+    // Microphone Dialog (Controller Copy, The Owner Signs Off)
+    public const string MicrophoneTitle = "Use your microphone?";
+    public const string MicrophoneText  = "Messages needs your microphone to record voice messages. Turn it on for Messages in Windows Settings, then try again.";
+    public const string OpenSettings    = "Open settings";
 
     // Startup
     public const string StartupRefused = "You'll have to manually enable startup. Turn it on in Settings > Apps > Startup.";

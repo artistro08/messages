@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Globalization;
+using System.Runtime.InteropServices;
 
 namespace GMessages.Presentation.Messaging;
 
@@ -127,6 +128,23 @@ public sealed record VoiceWave(float[] Peaks, TimeSpan Length)
         }
 
         return peaks;
+    }
+
+    /// <summary>
+    /// Gives the live input level of a block of 32-bit float samples (an audio graph's frame): the loudest sample.
+    /// </summary>
+    /// <remarks>Any trailing partial sample is ignored; silence or no samples gives 0, and clipping caps at 1.</remarks>
+    /// <param name="floats">Interleaved 32-bit float samples, as bytes.</param>
+    /// <returns>The level, from 0 to 1.</returns>
+    public static float LevelOf(ReadOnlySpan<byte> floats)
+    {
+        float peak = 0;
+        foreach (float sample in MemoryMarshal.Cast<byte, float>(floats))
+        {
+            peak = Math.Max(peak, Math.Abs(sample));
+        }
+
+        return Math.Min(1, peak);
     }
 
     /// <summary>
