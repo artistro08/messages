@@ -46,8 +46,8 @@
     <Content Include="Assets\*.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="Assets\*.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
 
-    <!-- Pairing Emoji: Noto Color Emoji images (googlefonts/noto-emoji, 2D/png/128), with their license -->
-    <Content Include="Assets\Emoji\*.png;Assets\Emoji\LICENSE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <!-- Pairing Emoji: Noto Color Emoji images (googlefonts/noto-emoji, 2D/png/128), with the Apache 2.0 license they (and the Unpair icon's Material Symbols path) are under, and the repository's OFL 1.1 -->
+    <Content Include="Assets\Emoji\*.png;Assets\Emoji\LICENSE-*.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Manifest Include="$(ApplicationManifest)" />
   </ItemGroup>
 
