@@ -191,6 +191,9 @@ public sealed partial class ChatsView : UserControl
     /// <returns>Archived, else Spam &amp; blocked.</returns>
     public static string FolderTitle(bool isArchivedView) => isArchivedView ? ChatCopy.Archived : ChatCopy.SpamAndBlocked;
 
+    /// <summary>Gets the battery banner's title (for bindings).</summary>
+    public static string BatteryTitle => ChatCopy.PhoneBatteryLow;
+
     // =========================================================================
     // EVENT HANDLERS
     // =========================================================================
@@ -321,6 +324,9 @@ public sealed partial class ChatsView : UserControl
     private void OnChatStarted(object? sender, string conversationId) => ViewModel.Select(conversationId);
 
     private void OnActionErrorClosed(InfoBar sender, object args) => ViewModel.DismissActionError();
+
+    // The Battery Banner Closed (By The User Or Because The Phone Recovered)
+    private void OnBatteryLowClosed(InfoBar sender, InfoBarClosedEventArgs args) => ViewModel.DismissPhoneBattery();
 
     // A Row's ⋮: Its Menu Opens Below The Button. The Sender Is The Row That Raised It (A Plain .NET Event, Not Read From
     // The Visual Tree)

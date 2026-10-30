@@ -19,7 +19,7 @@
 
         <!-- List Pane: on the Mica -->
         <SplitView.Pane>
-            <Grid x:Name="ListPane" RowDefinitions="Auto,Auto,Auto,*">
+            <Grid x:Name="ListPane" RowDefinitions="Auto,Auto,Auto,Auto,*">
 
                 <!-- Folder Header: Archived or Spam & blocked (the title bar's Back returns to the inbox) -->
                 <TextBlock
@@ -49,11 +49,22 @@
                     Message="{x:Bind ViewModel.ActionError, Mode=OneWay, FallbackValue=''}"
                     Severity="Error" />
 
+                <!-- Phone Battery Banner: only after a live low battery alert; closing it hides it until the next one -->
+                <InfoBar
+                    Grid.Row="3"
+                    Margin="16,0,16,8"
+                    AutomationProperties.AutomationId="Main.BatteryLow"
+                    Closed="OnBatteryLowClosed"
+                    IsClosable="True"
+                    IsOpen="{x:Bind ViewModel.IsPhoneBatteryLow, Mode=OneWay}"
+                    Severity="Warning"
+                    Title="{x:Bind local:ChatsView.BatteryTitle}" />
+
                 <!-- Conversations: room at the bottom so Start chat never covers the last row, and a lane on the right where
                      the scrollbar sits, between the rows and the chat island -->
                 <ListView
                     x:Name="ConversationList"
-                    Grid.Row="3"
+                    Grid.Row="4"
                     Padding="0,0,8,64"
                     AutomationProperties.AutomationId="Main.ConversationList"
                     ContainerContentChanging="OnContainerContentChanging"
@@ -70,7 +81,7 @@
 
                 <!-- Loading: while an empty list (the inbox, Archived or Spam & blocked) loads -->
                 <ProgressRing
-                    Grid.Row="3"
+                    Grid.Row="4"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center"
                     AutomationProperties.AutomationId="Main.ListLoading"
@@ -80,7 +91,7 @@
                      slides it away, scrolling up brings it back (set from code, animated by its transitions) -->
                 <Button
                     x:Name="StartChatButton"
-                    Grid.Row="3"
+                    Grid.Row="4"
                     Margin="0,0,16,16"
                     HorizontalAlignment="Right"
                     VerticalAlignment="Bottom"

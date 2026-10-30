@@ -25,6 +25,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
     private readonly ConnectionController _connection;
     private readonly ChatStore _store;
+
+    // Battery Banner: The Store's State, And Whether The User Closed The Banner Since The Last Low Alert
+    private bool _batteryLow;
+    private bool _batteryDismissed;
     private readonly TimeProvider _time;
     private readonly Action<Action> _post;
 
@@ -72,6 +76,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
         _connection.StateChanged += OnStateChanged;
         _connection.ClientEvent  += OnClientEvent;
+
+        _batteryLow = store.IsPhoneBatteryLow;
+        _store.PhoneBatteryChanged += OnPhoneBatteryChanged;
     }
 
     /// <inheritdoc />
@@ -167,6 +174,33 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
     /// <summary>Gets whether the failure banner shows (for bindings, which skip their function when an argument is null).</summary>
     public bool HasActionError => ActionError is not null;
+
+    /// <summary>
+    /// Gets whether the low battery banner shows: the phone reported a low battery live (its level isn't known at
+    /// start) and the user hasn't closed the banner since the last low alert.
+    /// </summary>
+    public bool IsPhoneBatteryLow => _batteryLow && !_batteryDismissed;
+
+    /// <summary>Hides the battery banner until the next low battery alert (the banner's own close button).</summary>
+    public void DismissPhoneBattery()
+    {
+        // The Bar Already Closed Itself; Clearing This Lets The Next Low Alert Open It Again
+        _batteryDismissed = true;
+        Changed();
+    }
+
+    // Reads The Store's State On The UI Thread; A New Low Alert Brings Back A Closed Banner
+    private void OnPhoneBatteryChanged(object? sender, EventArgs e) => _post(() =>
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _batteryLow       = _store.IsPhoneBatteryLow;
+        _batteryDismissed = false;
+        Changed();
+    });
 
     // =========================================================================
     // NAVIGATION
@@ -278,6 +312,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _disposed = true;
         _connection.StateChanged -= OnStateChanged;
         _connection.ClientEvent  -= OnClientEvent;
+        _store.PhoneBatteryChanged -= OnPhoneBatteryChanged;
         Inbox.Dispose();
         foreach (ConversationListViewModel list in _folders.Values)
         {
