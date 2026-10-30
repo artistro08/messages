@@ -230,17 +230,20 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         PropertyChanged?.Invoke(this, AllChanged);
     }
 
-    // The Newest Bubble Shows The Caption Row; One That Stops Being The Newest Forgets A Click That Hid It
+    // The Newest Bubble Shows The Caption Row; One That Stops Being The Newest Forgets A Click That Hid It, And One That
+    // Becomes The Newest Forgets A Click That Showed Its Time (Else Hiding The Caption Would Show The Footer Time)
     internal void SetStatus(bool isNewest, string text, bool showsLock)
     {
-        bool hidden = isNewest && IsCaptionHidden;
-        if (IsNewest == isNewest && StatusText == text && ShowsLock == showsLock && IsCaptionHidden == hidden)
+        bool hidden     = isNewest && IsCaptionHidden;
+        bool time_shown = !isNewest && IsTimeShown;
+        if (IsNewest == isNewest && StatusText == text && ShowsLock == showsLock && IsCaptionHidden == hidden && IsTimeShown == time_shown)
         {
             return;
         }
 
         IsNewest        = isNewest;
         IsCaptionHidden = hidden;
+        IsTimeShown     = time_shown;
         StatusText      = text;
         ShowsLock       = showsLock;
         PropertyChanged?.Invoke(this, AllChanged);

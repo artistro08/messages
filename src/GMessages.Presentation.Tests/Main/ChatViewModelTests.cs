@@ -1320,6 +1320,24 @@ public sealed class ChatViewModelTests
     }
 
     /// <summary>
+    /// A bubble whose time was shown by a click forgets it once it becomes the newest (newer bubbles dropped by a
+    /// reload), so hiding its caption row hides the time too instead of showing the footer time in its place.
+    /// </summary>
+    [TestMethod]
+    public void ToggleTime_ShownThenNewest_HidingCaptionHidesTime()
+    {
+        var bubble = new MessageBubbleViewModel(ChatMessage.From(Msg("m1", "one")));
+        bubble.ToggleTime();
+        Assert.IsTrue(bubble.IsTimeShown);
+
+        bubble.SetStatus(isNewest: true, string.Empty, showsLock: false);
+        Assert.IsFalse(bubble.IsTimeShown);
+        bubble.ToggleTime();
+        Assert.IsFalse(bubble.ShowsStatusRow);
+        Assert.IsFalse(bubble.IsTimeShown);
+    }
+
+    /// <summary>
     /// A click on the newest bubble hides its caption row and a second click shows it again; another bubble's click
     /// still shows and hides its own time.
     /// </summary>
