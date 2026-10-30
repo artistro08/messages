@@ -404,6 +404,20 @@ public sealed class FakePhone
     }
 
     /// <summary>
+    /// Adds reactions to a stored message and pushes it again, as a live update (the way the phone reports reactions).
+    /// </summary>
+    /// <param name="conversationId">The conversation ID.</param>
+    /// <param name="messageId">The message ID.</param>
+    /// <param name="reactions">Each reaction's type and who reacted, in order.</param>
+    /// <exception cref="KeyNotFoundException">The conversation has no such message.</exception>
+    /// <exception cref="InvalidOperationException">Pairing has not reached the client finished message.</exception>
+    public void PushReactions(string conversationId, string messageId, params (EmojiType Type, string ParticipantId)[] reactions)
+    {
+        Message message = Chats.AddReactions(conversationId, messageId, reactions) ?? throw new KeyNotFoundException($"No message {messageId} in {conversationId}.");
+        PushUpdate(new UpdateEvents { MessageEvent = new MessageEvent { Data = { message } } }, _push);
+    }
+
+    /// <summary>
     /// Pushes a typing event from someone in a conversation, as a live update.
     /// </summary>
     /// <remarks>The sender is named by phone number, as the real phone does; the app maps it to a participant.</remarks>

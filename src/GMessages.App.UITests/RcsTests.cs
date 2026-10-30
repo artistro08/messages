@@ -220,6 +220,48 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
+    /// In Team (a group), clicking a message's reaction pill lists who reacted, in the pill's order: 👍 from Bo and me
+    /// (shown as "You"), then 😂 from Cy.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task GroupPill_Click_ListsWhoReacted()
+    {
+        await OpenChatAsync("Row.c-team");
+        string id = Find("c-team", "Lunch at noon?").MessageID;
+
+        Server.Phone.PushReactions("c-team", id, (EmojiType.Like, "p-bo"), (EmojiType.Laugh, "p-cy"), (EmojiType.Like, FakeChats.MyParticipantId));
+        string last = "";
+        Wait.Until(() => (last = AppDriver.SafeName(App.TryFind("Reactions." + id))).EndsWith(" 3", StringComparison.Ordinal), AppDriver.DefaultTimeout,
+            () => $"The reaction pill read '{last}', not three reactions.");
+
+        App.Find("Reactions." + id).Click();
+        App.Find("Reactors");
+        string[] rows = [.. Enumerable.Range(0, 3).Select(i => AppDriver.SafeName(App.Find("Reactors." + i)))];
+        CollectionAssert.AreEqual(new[] { "\U0001F44D Bo", "\U0001F44D " + ChatCopy.You, "\U0001F602 Cy" }, rows);
+        Assert.IsNull(App.TryFind("ReactionPicker"), "The pill opened the reaction picker in a group.");
+        Keyboard.Type(VirtualKeyShort.ESCAPE);
+    }
+
+    /// <summary>
+    /// In Ann's one-on-one chat the reaction pill still opens the reaction picker, not a list of who reacted.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task OneOnOnePill_Click_OpensPickerNotReactors()
+    {
+        await OpenChatAsync("Row.c-ann");
+        string id = Find("c-ann", AnnLast).MessageID;
+
+        Server.Phone.PushReactions("c-ann", id, (EmojiType.Like, "p-ann"));
+        App.Find("Reactions." + id).Click();
+
+        App.Find("ReactionPicker");
+        Assert.IsNull(App.TryFind("Reactors"), "The pill listed who reacted in a one-on-one chat.");
+        Keyboard.Type(VirtualKeyShort.ESCAPE);
+    }
+
+    /// <summary>
     /// Shift + F10 on a focused bubble opens its menu, and Copy puts the bubble's text on the clipboard (pasted into the
     /// message box to check).
     /// </summary>

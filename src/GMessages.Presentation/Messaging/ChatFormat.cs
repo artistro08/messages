@@ -312,17 +312,33 @@ public static class ChatFormat
     {
         ArgumentNullException.ThrowIfNull(reactions);
 
-        // Count Each Emoji, Then Keep The Top 3 (OrderByDescending Is Stable)
-        var counts = reactions
-            .GroupBy(r => r.Emoji)
-            .Select(g => (Emoji: g.Key, Count: g.Sum(r => r.ParticipantIds.Count)))
-            .Where(e => e.Count > 0)
-            .ToList();
+        // Keep The Top 3
+        var counts = RankedCounts(reactions);
         int total  = counts.Sum(e => e.Count);
-        string top = string.Concat(counts.OrderByDescending(e => e.Count).Take(3).Select(e => e.Emoji));
+        string top = string.Concat(counts.Take(3).Select(e => e.Emoji));
 
         return total > 1 ? $"{top} {total.ToString(CultureInfo.CurrentCulture)}" : top;
     }
+
+    /// <summary>
+    /// Ranks a message's emoji the way <see cref="ReactionSummary"/> shows them: most used first, ties in first-seen order.
+    /// </summary>
+    /// <param name="reactions">The message's reactions.</param>
+    /// <returns>Every emoji anyone reacted with, ranked; empty when nobody reacted.</returns>
+    public static IReadOnlyList<string> RankedEmoji(IReadOnlyList<ReactionInfo> reactions)
+    {
+        ArgumentNullException.ThrowIfNull(reactions);
+
+        return [.. RankedCounts(reactions).Select(e => e.Emoji)];
+    }
+
+    // Counts Each Emoji, Most Used First (OrderByDescending Is Stable, So Ties Keep First-Seen Order)
+    private static List<(string Emoji, int Count)> RankedCounts(IReadOnlyList<ReactionInfo> reactions) =>
+        [.. reactions
+            .GroupBy(r => r.Emoji)
+            .Select(g => (Emoji: g.Key, Count: g.Sum(r => r.ParticipantIds.Count)))
+            .Where(e => e.Count > 0)
+            .OrderByDescending(e => e.Count)];
 
     // Binary Search Over The Sorted Ranges, With No Allocation (Runs For Every Character Shown)
     private static bool IsTextDefaultEmoji(int code)

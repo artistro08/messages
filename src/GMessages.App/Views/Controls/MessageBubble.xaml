@@ -325,7 +325,8 @@
                 <!-- /Hover Strip -->
             </Grid>
 
-            <!-- Reactions: a pill over the bubble's bottom corner; a click opens the reaction picker. A whole-pixel height (24,
+            <!-- Reactions: a pill over the bubble's bottom corner; a click (or Enter or Space) opens the reaction picker, or in a
+                 group chat the list of who reacted (built in code). A whole-pixel height (24,
                  more for large text) with corners of half of it, and its fill under the stroke, so the ends draw as smooth half
                  circles at any scale -->
             <Button
@@ -340,7 +341,7 @@
                 BackgroundSizing="OuterBorderEdge"
                 BorderBrush="{ThemeResource ReactionPillBorderBrush}"
                 BorderThickness="1"
-                Click="OnReactClick"
+                Click="OnPillClick"
                 Content="{x:Bind Bubble.ReactionsText, Mode=OneWay, FallbackValue=''}"
                 CornerRadius="12"
                 FontSize="12"

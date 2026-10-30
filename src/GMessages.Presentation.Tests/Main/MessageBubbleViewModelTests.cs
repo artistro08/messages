@@ -144,6 +144,59 @@ public sealed class MessageBubbleViewModelTests
         Assert.AreEqual("www.x.com", bubble.PreviewName);
     }
 
+    private static ConversationInfo Group() =>
+        new("c1", "Team", true, ConversationStatus.Active, false, false, DateTimeOffset.UnixEpoch, string.Empty, false, string.Empty,
+            [
+                new ParticipantInfo("me1", "Me", "Me", string.Empty, true, null),
+                new ParticipantInfo("p-bo", "Bo Park", "Bo", string.Empty, false, "+1 555-0002"),
+                new ParticipantInfo("p-cy", string.Empty, "Cy", string.Empty, false, "+1 555-0003"),
+                new ParticipantInfo("p-dee", string.Empty, string.Empty, string.Empty, false, "+1 555-0004"),
+                new ParticipantInfo("p-none", string.Empty, string.Empty, string.Empty, false, null),
+            ],
+            "me1", "m1");
+
+    [TestMethod]
+    public void Reactors_MeShowsYou()
+    {
+        var bubble = new MessageBubbleViewModel(Message("hi", new ReactionInfo(Like, ["me1"])), Group());
+
+        CollectionAssert.AreEqual(new[] { (Like, ChatCopy.You) }, bubble.Reactors().ToArray());
+        Assert.IsTrue(bubble.IsGroupChat);
+    }
+
+    [TestMethod]
+    public void Reactors_UnknownOrNamelessSkipped()
+    {
+        var bubble = new MessageBubbleViewModel(Message("hi", new ReactionInfo(Like, ["p-ghost", "p-none", "p-bo"])), Group());
+
+        CollectionAssert.AreEqual(new[] { (Like, "Bo Park") }, bubble.Reactors().ToArray());
+    }
+
+    [TestMethod]
+    public void Reactors_NameFallbacks_FullFirstNumber()
+    {
+        var bubble = new MessageBubbleViewModel(Message("hi", new ReactionInfo(Like, ["p-bo", "p-cy", "p-dee"])), Group());
+
+        CollectionAssert.AreEqual(new[] { (Like, "Bo Park"), (Like, "Cy"), (Like, "+1 555-0004") }, bubble.Reactors().ToArray());
+    }
+
+    [TestMethod]
+    public void Reactors_OrderedAsThePillRanksEmoji()
+    {
+        var bubble = new MessageBubbleViewModel(
+            Message("hi", new ReactionInfo(Laugh, ["p-cy"]), new ReactionInfo(Like, ["p-bo", "me1"])), Group());
+
+        CollectionAssert.AreEqual(new[] { (Like, "Bo Park"), (Like, ChatCopy.You), (Laugh, "Cy") }, bubble.Reactors().ToArray());
+        Assert.AreEqual(Like + Laugh + " 3", bubble.ReactionsText);
+    }
+
+    [TestMethod]
+    public void IsGroupChat_FalseOneOnOneOrUnknown()
+    {
+        Assert.IsFalse(new MessageBubbleViewModel(Message(), Conversation()).IsGroupChat);
+        Assert.IsFalse(new MessageBubbleViewModel(Message()).IsGroupChat);
+    }
+
     [TestMethod]
     public void CanAct_FalseForTombstoneSendingFailedAndUnsent()
     {

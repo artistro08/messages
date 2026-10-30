@@ -169,6 +169,9 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     /// <summary>Gets whether I reacted (for bindings, which skip their function when an argument is null).</summary>
     public bool HasMyReaction => MyReaction is not null;
 
+    /// <summary>Gets whether the bubble is in a group chat, where its reaction pill lists who reacted.</summary>
+    public bool IsGroupChat => _conversation?.IsGroup == true;
+
     /// <summary>Gets the ID of the message this one replies to, or empty.</summary>
     public string ReplyToId { get; private set; } = string.Empty;
 
@@ -243,6 +246,42 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
 
         PropertyChanged?.Invoke(this, AllChanged);
     }
+
+    /// <summary>
+    /// Lists who reacted, for a group chat's reaction pill: one row per person per emoji, the emoji in the order the pill
+    /// ranks them (<see cref="ChatFormat.RankedEmoji"/>), people in the order the phone lists them.
+    /// </summary>
+    /// <remarks>
+    /// My own reaction reads <see cref="ChatCopy.You"/>. Others are named from the conversation's participants: the full
+    /// name, else the first name, else the number. Someone with none of those, or not in the conversation, is left out,
+    /// so a raw participant ID never shows.
+    /// </remarks>
+    /// <returns>The rows; empty when nobody reacted.</returns>
+    public IReadOnlyList<(string Emoji, string Name)> Reactors()
+    {
+        List<(string Emoji, string Name)> rows = [];
+        foreach (string emoji in ChatFormat.RankedEmoji(_reactions))
+        {
+            foreach (string participant_id in _reactions.Where(r => r.Emoji == emoji).SelectMany(r => r.ParticipantIds))
+            {
+                string name = IsMine(participant_id) ? ChatCopy.You : NameOf(_conversation?.FindParticipant(participant_id));
+                if (name.Length > 0)
+                {
+                    rows.Add((emoji, name));
+                }
+            }
+        }
+
+        return rows;
+    }
+
+    // A Participant's Name: Full, First, Then The Number; Empty For None (Or An Unknown Participant)
+    private static string NameOf(ParticipantInfo? p) =>
+        p is null ? string.Empty
+        : p.FullName.Length > 0 ? p.FullName
+        : p.FirstName.Length > 0 ? p.FirstName
+        : !string.IsNullOrEmpty(p.FormattedNumber) ? p.FormattedNumber
+        : p.Number;
 
     // A Bubble Made Before Its Conversation Was Cached Learns Which Reaction Is Mine
     internal void SetConversation(ConversationInfo? conversation)
