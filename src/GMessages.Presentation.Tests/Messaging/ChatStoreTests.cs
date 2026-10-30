@@ -291,6 +291,38 @@ public sealed class ChatStoreTests
     }
 
     /// <summary>
+    /// After a full-size request the phone sends the same message again with its full media ID: the cached copy and the
+    /// raised message carry the new media part, and it is not new a second time.
+    /// </summary>
+    [TestMethod]
+    public async Task MediaEdit_ReplacesMediaId()
+    {
+        using var rig = new Rig();
+        await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1")));
+        rig.Client.MessagesPage = PageOf(Msg("m1", "c1", ts: 1_000));
+        await rig.Store.LoadMessagesAsync("c1", null, Ct);
+        var raised = new List<MessageArrivedEventArgs>();
+        rig.Store.MessageArrived += (_, e) => raised.Add(e);
+
+        // Thumbnail Only, Then The Same ID With Its Full Media ID
+        await rig.Store.HandleEventAsync(new MessageReceived(Photo("m2", new MediaContent { Format = MediaFormats.ImageJpeg, ThumbnailMediaID = "thumb-1" }), false));
+        await rig.Store.HandleEventAsync(new MessageReceived(Photo("m2", new MediaContent { Format = MediaFormats.ImageJpeg, ThumbnailMediaID = "thumb-1", MediaID = "full-1" }), false));
+
+        ChatMessage cached = rig.Store.CachedMessages("c1")!.Single(m => m.Id == "m2");
+        Assert.AreEqual("full-1", cached.Media?.MediaId);
+        Assert.AreEqual("full-1", raised[1].Message.Media?.MediaId);
+        Assert.IsTrue(raised[0].IsNew);
+        Assert.IsFalse(raised[1].IsNew);
+
+        static Message Photo(string id, MediaContent content)
+        {
+            var m = new Message { MessageID = id, ConversationID = "c1", Timestamp = 1_761_700_000_000_000, MessageStatus = new MessageStatus { Status = MessageStatusType.IncomingComplete } };
+            m.MessageInfo.Add(new MessageInfo { MediaContent = content });
+            return m;
+        }
+    }
+
+    /// <summary>
     /// The cache keeps the last 20 opened conversations: loading a 21st drops the one used longest ago.
     /// </summary>
     [TestMethod]

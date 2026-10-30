@@ -116,4 +116,94 @@ public sealed class ChatMessageTests
         Assert.IsTrue(ChatMessage.From(Make(MessageStatusType.TombstoneProtocolSwitchToEncryptedRcs)).EncryptionChange);
         Assert.IsNull(ChatMessage.From(Make(MessageStatusType.IncomingComplete)).EncryptionChange);
     }
+
+    // =========================================================================
+    // MEDIA
+    // =========================================================================
+
+    [TestMethod]
+    public void From_PhotoWithCaption_KeepsBoth()
+    {
+        Message m = Make(MessageStatusType.IncomingComplete, Text("look"));
+        m.MessageInfo.Add(new MessageInfo
+        {
+            MediaContent = new MediaContent
+            {
+                Format        = MediaFormats.ImageJpeg,
+                MediaID       = "media-1",
+                DecryptionKey = Google.Protobuf.ByteString.CopyFrom(1, 2, 3),
+                MediaName     = "pic.jpg",
+                Size          = 1234,
+                Dimensions    = new Dimensions { Width = 640, Height = 480 },
+            },
+        });
+
+        ChatMessage chat = ChatMessage.From(m);
+
+        Assert.AreEqual(MessageKind.Photo, chat.Kind);
+        Assert.AreEqual("look", chat.Text);
+        Assert.IsNotNull(chat.Media);
+        Assert.AreEqual("media-1", chat.Media.MediaId);
+        CollectionAssert.AreEqual(new byte[] { 1, 2, 3 }, chat.Media.Key);
+        Assert.AreEqual("pic.jpg", chat.Media.Name);
+        Assert.AreEqual(1234, chat.Media.Size);
+        Assert.AreEqual(640, chat.Media.Width);
+        Assert.AreEqual(480, chat.Media.Height);
+        Assert.IsFalse(chat.Media.IsPending);
+        Assert.AreEqual("look", ChatFormat.ShownText(chat));
+    }
+
+    [TestMethod]
+    public void From_ThumbnailOnly()
+    {
+        var content = new MediaContent { Format = MediaFormats.ImagePng, ThumbnailMediaID = "thumb-1", ThumbnailDecryptionKey = Google.Protobuf.ByteString.CopyFrom(9) };
+
+        ChatMessage chat = ChatMessage.From(Make(MessageStatusType.IncomingComplete, new MessageInfo { MediaContent = content }));
+
+        Assert.IsNotNull(chat.Media);
+        Assert.AreEqual(string.Empty, chat.Media.MediaId);
+        Assert.AreEqual("thumb-1", chat.Media.ThumbnailId);
+        CollectionAssert.AreEqual(new byte[] { 9 }, chat.Media.ThumbnailKey);
+        Assert.IsFalse(chat.Media.IsPending);
+        Assert.AreEqual(ChatCopy.Photo, ChatFormat.ShownText(chat));
+    }
+
+    [TestMethod]
+    public void From_InlineData()
+    {
+        var content = new MediaContent { Format = MediaFormats.ImageGif, MediaData = Google.Protobuf.ByteString.CopyFrom(7, 8) };
+
+        ChatMessage chat = ChatMessage.From(Make(MessageStatusType.IncomingComplete, new MessageInfo { MediaContent = content }));
+
+        Assert.IsNotNull(chat.Media);
+        CollectionAssert.AreEqual(new byte[] { 7, 8 }, chat.Media.InlineData);
+        Assert.IsFalse(chat.Media.IsPending);
+    }
+
+    [TestMethod]
+    public void From_Pending()
+    {
+        ChatMessage chat = ChatMessage.From(Make(MessageStatusType.IncomingYetToManualDownload, Media(MediaFormats.VideoMp4)));
+
+        Assert.IsNotNull(chat.Media);
+        Assert.IsTrue(chat.Media.IsPending);
+        Assert.AreEqual(MessageKind.Video, chat.Kind);
+    }
+
+    [TestMethod]
+    [DataRow(MediaFormats.ImageJpeg, "", "image/jpeg")]
+    [DataRow(MediaFormats.AudioMp4, "", "audio/mp4")]
+    [DataRow(MediaFormats.AppPdf, "", "application/pdf")]
+    [DataRow(MediaFormats.ImageUnspecified, "image/heic", "image/heic")]
+    [DataRow(MediaFormats.UnspecifiedType, "", "application/octet-stream")]
+    public void Mime_FromFormatTable(MediaFormats format, string messageMime, string expected)
+    {
+        var content = new MediaContent { Format = format, MediaID = "m", MimeType = messageMime };
+
+        Assert.AreEqual(expected, ChatMessage.From(Make(MessageStatusType.IncomingComplete, new MessageInfo { MediaContent = content })).Media!.Mime);
+    }
+
+    [TestMethod]
+    public void From_TextOnly_HasNoMedia() =>
+        Assert.IsNull(ChatMessage.From(Make(MessageStatusType.IncomingComplete, Text("hi"))).Media);
 }

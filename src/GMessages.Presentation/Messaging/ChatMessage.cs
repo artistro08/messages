@@ -13,7 +13,7 @@ namespace GMessages.Presentation.Messaging;
 /// <param name="Time">When it was sent.</param>
 /// <param name="FromMe">True when the owner sent it (from here or from the phone).</param>
 /// <param name="Kind">What it shows.</param>
-/// <param name="Text">The text, or empty when there is none.</param>
+/// <param name="Text">The text (a media message's caption), or empty when there is none.</param>
 /// <param name="Status">The phone's delivery status.</param>
 public sealed record ChatMessage(
     string Id,
@@ -52,12 +52,16 @@ public sealed record ChatMessage(
     /// <summary>Gets the encryption this system line switches the chat to, or null when it says nothing about encryption.</summary>
     public bool? EncryptionChange { get; init; }
 
+    /// <summary>Gets the photo, video, voice message or file the message carries, or null for none.</summary>
+    public MediaPart? Media { get; init; }
+
     /// <summary>
     /// Copies the fields the app needs out of a protocol message.
     /// </summary>
     /// <remarks>
-    /// Kind comes from the first text part, else the first media part (by its format), else Other. A status of
-    /// 200 to 299 is a system line (Tombstone). Outgoing statuses are 1 to 99, which includes messages sent from the phone.
+    /// The first media part becomes <see cref="Media"/> and decides the kind (by its format); the first text part is the
+    /// text, which on a media message is its caption. Text alone is Text; neither is Other. A status of 200 to 299 is a
+    /// system line (Tombstone). Outgoing statuses are 1 to 99, which includes messages sent from the phone.
     /// Message types 1, 2 and 3 are SMS and MMS, anything else RCS (<c>IsSMSOrMMS</c> in the Go connector's
     /// <c>dbmeta.go</c>). Reactions are read as the connector's <c>GetReactions</c> does.
     /// </remarks>
@@ -71,18 +75,20 @@ public sealed record ChatMessage(
         MessageKind kind         = MessageKind.Other;
         string text              = string.Empty;
 
-        // Text First, Then Media
+        // Media Decides The Kind; Text Is The Message, Or The Media's Caption
         MessageInfo? text_part  = m.MessageInfo.FirstOrDefault(i => i.DataCase == MessageInfo.DataOneofCase.MessageContent);
         MessageInfo? media_part = m.MessageInfo.FirstOrDefault(i => i.DataCase == MessageInfo.DataOneofCase.MediaContent);
+        MediaPart? media        = media_part is null ? null : MediaPart.From(media_part.MediaContent);
 
         if (text_part is not null)
         {
             kind = MessageKind.Text;
             text = text_part.MessageContent.Content;
         }
-        else if (media_part is not null)
+
+        if (media is not null)
         {
-            kind = KindOf(media_part.MediaContent.Format);
+            kind = media.Kind;
         }
 
         // System Lines Win
@@ -106,6 +112,7 @@ public sealed record ChatMessage(
             ReplyToId        = m.ReplyMessage?.MessageID ?? string.Empty,
             IsRcs            = m.Type is not (1 or 2 or 3),
             EncryptionChange = ChatFormat.EncryptionOf(status),
+            Media            = media,
         };
     }
 
@@ -131,23 +138,5 @@ public sealed record ChatMessage(
         }
 
         return reactions;
-    }
-
-    // Media Kind From The Format Name
-    private static MessageKind KindOf(MediaFormats format)
-    {
-        string name = format.ToString();
-
-        if (name.StartsWith("Image", StringComparison.Ordinal))
-        {
-            return MessageKind.Photo;
-        }
-
-        if (name.StartsWith("Video", StringComparison.Ordinal))
-        {
-            return MessageKind.Video;
-        }
-
-        return name.StartsWith("Audio", StringComparison.Ordinal) ? MessageKind.Audio : MessageKind.File;
     }
 }
