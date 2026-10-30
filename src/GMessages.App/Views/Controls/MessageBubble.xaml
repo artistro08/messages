@@ -2,7 +2,10 @@
     x:Class="GMessages.App.Views.Controls.MessageBubble"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:local="using:GMessages.App.Views.Controls">
+    xmlns:local="using:GMessages.App.Views.Controls"
+    PointerCanceled="OnPointerLeft"
+    PointerEntered="OnPointerEntered"
+    PointerExited="OnPointerLeft">
 
     <!-- Row: the bubble, with an avatar lane on its left for received bubbles in a group chat (the avatar beside a group's
          last bubble). Bubbles of one group sit 2 px apart, groups further -->
@@ -26,6 +29,7 @@
                         <Setter Target="Pill.HorizontalAlignment" Value="Left" />
                         <Setter Target="Footer.HorizontalAlignment" Value="Right" />
                         <Setter Target="StatusRow.HorizontalAlignment" Value="Right" />
+                        <Setter Target="HoverStrip.(Grid.Column)" Value="0" />
                     </VisualState.Setters>
                 </VisualState>
                 <VisualState x:Name="SentSms">
@@ -41,6 +45,7 @@
                         <Setter Target="Pill.HorizontalAlignment" Value="Left" />
                         <Setter Target="Footer.HorizontalAlignment" Value="Right" />
                         <Setter Target="StatusRow.HorizontalAlignment" Value="Right" />
+                        <Setter Target="HoverStrip.(Grid.Column)" Value="0" />
                     </VisualState.Setters>
                 </VisualState>
             </VisualStateGroup>
@@ -54,14 +59,47 @@
                     </VisualState.Setters>
                 </VisualState>
             </VisualStateGroup>
+
+            <!-- Hover: react, reply and the ⋮ fade in while the pointer is over a bubble that takes them (CanAct), as the
+                 conversation row's ⋮ does -->
+            <VisualStateGroup x:Name="Hover">
+                <VisualStateGroup.Transitions>
+                    <VisualTransition To="Shown">
+                        <Storyboard>
+                            <DoubleAnimationUsingKeyFrames Storyboard.TargetName="HoverStrip" Storyboard.TargetProperty="Opacity">
+                                <SplineDoubleKeyFrame
+                                    KeySpline="{StaticResource ControlFastOutSlowInKeySpline}"
+                                    KeyTime="{StaticResource ControlFastAnimationDuration}"
+                                    Value="1" />
+                            </DoubleAnimationUsingKeyFrames>
+                        </Storyboard>
+                    </VisualTransition>
+                </VisualStateGroup.Transitions>
+                <VisualState x:Name="Hidden" />
+                <VisualState x:Name="Shown">
+                    <Storyboard>
+                        <DoubleAnimation
+                            Storyboard.TargetName="HoverStrip"
+                            Storyboard.TargetProperty="Opacity"
+                            To="1"
+                            Duration="0" />
+                    </Storyboard>
+                    <VisualState.Setters>
+                        <Setter Target="HoverReact.IsHitTestVisible" Value="True" />
+                        <Setter Target="HoverReply.IsHitTestVisible" Value="True" />
+                        <Setter Target="HoverMore.IsHitTestVisible" Value="True" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
         </VisualStateManager.VisualStateGroups>
 
         <!-- Bubble: sender name, the quote, text and link preview on its colored back, the reaction pill on its bottom corner, then the
              time (once clicked) or the retry link, and the caption row (time, delivery icon and lock) under my newest message.
-             As wide as its content, up to 70% of the chat (560 px at most; set from code) -->
+             As wide as its content, up to 70% of the chat (560 px at most; set from code). The padding keeps the avatar lane's
+             and the hover strip's space on their sides -->
         <StackPanel
             x:Name="Root"
-            Padding="{x:Bind local:MessageBubble.LanePadding(Bubble.HasAvatarLane), Mode=OneWay}"
+            Padding="{x:Bind local:MessageBubble.LanePadding(Bubble.HasAvatarLane, Bubble.FromMe), Mode=OneWay}"
             HorizontalAlignment="Left"
             Opacity="{x:Bind local:MessageBubble.SendingOpacity(Bubble.IsSending), Mode=OneWay}"
             Spacing="2">
@@ -107,11 +145,12 @@
                 Text="{x:Bind Bubble.SenderName, Mode=OneWay, TargetNullValue=''}"
                 Visibility="{x:Bind Bubble.HasSenderName, Mode=OneWay, FallbackValue=Collapsed}" />
 
-            <!-- Bubble Back With The Avatar Lane: the lane reaches out into the row's left padding, so the avatar sits beside the
-                 bubble itself, bottoms aligned (not beside the pill, time or caption row below it) -->
+            <!-- Bubble Back With The Avatar Lane And The Hover Strip: both reach out into the row's padding, so the avatar sits
+                 beside the bubble itself, bottoms aligned (not beside the pill, time or caption row below it), and the strip
+                 beside the back, centered on it -->
             <Grid
-                Margin="{x:Bind local:MessageBubble.LaneOverhang(Bubble.HasAvatarLane), Mode=OneWay}"
-                ColumnDefinitions="Auto,*">
+                Margin="{x:Bind local:MessageBubble.LaneOverhang(Bubble.HasAvatarLane, Bubble.FromMe), Mode=OneWay}"
+                ColumnDefinitions="Auto,*,Auto">
 
                 <!-- Avatar Lane: the sender's avatar at the group's last bubble, made only where it shows -->
                 <Grid Width="{x:Bind local:MessageBubble.LaneWidth(Bubble.HasAvatarLane), Mode=OneWay}">
@@ -218,6 +257,59 @@
                         </Button>
                     </StackPanel>
                 </Border>
+
+                <!-- Hover Strip: react, reply and the ⋮ (see Hover above), right of a received back and left of a sent one (the
+                     Side states move it). Always there and always the same width, so no bubble moves when it shows; as tall
+                     as the back and transparent, so the pointer stays on the bubble on its way to the buttons. Not tab stops:
+                     the keyboard has the bubble menu, Shift + + and Ctrl + Enter -->
+                <StackPanel
+                    x:Name="HoverStrip"
+                    Grid.Column="2"
+                    Padding="4,0"
+                    Background="Transparent"
+                    Opacity="0"
+                    Orientation="Horizontal">
+                    <Button
+                        x:Name="HoverReact"
+                        Width="32"
+                        Height="32"
+                        Padding="0"
+                        VerticalAlignment="Center"
+                        AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('HoverReact.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                        Click="OnHoverReactClick"
+                        IsHitTestVisible="False"
+                        IsTabStop="False"
+                        Style="{StaticResource SubtleButtonStyle}">
+                        <FontIcon FontSize="16" Glyph="&#xE76E;" />
+                    </Button>
+                    <Button
+                        x:Name="HoverReply"
+                        Width="32"
+                        Height="32"
+                        Padding="0"
+                        VerticalAlignment="Center"
+                        AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('HoverReply.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                        Click="OnReplyClick"
+                        IsHitTestVisible="False"
+                        IsTabStop="False"
+                        Style="{StaticResource SubtleButtonStyle}">
+                        <FontIcon FontSize="16" Glyph="&#xE97A;" />
+                    </Button>
+                    <Button
+                        x:Name="HoverMore"
+                        Width="32"
+                        Height="32"
+                        Padding="0"
+                        VerticalAlignment="Center"
+                        AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('HoverMore.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                        Click="OnHoverMoreClick"
+                        IsHitTestVisible="False"
+                        IsTabStop="False"
+                        Style="{StaticResource SubtleButtonStyle}">
+                        <FontIcon FontSize="16" Glyph="&#xE712;" />
+                    </Button>
+                </StackPanel>
+                <!-- /Hover Strip -->
             </Grid>
 
             <!-- Reactions: a pill over the bubble's bottom corner; a click opens the reaction picker. A whole-pixel height (24,

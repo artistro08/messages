@@ -6,11 +6,12 @@ using GMessages.Presentation;
 using GMessages.Presentation.Messaging;
 using GMessages.Protocol.Proto;
 using Keyboard = FlaUI.Core.Input.Keyboard;
+using Mouse = FlaUI.Core.Input.Mouse;
 
 namespace GMessages.App.UITests;
 
 /// <summary>
-/// RCS in the chat pane: the status line, RCS and SMS bubbles, the lock, reactions, replies and typing.
+/// RCS in the chat pane: the status line, RCS and SMS bubbles, the lock, reactions, replies, the hover strip and typing.
 /// </summary>
 [TestClass]
 [TestCategory("UI")]
@@ -240,6 +241,123 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
+    /// With the mouse over Ann's last bubble, the hover strip's Reply starts a reply to it.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task HoverBubble_Reply_StartsReply()
+    {
+        await OpenChatAsync("Row.c-ann");
+        string id = Find("c-ann", AnnLast).MessageID;
+
+        AutomationElement reply = HoverStripButton(id, "HoverReply.");
+        Assert.AreEqual(ChatCopy.Reply, AppDriver.SafeName(reply));
+        reply.Click();
+
+        App.WaitForText("Chat.ReplyingTo", AnnLast);
+    }
+
+    /// <summary>
+    /// With the mouse over Ann's last bubble, the hover strip's React opens the reaction picker.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task HoverBubble_React_OpensPicker()
+    {
+        await OpenChatAsync("Row.c-ann");
+        string id = Find("c-ann", AnnLast).MessageID;
+
+        AutomationElement react = HoverStripButton(id, "HoverReact.");
+        Assert.AreEqual(ChatCopy.React, AppDriver.SafeName(react));
+        react.Click();
+
+        App.Find("ReactionPicker");
+        App.Find("ReactionPicker.1");
+    }
+
+    /// <summary>
+    /// With the mouse over Ann's last bubble, the hover strip's ⋮ opens the bubble menu.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task HoverBubble_More_OpensMenu()
+    {
+        await OpenChatAsync("Row.c-ann");
+        string id = Find("c-ann", AnnLast).MessageID;
+
+        AutomationElement more = HoverStripButton(id, "HoverMore.");
+        Assert.AreEqual(ChatCopy.MoreOptions, AppDriver.SafeName(more));
+        more.Click();
+
+        App.Find("Bubble.Copy");
+        Keyboard.Type(VirtualKeyShort.ESCAPE);
+    }
+
+    /// <summary>
+    /// The hover strip's space is always kept: hovering Ann's newest bubble moves neither it nor the bubble above it in its
+    /// group, and the strip sits right of the received bubble.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task HoverStrip_DoesNotMoveBubbles()
+    {
+        await OpenChatAsync("Row.c-ann");
+
+        // A Second Message From Ann, A Second After Her Last: The Two Make One Group
+        Message newest                           = Server.Phone.PushIncoming("c-ann", "See you then");
+        string neighbor_id                       = Find("c-ann", AnnLast).MessageID;
+        App.Find("Bubble." + newest.MessageID);
+
+        // Settle Wait For The List To Finish Scrolling To The New Bubble
+        Thread.Sleep(1000);
+        System.Drawing.Rectangle bubble_before  = App.Find("Bubble." + newest.MessageID).BoundingRectangle;
+        System.Drawing.Rectangle neighbor_before = App.Find("Bubble." + neighbor_id).BoundingRectangle;
+
+        AutomationElement react                 = HoverStripButton(newest.MessageID, "HoverReact.");
+        System.Drawing.Rectangle bubble_after   = App.Find("Bubble." + newest.MessageID).BoundingRectangle;
+        System.Drawing.Rectangle neighbor_after = App.Find("Bubble." + neighbor_id).BoundingRectangle;
+
+        AssertSame(bubble_before, bubble_after, "Ann's hovered bubble");
+        AssertSame(neighbor_before, neighbor_after, "The bubble above it in its group");
+        Assert.IsTrue(react.BoundingRectangle.Left >= bubble_after.Right,
+            $"The strip ({react.BoundingRectangle}) isn't right of Ann's bubble ({bubble_after}).");
+
+        static void AssertSame(System.Drawing.Rectangle before, System.Drawing.Rectangle after, string what) =>
+            Assert.IsTrue(Math.Abs(before.Left - after.Left) <= 1 && Math.Abs(before.Top - after.Top) <= 1
+                && Math.Abs(before.Width - after.Width) <= 1 && Math.Abs(before.Height - after.Height) <= 1,
+                $"{what} moved on hover: {before} became {after}.");
+    }
+
+    /// <summary>
+    /// Leaving the window straight from Ann's bubble hides the hover strip (the exit reports a point inside the bubble, so
+    /// a bounds check would keep it): a click where the ⋮ was opens no menu.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task HoverBubble_LeaveWindow_HidesStrip()
+    {
+        await OpenChatAsync("Row.c-ann");
+        string id                    = Find("c-ann", AnnLast).MessageID;
+        System.Drawing.Rectangle win = App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).BoundingRectangle;
+        AutomationElement more       = App.Find("HoverMore." + id);
+        PointerInput.Hover(App.Find("Bubble." + id).BoundingRectangle);
+
+        // Straight Out Through The Window's Left Edge, As Real Input
+        PointerInput.MoveBy(win.Left - Mouse.Position.X - 80);
+        if (Mouse.Position.X >= win.Left)
+        {
+            Assert.Inconclusive($"The pointer ({Mouse.Position}) couldn't leave the window ({win}) on the left.");
+        }
+
+        Thread.Sleep(500);
+        more.Click();
+
+        // A Menu Would Show By Now
+        Thread.Sleep(500);
+        Assert.IsNull(App.TryFind("Bubble.Copy"), "The strip stayed after the pointer left the window.");
+    }
+
+    /// <summary>
     /// A reply arriving from Ann shows the message it quotes above its text.
     /// </summary>
     /// <returns>A task for the test.</returns>
@@ -307,6 +425,17 @@ public sealed class RcsTests : UiTest
 
         // Opening The Chat Puts The Cursor In The Message Box; Waited For, So It Can't Take Focus From A Row Later
         WaitForFocus("Chat.Draft");
+    }
+
+    // Moves The Pointer Onto A Bubble, Then Onto One Of Its Hover Strip's Buttons (Hidden Until Then, So It Takes No
+    // Clicks), And Waits For The Strip's Fade In (167 ms), Which Turns On Its Clicks
+    private AutomationElement HoverStripButton(string messageId, string prefix)
+    {
+        AutomationElement button = App.Find(prefix + messageId);
+        PointerInput.Hover(App.Find("Bubble." + messageId).BoundingRectangle);
+        PointerInput.Hover(button.BoundingRectangle);
+        Thread.Sleep(500);
+        return button;
     }
 
     // The Newest Bubble's Row Takes Keyboard Focus

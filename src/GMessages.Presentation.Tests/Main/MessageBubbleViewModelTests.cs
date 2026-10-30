@@ -64,4 +64,19 @@ public sealed class MessageBubbleViewModelTests
         Assert.AreEqual(new Uri("https://example.com/a"), new MessageBubbleViewModel(Message("see https://example.com/a and http://b.example")).LinkUrl);
         Assert.IsNull(new MessageBubbleViewModel(Message("no link here")).LinkUrl);
     }
+
+    [TestMethod]
+    public void CanAct_FalseForTombstoneSendingFailedAndUnsent()
+    {
+        Assert.IsTrue(new MessageBubbleViewModel(Message()).CanAct);
+        Assert.IsFalse(new MessageBubbleViewModel(Message() with { Kind = MessageKind.Tombstone }).CanAct);
+        Assert.IsFalse(new MessageBubbleViewModel(Message() with { Status = MessageStatusType.OutgoingSending }).CanAct);
+        Assert.IsFalse(new MessageBubbleViewModel(Message() with { Status = MessageStatusType.OutgoingFailedGeneric }).CanAct);
+        Assert.IsFalse(new MessageBubbleViewModel(Message() with { Id = string.Empty, TmpId = "t1" }).CanAct);
+
+        // Marked Failed After Sending
+        var bubble = new MessageBubbleViewModel(Message());
+        bubble.MarkFailed();
+        Assert.IsFalse(bubble.CanAct);
+    }
 }

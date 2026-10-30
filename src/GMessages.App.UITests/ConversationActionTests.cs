@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Definitions;
 using FlaUI.Core.WindowsAPI;
@@ -18,7 +17,7 @@ namespace GMessages.App.UITests;
 [TestClass]
 [TestCategory("UI")]
 [DoNotParallelize]
-public sealed partial class ConversationActionTests : UiTest
+public sealed class ConversationActionTests : UiTest
 {
     private const string AnnPhone = "+15550000001";
 
@@ -70,8 +69,8 @@ public sealed partial class ConversationActionTests : UiTest
         // The Pointer Onto The Row, Then Onto The ⋮ (Hidden Until Then, So It Takes No Clicks)
         System.Drawing.Rectangle row = App.Find("Row.c-ann").BoundingRectangle;
         AutomationElement more       = App.Find("Row.More.c-ann");
-        Hover(row);
-        Hover(more.BoundingRectangle);
+        PointerInput.Hover(row);
+        PointerInput.Hover(more.BoundingRectangle);
 
         // Settle Wait For The ⋮'s Fade In (167 ms), Which Turns On Its Clicks
         Thread.Sleep(500);
@@ -99,10 +98,10 @@ public sealed partial class ConversationActionTests : UiTest
             AppDriver.DefaultTimeout, () => "Ann's row shows no name.");
 
         // Name, Then Blank Space Left Of The ⋮ On The Lower Line (Under The Time, Where No Icon Shows)
-        Hover(name!.BoundingRectangle);
+        PointerInput.Hover(name!.BoundingRectangle);
         System.Drawing.Rectangle more_rect = more.BoundingRectangle;
         System.Drawing.Rectangle row_rect  = row.BoundingRectangle;
-        Hover(new System.Drawing.Rectangle(more_rect.Left - 20, row_rect.Bottom - 16, 2, 2));
+        PointerInput.Hover(new System.Drawing.Rectangle(more_rect.Left - 20, row_rect.Bottom - 16, 2, 2));
 
         // Settle Wait For Any Fade (167 ms) Before The Click
         Thread.Sleep(500);
@@ -126,11 +125,10 @@ public sealed partial class ConversationActionTests : UiTest
         System.Drawing.Rectangle row = App.Find("Row.c-ann").BoundingRectangle;
         System.Drawing.Rectangle win = App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).BoundingRectangle;
         AutomationElement more       = App.Find("Row.More.c-ann");
-        Hover(row);
+        PointerInput.Hover(row);
 
         // Straight Out Through The Window's Left Edge, As Real Input
-        Input[] jump = [new() { Type = InputMouse, Mouse = new MouseInput { Dx = win.Left - Mouse.Position.X - 80, Flags = MouseEventMove } }];
-        Assert.AreEqual(1u, SendInput(1, jump, Marshal.SizeOf<Input>()), "Windows refused the mouse move.");
+        PointerInput.MoveBy(win.Left - Mouse.Position.X - 80);
         if (Mouse.Position.X >= win.Left)
         {
             Assert.Inconclusive($"The pointer ({Mouse.Position}) couldn't leave the window ({win}) on the left.");
@@ -577,15 +575,6 @@ public sealed partial class ConversationActionTests : UiTest
         Wait.Until(() => Server.Phone.ConversationUpdates.Count == count, AppDriver.DefaultTimeout,
             () => $"The phone got {Server.Phone.ConversationUpdates.Count} conversation updates, not {count}.");
 
-    // Moves The Pointer Over An Element As A Person Would. FlaUI Moves The Cursor With SetCursorPos, Which WinUI Doesn't
-    // See As Pointer Input (No PointerEntered), So A Real One-Pixel Move Follows It Through SendInput
-    private static void Hover(System.Drawing.Rectangle over)
-    {
-        Mouse.MoveTo(over.X + (over.Width / 2) - 1, over.Y + (over.Height / 2));
-        Input[] move = [new() { Type = InputMouse, Mouse = new MouseInput { Dx = 1, Flags = MouseEventMove } }];
-        Assert.AreEqual(1u, SendInput(1, move, Marshal.SizeOf<Input>()), "Windows refused the mouse move.");
-    }
-
     // A Dialog's Button, By Its Text
     private static AutomationElement DialogButton(AutomationElement dialog, string name)
     {
@@ -593,34 +582,5 @@ public sealed partial class ConversationActionTests : UiTest
         Wait.Until(() => (button = AppDriver.Search(dialog, e => e.ControlType == ControlType.Button && AppDriver.SafeName(e) == name)) is not null,
             AppDriver.DefaultTimeout, () => $"The dialog has no '{name}' button.");
         return button!;
-    }
-
-    // =========================================================================
-    // NATIVE MOUSE INPUT
-    // =========================================================================
-
-    private const uint InputMouse     = 0;
-    private const uint MouseEventMove = 0x0001;
-
-    [LibraryImport("user32.dll")]
-    private static partial uint SendInput(uint count, [In] Input[] inputs, int size);
-
-    // INPUT With Its MOUSEINPUT (The Union's Other Members Are Smaller)
-    [StructLayout(LayoutKind.Sequential)]
-    private struct Input
-    {
-        public uint Type;
-        public MouseInput Mouse;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct MouseInput
-    {
-        public int Dx;
-        public int Dy;
-        public uint MouseData;
-        public uint Flags;
-        public uint Time;
-        public IntPtr ExtraInfo;
     }
 }
