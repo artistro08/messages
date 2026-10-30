@@ -247,9 +247,85 @@ public sealed partial class MediaTests : UiTest
         Assert.AreEqual("blue.png", AppDriver.SafeName(App.Find("Chat.Attachment.1")), "The photo picked didn't become a chip.");
     }
 
+    /// <summary>
+    /// A received voice message shows its length, read from the audio (the proto has none), and its play button plays and
+    /// pauses it, named Play or Pause to match.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task ReceivedVoice_PlayPause_ShowsLength()
+    {
+        await OpenMediaChatAsync();
+
+        Message message          = Server.Phone.PushIncomingMedia("c-media", "audio/mp4", await VoiceFixtureAsync(), "Voice message.m4a");
+        AutomationElement length = App.Find("Bubble.Voice." + message.MessageID);
+        WaitForStatus(length, "Ready");
+        Assert.AreEqual("0:03", AppDriver.SafeName(length), "The voice message shows another length.");
+
+        AutomationElement play = App.Find("Voice.Play." + message.MessageID);
+        Assert.AreEqual(ChatCopy.Play, AppDriver.SafeName(play), "The play button has another name.");
+        play.Patterns.Invoke.Pattern.Invoke();
+        WaitForStatus(play, "Playing");
+        Assert.AreEqual(ChatCopy.Pause, AppDriver.SafeName(play), "The playing message's button isn't Pause.");
+
+        play.Patterns.Invoke.Pattern.Invoke();
+        WaitForStatus(play, "Paused");
+        Assert.AreEqual(ChatCopy.Play, AppDriver.SafeName(play), "The paused message's button isn't Play.");
+    }
+
     // =========================================================================
     // HELPERS
     // =========================================================================
+
+    /// <summary>
+    /// Makes a 3-second voice message: a tone that swells and fades (so its waveform has a shape), 8 kHz mono, encoded
+    /// to M4A/AAC by Windows' transcoder as the app's recorder would.
+    /// </summary>
+    /// <returns>The M4A file's bytes.</returns>
+    internal static async Task<byte[]> VoiceFixtureAsync()
+    {
+        const int Rate    = 8000;
+        const int Seconds = 3;
+
+        // A 16-Bit PCM WAV File
+        using var wav    = new MemoryStream();
+        using var writer = new BinaryWriter(wav);
+        int samples      = Rate * Seconds;
+        writer.Write("RIFF"u8);
+        writer.Write(36 + (samples * 2));
+        writer.Write("WAVEfmt "u8);
+        writer.Write(16);
+        writer.Write((short)1);
+        writer.Write((short)1);
+        writer.Write(Rate);
+        writer.Write(Rate * 2);
+        writer.Write((short)2);
+        writer.Write((short)16);
+        writer.Write("data"u8);
+        writer.Write(samples * 2);
+        for (int i = 0; i < samples; i++)
+        {
+            double swell = Math.Sin(Math.PI * i / samples);
+            writer.Write((short)(12000 * swell * Math.Sin(2 * Math.PI * 300 * i / Rate)));
+        }
+
+        writer.Flush();
+
+        // To M4A
+        using var source = new Windows.Storage.Streams.InMemoryRandomAccessStream();
+        using var target = new Windows.Storage.Streams.InMemoryRandomAccessStream();
+        await source.WriteAsync(System.Runtime.InteropServices.WindowsRuntime.WindowsRuntimeBufferExtensions.AsBuffer(wav.ToArray()));
+        source.Seek(0);
+        var profile  = Windows.Media.MediaProperties.MediaEncodingProfile.CreateM4a(Windows.Media.MediaProperties.AudioEncodingQuality.Low);
+        var prepared = await new Windows.Media.Transcoding.MediaTranscoder().PrepareStreamTranscodeAsync(source, target, profile);
+        Assert.IsTrue(prepared.CanTranscode, $"Windows can't make the voice fixture: {prepared.FailureReason}.");
+        await prepared.TranscodeAsync();
+
+        using var m4a = new MemoryStream();
+        target.Seek(0);
+        await System.IO.WindowsRuntimeStreamExtensions.AsStreamForRead(target).CopyToAsync(m4a);
+        return m4a.ToArray();
+    }
 
     // Whether Ctrl + Shift + The Key Is Free: No Other App Holds It As A Global Hotkey (Which Windows Would Hand That App)
     private static bool HotkeyFree(VirtualKeyShort key)

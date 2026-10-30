@@ -809,11 +809,11 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
         return bubble;
     }
 
-    // An Attachment's Pending Message: Its Bytes Ride As Inline Data, So The Bubble Shows Them Before Any Upload. Audio
-    // Shows As A File Card Until The Echo
+    // An Attachment's Pending Message: Its Bytes Ride As Inline Data, So The Bubble Shows (And Plays) Them Before Any
+    // Upload
     private ChatMessage MediaMessage(PendingAttachment a, string caption, bool isRcs)
     {
-        MessageKind kind = a.Kind == MessageKind.Audio ? MessageKind.File : a.Kind;
+        MessageKind kind = a.Kind;
         var media        = new MediaPart(string.Empty, [], string.Empty, [], a.Bytes, a.Name, a.Bytes.LongLength, a.Width, a.Height, kind, a.Mime);
 
         return new ChatMessage(string.Empty, GmClient.NewTmpId(), ConversationId, string.Empty, _time.GetUtcNow(), true, kind, caption, MessageStatusType.OutgoingSending)

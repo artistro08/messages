@@ -120,6 +120,14 @@ public static class ChatCopy
     public const string AttachTooBig     = "This file is too big to send (100 MB max).";
     public const string AttachSendFailed = "Couldn't send this attachment. Try again.";
 
+    // Voice Messages (Plan 6; Controller Copy, The Owner Signs Off At The Gate)
+    public const string RecordVoiceMessage = "Record voice message";
+    public const string Stop               = "Stop";
+    public const string CancelRecording    = "Cancel recording";
+    public const string Play               = "Play";
+    public const string Pause              = "Pause";
+    public const string MicrophoneOff      = "Microphone access is off. Turn it on in Settings > Privacy & security > Microphone.";
+
     // Startup
     public const string StartupRefused = "You'll have to manually enable startup. Turn it on in Settings > Apps > Startup.";
 }

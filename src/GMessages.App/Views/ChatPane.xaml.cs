@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.WindowsRuntime;
+using GMessages.App.Media;
 using GMessages.App.Views.Controls;
 using GMessages.Presentation.Main;
 using GMessages.Presentation.Messaging;
@@ -143,6 +144,9 @@ public sealed partial class ChatPane : UserControl
     private List<(MessageBubbleViewModel Bubble, double Top)> _olderRows = [];
     private int _olderTries;
 
+    // Plays The Chat's Voice Messages, One At A Time; Made On The First Play, Let Go On A Chat Switch Or Unload
+    private VoicePlayer? _voice;
+
     /// <summary>
     /// Creates the pane.
     /// </summary>
@@ -185,6 +189,7 @@ public sealed partial class ChatPane : UserControl
         {
             Ui.AnimationsEnabledChanged -= OnAnimationsEnabledChanged;
             Ui.ColorValuesChanged       -= OnColorValuesChanged;
+            StopVoice();
         };
 
         // A Recycled Row Starts Below Its Neighbors Again (A Focused Row Was Raised For Its Ring)
@@ -399,6 +404,7 @@ public sealed partial class ChatPane : UserControl
         }
 
         var chat = (ChatViewModel?)e.NewValue;
+        pane.StopVoice();
         BindableList.Show(pane.MessageList, chat?.Messages);
         BindableList.Show(pane.AttachmentList, chat?.Attachments);
         if (chat is not null)
@@ -689,6 +695,20 @@ public sealed partial class ChatPane : UserControl
         {
             _ = Chat.RetryAsync(bubble);
         }
+    }
+
+    // A Bubble's Play, Pause Or Seek: One Message Plays At A Time
+    private void OnVoiceRequested(object? sender, VoiceRequest request)
+    {
+        _voice ??= new VoicePlayer(DispatcherQueue);
+        _voice.Handle(request);
+    }
+
+    // Stops The Playing Voice Message And Lets Go Of The Player
+    private void StopVoice()
+    {
+        _voice?.Dispose();
+        _voice = null;
     }
 
     // A Bubble's Pill, Its Menu's React Or Its Hover Strip's React: The Picker Opens Over The Element Given
