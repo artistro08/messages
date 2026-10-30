@@ -85,6 +85,21 @@ public sealed class PairingViewModel : INotifyPropertyChanged
     /// <summary>Gets the emoji to tap on the phone, or null before the phone answers.</summary>
     public string? Emoji { get; private set; }
 
+    /// <summary>
+    /// Names the bundled Noto Color Emoji image of a pairing emoji (<c>Assets/Emoji</c> in the app), so the emoji looks
+    /// the way messages.google.com and the phone draw it.
+    /// </summary>
+    /// <remarks>Noto's own naming: each code point in lower-case hex (at least four digits) joined by "_", VS16 left out.</remarks>
+    /// <param name="emoji">The emoji.</param>
+    /// <returns>The file name, such as <c>emoji_u1f62e_200d_1f4a8.png</c>.</returns>
+    public static string EmojiFileName(string emoji)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(emoji);
+
+        IEnumerable<string> points = emoji.EnumerateRunes().Where(r => r.Value != 0xFE0F).Select(r => r.Value.ToString("x4", System.Globalization.CultureInfo.InvariantCulture));
+        return "emoji_u" + string.Join('_', points) + ".png";
+    }
+
     /// <summary>Gets the plain-English failure message, or null when nothing failed.</summary>
     public string? Message { get; private set; }
 

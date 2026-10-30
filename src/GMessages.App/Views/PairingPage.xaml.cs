@@ -8,6 +8,7 @@ using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.Web.WebView2.Core;
 
 namespace GMessages.App.Views;
@@ -370,6 +371,8 @@ public sealed partial class PairingPage : UserControl
 
     private void OnViewModelChanged(object? sender, PropertyChangedEventArgs e)
     {
+        ShowEmojiImage();
+
         // Try Again: A New Browser. Paired (Done) Needs Nothing Here: The App Switches The Window To The Chats
         if (_closed || ViewModel.Step != PairingStep.SigningIn || _webView is not null)
         {
@@ -377,6 +380,19 @@ public sealed partial class PairingPage : UserControl
         }
 
         _ = StartSignInAsync();
+    }
+
+    // The Emoji's Noto Color Emoji Image (Assets/Emoji, From googlefonts/noto-emoji), So It Looks As On messages.google.com
+    // And The Phone; The Text Glyph Stays Only When No Image Is Bundled For It
+    private void ShowEmojiImage()
+    {
+        string? emoji = ViewModel.Emoji;
+        string? name  = string.IsNullOrEmpty(emoji) ? null : PairingViewModel.EmojiFileName(emoji);
+        bool has_image = name is not null && File.Exists(Path.Combine(AppContext.BaseDirectory, "Assets", "Emoji", name));
+
+        EmojiImage.Source     = has_image ? new BitmapImage(new Uri("ms-appx:///Assets/Emoji/" + name)) : null;
+        EmojiImage.Visibility = has_image ? Visibility.Visible : Visibility.Collapsed;
+        EmojiText.Visibility  = has_image ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private void OnTryAgainClick(object sender, RoutedEventArgs e) => ViewModel.TryAgain();

@@ -96,8 +96,10 @@
                                     IsEnabled="{x:Bind local:SettingsPage.Not(Settings.IsUnpairing), Mode=OneWay}"
                                     Text="Unpair"
                                     Visibility="{x:Bind Settings.CanUnpair, Mode=OneWay}">
+                                    <!-- Phone With A Slash: Segoe Fluent Icons has none, so Material Symbols' mobile_off (Apache 2.0),
+                                         outlined, drawn on 16 px -->
                                     <MenuFlyoutItem.Icon>
-                                        <FontIcon Glyph="&#xE8C9;" />
+                                        <PathIcon Data="M13.667 15.533 0.467 2.333 l0.933 -0.933 L14.6 14.6 l-0.933 0.933ZM3.333 4.283 l1.333 1.333 v6.383 h6.4 l1.6 1.6 v0.4 q0 0.55 -0.392 0.942 T11.333 15.333 H4.667 q-0.55 0 -0.942 -0.392 T3.333 14 v-9.717Zm1.333 9.05 v0.667 h6.667 v-0.667 H4.667Zm1.217 -9.333 -1.317 -1.333 h6.767 v-0.667 H3.9 l-0.467 -0.467 q0.167 -0.383 0.492 -0.625 T4.667 0.667 h6.667 q0.55 0 0.942 0.392 T12.667 2 v8.767 l-1.333 -1.333 v-5.433 H5.883Zm2.117 9.333Zm-0.383 -10.667Z" />
                                     </MenuFlyoutItem.Icon>
                                 </MenuFlyoutItem>
                             </MenuFlyout>

@@ -187,7 +187,12 @@
                     Style="{StaticResource SettingsCardButtonStyle}"
                     Visibility="{x:Bind ViewModel.CanUnpair, Mode=OneWay}">
                     <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
-                        <FontIcon Glyph="&#xE8C9;" Style="{StaticResource CardIconStyle}" />
+                        <!-- Phone With A Slash: Material Symbols' mobile_off (Apache 2.0), outlined, drawn on 20 px -->
+                        <PathIcon
+                            Width="20"
+                            Height="20"
+                            VerticalAlignment="Center"
+                            Data="M17.083 19.417 0.583 2.917 l1.167 -1.167 L18.25 18.25 l-1.167 1.167ZM4.167 5.354 l1.667 1.667 v7.979 h8 l2 2 v0.5 q0 0.688 -0.49 1.177 T14.167 19.167 H5.833 q-0.688 0 -1.177 -0.49 T4.167 17.5 v-12.146Zm1.667 11.312 v0.833 h8.333 v-0.833 H5.833Zm1.521 -11.667 -1.646 -1.667 h8.458 v-0.833 H4.875 l-0.583 -0.583 q0.208 -0.479 0.615 -0.781 T5.833 0.833 h8.333 q0.688 0 1.177 0.49 T15.833 2.5 v10.958 l-1.667 -1.667 v-6.792 H7.354Zm2.646 11.667Zm-0.479 -13.333Z" />
                         <TextBlock
                             Grid.Column="1"
                             VerticalAlignment="Center"

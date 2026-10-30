@@ -50,11 +50,23 @@
             VerticalAlignment="Center"
             Spacing="16"
             Visibility="{x:Bind ViewModel.IsShowingEmoji, Mode=OneWay}">
-            <TextBlock
-                HorizontalAlignment="Center"
-                AutomationProperties.AutomationId="Pairing.Emoji"
-                FontSize="96"
-                Text="{x:Bind ViewModel.Emoji, Mode=OneWay}" />
+            <!-- The Emoji As The Website Draws It: Noto Color Emoji's image, bundled (set from code); the system emoji font
+                 only if the image is missing -->
+            <Grid HorizontalAlignment="Center">
+                <Image
+                    x:Name="EmojiImage"
+                    Width="96"
+                    Height="96"
+                    AutomationProperties.AutomationId="Pairing.Emoji"
+                    AutomationProperties.Name="{x:Bind ViewModel.Emoji, Mode=OneWay}"
+                    Visibility="Collapsed" />
+                <TextBlock
+                    x:Name="EmojiText"
+                    HorizontalAlignment="Center"
+                    AutomationProperties.AutomationId="Pairing.Emoji"
+                    FontSize="96"
+                    Text="{x:Bind ViewModel.Emoji, Mode=OneWay}" />
+            </Grid>
             <TextBlock
                 HorizontalAlignment="Center"
                 Style="{StaticResource SubtitleTextBlockStyle}"

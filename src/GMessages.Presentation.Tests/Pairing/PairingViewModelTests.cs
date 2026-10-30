@@ -286,4 +286,21 @@ public sealed class PairingViewModelTests
         Assert.IsNull(view_model.SignedOutReason);
         Assert.IsFalse(view_model.ShowSignedOutReason);
     }
+
+    /// <summary>
+    /// The pairing emoji are drawn from Noto Color Emoji images bundled with the app, named by their code points
+    /// without VS16, and every emoji either list can pick has one.
+    /// </summary>
+    [TestMethod]
+    public void EmojiImage_NamedByCodePoints_AndAllBundled()
+    {
+        Assert.AreEqual("emoji_u1f62e_200d_1f4a8.png", PairingViewModel.EmojiFileName("\U0001F62E\u200D\U0001F4A8"));
+        Assert.AreEqual("emoji_u2764.png", PairingViewModel.EmojiFileName("\u2764\uFE0F"));
+
+        string folder = Path.Combine(AppInfoTests.FindRepoRoot(), "src", "GMessages.App", "Assets", "Emoji");
+        string[] missing = [.. PairingEmojis.V0.Concat(PairingEmojis.V1).Distinct(StringComparer.Ordinal)
+            .Select(PairingViewModel.EmojiFileName)
+            .Where(name => !File.Exists(Path.Combine(folder, name)))];
+        Assert.AreEqual(0, missing.Length, "Missing: " + string.Join(", ", missing));
+    }
 }
