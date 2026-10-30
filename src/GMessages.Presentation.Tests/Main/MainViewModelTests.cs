@@ -95,6 +95,167 @@ public sealed class MainViewModelTests
     }
 
     /// <summary>
+    /// The archived list is made and loaded once, shows in place of the inbox, reloads with the other lists, and Back
+    /// returns to the inbox.
+    /// </summary>
+    [TestMethod]
+    public async Task OpenArchived_LoadsArchiveFolder_BackToInbox()
+    {
+        using var rig = new MainRig();
+        using MainViewModel vm = await NewMainAsync(rig);
+        rig.Page(MainRig.Conv("a", "Ann", 1), MainRig.Conv("z", "Zed", 2, status: ConversationStatus.Archived));
+        Assert.IsFalse(vm.IsFolderView);
+
+        vm.OpenArchived();
+
+        Assert.AreEqual(ConversationFolder.Archived, vm.Folder);
+        Assert.IsTrue(vm.IsArchivedView);
+        Assert.IsTrue(vm.IsFolderView);
+        Assert.IsFalse(vm.IsSpamView);
+        Assert.AreNotSame(vm.Inbox, vm.CurrentList);
+        Assert.AreEqual("z", string.Join(",", vm.CurrentList.Rows.Select(r => r.Id)));
+        Assert.AreEqual(ListConversationsRequest.Types.Folder.Archive, rig.Client.ListCalls.Last().Folder);
+
+        // Opening Again Keeps The List And Loads Nothing
+        ConversationListViewModel archived = vm.CurrentList;
+        int calls                          = rig.Client.ListCalls.Count;
+        vm.BackToInbox();
+        Assert.AreEqual(ConversationFolder.Inbox, vm.Folder);
+        Assert.IsFalse(vm.IsArchivedView);
+        Assert.IsFalse(vm.IsFolderView);
+        Assert.AreSame(vm.Inbox, vm.CurrentList);
+
+        vm.OpenArchived();
+        Assert.AreSame(archived, vm.CurrentList);
+        Assert.AreEqual(calls, rig.Client.ListCalls.Count);
+
+        // The Spam List Is Its Own
+        vm.OpenSpamBlocked();
+        Assert.IsTrue(vm.IsSpamView);
+        Assert.IsFalse(vm.IsArchivedView);
+        Assert.AreSame(vm.SpamBlocked, vm.CurrentList);
+        Assert.AreNotSame(archived, vm.CurrentList);
+
+        // Back Online: The Inbox, Archived And Spam Lists Reload, Once Each
+        calls = rig.Client.ListCalls.Count;
+        vm.ApplyState(ConnectionState.Reconnecting);
+        vm.ApplyState(ConnectionState.Connected);
+        Assert.AreEqual(calls + 3, rig.Client.ListCalls.Count);
+    }
+
+    /// <summary>
+    /// An action that moves the open conversation out of its folder closes the chat; one on another conversation
+    /// leaves the open chat alone.
+    /// </summary>
+    [TestMethod]
+    [DataRow(ConversationAction.Archive)]
+    [DataRow(ConversationAction.Delete)]
+    [DataRow(ConversationAction.BlockAndReport)]
+    public async Task Run_MovesOpenChatOut_ClosesIt(ConversationAction action)
+    {
+        using var rig = new MainRig();
+        using MainViewModel vm = await NewMainAsync(rig);
+        vm.Select("b");
+
+        Assert.IsTrue(await vm.RunAsync("c", action));
+        Assert.AreEqual("b", vm.SelectedConversationId);
+        Assert.IsNotNull(vm.Chat);
+
+        Assert.IsTrue(await vm.RunAsync("b", action));
+        Assert.IsNull(vm.SelectedConversationId);
+        Assert.IsNull(vm.Chat);
+        Assert.AreEqual("a", string.Join(",", vm.Inbox.Rows.Select(r => r.Id)));
+        Assert.IsNull(vm.ActionError);
+    }
+
+    /// <summary>
+    /// Mute and unmute keep the open chat, whose mute state follows.
+    /// </summary>
+    [TestMethod]
+    public async Task Run_Mute_KeepsChatOpen()
+    {
+        using var rig = new MainRig();
+        using MainViewModel vm = await NewMainAsync(rig);
+        vm.Select("a");
+        ChatViewModel chat = vm.Chat!;
+        Assert.IsFalse(chat.IsMuted);
+        Assert.AreEqual("a", chat.Conversation!.Id);
+
+        Assert.IsTrue(await vm.RunAsync("a", ConversationAction.Mute));
+        Assert.AreSame(chat, vm.Chat);
+        Assert.IsTrue(chat.IsMuted);
+        Assert.IsTrue(chat.Conversation!.IsMuted);
+        Assert.IsTrue(vm.FindConversation("a")!.IsMuted);
+
+        Assert.IsTrue(await vm.RunAsync("a", ConversationAction.Unmute));
+        Assert.AreSame(chat, vm.Chat);
+        Assert.IsFalse(chat.IsMuted);
+        Assert.IsNull(vm.FindConversation("nobody"));
+    }
+
+    /// <summary>
+    /// A refused or impossible update shows the failure banner and keeps the chat open; the next success or Dismiss
+    /// clears it.
+    /// </summary>
+    [TestMethod]
+    public async Task Run_Fails_SetsActionError_ChatStays()
+    {
+        using var rig = new MainRig();
+        using MainViewModel vm = await NewMainAsync(rig);
+        vm.Select("a");
+        rig.Client.RefuseUpdates = true;
+
+        Assert.IsFalse(await vm.RunAsync("a", ConversationAction.Archive));
+        Assert.AreEqual(ChatCopy.ActionFailed, vm.ActionError);
+        Assert.IsTrue(vm.HasActionError);
+        Assert.AreEqual("a", vm.SelectedConversationId);
+        Assert.AreEqual("a,b,c", string.Join(",", vm.Inbox.Rows.Select(r => r.Id)));
+
+        // Success Clears It
+        rig.Client.RefuseUpdates = false;
+        Assert.IsTrue(await vm.RunAsync("a", ConversationAction.Mute));
+        Assert.IsNull(vm.ActionError);
+        Assert.IsFalse(vm.HasActionError);
+
+        // Not Connected
+        rig.Connected = false;
+        Assert.IsFalse(await vm.RunAsync("a", ConversationAction.Delete));
+        Assert.AreEqual(ChatCopy.ActionFailed, vm.ActionError);
+        Assert.AreEqual("a", vm.SelectedConversationId);
+
+        vm.DismissActionError();
+        Assert.IsNull(vm.ActionError);
+        Assert.IsFalse(vm.HasActionError);
+    }
+
+    /// <summary>
+    /// A second run on a conversation still waiting on the phone sends nothing and shows no error; another conversation
+    /// isn't held up, and once the first answers the conversation can run again.
+    /// </summary>
+    [TestMethod]
+    public async Task Run_SameConversationTwice_OneRequest()
+    {
+        using var rig = new MainRig();
+        using MainViewModel vm = await NewMainAsync(rig);
+        var gate              = new TaskCompletionSource();
+        rig.Client.UpdateGate = gate;
+
+        Task<bool> first = vm.RunAsync("a", ConversationAction.Archive);
+        Assert.IsFalse(await vm.RunAsync("a", ConversationAction.Archive));
+        Assert.IsNull(vm.ActionError);
+        Assert.HasCount(1, rig.Client.ConversationUpdates);
+
+        Assert.IsTrue(await vm.RunAsync("b", ConversationAction.Mute));
+        Assert.HasCount(2, rig.Client.ConversationUpdates);
+
+        gate.SetResult();
+        Assert.IsTrue(await first);
+
+        Assert.IsTrue(await vm.RunAsync("a", ConversationAction.Unarchive));
+        Assert.HasCount(3, rig.Client.ConversationUpdates);
+    }
+
+    /// <summary>
     /// Reaching Connected (and only the arrival, not staying there) tells the window to retry its photos.
     /// </summary>
     [TestMethod]
@@ -194,10 +355,14 @@ public sealed class MainViewModelTests
         vm.Select("new-1");
         vm.OpenStartChat();
         vm.OpenSpamBlocked();
+        vm.OpenArchived();
         vm.ApplyState(ConnectionState.Reconnecting);
         vm.ApplyState(ConnectionState.Connected);
         vm.ApplyEvent(new PhoneRespondingAgain());
+        Assert.IsFalse(await vm.RunAsync("a", ConversationAction.Archive));
 
+        Assert.IsEmpty(rig.Client.ConversationUpdates, "no actions sent after closing");
+        Assert.AreEqual(ConversationFolder.Inbox, vm.Folder);
         Assert.IsNull(vm.Chat);
         Assert.IsNull(vm.SelectedConversationId);
         Assert.IsNull(vm.SpamBlocked);

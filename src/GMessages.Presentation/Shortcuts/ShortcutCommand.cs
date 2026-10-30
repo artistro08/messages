@@ -40,4 +40,13 @@ public enum ShortcutCommand
 
     /// <summary>Starts a reply to the focused message.</summary>
     ReplyToMessage,
+
+    /// <summary>Asks to move the open conversation to trash.</summary>
+    DeleteConversation,
+
+    /// <summary>Archives the open conversation.</summary>
+    ArchiveConversation,
+
+    /// <summary>Opens the open conversation's Details dialog.</summary>
+    ShowDetails,
 }
