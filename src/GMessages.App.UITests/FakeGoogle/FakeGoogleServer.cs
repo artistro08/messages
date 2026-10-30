@@ -121,6 +121,8 @@ public sealed class FakeGoogleServer : IAsyncDisposable
     private volatile bool _rejectCookies;
     private volatile bool _slowStart;
     private volatile bool _failMediaDownloads;
+    private readonly ConcurrentQueue<string> _downloads = new();
+    private long _downloadDelayTicks;
 
     /// <summary>
     /// Starts the server on a free port of 127.0.0.1.
@@ -201,6 +203,20 @@ public sealed class FakeGoogleServer : IAsyncDisposable
         get => _failMediaDownloads;
         set => _failMediaDownloads = value;
     }
+
+    /// <summary>
+    /// Gets or sets how long a media download waits before it answers (zero: at once), as a stalled download.
+    /// </summary>
+    public TimeSpan MediaDownloadDelay
+    {
+        get => TimeSpan.FromTicks(Interlocked.Read(ref _downloadDelayTicks));
+        set => Interlocked.Exchange(ref _downloadDelayTicks, value.Ticks);
+    }
+
+    /// <summary>
+    /// Gets the attachment ID of every media download so far, in arrival order.
+    /// </summary>
+    public IReadOnlyList<string> DownloadedMediaIds => [.. _downloads];
 
     /// <summary>
     /// Gets every request path so far, in arrival order.
@@ -381,6 +397,12 @@ public sealed class FakeGoogleServer : IAsyncDisposable
                 case "/upload" when request.HttpMethod == "GET":
                     var download  = DownloadAttachmentRequest.Parser.ParseFrom(Convert.FromBase64String(request.Headers["x-goog-download-metadata"] ?? ""));
                     byte[]? media = Phone.Chats.MediaBytes(download.Info?.AttachmentID ?? "");
+                    _downloads.Enqueue(download.Info?.AttachmentID ?? "");
+                    if (MediaDownloadDelay > TimeSpan.Zero)
+                    {
+                        await Task.Delay(MediaDownloadDelay, _stop.Token);
+                    }
+
                     await (_failMediaDownloads
                         ? RespondAsync(context.Response, 500, "text/plain", "Download failed"u8.ToArray())
                         : media is null
