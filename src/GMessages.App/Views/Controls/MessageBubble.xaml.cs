@@ -43,7 +43,8 @@ namespace GMessages.App.Views.Controls;
 /// title and the link's host, shows under the text once fetched, and the text then leaves out that link's address (a
 /// message that was only the link shows the card alone). Clicking the card opens the link in the default browser; its
 /// own menu (right-click, the Application key or Shift + F10) has Copy link (<c>Preview.CopyLink</c>), which copies the
-/// address as sent. The pill and the menu's React raise
+/// address as sent. In a group chat the pill opens who reacted (<c>Reactors</c>, rows <c>Reactors.{n}</c>, mine as
+/// "You"). In a one-on-one chat the pill, and everywhere the menu's React, raise
 /// <see cref="ReactRequested"/>, and the menu's Reply raises <see cref="ReplyRequested"/>, for the chat to act on.
 /// </para>
 /// <para>
@@ -74,6 +75,10 @@ public sealed partial class MessageBubble : UserControl
     // The Preview Card's Image Width, And Its Gap Below The Text, In Effective Pixels
     private const int PreviewImageWidth = 240;
     private const double PreviewGap     = 8;
+
+    // Who Reacted: The List Scrolls Past This Height, And Each Row's Emoji Sits This Far From The Name
+    private const double ReactorsMaxHeight = 320;
+    private const double ReactorsSpacing   = 12;
 
     // Width: A Bubble Grows With Its Content Up To This Share Of The Chat, And Never Past The Cap (Effective Pixels)
     private const double MaxWidthShare  = 0.7;
@@ -625,8 +630,51 @@ public sealed partial class MessageBubble : UserControl
         }
     }
 
-    // The Pill Or The Menu's React: The Picker Opens Over The Back
+    // The Menu's React: The Picker Opens Over The Back
     private void OnReactClick(object sender, RoutedEventArgs e) => ReactRequested?.Invoke(this, Back);
+
+    // The Pill: In A Group Chat, Who Reacted; In A One-On-One Chat, The Picker Over The Back As Before
+    private void OnPillClick(object sender, RoutedEventArgs e)
+    {
+        if (Bubble is not { IsGroupChat: true } bubble)
+        {
+            ReactRequested?.Invoke(this, Back);
+            return;
+        }
+
+        ShowReactors(bubble.Reactors());
+    }
+
+    // Who Reacted: A List In A Flyout At The Pill, One Row Per Person ("👍 Bo"), Named For Narrator (Reactors.{n}). The
+    // Rows Only Read, So They Show No Hover Or Press Fill. Names Never Reach The Log
+    private void ShowReactors(IReadOnlyList<(string Emoji, string Name)> reactors)
+    {
+        if (reactors.Count == 0)
+        {
+            return;
+        }
+
+        var list  = new ListView { SelectionMode = ListViewSelectionMode.None, MaxHeight = ReactorsMaxHeight };
+        var clear = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+        list.Resources["ListViewItemBackgroundPointerOver"] = clear;
+        list.Resources["ListViewItemBackgroundPressed"]     = clear;
+        AutomationProperties.SetAutomationId(list, "Reactors");
+
+        for (int i = 0; i < reactors.Count; i++)
+        {
+            (string emoji, string name) = reactors[i];
+            var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = ReactorsSpacing };
+            row.Children.Add(new TextBlock { Text = emoji, IsColorFontEnabled = true });
+            row.Children.Add(new TextBlock { Text = name });
+
+            var item = new ListViewItem { Content = row };
+            AutomationProperties.SetAutomationId(item, "Reactors." + i);
+            AutomationProperties.SetName(item, emoji + " " + name);
+            list.Items.Add(item);
+        }
+
+        new Flyout { Content = list }.ShowAt(Pill);
+    }
 
     // The Strip's Buttons Act Only While The Bubble Takes Them (A Click Can Race A Change). Its React Opens The Picker
     // Over The Button

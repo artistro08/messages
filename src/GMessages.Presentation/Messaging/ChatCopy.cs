@@ -61,6 +61,9 @@ public static class ChatCopy
     // Link Preview Card Menu (Controller Copy; Owner Signs Off)
     public const string CopyLink = "Copy link";
 
+    // Who Reacted, In Groups: My Own Row (Controller Copy; Owner Signs Off)
+    public const string You = "You";
+
     // A Bubble's Accessible Item Type, RCS Or SMS (Controller Copy; Owner Signs Off)
     public const string ChatMessage = "Chat message";
     public const string TextMessage = "Text message";

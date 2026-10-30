@@ -279,6 +279,33 @@ public sealed class FakeChats
         }
     }
 
+    // Others' (Or My) Reactions On A Stored Message, Each Added To Its Emoji's Entry; Null For An Unknown Message
+    internal Message? AddReactions(string conversationId, string messageId, IEnumerable<(EmojiType Type, string ParticipantId)> reactions)
+    {
+        lock (_lock)
+        {
+            Message? message = _messages.TryGetValue(conversationId, out List<Message>? all) ? all.FirstOrDefault(m => m.MessageID == messageId) : null;
+            if (message is null)
+            {
+                return null;
+            }
+
+            foreach ((EmojiType type, string participant_id) in reactions)
+            {
+                ReactionEntry? entry = message.Reactions.FirstOrDefault(e => e.Data?.Type == type);
+                if (entry is null)
+                {
+                    entry = new ReactionEntry { Data = new ReactionData { Type = type } };
+                    message.Reactions.Add(entry);
+                }
+
+                entry.ParticipantIDs.Add(participant_id);
+            }
+
+            return message.Clone();
+        }
+    }
+
     // A New Status On A Stored Message; Null For An Unknown Message
     internal Message? SetStatus(string conversationId, string messageId, MessageStatusType status)
     {
