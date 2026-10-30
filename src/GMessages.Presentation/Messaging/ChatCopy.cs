@@ -58,6 +58,9 @@ public static class ChatCopy
     public const string OriginalMessage   = "Original message";
     public const string Copy              = "Copy";
 
+    // Link Preview Card Menu (Controller Copy; Owner Signs Off)
+    public const string CopyLink = "Copy link";
+
     // A Bubble's Accessible Item Type, RCS Or SMS (Controller Copy; Owner Signs Off)
     public const string ChatMessage = "Chat message";
     public const string TextMessage = "Text message";

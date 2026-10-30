@@ -129,7 +129,15 @@ public sealed partial class LinkPreviewer : IDisposable
     /// </remarks>
     /// <param name="text">The message text.</param>
     /// <returns>The link, or null when there is none.</returns>
-    public static Uri? FirstLink(string text)
+    public static Uri? FirstLink(string text) => FirstTextLink(text)?.Url;
+
+    /// <summary>
+    /// Finds the first web link in a message as <see cref="FirstLink"/> does, with where it sits in the text.
+    /// </summary>
+    /// <remarks>The link's text (<see cref="TextLink.Start"/>, <see cref="TextLink.Length"/>) is exactly the address as sent.</remarks>
+    /// <param name="text">The message text.</param>
+    /// <returns>The link and its place, or null when there is none.</returns>
+    public static TextLink? FirstTextLink(string text)
     {
         ArgumentNullException.ThrowIfNull(text);
 
@@ -138,7 +146,7 @@ public sealed partial class LinkPreviewer : IDisposable
             string link = TrimLink(match.Value);
             if (Uri.TryCreate(link, UriKind.Absolute, out Uri? uri) && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
             {
-                return uri;
+                return new TextLink(match.Index, link.Length, uri);
             }
         }
 

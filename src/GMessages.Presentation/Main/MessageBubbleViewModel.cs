@@ -22,6 +22,9 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     // The Message's Reactions, Kept So MyReaction Can Be Worked Out Again When The Conversation Arrives
     private IReadOnlyList<ReactionInfo> _reactions = [];
 
+    // The First Link As Sent And Where It Sits In The Text: The Card's Link, Which The Card Replaces
+    private TextLink? _link;
+
     /// <summary>
     /// Creates the bubble from a message.
     /// </summary>
@@ -52,6 +55,20 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
 
     /// <summary>Gets the text as shown: <see cref="Text"/> with text-style emoji in color (see <see cref="ChatFormat.WithColorEmoji"/>).</summary>
     public string DisplayText { get; private set; } = string.Empty;
+
+    /// <summary>
+    /// Gets the text in the bubble: <see cref="DisplayText"/>, except that while the link's preview card shows (owner ruling
+    /// R5-12) the card takes the place of the link's address. Only that address goes, with the space it leaves (no double
+    /// spaces or blank lines); other links stay. Empty when the message was only the link.
+    /// </summary>
+    /// <remarks>
+    /// The message's own <see cref="Text"/> (copied by the bubble's Copy, read by screen readers through
+    /// <see cref="ToString"/>) stays whole.
+    /// </remarks>
+    public string BodyText { get; private set; } = string.Empty;
+
+    /// <summary>Gets whether the bubble shows any text (a link alone shows only its card).</summary>
+    public bool HasBodyText => BodyText.Length > 0;
 
     /// <summary>Gets whether the owner sent the message.</summary>
     public bool FromMe { get; private set; }
@@ -172,6 +189,13 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
 
     /// <summary>Gets whether the preview card shows.</summary>
     public bool HasPreview => Preview is not null;
+
+    /// <summary>
+    /// Gets the preview card's accessible name: the page title, then the link's host (the address isn't in the text
+    /// while the card shows, so Narrator still hears where it goes). Empty without a card.
+    /// </summary>
+    public string PreviewName => Preview is null || LinkUrl is null ? string.Empty
+        : Preview.Title.Length > 0 ? $"{Preview.Title}, {LinkUrl.Host}" : LinkUrl.Host;
 
     // The Link The Chat Asked A Preview For, So It Asks Once Per Link
     internal Uri? PreviewAskedFor { get; set; }
@@ -302,7 +326,8 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
             return;
         }
 
-        Preview = preview;
+        Preview  = preview;
+        BodyText = BodyOf(Text, DisplayText, _link, preview);
         PropertyChanged?.Invoke(this, AllChanged);
     }
 
@@ -340,8 +365,35 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         _reactions    = m.Reactions;
         MyReaction    = FindMyReaction();
         ReplyToId     = m.ReplyToId;
-        LinkUrl       = m.Kind == MessageKind.Text ? LinkPreviewer.FirstLink(m.Text) : null;
+        _link         = m.Kind == MessageKind.Text ? LinkPreviewer.FirstTextLink(m.Text) : null;
+        LinkUrl       = _link?.Url;
         Preview       = Preview?.Url == LinkUrl ? Preview : null;
+        BodyText      = BodyOf(Text, DisplayText, _link, Preview);
+    }
+
+    // The Text Shown In The Bubble: Without The Card's Link While The Card Shows. The Space On Either Side Of The Address
+    // Goes With It; What Was On Each Side Joins With One Space, Or One Line Break When Either Side Was Its Own Line, And
+    // Nothing Before Punctuation ("see https://x.com, ok" Reads "see, ok")
+    private static string BodyOf(string text, string displayText, TextLink? link, LinkPreview? preview)
+    {
+        if (preview is null || link is not { } l)
+        {
+            return displayText;
+        }
+
+        string before = text[..l.Start].TrimEnd(' ', '\t');
+        string after  = text[(l.Start + l.Length)..].TrimStart(' ', '\t');
+        bool line_end = before.EndsWith('\n');
+        bool line_new = after.StartsWith('\n') || after.StartsWith("\r\n", StringComparison.Ordinal);
+
+        // A Line That Was Only The Link Goes With Its Line Break
+        if (line_end && line_new)
+        {
+            after = after[(after[0] == '\r' ? 2 : 1)..];
+        }
+
+        string joint = before.Length == 0 || after.Length == 0 || line_end || line_new || char.IsPunctuation(after[0]) ? string.Empty : " ";
+        return ChatFormat.WithColorEmoji((before + joint + after).Trim());
     }
 
     private string? FindMyReaction() => _reactions.FirstOrDefault(r => r.ParticipantIds.Any(IsMine))?.Emoji;
