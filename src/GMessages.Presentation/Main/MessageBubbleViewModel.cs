@@ -228,6 +228,18 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     /// <summary>Gets whether the bubble shows a photo or a card, so its menu has Open and Save as.</summary>
     public bool HasMediaFile => HasPhoto || HasFileCard;
 
+    /// <summary>
+    /// Gets whether the photo or card may open in its default app, so its menu has Open. A program, script or installer
+    /// (see <see cref="MediaStore.CanOpen"/>) never opens: its menu has only Save as.
+    /// </summary>
+    public bool CanOpenMedia => HasMediaFile && Media is { } media && MediaStore.CanOpen(media.Name, media.Mime);
+
+    /// <summary>
+    /// Gets whether the bubble menu has Copy: not for a photo, video or file sent without a caption, whose
+    /// <see cref="Text"/> is only the kind label.
+    /// </summary>
+    public bool HasCopyText { get; private set; }
+
     /// <summary>Gets the card's file name: the sender's, or the kind label ("Video", "File") without one.</summary>
     public string FileName => Media is { Name.Length: > 0 } media ? media.Name : ChatFormat.KindLabel(Kind);
 
@@ -519,6 +531,7 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         Media         = m.Media;
         HasPhoto      = m.Media is not null && m.Kind == MessageKind.Photo;
         HasFileCard   = m.Media is not null && m.Kind is MessageKind.Video or MessageKind.File;
+        HasCopyText   = m.Media is null || m.Text.Length > 0;
 
         // A Photo Or Card Shows Only Its Caption Under It, Not The Kind Label
         BodyText      = HasMediaFile && m.Text.Length == 0 ? string.Empty : BodyOf(Text, DisplayText, _link, Preview);

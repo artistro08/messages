@@ -72,11 +72,13 @@ public sealed partial class ChatPane : UserControl
     // A Disabled Icon That Keeps Its Own Color Shows At This Opacity
     private const double DisabledOpacity = 0.4;
 
+    // Typing Dots: Each Rises This Far And Back Within Its Beat (See TypingCycle)
+    private const float TypingRise = 4;
+
     // Another Chat Fades In Over WinUI's Normal Control Animation Time
     private static readonly TimeSpan ChatFadeIn = TimeSpan.FromMilliseconds(250);
 
-    // Typing Dots: Each Rises This Far And Back Within Its Beat, The Next Starting This Much Later, Every Cycle
-    private const float TypingRise = 4;
+    // Typing Dots: Each Rises (TypingRise) Within Its Beat, The Next Starting This Much Later, Every Cycle
     private static readonly TimeSpan TypingCycle   = TimeSpan.FromMilliseconds(1200);
     private static readonly TimeSpan TypingStagger = TimeSpan.FromMilliseconds(150);
 
@@ -137,8 +139,10 @@ public sealed partial class ChatPane : UserControl
             _reactView = null;
         };
 
-        // Typing Dots Bounce Only While Their Bubble Shows
+        // Typing Dots Bounce Only While Their Bubble Shows, And Follow Windows' Animation Setting As It Changes (Raised Off The
+        // UI Thread)
         TypingBubble.RegisterPropertyChangedCallback(VisibilityProperty, (_, _) => AnimateTypingDots(TypingBubble.Visibility == Visibility.Visible));
+        Ui.AnimationsEnabledChanged += (_, _) => DispatcherQueue.TryEnqueue(() => AnimateTypingDots(TypingBubble.Visibility == Visibility.Visible));
     }
 
     /// <summary>Gets the lock's tooltip and name.</summary>

@@ -44,6 +44,18 @@ public sealed partial class MediaStore
         "LPT0", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
     };
 
+    // Programs, Scripts, Installers And Shortcuts: A Received One Is Never Opened, Only Saved Where The Person Picks
+    private static readonly HashSet<string> ProgramExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".exe", ".com", ".scr", ".pif", ".cpl", ".msc", ".dll", ".ocx", ".sys", ".drv",
+        ".bat", ".cmd", ".ps1", ".psm1", ".psd1", ".ps1xml", ".psc1", ".vb", ".vbs", ".vbe", ".js", ".jse", ".ws",
+        ".wsf", ".wsc", ".wsh", ".hta", ".jar", ".py", ".pyw", ".pyc", ".pl", ".rb",
+        ".msi", ".msp", ".mst", ".msix", ".msixbundle", ".appx", ".appxbundle", ".appinstaller", ".application",
+        ".appref-ms", ".xbap", ".gadget",
+        ".lnk", ".url", ".scf", ".inf", ".reg", ".chm", ".hlp", ".settingcontent-ms", ".library-ms", ".search-ms",
+        ".searchconnector-ms", ".diagcab", ".xll", ".iso", ".img", ".vhd", ".vhdx", ".cab",
+    };
+
     private readonly Func<IMessagingClient?> _client;
     private readonly string _tempFolder;
     private readonly ILogger _log;
@@ -335,6 +347,21 @@ public sealed partial class MediaStore
 
         return safe;
     }
+
+    /// <summary>
+    /// Tells whether a received file may open in its default app.
+    /// </summary>
+    /// <remarks>
+    /// Programs, scripts, installers and shortcuts (<c>.exe</c>, <c>.bat</c>, <c>.ps1</c>, <c>.js</c>, <c>.msi</c>,
+    /// <c>.lnk</c>...) never open: the person can only save them, and decides what to do with them. The check is made on
+    /// the name the file is written under (see <see cref="SanitizeName"/>), so trailing dots or spaces can't hide the
+    /// extension.
+    /// </remarks>
+    /// <param name="name">The sender's file name.</param>
+    /// <param name="mime">The mime type, for the extension of an empty name.</param>
+    /// <returns>False for a program or script; true otherwise.</returns>
+    public static bool CanOpen(string name, string mime) =>
+        !ProgramExtensions.Contains(Path.GetExtension(SanitizeName(name, mime)));
 
     // =========================================================================
     // HELPERS
