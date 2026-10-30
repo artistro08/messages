@@ -20,10 +20,14 @@ public sealed partial class ConversationRow : UserControl
 {
     /// <summary>Identifies the <see cref="Row"/> property.</summary>
     public static readonly DependencyProperty RowProperty =
-        DependencyProperty.Register(nameof(Row), typeof(ConversationRowViewModel), typeof(ConversationRow), new PropertyMetadata(null));
+        DependencyProperty.Register(nameof(Row), typeof(ConversationRowViewModel), typeof(ConversationRow), new PropertyMetadata(null, OnRowChanged));
 
     // Reads The Windows Animation Setting Live (Settings > Accessibility > Visual Effects)
     private static readonly UISettings Ui = new();
+
+    // The Pointer Is Over The Row; The ⋮'s Menu Is Open, So The ⋮ Stays While The Pointer Is In The Menu
+    private bool _pointerOver;
+    private bool _keepShown;
 
     /// <summary>
     /// Creates the row.
@@ -61,13 +65,50 @@ public sealed partial class ConversationRow : UserControl
     /// <returns>The AutomationId.</returns>
     public static string PartId(string prefix, string id) => prefix + id;
 
+    /// <summary>
+    /// Keeps the ⋮ shown while its menu is open (the pointer leaves the row for the menu).
+    /// </summary>
+    /// <remarks>Turned off, the ⋮ hides unless the pointer is back over the row.</remarks>
+    /// <param name="keep">True while the menu is open.</param>
+    internal void KeepShown(bool keep)
+    {
+        _keepShown = keep;
+        if (!keep && !_pointerOver)
+        {
+            VisualStateManager.GoToState(this, "Hidden", Ui.AnimationsEnabled);
+        }
+    }
+
     // =========================================================================
     // EVENT HANDLERS
     // =========================================================================
 
-    private void OnPointerEntered(object sender, PointerRoutedEventArgs e) => VisualStateManager.GoToState(this, "Shown", Ui.AnimationsEnabled);
+    // A Recycled Row Shows Another Conversation: No ⋮ Left Over From The Last One
+    private static void OnRowChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        var view          = (ConversationRow)d;
+        view._pointerOver = false;
+        view._keepShown   = false;
+        VisualStateManager.GoToState(view, "Hidden", false);
+    }
 
-    private void OnPointerLeft(object sender, PointerRoutedEventArgs e) => VisualStateManager.GoToState(this, "Hidden", Ui.AnimationsEnabled);
+    private void OnPointerEntered(object sender, PointerRoutedEventArgs e)
+    {
+        _pointerOver = true;
+        VisualStateManager.GoToState(this, "Shown", Ui.AnimationsEnabled);
+    }
+
+    // The Pointer Left The Row. Moving Between The Name, Avatar And Icons Raises No Exit Here (Checked In The UI Tests),
+    // And No Bounds Check Is Made: Leaving The Window Straight From A Row Reports Its Last Point Inside The Row. While
+    // The Menu Is Open (Its Overlay Takes The Pointer) The ⋮ Waits For The Menu To Close
+    private void OnPointerLeft(object sender, PointerRoutedEventArgs e)
+    {
+        _pointerOver = false;
+        if (!_keepShown)
+        {
+            VisualStateManager.GoToState(this, "Hidden", Ui.AnimationsEnabled);
+        }
+    }
 
     private void OnMoreClick(object sender, RoutedEventArgs e) => MoreRequested?.Invoke(this, EventArgs.Empty);
 }

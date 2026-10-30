@@ -213,12 +213,12 @@ internal static class ConversationMenuFlyout
 
     private static string GlyphOf(ConversationMenuItem item) => item switch
     {
-        ConversationMenuItem.Details                                          => "",
-        ConversationMenuItem.Archive or ConversationMenuItem.Unarchive        => "",
-        ConversationMenuItem.Mute                                             => "",
-        ConversationMenuItem.Unmute                                           => "",
-        ConversationMenuItem.BlockAndReport or ConversationMenuItem.Unblock   => "",
-        ConversationMenuItem.MoveToTrash                                      => "",
+        ConversationMenuItem.Details                                          => "\uE946",
+        ConversationMenuItem.Archive or ConversationMenuItem.Unarchive        => "\uE7B8",
+        ConversationMenuItem.Mute                                             => "\uE7ED",
+        ConversationMenuItem.Unmute                                           => "\uEA8F",
+        ConversationMenuItem.BlockAndReport or ConversationMenuItem.Unblock   => "\uE8F8",
+        ConversationMenuItem.MoveToTrash                                      => "\uE74D",
         _                                                                     => throw new ArgumentOutOfRangeException(nameof(item), item, null),
     };
 

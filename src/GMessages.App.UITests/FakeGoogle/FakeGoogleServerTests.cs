@@ -481,6 +481,26 @@ public sealed class FakeGoogleServerTests
     }
 
     /// <summary>
+    /// An archive with the ID only in the update data (the top-level ID unset, as the app and LibGM send it) is applied
+    /// to that conversation.
+    /// </summary>
+    [TestMethod]
+    public async Task UpdateConversation_IdOnlyInUpdateData_IsApplied()
+    {
+        await using Rig rig = await PairedAsync();
+        var request = new UpdateConversationRequest
+        {
+            UpdateData = new UpdateConversationData { ConversationID = "c-ann", Status = ConversationStatus.Archived },
+        };
+
+        UpdateConversationResponse answer = await rig.Client.UpdateConversationAsync(request, CancellationToken.None).WaitAsync(HangGuard);
+
+        Assert.IsTrue(answer.Success);
+        WaitForEvent<ConversationUpdated>(rig.Events, e => e.Conversation.ConversationID == "c-ann" && e.Conversation.Status == ConversationStatus.Archived, "archived conversation");
+        Assert.AreEqual(ConversationStatus.Archived, rig.Server.Phone.Chats.Get("c-ann")?.Status, "phone's stored status");
+    }
+
+    /// <summary>
     /// With <see cref="FakePhone.FailConversationUpdates"/>, a block is answered with no success, is recorded, and the
     /// conversation stays in the inbox.
     /// </summary>

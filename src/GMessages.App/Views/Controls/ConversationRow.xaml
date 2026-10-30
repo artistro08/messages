@@ -95,7 +95,9 @@
                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                 Style="{StaticResource CaptionTextBlockStyle}"
                 Text="{x:Bind Row.Time, Mode=OneWay}" />
+            <!-- Icons: the line is always kept (16 px), so every row's time sits at the same height -->
             <StackPanel
+                Height="16"
                 HorizontalAlignment="Right"
                 Orientation="Horizontal"
                 Spacing="4">
@@ -105,11 +107,13 @@
                     x:Name="MutedIcon"
                     AutomationProperties.AutomationId="{x:Bind local:ConversationRow.PartId('Row.Muted.', Row.Id), Mode=OneWay, FallbackValue=''}"
                     FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                    VerticalAlignment="Center"
                     FontSize="12"
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                     Text="&#xE7ED;"
                     Visibility="{x:Bind Row.IsMuted, Mode=OneWay, FallbackValue=Collapsed}" />
                 <FontIcon
+                    VerticalAlignment="Center"
                     FontSize="12"
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                     Glyph="&#xE718;"

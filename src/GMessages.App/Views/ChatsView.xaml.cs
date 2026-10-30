@@ -329,7 +329,7 @@ public sealed partial class ChatsView : UserControl
             return;
         }
 
-        ShowConversationMenu(row.Id, view.MoreAnchor, position: null);
+        ShowConversationMenu(row.Id, view.MoreAnchor, position: null, from: view);
     }
 
     // Right-Click On A Row Opens Its Menu At The Pointer; The Application Key Or Shift + F10 On The Focused Row Opens It
@@ -345,7 +345,7 @@ public sealed partial class ChatsView : UserControl
 
         FrameworkElement target = container.As<FrameworkElement>();
         e.Handled               = true;
-        ShowConversationMenu(row.Id, target, e.TryGetPosition(target, out Windows.Foundation.Point at) ? at : null);
+        ShowConversationMenu(row.Id, target, e.TryGetPosition(target, out Windows.Foundation.Point at) ? at : null, from: null);
     }
 
     // Picking A Row Opens It; A Cleared Selection (List Swapped, Row Moved) Keeps The Open Conversation
@@ -433,8 +433,9 @@ public sealed partial class ChatsView : UserControl
         return element;
     }
 
-    // Opens A Conversation's Menu, Read Fresh From The Store So It Matches The Conversation Now (Archived, Muted)
-    private void ShowConversationMenu(string conversationId, FrameworkElement target, Windows.Foundation.Point? position)
+    // Opens A Conversation's Menu, Read Fresh From The Store So It Matches The Conversation Now (Archived, Muted). Opened
+    // From A Row's ⋮, That ⋮ Stays Shown Until The Menu Closes
+    private void ShowConversationMenu(string conversationId, FrameworkElement target, Windows.Foundation.Point? position, ConversationRow? from)
     {
         if (ViewModel.FindConversation(conversationId) is not { } c || XamlRoot is not { } root)
         {
@@ -442,6 +443,12 @@ public sealed partial class ChatsView : UserControl
         }
 
         MenuFlyout menu = ConversationMenuFlyout.Build(ConversationMenu.For(c, inHeader: false), item => RunMenuItem(root, c, item));
+        if (from is not null)
+        {
+            from.KeepShown(true);
+            menu.Closed += (_, _) => from.KeepShown(false);
+        }
+
         menu.ShowAt(target, new FlyoutShowOptions { Position = position });
     }
 
