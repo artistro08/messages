@@ -107,6 +107,12 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     /// <summary>Gets whether the message went over RCS (chat) rather than SMS or MMS.</summary>
     public bool IsRcs { get; private set; }
 
+    /// <summary>
+    /// Gets whether the bubble takes react, reply and its menu from the hover strip: the phone has reported it, and it isn't a
+    /// tombstone, still being sent or failed.
+    /// </summary>
+    public bool CanAct => Id.Length > 0 && !IsTombstone && !IsSending && !IsFailed;
+
     /// <summary>Gets the bubble's accessible item type: "Chat message" for RCS, "Text message" for SMS.</summary>
     public string ItemTypeName => IsRcs ? ChatCopy.ChatMessage : ChatCopy.TextMessage;
 
@@ -172,6 +178,9 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
 
     // The Phone's Delivery Status, For The Chat's Status Line
     internal MessageStatusType Status { get; private set; }
+
+    // A Tombstone (Such As "Now Chatting With End-To-End Encryption"): Nothing To React Or Reply To
+    private bool IsTombstone { get; set; }
 
     /// <summary>
     /// Copies new message details into the bubble (an echo or a status change).
@@ -325,6 +334,7 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         IsFailed      = m.IsFailed;
         IsSending     = m.Status == MessageStatusType.OutgoingSending;
         Status        = m.Status;
+        IsTombstone   = m.Kind == MessageKind.Tombstone;
         IsRcs         = m.IsRcs;
         ReactionsText = ChatFormat.ReactionSummary(m.Reactions);
         _reactions    = m.Reactions;

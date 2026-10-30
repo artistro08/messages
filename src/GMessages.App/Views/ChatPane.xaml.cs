@@ -38,7 +38,8 @@ namespace GMessages.App.Views;
 /// </para>
 /// <para>
 /// One reaction picker (<c>ReactionPicker</c>, buttons <c>ReactionPicker.1</c> to <c>.7</c>) serves every bubble: a
-/// bubble's pill or menu, or Shift + + on its row, opens it over that bubble. A bubble's Reply, or Ctrl + Enter on its
+/// bubble's pill or menu, or Shift + + on its row, opens it over that bubble (its hover strip's React, over that
+/// button). A bubble's Reply, or Ctrl + Enter on its
 /// row, starts the reply and moves to the message box. The Application key or Shift + F10 on a row opens its menu.
 /// </para>
 /// <para>
@@ -70,8 +71,9 @@ public sealed partial class ChatPane : UserControl
     private double _lastExtent;
     private double _lastViewport;
 
-    // The Bubble The Reaction Picker Is Open For
+    // The Bubble The Reaction Picker Is Open For, And Its View, Whose Hover Strip Stays While The Picker Is Open
     private MessageBubbleViewModel? _reactTarget;
+    private MessageBubble? _reactView;
 
     // On The Way To The Newest Message (See ScrollToNewest)
     private bool _toNewest;
@@ -105,6 +107,12 @@ public sealed partial class ChatPane : UserControl
             button.Click += (_, _) => React(emoji);
             ReactionButtons.Children.Add(button);
         }
+
+        ReactionPicker.Closed += (_, _) =>
+        {
+            _reactView?.KeepShown(false);
+            _reactView = null;
+        };
     }
 
     /// <summary>Gets the lock's tooltip and name.</summary>
@@ -148,7 +156,7 @@ public sealed partial class ChatPane : UserControl
     /// Opens the reaction picker over the bubble whose row has focus (the Shift + + shortcut).
     /// </summary>
     /// <returns>True when a bubble row had focus.</returns>
-    public bool OpenReactionsForFocused() => FocusedBubbleView() is { } view && OpenReactionPicker(view);
+    public bool OpenReactionsForFocused() => FocusedBubbleView() is { } view && OpenReactionPicker(view, view.Anchor);
 
     /// <summary>
     /// Starts a reply to the bubble whose row has focus and moves to the message box (the Ctrl + Enter shortcut).
@@ -467,16 +475,16 @@ public sealed partial class ChatPane : UserControl
         }
     }
 
-    // A Bubble's Pill Or Its Menu's React
-    private void OnReactRequested(object? sender, EventArgs e)
+    // A Bubble's Pill, Its Menu's React Or Its Hover Strip's React: The Picker Opens Over The Element Given
+    private void OnReactRequested(object? sender, FrameworkElement anchor)
     {
         if (sender is MessageBubble view)
         {
-            OpenReactionPicker(view);
+            OpenReactionPicker(view, anchor);
         }
     }
 
-    // A Bubble Menu's Reply
+    // A Bubble Menu's Reply Or Its Hover Strip's Reply
     private void OnReplyRequested(object? sender, EventArgs e)
     {
         if (sender is MessageBubble { Bubble: { } bubble })
@@ -581,16 +589,20 @@ public sealed partial class ChatPane : UserControl
     private MessageBubble? RowBubbleView(DependencyObject element) =>
         MessageList.IndexFromContainer(element) >= 0 ? FindPart<MessageBubble>(element, "BubbleView") : null;
 
-    // Opens The Reaction Picker Over A Bubble; Not For A Bubble The Phone Hasn't Reported Yet (Nothing To React To)
-    private bool OpenReactionPicker(MessageBubble view)
+    // Opens The Reaction Picker Over A Bubble's Part; Not For A Bubble The Phone Hasn't Reported Yet (Nothing To React
+    // To). The Bubble's Hover Strip Stays Until The Picker Closes
+    private bool OpenReactionPicker(MessageBubble view, FrameworkElement anchor)
     {
         if (view.Bubble is not { Id.Length: > 0 } bubble)
         {
             return false;
         }
 
+        _reactView?.KeepShown(false);
         _reactTarget = bubble;
-        ReactionPicker.ShowAt(view.Anchor);
+        _reactView   = view;
+        view.KeepShown(true);
+        ReactionPicker.ShowAt(anchor);
         return true;
     }
 

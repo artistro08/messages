@@ -11,6 +11,7 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.System;
+using Windows.UI.ViewManagement;
 
 namespace GMessages.App.Views.Controls;
 
@@ -52,6 +53,11 @@ namespace GMessages.App.Views.Controls;
 /// Bubbles of one group (see <see cref="ChatViewModel.GroupGap"/>) sit close together with small corners where they meet,
 /// as in Google Messages. A bubble is as wide as its content, up to 70% of the chat and 560 px at most.
 /// </para>
+/// <para>
+/// Pointing at a bubble that can take them (<see cref="MessageBubbleViewModel.CanAct"/>) fades in react
+/// (<c>HoverReact.{id}</c>), reply (<c>HoverReply.{id}</c>) and the ⋮ (<c>HoverMore.{id}</c>) beside its back, as in
+/// Google Messages for web, through the <c>Hover</c> visual states. Their space is always kept, so nothing moves.
+/// </para>
 /// </remarks>
 public sealed partial class MessageBubble : UserControl
 {
@@ -79,6 +85,17 @@ public sealed partial class MessageBubble : UserControl
 
     // The Avatar Lane Beside Received Bubbles In A Group Chat
     private const double AvatarLane = 36;
+
+    // The Hover Strip: Three 32 px Buttons With 4 px Either Side (MessageBubble.xaml)
+    private const double HoverStripWidth = 104;
+
+    // Reads The Windows Animation Setting Live (Settings > Accessibility > Visual Effects)
+    private static readonly UISettings Ui = new();
+
+    // The Pointer Is Over The Bubble; The Picker Or Menu Opened From The Strip Is Open, So The Strip Stays While The
+    // Pointer Is In It
+    private bool _pointerOver;
+    private bool _keepShown;
 
     // The Image Bytes The Card Shows (Or Is Decoding), So A Change Decodes Once
     private byte[]? _previewImage;
@@ -108,6 +125,15 @@ public sealed partial class MessageBubble : UserControl
 
         // The Text's Own Menu Would Win A Right-Click On It, So It Gets The Bubble Menu Too (Which Has Copy)
         Body.ContextFlyout = Menu;
+        Menu.Closed       += (_, _) => KeepShown(false);
+
+        // Copy
+        AutomationProperties.SetName(HoverReact, ChatCopy.React);
+        ToolTipService.SetToolTip(HoverReact, ChatCopy.React);
+        AutomationProperties.SetName(HoverReply, ChatCopy.Reply);
+        ToolTipService.SetToolTip(HoverReply, ChatCopy.Reply);
+        AutomationProperties.SetName(HoverMore, ChatCopy.MoreOptions);
+        ToolTipService.SetToolTip(HoverMore, ChatCopy.MoreOptions);
 
         // Links Follow The Text's Color: Its Side's State And The Theme Set It
         Body.RegisterPropertyChangedCallback(TextBlock.ForegroundProperty, (_, _) => ColorLinks());
@@ -119,12 +145,13 @@ public sealed partial class MessageBubble : UserControl
     public event EventHandler? RetryRequested;
 
     /// <summary>
-    /// Asks the chat to open the reaction picker on this bubble (the pill or the menu's React).
+    /// Asks the chat to open the reaction picker on this bubble (the pill, the menu's React or the hover strip's React),
+    /// over the element given: the back, or the strip's React button.
     /// </summary>
-    public event EventHandler? ReactRequested;
+    public event EventHandler<FrameworkElement>? ReactRequested;
 
     /// <summary>
-    /// Asks the chat to start a reply to this bubble (the menu's Reply).
+    /// Asks the chat to start a reply to this bubble (the menu's Reply or the hover strip's Reply).
     /// </summary>
     public event EventHandler? ReplyRequested;
 
@@ -154,9 +181,35 @@ public sealed partial class MessageBubble : UserControl
     }
 
     /// <summary>
-    /// Opens the bubble menu (the Application key or Shift + F10 on the bubble's row).
+    /// Opens the bubble menu over the back (the Application key or Shift + F10 on the bubble's row).
     /// </summary>
-    public void ShowMenu() => Menu.ShowAt(Back);
+    public void ShowMenu() => ShowMenu(Back);
+
+    /// <summary>
+    /// Opens the bubble menu at an element, such as the hover strip's ⋮.
+    /// </summary>
+    /// <remarks>The hover strip stays shown until the menu closes.</remarks>
+    /// <param name="anchor">The element the menu opens at.</param>
+    public void ShowMenu(FrameworkElement anchor)
+    {
+        KeepShown(true);
+        Menu.ShowAt(anchor);
+    }
+
+    /// <summary>
+    /// Keeps the hover strip shown while the reaction picker or the menu opened from it is open (the pointer leaves the
+    /// bubble for it).
+    /// </summary>
+    /// <remarks>Turned off, the strip hides unless the pointer is back over the bubble.</remarks>
+    /// <param name="keep">True while the picker or menu is open.</param>
+    internal void KeepShown(bool keep)
+    {
+        _keepShown = keep;
+        if (!keep && !_pointerOver)
+        {
+            VisualStateManager.GoToState(this, "Hidden", Ui.AnimationsEnabled);
+        }
+    }
 
     // =========================================================================
     // X:BIND HELPERS
@@ -257,20 +310,28 @@ public sealed partial class MessageBubble : UserControl
     public static double LaneWidth(bool hasLane) => hasLane ? AvatarLane : 0;
 
     /// <summary>
-    /// Gives the bubble's left padding: the avatar lane's width when it has one, so the name, pill and time line up with the
+    /// Gives the bubble's padding: the avatar lane's width on the left when it has one, and the hover strip's width on the
+    /// strip's side (right of a received bubble, left of a sent one), so the name, pill and time line up with the
     /// bubble's back.
     /// </summary>
     /// <param name="hasLane">True for a received bubble in a group chat.</param>
+    /// <param name="fromMe">True for a sent bubble.</param>
     /// <returns>The padding.</returns>
-    public static Thickness LanePadding(bool hasLane) => new(LaneWidth(hasLane), 0, 0, 0);
+    public static Thickness LanePadding(bool hasLane, bool fromMe) =>
+        fromMe ? new(HoverStripWidth, 0, 0, 0) : new(LaneWidth(hasLane), 0, HoverStripWidth, 0);
 
     /// <summary>
-    /// Gives the back's row a negative left margin of the lane's width, so the lane (with the avatar) sits in the padding,
-    /// beside the back.
+    /// Gives the back's row negative margins of the padding (see <see cref="LanePadding"/>), so the lane (with the avatar)
+    /// and the hover strip sit in the padding, beside the back.
     /// </summary>
     /// <param name="hasLane">True for a received bubble in a group chat.</param>
+    /// <param name="fromMe">True for a sent bubble.</param>
     /// <returns>The margin.</returns>
-    public static Thickness LaneOverhang(bool hasLane) => new(-LaneWidth(hasLane), 0, 0, 0);
+    public static Thickness LaneOverhang(bool hasLane, bool fromMe)
+    {
+        Thickness padding = LanePadding(hasLane, fromMe);
+        return new(-padding.Left, 0, -padding.Right, 0);
+    }
 
     /// <summary>
     /// Fades a bubble that is still being sent.
@@ -281,7 +342,8 @@ public sealed partial class MessageBubble : UserControl
 
     /// <summary>
     /// Caps the bubble at 70% of the chat's width (560 px at most) before it is measured, so it is the right width from its
-    /// first layout and short messages stay narrow.
+    /// first layout and short messages stay narrow. The hover strip's kept space comes on top, so it takes nothing from
+    /// the bubble.
     /// </summary>
     /// <param name="availableSize">The row's width and height.</param>
     /// <returns>The size the bubble wants.</returns>
@@ -289,7 +351,7 @@ public sealed partial class MessageBubble : UserControl
     {
         if (double.IsFinite(availableSize.Width))
         {
-            double max_width = Math.Min(MaxBubbleWidth, Math.Floor(availableSize.Width * MaxWidthShare));
+            double max_width = Math.Min(MaxBubbleWidth, Math.Floor(availableSize.Width * MaxWidthShare)) + HoverStripWidth;
             if (Root.MaxWidth != max_width)
             {
                 Root.MaxWidth = max_width;
@@ -303,10 +365,14 @@ public sealed partial class MessageBubble : UserControl
     // EVENT HANDLERS
     // =========================================================================
 
-    // A Recycled Container Gets Another Message: Follow Its Changes Instead, And Put It On Its Side
+    // A Recycled Container Gets Another Message: Follow Its Changes Instead, And Put It On Its Side, With No Hover Strip
+    // Left Over From The Last One
     private static void OnBubbleChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
-        var view = (MessageBubble)d;
+        var view          = (MessageBubble)d;
+        view._pointerOver = false;
+        view._keepShown   = false;
+        VisualStateManager.GoToState(view, "Hidden", false);
 
         if (e.OldValue is MessageBubbleViewModel old_bubble)
         {
@@ -511,7 +577,35 @@ public sealed partial class MessageBubble : UserControl
         }
     }
 
-    private void OnReactClick(object sender, RoutedEventArgs e) => ReactRequested?.Invoke(this, EventArgs.Empty);
+    // The Pill Or The Menu's React: The Picker Opens Over The Back
+    private void OnReactClick(object sender, RoutedEventArgs e) => ReactRequested?.Invoke(this, Back);
+
+    // The Strip's React: The Picker Opens Over The Button
+    private void OnHoverReactClick(object sender, RoutedEventArgs e) => ReactRequested?.Invoke(this, HoverReact);
+
+    private void OnHoverMoreClick(object sender, RoutedEventArgs e) => ShowMenu(HoverMore);
+
+    // Only A Bubble That Can Take Them Shows The Strip
+    private void OnPointerEntered(object sender, PointerRoutedEventArgs e)
+    {
+        _pointerOver = true;
+        if (Bubble?.CanAct == true)
+        {
+            VisualStateManager.GoToState(this, "Shown", Ui.AnimationsEnabled);
+        }
+    }
+
+    // The Pointer Left The Bubble. As On The Conversation Row, No Bounds Check Is Made: Leaving The Window Straight From A
+    // Bubble Reports Its Last Point Inside It. While The Picker Or Menu Is Open (Its Overlay Takes The Pointer) The Strip
+    // Waits For It To Close
+    private void OnPointerLeft(object sender, PointerRoutedEventArgs e)
+    {
+        _pointerOver = false;
+        if (!_keepShown)
+        {
+            VisualStateManager.GoToState(this, "Hidden", Ui.AnimationsEnabled);
+        }
+    }
 
     private void OnReplyClick(object sender, RoutedEventArgs e) => ReplyRequested?.Invoke(this, EventArgs.Empty);
 }
