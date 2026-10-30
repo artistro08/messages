@@ -47,6 +47,9 @@
                         <Setter Target="VoicePlay.Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
                         <Setter Target="VoiceLength.Foreground" Value="{ThemeResource TextOnAccentFillColorSecondaryBrush}" />
                         <Setter Target="VoiceBars.BarBrush" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                        <Setter Target="Preview.Background" Value="{ThemeResource QuoteOnAccentFillBrush}" />
+                        <Setter Target="PreviewTitle.Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                        <Setter Target="PreviewSite.Foreground" Value="{ThemeResource TextOnAccentFillColorSecondaryBrush}" />
                         <Setter Target="Pill.HorizontalAlignment" Value="Left" />
                         <Setter Target="Footer.HorizontalAlignment" Value="Right" />
                         <Setter Target="StatusRow.HorizontalAlignment" Value="Right" />
@@ -412,12 +415,14 @@
                                     Visibility="Collapsed" />
                                 <StackPanel Padding="10,6,10,8" Spacing="2">
                                     <TextBlock
+                                        x:Name="PreviewTitle"
                                         MaxLines="2"
                                         Style="{StaticResource BodyStrongTextBlockStyle}"
                                         Text="{x:Bind Bubble.Preview.Title, Mode=OneWay, FallbackValue=''}"
                                         TextTrimming="CharacterEllipsis"
                                         TextWrapping="Wrap" />
                                     <TextBlock
+                                        x:Name="PreviewSite"
                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                         MaxLines="1"
                                         Style="{StaticResource CaptionTextBlockStyle}"
