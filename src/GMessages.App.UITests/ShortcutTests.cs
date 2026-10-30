@@ -111,6 +111,25 @@ public sealed class ShortcutTests : UiTest
     }
 
     /// <summary>
+    /// Arrowing through the conversation list opens each chat but keeps the focus on the list; Enter then moves to the
+    /// message box.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task ArrowKeys_BrowseList_EnterGoesToDraft()
+    {
+        await OpenChatAsync("Row.c-team");
+
+        Keyboard.Type(VirtualKeyShort.DOWN);
+        App.WaitForText("Chat.Header", "Ann Lee");
+        Thread.Sleep(500);
+        WaitForFocusIn("Row.c-ann");
+
+        Keyboard.Type(VirtualKeyShort.RETURN);
+        WaitForFocusIn("Chat.Draft");
+    }
+
+    /// <summary>
     /// Ctrl + s opens the settings page.
     /// </summary>
     /// <returns>A task for the test.</returns>

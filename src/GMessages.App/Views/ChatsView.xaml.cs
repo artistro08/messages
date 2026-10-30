@@ -10,6 +10,9 @@ using GMessages.Presentation.Shortcuts;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
+using Windows.System;
+using WinRT;
 
 namespace GMessages.App.Views;
 
@@ -89,6 +92,7 @@ public sealed partial class ChatsView : UserControl
 
         // Behavior
         ViewModel.PropertyChanged += OnViewModelChanged;
+        ConversationList.AddHandler(KeyDownEvent, new KeyEventHandler(OnListKeyDown), handledEventsToo: true);
         ShowCurrentList();
         _ = ViewModel.Inbox.LoadAsync();
     }
@@ -306,8 +310,34 @@ public sealed partial class ChatsView : UserControl
             return;
         }
 
+        // Arrowing Through The List Opens Each Chat But Keeps The Focus On The List; A Click (Or Anything Else) Moves It To
+        // The Message Box
+        if (IsBrowsingWithKeys())
+        {
+            ChatView.KeepFocusOnNextOpen();
+        }
+
         ViewModel.Select(row.Id);
     }
+
+    // Enter On A Row Moves To The Open Chat's Message Box (The Arrow Keys Opened It But Left The Focus Here). Caught Even
+    // When The List Handled The Key
+    private void OnListKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.Key != VirtualKey.Enter || !ViewModel.IsChatOpen || !IsBrowsingWithKeys())
+        {
+            return;
+        }
+
+        e.Handled = ChatView.FocusDraft();
+    }
+
+    // A Row Of The List Has Keyboard Focus (Arrow Keys, Tab), Not Pointer Or Programmatic Focus. Matched As A Row Of The
+    // List And Read Through A WinRT Cast, Not A Type Test (See ChatPane.FindPart)
+    private bool IsBrowsingWithKeys() =>
+        XamlRoot is { } root && FocusManager.GetFocusedElement(root) is { } focused
+        && ConversationList.IndexFromContainer(focused.As<DependencyObject>()) >= 0
+        && focused.As<Control>().FocusState == FocusState.Keyboard;
 
     // Names Each Row For UI Automation (Row.{id}), And Loads The Next Page Once The Last Row Is Realized
     private void OnContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)

@@ -67,6 +67,9 @@ public sealed partial class ChatPane : UserControl
     // On The Way To The Newest Message (See ScrollToNewest)
     private bool _toNewest;
 
+    // The Next Chat Opens From The List's Arrow Keys: The Focus Stays On The List (See KeepFocusOnNextOpen)
+    private bool _keepFocus;
+
     // An Older Page Going In Above (See KeepOlderAnchor): How Far The View's Top Sat From The Content's End Before It (Null
     // Once Used), The Bubble At The View's Top Then (Null When Done), Every Shown Bubble Then With Its Top In The View, And
     // The Corrections Left
@@ -223,15 +226,26 @@ public sealed partial class ChatPane : UserControl
             // Ready To Type: The Message Box Takes Focus Once The Pane Shows (A Turn Later; A Hidden Box Can't Take It). This
             // Is Focus Inside The Window Only: It Never Activates The Window Or Takes The Foreground, So A Window Opened In The
             // Background Stays There, And Shows The Cursor In The Box Once The Person Brings It Up
+            // Background Stays There, And Shows The Cursor In The Box Once The Person Brings It Up. Browsing The List With
+            // The Arrow Keys Opens Each Chat But Keeps The Focus On The List
+            bool keep_focus = pane._keepFocus;
             pane.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
             {
-                if (pane.Chat == chat)
+                if (pane.Chat == chat && !keep_focus)
                 {
                     pane.DraftBox.Focus(FocusState.Programmatic);
                 }
             });
         }
+
+        pane._keepFocus = false;
     }
+
+    /// <summary>
+    /// Leaves the focus where it is when the next chat opens (the conversation list's arrow keys open each chat they pass,
+    /// and the person is still browsing).
+    /// </summary>
+    public void KeepFocusOnNextOpen() => _keepFocus = true;
 
     // A Bubble Added At The Bottom (Sent, Arrived Or The First Page) Comes Into View; Older Pages Go In Above. The List
     // Scrolls To Its End Instead Of ScrollIntoView: On This Bottom-Aligned List, ScrollIntoView Made The Panel Realize
