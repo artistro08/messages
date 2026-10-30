@@ -6,6 +6,7 @@ using Windows.Media.Capture;
 using Windows.Media.MediaProperties;
 using Windows.Media.Render;
 using Windows.Media.Transcoding;
+using Windows.Security.Authorization.AppCapabilityAccess;
 using Windows.Storage;
 using Windows.Storage.Streams;
 
@@ -55,7 +56,7 @@ internal sealed class MicrophoneUnavailableException : Exception
 /// is needed under Native AOT.
 /// </para>
 /// <para>
-/// Before the graph, <see cref="MediaCapture"/> opens the microphone once, which is what makes Windows ask the user for
+/// Before the graph, <see cref="AppCapability"/> asks for the microphone, which is what makes Windows ask the user for
 /// access (an <see cref="AudioGraph"/> alone is only refused).
 /// </para>
 /// <para>
@@ -110,8 +111,7 @@ internal sealed class VoiceRecorder : IDisposable
             return new VoiceRecorder(null, null, null);
         }
 
-        // Ask For The Microphone First: Windows Only Shows Its Consent Prompt When MediaCapture Opens It, Never For An
-        // AudioGraph, Which Is Just Refused
+        // Ask For The Microphone First: An AudioGraph Alone Is Only Refused, It Never Prompts
         await AskForMicrophoneAsync();
 
         AudioGraph? graph = null;
@@ -162,38 +162,43 @@ internal sealed class VoiceRecorder : IDisposable
     }
 
     /// <summary>
-    /// Opens the microphone through <see cref="MediaCapture"/> and lets go of it at once, so Windows asks the user for
-    /// access when it hasn't been given yet (and again after a refusal, when Windows allows it).
+    /// Asks Windows for the microphone through <see cref="AppCapability"/>, which shows the "Let Messages use your
+    /// microphone?" prompt while access is still undecided.
     /// </summary>
     /// <remarks>
-    /// Runs on the UI thread, where the consent prompt can show. Access refused (<c>E_ACCESSDENIED</c>), no capture device
-    /// or any other failure throws <see cref="MicrophoneUnavailableException"/>, so the settings message shows.
+    /// A packaged desktop app gets its consent prompt from <see cref="AppCapability.RequestAccessAsync"/>; opening the
+    /// microphone through <c>MediaCapture</c> failed with <c>RPC_E_DISCONNECTED</c> (0x80010108) before any prompt showed
+    /// (owner's 0.5.1 log), and an <see cref="AudioGraph"/> alone is only refused. Runs on the UI thread so the prompt can
+    /// show over the window. Refused, undeclared or any other outcome throws <see cref="MicrophoneUnavailableException"/>,
+    /// so the settings message shows.
     /// </remarks>
     /// <returns>A task that completes once access is given.</returns>
-    /// <exception cref="MicrophoneUnavailableException">Access is off, or there is no microphone.</exception>
+    /// <exception cref="MicrophoneUnavailableException">Access is off, or the request failed.</exception>
     private static async Task AskForMicrophoneAsync()
     {
-        const int AccessDenied = unchecked((int)0x80070005);
-
-        using var capture = new MediaCapture();
-        var settings      = new MediaCaptureInitializationSettings
-        {
-            StreamingCaptureMode = StreamingCaptureMode.Audio,
-            MediaCategory        = MediaCategory.Speech,
-        };
-
+        AppCapabilityAccessStatus status;
         try
         {
-            await capture.InitializeAsync(settings);
-        }
-        catch (Exception ex) when (ex is UnauthorizedAccessException || ex.HResult == AccessDenied)
-        {
-            throw new MicrophoneUnavailableException("AccessDenied", ex);
+            AppCapability microphone = AppCapability.Create("microphone");
+            status                   = microphone.CheckAccess();
+
+            // Undecided: Windows Shows Its Prompt
+            if (status == AppCapabilityAccessStatus.UserPromptRequired)
+            {
+                status = await microphone.RequestAccessAsync();
+            }
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             throw new MicrophoneUnavailableException($"{ex.GetType().Name} 0x{ex.HResult:X8}", ex);
         }
+
+        if (status == AppCapabilityAccessStatus.Allowed)
+        {
+            return;
+        }
+
+        throw new MicrophoneUnavailableException(status is AppCapabilityAccessStatus.DeniedByUser or AppCapabilityAccessStatus.DeniedBySystem ? "AccessDenied" : status.ToString());
     }
 
     /// <summary>
