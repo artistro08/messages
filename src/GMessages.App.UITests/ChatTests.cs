@@ -204,7 +204,7 @@ public sealed class ChatTests : UiTest
 
         await OpenMainAsync();
         App.Find("Row.c-long").Patterns.SelectionItem.Pattern.Select();
-        Wait.Until(() => Bubbles().Count >= ChatStore.PageSize, AppDriver.DefaultTimeout, () => $"The long chat showed {Bubbles().Count} bubbles.");
+        Wait.Until(() => Shows("m-", NewestLine), AppDriver.DefaultTimeout, () => $"The long chat showed {Bubbles().Count} bubbles, without its newest.");
 
         // Opened, It Settles On The Newest Message And Stays There (No Scroll Up, So No Bottom Fade Or Button)
         var scroll = App.Find("Chat.Messages").Patterns.Scroll.Pattern;
@@ -216,8 +216,8 @@ public sealed class ChatTests : UiTest
         {
             // -1: Leave The Horizontal Position Alone (UI Automation's NoScroll)
             scroll.SetScrollPercent(-1, 0);
-            return Bubbles().Count > ChatStore.PageSize;
-        }, AppDriver.DefaultTimeout, () => $"Scrolling up left {Bubbles().Count} bubbles; no older page loaded.");
+            return OldestShown("m-") <= OlderPageLast;
+        }, AppDriver.DefaultTimeout, () => $"Scrolling up showed line {OldestShown("m-")} at the oldest; no older page loaded.");
         AutomationElement down = App.Find("Chat.ScrollToBottom");
         Wait.Until(() => down.Properties.IsKeyboardFocusable.ValueOrDefault, AppDriver.DefaultTimeout, () => "Scroll to bottom didn't show far up the chat.");
 
@@ -229,17 +229,16 @@ public sealed class ChatTests : UiTest
         // Reopened, The Window Shows The Same Chat From What The App Kept: Scrolling Up Works There Too
         CloseMainWindow();
         Tray.LeftClick();
-        Wait.Until(() => Bubbles().Count >= ChatStore.PageSize, AppDriver.DefaultTimeout, () => $"The reopened chat showed {Bubbles().Count} bubbles.");
+        Wait.Until(() => Shows("m-", NewestLine), AppDriver.DefaultTimeout, () => $"The reopened chat showed {Bubbles().Count} bubbles, without its newest.");
         scroll = App.Find("Chat.Messages").Patterns.Scroll.Pattern;
         down   = App.Find("Chat.ScrollToBottom");
         Thread.Sleep(2000);
         AssertAtNewest("Reopening the chat");
-        int shown = Bubbles().Count;
         Wait.Until(() =>
         {
             scroll.SetScrollPercent(-1, 0);
-            return Bubbles().Count > shown && down.Properties.IsKeyboardFocusable.ValueOrDefault;
-        }, AppDriver.DefaultTimeout, () => $"In the reopened chat, scrolling up left {Bubbles().Count} bubbles (was {shown}) and Scroll to bottom showed: {down.Properties.IsKeyboardFocusable.ValueOrDefault}.");
+            return OldestShown("m-") <= OlderPageLast && down.Properties.IsKeyboardFocusable.ValueOrDefault;
+        }, AppDriver.DefaultTimeout, () => $"In the reopened chat, scrolling up showed line {OldestShown("m-")} at the oldest and Scroll to bottom showed: {down.Properties.IsKeyboardFocusable.ValueOrDefault}.");
 
         Message Line(string text)
         {
@@ -273,7 +272,7 @@ public sealed class ChatTests : UiTest
 
         await OpenMainAsync();
         App.Find("Row.c-wheel").Patterns.SelectionItem.Pattern.Select();
-        Wait.Until(() => Bubbles().Count >= ChatStore.PageSize, AppDriver.DefaultTimeout, () => $"The wheel chat showed {Bubbles().Count} bubbles.");
+        Wait.Until(() => Shows("w-", NewestLine), AppDriver.DefaultTimeout, () => $"The wheel chat showed {Bubbles().Count} bubbles, without its newest.");
 
         // Wheel Up Over The Bubbles Until The Older Page Comes In And The Button Shows
         AutomationElement list = App.Find("Chat.Messages");
@@ -283,8 +282,8 @@ public sealed class ChatTests : UiTest
         Wait.Until(() =>
         {
             FlaUI.Core.Input.Mouse.Scroll(5);
-            return Bubbles().Count > ChatStore.PageSize && down.Properties.IsKeyboardFocusable.ValueOrDefault;
-        }, AppDriver.DefaultTimeout, () => $"Wheeling up left {Bubbles().Count} bubbles; Scroll to bottom showed: {down.Properties.IsKeyboardFocusable.ValueOrDefault}.");
+            return OldestShown("w-") <= OlderPageLast && down.Properties.IsKeyboardFocusable.ValueOrDefault;
+        }, AppDriver.DefaultTimeout, () => $"Wheeling up showed line {OldestShown("w-")} at the oldest; Scroll to bottom showed: {down.Properties.IsKeyboardFocusable.ValueOrDefault}.");
 
         Message Line(string text)
         {
@@ -599,6 +598,20 @@ public sealed class ChatTests : UiTest
             return null;
         }
     }
+
+    // Three-Page Chats (Lines 1 To 3 Pages): The Newest Line, And The Last Line Of The Page Above The Newest One
+    private const int NewestLine    = ChatStore.PageSize * 3;
+    private const int OlderPageLast = ChatStore.PageSize * 2;
+
+    // Whether The Bubble Of A Line ("m-12") Is In The List. The List Only Makes The Rows In And Near The View, So How Many
+    // Bubbles UI Automation Sees Depends On Their Heights (Narrow Windows Wrap More): Tests Look For Particular Lines
+    private bool Shows(string prefix, int line) => Bubbles().Any(b => b.Id == $"Bubble.{prefix}{line}");
+
+    // The Oldest Line Among The Bubbles In The List, Or int.MaxValue For None
+    private int OldestShown(string prefix) =>
+        Bubbles().Select(b => b.Id.StartsWith("Bubble." + prefix, StringComparison.Ordinal) && int.TryParse(b.Id.AsSpan(7 + prefix.Length), out int line) ? line : int.MaxValue)
+            .DefaultIfEmpty(int.MaxValue)
+            .Min();
 
     // The Message List Sits On Its Newest Message: Less Than A Pixel Short Of Its End, So No Bottom Fade Or Arrow
     private void AssertAtNewest(string what)
