@@ -700,7 +700,7 @@ public sealed class FakeGoogleServerTests
     // =========================================================================
 
     /// <summary>
-    /// A file uploaded through the fake server downloads back as the same bytes, and the seeded photo in c-ann
+    /// A file uploaded through the fake server downloads back as the same bytes, and the seeded photo chat's photo
     /// downloads as the blue PNG.
     /// </summary>
     [TestMethod]
@@ -716,7 +716,8 @@ public sealed class FakeGoogleServerTests
         CollectionAssert.AreEqual(plain, downloaded);
 
         // The Seeded Photo
-        ListMessagesResponse page = await rig.Client.FetchMessagesAsync("c-ann", 10, null, CancellationToken.None).WaitAsync(HangGuard);
+        rig.Server.Phone.Chats.AddPhotoChat();
+        ListMessagesResponse page = await rig.Client.FetchMessagesAsync("c-media", 10, null, CancellationToken.None).WaitAsync(HangGuard);
         MediaContent photo        = page.Messages.SelectMany(m => m.MessageInfo).Single(p => p.MediaContent is not null).MediaContent;
         byte[] png                = await rig.Client.DownloadMediaAsync(photo.MediaID, photo.DecryptionKey.Memory, CancellationToken.None).WaitAsync(HangGuard);
         CollectionAssert.AreEqual(Convert.FromBase64String(FakeChats.BluePng), png);
