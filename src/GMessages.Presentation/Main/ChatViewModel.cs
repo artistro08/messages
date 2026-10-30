@@ -84,6 +84,10 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     private string _attachError = string.Empty;
     private int _nextAttachmentId;
 
+    // Each Attachment Bubble Sent From Here: Its Bytes Until The Upload Is Done, Then The Upload, Which A Retry Sends
+    // Again. Dropped When The Chat Closes
+    private readonly Dictionary<MessageBubbleViewModel, OutgoingMedia> _outgoing = [];
+
     /// <summary>
     /// Creates an empty chat and starts listening to the store.
     /// </summary>
@@ -455,7 +459,9 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
         for (int i = 0; i < attachments.Count; i++)
         {
             string caption = caption_on_media && i == attachments.Count - 1 ? text : string.Empty;
-            bubbles.Add(AddPending(MediaMessage(attachments[i], caption, is_rcs)));
+            MessageBubbleViewModel media_bubble = AddPending(MediaMessage(attachments[i], caption, is_rcs));
+            _outgoing[media_bubble]             = new OutgoingMedia(attachments[i].Bytes, attachments[i].Name, attachments[i].Mime);
+            bubbles.Add(media_bubble);
         }
 
         if (text.Length > 0 && !caption_on_media)
@@ -589,8 +595,12 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
-    /// Sends a failed bubble's text again with a new temporary ID.
+    /// Sends a failed bubble again with a new temporary ID: its text, or its attachment with its caption.
     /// </summary>
+    /// <remarks>
+    /// An attachment sends the same upload again (its media ID and key), and uploads again only when the first try
+    /// failed before its upload was done. A bubble from before the chat opened sends the media its echo carried.
+    /// </remarks>
     /// <param name="failed">The bubble that failed.</param>
     /// <returns>A task that completes when the phone answered or the bubble failed again.</returns>
     public async Task RetryAsync(MessageBubbleViewModel failed)
@@ -613,11 +623,18 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     {
         try
         {
-            if (bubble is { IsLocalMedia: true, Media: { } media })
+            if (OutgoingOf(bubble) is { } outgoing)
             {
-                var progress   = new PostedProgress(share => _post(() => bubble.SetUploadShare(share)));
+                // Upload Once; A Retry Sends The Same Upload Again
+                if (outgoing.Uploaded is null)
+                {
+                    var progress      = new PostedProgress(share => _post(() => bubble.SetUploadShare(share)));
+                    outgoing.Uploaded = await _store.UploadAttachmentAsync(outgoing.Bytes, outgoing.Name, outgoing.Mime, progress, CancellationToken.None);
+                    outgoing.Bytes    = [];
+                }
+
                 string caption = bubble.Caption;
-                await _store.SendMediaAsync(ConversationId, media.InlineData, media.Name, media.Mime, caption.Length > 0 ? caption : null, bubble.TmpId, progress, CancellationToken.None);
+                await _store.SendUploadedMediaAsync(ConversationId, outgoing.Uploaded, caption.Length > 0 ? caption : null, bubble.TmpId, CancellationToken.None);
                 return;
             }
 
@@ -776,6 +793,7 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
         _store.TypingChanged       -= OnTypingChanged;
         _store.ConversationChanged -= OnConversationChanged;
         _typingTimer.Dispose();
+        _outgoing.Clear();
     }
 
     // =========================================================================
@@ -803,6 +821,48 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
             Media = media,
             IsRcs = isRcs,
         };
+    }
+
+    // The Attachment A Bubble Sends: Kept From Its Send Here, Or (A Failed Bubble From Before The Chat Opened) The
+    // Uploaded Media Its Echo Carried; Null For Text
+    private OutgoingMedia? OutgoingOf(MessageBubbleViewModel bubble)
+    {
+        if (_outgoing.TryGetValue(bubble, out OutgoingMedia? kept))
+        {
+            return kept;
+        }
+
+        if (bubble is not { FromMe: true, Media: { MediaId.Length: > 0, Key.Length: > 0 } m })
+        {
+            return null;
+        }
+
+        var echoed = new OutgoingMedia([], m.Name, m.Mime)
+        {
+            Uploaded = new MediaContent
+            {
+                Format        = MediaFormatsMap.FromMime(m.Mime),
+                MediaID       = m.MediaId,
+                MediaName     = m.Name,
+                Size          = m.Size,
+                DecryptionKey = Google.Protobuf.ByteString.CopyFrom(m.Key),
+                MimeType      = m.Mime,
+            },
+        };
+        _outgoing[bubble] = echoed;
+        return echoed;
+    }
+
+    // An Attachment Sent From Here: Its Bytes Until The Upload Is Done (Then Freed), And The Upload
+    private sealed class OutgoingMedia(byte[] bytes, string name, string mime)
+    {
+        public byte[] Bytes { get; set; } = bytes;
+
+        public string Name { get; } = name;
+
+        public string Mime { get; } = mime;
+
+        public MediaContent? Uploaded { get; set; }
     }
 
     // Reports On The UI Thread Through The Chat's Post, Not On The Upload's Thread

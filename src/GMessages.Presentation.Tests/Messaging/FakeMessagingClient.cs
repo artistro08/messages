@@ -241,10 +241,18 @@ internal sealed class FakeMessagingClient : IMessagingClient
     /// <summary>Uploaded files by media ID (plain bytes), and what downloads answer with.</summary>
     public Dictionary<string, byte[]> Media { get; } = [];
 
+    /// <summary>When set, uploading throws this instead of answering.</summary>
+    public Exception? UploadThrows { get; set; }
+
     public List<(string MessageId, string ActionMessageId)> FullSizeCalls { get; } = [];
 
     public Task<MediaContent> UploadMediaAsync(ReadOnlyMemory<byte> plain, string fileName, string mime, IProgress<double>? progress, CancellationToken ct)
     {
+        if (UploadThrows is { } ex)
+        {
+            throw ex;
+        }
+
         string id = "media-" + (Media.Count + 1);
         Media[id] = plain.ToArray();
         progress?.Report(1);

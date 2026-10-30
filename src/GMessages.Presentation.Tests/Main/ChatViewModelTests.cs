@@ -402,6 +402,60 @@ public sealed class ChatViewModelTests
     }
 
     /// <summary>
+    /// A photo the phone reports failed after its echo retries with the same upload (media ID and key) and its caption,
+    /// not as text only, and without uploading again.
+    /// </summary>
+    [TestMethod]
+    public async Task RetryFailedMedia_ResendsSameMediaContent()
+    {
+        using var rig = new MainRig();
+        using ChatViewModel chat = NewChat(rig);
+        await chat.LoadAsync();
+        chat.Attach("a.png", "image/png", [1]);
+        chat.Draft = "look";
+        await chat.SendAsync();
+        MediaContent uploaded = rig.Client.Sent[0].MessagePayload.MessageInfo[0].MediaContent;
+
+        // The Echo Carries The Media, Then The Phone Reports It Failed
+        Message echo = Mine("m9", "look", chat.Messages[0].TmpId, MessageStatusType.OutgoingFailedGeneric);
+        echo.MessageInfo.Insert(0, new MessageInfo { MediaContent = new MediaContent { MediaID = uploaded.MediaID, MediaName = "a.png", Format = MediaFormats.ImagePng } });
+        await rig.LiveMessage(echo);
+        Assert.IsTrue(chat.Messages[0].IsFailed);
+
+        await chat.RetryAsync(chat.Messages[0]);
+
+        Assert.HasCount(2, rig.Client.Sent);
+        Assert.HasCount(1, rig.Client.Media, "No new upload");
+        Assert.AreEqual(uploaded, rig.Client.Sent[1].MessagePayload.MessageInfo[0].MediaContent);
+        Assert.AreEqual("look", rig.Client.Sent[1].MessagePayload.MessageInfo[1].MessageContent.Content);
+        Assert.AreEqual(chat.Messages[0].TmpId, rig.Client.Sent[1].TmpID);
+    }
+
+    /// <summary>
+    /// An attachment whose upload failed uploads again from the bytes kept for it when retried.
+    /// </summary>
+    [TestMethod]
+    public async Task RetryBeforeUpload_UploadsAgain()
+    {
+        using var rig = new MainRig();
+        using ChatViewModel chat = NewChat(rig);
+        await chat.LoadAsync();
+        chat.Attach("a.png", "image/png", [7]);
+        rig.Client.UploadThrows = new HttpRequestException();
+        await chat.SendAsync();
+
+        Assert.IsTrue(chat.Messages[0].IsFailed);
+        Assert.IsEmpty(rig.Client.Sent);
+
+        rig.Client.UploadThrows = null;
+        await chat.RetryAsync(chat.Messages[0]);
+
+        Assert.IsTrue(chat.Messages[0].IsSending);
+        Assert.HasCount(1, rig.Client.Sent);
+        CollectionAssert.AreEqual(new byte[] { 7 }, rig.Client.Media[rig.Client.Sent[0].MessagePayload.MessageInfo[0].MediaContent.MediaID]);
+    }
+
+    /// <summary>
     /// A file over 100 MiB never becomes a chip: the note says so (a good file picked with it keeps the note), and a
     /// removed chip or a new pick clears it.
     /// </summary>
