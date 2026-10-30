@@ -29,6 +29,10 @@ public sealed partial class SettingsPage : UserControl
     public SettingsPage(SettingsViewModel viewModel)
     {
         ViewModel = viewModel;
+
+        // Forget The Last Page's Microphones: This Box Holds Only "Windows Default" Until They're Found Again, And A
+        // Saved Index Past It Throws (ArgumentException) Out Of The First Binding Pass, Leaving Every Dropdown Blank
+        ViewModel.SetMicrophones([]);
         InitializeComponent();
 
         // Copy
