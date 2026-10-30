@@ -225,19 +225,6 @@ public sealed partial class ChatPane : UserControl
         _recordTimer.Interval = RecordTick;
         _recordTimer.Tick    += (_, _) => ShowRecording();
 
-        // Microphone Off: The Copy, With Its Settings Path As The Link. A Hyperlink's NavigateUri Launches Nothing In This
-        // Desktop App, So Its Click Launches The Page
-        string copy  = ChatCopy.MicrophoneOff;
-        int link     = copy.IndexOf("Settings", StringComparison.Ordinal);
-        int link_end = copy.LastIndexOf('.');
-        var settings = new Hyperlink();
-        settings.Click += (_, _) => OpenMicrophoneSettings();
-        settings.Inlines.Add(new Run { Text = copy[link..link_end] });
-        AutomationProperties.SetAutomationId(settings, "Chat.MicSettings");
-        MicError.Inlines.Add(new Run { Text = copy[..link] });
-        MicError.Inlines.Add(settings);
-        MicError.Inlines.Add(new Run { Text = copy[link_end..] });
-
         ShowPreviewPlaying(false, 0);
     }
 
@@ -812,7 +799,8 @@ public sealed partial class ChatPane : UserControl
         catch (MicrophoneUnavailableException ex)
         {
             AppLog.MediaFailed(App.ShellLog, "record", chat.ConversationId, ex.Message);
-            chat.Voice.MicrophoneOff();
+            chat.Voice.Cancel();
+            await AskMicrophoneSettingsAsync();
             return;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -841,9 +829,31 @@ public sealed partial class ChatPane : UserControl
         StopRecordingButton.Focus(FocusState.Programmatic);
     }
 
-    // The Settings Message's Link: Windows' Microphone Privacy Page. A Test Run Only Notes The Address; A Failure Logs Its
-    // Error Type Only
-    private async void OpenMicrophoneSettings()
+    // Microphone Off Or Missing: A Desktop App Can't Show Windows' Own Prompt, So This Dialog Asks The User To Turn It On,
+    // And Open Settings Goes To Windows' Microphone Page
+    private async Task AskMicrophoneSettingsAsync()
+    {
+        if (XamlRoot is not { } root)
+        {
+            return;
+        }
+
+        ContentDialog dialog     = Dialogs.Create(root);
+        dialog.Title             = ChatCopy.MicrophoneTitle;
+        dialog.Content           = new TextBlock { Text = ChatCopy.MicrophoneText, TextWrapping = TextWrapping.Wrap };
+        dialog.PrimaryButtonText = ChatCopy.OpenSettings;
+        dialog.CloseButtonText   = ChatCopy.Cancel;
+        dialog.DefaultButton     = ContentDialogButton.Primary;
+        AutomationProperties.SetAutomationId(dialog, "Dialog.Microphone");
+
+        if (await ConversationMenuFlyout.ShowAsync(dialog))
+        {
+            await OpenMicrophoneSettingsAsync();
+        }
+    }
+
+    // Windows' Microphone Privacy Page. A Test Run Only Notes The Address; A Failure Logs Its Error Type Only
+    private async Task OpenMicrophoneSettingsAsync()
     {
         var page               = new Uri("ms-settings:privacy-microphone");
         string conversation_id = Chat?.ConversationId ?? string.Empty;
@@ -930,8 +940,12 @@ public sealed partial class ChatPane : UserControl
         }
 
         long seconds     = (Environment.TickCount64 - _recordStart) / 1000;
+        float level      = recorder.TakeLevel();
         RecordTimer.Text = VoiceWave.LengthText(TimeSpan.FromSeconds(seconds));
-        RecordBars.Push(recorder.TakeLevel());
+        RecordBars.Push(level);
+
+        // Test Run: The Newest Bar, So A Test Sees The Waveform Move
+        TestHooks.NoteState("record-level", level.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture));
     }
 
     // The Preview Chip: Play Or Pause, And A Click On Its Waveform Seeks

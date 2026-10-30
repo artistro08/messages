@@ -29,9 +29,8 @@ public enum VoiceDraftState
 /// can't bring a recording back.
 /// </para>
 /// <para>
-/// When the microphone can't be used (access off, or no device), <see cref="MicrophoneOff"/> goes back to Idle and
-/// <see cref="IsMicrophoneOff"/> shows the settings message until the next start. The audio and file path are never
-/// logged.
+/// When the microphone can't be used (access off, or no device), the chat pane cancels and shows its microphone
+/// dialog. The audio and file path are never logged.
 /// </para>
 /// </remarks>
 public sealed class VoiceDraft : INotifyPropertyChanged
@@ -58,9 +57,6 @@ public sealed class VoiceDraft : INotifyPropertyChanged
 
     /// <summary>Gets whether a recording waits to be sent (the preview chip shows).</summary>
     public bool IsPreview => State == VoiceDraftState.Preview;
-
-    /// <summary>Gets whether the last start found the microphone off or missing (the settings message shows).</summary>
-    public bool IsMicrophoneOff { get; private set; }
 
     /// <summary>Gets the temp file being recorded to, or empty when Idle.</summary>
     public string FilePath { get; private set; } = string.Empty;
@@ -98,7 +94,7 @@ public sealed class VoiceDraft : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Starts recording to a temp file: Idle to Recording. Hides the settings message.
+    /// Starts recording to a temp file: Idle to Recording.
     /// </summary>
     /// <param name="path">The temp file the recording goes to.</param>
     /// <returns>False (nothing changes) unless Idle.</returns>
@@ -111,8 +107,7 @@ public sealed class VoiceDraft : INotifyPropertyChanged
             return false;
         }
 
-        FilePath        = path;
-        IsMicrophoneOff = false;
+        FilePath = path;
         Move(VoiceDraftState.Recording);
         return true;
     }
@@ -168,16 +163,6 @@ public sealed class VoiceDraft : INotifyPropertyChanged
         Reset();
         Move(VoiceDraftState.Idle);
         return audio;
-    }
-
-    /// <summary>
-    /// The microphone couldn't be used (access off, or no device): back to Idle, with the settings message showing.
-    /// </summary>
-    public void MicrophoneOff()
-    {
-        Reset();
-        IsMicrophoneOff = true;
-        Move(VoiceDraftState.Idle);
     }
 
     // Deletes The Temp File And Lets Go Of The Audio
