@@ -10,6 +10,50 @@
         x:Name="Row"
         Margin="{x:Bind local:MessageBubble.GroupMargin(Bubble.IsFirstInGroup, Bubble.IsLastInGroup), Mode=OneWay}">
 
+        <!-- Sent Or Received: sent RCS sits right on a lighter shade of the accent, sent SMS right on the accent color,
+             received left on the card color; the reaction pill takes the bubble's inner corner. The quote is tinted to suit
+             the bubble it sits in. The groups must stay on the control's root element: GoToState only looks there, and
+             on any element below it every state silently fails to apply -->
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="Side">
+                <VisualState x:Name="Received" />
+                <VisualState x:Name="Sent">
+                    <VisualState.Setters>
+                        <Setter Target="Root.HorizontalAlignment" Value="Right" />
+                        <Setter Target="Back.Background" Value="{ThemeResource RcsBubbleBrush}" />
+                        <Setter Target="Back.BorderBrush" Value="{ThemeResource RcsBubbleBorderBrush}" />
+                        <Setter Target="Body.Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+                        <Setter Target="Pill.HorizontalAlignment" Value="Left" />
+                        <Setter Target="Footer.HorizontalAlignment" Value="Right" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="SentSms">
+                    <VisualState.Setters>
+                        <Setter Target="Root.HorizontalAlignment" Value="Right" />
+                        <Setter Target="Back.Background" Value="{ThemeResource AccentFillColorDefaultBrush}" />
+                        <Setter Target="Back.BorderThickness" Value="0" />
+                        <Setter Target="Body.Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                        <Setter Target="Quote.Background" Value="{ThemeResource QuoteOnAccentFillBrush}" />
+                        <Setter Target="QuoteBar.Background" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                        <Setter Target="QuoteSender.Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                        <Setter Target="QuoteText.Foreground" Value="{ThemeResource TextOnAccentFillColorSecondaryBrush}" />
+                        <Setter Target="Pill.HorizontalAlignment" Value="Left" />
+                        <Setter Target="Footer.HorizontalAlignment" Value="Right" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+
+            <!-- My Reaction: the pill gets an accent border -->
+            <VisualStateGroup x:Name="Reaction">
+                <VisualState x:Name="NotMine" />
+                <VisualState x:Name="Mine">
+                    <VisualState.Setters>
+                        <Setter Target="Pill.BorderBrush" Value="{ThemeResource AccentFillColorDefaultBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+
         <!-- Bubble: sender name, the quote, text and link preview on its colored back, the reaction pill on its bottom corner, then the
              time (once clicked) or the retry link, and the caption row (time, delivery icon and lock) under my newest message.
              As wide as its content, up to 70% of the chat (560 px at most; set from code) -->
@@ -52,48 +96,6 @@
                 </MenuFlyout>
             </StackPanel.ContextFlyout>
 
-            <!-- Sent Or Received: sent RCS sits right on a lighter shade of the accent, sent SMS right on the accent color,
-                 received left on the card color; the reaction pill takes the bubble's inner corner. The quote is tinted to suit
-                 the bubble it sits in -->
-            <VisualStateManager.VisualStateGroups>
-                <VisualStateGroup x:Name="Side">
-                    <VisualState x:Name="Received" />
-                    <VisualState x:Name="Sent">
-                        <VisualState.Setters>
-                            <Setter Target="Root.HorizontalAlignment" Value="Right" />
-                            <Setter Target="Back.Background" Value="{ThemeResource RcsBubbleBrush}" />
-                            <Setter Target="Back.BorderBrush" Value="{ThemeResource RcsBubbleBorderBrush}" />
-                            <Setter Target="Body.Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
-                            <Setter Target="Pill.HorizontalAlignment" Value="Left" />
-                            <Setter Target="Footer.HorizontalAlignment" Value="Right" />
-                        </VisualState.Setters>
-                    </VisualState>
-                    <VisualState x:Name="SentSms">
-                        <VisualState.Setters>
-                            <Setter Target="Root.HorizontalAlignment" Value="Right" />
-                            <Setter Target="Back.Background" Value="{ThemeResource AccentFillColorDefaultBrush}" />
-                            <Setter Target="Back.BorderThickness" Value="0" />
-                            <Setter Target="Body.Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
-                            <Setter Target="Quote.Background" Value="{ThemeResource QuoteOnAccentFillBrush}" />
-                            <Setter Target="QuoteBar.Background" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
-                            <Setter Target="QuoteSender.Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
-                            <Setter Target="QuoteText.Foreground" Value="{ThemeResource TextOnAccentFillColorSecondaryBrush}" />
-                            <Setter Target="Pill.HorizontalAlignment" Value="Left" />
-                            <Setter Target="Footer.HorizontalAlignment" Value="Right" />
-                        </VisualState.Setters>
-                    </VisualState>
-                </VisualStateGroup>
-
-                <!-- My Reaction: the pill gets an accent border -->
-                <VisualStateGroup x:Name="Reaction">
-                    <VisualState x:Name="NotMine" />
-                    <VisualState x:Name="Mine">
-                        <VisualState.Setters>
-                            <Setter Target="Pill.BorderBrush" Value="{ThemeResource AccentFillColorDefaultBrush}" />
-                        </VisualState.Setters>
-                    </VisualState>
-                </VisualStateGroup>
-            </VisualStateManager.VisualStateGroups>
 
             <!-- Sender: first bubble of a received group in a group chat, in the color of their letter circle -->
             <TextBlock
