@@ -101,4 +101,54 @@ public sealed class ChatFormatTests
         // Ties Keep First-Seen Order, Then Only The Top 3 Show; The Count Is Everyone
         Assert.AreEqual(Sad + Love + Like + " 4", ChatFormat.ReactionSummary([new ReactionInfo(Sad, ["p1"]), new ReactionInfo(Love, ["p2"]), new ReactionInfo(Like, ["p3"]), new ReactionInfo(Laugh, ["p4"])]));
     }
+
+    // =========================================================================
+    // GROUP SNIPPETS AND COLOR EMOJI
+    // =========================================================================
+
+    /// <summary>
+    /// A group's last message from someone else starts with their first name, as Google shows it ("Rachel: Awe!").
+    /// </summary>
+    [TestMethod]
+    [DataRow(true, 0L, "Rachel Green", "Awe!", "Rachel: Awe!")]
+    [DataRow(true, 0L, "+1 555-0100", "hi", "+1 555-0100: hi")]
+    [DataRow(true, 0L, "", "hi", "hi")]
+    [DataRow(true, 1L, "Rachel Green", "hi", "You: hi")]
+    [DataRow(false, 0L, "Rachel Green", "hi", "hi")]
+    public void Snippet_GroupNamesTheSender(bool isGroup, long fromMe, string displayName, string content, string expected)
+    {
+        var c = new Conversation
+        {
+            ConversationID = "c1",
+            IsGroupChat    = isGroup,
+            LatestMessage  = new LatestMessage { DisplayContent = content, FromMe = fromMe, DisplayName = displayName },
+        };
+
+        Assert.AreEqual(expected, ChatFormat.Snippet(ConversationInfo.From(c)));
+    }
+
+    [TestMethod]
+    public void Snippet_ShowsColorEmoji()
+    {
+        var c = new Conversation { ConversationID = "c1", LatestMessage = new LatestMessage { DisplayContent = "\u263A" } };
+
+        Assert.AreEqual("\u263A\uFE0F", ChatFormat.Snippet(ConversationInfo.From(c)));
+    }
+
+    /// <summary>
+    /// Symbols that are emoji but default to text style get VS16, so they draw in color; anything else is left alone.
+    /// </summary>
+    [TestMethod]
+    [DataRow("", "")]
+    [DataRow("\u263A", "\u263A\uFE0F")]                                    // Smiling Face
+    [DataRow("I \u2764 it \u2600", "I \u2764\uFE0F it \u2600\uFE0F")]       // Heart, Sun
+    [DataRow("\u270C", "\u270C\uFE0F")]                                    // Victory Hand
+    [DataRow("\u263A\uFE0F", "\u263A\uFE0F")]                              // Already Emoji Style
+    [DataRow("\u263A\uFE0E", "\u263A\uFE0E")]                              // Text Style Asked For
+    [DataRow("\u261D\U0001F3FD", "\u261D\U0001F3FD")]                      // A Skin Tone Follows
+    [DataRow("\u2764\u200D\U0001F525", "\u2764\uFE0F\u200D\U0001F525")]    // Heart On Fire
+    [DataRow("\U0001F600 1 # * \u00A9 \u00AE \u2122 \u2192", "\U0001F600 1 # * \u00A9 \u00AE \u2122 \u2192")]
+    [DataRow("\U0001F441", "\U0001F441\uFE0F")]                            // Eye (Astral, Text Default)
+    public void WithColorEmoji_AddsVs16ToTextDefaultEmoji(string text, string expected) =>
+        Assert.AreEqual(expected, ChatFormat.WithColorEmoji(text));
 }

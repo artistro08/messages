@@ -37,6 +37,7 @@ public sealed record NotificationContent(string Tag, string Group, string Title,
             }
         }
 
-        return new NotificationContent(m.Id, c.Id, c.Name, body, m.ParticipantId);
+        // Text-Style Emoji In Color, As In The Chat
+        return new NotificationContent(m.Id, c.Id, c.Name, ChatFormat.WithColorEmoji(body), m.ParticipantId);
     }
 }

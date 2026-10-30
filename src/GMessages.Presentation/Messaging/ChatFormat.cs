@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 using GMessages.Protocol.Proto;
 
 namespace GMessages.Presentation.Messaging;
@@ -8,16 +9,100 @@ namespace GMessages.Presentation.Messaging;
 /// </summary>
 public static class ChatFormat
 {
+    // Emoji That Default To Text Style (Emoji=Yes Without Emoji_Presentation, Unicode 16.0 emoji-data.txt), As Inclusive
+    // Ranges. Left Out On Purpose: The Keycap Bases (Digits, # And *), (c), (r) And TM, Which Are Usually Meant As Text
+    private static readonly (int First, int Last)[] TextDefaultEmoji =
+    [
+        (0x203C, 0x203C), (0x2049, 0x2049), (0x2139, 0x2139), (0x2194, 0x2199), (0x21A9, 0x21AA), (0x2328, 0x2328),
+        (0x23CF, 0x23CF), (0x23ED, 0x23EF), (0x23F1, 0x23F2), (0x23F8, 0x23FA), (0x24C2, 0x24C2), (0x25AA, 0x25AB),
+        (0x25B6, 0x25B6), (0x25C0, 0x25C0), (0x25FB, 0x25FC), (0x2600, 0x2604), (0x260E, 0x260E), (0x2611, 0x2611),
+        (0x2618, 0x2618), (0x261D, 0x261D), (0x2620, 0x2620), (0x2622, 0x2623), (0x2626, 0x2626), (0x262A, 0x262A),
+        (0x262E, 0x262F), (0x2638, 0x263A), (0x2640, 0x2640), (0x2642, 0x2642), (0x265F, 0x2660), (0x2663, 0x2663),
+        (0x2665, 0x2666), (0x2668, 0x2668), (0x267B, 0x267B), (0x267E, 0x267E), (0x2692, 0x2692), (0x2694, 0x2697),
+        (0x2699, 0x2699), (0x269B, 0x269C), (0x26A0, 0x26A0), (0x26A7, 0x26A7), (0x26B0, 0x26B1), (0x26C8, 0x26C8),
+        (0x26CF, 0x26CF), (0x26D1, 0x26D1), (0x26D3, 0x26D3), (0x26E9, 0x26E9), (0x26F0, 0x26F1), (0x26F4, 0x26F4),
+        (0x26F7, 0x26F9), (0x2702, 0x2702), (0x2708, 0x2709), (0x270C, 0x270D), (0x270F, 0x270F), (0x2712, 0x2712),
+        (0x2714, 0x2714), (0x2716, 0x2716), (0x271D, 0x271D), (0x2721, 0x2721), (0x2733, 0x2734), (0x2744, 0x2744),
+        (0x2747, 0x2747), (0x2763, 0x2764), (0x27A1, 0x27A1), (0x2934, 0x2935), (0x2B05, 0x2B07), (0x3030, 0x3030),
+        (0x303D, 0x303D), (0x3297, 0x3297), (0x3299, 0x3299), (0x1F170, 0x1F171), (0x1F17E, 0x1F17F), (0x1F202, 0x1F202),
+        (0x1F237, 0x1F237), (0x1F321, 0x1F321), (0x1F324, 0x1F32C), (0x1F336, 0x1F336), (0x1F37D, 0x1F37D),
+        (0x1F396, 0x1F397), (0x1F399, 0x1F39B), (0x1F39E, 0x1F39F), (0x1F3CB, 0x1F3CE), (0x1F3D4, 0x1F3DF),
+        (0x1F3F3, 0x1F3F3), (0x1F3F5, 0x1F3F5), (0x1F3F7, 0x1F3F7), (0x1F43F, 0x1F43F), (0x1F441, 0x1F441),
+        (0x1F4FD, 0x1F4FD), (0x1F549, 0x1F54A), (0x1F56F, 0x1F570), (0x1F573, 0x1F579), (0x1F587, 0x1F587),
+        (0x1F58A, 0x1F58D), (0x1F590, 0x1F590), (0x1F5A5, 0x1F5A5), (0x1F5A8, 0x1F5A8), (0x1F5B1, 0x1F5B2),
+        (0x1F5BC, 0x1F5BC), (0x1F5C2, 0x1F5C4), (0x1F5D1, 0x1F5D3), (0x1F5DC, 0x1F5DE), (0x1F5E1, 0x1F5E1),
+        (0x1F5E3, 0x1F5E3), (0x1F5E8, 0x1F5E8), (0x1F5EF, 0x1F5EF), (0x1F5F3, 0x1F5F3), (0x1F5FA, 0x1F5FA),
+        (0x1F6CB, 0x1F6CB), (0x1F6CD, 0x1F6CF), (0x1F6E0, 0x1F6E5), (0x1F6E9, 0x1F6E9), (0x1F6F0, 0x1F6F0),
+        (0x1F6F3, 0x1F6F3),
+    ];
+
     /// <summary>
-    /// The snippet line of a conversation, with "You: " in front of the owner's own messages.
+    /// The snippet line of a conversation: "You: " in front of the owner's own messages, and in a group the sender's
+    /// first name in front of anyone else's ("Rachel: "), as Google Messages shows it.
     /// </summary>
+    /// <remarks>Text-style emoji are shown in color (see <see cref="WithColorEmoji"/>).</remarks>
     /// <param name="c">The conversation.</param>
     /// <returns>The text to show.</returns>
     public static string Snippet(ConversationInfo c)
     {
         ArgumentNullException.ThrowIfNull(c);
 
-        return c.SnippetFromMe ? ChatCopy.YouPrefix + c.Snippet : c.Snippet;
+        string sender = c.IsGroup && !c.SnippetFromMe ? FirstName(c.SnippetSender) : string.Empty;
+        string prefix = c.SnippetFromMe ? ChatCopy.YouPrefix : sender.Length > 0 ? sender + ": " : string.Empty;
+        return WithColorEmoji(prefix + c.Snippet);
+    }
+
+    /// <summary>
+    /// The first word of a name, or the whole of a number, short code or email address (which have no first name).
+    /// </summary>
+    /// <param name="name">The name as the phone gives it.</param>
+    /// <returns>The first name, or empty for no name.</returns>
+    public static string FirstName(string name)
+    {
+        string trimmed = (name ?? string.Empty).Trim();
+
+        return IsNoName(trimmed) ? trimmed : trimmed.Split(' ', 2)[0];
+    }
+
+    /// <summary>
+    /// Shows emoji that default to text style (such as U+263A, U+2764, U+2600, U+270C) in color, by adding VS16
+    /// (U+FE0F) after them.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Without VS16 those symbols draw as plain black glyphs from the text font; the phone (Noto Color Emoji) draws them in
+    /// color either way. A symbol that already has VS16, asks for text style with VS15 (U+FE0E), or takes a skin tone is
+    /// left alone, and so are the digits, # and *, (c), (r) and TM.
+    /// </para>
+    /// <para>For showing only: the text sent or copied stays as typed.</para>
+    /// </remarks>
+    /// <param name="text">The text.</param>
+    /// <returns>The text with VS16 added where needed.</returns>
+    public static string WithColorEmoji(string text)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return text ?? string.Empty;
+        }
+
+        // Copied Only Once The First VS16 Is Needed; Most Text Comes Back As It Was
+        StringBuilder? built = null;
+        int i = 0;
+        while (i < text.Length)
+        {
+            int length = char.IsSurrogatePair(text, i) ? 2 : 1;
+            int code   = length == 2 ? char.ConvertToUtf32(text, i) : text[i];
+            built?.Append(text, i, length);
+            i += length;
+
+            if (IsTextDefaultEmoji(code) && !TakesNoVs16(text, i))
+            {
+                built ??= new StringBuilder(text, 0, i, text.Length + 8);
+                built.Append('\uFE0F');
+            }
+        }
+
+        return built?.ToString() ?? text;
     }
 
     /// <summary>
@@ -187,6 +272,14 @@ public static class ChatFormat
 
         return total > 1 ? $"{top} {total.ToString(CultureInfo.CurrentCulture)}" : top;
     }
+
+    private static bool IsTextDefaultEmoji(int code) =>
+        code >= 0x203C && Array.Exists(TextDefaultEmoji, r => code >= r.First && code <= r.Last);
+
+    // VS16 Or VS15 Already, Or A Skin Tone Modifier (U+1F3FB To U+1F3FF) Follows
+    private static bool TakesNoVs16(string text, int at) =>
+        at < text.Length
+        && (text[at] is '\uFE0F' or '\uFE0E' || (char.IsSurrogatePair(text, at) && char.ConvertToUtf32(text, at) is >= 0x1F3FB and <= 0x1F3FF));
 
     // Empty, A Number Or Short Code (Digits And Dialing Marks Only), Or An Email Address (One Word With An @)
     private static bool IsNoName(string name) =>

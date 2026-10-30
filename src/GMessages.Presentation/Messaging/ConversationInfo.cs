@@ -39,6 +39,9 @@ public sealed record ConversationInfo(
     /// <summary>Gets whether the conversation is an RCS (chat) conversation rather than SMS.</summary>
     public bool IsRcs { get; init; }
 
+    /// <summary>Gets the name the phone gives the newest message's sender (shown before a group's snippet), or empty.</summary>
+    public string SnippetSender { get; init; } = string.Empty;
+
     /// <summary>
     /// Copies the fields the app needs out of a protocol conversation.
     /// </summary>
@@ -64,7 +67,8 @@ public sealed record ConversationInfo(
             c.DefaultOutgoingID,
             c.LatestMessageID)
         {
-            IsRcs = c.Type == ConversationType.Rcs,
+            IsRcs         = c.Type == ConversationType.Rcs,
+            SnippetSender = c.LatestMessage?.DisplayName ?? string.Empty,
         };
     }
 
