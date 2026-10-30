@@ -241,7 +241,30 @@
                 CornerRadius="12"
                 FontSize="12"
                 UseLayoutRounding="True"
-                Visibility="{x:Bind Bubble.HasReactions, Mode=OneWay, FallbackValue=Collapsed}" />
+                Visibility="{x:Bind Bubble.HasReactions, Mode=OneWay, FallbackValue=Collapsed}">
+
+                <!-- Hover And Press: opaque shades of the pill's own fill, so the button's 83 ms brush transition blends
+                     smoothly. The default hover fill is a faint see-through white, and blending the opaque fill into it
+                     passes through a bright half-opaque gray for a frame or two (the flash). The border stays as it is -->
+                <Button.Resources>
+                    <ResourceDictionary>
+                        <ResourceDictionary.ThemeDictionaries>
+                            <ResourceDictionary x:Key="Default">
+                                <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="SolidBackgroundFillColorQuarternaryBrush" />
+                                <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="SolidBackgroundFillColorSecondaryBrush" />
+                                <StaticResource x:Key="ButtonBorderBrushPointerOver" ResourceKey="CardStrokeColorDefaultBrush" />
+                                <StaticResource x:Key="ButtonBorderBrushPressed" ResourceKey="CardStrokeColorDefaultBrush" />
+                            </ResourceDictionary>
+                            <ResourceDictionary x:Key="Light">
+                                <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="SolidBackgroundFillColorQuarternaryBrush" />
+                                <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="SolidBackgroundFillColorSecondaryBrush" />
+                                <StaticResource x:Key="ButtonBorderBrushPointerOver" ResourceKey="CardStrokeColorDefaultBrush" />
+                                <StaticResource x:Key="ButtonBorderBrushPressed" ResourceKey="CardStrokeColorDefaultBrush" />
+                            </ResourceDictionary>
+                        </ResourceDictionary.ThemeDictionaries>
+                    </ResourceDictionary>
+                </Button.Resources>
+            </Button>
 
             <!-- Time (Hidden Until The Bubble Is Clicked), Or The Retry Link When The Send Failed -->
             <Grid x:Name="Footer" Margin="12,0">
