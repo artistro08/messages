@@ -242,28 +242,34 @@
                 Text="&#xE712;" />
         </Border>
 
-        <!-- Replying To: the quoted text above the message box, with a button to drop the reply -->
+        <!-- Replying To: joined to the top of the message box as one control (the same width and left edge, rounded on top
+             only, while the box squares its top corners): an accent bar, the quoted text and a button to drop the reply -->
         <Grid
             Grid.Row="3"
             Margin="12,8,12,0"
-            Padding="12,6,4,6"
-            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
-            BorderBrush="{ThemeResource AccentFillColorDefaultBrush}"
-            BorderThickness="2,0,0,0"
-            ColumnDefinitions="*,Auto"
+            Padding="8,6,4,6"
+            Background="{ThemeResource ControlFillColorDefaultBrush}"
+            BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+            BorderThickness="1,1,1,0"
+            ColumnDefinitions="Auto,*,Auto"
             ColumnSpacing="8"
-            CornerRadius="4"
+            CornerRadius="4,4,0,0"
             Visibility="{x:Bind Chat.IsReplying, Mode=OneWay, FallbackValue=Collapsed}">
+            <Border
+                Width="3"
+                Background="{ThemeResource QuoteBarBrush}"
+                CornerRadius="1.5" />
             <TextBlock
+                Grid.Column="1"
                 VerticalAlignment="Center"
                 AutomationProperties.AutomationId="Chat.ReplyingTo"
                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                 MaxLines="2"
-                Text="{x:Bind Chat.ReplyingTo.Text, Mode=OneWay, FallbackValue=''}"
+                Text="{x:Bind Chat.ReplyingTo.DisplayText, Mode=OneWay, FallbackValue=''}"
                 TextTrimming="CharacterEllipsis"
                 TextWrapping="Wrap" />
             <Button
-                Grid.Column="1"
+                Grid.Column="2"
                 Width="32"
                 Height="32"
                 Padding="0"
@@ -279,8 +285,8 @@
         </Grid>
 
         <!-- Compose: the message box (Enter sends, Shift + Enter adds a line), with the emoji icon inside it on the left and
-             send inside it on the right, icons only -->
-        <Grid Grid.Row="4" Padding="12,8,12,12">
+             send inside it on the right, icons only. Under the reply chip it meets the chip with square top corners -->
+        <Grid Grid.Row="4" Padding="{x:Bind local:ChatPane.ComposePadding(Chat.IsReplying), Mode=OneWay}">
             <TextBox
                 x:Name="DraftBox"
                 MinHeight="44"
@@ -289,6 +295,7 @@
                 AcceptsReturn="True"
                 AutomationProperties.AutomationId="Chat.Draft"
                 AutomationProperties.Name="Message"
+                CornerRadius="{x:Bind local:ChatPane.DraftCorners(Chat.IsReplying), Mode=OneWay}"
                 PreviewKeyDown="OnDraftKeyDown"
                 Text="{x:Bind Chat.Draft, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, FallbackValue=''}"
                 TextWrapping="Wrap" />

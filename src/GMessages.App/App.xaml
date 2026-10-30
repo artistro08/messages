@@ -9,21 +9,33 @@
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
             </ResourceDictionary.MergedDictionaries>
 
-            <!-- Sent SMS Bubble: a lighter (Light) or darker (Dark) shade of the accent, with the regular text color on it.
-                 Its border matches the fill there; in high contrast the fill is the window color, so the border is the
-                 text color to keep the bubble's edge -->
+            <!-- Sent RCS Bubble: a lighter (Light) or darker (Dark) shade of the accent, with the regular text color on it
+                 (sent SMS and MMS take the full accent). Its border matches the fill there; in high contrast the fill is the
+                 window color, so the border is the text color to keep the bubble's edge.
+                 Reply Quote: a tint of the bubble it sits in with an accent bar. On the card color and on the RCS shade it is the
+                 accent, faint; on the full accent (SMS) it is the text-on-accent color, faint, with a bar of that color. In
+                 high contrast the quote takes the bubble's own color (window, or highlight on SMS) and a highlight bar -->
             <ResourceDictionary.ThemeDictionaries>
                 <ResourceDictionary x:Key="Light">
-                    <SolidColorBrush x:Key="SmsBubbleBrush" Color="{ThemeResource SystemAccentColorLight2}" />
-                    <SolidColorBrush x:Key="SmsBubbleBorderBrush" Color="{ThemeResource SystemAccentColorLight2}" />
+                    <SolidColorBrush x:Key="RcsBubbleBrush" Color="{ThemeResource SystemAccentColorLight2}" />
+                    <SolidColorBrush x:Key="RcsBubbleBorderBrush" Color="{ThemeResource SystemAccentColorLight2}" />
+                    <SolidColorBrush x:Key="QuoteFillBrush" Opacity="0.14" Color="{ThemeResource SystemAccentColorDark1}" />
+                    <SolidColorBrush x:Key="QuoteBarBrush" Color="{ThemeResource SystemAccentColorDark1}" />
+                    <SolidColorBrush x:Key="QuoteOnAccentFillBrush" Opacity="0.18" Color="{ThemeResource TextOnAccentFillColorPrimary}" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
-                    <SolidColorBrush x:Key="SmsBubbleBrush" Color="{ThemeResource SystemAccentColorDark1}" />
-                    <SolidColorBrush x:Key="SmsBubbleBorderBrush" Color="{ThemeResource SystemAccentColorDark1}" />
+                    <SolidColorBrush x:Key="RcsBubbleBrush" Color="{ThemeResource SystemAccentColorDark1}" />
+                    <SolidColorBrush x:Key="RcsBubbleBorderBrush" Color="{ThemeResource SystemAccentColorDark1}" />
+                    <SolidColorBrush x:Key="QuoteFillBrush" Opacity="0.18" Color="{ThemeResource SystemAccentColorLight2}" />
+                    <SolidColorBrush x:Key="QuoteBarBrush" Color="{ThemeResource SystemAccentColorLight2}" />
+                    <SolidColorBrush x:Key="QuoteOnAccentFillBrush" Opacity="0.18" Color="{ThemeResource TextOnAccentFillColorPrimary}" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="HighContrast">
-                    <SolidColorBrush x:Key="SmsBubbleBrush" Color="{ThemeResource SystemColorWindowColor}" />
-                    <SolidColorBrush x:Key="SmsBubbleBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+                    <SolidColorBrush x:Key="RcsBubbleBrush" Color="{ThemeResource SystemColorWindowColor}" />
+                    <SolidColorBrush x:Key="RcsBubbleBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+                    <SolidColorBrush x:Key="QuoteFillBrush" Color="{ThemeResource SystemColorWindowColor}" />
+                    <SolidColorBrush x:Key="QuoteBarBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+                    <SolidColorBrush x:Key="QuoteOnAccentFillBrush" Color="{ThemeResource SystemColorHighlightColor}" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
         </ResourceDictionary>

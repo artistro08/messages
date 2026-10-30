@@ -1207,4 +1207,123 @@ public sealed class ChatViewModelTests
         Assert.AreEqual(0, handler.Requests.Count);
         Assert.IsFalse(chat.Messages.Any(b => b.HasPreview));
     }
+
+    // =========================================================================
+    // GROUPED BUBBLES AND STATUS ICONS
+    // =========================================================================
+
+    /// <summary>
+    /// Messages from the same sender a few minutes apart form a group: the first and last are marked, a sender change
+    /// or a long gap starts a new one, and mine group the same way.
+    /// </summary>
+    [TestMethod]
+    public async Task Groups_SameSenderWithinAFewMinutes()
+    {
+        const long Minute = 60_000_000;
+        const long Start  = 1_761_700_000_000_000;
+
+        using var rig = new MainRig();
+        Conversation conv = MainRig.Conv("a", "Ann");
+        conv.DefaultOutgoingID = "me";
+        using ChatViewModel chat = NewChat(rig, conv,
+            Msg("m1", "one", ts: Start),
+            Msg("m2", "two", ts: Start + Minute),
+            Msg("m3", "three", ts: Start + (2 * Minute)),
+            Msg("m4", "four", ts: Start + (20 * Minute)),
+            Msg("m5", "five", "t5", "me", MessageStatusType.OutgoingComplete, Start + (21 * Minute)),
+            Msg("m6", "six", "t6", "me", MessageStatusType.OutgoingComplete, Start + (22 * Minute)));
+
+        await chat.LoadAsync();
+
+        Assert.AreEqual("1 0 0 1 1 0", Flags(b => b.IsFirstInGroup));
+        Assert.AreEqual("0 0 1 1 0 1", Flags(b => b.IsLastInGroup));
+
+        string Flags(Func<MessageBubbleViewModel, bool> flag) => string.Join(' ', chat.Messages.Select(b => flag(b) ? 1 : 0));
+    }
+
+    /// <summary>
+    /// In a group chat a received group shows the sender's name over its first bubble and their avatar beside its last;
+    /// a one-on-one chat shows neither.
+    /// </summary>
+    [TestMethod]
+    public async Task Groups_GroupChatAvatarOnLastNameOnFirst()
+    {
+        using var rig = new MainRig();
+        Conversation conv = MainRig.Conv("a", "Team");
+        conv.IsGroupChat = true;
+        conv.Participants.Add(new Participant { ID = new SmallInfo { ParticipantID = "p-b" }, FullName = "Bo" });
+        using ChatViewModel chat = NewChat(rig, conv, Msg("m1", "one", from: "p-a"), Msg("m2", "two", from: "p-a"), Msg("m3", "three", from: "p-b"));
+
+        await chat.LoadAsync();
+
+        Assert.AreEqual("False True True", string.Join(' ', chat.Messages.Select(b => b.ShowsAvatar)));
+        Assert.IsTrue(chat.Messages.All(b => b.HasAvatarLane));
+        Assert.AreEqual("Team||Bo", string.Join('|', chat.Messages.Select(b => b.SenderName)));
+        Assert.AreEqual("p-a", chat.Messages[1].AvatarPhotoId);
+        Assert.AreEqual("B", chat.Messages[2].AvatarInitial);
+        Assert.AreEqual(string.Empty, chat.Messages[0].AvatarPhotoId);
+    }
+
+    [TestMethod]
+    public async Task Groups_OneOnOneHasNoAvatars()
+    {
+        using var rig            = new MainRig();
+        using ChatViewModel chat = NewChat(rig, null, Msg("m1", "one"), Msg("m2", "two"));
+
+        await chat.LoadAsync();
+
+        Assert.IsFalse(chat.Messages.Any(b => b.ShowsAvatar || b.HasAvatarLane));
+    }
+
+    /// <summary>
+    /// The newest sent bubble's status shows as Google's icon, with the lock in an encrypted chat; a bubble being sent
+    /// shows the clock; the others show none.
+    /// </summary>
+    [TestMethod]
+    public async Task StatusIcon_FollowsTheStatus()
+    {
+        using var rig            = new MainRig();
+        using ChatViewModel chat = await RcsChat(rig, TimeProvider.System, Mine("m1", "one", "t1", MessageStatusType.OutgoingDelivered), Mine("m2", "two", "t2", MessageStatusType.OutgoingComplete));
+        Assert.AreEqual(MessageStatusIcon.None, chat.Messages[0].StatusIcon);
+        Assert.AreEqual(MessageStatusIcon.Sent, chat.Messages[1].StatusIcon);
+        Assert.IsFalse(chat.Messages[1].ShowsLock);
+
+        chat.Draft = "three";
+        await chat.SendAsync();
+        Assert.AreEqual(MessageStatusIcon.Sending, chat.Messages[^1].StatusIcon);
+
+        await rig.LiveMessage(Mine("m2", "two", "t2", MessageStatusType.OutgoingDisplayed));
+        Assert.AreEqual(MessageStatusIcon.Read, chat.Messages[1].StatusIcon);
+    }
+
+    /// <summary>
+    /// The bubble text shows text-style emoji in color; the text it sends again on a retry stays as typed.
+    /// </summary>
+    [TestMethod]
+    public async Task DisplayText_ShowsColorEmoji()
+    {
+        using var rig            = new MainRig();
+        using ChatViewModel chat = NewChat(rig, null, Msg("m1", "hi \u263A"));
+
+        await chat.LoadAsync();
+
+        Assert.AreEqual("hi \u263A", chat.Messages[0].Text);
+        Assert.AreEqual("hi \u263A\uFE0F", chat.Messages[0].DisplayText);
+    }
+
+    /// <summary>
+    /// Restoring a draft (reopening a chat) sets it without telling the other side I'm typing.
+    /// </summary>
+    [TestMethod]
+    public async Task RestoreDraft_SendsNoTyping()
+    {
+        using var rig            = new MainRig();
+        using ChatViewModel chat = await RcsChat(rig, TimeProvider.System);
+
+        chat.RestoreDraft("kept");
+
+        Assert.AreEqual("kept", chat.Draft);
+        Assert.IsTrue(chat.CanSend);
+        Assert.AreEqual(0, rig.Client.Typing.Count);
+    }
 }

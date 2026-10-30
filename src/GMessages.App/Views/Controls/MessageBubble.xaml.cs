@@ -12,8 +12,8 @@ using Windows.System;
 namespace GMessages.App.Views.Controls;
 
 /// <summary>
-/// One message bubble: sent ones on the right (RCS in the accent color, SMS in a shade of it), received ones on the left
-/// in the card color.
+/// One message bubble: sent ones on the right (RCS in a lighter shade of the accent, SMS in the accent color), received
+/// ones on the left in the card color.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -33,9 +33,14 @@ namespace GMessages.App.Views.Controls;
 /// </para>
 /// <para>
 /// The reply quote shows above the text (<c>Quote.{id}</c>), the reaction pill (<c>Reactions.{id}</c>) over the bottom
-/// corner and the status line (<c>Status.{id}</c>) under it. A link's preview card (<c>Preview.{id}</c>), named by its
+/// corner and, under my newest message, the caption row: the time, Google's drawn delivery icon (named
+/// <c>Status.{id}</c>: "Sent", "Delivered" or "Read") and the lock in an encrypted chat. A link's preview card (<c>Preview.{id}</c>), named by its
 /// title, shows under the text once fetched; clicking it opens the link in the default browser. The pill and the menu's React raise
 /// <see cref="ReactRequested"/>, and the menu's Reply raises <see cref="ReplyRequested"/>, for the chat to act on.
+/// </para>
+/// <para>
+/// Bubbles of one group (see <see cref="ChatViewModel.GroupGap"/>) sit close together with small corners where they meet,
+/// as in Google Messages. A bubble is as wide as its content, up to 70% of the chat and 560 px at most.
 /// </para>
 /// </remarks>
 public sealed partial class MessageBubble : UserControl
@@ -49,6 +54,21 @@ public sealed partial class MessageBubble : UserControl
 
     // The Preview Card's Image Width, In Effective Pixels
     private const int PreviewImageWidth = 240;
+
+    // Width: A Bubble Grows With Its Content Up To This Share Of The Chat, And Never Past The Cap (Effective Pixels)
+    private const double MaxWidthShare  = 0.7;
+    private const double MaxBubbleWidth = 560;
+
+    // Corners: Large Round Ones, And Small Ones Where Bubbles Of A Group Meet On The Sender's Side
+    private const double LargeCorner = 18;
+    private const double SmallCorner = 4;
+
+    // Spacing: Half The Gap Inside A Group, And Half The Gap Between Groups
+    private const double InGroupGap = 1;
+    private const double GroupGap   = 4;
+
+    // The Avatar Lane Beside Received Bubbles In A Group Chat
+    private const double AvatarLane = 36;
 
     // The Image Bytes The Card Shows (Or Is Decoding), So A Change Decodes Once
     private byte[]? _previewImage;
@@ -97,6 +117,9 @@ public sealed partial class MessageBubble : UserControl
 
     /// <summary>Gets the menu's Reply text.</summary>
     public static string ReplyText => ChatCopy.Reply;
+
+    /// <summary>Gets the caption row lock's tooltip and name.</summary>
+    public static string EncryptedText => ChatCopy.EndToEndEncrypted;
 
     /// <summary>Gets the colored back, which the reaction picker opens over.</summary>
     internal FrameworkElement Anchor => Back;
@@ -159,13 +182,57 @@ public sealed partial class MessageBubble : UserControl
     public static string TimeIdOf(string id, string tmpId) => AutomationIdOf(id, tmpId) + ".Time";
 
     /// <summary>
-    /// Shows the time once the bubble was clicked, unless the retry link takes its place.
+    /// Shows the time once the bubble was clicked, unless the retry link takes its place or the caption row already shows it.
     /// </summary>
     /// <param name="isTimeShown">True once clicked.</param>
     /// <param name="isFailed">True when the send failed.</param>
+    /// <param name="showsStatusRow">True when the caption row (with the time) shows.</param>
     /// <returns>The time's visibility.</returns>
-    public static Visibility TimeVisibility(bool isTimeShown, bool isFailed) =>
-        isTimeShown && !isFailed ? Visibility.Visible : Visibility.Collapsed;
+    public static Visibility TimeVisibility(bool isTimeShown, bool isFailed, bool showsStatusRow) =>
+        isTimeShown && !isFailed && !showsStatusRow ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>
+    /// Shows a part of the delivery icon for some of the icons.
+    /// </summary>
+    /// <param name="icon">The bubble's icon.</param>
+    /// <param name="icons">The icons the part belongs to, as their numbers ("123" for sending, sent and delivered).</param>
+    /// <returns>Visible when the bubble's icon is one of them.</returns>
+    public static Visibility ShownFor(MessageStatusIcon icon, string icons) =>
+        icon != MessageStatusIcon.None && icons.Contains((char)('0' + (int)icon), StringComparison.Ordinal) ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>
+    /// Rounds a bubble the way Google Messages does: large corners, with small ones on the sender's side where it meets the
+    /// bubble above or below in its group (sent on the right, received on the left).
+    /// </summary>
+    /// <param name="fromMe">True for a sent bubble.</param>
+    /// <param name="isFirst">True for the first bubble of its group.</param>
+    /// <param name="isLast">True for the last bubble of its group.</param>
+    /// <returns>The corners.</returns>
+    public static CornerRadius CornersOf(bool fromMe, bool isFirst, bool isLast)
+    {
+        double top    = isFirst ? LargeCorner : SmallCorner;
+        double bottom = isLast ? LargeCorner : SmallCorner;
+
+        return fromMe
+            ? new CornerRadius(LargeCorner, top, bottom, LargeCorner)
+            : new CornerRadius(top, LargeCorner, LargeCorner, bottom);
+    }
+
+    /// <summary>
+    /// Spaces bubbles 2 px apart inside a group and further apart between groups.
+    /// </summary>
+    /// <param name="isFirst">True for the first bubble of its group.</param>
+    /// <param name="isLast">True for the last bubble of its group.</param>
+    /// <returns>The row's margin.</returns>
+    public static Thickness GroupMargin(bool isFirst, bool isLast) =>
+        new(0, isFirst ? GroupGap : InGroupGap, 0, isLast ? GroupGap : InGroupGap);
+
+    /// <summary>
+    /// Gives the avatar lane's width: received bubbles in a group chat keep it, so their avatar lines up.
+    /// </summary>
+    /// <param name="hasLane">True for a received bubble in a group chat.</param>
+    /// <returns>The lane's width.</returns>
+    public static double LaneWidth(bool hasLane) => hasLane ? AvatarLane : 0;
 
     /// <summary>
     /// Fades a bubble that is still being sent.
@@ -173,6 +240,26 @@ public sealed partial class MessageBubble : UserControl
     /// <param name="isSending">True while sending.</param>
     /// <returns>The opacity.</returns>
     public static double SendingOpacity(bool isSending) => isSending ? SendingFade : 1;
+
+    /// <summary>
+    /// Caps the bubble at 70% of the chat's width (560 px at most) before it is measured, so it is the right width from its
+    /// first layout and short messages stay narrow.
+    /// </summary>
+    /// <param name="availableSize">The row's width and height.</param>
+    /// <returns>The size the bubble wants.</returns>
+    protected override Windows.Foundation.Size MeasureOverride(Windows.Foundation.Size availableSize)
+    {
+        if (double.IsFinite(availableSize.Width))
+        {
+            double max_width = Math.Min(MaxBubbleWidth, Math.Floor(availableSize.Width * MaxWidthShare));
+            if (Root.MaxWidth != max_width)
+            {
+                Root.MaxWidth = max_width;
+            }
+        }
+
+        return base.MeasureOverride(availableSize);
+    }
 
     // =========================================================================
     // EVENT HANDLERS
@@ -267,10 +354,10 @@ public sealed partial class MessageBubble : UserControl
 
     private void OnRetryClick(object sender, RoutedEventArgs e) => RetryRequested?.Invoke(this, EventArgs.Empty);
 
-    // Copies The Selected Text, Or The Whole Text When Nothing Is Selected, As The Text's Own Copy Did
+    // Copies The Selected Text, Or The Whole Text As Sent When Nothing Is Selected, As The Text's Own Copy Did
     private void OnCopyClick(object sender, RoutedEventArgs e)
     {
-        string text = Body.SelectedText.Length > 0 ? Body.SelectedText : Body.Text;
+        string text = Body.SelectedText.Length > 0 ? Body.SelectedText : Bubble?.Text ?? string.Empty;
         if (text.Length == 0)
         {
             return;

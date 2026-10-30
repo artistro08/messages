@@ -30,8 +30,9 @@ namespace GMessages.App.Views;
 /// on its own, until the list scrolls or no older pages are left.
 /// </para>
 /// <para>
-/// Enter sends the draft and Shift + Enter adds a line. The emoji button opens the Windows emoji panel on the
-/// message box.
+/// Opening a chat puts the cursor in the message box. Enter sends the draft and Shift + Enter adds a line. The emoji
+/// button opens the Windows emoji panel on the message box. While replying, the reply chip and the message box join into
+/// one control.
 /// </para>
 /// <para>
 /// One reaction picker (<c>ReactionPicker</c>, buttons <c>ReactionPicker.1</c> to <c>.7</c>) serves every bubble: a
@@ -47,6 +48,11 @@ public sealed partial class ChatPane : UserControl
 
     // LibGM's Reactions: EmojiType 1 To 7
     private const int ReactionCount = 7;
+
+    // The Message Box's Corners (Windows' Control Corner Radius) And The Compose Area's Padding
+    private const double DraftCorner  = 4;
+    private const double ComposeInset = 12;
+    private const double ComposeTop   = 8;
 
     private ScrollViewer? _scroller;
 
@@ -157,6 +163,26 @@ public sealed partial class ChatPane : UserControl
     }
 
     // =========================================================================
+    // X:BIND HELPERS
+    // =========================================================================
+
+    /// <summary>
+    /// Gives the compose area's padding: none on top while replying, so the message box meets the reply chip.
+    /// </summary>
+    /// <param name="isReplying">True while a reply is being written.</param>
+    /// <returns>The padding.</returns>
+    public static Thickness ComposePadding(bool isReplying) =>
+        new(ComposeInset, isReplying ? 0 : ComposeTop, ComposeInset, ComposeInset);
+
+    /// <summary>
+    /// Gives the message box's corners: square on top while replying, so it and the reply chip read as one control.
+    /// </summary>
+    /// <param name="isReplying">True while a reply is being written.</param>
+    /// <returns>The corners.</returns>
+    public static CornerRadius DraftCorners(bool isReplying) =>
+        isReplying ? new CornerRadius(0, 0, DraftCorner, DraftCorner) : new CornerRadius(DraftCorner);
+
+    // =========================================================================
     // EVENT HANDLERS
     // =========================================================================
 
@@ -192,6 +218,17 @@ public sealed partial class ChatPane : UserControl
 
             // The Chat Is On Screen, So Its Toasts Are Read
             (Application.Current as App)?.Notifications?.RemoveConversation(chat.ConversationId);
+
+            // Ready To Type: The Message Box Takes Focus Once The Pane Shows (A Turn Later; A Hidden Box Can't Take It). This
+            // Is Focus Inside The Window Only: It Never Activates The Window Or Takes The Foreground, So A Window Opened In The
+            // Background Stays There, And Shows The Cursor In The Box Once The Person Brings It Up
+            pane.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+            {
+                if (pane.Chat == chat)
+                {
+                    pane.DraftBox.Focus(FocusState.Programmatic);
+                }
+            });
         }
     }
 

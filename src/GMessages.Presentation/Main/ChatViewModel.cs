@@ -31,6 +31,9 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     /// <summary>How long after telling the other side I'm typing before telling them again.</summary>
     public static readonly TimeSpan TypingResend = TimeSpan.FromSeconds(10);
 
+    /// <summary>The longest gap between two messages from the same sender that still groups their bubbles.</summary>
+    public static readonly TimeSpan GroupGap = TimeSpan.FromMinutes(3);
+
     private readonly ChatStore _store;
     private readonly TimeProvider _time;
     private readonly Action<Action> _post;
@@ -155,6 +158,17 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
                 _ = SendTypingAsync();
             }
         }
+    }
+
+    /// <summary>
+    /// Puts back a draft kept from the last time the chat was open, without telling the other side I'm typing.
+    /// </summary>
+    /// <param name="draft">The kept draft.</param>
+    public void RestoreDraft(string draft)
+    {
+        _draft = draft ?? string.Empty;
+        Raise(nameof(Draft));
+        Raise(nameof(CanSend));
     }
 
     /// <summary>Gets the bubble being replied to, or null.</summary>
@@ -528,10 +542,11 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
-        // A System Line Shows No Bubble, But Can Switch Encryption On Or Off
+        // A System Line Shows No Bubble, But Can Switch Encryption On Or Off (The Header's Lock And The Status Row's)
         if (m.Kind == MessageKind.Tombstone)
         {
             IsEncrypted = _store.IsEncrypted(ConversationId);
+            RefreshStatus(IsEncrypted);
             return;
         }
 
@@ -715,9 +730,9 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     {
         ConversationInfo? c = _store.Find(ConversationId);
 
-        RefreshSenders(c);
+        RefreshGroups(c);
         RefreshQuotes(c);
-        RefreshStatus();
+        RefreshStatus(_store.IsEncrypted(ConversationId));
         RefreshPreviews(c);
         IsEncrypted = _store.IsEncrypted(ConversationId);
     }
@@ -758,22 +773,28 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
         });
     }
 
-    // Names The Sender On The First Received Bubble Of A Run, Groups Only
-    private void RefreshSenders(ConversationInfo? c)
+    // Groups The Bubbles As Google Messages Does: The Same Sender (Me, Or One Person), Each A Few Minutes After The Last.
+    // In A Group Chat A Received Group Is Named Over Its First Bubble And Shows Its Sender's Avatar Beside Its Last
+    private void RefreshGroups(ConversationInfo? c)
     {
-        MessageBubbleViewModel? previous = null;
+        bool is_group = c is { IsGroup: true };
 
-        foreach (MessageBubbleViewModel b in Messages)
+        for (int i = 0; i < Messages.Count; i++)
         {
-            bool first_of_run       = previous is null || previous.FromMe || previous.ParticipantId != b.ParticipantId;
-            ParticipantInfo? sender = c?.FindParticipant(b.ParticipantId);
-            string name             = c is { IsGroup: true } && !b.FromMe && first_of_run ? ChatFormat.SenderName(sender) : string.Empty;
+            MessageBubbleViewModel b = Messages[i];
+            bool first               = i == 0 || !SameGroup(Messages[i - 1], b);
+            bool last                = i == Messages.Count - 1 || !SameGroup(b, Messages[i + 1]);
+            ParticipantInfo? sender  = c?.FindParticipant(b.ParticipantId);
+            string name              = ChatFormat.SenderName(sender);
+            bool lane                = is_group && !b.FromMe;
 
             // The Name Takes The Color Of The Sender's Letter Circle; The Conversation Says Which Reaction Is Mine
-            b.SetSender(name.Length > 0 ? name : null, AvatarParts.ColorOf(sender));
+            b.SetGroup(first, last, lane, lane && first && name.Length > 0 ? name : null, AvatarParts.ColorOf(sender), ChatFormat.Initial(name), b.ParticipantId);
             b.SetConversation(c);
-            previous = b;
         }
+
+        static bool SameGroup(MessageBubbleViewModel a, MessageBubbleViewModel b) =>
+            a.FromMe == b.FromMe && (a.FromMe || a.ParticipantId == b.ParticipantId) && b.SentAt - a.SentAt <= GroupGap;
     }
 
     // Quotes Come From The Bubbles Shown, Else The Store (Memory Or Database), Else "Original message" With No Sender.
@@ -812,14 +833,15 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
         });
     }
 
-    // "Sent", "Delivered" Or "Read" Under The Newest Of My Bubbles That Is Neither Failed Nor Sending; None Elsewhere
-    private void RefreshStatus()
+    // "Sent", "Delivered" Or "Read" (Google's Icon, Named So) Under The Newest Of My Bubbles That Is Neither Failed Nor
+    // Sending, With The Lock In An Encrypted Chat; None Elsewhere
+    private void RefreshStatus(bool encrypted)
     {
         MessageBubbleViewModel? newest = Messages.LastOrDefault(b => b.FromMe && !b.IsFailed && !b.IsSending);
 
         foreach (MessageBubbleViewModel b in Messages)
         {
-            b.SetStatusText(b == newest ? ChatFormat.StatusText(b.Status) : string.Empty);
+            b.SetStatus(b == newest ? ChatFormat.StatusText(b.Status) : string.Empty, b == newest && encrypted);
         }
     }
 

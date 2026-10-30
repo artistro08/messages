@@ -50,6 +50,9 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     /// <summary>Gets the text, or the kind label ("Photo", "Video"...) for a message without text.</summary>
     public string Text { get; private set; } = string.Empty;
 
+    /// <summary>Gets the text as shown: <see cref="Text"/> with text-style emoji in color (see <see cref="ChatFormat.WithColorEmoji"/>).</summary>
+    public string DisplayText { get; private set; } = string.Empty;
+
     /// <summary>Gets whether the owner sent the message.</summary>
     public bool FromMe { get; private set; }
 
@@ -61,6 +64,24 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
 
     /// <summary>Gets whether <see cref="SenderName"/> is set (for bindings, which skip their function when an argument is null).</summary>
     public bool HasSenderName => SenderName is not null;
+
+    /// <summary>Gets whether the bubble starts its group (the same sender, a few minutes apart at most); set by the chat.</summary>
+    public bool IsFirstInGroup { get; private set; } = true;
+
+    /// <summary>Gets whether the bubble ends its group; set by the chat.</summary>
+    public bool IsLastInGroup { get; private set; } = true;
+
+    /// <summary>Gets whether the bubble keeps a lane on its left for the sender's avatar (received, in a group chat).</summary>
+    public bool HasAvatarLane { get; private set; }
+
+    /// <summary>Gets whether the sender's avatar shows beside the bubble (the last of a received group, in a group chat).</summary>
+    public bool ShowsAvatar { get; private set; }
+
+    /// <summary>Gets the avatar's letter while it shows, else empty.</summary>
+    public string AvatarInitial { get; private set; } = string.Empty;
+
+    /// <summary>Gets the participant whose photo covers the avatar while it shows, else empty.</summary>
+    public string AvatarPhotoId { get; private set; } = string.Empty;
 
     /// <summary>Gets when the message was sent.</summary>
     public DateTimeOffset SentAt { get; private set; }
@@ -83,8 +104,22 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     /// <summary>Gets the bubble's accessible item type: "Chat message" for RCS, "Text message" for SMS.</summary>
     public string ItemTypeName => IsRcs ? ChatCopy.ChatMessage : ChatCopy.TextMessage;
 
-    /// <summary>Gets the status line under the bubble ("Sent", "Delivered", "Read"), or empty; set by the chat.</summary>
+    /// <summary>Gets the status under the bubble ("Sent", "Delivered", "Read"), or empty; set by the chat. The icon's accessible name.</summary>
     public string StatusText { get; private set; } = string.Empty;
+
+    /// <summary>Gets the delivery icon under the bubble: the clock while sending, else the status of my newest bubble.</summary>
+    public MessageStatusIcon StatusIcon => IsSending ? MessageStatusIcon.Sending : StatusText.Length == 0 ? MessageStatusIcon.None : Status switch
+    {
+        MessageStatusType.OutgoingDelivered => MessageStatusIcon.Delivered,
+        MessageStatusType.OutgoingDisplayed => MessageStatusIcon.Read,
+        _                                   => MessageStatusIcon.Sent,
+    };
+
+    /// <summary>Gets whether the caption row (time, delivery icon and lock) shows under the bubble.</summary>
+    public bool ShowsStatusRow => StatusIcon != MessageStatusIcon.None;
+
+    /// <summary>Gets whether the lock shows in the caption row: the newest status row of an end-to-end encrypted chat.</summary>
+    public bool ShowsLock { get; private set; }
 
     /// <summary>Gets the reaction chip text, such as "👍😂 3", or empty.</summary>
     public string ReactionsText { get; private set; } = string.Empty;
@@ -154,18 +189,6 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         PropertyChanged?.Invoke(this, AllChanged);
     }
 
-    internal void SetSender(string? name, uint color)
-    {
-        if (SenderName == name && SenderColor == color)
-        {
-            return;
-        }
-
-        SenderName  = name;
-        SenderColor = color;
-        PropertyChanged?.Invoke(this, AllChanged);
-    }
-
     // A Bubble Made Before Its Conversation Was Cached Learns Which Reaction Is Mine
     internal void SetConversation(ConversationInfo? conversation)
     {
@@ -185,26 +208,52 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         PropertyChanged?.Invoke(this, AllChanged);
     }
 
-    internal void SetStatusText(string text)
+    internal void SetStatus(string text, bool showsLock)
     {
-        if (StatusText == text)
+        if (StatusText == text && ShowsLock == showsLock)
         {
             return;
         }
 
         StatusText = text;
+        ShowsLock  = showsLock;
         PropertyChanged?.Invoke(this, AllChanged);
     }
 
+    // Where The Bubble Sits In Its Group, Its Name Over The First And Its Avatar Beside The Last (Group Chats Only)
+    internal void SetGroup(bool first, bool last, bool avatarLane, string? senderName, uint senderColor, string avatarInitial, string avatarPhotoId)
+    {
+        bool shows_avatar = avatarLane && last;
+        string initial    = shows_avatar ? avatarInitial : string.Empty;
+        string photo_id   = shows_avatar ? avatarPhotoId : string.Empty;
+        if (IsFirstInGroup == first && IsLastInGroup == last && HasAvatarLane == avatarLane && SenderName == senderName && SenderColor == senderColor
+            && AvatarInitial == initial && AvatarPhotoId == photo_id)
+        {
+            return;
+        }
+
+        IsFirstInGroup = first;
+        IsLastInGroup  = last;
+        HasAvatarLane  = avatarLane;
+        ShowsAvatar    = shows_avatar;
+        SenderName     = senderName;
+        SenderColor    = senderColor;
+        AvatarInitial  = initial;
+        AvatarPhotoId  = photo_id;
+        PropertyChanged?.Invoke(this, AllChanged);
+    }
+
+    // The Quote Shows Text-Style Emoji In Color, Like The Bubble
     internal void SetQuote(string sender, string text)
     {
-        if (QuoteSender == sender && QuoteText == text)
+        string shown = ChatFormat.WithColorEmoji(text);
+        if (QuoteSender == sender && QuoteText == shown)
         {
             return;
         }
 
         QuoteSender = sender;
-        QuoteText   = text;
+        QuoteText   = shown;
         PropertyChanged?.Invoke(this, AllChanged);
     }
 
@@ -240,6 +289,7 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         TmpId         = m.TmpId.Length > 0 ? m.TmpId : TmpId;
         ParticipantId = m.ParticipantId;
         Text          = m.Kind == MessageKind.Text ? m.Text : ChatFormat.KindLabel(m.Kind);
+        DisplayText   = ChatFormat.WithColorEmoji(Text);
         FromMe        = m.FromMe;
         SentAt        = m.Time;
         Time          = m.Time.ToLocalTime().ToString("t", CultureInfo.CurrentCulture);
