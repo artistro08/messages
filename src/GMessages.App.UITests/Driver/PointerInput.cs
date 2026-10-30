@@ -35,6 +35,20 @@ public static partial class PointerInput
         Assert.AreEqual(1u, SendInput(1, move, Marshal.SizeOf<Input>()), "Windows refused the mouse move.");
     }
 
+    /// <summary>
+    /// Moves the pointer straight out through the window's left edge in one real move. The test is inconclusive when
+    /// the pointer can't leave there (the window sits at the screen's left edge).
+    /// </summary>
+    /// <param name="window">The window's bounds, in screen pixels.</param>
+    public static void LeaveLeft(System.Drawing.Rectangle window)
+    {
+        MoveBy(window.Left - Mouse.Position.X - 80);
+        if (Mouse.Position.X >= window.Left)
+        {
+            Assert.Inconclusive($"The pointer ({Mouse.Position}) couldn't leave the window ({window}) on the left.");
+        }
+    }
+
     // =========================================================================
     // NATIVE MOUSE INPUT
     // =========================================================================

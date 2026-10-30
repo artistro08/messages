@@ -6,7 +6,6 @@ using GMessages.Presentation;
 using GMessages.Presentation.Messaging;
 using GMessages.Protocol.Proto;
 using Keyboard = FlaUI.Core.Input.Keyboard;
-using Mouse = FlaUI.Core.Input.Mouse;
 
 namespace GMessages.App.UITests;
 
@@ -127,12 +126,7 @@ public sealed class ConversationActionTests : UiTest
         AutomationElement more       = App.Find("Row.More.c-ann");
         PointerInput.Hover(row);
 
-        // Straight Out Through The Window's Left Edge, As Real Input
-        PointerInput.MoveBy(win.Left - Mouse.Position.X - 80);
-        if (Mouse.Position.X >= win.Left)
-        {
-            Assert.Inconclusive($"The pointer ({Mouse.Position}) couldn't leave the window ({win}) on the left.");
-        }
+        PointerInput.LeaveLeft(win);
 
         Thread.Sleep(500);
         more.Click();
