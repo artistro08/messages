@@ -82,8 +82,15 @@ public sealed partial class ChatPane : UserControl
     private static readonly TimeSpan TypingCycle   = TimeSpan.FromMilliseconds(1200);
     private static readonly TimeSpan TypingStagger = TimeSpan.FromMilliseconds(150);
 
+    // Windows' Own Focus Visual: A 2 px Outer Ring And A 1 px Inner One, Put Back On A Focused Row In High Contrast
+    private static readonly Thickness SystemFocusPrimary   = new(2);
+    private static readonly Thickness SystemFocusSecondary = new(1);
+
     // Reads The Windows Animation Setting Live (Settings > Accessibility > Visual Effects)
     private static readonly UISettings Ui = new();
+
+    // Reads Whether High Contrast Is On (Settings > Accessibility > Contrast Themes)
+    private static readonly AccessibilitySettings Access = new();
 
     private ScrollViewer? _scroller;
 
@@ -143,6 +150,17 @@ public sealed partial class ChatPane : UserControl
         // UI Thread)
         TypingBubble.RegisterPropertyChangedCallback(VisibilityProperty, (_, _) => AnimateTypingDots(TypingBubble.Visibility == Visibility.Visible));
         Ui.AnimationsEnabledChanged += (_, _) => DispatcherQueue.TryEnqueue(() => AnimateTypingDots(TypingBubble.Visibility == Visibility.Visible));
+
+        // High Contrast Turned On Or Off: The Focused Row Swaps Between Its Bubble's Ring And The System Visual. Windows
+        // Changes Its Colors Then (Raised Off The UI Thread); AccessibilitySettings.HighContrastChanged Can't Be Used, As
+        // Subscribing To It Crashes A Desktop App's Window
+        Ui.ColorValuesChanged += (_, _) => DispatcherQueue.TryEnqueue(() =>
+        {
+            if (XamlRoot is { } root && FocusManager.GetFocusedElement(root) is { } focused)
+            {
+                ShowFocusRing(focused.As<DependencyObject>());
+            }
+        });
     }
 
     /// <summary>Gets the lock's tooltip and name.</summary>
@@ -663,6 +681,43 @@ public sealed partial class ChatPane : UserControl
         _lastExtent   = scroller.ExtentHeight;
         _lastViewport = scroller.ViewportHeight;
         return changed;
+    }
+
+    // A Row Gained Or Lost Focus (Or Something Inside One, Which Is Ignored)
+    private void OnMessageListFocusChanged(object sender, RoutedEventArgs e)
+    {
+        if (e.OriginalSource is not null)
+        {
+            ShowFocusRing(e.OriginalSource.As<DependencyObject>());
+        }
+    }
+
+    // A Row With Keyboard Or Programmatic Focus Rings Its Bubble, Raised Over Its Neighbors So They Don't Cover The Ring;
+    // A Click Doesn't. In High Contrast The Row's System Focus Visual Shows Instead (See MessageBubbleViewModel.ShowsFocusRing)
+    private void ShowFocusRing(DependencyObject element)
+    {
+        if (RowBubbleView(element) is not { } view)
+        {
+            return;
+        }
+
+        Control row        = element.As<Control>();
+        bool high_contrast = Access.HighContrast;
+        bool shown         = MessageBubbleViewModel.ShowsFocusRing(row.FocusState != FocusState.Unfocused, row.FocusState == FocusState.Pointer, high_contrast);
+
+        if (high_contrast)
+        {
+            row.FocusVisualPrimaryThickness   = SystemFocusPrimary;
+            row.FocusVisualSecondaryThickness = SystemFocusSecondary;
+        }
+        else
+        {
+            row.ClearValue(FocusVisualPrimaryThicknessProperty);
+            row.ClearValue(FocusVisualSecondaryThicknessProperty);
+        }
+
+        Canvas.SetZIndex(row, shown ? 1 : 0);
+        view.ShowFocusRing(shown, high_contrast);
     }
 
     // The Bubble Of The Row With Keyboard Focus, Or Null When Focus Is Elsewhere (Also On A Link Inside A Row)

@@ -76,7 +76,9 @@
             Padding="12,8"
             AutomationProperties.AutomationId="Chat.Messages"
             ContextRequested="OnMessageListContextRequested"
+            GotFocus="OnMessageListFocusChanged"
             Loaded="OnMessageListLoaded"
+            LostFocus="OnMessageListFocusChanged"
             PreviewKeyDown="OnMessageListKeyDown"
             SelectionMode="None"
             ShowsScrollingPlaceholders="False">
@@ -135,8 +137,12 @@
                     <ItemsStackPanel VerticalAlignment="Bottom" ItemsUpdatingScrollMode="KeepItemsInView" />
                 </ItemsPanelTemplate>
             </ListView.ItemsPanel>
+            <!-- Rows: no system focus visual across the whole row; a focused bubble rings itself instead (owner request).
+                 High contrast puts the system visual back from code (see ShowFocusRing in ChatPane.xaml.cs) -->
             <ListView.ItemContainerStyle>
                 <Style TargetType="ListViewItem">
+                    <Setter Property="FocusVisualPrimaryThickness" Value="0" />
+                    <Setter Property="FocusVisualSecondaryThickness" Value="0" />
                     <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                     <Setter Property="MinHeight" Value="0" />
                     <Setter Property="Padding" Value="0" />

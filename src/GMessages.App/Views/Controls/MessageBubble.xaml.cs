@@ -89,6 +89,10 @@ namespace GMessages.App.Views.Controls;
 /// layout and the list's scroll pin never see it move. The first page, older pages, cached bubbles and recycled rows
 /// show without it, and so does everything when Windows' animation effects are off.
 /// </para>
+/// <para>
+/// A bubble whose row has keyboard focus draws a ring around its back (see <see cref="ShowFocusRing"/>), in place of the
+/// row's system focus visual; in high contrast the system visual shows instead.
+/// </para>
 /// </remarks>
 public sealed partial class MessageBubble : UserControl
 {
@@ -291,6 +295,22 @@ public sealed partial class MessageBubble : UserControl
     }
 
     /// <summary>
+    /// Shows or hides the ring around the bubble's back, for its row's keyboard focus.
+    /// </summary>
+    /// <remarks>
+    /// The chat pane decides (see <see cref="MessageBubbleViewModel.ShowsFocusRing"/>). A test run also puts the result in
+    /// the text's item status: <c>FocusRing</c> or <c>NoRing</c>, then <c>+SystemFocus</c> while the row's system focus
+    /// visual draws too.
+    /// </remarks>
+    /// <param name="shown">True to show the ring.</param>
+    /// <param name="systemVisual">True when the row's system focus visual draws (high contrast).</param>
+    internal void ShowFocusRing(bool shown, bool systemVisual)
+    {
+        VisualStateManager.GoToState(this, shown ? "RingShown" : "RingHidden", false);
+        TestHooks.ShowState(Body, (shown ? "FocusRing" : "NoRing") + (systemVisual ? "+SystemFocus" : string.Empty));
+    }
+
+    /// <summary>
     /// Keeps the hover strip shown while the reaction picker or the menu opened from it is open (the pointer leaves the
     /// bubble for it).
     /// </summary>
@@ -385,6 +405,21 @@ public sealed partial class MessageBubble : UserControl
         return fromMe
             ? new CornerRadius(LargeCorner, top, bottom, LargeCorner)
             : new CornerRadius(top, LargeCorner, LargeCorner, bottom);
+    }
+
+    /// <summary>
+    /// Rounds the focus ring a distance outside the back: each of the back's corners (see <see cref="CornersOf"/>) grown
+    /// by that distance, so the ring follows them evenly.
+    /// </summary>
+    /// <param name="fromMe">True for a sent bubble.</param>
+    /// <param name="isFirst">True for the first bubble of its group.</param>
+    /// <param name="isLast">True for the last bubble of its group.</param>
+    /// <param name="outset">How far outside the back the ring's edge sits, in effective pixels.</param>
+    /// <returns>The corners.</returns>
+    public static CornerRadius RingCorners(bool fromMe, bool isFirst, bool isLast, double outset)
+    {
+        CornerRadius back = CornersOf(fromMe, isFirst, isLast);
+        return new CornerRadius(back.TopLeft + outset, back.TopRight + outset, back.BottomRight + outset, back.BottomLeft + outset);
     }
 
     /// <summary>
@@ -547,6 +582,7 @@ public sealed partial class MessageBubble : UserControl
         view._keepShown   = false;
         view._canAct      = view.Bubble?.CanAct == true;
         VisualStateManager.GoToState(view, "Hidden", false);
+        view.ShowFocusRing(false, false);
 
         if (e.OldValue is MessageBubbleViewModel old_bubble)
         {
