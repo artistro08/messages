@@ -7,6 +7,33 @@
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+
+                <!-- Icon Buttons (owner, Task 22): a button that is just an icon gets no background or border on hover or
+                     press. The subtle button's hover and press brushes, which only SubtleButtonStyle (and so IconButtonStyle)
+                     reads, and the title bar Back's are clear in Light and Dark. A merged dictionary after the controls'
+                     resources, the only place that overrides theirs: a merged dictionary is searched before this one's own
+                     theme dictionaries. No high contrast dictionary, so high contrast keeps the system's own hover and press
+                     colors; the foreground, focus visual and disabled look stay Fluent's -->
+                <ResourceDictionary>
+                    <ResourceDictionary.ThemeDictionaries>
+                        <ResourceDictionary x:Key="Light">
+                            <SolidColorBrush x:Key="SubtleButtonBackgroundPointerOver" Color="Transparent" />
+                            <SolidColorBrush x:Key="SubtleButtonBackgroundPressed" Color="Transparent" />
+                            <SolidColorBrush x:Key="SubtleButtonBorderBrushPointerOver" Color="Transparent" />
+                            <SolidColorBrush x:Key="SubtleButtonBorderBrushPressed" Color="Transparent" />
+                            <SolidColorBrush x:Key="TitleBarBackButtonBackgroundPointerOver" Color="Transparent" />
+                            <SolidColorBrush x:Key="TitleBarBackButtonBackgroundPressed" Color="Transparent" />
+                        </ResourceDictionary>
+                        <ResourceDictionary x:Key="Dark">
+                            <SolidColorBrush x:Key="SubtleButtonBackgroundPointerOver" Color="Transparent" />
+                            <SolidColorBrush x:Key="SubtleButtonBackgroundPressed" Color="Transparent" />
+                            <SolidColorBrush x:Key="SubtleButtonBorderBrushPointerOver" Color="Transparent" />
+                            <SolidColorBrush x:Key="SubtleButtonBorderBrushPressed" Color="Transparent" />
+                            <SolidColorBrush x:Key="TitleBarBackButtonBackgroundPointerOver" Color="Transparent" />
+                            <SolidColorBrush x:Key="TitleBarBackButtonBackgroundPressed" Color="Transparent" />
+                        </ResourceDictionary>
+                    </ResourceDictionary.ThemeDictionaries>
+                </ResourceDictionary>
             </ResourceDictionary.MergedDictionaries>
 
             <!-- Sent RCS Bubble: a lighter (Light) or darker (Dark) shade of the accent, with the regular text color on it
@@ -48,6 +75,16 @@
                     <SolidColorBrush x:Key="ReactionPillMineBrush" Color="{ThemeResource SystemColorWindowColor}" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
+
+            <!-- Icon Button: every button that is just an icon (or a picture). Fluent's subtle button with no padding, so the
+                 icon centers in the button's set size; its hover and press backgrounds are clear (Icon Buttons, above).
+                 Defined here, before any page or control that uses it loads -->
+            <Style
+                x:Key="IconButtonStyle"
+                BasedOn="{StaticResource SubtleButtonStyle}"
+                TargetType="Button">
+                <Setter Property="Padding" Value="0" />
+            </Style>
         </ResourceDictionary>
     </Application.Resources>
 </Application>
