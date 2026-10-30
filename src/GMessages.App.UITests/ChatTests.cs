@@ -329,13 +329,7 @@ public sealed class ChatTests : UiTest
     [TestMethod]
     public async Task SwitchChats_EachOpensOnNewest()
     {
-        // Two Chats Like Real Ones: Sent And Received One-Liners, Some With Emoji, A Screen And A Half Per Page
-        long time = DateTimeOffset.UtcNow.AddDays(-1).ToUnixTimeMilliseconds() * 1000;
-        foreach (string id in new[] { "sa", "sb" })
-        {
-            Conversation chat = FakeChats.NewConversation("c-" + id, "Pal " + id, false, ConversationStatus.Active, false, false, FakeChats.Person("p-" + id, "Pal " + id, "+1555000001" + id.Length));
-            Server.Phone.Chats.Add(chat, [.. Enumerable.Range(1, ChatStore.PageSize * 2).Select(i => Line(id, i))]);
-        }
+        AddTwoPageChats("sa", "sb");
 
         await OpenMainAsync();
         foreach (string id in new[] { "sa", "sb", "sa", "sb" })
@@ -344,20 +338,6 @@ public sealed class ChatTests : UiTest
             Wait.Until(() => Bubbles().Any(b => b.Id == $"Bubble.{id}-{ChatStore.PageSize * 2}"), AppDriver.DefaultTimeout, () => $"Chat {id} didn't show its newest bubble.");
             Thread.Sleep(2000);
             AssertAtNewest($"Opening chat {id}");
-        }
-
-        Message Line(string id, int i)
-        {
-            var message = new Message
-            {
-                MessageID      = $"{id}-{i}",
-                ConversationID = "c-" + id,
-                ParticipantID  = i % 2 == 0 ? FakeChats.MyParticipantId : "p-" + id,
-                Timestamp      = time += 1_000_000,
-                MessageStatus  = new MessageStatus { Status = i % 2 == 0 ? MessageStatusType.OutgoingComplete : MessageStatusType.IncomingComplete },
-            };
-            message.MessageInfo.Add(new MessageInfo { MessageContent = new MessageContent { Content = i % 3 == 0 ? $"Line {i} \U0001F923\U0001F923" : $"Line {i}" } });
-            return message;
         }
     }
 
@@ -370,13 +350,7 @@ public sealed class ChatTests : UiTest
     [TestMethod]
     public async Task SwitchChats_ByClick_NoFlash()
     {
-        // Three Chats Of Two Pages Each, Like Real Ones
-        long time = DateTimeOffset.UtcNow.AddDays(-1).ToUnixTimeMilliseconds() * 1000;
-        foreach (string id in new[] { "fa", "fb", "fc" })
-        {
-            Conversation chat = FakeChats.NewConversation("c-" + id, "Pal " + id, false, ConversationStatus.Active, false, false, FakeChats.Person("p-" + id, "Pal " + id, "+1555000002" + id.Length));
-            Server.Phone.Chats.Add(chat, [.. Enumerable.Range(1, ChatStore.PageSize * 2).Select(i => Line(id, i))]);
-        }
+        AddTwoPageChats("fa", "fb", "fc");
 
         await OpenMainAsync();
         App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).SetForeground();
@@ -389,20 +363,6 @@ public sealed class ChatTests : UiTest
         foreach (string id in new[] { "fb", "fa", "fc", "fb" })
         {
             AssertNoFlash(id);
-        }
-
-        Message Line(string id, int i)
-        {
-            var message = new Message
-            {
-                MessageID      = $"{id}-{i}",
-                ConversationID = "c-" + id,
-                ParticipantID  = i % 2 == 0 ? FakeChats.MyParticipantId : "p-" + id,
-                Timestamp      = time += 1_000_000,
-                MessageStatus  = new MessageStatus { Status = i % 2 == 0 ? MessageStatusType.OutgoingComplete : MessageStatusType.IncomingComplete },
-            };
-            message.MessageInfo.Add(new MessageInfo { MessageContent = new MessageContent { Content = i % 3 == 0 ? $"Line {i} \U0001F923\U0001F923" : $"Line {i}" } });
-            return message;
         }
     }
 
@@ -603,6 +563,32 @@ public sealed class ChatTests : UiTest
         }
     }
 
+    // Adds Chats Like Real Ones (c-{id}, Pal {id}): Two Pages Of Sent And Received One-Liners ({id}-1 Up), Some With Emoji,
+    // A Screen And A Half Per Page
+    private void AddTwoPageChats(params string[] ids)
+    {
+        long time = DateTimeOffset.UtcNow.AddDays(-1).ToUnixTimeMilliseconds() * 1000;
+        foreach (string id in ids)
+        {
+            Conversation chat = FakeChats.NewConversation("c-" + id, "Pal " + id, false, ConversationStatus.Active, false, false, FakeChats.Person("p-" + id, "Pal " + id, "+1555000001" + id.Length));
+            Server.Phone.Chats.Add(chat, [.. Enumerable.Range(1, ChatStore.PageSize * 2).Select(i => Line(id, i))]);
+        }
+
+        Message Line(string id, int i)
+        {
+            var message = new Message
+            {
+                MessageID      = $"{id}-{i}",
+                ConversationID = "c-" + id,
+                ParticipantID  = i % 2 == 0 ? FakeChats.MyParticipantId : "p-" + id,
+                Timestamp      = time += 1_000_000,
+                MessageStatus  = new MessageStatus { Status = i % 2 == 0 ? MessageStatusType.OutgoingComplete : MessageStatusType.IncomingComplete },
+            };
+            message.MessageInfo.Add(new MessageInfo { MessageContent = new MessageContent { Content = i % 3 == 0 ? $"Line {i} \U0001F923\U0001F923" : $"Line {i}" } });
+            return message;
+        }
+    }
+
     // Waits For A Chat's Newest Bubble (Line Two Pages In)
     private void WaitForNewest(string id) =>
         Wait.Until(() => App.TryFind($"Bubble.{id}-{ChatStore.PageSize * 2}") is not null, AppDriver.DefaultTimeout, () => $"Chat {id} didn't show its newest bubble.");
@@ -640,21 +626,34 @@ public sealed class ChatTests : UiTest
         (double draft_before, double lighter_before) = Read();
         Assert.IsTrue(Math.Abs(lighter_before) < 1, $"Before opening {id}, the list's middle read {lighter_before:0.0} off its padding; the check needs it empty.");
 
-        // Click, Then Sample On A Second Thread So The Readings Keep Their Pace
-        var samples = new List<(double Ms, double Draft, double Lighter)>();
-        var clock   = System.Diagnostics.Stopwatch.StartNew();
-        var sampler = new Thread(() =>
+        // Click, Then Sample On A Second Thread So The Readings Keep Their Pace. A Failed Reading Is Kept And Thrown Here
+        // Once The Thread Ends, So It Fails The Test Instead Of The Test Host
+        var samples        = new List<(double Ms, double Draft, double Lighter)>();
+        var clock          = System.Diagnostics.Stopwatch.StartNew();
+        Exception? failure = null;
+        var sampler        = new Thread(() =>
         {
-            while (clock.ElapsedMilliseconds < 800)
+            try
             {
-                (double d, double l) = Read();
-                samples.Add((clock.Elapsed.TotalMilliseconds, d, l));
-                Thread.Sleep(1);
+                while (clock.ElapsedMilliseconds < 800)
+                {
+                    (double d, double l) = Read();
+                    samples.Add((clock.Elapsed.TotalMilliseconds, d, l));
+                    Thread.Sleep(1);
+                }
+            }
+            catch (Exception ex)
+            {
+                failure = ex;
             }
         });
         sampler.Start();
         FlaUI.Core.Input.Mouse.Click();
         sampler.Join();
+        if (failure is not null)
+        {
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
+        }
 
         string trace = string.Join(" ", samples.Select(s => $"{s.Ms:0}:{s.Draft - draft_before:0}/{s.Lighter:0.0}"));
         TestContext.WriteLine($"{id}: {samples.Count} readings (ms:box/list) {trace}");
