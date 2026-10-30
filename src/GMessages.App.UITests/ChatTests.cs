@@ -585,9 +585,21 @@ public sealed class ChatTests : UiTest
         DateTime? until     = null;
         while (until is null || DateTime.UtcNow < until)
         {
-            int? y = BubbleTop(list, watched);
-            samples.Add(y?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "off");
-            Assert.IsTrue(AnyBubble(list), $"The list showed no bubbles during the older page's arrival. Samples: {string.Join(" ", samples)}.");
+            int? y   = BubbleTop(list, watched);
+            bool any = AnyBubble(list);
+
+            // UI Automation Can See The List With No Rows For A Moment While The Page Goes In, Though The Screen Never Stops
+            // Showing Them (Frames Captured Every 8 ms Around Six Such Readings All Showed The Bubbles In Place). A Reading
+            // With No Bubbles Counts Once 3 Readings 50 ms Apart Agree; Such A Sample Is Marked "~"
+            string mark = "";
+            if (!any)
+            {
+                (any, y) = Settled(() => (AnyBubble(list), BubbleTop(list, watched)));
+                mark     = "~";
+            }
+
+            samples.Add((y?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "off") + mark);
+            Assert.IsTrue(any, $"The list showed no bubbles during the older page's arrival. Samples: {string.Join(" ", samples)}.");
             Assert.IsTrue(y is { } top && Math.Abs(top - recorded!.Value) <= 4,
                 $"{watched} moved from y={recorded} during the older page's arrival. Samples: {string.Join(" ", samples)}.");
 
@@ -601,6 +613,23 @@ public sealed class ChatTests : UiTest
         }
 
         TestContext.WriteLine($"{watched} tops: {string.Join(" ", samples)}");
+    }
+
+    // Reads Again Every 50 ms Until 3 Readings In A Row Agree (Up To A Second), And Gives The Last
+    private static T Settled<T>(Func<T> read)
+    {
+        T last         = read();
+        int same       = 1;
+        DateTime until = DateTime.UtcNow.AddSeconds(1);
+        while (same < 3 && DateTime.UtcNow < until)
+        {
+            Thread.Sleep(50);
+            T now = read();
+            same  = EqualityComparer<T>.Default.Equals(now, last) ? same + 1 : 1;
+            last  = now;
+        }
+
+        return last;
     }
 
     // A Bubble's Screen Top, Or Null When It Is Gone, Off Screen Or Outside The List
