@@ -198,6 +198,15 @@ internal static class NativeMethods
     }
 
     // =========================================================================
+    // SHLWAPI
+    // =========================================================================
+
+    public const int SFBS_FLAGS_ROUND_TO_NEAREST_DISPLAYED_DIGIT = 1;
+
+    [DllImport("shlwapi.dll", CharSet = CharSet.Unicode)]
+    public static extern int StrFormatByteSizeEx(ulong size, int flags, [Out] char[] buffer, uint bufferSize);
+
+    // =========================================================================
     // USER32
     // =========================================================================
 

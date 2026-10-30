@@ -127,6 +127,33 @@ public sealed class MediaTests : UiTest
         Assert.IsTrue(text.BoundingRectangle.Top >= photo.BoundingRectangle.Bottom, $"The caption ({text.BoundingRectangle}) isn't under the photo ({photo.BoundingRectangle}).");
     }
 
+    /// <summary>
+    /// A received file shows as a card with its name and size; a click downloads it, writes it to the private temp folder
+    /// and opens it (the test hook notes the path instead), and the file holds the bytes sent.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task ReceivedFile_Card_OpensDownloaded()
+    {
+        await OpenMediaChatAsync();
+        byte[] bytes = System.Text.Encoding.UTF8.GetBytes("%PDF-1.4 notes for the trip");
+
+        Message message        = Server.Phone.PushIncomingMedia("c-media", "application/pdf", bytes, "notes.pdf");
+        AutomationElement card = App.Find("Bubble.File." + message.MessageID);
+        Assert.AreEqual("notes.pdf", AppDriver.SafeName(card), "The card isn't named by the file name.");
+        Wait.Until(() => HasText(card, "27 bytes"), AppDriver.DefaultTimeout, () => "The card doesn't show the file's size.");
+
+        card.Click();
+        string launched = Path.Combine(App.DataDir, "launched.txt");
+        Wait.Until(() => File.Exists(launched), AppDriver.DefaultTimeout, () => "Clicking the card opened nothing.");
+        string path = File.ReadAllLines(launched)[^1];
+        Assert.AreEqual("notes.pdf", Path.GetFileName(path), "The opened file lost its name.");
+        Assert.IsTrue(path.StartsWith(App.DataDir, StringComparison.OrdinalIgnoreCase), $"The file was written outside the app's private folder: {path}.");
+        CollectionAssert.AreEqual(bytes, File.ReadAllBytes(path), "The opened file doesn't hold the bytes sent.");
+        Wait.Until(() => card.Properties.ItemStatus.ValueOrDefault == "Ready" && HasText(card, "27 bytes"), AppDriver.DefaultTimeout,
+            () => $"The card stayed '{card.Properties.ItemStatus.ValueOrDefault}' after opening.");
+    }
+
     // =========================================================================
     // HELPERS
     // =========================================================================
