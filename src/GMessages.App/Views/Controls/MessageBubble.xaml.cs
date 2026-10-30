@@ -191,8 +191,9 @@ public sealed partial class MessageBubble : UserControl
     // The Widest A Photo May Be: The Bubble's Width Cap Inside Its Border (Set At Measure)
     private double _photoMaxWidth = MaxBubbleWidth - 2;
 
-    // The File The Card Shows, And Whether It Is Opening Or Its Last Open Failed
+    // The File The Card Shows, Its Message, And Whether It Is Opening Or Its Last Open Failed
     private MediaPart? _filePart;
+    private string _fileMessage = string.Empty;
     private bool _fileOpening;
     private bool _fileFailed;
 
@@ -884,12 +885,13 @@ public sealed partial class MessageBubble : UserControl
     private async void ShowFile()
     {
         MediaPart? part = Bubble is { HasFileCard: true } bubble ? bubble.Media : null;
-        if (SameMedia(part, _filePart))
+        if (SameMedia(part, _filePart) && (Bubble?.Id ?? string.Empty) == _fileMessage)
         {
             return;
         }
 
         _filePart            = part;
+        _fileMessage         = Bubble?.Id ?? string.Empty;
         _fileOpening         = false;
         _fileFailed          = false;
         FileThumb.Background = null;
@@ -1042,6 +1044,10 @@ public sealed partial class MessageBubble : UserControl
 
             byte[] bytes = await media.GetAsync(part, thumbnail: false, CancellationToken.None);
             await FileIO.WriteBytesAsync(file, bytes);
+            if (file.Path.Length > 0)
+            {
+                media.MarkFromInternet(file.Path);
+            }
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {

@@ -149,18 +149,23 @@ public sealed partial class ChatPane : UserControl
         // Typing Dots Bounce Only While Their Bubble Shows, And Follow Windows' Animation Setting As It Changes (Raised Off The
         // UI Thread)
         TypingBubble.RegisterPropertyChangedCallback(VisibilityProperty, (_, _) => AnimateTypingDots(TypingBubble.Visibility == Visibility.Visible));
-        Ui.AnimationsEnabledChanged += (_, _) => DispatcherQueue.TryEnqueue(() => AnimateTypingDots(TypingBubble.Visibility == Visibility.Visible));
 
-        // High Contrast Turned On Or Off: The Focused Row Swaps Between Its Bubble's Ring And The System Visual. Windows
-        // Changes Its Colors Then (Raised Off The UI Thread); AccessibilitySettings.HighContrastChanged Can't Be Used, As
-        // Subscribing To It Crashes A Desktop App's Window
-        Ui.ColorValuesChanged += (_, _) => DispatcherQueue.TryEnqueue(() =>
+        // The Static Settings' Events Hold The Pane Only While It Is Loaded, So A Closed Window's Pane Isn't Kept Alive
+        Loaded += (_, _) =>
         {
-            if (XamlRoot is { } root && FocusManager.GetFocusedElement(root) is { } focused)
-            {
-                ShowFocusRing(focused.As<DependencyObject>());
-            }
-        });
+            Ui.AnimationsEnabledChanged -= OnAnimationsEnabledChanged;
+            Ui.ColorValuesChanged       -= OnColorValuesChanged;
+            Ui.AnimationsEnabledChanged += OnAnimationsEnabledChanged;
+            Ui.ColorValuesChanged       += OnColorValuesChanged;
+        };
+        Unloaded += (_, _) =>
+        {
+            Ui.AnimationsEnabledChanged -= OnAnimationsEnabledChanged;
+            Ui.ColorValuesChanged       -= OnColorValuesChanged;
+        };
+
+        // A Recycled Row Starts Below Its Neighbors Again (A Focused Row Was Raised For Its Ring)
+        MessageList.ContainerContentChanging += (_, args) => Canvas.SetZIndex(args.ItemContainer, 0);
     }
 
     /// <summary>Gets the lock's tooltip and name.</summary>
@@ -273,6 +278,30 @@ public sealed partial class ChatPane : UserControl
     // =========================================================================
     // EVENT HANDLERS
     // =========================================================================
+
+    // Windows' Animation Setting Changed (Raised Off The UI Thread): The Typing Dots Follow It
+    private void OnAnimationsEnabledChanged(UISettings sender, UISettingsAnimationsEnabledChangedEventArgs args) =>
+        DispatcherQueue.TryEnqueue(() => AnimateTypingDots(TypingBubble.Visibility == Visibility.Visible));
+
+    // High Contrast Turned On Or Off: The Focused Row Swaps Between Its Bubble's Ring And The System Visual. Windows
+    // Changes Its Colors Then (Raised Off The UI Thread); AccessibilitySettings.HighContrastChanged Can't Be Used, As
+    // Subscribing To It Crashes A Desktop App's Window. The High-Contrast Flag Can Lag The Colors, So It Is Checked Once
+    // More On A Low-Priority Pass
+    private void OnColorValuesChanged(UISettings sender, object args) =>
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            RecheckFocusRing();
+            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, RecheckFocusRing);
+        });
+
+    // The Focused Row's Ring Or System Visual, For The Current High-Contrast Setting
+    private void RecheckFocusRing()
+    {
+        if (XamlRoot is { } root && FocusManager.GetFocusedElement(root) is { } focused)
+        {
+            ShowFocusRing(focused.As<DependencyObject>());
+        }
+    }
 
     // Another Chat Opened: Show Its Bubbles And Follow Their Changes
     private static void OnChatChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)

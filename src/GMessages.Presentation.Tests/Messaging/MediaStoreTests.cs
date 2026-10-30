@@ -108,6 +108,21 @@ public sealed class MediaStoreTests
     }
 
     /// <summary>
+    /// A file written to the temp folder carries the mark of the web, as a browser download does.
+    /// </summary>
+    [TestMethod]
+    public async Task SaveToTemp_WritesMarkOfTheWeb()
+    {
+        using var rig           = new Rig();
+        rig.Client.Media["m-1"] = [1, 2, 3];
+        string path             = await rig.Store.SaveToTempAsync(Part("m-1"), Ct);
+
+        string mark = File.ReadAllText(path + ":Zone.Identifier");
+
+        Assert.AreEqual("[ZoneTransfer]\r\nZoneId=3\r\n", mark);
+    }
+
+    /// <summary>
     /// Clear empties memory (the next ask downloads again) and the temp folder.
     /// </summary>
     [TestMethod]
@@ -219,6 +234,10 @@ public sealed class MediaStoreTests
     [DataRow("a.jar", "application/java-archive", false)]
     [DataRow("photo.jpg.exe", "image/jpeg", false)]
     [DataRow("", "text/js", false)]
+    [DataRow("a.url", "application/octet-stream", false)]
+    [DataRow("x.exe.", "application/octet-stream", false)]
+    [DataRow("x.exe .", "application/octet-stream", false)]
+    [DataRow("Setup.ExE", "application/octet-stream", false)]
     [DataRow("notes.pdf", "application/pdf", true)]
     [DataRow("photo.jpg", "image/jpeg", true)]
     [DataRow("clip.mp4", "video/mp4", true)]
