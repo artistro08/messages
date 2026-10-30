@@ -46,6 +46,43 @@ public sealed class LinkPreviewerTests
     [TestMethod]
     public void FirstLink_NoLink_Null() => Assert.IsNull(LinkPreviewer.FirstLink("no link here, ftp://x.com"));
 
+    // =========================================================================
+    // LINKS IN TEXT
+    // =========================================================================
+
+    // Each Link As "Start:Shown Text>Url", Joined By Spaces
+    private static string Links(string text) =>
+        string.Join(" ", LinkPreviewer.FindLinks(text).Select(l => $"{l.Start}:{text.Substring(l.Start, l.Length)}>{l.Url.AbsoluteUri}"));
+
+    [TestMethod]
+    [DataRow("see https://x.com.", "4:https://x.com>https://x.com/")]
+    [DataRow("(see https://x.com/a)", "5:https://x.com/a>https://x.com/a")]
+    [DataRow("https://en.wikipedia.org/wiki/Foo_(bar), ok", "0:https://en.wikipedia.org/wiki/Foo_(bar)>https://en.wikipedia.org/wiki/Foo_(bar)")]
+    [DataRow("wow http://b.example/c?d=1!?", "4:http://b.example/c?d=1>http://b.example/c?d=1")]
+    [DataRow("\"https://x.com/a\",", "1:https://x.com/a>https://x.com/a")]
+    public void FindLinks_TrimsPunctuationAndParentheses(string text, string expected) => Assert.AreEqual(expected, Links(text));
+
+    [TestMethod]
+    public void FindLinks_Several() =>
+        Assert.AreEqual("0:https://a.com>https://a.com/ 18:http://b.com/x>http://b.com/x", Links("https://a.com and http://b.com/x"));
+
+    [TestMethod]
+    public void FindLinks_Www_OpensOverHttps() =>
+        Assert.AreEqual("8:www.example.com/a>https://www.example.com/a", Links("Try it: www.example.com/a."));
+
+    [TestMethod]
+    [DataRow("https://x.com😀 nice", "0:https://x.com>https://x.com/")]
+    [DataRow("😀https://x.com/a", "2:https://x.com/a>https://x.com/a")]
+    [DataRow("https://x.com/a❤️", "0:https://x.com/a>https://x.com/a")]
+    public void FindLinks_StopsAtEmoji(string text, string expected) => Assert.AreEqual(expected, Links(text));
+
+    [TestMethod]
+    [DataRow("no links here")]
+    [DataRow("")]
+    [DataRow("ftp://x.com file:///c:/x javascript:alert(1) ms-settings:display")]
+    [DataRow("awww.example.com and https:// alone")]
+    public void FindLinks_None(string text) => Assert.AreEqual(string.Empty, Links(text));
+
     /// <summary>
     /// Review Focus 5: only HTTPS to a named public host is fetched.
     /// </summary>

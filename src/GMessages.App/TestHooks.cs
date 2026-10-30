@@ -41,6 +41,11 @@ internal static class TestHooks
     /// True when pointed at the fake server, so link previews may fetch its <c>http://127.0.0.1</c> pages.
     /// </summary>
     public static bool AllowLoopbackPreviews => EndpointBase is not null;
+
+    /// <summary>
+    /// True when pointed at the fake server: a clicked link is only logged, never opened in a browser.
+    /// </summary>
+    public static bool BlockLaunches => EndpointBase is not null;
 }
 #else
 /// <summary>
@@ -62,5 +67,8 @@ internal static class TestHooks
 
     /// <summary>Always false in Release: link previews never fetch loopback addresses.</summary>
     public static bool AllowLoopbackPreviews => false;
+
+    /// <summary>Always false in Release: a clicked link opens in the default browser.</summary>
+    public static bool BlockLaunches => false;
 }
 #endif

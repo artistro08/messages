@@ -146,6 +146,41 @@ public sealed partial class LinkPreviewer : IDisposable
     }
 
     /// <summary>
+    /// Finds every web link in a message's text, for showing them as links.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A link starts with <c>http://</c>, <c>https://</c> or <c>www.</c> (at a word start) and runs to the next space or
+    /// emoji (VS16 and zero-width joiners included), with the same trailing punctuation trimmed as <see cref="FirstLink"/>.
+    /// A bare <c>www.</c> host opens over <c>https</c>.
+    /// </para>
+    /// <para>
+    /// Only <c>http</c> and <c>https</c> addresses come back, so a <c>file:</c>, <c>javascript:</c> or <c>ms-</c> link in
+    /// the text stays plain text. Works on the shown text (<see cref="ChatFormat.WithColorEmoji"/>) as well as the original.
+    /// </para>
+    /// </remarks>
+    /// <param name="text">The message text.</param>
+    /// <returns>The links in order; empty when there are none.</returns>
+    public static IReadOnlyList<TextLink> FindLinks(string text)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+
+        List<TextLink> links = [];
+        foreach (Match match in TextLinkPattern().Matches(text))
+        {
+            string shown   = TrimLink(match.Value);
+            string address = shown.StartsWith("www.", StringComparison.OrdinalIgnoreCase) ? "https://" + shown : shown;
+            if (Uri.TryCreate(address, UriKind.Absolute, out Uri? uri) && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)
+                && uri.Host.Length > 0)
+            {
+                links.Add(new TextLink(match.Index, shown.Length, uri));
+            }
+        }
+
+        return links;
+    }
+
+    /// <summary>
     /// Says whether a link may be fetched for a preview.
     /// </summary>
     /// <remarks>
@@ -632,6 +667,10 @@ public sealed partial class LinkPreviewer : IDisposable
 
     [GeneratedRegex(@"\bhttps?://\S+", RegexOptions.IgnoreCase)]
     private static partial Regex LinkPattern();
+
+    // A Link In Text Ends At A Space Or An Emoji: Symbols, Surrogate Pairs, VS16 And Zero-Width Joiners
+    [GeneratedRegex(@"\b(?:https?://|www\.)[^\s\p{So}\p{Cs}️‍]+", RegexOptions.IgnoreCase)]
+    private static partial Regex TextLinkPattern();
 
     [GeneratedRegex(@"<meta\b[^>]*>", RegexOptions.IgnoreCase, HtmlTimeoutMs)]
     private static partial Regex MetaTag();

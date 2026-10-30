@@ -180,7 +180,6 @@
                             AutomationProperties.ItemType="{x:Bind Bubble.ItemTypeName, Mode=OneWay, FallbackValue=''}"
                             IsTextSelectionEnabled="True"
                             IsColorFontEnabled="True"
-                            Text="{x:Bind Bubble.DisplayText, Mode=OneWay}"
                             TextWrapping="Wrap" />
 
                         <!-- Link Preview: the page's image, its title (two lines at most) and its site in caption style; a click,

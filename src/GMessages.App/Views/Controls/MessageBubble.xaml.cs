@@ -2,8 +2,11 @@ using System.ComponentModel;
 using System.Runtime.InteropServices;
 using GMessages.Presentation.Main;
 using GMessages.Presentation.Messaging;
+using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Documents;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Windows.ApplicationModel.DataTransfer;
@@ -38,6 +41,12 @@ namespace GMessages.App.Views.Controls;
 /// owner's delivery icon (named <c>Status.{id}</c>: "Sent", "Delivered" or "Read"), and the lock in an encrypted chat. A link's preview card (<c>Preview.{id}</c>), named by its
 /// title, shows under the text once fetched; clicking it opens the link in the default browser. The pill and the menu's React raise
 /// <see cref="ReactRequested"/>, and the menu's Reply raises <see cref="ReplyRequested"/>, for the chat to act on.
+/// </para>
+/// <para>
+/// Web links in the text (see <see cref="LinkPreviewer.FindLinks"/>) show as underlined links in the text's own color,
+/// so they read on every bubble color and in high contrast. Each is named <c>Link.{id}.{n}</c> (n from 0) and reached
+/// with Tab; a click or Enter opens it in the default browser (http and https only), and that click doesn't also
+/// show or hide the time. Selection and Copy work on the whole text as before.
 /// </para>
 /// <para>
 /// Bubbles of one group (see <see cref="ChatViewModel.GroupGap"/>) sit close together with small corners where they meet,
@@ -77,6 +86,15 @@ public sealed partial class MessageBubble : UserControl
     // A Click On The Card Also Reaches The Bubble's Back, Which Must Not Toggle The Time For It
     private bool _previewTapped;
 
+    // Same For A Link In The Text: Its Click And The Back's Tap Come In Either Order, So The Tap Waits A Turn
+    private bool _linkClicked;
+
+    // The Text And ID The Text's Runs Were Built For: Rebuilt Only When They Change (A Rebuild Drops A Selection)
+    private string? _shownText;
+
+    // The Text's Links, Kept In The Text's Color
+    private readonly List<Hyperlink> _links = [];
+
     /// <summary>
     /// Creates the bubble.
     /// </summary>
@@ -90,6 +108,9 @@ public sealed partial class MessageBubble : UserControl
 
         // The Text's Own Menu Would Win A Right-Click On It, So It Gets The Bubble Menu Too (Which Has Copy)
         Body.ContextFlyout = Menu;
+
+        // Links Follow The Text's Color: Its Side's State And The Theme Set It
+        Body.RegisterPropertyChangedCallback(TextBlock.ForegroundProperty, (_, _) => ColorLinks());
     }
 
     /// <summary>
@@ -297,6 +318,7 @@ public sealed partial class MessageBubble : UserControl
             new_bubble.PropertyChanged += view.OnBubblePropertyChanged;
         }
 
+        view.ShowText();
         view.ShowStates();
         view.ShowPreviewImage();
     }
@@ -304,6 +326,7 @@ public sealed partial class MessageBubble : UserControl
     // An Echo Can Make A Sending Bubble RCS, My Reaction Comes And Goes, And A Preview Card Arrives
     private void OnBubblePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        ShowText();
         ShowStates();
         ShowPreviewImage();
     }
@@ -349,6 +372,89 @@ public sealed partial class MessageBubble : UserControl
         VisualStateManager.GoToState(this, Bubble?.HasMyReaction == true ? "Mine" : "NotMine", false);
     }
 
+    // The Text, With Its Web Links As Links (Plain Text When It Has None)
+    private void ShowText()
+    {
+        string text = Bubble?.DisplayText ?? string.Empty;
+        string key  = text + "|" + PartIdOf("Link.", Bubble?.Id ?? string.Empty, Bubble?.TmpId ?? string.Empty);
+        if (key == _shownText)
+        {
+            return;
+        }
+
+        _shownText = key;
+        _links.Clear();
+
+        IReadOnlyList<TextLink> links = LinkPreviewer.FindLinks(text);
+        if (links.Count == 0)
+        {
+            Body.Text = text;
+            return;
+        }
+
+        // Plain Runs Between The Links
+        Body.Inlines.Clear();
+        int at = 0;
+        foreach (TextLink link in links)
+        {
+            if (link.Start > at)
+            {
+                Body.Inlines.Add(new Run { Text = text[at..link.Start] });
+            }
+
+            Body.Inlines.Add(NewLink(text.Substring(link.Start, link.Length), link.Url, _links.Count));
+            at = link.Start + link.Length;
+        }
+
+        if (at < text.Length)
+        {
+            Body.Inlines.Add(new Run { Text = text[at..] });
+        }
+    }
+
+    // A Link Named By Its Text, Opened On Click Or Enter (Never By Itself)
+    private Hyperlink NewLink(string shown, Uri url, int number)
+    {
+        var link = new Hyperlink { Foreground = Body.Foreground, UnderlineStyle = UnderlineStyle.Single };
+        link.Inlines.Add(new Run { Text = shown });
+        AutomationProperties.SetAutomationId(link, PartIdOf("Link.", Bubble?.Id ?? string.Empty, Bubble?.TmpId ?? string.Empty) + "." + number);
+        link.Click += (_, _) =>
+        {
+            _linkClicked = true;
+            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => _linkClicked = false);
+            OpenLink(url);
+        };
+
+        _links.Add(link);
+        return link;
+    }
+
+    private void ColorLinks()
+    {
+        foreach (Hyperlink link in _links)
+        {
+            link.Foreground = Body.Foreground;
+        }
+    }
+
+    // Only Web Addresses Open (FindLinks Gives No Other, Checked Again Before Anything Launches); A Test Run Only Logs
+    // The Click. Never The Address: Only Its Scheme Is Logged
+    private static void OpenLink(Uri url)
+    {
+        if (url.Scheme != Uri.UriSchemeHttp && url.Scheme != Uri.UriSchemeHttps)
+        {
+            return;
+        }
+
+        bool launch = !TestHooks.BlockLaunches;
+        AppLog.LinkOpened(App.ShellLog, url.Scheme, launch);
+        if (launch)
+        {
+            _ = Launcher.LaunchUriAsync(url);
+        }
+    }
+
+    // The Time Toggles A Turn Later, Once A Link's Click (Which Can Come After The Tap) Has Had Its Say
     private void OnBackTapped(object sender, TappedRoutedEventArgs e)
     {
         if (_previewTapped)
@@ -357,7 +463,16 @@ public sealed partial class MessageBubble : UserControl
             return;
         }
 
-        Bubble?.ToggleTime();
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            if (_linkClicked)
+            {
+                _linkClicked = false;
+                return;
+            }
+
+            Bubble?.ToggleTime();
+        });
     }
 
     // Opens The Link In The Default Browser
@@ -365,7 +480,7 @@ public sealed partial class MessageBubble : UserControl
     {
         if (Bubble?.Preview is { } preview)
         {
-            _ = Launcher.LaunchUriAsync(preview.Url);
+            OpenLink(preview.Url);
         }
     }
 

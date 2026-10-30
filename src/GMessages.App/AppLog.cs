@@ -68,6 +68,9 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 920, Level = LogLevel.Warning, Message = "Copy failed ({ErrorType}); the clipboard is busy")]
     public static partial void CopyFailed(ILogger logger, string errorType);
 
+    [LoggerMessage(EventId = 921, Level = LogLevel.Information, Message = "Link opened ({Scheme}, launched: {Launched})")]
+    public static partial void LinkOpened(ILogger logger, string scheme, bool launched);
+
     [LoggerMessage(EventId = 951,Level = LogLevel.Information, Message = "Test endpoint {Endpoint}, data folder {DataFolder}")]
     public static partial void TestEndpoint(ILogger logger, string endpoint, string dataFolder);
 }

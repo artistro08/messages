@@ -80,6 +80,31 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
+    /// A link in a message's text shows as a link named by its text. Clicking it opens it (a test run only logs that,
+    /// with no browser) and doesn't also click the bubble: the newest bubble's caption row stays.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task LinkInText_Click_OpensWithoutTogglingTheCaption()
+    {
+        await OpenChatAsync("Row.c-ann");
+
+        // Plain http To A Name That Never Resolves: No Preview Is Fetched For It
+        Message message = Server.Phone.PushIncoming("c-ann", "read http://example.invalid/page today");
+        AutomationElement link = App.Find($"Link.{message.MessageID}.0");
+        Assert.AreEqual("http://example.invalid/page", AppDriver.SafeName(link));
+        App.Find("Caption." + message.MessageID);
+
+        link.Click();
+        Wait.Until(() => ReadLog().Contains("Link opened (http, launched: False)", StringComparison.Ordinal), AppDriver.DefaultTimeout,
+            () => "The link click was never logged.");
+
+        // A Bubble Click Would Hide The Caption A Turn Later; Give It Time To Show It Didn't
+        Thread.Sleep(500);
+        Assert.IsNotNull(App.TryFind("Caption." + message.MessageID), "The link click also clicked the bubble (its caption row hid).");
+    }
+
+    /// <summary>
     /// A link in an inbox chat gets a preview card named by the linked page's <c>og:title</c>.
     /// </summary>
     /// <returns>A task for the test.</returns>
