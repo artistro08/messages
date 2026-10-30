@@ -225,8 +225,11 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     /// <summary>Gets whether the bubble shows a card for a video or a file.</summary>
     public bool HasFileCard { get; private set; }
 
-    /// <summary>Gets whether the bubble shows a photo or a card, so its menu has Open and Save as.</summary>
-    public bool HasMediaFile => HasPhoto || HasFileCard;
+    /// <summary>Gets whether the bubble shows a voice message's player (play, waveform and length).</summary>
+    public bool HasVoice { get; private set; }
+
+    /// <summary>Gets whether the bubble shows a photo, a card or a voice message, so its menu has Open and Save as.</summary>
+    public bool HasMediaFile => HasPhoto || HasFileCard || HasVoice;
 
     /// <summary>
     /// Gets whether the photo or card may open in its default app, so its menu has Open. A program, script or installer
@@ -576,9 +579,10 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         Media         = KeepSize(m.Media, Media);
         HasPhoto      = m.Media is not null && m.Kind == MessageKind.Photo;
         HasFileCard   = m.Media is not null && m.Kind is MessageKind.Video or MessageKind.File;
+        HasVoice      = m.Media is not null && m.Kind == MessageKind.Audio;
         HasCopyText   = m.Media is null || m.Text.Length > 0;
 
-        // A Photo Or Card Shows Only Its Caption Under It, Not The Kind Label
+        // A Photo, Card Or Voice Message Shows Only Its Caption Under It, Not The Kind Label
         BodyText      = HasMediaFile && m.Text.Length == 0 ? string.Empty : BodyOf(Text, DisplayText, _link, Preview);
     }
 

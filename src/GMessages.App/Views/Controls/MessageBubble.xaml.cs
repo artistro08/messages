@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Numerics;
 using System.Runtime.InteropServices;
+using GMessages.App.Media;
 using GMessages.Presentation.Main;
 using GMessages.Presentation.Messaging;
 using Microsoft.UI.Composition;
@@ -197,6 +198,12 @@ public sealed partial class MessageBubble : UserControl
     private bool _fileOpening;
     private bool _fileFailed;
 
+    // The Voice Message Shown, Its Message, And Its Audio And Waveform Once Read
+    private MediaPart? _voicePart;
+    private string _voiceMessage = string.Empty;
+    private byte[]? _voiceAudio;
+    private VoiceWave? _voiceWave;
+
     /// <summary>
     /// Creates the bubble.
     /// </summary>
@@ -209,6 +216,7 @@ public sealed partial class MessageBubble : UserControl
         Preview.AddHandler(TappedEvent, new TappedEventHandler((_, _) => _previewTapped = true), handledEventsToo: true);
         Photo.AddHandler(TappedEvent, new TappedEventHandler((_, _) => _previewTapped = true), handledEventsToo: true);
         FileCard.AddHandler(TappedEvent, new TappedEventHandler((_, _) => _previewTapped = true), handledEventsToo: true);
+        Voice.AddHandler(TappedEvent, new TappedEventHandler((_, _) => _previewTapped = true), handledEventsToo: true);
 
         // The Text's Own Menu Would Win A Right-Click On It, So It Gets The Bubble Menu Too (Which Has Copy)
         Body.ContextFlyout = Menu;
@@ -225,8 +233,14 @@ public sealed partial class MessageBubble : UserControl
         // The Photo's Layers Take The Photo's Rounded Corners (Bound Once, On The Button)
         Photo.RegisterPropertyChangedCallback(Control.CornerRadiusProperty, (_, _) => PhotoBlur.CornerRadius = PhotoFull.CornerRadius = Photo.CornerRadius);
 
-        // Links Follow The Text's Color: Its Side's State And The Theme Set It
-        Body.RegisterPropertyChangedCallback(TextBlock.ForegroundProperty, (_, _) => ColorLinks());
+        // Links And The Voice Waveform Follow The Text's Color: Its Side's State And The Theme Set It
+        Body.RegisterPropertyChangedCallback(TextBlock.ForegroundProperty, (_, _) =>
+        {
+            ColorLinks();
+            VoiceBars.BarBrush = Body.Foreground;
+        });
+        VoiceBars.BarBrush = Body.Foreground;
+        ShowVoicePlaying(false, 0);
     }
 
     /// <summary>
@@ -244,6 +258,11 @@ public sealed partial class MessageBubble : UserControl
     /// Asks the chat to start a reply to this bubble (the menu's Reply or the hover strip's Reply).
     /// </summary>
     public event EventHandler? ReplyRequested;
+
+    /// <summary>
+    /// Asks the chat's voice player to play, pause or seek this bubble's voice message.
+    /// </summary>
+    public event EventHandler<VoiceRequest>? VoiceRequested;
 
     /// <summary>Gets the menu's Copy text.</summary>
     public static string CopyText => ChatCopy.Copy;
@@ -597,6 +616,7 @@ public sealed partial class MessageBubble : UserControl
         view.ShowPreviewImage();
         view.ShowPhoto();
         view.ShowFile();
+        view.ShowVoice();
 
         // A Bubble Added Live Animates In, Once (The Flag Clears, So A Recycled Row Never Replays It)
         if (view.Bubble?.TakeNew() == true && Ui.AnimationsEnabled)
@@ -639,6 +659,7 @@ public sealed partial class MessageBubble : UserControl
         ShowPreviewImage();
         ShowPhoto();
         ShowFile();
+        ShowVoice();
         ShowHoverStrip();
     }
 
@@ -947,6 +968,88 @@ public sealed partial class MessageBubble : UserControl
         _fileOpening = false;
         _fileFailed  = !opened;
         ShowFileDetail();
+    }
+
+    // =========================================================================
+    // VOICE
+    // =========================================================================
+
+    // Another Voice Message: Shown Stopped, Then Downloaded And Its Waveform And Length Read (Once Per File, In Memory)
+    private async void ShowVoice()
+    {
+        MediaPart? part = Bubble is { HasVoice: true } bubble ? bubble.Media : null;
+        if (SameMedia(part, _voicePart) && (Bubble?.Id ?? string.Empty) == _voiceMessage)
+        {
+            return;
+        }
+
+        _voicePart        = part;
+        _voiceMessage     = Bubble?.Id ?? string.Empty;
+        _voiceAudio       = null;
+        _voiceWave        = null;
+        VoiceLength.Text  = string.Empty;
+        VoiceBars.Show(null);
+        ShowVoicePlaying(false, 0);
+        if (part is not { IsPending: false } || (Application.Current as App)?.Media is not { } media)
+        {
+            return;
+        }
+
+        try
+        {
+            byte[] audio   = await media.GetAsync(part, thumbnail: false, CancellationToken.None);
+            VoiceWave wave = await WaveformReader.ReadAsync(audio);
+            if (!ReferenceEquals(part, _voicePart))
+            {
+                return;
+            }
+
+            _voiceAudio      = audio;
+            _voiceWave       = wave;
+            VoiceLength.Text = VoiceWave.LengthText(wave.Length);
+            VoiceBars.Show(wave.Peaks);
+            TestHooks.ShowState(VoiceLength, "Ready");
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            AppLog.MediaFailed(App.ShellLog, "voice", Bubble?.Id ?? string.Empty, ex.GetType().Name);
+            TestHooks.ShowState(VoiceLength, "Failed");
+        }
+    }
+
+    // Play Or Pause: The Chat's Player Shows The State Back (See VoiceRequest)
+    private void OnVoicePlayClick(object sender, RoutedEventArgs e) => RequestVoice(null);
+
+    // A Click On The Waveform Seeks There
+    private void OnVoiceSeekRequested(object? sender, double share) => RequestVoice(share);
+
+    private void RequestVoice(double? seekTo)
+    {
+        if (_voiceAudio is not { } audio || _voiceWave is not { } wave)
+        {
+            return;
+        }
+
+        // Only While This View Still Shows The Message (A Recycled Row Moves On)
+        MediaPart? part = _voicePart;
+        VoiceRequested?.Invoke(this, new VoiceRequest(PartIdOf(string.Empty, Bubble?.Id ?? string.Empty, Bubble?.TmpId ?? string.Empty), audio, wave.Length, seekTo, (playing, share) =>
+        {
+            if (ReferenceEquals(part, _voicePart))
+            {
+                ShowVoicePlaying(playing, share);
+            }
+        }));
+    }
+
+    // The Play Button Becomes Pause While It Plays, And The Waveform Fills Up To How Much Has Played
+    private void ShowVoicePlaying(bool playing, double share)
+    {
+        string name      = playing ? ChatCopy.Pause : ChatCopy.Play;
+        VoiceGlyph.Glyph = playing ? "" : "";
+        AutomationProperties.SetName(VoicePlay, name);
+        ToolTipService.SetToolTip(VoicePlay, name);
+        VoiceBars.ShowProgress(share);
+        TestHooks.ShowState(VoicePlay, playing ? "Playing" : "Paused");
     }
 
     // =========================================================================

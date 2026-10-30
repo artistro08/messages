@@ -44,6 +44,8 @@
                         <Setter Target="QuoteText.Foreground" Value="{ThemeResource TextOnAccentFillColorSecondaryBrush}" />
                         <Setter Target="FileCard.Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
                         <Setter Target="FileDetail.Foreground" Value="{ThemeResource TextOnAccentFillColorSecondaryBrush}" />
+                        <Setter Target="VoicePlay.Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                        <Setter Target="VoiceLength.Foreground" Value="{ThemeResource TextOnAccentFillColorSecondaryBrush}" />
                         <Setter Target="Pill.HorizontalAlignment" Value="Left" />
                         <Setter Target="Footer.HorizontalAlignment" Value="Right" />
                         <Setter Target="StatusRow.HorizontalAlignment" Value="Right" />
@@ -321,6 +323,38 @@
                             </Grid>
                         </Button>
                         <!-- /File Card -->
+
+                        <!-- Voice: play or pause, the waveform that fills as it plays (a click seeks) and the length, read from the
+                             audio once it downloads. The length is named Bubble.Voice.{id} -->
+                        <Grid
+                            x:Name="Voice"
+                            ColumnDefinitions="Auto,*,Auto"
+                            ColumnSpacing="8"
+                            Visibility="{x:Bind Bubble.HasVoice, Mode=OneWay, FallbackValue=Collapsed}">
+                            <Button
+                                x:Name="VoicePlay"
+                                Width="32"
+                                Height="32"
+                                Margin="-6,0,0,0"
+                                AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Voice.Play.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                                Click="OnVoicePlayClick"
+                                Style="{StaticResource IconButtonStyle}">
+                                <FontIcon x:Name="VoiceGlyph" FontSize="16" />
+                            </Button>
+                            <local:Waveform
+                                x:Name="VoiceBars"
+                                Grid.Column="1"
+                                VerticalAlignment="Center"
+                                SeekRequested="OnVoiceSeekRequested" />
+                            <TextBlock
+                                x:Name="VoiceLength"
+                                Grid.Column="2"
+                                VerticalAlignment="Center"
+                                AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Bubble.Voice.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Style="{StaticResource CaptionTextBlockStyle}" />
+                        </Grid>
+                        <!-- /Voice -->
 
                         <!-- Upload: how much of my photo or file has gone up, while it sends from here -->
                         <ProgressBar

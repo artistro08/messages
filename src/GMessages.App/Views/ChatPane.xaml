@@ -155,7 +155,8 @@
                         Bubble="{x:Bind}"
                         ReactRequested="OnReactRequested"
                         ReplyRequested="OnReplyRequested"
-                        RetryRequested="OnRetryRequested" />
+                        RetryRequested="OnRetryRequested"
+                        VoiceRequested="OnVoiceRequested" />
                 </DataTemplate>
             </ListView.ItemTemplate>
         </ListView>
