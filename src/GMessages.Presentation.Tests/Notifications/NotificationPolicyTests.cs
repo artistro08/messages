@@ -95,6 +95,14 @@ public sealed class NotificationPolicyTests
     }
 
     [TestMethod]
+    public void Body_Long_CutAtTab()
+    {
+        string text = string.Join("	", Enumerable.Repeat("abc", 30));
+
+        Assert.AreEqual(string.Join("	", Enumerable.Repeat("abc", 25)) + "…", NotificationContent.Shorten(text));
+    }
+
+    [TestMethod]
     public void Body_LongWord_HardCut() => Assert.AreEqual(new string('x', 100) + "…", NotificationContent.Shorten(new string('x', 150)));
 
     /// <summary>

@@ -651,6 +651,48 @@ public sealed class ChatStoreTests
         }
     }
 
+    /// <summary>
+    /// A first-seen message carrying only someone else's reaction still toasts: only my own reaction marks it as an echo.
+    /// </summary>
+    [TestMethod]
+    public async Task FirstSeen_WithOthersReaction_Toasts()
+    {
+        using var rig = new Rig();
+        await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1")));
+        MessageArrivedEventArgs? got = null;
+        rig.Store.MessageArrived += (_, e) => got = e;
+
+        Message m              = Msg("m1", "c1");
+        m.ParticipantID        = "p-ann";
+        m.MessageStatus.Status = MessageStatusType.IncomingComplete;
+        m.Reactions.Add(new ReactionEntry { Data = new ReactionData { Type = EmojiType.Like }, ParticipantIDs = { "p-ann" } });
+        await rig.Store.HandleEventAsync(new MessageReceived(m, false));
+
+        Assert.IsNotNull(got);
+        Assert.IsTrue(got.IsNew);
+    }
+
+    /// <summary>
+    /// After a restart the seen ring is empty; the phone echoing a message that carries my reaction is not new.
+    /// </summary>
+    [TestMethod]
+    public async Task Echo_OfMyReaction_AfterRestart_NoToast()
+    {
+        using var rig = new Rig();
+        await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1")));
+        MessageArrivedEventArgs? got = null;
+        rig.Store.MessageArrived += (_, e) => got = e;
+
+        Message m              = Msg("m1", "c1");
+        m.ParticipantID        = "p-ann";
+        m.MessageStatus.Status = MessageStatusType.IncomingComplete;
+        m.Reactions.Add(new ReactionEntry { Data = new ReactionData { Type = EmojiType.Like }, ParticipantIDs = { "p-ann", "me1" } });
+        await rig.Store.HandleEventAsync(new MessageReceived(m, false));
+
+        Assert.IsNotNull(got);
+        Assert.IsFalse(got.IsNew);
+    }
+
     // =========================================================================
     // SENDING
     // =========================================================================
