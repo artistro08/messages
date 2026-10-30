@@ -155,7 +155,8 @@ public sealed partial class MessageBubble : UserControl
     // The Image Bytes The Card Shows (Or Is Decoding), So A Change Decodes Once
     private byte[]? _previewImage;
 
-    // A Click On The Card Also Reaches The Bubble's Back, Which Must Not Toggle The Time For It
+    // A Click On The Preview Card, The Photo Or The File Card Also Reaches The Bubble's Back, Which Must Not Toggle The
+    // Time For It
     private bool _previewTapped;
 
     // Same For A Link In The Text: Its Click And The Back's Tap Come In Either Order, So The Tap Waits A Turn
@@ -194,6 +195,8 @@ public sealed partial class MessageBubble : UserControl
         // Behavior
         Back.AddHandler(TappedEvent, new TappedEventHandler(OnBackTapped), handledEventsToo: true);
         Preview.AddHandler(TappedEvent, new TappedEventHandler((_, _) => _previewTapped = true), handledEventsToo: true);
+        Photo.AddHandler(TappedEvent, new TappedEventHandler((_, _) => _previewTapped = true), handledEventsToo: true);
+        FileCard.AddHandler(TappedEvent, new TappedEventHandler((_, _) => _previewTapped = true), handledEventsToo: true);
 
         // The Text's Own Menu Would Win A Right-Click On It, So It Gets The Bubble Menu Too (Which Has Copy)
         Body.ContextFlyout = Menu;
