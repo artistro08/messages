@@ -281,11 +281,13 @@ public partial class App : Application, IDisposable
         if (NeedsPairing())
         {
             // The Chats Go (Showing Pairing Drops Them First), And Nothing Of The Old Phone (Names, Numbers, Owner, SIMs)
-            // Is Kept For Whichever Phone Pairs Next
+            // Is Kept For Whichever Phone Pairs Next. The Old Session's Toasts And Waiting Snoozes Go Too (RemoveAllAsync
+            // Logs Its Own Failure, So Nothing Goes Unobserved)
             _pendingConversationId = null;
             _lastConversationId    = null;
             ShowMainWindow();
             _store?.Reset();
+            _ = _notifications?.RemoveAllAsync();
             return;
         }
 

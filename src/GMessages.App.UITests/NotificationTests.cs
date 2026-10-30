@@ -1,4 +1,5 @@
 using FlaUI.Core.AutomationElements;
+using FlaUI.Core.Definitions;
 using GMessages.App.UITests.Driver;
 using GMessages.App.UITests.FakeGoogle;
 using GMessages.Presentation;
@@ -22,6 +23,9 @@ public sealed class NotificationTests : UiTest
 {
     // How Long A Message That Must Not Notify Is Watched For A Toast
     private static readonly TimeSpan QuietPeriod = TimeSpan.FromSeconds(5);
+
+    // How Long A Sign-Out May Take To Clear A Toast
+    private static readonly TimeSpan SignOutTime = TimeSpan.FromSeconds(10);
 
     private ToastDriver _toasts = null!;
 
@@ -216,6 +220,48 @@ public sealed class NotificationTests : UiTest
 
         string shown = $"Toast shown for {message.MessageID} ";
         Assert.AreEqual(1, ReadLog().Split('\n').Count(l => l.Contains(shown, StringComparison.Ordinal)), "An update showed the message's toast again.");
+    }
+
+    /// <summary>
+    /// Signing out (Google ends the session) removes the toasts that were showing.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task SignOut_RemovesToasts()
+    {
+        await PairAsync();
+        Server.Phone.PushIncoming("c-ann", "sign-out marker");
+        _toasts.WaitFor(AppDriver.DefaultTimeout, "Ann Lee", "sign-out marker");
+
+        Server.KillLongPoll(401);
+
+        Wait.Until(() => _toasts.TryFind("sign-out marker") is null, SignOutTime, () => "The toast stayed after sign-out.");
+    }
+
+    /// <summary>
+    /// A snoozed toast doesn't come back after a sign-out.
+    /// </summary>
+    /// <remarks>
+    /// The snooze length is the default (15 minutes): the settings accept only 5, 15, 60 or 240, so a wake inside the
+    /// watched time can't happen either way. This checks that Snooze followed by a sign-out leaves no toast; that the
+    /// clear cancels a waiting snooze is covered by <c>ToastMemoryTests</c>.
+    /// </remarks>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    [TestCategory("Slow")]
+    public async Task SignOut_SnoozedToastNeverReturns()
+    {
+        await PairAsync();
+        Server.Phone.PushIncoming("c-ann", "snoozed marker");
+        AutomationElement toast = _toasts.WaitFor(AppDriver.DefaultTimeout, "Ann Lee", "snoozed marker");
+
+        // Snooze It, Then Sign Out
+        AppDriver.Search(toast, e => e.ControlType == ControlType.Button && AppDriver.SafeName(e) == ChatCopy.Snooze)!.Patterns.Invoke.Pattern.Invoke();
+        Server.KillLongPoll(401);
+
+        // The Banner Of An Unattended Machine Stays Until The Sign-Out Clears It; After That None May Return
+        Wait.Until(() => _toasts.TryFind("snoozed marker") is null, SignOutTime, () => "The toast stayed after sign-out.");
+        _toasts.AssertNone("snoozed marker", TimeSpan.FromSeconds(70));
     }
 
     // =========================================================================
