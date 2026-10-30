@@ -202,11 +202,12 @@ internal sealed class VoiceRecorder : IDisposable
             }
         }
 
-        // Windows' Default Microphone
+        // Windows' Default Microphone: The Other Category Follows Settings' "Default" Device; Speech Would Follow The
+        // Communications Default Instead (On The Owner's PC The Yeti, While The Default Is The Surface)
         if (device is not { IsEnabled: true })
         {
             MicrophoneConsent.Log("device", "default");
-            return await graph.CreateDeviceInputNodeAsync(MediaCategory.Speech);
+            return await graph.CreateDeviceInputNodeAsync(MediaCategory.Other);
         }
 
         // The Chosen Microphone

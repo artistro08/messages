@@ -104,6 +104,13 @@ public sealed partial class SettingsPage : UserControl
             MicrophoneBox.Items.Add(name);
         }
 
+        // "Windows Default" Names The Microphone It Means Today, So It's Clear Which One Records
+        string default_id = MediaDevice.GetDefaultAudioCaptureId(AudioDeviceRole.Default);
+        if (microphones.FindIndex(mic => string.Equals(mic.Id, default_id, StringComparison.OrdinalIgnoreCase)) is var index and >= 0)
+        {
+            MicrophoneBox.Items[0] = $"{ChatCopy.WindowsDefault} ({microphones[index].Name})";
+        }
+
         ViewModel.SetMicrophones(microphones);
     }
 
