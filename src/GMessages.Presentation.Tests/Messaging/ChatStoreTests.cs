@@ -1,3 +1,4 @@
+using Google.Protobuf;
 using GMessages.Presentation.Connection;
 using GMessages.Presentation.Messaging;
 using GMessages.Protocol;
@@ -14,6 +15,30 @@ namespace GMessages.Presentation.Tests.Messaging;
 public sealed class ChatStoreTests
 {
     private static readonly CancellationToken Ct = CancellationToken.None;
+
+    // =========================================================================
+    // MUTE PROBE
+    // =========================================================================
+
+    [TestMethod]
+    public void DescribeUnknownFields_ListsNumbersAndInts_NeverStrings()
+    {
+        // Known Field Plus Unknown 40 (Varint 1), 41 (String), 42 (Nested {1: 1})
+        byte[] extra = [0xC0, 0x02, 0x01, 0xCA, 0x02, 0x0B, .. "secret-name"u8.ToArray(), 0xD2, 0x02, 0x02, 0x08, 0x01];
+        byte[] known = new Conversation { ConversationID = "c1" }.ToByteArray();
+        Conversation conversation = Conversation.Parser.ParseFrom([.. known, .. extra]);
+
+        string text = ChatStore.DescribeUnknownFields(conversation);
+
+        Assert.AreEqual("40=1 41=len11 42=len2{1=1}", text);
+        Assert.IsFalse(text.Contains("secret"));
+    }
+
+    [TestMethod]
+    public void DescribeUnknownFields_None_Empty()
+    {
+        Assert.AreEqual("", ChatStore.DescribeUnknownFields(new Conversation { ConversationID = "c1" }));
+    }
 
     // =========================================================================
     // RIG
