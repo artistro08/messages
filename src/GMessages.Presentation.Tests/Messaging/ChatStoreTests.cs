@@ -611,6 +611,46 @@ public sealed class ChatStoreTests
         Assert.IsFalse(got.IsNew);
     }
 
+    /// <summary>
+    /// The phone echoing a recent incoming message with my reaction on it (after a restart, so the notified ring
+    /// doesn't know it) is not new and doesn't toast. Nor is a status echo of a message already in the cached page.
+    /// </summary>
+    [TestMethod]
+    public async Task MyReaction_NoToast()
+    {
+        using var rig = new Rig();
+        await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1")));
+        var got = new List<MessageArrivedEventArgs>();
+        rig.Store.MessageArrived += (_, e) => got.Add(e);
+
+        // The Reaction Echo, Never Seen Before
+        Message reacted = Incoming("m1");
+        reacted.Reactions.Add(new ReactionEntry { Data = new ReactionData { Type = EmojiType.Like }, ParticipantIDs = { "me1" } });
+        await rig.Store.HandleEventAsync(new MessageReceived(reacted, false));
+
+        // A Message In The Cached Page, Echoed Again
+        rig.Client.MessagesPage = PageOf(Incoming("m2"));
+        await rig.Store.LoadMessagesAsync("c1", null, Ct);
+        await rig.Store.HandleEventAsync(new MessageReceived(Incoming("m2"), false));
+
+        // A Live Message Still Notifies
+        await rig.Store.HandleEventAsync(new MessageReceived(Incoming("m3"), false));
+
+        Assert.HasCount(3, got);
+        Assert.IsFalse(got[0].IsNew);
+        Assert.IsFalse(NotificationPolicy.ShouldNotify(got[0], true, null, false, false));
+        Assert.IsFalse(got[1].IsNew);
+        Assert.IsTrue(NotificationPolicy.ShouldNotify(got[2], true, null, false, false));
+
+        static Message Incoming(string id)
+        {
+            Message m              = Msg(id, "c1");
+            m.ParticipantID        = "p-ann";
+            m.MessageStatus.Status = MessageStatusType.IncomingComplete;
+            return m;
+        }
+    }
+
     // =========================================================================
     // SENDING
     // =========================================================================
