@@ -1,15 +1,19 @@
+using GMessages.App.Media;
 using GMessages.Presentation;
 using GMessages.Presentation.Messaging;
 using GMessages.Presentation.Settings;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Windows.Devices.Enumeration;
+using Windows.Media.Devices;
 
 namespace GMessages.App.Views;
 
 /// <summary>
 /// The settings page, shown over the whole main window below the title bar: theme, Start with Windows, notification
-/// switches and the snooze length, unpair, the logs folder and About, each on a Windows Settings card.
+/// switches and the snooze length, the microphone for voice messages, unpair, the logs folder and About, each on a
+/// Windows Settings card.
 /// </summary>
 /// <remarks>
 /// Adapted from Magic Buds' <c>SettingsWindow</c>, its cards and its About page. Made when opened and dropped on the
@@ -31,12 +35,19 @@ public sealed partial class SettingsPage : UserControl
         SnoozeHeader.Text      = ChatCopy.SnoozeLength;
         SnoozeDescription.Text = ChatCopy.SnoozeLengthDescription;
         AutomationProperties.SetName(SnoozeBox, ChatCopy.SnoozeLength);
+        MicrophoneHeader.Text      = ChatCopy.Microphone;
+        MicrophoneDescription.Text = ChatCopy.MicrophoneDescription;
+        AutomationProperties.SetName(MicrophoneBox, ChatCopy.Microphone);
 
         // Snooze Choices: Added Here, Before The Bindings Select One (A .NET List Isn't A XAML ItemsSource Under AOT)
         foreach (string choice in ViewModel.SnoozeChoices)
         {
             SnoozeBox.Items.Add(choice);
         }
+
+        // Microphones: "Windows Default" Now, Windows' Active Microphones Once Found
+        MicrophoneBox.Items.Add(ChatCopy.WindowsDefault);
+        _ = LoadMicrophonesAsync();
 
         _ = ViewModel.LoadAsync();
     }
@@ -71,6 +82,30 @@ public sealed partial class SettingsPage : UserControl
     /// Stops the page's bindings once the window drops it, so the long-lived view model no longer updates it.
     /// </summary>
     public void Close() => Bindings.StopTracking();
+
+    // Finds Windows' Active Microphones Each Time The Page Opens. Their Items Go In Before The View Model Gets Them, So
+    // The Saved One Is In The Box When The Binding Selects It; A Failed Search Leaves Only "Windows Default"
+    private async Task LoadMicrophonesAsync()
+    {
+        List<(string Id, string Name)> microphones;
+        try
+        {
+            DeviceInformationCollection devices = await DeviceInformation.FindAllAsync(MediaDevice.GetAudioCaptureSelector());
+            microphones                         = [.. devices.Where(device => device.IsEnabled).Select(device => (device.Id, device.Name))];
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            MicrophoneConsent.Log("devices", ex.GetType().Name);
+            return;
+        }
+
+        foreach ((_, string name) in microphones)
+        {
+            MicrophoneBox.Items.Add(name);
+        }
+
+        ViewModel.SetMicrophones(microphones);
+    }
 
     private void OnUnpairClick(object sender, RoutedEventArgs e) => UnpairRequested?.Invoke(this, EventArgs.Empty);
 

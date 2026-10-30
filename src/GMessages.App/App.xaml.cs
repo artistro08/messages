@@ -116,6 +116,11 @@ public partial class App : Application, IDisposable
     internal MediaStore? Media => _media;
 
     /// <summary>
+    /// Gets the Windows device ID of the microphone chosen in Settings, or null for Windows' default (and before launch).
+    /// </summary>
+    internal string? MicrophoneId => _settings?.MicrophoneId;
+
+    /// <summary>
     /// Sets up logging, settings and the tray icon, then starts watching for quit and show requests.
     /// </summary>
     /// <param name="args">Launch details (unused; the command line is read by <see cref="Program"/>).</param>

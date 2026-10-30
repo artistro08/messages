@@ -95,6 +95,11 @@ public static class ChatCopy
     public const string SnoozeLength            = "Snooze length";
     public const string SnoozeLengthDescription = "How long Snooze on a notification waits before showing it again.";
 
+    // Microphone (Settings Card; Owner Signs Off)
+    public const string Microphone            = "Microphone";
+    public const string MicrophoneDescription = "Which microphone records voice messages.";
+    public const string WindowsDefault        = "Windows default";
+
     // Notifications And New Chat
     public const string Reply              = "Reply";
     public const string Send               = "Send";

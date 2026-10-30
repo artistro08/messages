@@ -783,7 +783,7 @@ public sealed partial class ChatPane : UserControl
     // Settings Message; Any Other Failure Goes Back To The Mic. A Cancel Or Chat Switch While Starting Drops The Recorder
     private async void OnRecordClick(object sender, RoutedEventArgs e)
     {
-        if (Chat is not { Voice.IsIdle: true } chat || (Application.Current as App)?.Media is not { } media)
+        if (Chat is not { Voice.IsIdle: true } chat || (Application.Current as App) is not { Media: { } media } app)
         {
             return;
         }
@@ -794,7 +794,7 @@ public sealed partial class ChatPane : UserControl
         VoiceRecorder recorder;
         try
         {
-            recorder = await VoiceRecorder.StartAsync(path);
+            recorder = await VoiceRecorder.StartAsync(path, app.MicrophoneId);
         }
         catch (MicrophoneUnavailableException ex)
         {
