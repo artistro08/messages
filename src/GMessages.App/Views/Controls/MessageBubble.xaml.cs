@@ -40,7 +40,10 @@ namespace GMessages.App.Views.Controls;
 /// The reply quote shows above the text (<c>Quote.{id}</c>), the reaction pill (<c>Reactions.{id}</c>) over the bottom
 /// corner and, under the chat's newest message, the caption row: the time (<c>Caption.{id}</c>), on my message the
 /// owner's delivery icon (named <c>Status.{id}</c>: "Sent", "Delivered" or "Read"), and the lock in an encrypted chat. A link's preview card (<c>Preview.{id}</c>), named by its
-/// title, shows under the text once fetched; clicking it opens the link in the default browser. The pill and the menu's React raise
+/// title and the link's host, shows under the text once fetched, and the text then leaves out that link's address (a
+/// message that was only the link shows the card alone). Clicking the card opens the link in the default browser; its
+/// own menu (right-click, the Application key or Shift + F10) has Copy link (<c>Preview.CopyLink</c>), which copies the
+/// address as sent. The pill and the menu's React raise
 /// <see cref="ReactRequested"/>, and the menu's Reply raises <see cref="ReplyRequested"/>, for the chat to act on.
 /// </para>
 /// <para>
@@ -68,8 +71,9 @@ public sealed partial class MessageBubble : UserControl
     // A Bubble Still Being Sent Shows Faded
     private const double SendingFade = 0.6;
 
-    // The Preview Card's Image Width, In Effective Pixels
+    // The Preview Card's Image Width, And Its Gap Below The Text, In Effective Pixels
     private const int PreviewImageWidth = 240;
+    private const double PreviewGap     = 8;
 
     // Width: A Bubble Grows With Its Content Up To This Share Of The Chat, And Never Past The Cap (Effective Pixels)
     private const double MaxWidthShare  = 0.7;
@@ -169,6 +173,9 @@ public sealed partial class MessageBubble : UserControl
 
     /// <summary>Gets the menu's Reply text.</summary>
     public static string ReplyText => ChatCopy.Reply;
+
+    /// <summary>Gets the preview card menu's Copy link text.</summary>
+    public static string CopyLinkText => ChatCopy.CopyLink;
 
     /// <summary>Gets the caption row lock's tooltip and name.</summary>
     public static string EncryptedText => ChatCopy.EndToEndEncrypted;
@@ -337,6 +344,14 @@ public sealed partial class MessageBubble : UserControl
     }
 
     /// <summary>
+    /// Spaces the preview card from the text above it; with no text (a message that was only the link) the card starts
+    /// at the top of the bubble.
+    /// </summary>
+    /// <param name="hasText">True when the bubble shows text.</param>
+    /// <returns>The card's margin.</returns>
+    public static Thickness PreviewMargin(bool hasText) => new(0, hasText ? PreviewGap : 0, 0, 0);
+
+    /// <summary>
     /// Fades a bubble that is still being sent.
     /// </summary>
     /// <param name="isSending">True while sending.</param>
@@ -457,10 +472,10 @@ public sealed partial class MessageBubble : UserControl
         VisualStateManager.GoToState(this, Bubble?.HasMyReaction == true ? "Mine" : "NotMine", false);
     }
 
-    // The Text, With Its Web Links As Links (Plain Text When It Has None)
+    // The Text, With Its Web Links As Links (Plain Text When It Has None); Without The Card's Link While The Card Shows
     private void ShowText()
     {
-        string text = Bubble?.DisplayText ?? string.Empty;
+        string text = Bubble?.BodyText ?? string.Empty;
         string key  = text + "|" + PartIdOf("Link.", Bubble?.Id ?? string.Empty, Bubble?.TmpId ?? string.Empty);
         if (key == _shownText)
         {
@@ -582,10 +597,24 @@ public sealed partial class MessageBubble : UserControl
             return;
         }
 
+        ToClipboard(text);
+    }
+
+    // The Card's Copy Link: The Whole Address As Sent, Though The Text No Longer Shows It
+    private void OnCopyLinkClick(object sender, RoutedEventArgs e)
+    {
+        if (Bubble?.LinkUrl is { } url)
+        {
+            ToClipboard(url.OriginalString);
+        }
+    }
+
+    // Another App Holding The Clipboard Throws; Copy Then Does Nothing, Logged
+    private static void ToClipboard(string text)
+    {
         var package = new DataPackage();
         package.SetText(text);
 
-        // Another App Holding The Clipboard Throws; Copy Then Does Nothing, Logged
         try
         {
             Clipboard.SetContent(package);

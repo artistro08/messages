@@ -105,16 +105,77 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// A link in an inbox chat gets a preview card named by the linked page's <c>og:title</c>.
+    /// A link in an inbox chat gets a preview card named by the linked page's <c>og:title</c> and the link's host. Once it
+    /// shows, the card takes the link's place: the text reads without the address.
     /// </summary>
     /// <returns>A task for the test.</returns>
     [TestMethod]
-    public async Task LinkMessage_ShowsPreviewCard()
+    public async Task LinkMessage_ShowsPreviewCard_TextDropsTheLink()
     {
         await OpenChatAsync("Row.c-ann");
 
-        Message link = Server.Phone.PushIncoming("c-ann", $"look http://127.0.0.1:{Server.BaseUrl.Port}/preview-page");
-        App.WaitForText("Preview." + link.MessageID, FakeGoogleServer.PreviewPageTitle);
+        Message link = Server.Phone.PushIncoming("c-ann", $"look {PreviewLink()}");
+        App.WaitForText("Preview." + link.MessageID, FakeGoogleServer.PreviewPageTitle + ", 127.0.0.1");
+        App.WaitForText("Bubble." + link.MessageID, "look");
+        Assert.IsNull(App.TryFind($"Link.{link.MessageID}.0"), "The previewed link still shows in the text.");
+    }
+
+    /// <summary>
+    /// A message that is only a link shows its preview card alone, with no empty text line above it.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task LinkOnlyMessage_ShowsCardAlone()
+    {
+        await OpenChatAsync("Row.c-ann");
+
+        Message link = Server.Phone.PushIncoming("c-ann", PreviewLink());
+        App.WaitForText("Preview." + link.MessageID, FakeGoogleServer.PreviewPageTitle + ", 127.0.0.1");
+        WaitForGone("Bubble." + link.MessageID);
+    }
+
+    /// <summary>
+    /// Right-clicking a preview card opens its own menu, whose Copy link puts the whole address on the clipboard (pasted
+    /// into the message box to check); the bubble menu doesn't open.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task PreviewCard_RightClick_CopyLink_CopiesTheAddress()
+    {
+        await OpenChatAsync("Row.c-ann");
+        string url = PreviewLink();
+        Message link = Server.Phone.PushIncoming("c-ann", $"look {url}");
+        App.WaitForText("Preview." + link.MessageID, FakeGoogleServer.PreviewPageTitle + ", 127.0.0.1");
+
+        App.Find("Preview." + link.MessageID).RightClick();
+        AutomationElement copy_link = App.Find("Preview.CopyLink");
+        Assert.AreEqual(ChatCopy.CopyLink, AppDriver.SafeName(copy_link));
+        Assert.IsNull(App.TryFind("Bubble.Copy"), "The bubble menu opened over the card's menu.");
+        copy_link.Patterns.Invoke.Pattern.Invoke();
+
+        App.Find("Chat.Draft").Focus();
+        Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_V);
+        string last = "";
+        Wait.Until(() => (last = App.TryFind("Chat.Draft")?.Patterns.Value.Pattern.Value.ValueOrDefault ?? "") == url, AppDriver.DefaultTimeout,
+            () => $"The message box read '{last}' after pasting, not the link.");
+    }
+
+    /// <summary>
+    /// A link whose preview fails (the page isn't there) gets no card and keeps its link in the text.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task LinkPreviewFails_KeepsTheLink()
+    {
+        await OpenChatAsync("Row.c-ann");
+
+        string url   = $"http://127.0.0.1:{Server.BaseUrl.Port}/no-such-page";
+        Message link = Server.Phone.PushIncoming("c-ann", $"look {url}");
+        Wait.Until(() => ReadLog().Contains("No link preview", StringComparison.Ordinal) || ReadLog().Contains("Link preview failed", StringComparison.Ordinal),
+            AppDriver.DefaultTimeout, () => "The preview never finished.");
+
+        Assert.AreEqual(url, AppDriver.SafeName(App.Find($"Link.{link.MessageID}.0")));
+        Assert.IsNull(App.TryFind("Preview." + link.MessageID), "A failed preview showed a card.");
     }
 
     /// <summary>
@@ -517,6 +578,9 @@ public sealed class RcsTests : UiTest
         Wait.Until(() => (last = App.Automation.FocusedElement()?.Properties.AutomationId.ValueOrDefault ?? "") == automationId, AppDriver.DefaultTimeout,
             () => $"Focus was on '{last}', not '{automationId}'.");
     }
+
+    // A Link To The Fake Server's Preview Page (Loopback Links Get Previews In Test Runs Only)
+    private string PreviewLink() => $"http://127.0.0.1:{Server.BaseUrl.Port}/preview-page";
 
     // The Conversation's Newest Message On The Fake Phone
     private Message Newest(string conversationId) => Server.Phone.Chats.Page(conversationId, 1, null).Page[0];

@@ -213,26 +213,42 @@
                             </StackPanel>
                         </Grid>
 
+                        <!-- Text: while the preview card shows, without the card's link (Bubble.BodyText); a message that was
+                             only the link shows the card alone -->
                         <TextBlock
                             x:Name="Body"
                             AutomationProperties.AutomationId="{x:Bind local:MessageBubble.AutomationIdOf(Bubble.Id, Bubble.TmpId), Mode=OneWay}"
                             AutomationProperties.ItemType="{x:Bind Bubble.ItemTypeName, Mode=OneWay, FallbackValue=''}"
                             IsTextSelectionEnabled="True"
                             IsColorFontEnabled="True"
-                            TextWrapping="Wrap" />
+                            TextWrapping="Wrap"
+                            Visibility="{x:Bind Bubble.HasBodyText, Mode=OneWay, FallbackValue=Collapsed}" />
 
                         <!-- Link Preview: the page's image, its title (two lines at most) and its site in caption style; a click,
-                             Enter or Space opens the link in the default browser -->
+                             Enter or Space opens the link in the default browser. Named by its title and the link's host.
+                             Right-click, the Application key or Shift + F10 opens its own menu, with Copy link -->
                         <Button
                             x:Name="Preview"
-                            Margin="0,8,0,0"
+                            Margin="{x:Bind local:MessageBubble.PreviewMargin(Bubble.HasBodyText), Mode=OneWay}"
                             Padding="0"
                             HorizontalContentAlignment="Stretch"
                             AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Preview.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
-                            AutomationProperties.Name="{x:Bind Bubble.Preview.Title, Mode=OneWay, FallbackValue=''}"
+                            AutomationProperties.Name="{x:Bind Bubble.PreviewName, Mode=OneWay, FallbackValue=''}"
                             Click="OnPreviewClick"
                             CornerRadius="8"
                             Visibility="{x:Bind Bubble.HasPreview, Mode=OneWay, FallbackValue=Collapsed}">
+                            <Button.ContextFlyout>
+                                <MenuFlyout>
+                                    <MenuFlyoutItem
+                                        AutomationProperties.AutomationId="Preview.CopyLink"
+                                        Click="OnCopyLinkClick"
+                                        Text="{x:Bind local:MessageBubble.CopyLinkText}">
+                                        <MenuFlyoutItem.Icon>
+                                            <FontIcon Glyph="&#xE71B;" />
+                                        </MenuFlyoutItem.Icon>
+                                    </MenuFlyoutItem>
+                                </MenuFlyout>
+                            </Button.ContextFlyout>
                             <StackPanel MaxWidth="240">
                                 <Image
                                     x:Name="PreviewImage"
