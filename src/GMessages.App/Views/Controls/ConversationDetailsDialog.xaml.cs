@@ -8,7 +8,8 @@ using Microsoft.UI.Xaml.Controls;
 namespace GMessages.App.Views.Controls;
 
 /// <summary>
-/// A conversation's Details: its people, the Mute toggle and, for a one-on-one chat, Block &amp; report spam.
+/// A conversation's Details: its people, the Mute toggle (not in spam or blocked) and, for a one-on-one chat, Block
+/// &amp; report spam.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -57,6 +58,7 @@ public sealed partial class ConversationDetailsDialog : ContentDialog
         BindableList.Show(PeopleList, new ObservableCollection<PersonRow>(details.People));
         MuteSwitch.IsOn        = details.IsMuted;
         MuteSwitch.Toggled    += OnMuteToggled;
+        MuteSwitch.Visibility  = details.CanMute ? Visibility.Visible : Visibility.Collapsed;
         BlockButton.Visibility = details.CanBlock ? Visibility.Visible : Visibility.Collapsed;
     }
 

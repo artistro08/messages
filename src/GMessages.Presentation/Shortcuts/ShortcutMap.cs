@@ -55,7 +55,7 @@ public static class ShortcutMap
     /// <param name="focusInTextBox">Whether a text box has keyboard focus.</param>
     /// <param name="rightAlt">Whether the Right Alt key (AltGr) is held.</param>
     /// <returns>The matching command, or null.</returns>
-    public static ShortcutCommand? Resolve(VirtualKey key, bool ctrl, bool shift, bool alt, bool focusInTextBox, bool rightAlt = false)
+    public static ShortcutCommand? Resolve(VirtualKey key, bool ctrl, bool shift, bool alt, bool focusInTextBox, bool rightAlt)
     {
         // Ctrl + Alt Chords: Only Ctrl + Alt + h, And Never With AltGr
         if (alt)

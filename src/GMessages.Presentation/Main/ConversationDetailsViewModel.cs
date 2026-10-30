@@ -6,7 +6,7 @@ namespace GMessages.Presentation.Main;
 /// One person in the Details dialog: their avatar, name and number.
 /// </summary>
 /// <param name="Name">The full name, else the number.</param>
-/// <param name="Number">The number as the phone shows it, else the raw number.</param>
+/// <param name="Number">The number as the phone shows it, else the raw number; empty when it is already the name.</param>
 /// <param name="Initial">The avatar letter, or empty for the person icon.</param>
 /// <param name="Color">The avatar color as opaque ARGB.</param>
 /// <param name="PhotoId">The participant whose photo covers the avatar.</param>
@@ -30,11 +30,13 @@ public sealed class ConversationDetailsViewModel
     {
         ArgumentNullException.ThrowIfNull(c);
 
-        AvatarParts header = AvatarParts.Of(c);
+        AvatarParts header                       = AvatarParts.Of(c);
+        IReadOnlyList<ConversationMenuItem> menu = ConversationMenu.For(c, inHeader: true);
 
         People   = [.. c.Participants.Where(p => !p.IsMe).Select(p => RowOf(p, c.IsGroup ? null : header))];
         IsMuted  = c.IsMuted;
-        CanBlock = ConversationMenu.For(c, inHeader: true).Contains(ConversationMenuItem.BlockAndReport);
+        CanMute  = menu.Contains(ConversationMenuItem.Mute) || menu.Contains(ConversationMenuItem.Unmute);
+        CanBlock = menu.Contains(ConversationMenuItem.BlockAndReport);
     }
 
     /// <summary>Gets everyone in the conversation but the phone's owner, in the phone's order.</summary>
@@ -42,6 +44,9 @@ public sealed class ConversationDetailsViewModel
 
     /// <summary>Gets whether the conversation is muted.</summary>
     public bool IsMuted { get; }
+
+    /// <summary>Gets whether the Mute toggle shows (the menu's rule: not in spam or blocked).</summary>
+    public bool CanMute { get; }
 
     /// <summary>Gets whether Block &amp; report spam is offered (the menu's rule: one-on-one, not spam or blocked).</summary>
     public bool CanBlock { get; }
@@ -52,9 +57,10 @@ public sealed class ConversationDetailsViewModel
         string number = p.FormattedNumber ?? p.Number;
         string name   = string.IsNullOrEmpty(p.FullName) ? number : p.FullName;
 
+        // No Saved Name: The Number Shows Once, As The Name
         return new PersonRow(
             name,
-            number,
+            name == number ? string.Empty : number,
             oneOnOne?.Initial ?? ChatFormat.Initial(ChatFormat.SenderName(p)),
             oneOnOne?.Color ?? AvatarParts.ColorOf(p),
             p.Id);

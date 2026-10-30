@@ -26,25 +26,25 @@ public sealed class ShortcutMapTests
     [DataRow(VirtualKey.O, true, true, ShortcutCommand.ShowDetails)]
     public void Resolve_MapsKey(VirtualKey key, bool ctrl, bool shift, ShortcutCommand expected)
     {
-        Assert.AreEqual(expected, ShortcutMap.Resolve(key, ctrl, shift, false, false));
+        Assert.AreEqual(expected, ShortcutMap.Resolve(key, ctrl, shift, false, false, false));
     }
 
     [TestMethod]
-    public void R_InTextBox_IsNull() => Assert.IsNull(ShortcutMap.Resolve(VirtualKey.R, false, false, false, true));
+    public void R_InTextBox_IsNull() => Assert.IsNull(ShortcutMap.Resolve(VirtualKey.R, false, false, false, true, false));
 
     [TestMethod]
-    public void ShiftPlus_InTextBox_IsNull() => Assert.IsNull(ShortcutMap.Resolve((VirtualKey)187, false, true, false, true));
+    public void ShiftPlus_InTextBox_IsNull() => Assert.IsNull(ShortcutMap.Resolve((VirtualKey)187, false, true, false, true, false));
 
     [TestMethod]
-    public void CtrlEnter_InTextBox_IsNull() => Assert.IsNull(ShortcutMap.Resolve(VirtualKey.Enter, true, false, false, true));
+    public void CtrlEnter_InTextBox_IsNull() => Assert.IsNull(ShortcutMap.Resolve(VirtualKey.Enter, true, false, false, true, false));
 
     [TestMethod]
     public void CtrlK_InTextBox_StillStartsChat() =>
-        Assert.AreEqual(ShortcutCommand.StartChat, ShortcutMap.Resolve(VirtualKey.K, true, false, false, true));
+        Assert.AreEqual(ShortcutCommand.StartChat, ShortcutMap.Resolve(VirtualKey.K, true, false, false, true, false));
 
     [TestMethod]
     public void Escape_InTextBox_StillExits() =>
-        Assert.AreEqual(ShortcutCommand.ExitConversation, ShortcutMap.Resolve(VirtualKey.Escape, false, false, false, true));
+        Assert.AreEqual(ShortcutCommand.ExitConversation, ShortcutMap.Resolve(VirtualKey.Escape, false, false, false, true, false));
 
     /// <summary>
     /// The conversation shortcuts work while typing too, and Ctrl + Alt + h is the only Alt chord.
@@ -55,30 +55,30 @@ public sealed class ShortcutMapTests
     [DataRow(VirtualKey.O, true, true, false, ShortcutCommand.ShowDetails)]
     public void ConversationShortcuts_IgnoreTextFocus(VirtualKey key, bool ctrl, bool shift, bool alt, ShortcutCommand expected)
     {
-        Assert.AreEqual(expected, ShortcutMap.Resolve(key, ctrl, shift, alt, false));
-        Assert.AreEqual(expected, ShortcutMap.Resolve(key, ctrl, shift, alt, true));
+        Assert.AreEqual(expected, ShortcutMap.Resolve(key, ctrl, shift, alt, false, false));
+        Assert.AreEqual(expected, ShortcutMap.Resolve(key, ctrl, shift, alt, true, false));
     }
 
     [TestMethod]
-    public void CtrlAltK_IsNotAShortcut() => Assert.IsNull(ShortcutMap.Resolve(VirtualKey.K, true, false, true, false));
+    public void CtrlAltK_IsNotAShortcut() => Assert.IsNull(ShortcutMap.Resolve(VirtualKey.K, true, false, true, false, false));
 
     [TestMethod]
     [DataRow(false, false)]
     [DataRow(true, true)]
     [DataRow(false, true)]
-    public void AltH_WithoutExactlyCtrl_IsNull(bool ctrl, bool shift) => Assert.IsNull(ShortcutMap.Resolve(VirtualKey.H, ctrl, shift, true, false));
+    public void AltH_WithoutExactlyCtrl_IsNull(bool ctrl, bool shift) => Assert.IsNull(ShortcutMap.Resolve(VirtualKey.H, ctrl, shift, true, false, false));
 
     // Ruling R5-7: AltGr Is Left Ctrl + Right Alt, So With Right Alt Down The Key Is Left To The Layout
     [TestMethod]
     [DataRow(false)]
     [DataRow(true)]
-    public void CtrlRightAltH_IsNull(bool focusInTextBox) => Assert.IsNull(ShortcutMap.Resolve(VirtualKey.H, true, false, true, focusInTextBox, rightAlt: true));
+    public void CtrlRightAltH_IsNull(bool focusInTextBox) => Assert.IsNull(ShortcutMap.Resolve(VirtualKey.H, true, false, true, focusInTextBox, true));
 
     [TestMethod]
-    public void CtrlH_WithoutAlt_IsNull() => Assert.IsNull(ShortcutMap.Resolve(VirtualKey.H, true, false, false, false));
+    public void CtrlH_WithoutAlt_IsNull() => Assert.IsNull(ShortcutMap.Resolve(VirtualKey.H, true, false, false, false, false));
 
     [TestMethod]
-    public void Unmapped_IsNull() => Assert.IsNull(ShortcutMap.Resolve(VirtualKey.Z, true, false, false, false));
+    public void Unmapped_IsNull() => Assert.IsNull(ShortcutMap.Resolve(VirtualKey.Z, true, false, false, false, false));
 
     [TestMethod]
     public void HelpRows_AreVerbatimSpecText()
