@@ -77,6 +77,26 @@ public class MediaCryptoTests
     }
 
     /// <summary>
+    /// A Go-layout file whose plaintext fills exactly two chunks decrypts: the last chunk is a full 32768 raw bytes
+    /// with the last-chunk flag set.
+    /// </summary>
+    [TestMethod]
+    public void Decrypt_GoLayout_FullLastChunk()
+    {
+        byte[] key   = MediaCrypto.GenerateKey();
+        byte[] plain = RandomBytes(2 * PlainChunk);
+        using var gcm = new AesGcm(key, 16);
+
+        byte[] last = HandChunk(gcm, plain.AsSpan(PlainChunk), 1, true);
+        byte[] file = [0, 15,
+            .. HandChunk(gcm, plain.AsSpan(0, PlainChunk), 0, false),
+            .. last];
+
+        Assert.HasCount(MediaCrypto.OutgoingRawChunkSize, last);
+        CollectionAssert.AreEqual(plain, MediaCrypto.Decrypt(file, key));
+    }
+
+    /// <summary>
     /// The header is <c>{0, 15}</c> on encrypt; decrypt accepts another chunk size from the header and refuses one
     /// above <c>1 &lt;&lt; 22</c> or a non-zero first byte.
     /// </summary>

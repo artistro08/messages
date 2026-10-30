@@ -47,9 +47,9 @@ public sealed partial class GmClient
     /// <param name="ct">Cancels the upload.</param>
     /// <returns>The media content: format, media ID, name, plain size, decryption key and mime type.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="fileName"/> or <paramref name="mime"/> is null.</exception>
-    /// <exception cref="InvalidDataException">The start answer lacks the upload URL or granularity, or the finalize answer has no media ID.</exception>
+    /// <exception cref="InvalidDataException">The start answer lacks the upload URL or granularity, the finalize answer is base64 with bad padding or has no media ID, or an answer is over <see cref="GmHttpClient.MaxMediaBodyBytes"/>.</exception>
     /// <exception cref="InvalidProtocolBufferException">The finalize answer is not an upload response.</exception>
-    /// <exception cref="GmRequestException">The server refused the start or the finalize.</exception>
+    /// <exception cref="GmRequestException">The start or the finalize did not answer HTTP 200.</exception>
     /// <exception cref="HttpRequestException">The request failed before any response arrived.</exception>
     /// <exception cref="OperationCanceledException"><paramref name="ct"/> was canceled.</exception>
     public async Task<MediaContent> UploadMediaAsync(ReadOnlyMemory<byte> plain, string fileName, string mime, IProgress<double>? progress, CancellationToken ct)
@@ -66,7 +66,7 @@ public sealed partial class GmClient
         // Start: Base64 Of The Start Request
         var start_request = new StartMediaUploadRequest { AttachmentType = 1, AuthData = MediaAuth(), Mobile = _auth.Mobile };
         var start_body    = new ByteArrayContent(System.Text.Encoding.ASCII.GetBytes(Convert.ToBase64String(start_request.ToByteArray())));
-        GmMediaResponse started = await _http.SendMediaAsync(HttpMethod.Post, _endpoints.UploadMedia, UploadHeaders(size, "start", "", mime, "resumable"), start_body, ct).ConfigureAwait(false);
+        GmMediaResponse started = await _http.SendMediaAsync(HttpMethod.Post, _endpoints.UploadMedia, UploadHeaders(size, "start", "", mime, "resumable"), start_body, requireOk: true, ct).ConfigureAwait(false);
 
         if (!started.Headers.TryGetValue("x-goog-upload-url", out string? upload_url) || !Uri.TryCreate(upload_url, UriKind.Absolute, out Uri? upload_uri))
         {
@@ -80,8 +80,8 @@ public sealed partial class GmClient
 
         // Finalize: The Whole Encrypted File
         var file_body             = new ProgressContent(encrypted, progress);
-        GmMediaResponse finalized = await _http.SendMediaAsync(HttpMethod.Post, upload_uri, UploadHeaders(size, "upload, finalize", "0", mime, ""), file_body, ct).ConfigureAwait(false);
-        UploadMediaResponse uploaded = UploadMediaResponse.Parser.ParseFrom(IsStandardBase64(finalized.Body) ? Convert.FromBase64String(System.Text.Encoding.ASCII.GetString(finalized.Body)) : finalized.Body);
+        GmMediaResponse finalized = await _http.SendMediaAsync(HttpMethod.Post, upload_uri, UploadHeaders(size, "upload, finalize", "0", mime, ""), file_body, requireOk: true, ct).ConfigureAwait(false);
+        UploadMediaResponse uploaded = UploadMediaResponse.Parser.ParseFrom(DecodeUploadAnswer(finalized.Body));
         if (uploaded.Media is not { MediaID.Length: > 0 } media)
         {
             throw new InvalidDataException("The upload answer has no media ID.");
@@ -113,6 +113,7 @@ public sealed partial class GmClient
     /// <exception cref="ArgumentNullException"><paramref name="mediaId"/> is null.</exception>
     /// <exception cref="ArgumentException"><paramref name="key"/> is not 32 bytes (Go's <c>NewAESGCMHelper</c> refuses it too).</exception>
     /// <exception cref="GmRequestException">The server refused the download.</exception>
+    /// <exception cref="InvalidDataException">The download is over <see cref="GmHttpClient.MaxMediaBodyBytes"/>.</exception>
     /// <exception cref="System.Security.Cryptography.CryptographicException">The file does not decrypt with the key.</exception>
     /// <exception cref="HttpRequestException">The request failed before any response arrived.</exception>
     /// <exception cref="OperationCanceledException"><paramref name="ct"/> was canceled.</exception>
@@ -133,7 +134,7 @@ public sealed partial class GmClient
         string metadata_header = Convert.ToBase64String(metadata.ToByteArray());
 
         // Download And Decrypt
-        GmMediaResponse res = await _http.SendMediaAsync(HttpMethod.Get, _endpoints.UploadMedia, DownloadHeaders(metadata_header), null, ct).ConfigureAwait(false);
+        GmMediaResponse res = await _http.SendMediaAsync(HttpMethod.Get, _endpoints.UploadMedia, DownloadHeaders(metadata_header), null, requireOk: false, ct).ConfigureAwait(false);
         return MediaCrypto.Decrypt(res.Body, key.Span);
     }
 
@@ -217,6 +218,24 @@ public sealed partial class GmClient
         new("accept-encoding", "gzip, deflate, br"),
         new("accept-language", "en-US,en;q=0.9"),
     ];
+
+    // The Finalize Answer: Base64 When It Looks Like It (Bad Padding Fails Cleanly), Raw Otherwise
+    private static byte[] DecodeUploadAnswer(byte[] body)
+    {
+        if (!IsStandardBase64(body))
+        {
+            return body;
+        }
+
+        try
+        {
+            return Convert.FromBase64String(System.Text.Encoding.ASCII.GetString(body));
+        }
+        catch (FormatException ex)
+        {
+            throw new InvalidDataException("The upload answer is not valid base64.", ex);
+        }
+    }
 
     // Port Of isStandardBase64: Whole Groups Of Four, Base64 Characters Only
     private static bool IsStandardBase64(byte[] data) =>

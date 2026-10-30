@@ -25,7 +25,8 @@ namespace GMessages.App.UITests.FakeGoogle;
 /// <c>start</c> POST answers with an upload URL and granularity, a <c>upload, finalize</c> POST to that URL stores the
 /// encrypted file in the phone's <see cref="FakePhone.Chats"/> and answers with a base64 <c>UploadMediaResponse</c>,
 /// and a GET answers with the stored bytes of the attachment ID in <c>x-goog-download-metadata</c> (404 when there are
-/// none). Each request is served on its own task. Binds
+/// none). A finalize to a session it never started, or at an offset other than 0, and any <c>/upload</c> request that
+/// carries <c>cookie</c> or <c>x-goog-api-key</c>, get 400. Each request is served on its own task. Binds
 /// 127.0.0.1 only and never contacts anything.
 /// </remarks>
 public sealed class FakeGoogleServer : IAsyncDisposable
@@ -109,6 +110,7 @@ public sealed class FakeGoogleServer : IAsyncDisposable
     private readonly ConcurrentQueue<string> _paths = new();
     private readonly ConcurrentQueue<Exception> _errors = new();
     private readonly ConcurrentDictionary<Task, byte> _handlers = new();
+    private readonly ConcurrentDictionary<string, byte> _uploadSessions = new();
     private readonly Lock _lock = new();
     private readonly List<byte[]> _pending = [];
     private readonly List<byte[]> _catchUp = [];
@@ -339,15 +341,28 @@ public sealed class FakeGoogleServer : IAsyncDisposable
                     await RespondAsync(context.Response, 200, PbLiteMime, "[]"u8.ToArray());
                     break;
 
+                // Media: Never With Cookies Or The Api Key
+                case not null when path.StartsWith("/upload", StringComparison.Ordinal) && (request.Headers["cookie"] is not null || request.Headers["x-goog-api-key"] is not null):
+                    await RespondAsync(context.Response, 400, "text/plain", "Media requests carry no credentials"u8.ToArray());
+                    break;
+
                 // Media: Upload Start, Upload Finalize, Download
                 case "/upload" when request.HttpMethod == "POST" && request.Headers["x-goog-upload-command"] == "start":
-                    context.Response.Headers.Add("x-goog-upload-url", new Uri(BaseUrl, "/upload/session/" + Guid.NewGuid().ToString("N")).AbsoluteUri);
+                    string session = Guid.NewGuid().ToString("N");
+                    _uploadSessions[session] = 0;
+                    context.Response.Headers.Add("x-goog-upload-url", new Uri(BaseUrl, "/upload/session/" + session).AbsoluteUri);
                     context.Response.Headers.Add("x-goog-upload-chunk-granularity", "262144");
                     context.Response.Headers.Add("x-goog-upload-status", "active");
                     await RespondAsync(context.Response, 200, "text/plain", []);
                     break;
 
                 case not null when path.StartsWith("/upload/session/", StringComparison.Ordinal) && request.HttpMethod == "POST" && request.Headers["x-goog-upload-command"] == "upload, finalize":
+                    if (!_uploadSessions.TryRemove(path["/upload/session/".Length..], out _) || request.Headers["x-goog-upload-offset"] != "0")
+                    {
+                        await RespondAsync(context.Response, 400, "text/plain", "Unknown upload session or offset"u8.ToArray());
+                        break;
+                    }
+
                     string media_id = Phone.Chats.StoreUpload(await ReadBodyAsync(request));
                     var uploaded    = new UploadMediaResponse { Media = new UploadedMedia { MediaID = media_id, MediaNumber = 1 } };
                     await RespondAsync(context.Response, 200, "text/plain", Encoding.ASCII.GetBytes(Convert.ToBase64String(uploaded.ToByteArray())));
