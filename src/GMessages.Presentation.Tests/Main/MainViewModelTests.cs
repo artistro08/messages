@@ -217,11 +217,13 @@ public sealed class MainViewModelTests
         Assert.IsNull(vm.ActionError);
         Assert.IsFalse(vm.HasActionError);
 
-        // Not Connected
+        // Not Connected: Logged Once, By Error Type Only
         rig.Connected = false;
+        int logged    = rig.Log.Messages.Length;
         Assert.IsFalse(await vm.RunAsync("a", ConversationAction.Delete));
         Assert.AreEqual(ChatCopy.ActionFailed, vm.ActionError);
         Assert.AreEqual("a", vm.SelectedConversationId);
+        Assert.AreEqual("Could not update conversation (MessagingUnavailableException)", rig.Log.Messages.Skip(logged).Single());
 
         vm.DismissActionError();
         Assert.IsNull(vm.ActionError);

@@ -6,6 +6,7 @@ using GMessages.Protocol.Http;
 using GMessages.Presentation.Tests.Messaging;
 using GMessages.Protocol.Proto;
 using GMessages.Protocol.Rpc;
+using GMessages.Protocol.Tests.Fakes;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace GMessages.Presentation.Tests.Main;
@@ -25,13 +26,16 @@ internal sealed class MainRig : IDisposable
             TimeProvider.System,
             NullLoggerFactory.Instance,
             a => a());
-        Store = new ChatStore(Controller, () => Connected ? Client : null, NullLogger.Instance, database);
+        Store = new ChatStore(Controller, () => Connected ? Client : null, Log, database);
     }
 
     public ConnectionController Controller { get; }
 
     /// <summary>Gets or sets whether the store sees a phone client.</summary>
     public bool Connected { get; set; } = true;
+
+    /// <summary>Gets what the store logged.</summary>
+    public CollectingLogger Log { get; } = new();
 
     public FakeMessagingClient Client { get; } = new();
 
