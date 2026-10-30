@@ -200,6 +200,33 @@ public sealed class MediaStoreTests
         Assert.AreEqual(expected, MediaStore.SanitizeName(name, mime));
 
     /// <summary>
+    /// Programs, scripts, installers and shortcuts never open, however the name hides the extension; other files do.
+    /// </summary>
+    [TestMethod]
+    [DataRow("setup.exe", "application/octet-stream", false)]
+    [DataRow("SETUP.EXE", "application/octet-stream", false)]
+    [DataRow("run.bat. . ", "text/plain", false)]
+    [DataRow("a.cmd", "text/plain", false)]
+    [DataRow("a.ps1", "text/plain", false)]
+    [DataRow("a.vbs", "text/plain", false)]
+    [DataRow("a.js", "text/javascript", false)]
+    [DataRow("a.msi", "application/octet-stream", false)]
+    [DataRow("a.msix", "application/octet-stream", false)]
+    [DataRow("a.lnk", "application/octet-stream", false)]
+    [DataRow("a.scr", "application/octet-stream", false)]
+    [DataRow("a.reg", "text/plain", false)]
+    [DataRow("a.hta", "text/html", false)]
+    [DataRow("a.jar", "application/java-archive", false)]
+    [DataRow("photo.jpg.exe", "image/jpeg", false)]
+    [DataRow("", "text/js", false)]
+    [DataRow("notes.pdf", "application/pdf", true)]
+    [DataRow("photo.jpg", "image/jpeg", true)]
+    [DataRow("clip.mp4", "video/mp4", true)]
+    [DataRow("", "image/jpeg", true)]
+    public void CanOpen_NeverPrograms(string name, string mime, bool expected) =>
+        Assert.AreEqual(expected, MediaStore.CanOpen(name, mime));
+
+    /// <summary>
     /// A long name is cut to the limit and keeps its extension.
     /// </summary>
     [TestMethod]

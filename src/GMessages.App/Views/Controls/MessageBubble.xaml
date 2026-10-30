@@ -106,13 +106,15 @@
             Opacity="{x:Bind local:MessageBubble.SendingOpacity(Bubble.IsSending), Mode=OneWay}"
             Spacing="2">
 
-            <!-- Bubble Menu: right-click, the Application key or Shift + F10 -->
+            <!-- Bubble Menu: right-click, the Application key or Shift + F10. No Copy on a photo or file without a caption, and
+                 no Open on a received program or script (only Save as) -->
             <StackPanel.ContextFlyout>
                 <MenuFlyout x:Name="Menu">
                     <MenuFlyoutItem
                         AutomationProperties.AutomationId="Bubble.Copy"
                         Click="OnCopyClick"
-                        Text="{x:Bind local:MessageBubble.CopyText}">
+                        Text="{x:Bind local:MessageBubble.CopyText}"
+                        Visibility="{x:Bind Bubble.HasCopyText, Mode=OneWay, FallbackValue=Collapsed}">
                         <MenuFlyoutItem.Icon>
                             <FontIcon Glyph="&#xE8C8;" />
                         </MenuFlyoutItem.Icon>
@@ -121,7 +123,7 @@
                         AutomationProperties.AutomationId="Bubble.Open"
                         Click="OnOpenClick"
                         Text="{x:Bind local:MessageBubble.OpenText}"
-                        Visibility="{x:Bind Bubble.HasMediaFile, Mode=OneWay, FallbackValue=Collapsed}">
+                        Visibility="{x:Bind Bubble.CanOpenMedia, Mode=OneWay, FallbackValue=Collapsed}">
                         <MenuFlyoutItem.Icon>
                             <FontIcon Glyph="&#xE8E5;" />
                         </MenuFlyoutItem.Icon>

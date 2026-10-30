@@ -233,6 +233,32 @@ public sealed class MessageBubbleViewModelTests
     }
 
     [TestMethod]
+    public void Bubble_CaptionlessMedia_HasNoCopy()
+    {
+        var bare     = new MessageBubbleViewModel(MediaMessage(MessageKind.Photo) with { Text = string.Empty });
+        var caption  = new MessageBubbleViewModel(MediaMessage(MessageKind.Photo, "At the beach"));
+        var file     = new MessageBubbleViewModel(MediaMessage(MessageKind.File) with { Text = string.Empty });
+        var text     = new MessageBubbleViewModel(Message("hi"));
+
+        Assert.IsFalse(bare.HasCopyText);
+        Assert.IsTrue(caption.HasCopyText);
+        Assert.IsFalse(file.HasCopyText);
+        Assert.IsTrue(text.HasCopyText);
+    }
+
+    [TestMethod]
+    public void Bubble_ReceivedProgram_CannotOpen()
+    {
+        ChatMessage m = MediaMessage(MessageKind.File);
+        var program   = new MessageBubbleViewModel(m with { Media = m.Media! with { Name = "setup.exe", Mime = "application/octet-stream" } });
+        var document  = new MessageBubbleViewModel(m with { Media = m.Media! with { Name = "notes.pdf", Mime = "application/pdf" } });
+
+        Assert.IsTrue(program.HasMediaFile);
+        Assert.IsFalse(program.CanOpenMedia);
+        Assert.IsTrue(document.CanOpenMedia);
+    }
+
+    [TestMethod]
     public void Bubble_PhotoWithCaption_ShowsCaption()
     {
         var bubble = new MessageBubbleViewModel(MediaMessage(MessageKind.Photo, "At the beach"));

@@ -132,6 +132,9 @@ public sealed partial class MessageBubble : UserControl
     // The File Card's Thumbnail Width (Its 40 px Square, Sharp At 200% Scale)
     private const int FileThumbWidth = 80;
 
+    // A New Bubble's Entrance Rises From This Far Below (Over EntranceTime)
+    private const float EntranceRise = 12;
+
     // A Photo's Caption Sits This Far Inside The Bubble; The Back's Usual Padding Otherwise
     private static readonly Thickness CaptionInset = new(12, 6, 12, 8);
     private static readonly Thickness TextPadding  = new(12, 8, 12, 8);
@@ -139,8 +142,7 @@ public sealed partial class MessageBubble : UserControl
     // How Long A Thumbnail-Only Photo Waits For The Phone's Full Size Before It Offers To Try Again
     private static readonly TimeSpan FullSizeWait = TimeSpan.FromSeconds(30);
 
-    // A New Bubble's Entrance: A Fade And A Rise From This Far Below, Over WinUI's Normal Control Animation Time
-    private const float EntranceRise = 12;
+    // A New Bubble's Entrance: A Fade And A Rise (EntranceRise), Over WinUI's Normal Control Animation Time
     private static readonly TimeSpan EntranceTime = TimeSpan.FromMilliseconds(250);
 
     // Reads The Windows Animation Setting Live (Settings > Accessibility > Visual Effects)
@@ -178,6 +180,9 @@ public sealed partial class MessageBubble : UserControl
     private string _photoMessage = string.Empty;
     private int _photoLoad;
     private bool _photoFailed;
+
+    // Cancels A Thumbnail-Only Photo's Wait For Its Full Size When A Newer Load Starts (Null When None Is Waiting)
+    private Action? _cancelPhotoWait;
 
     // The Widest A Photo May Be: The Bubble's Width Cap Inside Its Border (Set At Measure)
     private double _photoMaxWidth = MaxBubbleWidth - 2;
@@ -528,7 +533,16 @@ public sealed partial class MessageBubble : UserControl
     // Left Over From The Last One
     private static void OnBubbleChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
-        var view          = (MessageBubble)d;
+        var view = (MessageBubble)d;
+
+        // No Entrance Left Running From The Container's Last Bubble
+        Visual row = ElementCompositionPreview.GetElementVisual(view.Row);
+        ElementCompositionPreview.SetIsTranslationEnabled(view.Row, true);
+        row.StopAnimation(nameof(Visual.Opacity));
+        row.StopAnimation("Translation");
+        row.Opacity = 1;
+        row.Properties.InsertVector3("Translation", Vector3.Zero);
+
         view._pointerOver = false;
         view._keepShown   = false;
         view._canAct      = view.Bubble?.CanAct == true;
@@ -645,7 +659,7 @@ public sealed partial class MessageBubble : UserControl
     private void ShowPhoto()
     {
         MediaPart? part = Bubble is { HasPhoto: true } bubble ? bubble.Media : null;
-        if (ReferenceEquals(part, _photoPart))
+        if (SameMedia(part, _photoPart) && (Bubble?.Id ?? string.Empty) == _photoMessage)
         {
             return;
         }
@@ -655,8 +669,9 @@ public sealed partial class MessageBubble : UserControl
         _photoPart        = part;
         _photoMessage     = message_id;
         _photoFailed      = false;
-        int load          = ++_photoLoad;
+        int load          = NextPhotoLoad();
 
+        // Another Message, Or None (A Bubble Without A Photo): Let Go Of The Old Images
         if (!same_message)
         {
             PhotoBlur.Background        = null;
@@ -671,6 +686,19 @@ public sealed partial class MessageBubble : UserControl
         {
             _ = LoadPhotoAsync(part, load, again: false);
         }
+    }
+
+    // The Same Media Though The Bubble's Update Built A New Part (A Status Or Reaction Change): Nothing To Load Again
+    private static bool SameMedia(MediaPart? a, MediaPart? b) =>
+        a is null || b is null ? a is null && b is null
+            : a.MediaId == b.MediaId && a.ThumbnailId == b.ThumbnailId && a.Name == b.Name;
+
+    // Starts A Photo Load: Its Number, With An Older Load's Wait For The Full Size Cancelled
+    private int NextPhotoLoad()
+    {
+        _cancelPhotoWait?.Invoke();
+        _cancelPhotoWait = null;
+        return ++_photoLoad;
     }
 
     // The Photo's Size From Its Dimensions, Fitted To The Bubble (See MessageBubbleViewModel.PhotoSize)
@@ -725,7 +753,24 @@ public sealed partial class MessageBubble : UserControl
             if (part is { MediaId.Length: 0, ThumbnailId.Length: > 0 })
             {
                 await bubble.RequestFullSizeAsync(media, again);
-                await Task.Delay(FullSizeWait);
+                if (load != _photoLoad)
+                {
+                    return;
+                }
+
+                using (var wait = new CancellationTokenSource())
+                {
+                    _cancelPhotoWait = wait.Cancel;
+                    try
+                    {
+                        await Task.Delay(FullSizeWait, wait.Token);
+                    }
+                    finally
+                    {
+                        _cancelPhotoWait = load == _photoLoad ? null : _cancelPhotoWait;
+                    }
+                }
+
                 if (load == _photoLoad)
                 {
                     ShowPhotoFailed();
@@ -788,7 +833,7 @@ public sealed partial class MessageBubble : UserControl
         {
             _photoFailed = false;
             ShowPhotoNote(null, string.Empty);
-            _ = LoadPhotoAsync(part, ++_photoLoad, again: true);
+            _ = LoadPhotoAsync(part, NextPhotoLoad(), again: true);
             return;
         }
 
@@ -803,7 +848,7 @@ public sealed partial class MessageBubble : UserControl
     private async void ShowFile()
     {
         MediaPart? part = Bubble is { HasFileCard: true } bubble ? bubble.Media : null;
-        if (ReferenceEquals(part, _filePart))
+        if (SameMedia(part, _filePart))
         {
             return;
         }
@@ -873,8 +918,9 @@ public sealed partial class MessageBubble : UserControl
     // OPEN AND SAVE
     // =========================================================================
 
-    // Writes The File To The Private Temp Folder And Opens It In Its Default App (A Test Run Only Notes The Path). Never
-    // Logs The Name Or Path: Only The Message ID. True When Opened
+    // Writes The File To The Private Temp Folder And Opens It In Its Default App (A Test Run Only Notes The Path). A
+    // Program, Script Or Installer Is Never Opened (See MediaStore.CanOpen): The Save Dialog Shows Instead, So The Person
+    // Decides. Never Logs The Name Or Path: Only The Message ID. True When Opened Or Offered For Saving
     private async Task<bool> OpenMediaAsync(MediaPart part)
     {
         if ((Application.Current as App)?.Media is not { } media)
@@ -883,6 +929,13 @@ public sealed partial class MessageBubble : UserControl
         }
 
         string message_id = Bubble?.Id ?? string.Empty;
+        if (!MediaStore.CanOpen(part.Name, part.Mime))
+        {
+            AppLog.MediaFailed(App.ShellLog, "open", message_id, "Blocked");
+            await SaveAsAsync(part);
+            return true;
+        }
+
         try
         {
             string path = await media.SaveToTempAsync(part, CancellationToken.None);
@@ -916,11 +969,19 @@ public sealed partial class MessageBubble : UserControl
         }
     }
 
-    // The Menu's Save As: The Windows Save Dialog Over This Window, Named As The Sender Named It (Made Safe)
-    private async void OnSaveAsClick(object sender, RoutedEventArgs e)
+    // The Menu's Save As
+    private void OnSaveAsClick(object sender, RoutedEventArgs e)
     {
-        if (Bubble?.Media is not { IsPending: false } part || (Application.Current as App)?.Media is not { } media
-            || XamlRoot?.ContentIslandEnvironment is not { } island)
+        if (Bubble?.Media is { IsPending: false } part)
+        {
+            _ = SaveAsAsync(part);
+        }
+    }
+
+    // The Windows Save Dialog Over This Window, Named As The Sender Named It (Made Safe)
+    private async Task SaveAsAsync(MediaPart part)
+    {
+        if ((Application.Current as App)?.Media is not { } media || XamlRoot?.ContentIslandEnvironment is not { } island)
         {
             return;
         }
@@ -935,7 +996,7 @@ public sealed partial class MessageBubble : UserControl
         picker.FileTypeChoices.Add(ChatCopy.File, [extension.Length > 1 ? extension : ".bin"]);
         WinRT.Interop.InitializeWithWindow.Initialize(picker, Microsoft.UI.Win32Interop.GetWindowFromWindowId(island.AppWindowId));
 
-        string message_id = Bubble.Id;
+        string message_id = Bubble?.Id ?? string.Empty;
         try
         {
             if (await picker.PickSaveFileAsync() is not { } file)
