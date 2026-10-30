@@ -103,6 +103,23 @@ internal static class TestHooks
         File.Delete(pick);
         return paths;
     }
+
+    /// <summary>
+    /// When pointed at the fake server, stands in for the microphone, so no test ever records from a real one:
+    /// <c>{data folder}\microphone.txt</c> reads <c>denied</c> (access off), or holds the path of an audio file the fake
+    /// recording copies. Without the file there is no microphone.
+    /// </summary>
+    /// <returns><c>denied</c>, <c>none</c> or a file path; null on a normal run (use the real microphone).</returns>
+    public static string? FakeMicrophone()
+    {
+        if (!BlockLaunches || DataDir is null)
+        {
+            return null;
+        }
+
+        string microphone = Path.Combine(DataDir, "microphone.txt");
+        return File.Exists(microphone) ? File.ReadAllText(microphone).Trim() : "none";
+    }
 }
 #else
 /// <summary>
@@ -144,5 +161,9 @@ internal static class TestHooks
     /// <param name="photos">True for the photo picker.</param>
     /// <returns>Null.</returns>
     public static IReadOnlyList<string>? PickFiles(bool photos) => null;
+
+    /// <summary>Always null in Release: the real microphone records.</summary>
+    /// <returns>Null.</returns>
+    public static string? FakeMicrophone() => null;
 }
 #endif

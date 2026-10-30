@@ -125,6 +125,13 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
             Raise(nameof(HasAttachments));
             Raise(nameof(CanSend));
         };
+
+        // A Recording Waiting To Be Sent Turns Send On; The Pane Follows Its Steps
+        Voice.PropertyChanged += (_, _) =>
+        {
+            Raise(nameof(Voice));
+            Raise(nameof(CanSend));
+        };
     }
 
     /// <inheritdoc />
@@ -224,8 +231,11 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
         private set => Set(ref _isEncrypted, value, nameof(IsEncrypted));
     }
 
-    /// <summary>Gets whether there is something to send: text (not empty or only spaces) or an attachment.</summary>
-    public bool CanSend => !string.IsNullOrWhiteSpace(_draft) || Attachments.Count > 0;
+    /// <summary>Gets whether there is something to send: text (not empty or only spaces), an attachment or a recording.</summary>
+    public bool CanSend => !string.IsNullOrWhiteSpace(_draft) || Attachments.Count > 0 || Voice.IsPreview;
+
+    /// <summary>Gets the voice message being recorded, or recorded and waiting for Send (the preview chip).</summary>
+    public VoiceDraft Voice { get; } = new();
 
     /// <summary>Gets the photos and files picked to send with the next Send, in order (the chips).</summary>
     public ObservableCollection<PendingAttachment> Attachments { get; } = [];
@@ -430,7 +440,8 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     /// text, as the Go connector sends it (<c>handlematrix.go</c>). The reply clears once sent.
     /// </para>
     /// <para>
-    /// Attachments go first, one at a time in order, each its own bubble showing its upload. Off RCS the text rides on
+    /// A recording waiting in the preview chip goes first, as <c>Voice message.m4a</c> (<c>audio/mp4</c>), its temp file
+    /// deleted. Attachments go first, one at a time in order, each its own bubble showing its upload. Off RCS the text rides on
     /// the last one as its caption; RCS refuses captions on media, so there the text follows as its own message. A
     /// failed attachment fails only its own bubble, which retries on its own.
     /// </para>
@@ -445,6 +456,12 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
 
         string text                         = string.IsNullOrWhiteSpace(Draft) ? string.Empty : Draft;
         List<PendingAttachment> attachments = [.. Attachments];
+
+        // The Recording Goes First, As An Attachment (Its Temp File Is Deleted Now)
+        if (Voice.Take() is { } voice)
+        {
+            attachments.Insert(0, new PendingAttachment(++_nextAttachmentId, VoiceDraft.FileName, VoiceDraft.Mime, voice, 0, 0));
+        }
         bool is_rcs                         = _store.Find(ConversationId)?.IsRcs == true;
         string? reply_to                    = ReplyingTo is { IsRcs: true, Id.Length: > 0 } quoted ? quoted.Id : null;
         bool caption_on_media               = attachments.Count > 0 && !is_rcs && text.Length > 0;
@@ -794,6 +811,7 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
         _store.ConversationChanged -= OnConversationChanged;
         _typingTimer.Dispose();
         _outgoing.Clear();
+        Voice.Cancel();
     }
 
     // =========================================================================

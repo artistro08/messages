@@ -93,6 +93,9 @@ public sealed partial class MediaStore
         _log        = log;
     }
 
+    /// <summary>Gets the private temp folder (emptied by <see cref="Clear"/>), where voice recordings go too.</summary>
+    public string TempFolder => _tempFolder;
+
     // =========================================================================
     // MEDIA
     // =========================================================================

@@ -233,13 +233,8 @@ public sealed partial class MessageBubble : UserControl
         // The Photo's Layers Take The Photo's Rounded Corners (Bound Once, On The Button)
         Photo.RegisterPropertyChangedCallback(Control.CornerRadiusProperty, (_, _) => PhotoBlur.CornerRadius = PhotoFull.CornerRadius = Photo.CornerRadius);
 
-        // Links And The Voice Waveform Follow The Text's Color: Its Side's State And The Theme Set It
-        Body.RegisterPropertyChangedCallback(TextBlock.ForegroundProperty, (_, _) =>
-        {
-            ColorLinks();
-            VoiceBars.BarBrush = Body.Foreground;
-        });
-        VoiceBars.BarBrush = Body.Foreground;
+        // Links Follow The Text's Color: Its Side's State And The Theme Set It
+        Body.RegisterPropertyChangedCallback(TextBlock.ForegroundProperty, (_, _) => ColorLinks());
         ShowVoicePlaying(false, 0);
     }
 

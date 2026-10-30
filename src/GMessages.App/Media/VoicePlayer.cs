@@ -61,6 +61,9 @@ internal sealed class VoicePlayer : IDisposable
         _timer.Tick    += (_, _) => ShowState();
     }
 
+    /// <summary>Gets the key of the message loaded in the player, or empty.</summary>
+    public string Key => _key;
+
     /// <summary>
     /// Plays or pauses a message, or seeks in it: another message stops first.
     /// </summary>

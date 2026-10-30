@@ -371,6 +371,67 @@
             </ScrollViewer>
             <!-- /Attachments -->
 
+            <!-- Microphone Off: access is off or there is no microphone; the link opens Windows' microphone privacy settings
+                 (its runs are set from code, from the copy) -->
+            <TextBlock
+                x:Name="MicError"
+                Margin="12,8,12,0"
+                AutomationProperties.AutomationId="Chat.MicError"
+                AutomationProperties.LiveSetting="Polite"
+                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                Style="{StaticResource CaptionTextBlockStyle}"
+                TextWrapping="Wrap"
+                Visibility="{x:Bind Chat.Voice.IsMicrophoneOff, Mode=OneWay, FallbackValue=Collapsed}" />
+
+            <!-- Voice Preview: the recording waiting for Send, with play or pause, its waveform (a click seeks), its length and
+                 a button to remove it (which deletes it) -->
+            <Grid
+                Margin="12,8,12,0"
+                Padding="4,4,4,4"
+                HorizontalAlignment="Left"
+                Background="{ThemeResource ControlFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                BorderThickness="1"
+                ColumnDefinitions="Auto,Auto,Auto,Auto"
+                ColumnSpacing="8"
+                CornerRadius="8"
+                Visibility="{x:Bind Chat.Voice.IsPreview, Mode=OneWay, FallbackValue=Collapsed}">
+                <Button
+                    x:Name="PreviewPlay"
+                    Width="32"
+                    Height="32"
+                    AutomationProperties.AutomationId="Chat.VoicePlay"
+                    Click="OnPreviewPlayClick"
+                    Style="{StaticResource IconButtonStyle}">
+                    <FontIcon x:Name="PreviewGlyph" FontSize="16" />
+                </Button>
+                <controls:Waveform
+                    x:Name="PreviewBars"
+                    Grid.Column="1"
+                    VerticalAlignment="Center"
+                    BarBrush="{ThemeResource TextFillColorPrimaryBrush}"
+                    SeekRequested="OnPreviewSeekRequested" />
+                <TextBlock
+                    Grid.Column="2"
+                    VerticalAlignment="Center"
+                    AutomationProperties.AutomationId="Chat.VoiceLength"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Style="{StaticResource CaptionTextBlockStyle}"
+                    Text="{x:Bind Chat.Voice.LengthText, Mode=OneWay, FallbackValue=''}" />
+                <Button
+                    Grid.Column="3"
+                    Width="32"
+                    Height="32"
+                    AutomationProperties.AutomationId="Chat.VoiceRemove"
+                    AutomationProperties.Name="{x:Bind local:ChatPane.RemoveAttachmentText}"
+                    Click="OnPreviewRemoveClick"
+                    Style="{StaticResource IconButtonStyle}"
+                    ToolTipService.ToolTip="{x:Bind local:ChatPane.RemoveAttachmentText}">
+                    <FontIcon FontSize="12" Glyph="&#xE711;" />
+                </Button>
+            </Grid>
+            <!-- /Voice Preview -->
+
             <!-- Replying To: joined to the top of the message box as one control (the same width and left edge, rounded on top
                  only, while the box squares its top corners): an accent bar, the quoted text and a button to drop the reply -->
             <Grid
@@ -412,13 +473,13 @@
         </StackPanel>
 
         <!-- Compose: the message box (Enter sends, Shift + Enter adds a line), with the attach and emoji icons inside it on the
-             left and send inside it on the right, icons only. Under the reply chip it meets the chip with square top corners -->
+             left and the mic and send inside it on the right, icons only. Under the reply chip it meets the chip with square top corners -->
         <Grid Grid.Row="4" Padding="{x:Bind local:ChatPane.ComposePadding(Chat.IsReplying), Mode=OneWay}">
             <TextBox
                 x:Name="DraftBox"
                 MinHeight="44"
                 MaxHeight="160"
-                Padding="76,11,44,11"
+                Padding="76,11,76,11"
                 AcceptsReturn="True"
                 AutomationProperties.AutomationId="Chat.Draft"
                 AutomationProperties.Name="Message"
@@ -482,6 +543,23 @@
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                     Glyph="&#xE76E;" />
             </Button>
+            <!-- Record: the mic, inside the box's right edge beside Send, always there -->
+            <Button
+                Width="32"
+                Height="32"
+                Margin="0,0,38,6"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Bottom"
+                AutomationProperties.AutomationId="Chat.Record"
+                AutomationProperties.Name="{x:Bind local:ChatPane.RecordText}"
+                Click="OnRecordClick"
+                Style="{StaticResource IconButtonStyle}"
+                ToolTipService.ToolTip="{x:Bind local:ChatPane.RecordText}">
+                <FontIcon
+                    FontSize="16"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Glyph="&#xE720;" />
+            </Button>
             <Button
                 Width="32"
                 Height="32"
@@ -500,6 +578,72 @@
                     Glyph="&#xE724;"
                     Opacity="{x:Bind local:ChatPane.EnabledOpacity(Chat.CanSend), Mode=OneWay, FallbackValue=0.4}" />
             </Button>
+
+            <!-- Recording: over the message box while the mic records, a red dot, the running time, the live waveform of the
+                 input level, then Cancel recording (deletes it) and Stop (keeps it for the preview chip). On a solid base, since
+                 the box's fill lets what is under it show -->
+            <Border
+                Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+                CornerRadius="{x:Bind local:ChatPane.DraftCorners(Chat.IsReplying), Mode=OneWay}"
+                Visibility="{x:Bind Chat.Voice.IsRecording, Mode=OneWay, FallbackValue=Collapsed}">
+                <Grid
+                    Padding="12,0,6,0"
+                    Background="{ThemeResource ControlFillColorInputActiveBrush}"
+                    BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    ColumnDefinitions="Auto,Auto,*,Auto,Auto"
+                    ColumnSpacing="8"
+                    CornerRadius="{x:Bind local:ChatPane.DraftCorners(Chat.IsReplying), Mode=OneWay}">
+                    <Ellipse
+                        Width="8"
+                        Height="8"
+                        VerticalAlignment="Center"
+                        Fill="{ThemeResource SystemFillColorCriticalBrush}" />
+                    <TextBlock
+                        x:Name="RecordTimer"
+                        Grid.Column="1"
+                        VerticalAlignment="Center"
+                        AutomationProperties.AutomationId="Chat.RecordTimer" />
+                    <controls:Waveform
+                        x:Name="RecordBars"
+                        Grid.Column="2"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Center"
+                        BarBrush="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <Button
+                        Grid.Column="3"
+                        Width="32"
+                        Height="32"
+                        VerticalAlignment="Center"
+                        AutomationProperties.AutomationId="Chat.CancelRecording"
+                        AutomationProperties.Name="{x:Bind local:ChatPane.CancelRecordingText}"
+                        Click="OnCancelRecordingClick"
+                        Style="{StaticResource IconButtonStyle}"
+                        ToolTipService.ToolTip="{x:Bind local:ChatPane.CancelRecordingText}">
+                        <FontIcon
+                            FontSize="16"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Glyph="&#xE74D;" />
+                    </Button>
+                    <Button
+                        x:Name="StopRecordingButton"
+                        Grid.Column="4"
+                        Width="32"
+                        Height="32"
+                        VerticalAlignment="Center"
+                        AutomationProperties.AutomationId="Chat.StopRecording"
+                        AutomationProperties.Name="{x:Bind local:ChatPane.StopText}"
+                        Click="OnStopRecordingClick"
+                        Style="{StaticResource IconButtonStyle}"
+                        ToolTipService.ToolTip="{x:Bind local:ChatPane.StopText}">
+                        <FontIcon
+                            FontSize="16"
+                            Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                            Glyph="&#xE71A;" />
+                    </Button>
+                </Grid>
+            </Border>
+            <!-- /Recording -->
         </Grid>
     </Grid>
 </UserControl>

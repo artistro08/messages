@@ -273,9 +273,95 @@ public sealed partial class MediaTests : UiTest
         Assert.AreEqual(ChatCopy.Play, AppDriver.SafeName(play), "The paused message's button isn't Play.");
     }
 
+    /// <summary>
+    /// The mic records (the test hook's microphone copies the fixture), Stop puts the recording in the preview chip with
+    /// its length, and Send sends it as "Voice message.m4a" (audio/mp4); the temp file is gone after.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Record_StopSend_SendsAudioMp4()
+    {
+        await FakeMicrophoneAsync();
+        await OpenMediaChatAsync();
+        Assert.AreEqual(ChatCopy.RecordVoiceMessage, AppDriver.SafeName(App.Find("Chat.Record")), "The mic has another name.");
+
+        App.Find("Chat.Record").Patterns.Invoke.Pattern.Invoke();
+        App.Find("Chat.RecordTimer");
+        Wait.Until(() => VoiceTempFiles().Length == 1, AppDriver.DefaultTimeout, () => "Recording wrote no temp file.");
+        App.Find("Chat.StopRecording").Patterns.Invoke.Pattern.Invoke();
+
+        AutomationElement length = App.Find("Chat.VoiceLength");
+        Wait.Until(() => AppDriver.SafeName(length) == "0:03", AppDriver.DefaultTimeout, () => $"The preview chip shows '{AppDriver.SafeName(length)}', not 0:03.");
+        Assert.AreEqual(ChatCopy.Play, AppDriver.SafeName(App.Find("Chat.VoicePlay")), "The preview's play button has another name.");
+
+        App.Find("Chat.Send").Patterns.Invoke.Pattern.Invoke();
+        Wait.Until(() => Server.Phone.Sent.Count == 1, AppDriver.DefaultTimeout, () => $"The phone got {Server.Phone.Sent.Count} sends, not the voice message.");
+        MediaContent media = Server.Phone.Sent[0].MessagePayload.MessageInfo.Single().MediaContent;
+        Assert.AreEqual("Voice message.m4a", media.MediaName, "The voice message went with another name.");
+        Assert.AreEqual("audio/mp4", media.MimeType, "The voice message went with another type.");
+        Wait.Until(() => App.TryFind("Chat.VoiceLength") is null, AppDriver.DefaultTimeout, () => "The preview chip stayed after Send.");
+        Assert.IsEmpty(VoiceTempFiles(), "The recording's temp file outlived the send.");
+    }
+
+    /// <summary>
+    /// Cancel recording drops the recording: its temp file is deleted, nothing is sent and the mic is back.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Record_Cancel_DeletesTemp()
+    {
+        await FakeMicrophoneAsync();
+        await OpenMediaChatAsync();
+
+        App.Find("Chat.Record").Patterns.Invoke.Pattern.Invoke();
+        Wait.Until(() => VoiceTempFiles().Length == 1, AppDriver.DefaultTimeout, () => "Recording wrote no temp file.");
+        Assert.AreEqual(ChatCopy.CancelRecording, AppDriver.SafeName(App.Find("Chat.CancelRecording")), "Cancel recording has another name.");
+        Assert.AreEqual(ChatCopy.Stop, AppDriver.SafeName(App.Find("Chat.StopRecording")), "Stop has another name.");
+
+        App.Find("Chat.CancelRecording").Patterns.Invoke.Pattern.Invoke();
+        Wait.Until(() => VoiceTempFiles().Length == 0, AppDriver.DefaultTimeout, () => "Cancel recording kept the temp file.");
+        Wait.Until(() => App.TryFind("Chat.StopRecording") is null, AppDriver.DefaultTimeout, () => "The recording bar stayed after Cancel.");
+        Assert.IsNull(App.TryFind("Chat.VoiceLength"), "A cancelled recording left a preview chip.");
+        Assert.IsEmpty(Server.Phone.Sent, "Cancel recording sent something.");
+    }
+
+    /// <summary>
+    /// With microphone access off, the mic shows the settings message with its link to Windows' microphone privacy
+    /// settings, and no recording starts.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task MicDenied_ShowsSettingsLink()
+    {
+        File.WriteAllText(Path.Combine(App.DataDir, "microphone.txt"), "denied");
+        await OpenMediaChatAsync();
+
+        App.Find("Chat.Record").Patterns.Invoke.Pattern.Invoke();
+        AutomationElement error = App.Find("Chat.MicError");
+        Assert.AreEqual(ChatCopy.MicrophoneOff, AppDriver.SafeName(error), "The microphone message reads otherwise.");
+        Assert.AreEqual("Settings > Privacy & security > Microphone", AppDriver.SafeName(App.Find("Chat.MicSettings")), "The settings link reads otherwise.");
+        Assert.IsNull(App.TryFind("Chat.StopRecording"), "A recording started with the microphone off.");
+        Assert.IsEmpty(VoiceTempFiles(), "A refused recording left a temp file.");
+    }
+
     // =========================================================================
     // HELPERS
     // =========================================================================
+
+    // The Test Hook's Microphone Records The Voice Fixture
+    private async Task FakeMicrophoneAsync()
+    {
+        string fixture = Path.Combine(App.DataDir, "voice-fixture.m4a");
+        await File.WriteAllBytesAsync(fixture, await VoiceFixtureAsync());
+        await File.WriteAllTextAsync(Path.Combine(App.DataDir, "microphone.txt"), fixture);
+    }
+
+    // Recordings Waiting In The App's Private Temp Folder
+    private string[] VoiceTempFiles()
+    {
+        string folder = Path.Combine(App.DataDir, "Temp", "Media");
+        return Directory.Exists(folder) ? Directory.GetFiles(folder, "voice-*.m4a") : [];
+    }
 
     /// <summary>
     /// Makes a 3-second voice message: a tone that swells and fades (so its waveform has a shape), 8 kHz mono, encoded
