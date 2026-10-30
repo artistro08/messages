@@ -68,10 +68,11 @@ public sealed partial class ChatPane : UserControl
     private bool _toNewest;
 
     // An Older Page Going In Above (See KeepOlderAnchor): How Far The View's Top Sat From The Content's End Before It (Null
-    // Once Used), The Bubble At The View's Top Then And Its Top In The View (Null When Done), And The Corrections Left
+    // Once Used), The Bubble At The View's Top Then (Null When Done), Every Shown Bubble Then With Its Top In The View, And
+    // The Corrections Left
     private double? _olderFromEnd;
     private MessageBubbleViewModel? _olderBubble;
-    private double _olderTop;
+    private List<(MessageBubbleViewModel Bubble, double Top)> _olderRows = [];
     private int _olderTries;
 
     /// <summary>
@@ -554,28 +555,30 @@ public sealed partial class ChatPane : UserControl
         DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => DraftBox.Focus(FocusState.Keyboard));
     }
 
-    // Notes, Before An Older Page Goes In Above, How Far The View's Top Sits From The Content's End And The First Shown
-    // Bubble With Its Top In The View (Its Row Is Still Where The Last Layout Put It). The Search Starts At The Panel's
-    // First Shown Row As Of That Layout, Which Is One Row Above It Now That The New Bubble Sits At 0
+    // Notes, Before An Older Page Goes In Above, How Far The View's Top Sits From The Content's End And Each Shown Bubble
+    // With Its Top In The View (Their Rows Are Still Where The Last Layout Put Them). The Panel's Shown Rows As Of That
+    // Layout Sit One Index Lower Now That The New Bubble Is At 0
     private void NoteOlderAnchor(ScrollViewer scroller, ChatViewModel chat)
     {
-        int first = MessageList.ItemsPanelRoot?.As<ItemsStackPanel>().FirstVisibleIndex ?? 0;
-        foreach (MessageBubbleViewModel bubble in chat.Messages.Skip(Math.Max(1, first)))
+        if (MessageList.ItemsPanelRoot?.As<ItemsStackPanel>() is not { } panel)
         {
-            if (RowTop(scroller, bubble) is not { } top)
-            {
-                continue;
-            }
-
-            if (top + 1 >= 0)
-            {
-                _olderFromEnd = scroller.ExtentHeight - scroller.VerticalOffset;
-                _olderBubble  = bubble;
-                _olderTop     = top;
-                _olderTries   = 10;
-                return;
-            }
+            return;
         }
+
+        int first  = Math.Max(1, panel.FirstVisibleIndex + 1);
+        int last   = Math.Min(chat.Messages.Count - 1, panel.LastVisibleIndex + 1);
+        _olderRows = [.. Enumerable.Range(first, Math.Max(0, last - first + 1))
+            .Select(i => (Bubble: chat.Messages[i], Top: RowTop(scroller, chat.Messages[i])))
+            .Where(row => row.Top + 1 >= 0)
+            .Select(row => (row.Bubble, row.Top!.Value))];
+        if (_olderRows.Count == 0)
+        {
+            return;
+        }
+
+        _olderFromEnd = scroller.ExtentHeight - scroller.VerticalOffset;
+        _olderBubble  = _olderRows[0].Bubble;
+        _olderTries   = 10;
     }
 
     // The Older Page Went In Above: Puts The View Back (No Animation) So The Shown Bubbles Stay Put. The List's Own
@@ -605,14 +608,29 @@ public sealed partial class ChatPane : UserControl
             return;
         }
 
-        double? top = RowTop(scroller, bubble);
-        if (top is null || Math.Abs(top.Value - _olderTop) < 0.5 || --_olderTries <= 0)
+        // The First Noted Bubble Still Shown Says How Far Off The View Is (The Jump Can Land A Few Rows Off). Only A Shown
+        // Row's Top Counts: A Row Outside The Panel's Shown Range Can Still Have A Container Parked Thousands Of Pixels Off
+        // (Traced At -16,544), And Correcting By That Threw The View To The Top, Which Asked For The Next Page And Held The
+        // View There Until It Landed
+        var panel                       = MessageList.ItemsPanelRoot?.As<ItemsStackPanel>();
+        (double Now, double Then)? mark = null;
+        foreach ((MessageBubbleViewModel row, double then) in _olderRows)
+        {
+            int index = Chat.Messages.IndexOf(row);
+            if (panel is not null && index >= panel.FirstVisibleIndex && index <= panel.LastVisibleIndex && RowTop(scroller, row) is { } now)
+            {
+                mark = (now, then);
+                break;
+            }
+        }
+
+        if (mark is not { } shown || Math.Abs(shown.Now - shown.Then) < 0.5 || --_olderTries <= 0)
         {
             _olderBubble = null;
             return;
         }
 
-        scroller.ChangeView(null, scroller.VerticalOffset + top.Value - _olderTop, null, true);
+        scroller.ChangeView(null, scroller.VerticalOffset + shown.Now - shown.Then, null, true);
     }
 
     // A Bubble's Row Top In The View, Or Null While Its Row Isn't Realized

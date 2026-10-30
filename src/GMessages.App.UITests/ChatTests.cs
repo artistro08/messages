@@ -361,47 +361,10 @@ public sealed class ChatTests : UiTest
         Wait.Until(() => Bubbles().Any(b => b.Text.StartsWith("long 120", StringComparison.Ordinal)), AppDriver.DefaultTimeout,
             () => $"The long chat didn't show 'long 120'; bubbles: [{string.Join(", ", Bubbles().Select(b => b.Id))}].");
 
-        // Up Until The Older Page Is Asked For
+        // Up Until The Older Page Is Asked For, Then It Lands Without Moving The Shown Bubbles
         AutomationElement list = App.Find("Chat.Messages");
         var scroll             = list.Patterns.Scroll.Pattern;
-        Wait.Until(() =>
-        {
-            scroll.SetScrollPercent(-1, 0);
-            return App.TryFind("Chat.LoadingOlder") is not null;
-        }, AppDriver.DefaultTimeout, () => "Scrolling up never showed the loading ring.");
-
-        // Where The Oldest Shown Bubble Sits Once The Scroll Settled
-        int? recorded = null;
-        Wait.Until(() =>
-        {
-            int? y    = BubbleTop(list, Oldest);
-            bool same = y is not null && y == recorded;
-            recorded  = y;
-            return same;
-        }, TimeSpan.FromSeconds(1), () => $"{Oldest} never settled on screen (last top: {recorded?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "gone"}).");
-
-        // Every 50 ms Until The Page Lands, Then A Second More: It Stays Put
-        var samples         = new List<string>();
-        DateTime landed_cap = DateTime.UtcNow + AppDriver.DefaultTimeout;
-        DateTime? until     = null;
-        while (until is null || DateTime.UtcNow < until)
-        {
-            int? y = BubbleTop(list, Oldest);
-            samples.Add(y?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "off");
-            Assert.IsTrue(AnyBubble(list), $"The list showed no bubbles during the older page's arrival. Samples: {string.Join(" ", samples)}.");
-            Assert.IsTrue(y is { } top && Math.Abs(top - recorded!.Value) <= 4,
-                $"{Oldest} moved from y={recorded} during the older page's arrival. Samples: {string.Join(" ", samples)}.");
-
-            if (until is null && App.TryFind("Chat.LoadingOlder") is null)
-            {
-                until = DateTime.UtcNow.AddSeconds(1);
-            }
-
-            Assert.IsTrue(DateTime.UtcNow < landed_cap, $"The older page never landed. Samples: {string.Join(" ", samples)}.");
-            Thread.Sleep(50);
-        }
-
-        TestContext.WriteLine($"{Oldest} tops: {string.Join(" ", samples)}");
+        AssertOlderPageKeepsInPlace(list, Oldest, () => scroll.SetScrollPercent(-1, 0));
 
         // The Older Page Is There (Scrolled To If It Sits Above The Realized Bubbles)
         Wait.Until(() =>
@@ -414,6 +377,55 @@ public sealed class ChatTests : UiTest
             scroll.SetScrollPercent(-1, 0);
             return false;
         }, AppDriver.DefaultTimeout, () => $"No {NextPage} after the older page landed.");
+    }
+
+    /// <summary>
+    /// The same with the mouse wheel in a chat like a real one (mostly one-liners, some wrapping, a few very tall) whose
+    /// older pages take as long as a real phone's: the shown bubbles stay put, and the page that landed isn't followed
+    /// at once by another while the view still sits at its top.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task OlderPage_WheelInMixedChat_KeepsVisibleBubblesInPlace()
+    {
+        // Four Pages Of Mixed Heights; Older Pages Take 0.7 Seconds, As In The Owner's Recording
+        const int Count   = ChatStore.PageSize * 4;
+        Conversation chat = FakeChats.NewConversation("c-mixed", "Mixed Pal", false, ConversationStatus.Active, false, false, FakeChats.Person("p-mixed", "Mixed Pal", "+15550000008"));
+        long time         = DateTimeOffset.UtcNow.AddDays(-1).ToUnixTimeMilliseconds() * 1000;
+        Server.Phone.Chats.Add(chat, [.. Enumerable.Range(1, Count).Select(Line)]);
+        Server.Phone.OlderPagesDelay = TimeSpan.FromMilliseconds(700);
+        string oldest                = $"Bubble.m-{Count - ChatStore.PageSize + 1:000}";
+
+        await OpenMainAsync();
+        App.Find("Row.c-mixed").Patterns.SelectionItem.Pattern.Select();
+        Wait.Until(() => Bubbles().Any(b => b.Id == $"Bubble.m-{Count:000}"), AppDriver.DefaultTimeout, () => "The mixed chat didn't show its newest bubble.");
+
+        // Wheel Up Over The Bubbles Until The Older Page Is Asked For
+        AutomationElement list        = App.Find("Chat.Messages");
+        System.Drawing.Rectangle over = list.BoundingRectangle;
+        FlaUI.Core.Input.Mouse.MoveTo(over.X + (over.Width / 2), over.Y + (over.Height / 2));
+        AssertOlderPageKeepsInPlace(list, oldest, () => FlaUI.Core.Input.Mouse.Scroll(5));
+
+        Message Line(int i)
+        {
+            bool from_me = (i / 2 + i / 7) % 2 == 0;
+            string text  = (i % 11, i % 4) switch
+            {
+                (0, _) => $"Mixed {i} " + string.Concat(Enumerable.Repeat("a very tall message ", 30)),
+                (_, 0) => $"Mixed {i} " + string.Concat(Enumerable.Repeat("wraps once ", 9)),
+                _      => $"Mixed {i}",
+            };
+            var message = new Message
+            {
+                MessageID      = $"m-{i:000}",
+                ConversationID = "c-mixed",
+                ParticipantID  = from_me ? FakeChats.MyParticipantId : "p-mixed",
+                Timestamp      = time += 1_000_000,
+                MessageStatus  = new MessageStatus { Status = from_me ? MessageStatusType.OutgoingComplete : MessageStatusType.IncomingComplete },
+            };
+            message.MessageInfo.Add(new MessageInfo { MessageContent = new MessageContent { Content = text } });
+            return message;
+        }
     }
 
     /// <summary>
@@ -520,6 +532,51 @@ public sealed class ChatTests : UiTest
         {
             return false;
         }
+    }
+
+    // Scrolls Up Until The Loading Ring Shows, Then Checks The Bubble Stays Put (Within 4 px) Every 50 ms From Its Settled
+    // Place Until The Ring Has Been Gone A Second: The Page Lands Above Without Moving It, Blanking The List Or Asking
+    // For Another Page Before The View Is Put Back
+    private void AssertOlderPageKeepsInPlace(AutomationElement list, string watched, Action scrollUp)
+    {
+        Wait.Until(() =>
+        {
+            scrollUp();
+            return App.TryFind("Chat.LoadingOlder") is not null;
+        }, AppDriver.DefaultTimeout, () => "Scrolling up never showed the loading ring.");
+
+        // Where The Bubble Sits Once The Scroll Settled
+        int? recorded = null;
+        Wait.Until(() =>
+        {
+            int? y    = BubbleTop(list, watched);
+            bool same = y is not null && y == recorded;
+            recorded  = y;
+            return same;
+        }, TimeSpan.FromSeconds(1), () => $"{watched} never settled on screen (last top: {recorded?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "gone"}).");
+
+        // Every 50 ms Until The Page Lands, Then A Second More: It Stays Put
+        var samples         = new List<string>();
+        DateTime landed_cap = DateTime.UtcNow + AppDriver.DefaultTimeout;
+        DateTime? until     = null;
+        while (until is null || DateTime.UtcNow < until)
+        {
+            int? y = BubbleTop(list, watched);
+            samples.Add(y?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "off");
+            Assert.IsTrue(AnyBubble(list), $"The list showed no bubbles during the older page's arrival. Samples: {string.Join(" ", samples)}.");
+            Assert.IsTrue(y is { } top && Math.Abs(top - recorded!.Value) <= 4,
+                $"{watched} moved from y={recorded} during the older page's arrival. Samples: {string.Join(" ", samples)}.");
+
+            if (until is null && App.TryFind("Chat.LoadingOlder") is null)
+            {
+                until = DateTime.UtcNow.AddSeconds(1);
+            }
+
+            Assert.IsTrue(DateTime.UtcNow < landed_cap, $"The older page never landed. Samples: {string.Join(" ", samples)}.");
+            Thread.Sleep(50);
+        }
+
+        TestContext.WriteLine($"{watched} tops: {string.Join(" ", samples)}");
     }
 
     // A Bubble's Screen Top, Or Null When It Is Gone, Off Screen Or Outside The List
