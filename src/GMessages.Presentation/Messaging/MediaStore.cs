@@ -145,14 +145,29 @@ public sealed partial class MediaStore
     /// <exception cref="MediaPendingException">The part has no media ID, thumbnail or inline data yet.</exception>
     /// <exception cref="MessagingUnavailableException">Not connected.</exception>
     /// <exception cref="IOException">The file could not be written.</exception>
-    /// <exception cref="OperationCanceledException"><paramref name="ct"/> was canceled.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="ct"/> was canceled, or <see cref="Clear"/> ran before the file was written.</exception>
     public async Task<string> SaveToTempAsync(MediaPart part, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(part);
 
+        // Note The Generation First: A Clear (Sign-Out) During The Download Means Nothing Is Written
+        int generation;
+        lock (_lock)
+        {
+            generation = _generation;
+        }
+
         byte[] bytes  = await GetAsync(part, thumbnail: false, ct).ConfigureAwait(false);
         string folder = Path.Combine(_tempFolder, Guid.NewGuid().ToString("N"));
         string path   = Path.Combine(folder, SanitizeName(part.Name, part.Mime));
+
+        lock (_lock)
+        {
+            if (generation != _generation)
+            {
+                throw new OperationCanceledException("The media was cleared while it downloaded.");
+            }
+        }
 
         Directory.CreateDirectory(folder);
         await File.WriteAllBytesAsync(path, bytes, ct).ConfigureAwait(false);
@@ -217,7 +232,8 @@ public sealed partial class MediaStore
     /// </summary>
     /// <remarks>
     /// A file another app still holds open can't be deleted; it is left and counted in the log, and the next clear tries
-    /// again. A download that finishes after the clear is handed to its caller but not kept.
+    /// again. A download that finishes after the clear is handed to its caller but not kept, and no file is written for it.
+    /// So a file another app still holds open survives sign-out until the next start or quit.
     /// </remarks>
     public void Clear()
     {
