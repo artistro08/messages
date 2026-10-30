@@ -88,6 +88,28 @@ public sealed class MainWindowTests : UiTest
     }
 
     /// <summary>
+    /// The title bar's profile button shows the phone owner's photo right after a fresh pair, and again when the
+    /// window opens from the tray with the list already cached (no row changes then, so the photo was never asked for).
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Profile_ShowsOwnersPhoto_AfterPairAndOnReopen()
+    {
+        // Fresh Pair
+        WaitForPairing();
+        await SignInAndWaitForEmojiAsync();
+        Server.Phone.Tap(true);
+        App.Find("Main.ConversationList");
+        Wait.Until(ProfileHasPhoto, AppDriver.DefaultTimeout, () => "The profile button didn't show the owner's photo after pairing.");
+
+        // Reopen From The Tray
+        CloseMainWindow();
+        Tray.LeftClick();
+        App.Find("Main.ConversationList");
+        Wait.Until(ProfileHasPhoto, AppDriver.DefaultTimeout, () => "The profile button didn't show the owner's photo when the window opened again.");
+    }
+
+    /// <summary>
     /// ☰ hides the conversation list, and a second click brings it back.
     /// </summary>
     /// <returns>A task for the test.</returns>
@@ -368,6 +390,10 @@ public sealed class MainWindowTests : UiTest
     // True When An Avatar Under The Row Says It Shows A Photo
     private bool HasPhoto(string rowId) =>
         App.TryFind(rowId) is { } row && AppDriver.Search(row, e => e.Properties.ItemStatus.ValueOrDefault == "Photo") is not null;
+
+    // True When The Profile Button Says It Shows The Owner's Photo
+    private bool ProfileHasPhoto() =>
+        App.TryFind("Main.ProfileButton") is { } button && button.Properties.ItemStatus.ValueOrDefault == "Photo";
 
     // The List's Rows, Top To Bottom, By AutomationId
     private string[] RowIds()
