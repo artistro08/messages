@@ -30,6 +30,9 @@ namespace GMessages.App.UITests.FakeGoogle;
 /// after every <c>GET_UPDATES</c>. <see cref="PushIncoming"/> sends a live message, or, with <c>old</c>, one in the
 /// startup catch-up batch; <see cref="PushStatusUpdate"/> and <see cref="PushStatus"/> send a message again with a new
 /// status, as a real phone does several times per message; <see cref="PushTyping"/> sends a typing event.
+/// Conversation updates (archive, mute, block, delete) are kept in <see cref="ConversationUpdates"/>, answered, applied
+/// and the conversation sent again, unless <see cref="FailConversationUpdates"/>. <see cref="PushConversationStatus"/>
+/// moves a conversation on the phone's side and <see cref="PushAlert"/> sends a user alert.
 /// </para>
 /// </remarks>
 public sealed class FakePhone
@@ -47,6 +50,7 @@ public sealed class FakePhone
     private readonly List<MessageReadRequest> _reads = [];
     private readonly List<SendReactionRequest> _reactions = [];
     private readonly List<TypingUpdateRequest> _typing    = [];
+    private readonly List<UpdateConversationRequest> _conversationUpdates = [];
     private AesCtrHelper? _derivedCrypto;
     private TaskCompletionSource _finishReceived = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private ECParameters _key;
@@ -76,6 +80,11 @@ public sealed class FakePhone
     /// Gets or sets whether sends are answered with <c>FAILURE_2</c> and no echo, to test failures without the 60 second timeout.
     /// </summary>
     public bool FailSends { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether conversation updates are answered with <c>Success = false</c> and change nothing.
+    /// </summary>
+    public bool FailConversationUpdates { get; set; }
 
     /// <summary>
     /// Gets or sets how long every <c>ListMessages</c> answer waits before it goes out (zero by default).
@@ -140,6 +149,20 @@ public sealed class FakePhone
             lock (_lock)
             {
                 return [.. _typing];
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets every <c>UpdateConversation</c> request so far, in arrival order, including failed ones.
+    /// </summary>
+    public IReadOnlyList<UpdateConversationRequest> ConversationUpdates
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return [.. _conversationUpdates];
             }
         }
     }
@@ -255,6 +278,10 @@ public sealed class FakePhone
 
             case ActionType.SendReaction when RequestCrypto is not null:
                 OnSendReaction(data);
+                break;
+
+            case ActionType.UpdateConversation when RequestCrypto is not null:
+                OnUpdateConversation(data);
                 break;
 
             // Typing Is Sent Without Waiting, So The Phone Never Answers It
@@ -393,6 +420,61 @@ public sealed class FakePhone
             Type           = started ? TypingTypes.StartedTyping : TypingTypes.StoppedTyping,
         };
         PushUpdate(new UpdateEvents { TypingEvent = new TypingEvent { Data = typing } }, _push);
+    }
+
+    /// <summary>
+    /// Pushes a user alert, such as the phone's battery running low, as a live update.
+    /// </summary>
+    /// <param name="type">The alert type.</param>
+    /// <exception cref="InvalidOperationException">Pairing has not reached the client finished message.</exception>
+    public void PushAlert(AlertType type) =>
+        PushUpdate(new UpdateEvents { UserAlertEvent = new UserAlertEvent { AlertType = type } }, _push);
+
+    /// <summary>
+    /// Moves a conversation to a new status on the phone's side, such as archiving it there, and pushes it as a live update.
+    /// </summary>
+    /// <param name="conversationId">The conversation ID.</param>
+    /// <param name="status">The new status.</param>
+    /// <exception cref="KeyNotFoundException">The fake phone has no such conversation.</exception>
+    /// <exception cref="InvalidOperationException">Pairing has not reached the client finished message.</exception>
+    public void PushConversationStatus(string conversationId, ConversationStatus status)
+    {
+        Conversation conversation = Chats.SetConversationStatus(conversationId, status) ?? throw new KeyNotFoundException($"No conversation {conversationId}.");
+        PushUpdate(new UpdateEvents { ConversationEvent = new ConversationEvent { Data = { conversation } } }, _push);
+    }
+
+    // Answers A Conversation Update, Applies It And Sends The Conversation Again; Mute Is Only Recorded. Failed Or
+    // Unknown Conversations Are Answered Without Success And Change Nothing
+    private void OnUpdateConversation(OutgoingRPCData data)
+    {
+        var request = Open(data, UpdateConversationRequest.Parser);
+        lock (_lock)
+        {
+            _conversationUpdates.Add(request);
+        }
+
+        if (FailConversationUpdates)
+        {
+            Reply(data.RequestID, data.Action, new UpdateConversationResponse { Success = false }, encrypt: true);
+            return;
+        }
+
+        // Block, Unblock And Delete Ride On The Action; Archive And Unarchive On The Update Data's Status
+        ConversationStatus? updated = request.UpdateData?.DataCase == UpdateConversationData.DataOneofCase.Status ? request.UpdateData.Status : null;
+        ConversationStatus? status  = request.Action switch
+        {
+            ConversationActionStatus.Delete                                           => ConversationStatus.Deleted,
+            ConversationActionStatus.Block or ConversationActionStatus.BlockAndReport => ConversationStatus.BlockedFolder,
+            ConversationActionStatus.Unblock                                          => ConversationStatus.Active,
+            _                                                                         => updated,
+        };
+
+        Conversation? conversation = Chats.SetConversationStatus(request.ConversationID, status);
+        Reply(data.RequestID, data.Action, new UpdateConversationResponse { Success = conversation is not null }, encrypt: true);
+        if (conversation is not null)
+        {
+            PushUpdate(new UpdateEvents { ConversationEvent = new ConversationEvent { Data = { conversation } } }, _push);
+        }
     }
 
     // Answers A Reaction, Then Sends The Message Again With Its Reactions Updated

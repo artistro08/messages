@@ -225,6 +225,40 @@ public class GmClientMessagingTests
     }
 
     /// <summary>
+    /// UpdateConversation is user-initiated: five seconds without an answer raises PhoneSlow once; the request goes out
+    /// as given and the typed answer is returned.
+    /// </summary>
+    [TestMethod]
+    public async Task UpdateConversation_IsUserInitiated_SendsRequest()
+    {
+        await using Rig rig = CreateRig();
+        int slow_count = 0;
+        rig.Client.Rpc.PhoneSlow += (_, _) => Interlocked.Increment(ref slow_count);
+        var request = new UpdateConversationRequest
+        {
+            ConversationID = "c-1",
+            UpdateData     = new UpdateConversationData { ConversationID = "c-1", Status = ConversationStatus.Archived },
+        };
+
+        Task<UpdateConversationResponse> call = rig.Client.UpdateConversationAsync(request, CancellationToken.None);
+        Sent sent = Captured(rig, 0);
+
+        // Five Seconds With No Answer
+        Assert.IsTrue(SpinWait.SpinUntil(() => rig.Time.CountTimers(RpcSession.PhoneSlowTimeout) > 0, HangGuard), "slow timer");
+        rig.Time.Advance(RpcSession.PhoneSlowTimeout);
+        Assert.IsTrue(SpinWait.SpinUntil(() => Volatile.Read(ref slow_count) > 0, HangGuard), "PhoneSlow raised");
+
+        Answer(rig, sent, new UpdateConversationResponse { Success = true });
+        UpdateConversationResponse result = await call.WaitAsync(HangGuard);
+
+        Assert.AreEqual(ActionType.UpdateConversation, sent.Data.Action);
+        UpdateConversationRequest sent_request = sent.Payload(UpdateConversationRequest.Parser);
+        Assert.AreEqual(request, sent_request);
+        Assert.AreEqual(ConversationStatus.Archived, sent_request.UpdateData.Status);
+        Assert.IsTrue(result.Success);
+    }
+
+    /// <summary>
     /// SetTyping sends a typing update with the conversation, typing true and the SIM, and completes without an answer.
     /// </summary>
     [TestMethod]

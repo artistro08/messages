@@ -103,6 +103,17 @@ internal sealed class FakeMessagingClient : IMessagingClient
         return CreateThrows is { } ex ? throw ex : CreateAnswers.Dequeue();
     }
 
+    public List<UpdateConversationRequest> ConversationUpdates { get; } = [];
+
+    /// <summary>When set, conversation updates are answered with <c>Success = false</c>.</summary>
+    public bool RefuseUpdates { get; set; }
+
+    public Task<UpdateConversationResponse> UpdateConversationAsync(UpdateConversationRequest request, CancellationToken ct)
+    {
+        ConversationUpdates.Add(request.Clone());
+        return Task.FromResult(new UpdateConversationResponse { Success = !RefuseUpdates });
+    }
+
     /// <summary>Pages returned by successive message fetches before falling back to <see cref="MessagesPage"/>.</summary>
     public Queue<ListMessagesResponse> MessagePages { get; } = new();
 

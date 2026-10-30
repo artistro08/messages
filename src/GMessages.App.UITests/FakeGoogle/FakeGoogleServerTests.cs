@@ -450,6 +450,78 @@ public sealed class FakeGoogleServerTests
     }
 
     /// <summary>
+    /// An archive is answered with success, the conversation comes back archived, and it moves from the inbox to the
+    /// archive folder.
+    /// </summary>
+    [TestMethod]
+    public async Task UpdateConversation_Archive_EchoesConversationArchived()
+    {
+        await using Rig rig = await PairedAsync();
+        var request = new UpdateConversationRequest
+        {
+            ConversationID = "c-ann",
+            UpdateData     = new UpdateConversationData { ConversationID = "c-ann", Status = ConversationStatus.Archived },
+        };
+
+        UpdateConversationResponse answer = await rig.Client.UpdateConversationAsync(request, CancellationToken.None).WaitAsync(HangGuard);
+
+        Assert.IsTrue(answer.Success);
+        WaitForEvent<ConversationUpdated>(rig.Events, e => e.Conversation.ConversationID == "c-ann" && e.Conversation.Status == ConversationStatus.Archived, "archived conversation");
+        Assert.HasCount(1, rig.Server.Phone.ConversationUpdates);
+        ListConversationsResponse inbox   = await rig.Client.ListConversationsAsync(ListConversationsRequest.Types.Folder.Inbox, 25, null, CancellationToken.None).WaitAsync(HangGuard);
+        ListConversationsResponse archive = await rig.Client.ListConversationsAsync(ListConversationsRequest.Types.Folder.Archive, 25, null, CancellationToken.None).WaitAsync(HangGuard);
+        Assert.IsFalse(inbox.Conversations.Any(c => c.ConversationID == "c-ann"), "out of the inbox");
+        Assert.AreEqual("c-ann", archive.Conversations.Single().ConversationID);
+
+        // A Phone-Side Keep-Archived Move Still Lists In The Archive
+        rig.Server.Phone.PushConversationStatus("c-team", ConversationStatus.KeepArchived);
+        WaitForEvent<ConversationUpdated>(rig.Events, e => e.Conversation.ConversationID == "c-team" && e.Conversation.Status == ConversationStatus.KeepArchived, "phone-side move");
+        archive = await rig.Client.ListConversationsAsync(ListConversationsRequest.Types.Folder.Archive, 25, null, CancellationToken.None).WaitAsync(HangGuard);
+        Assert.HasCount(2, archive.Conversations);
+    }
+
+    /// <summary>
+    /// With <see cref="FakePhone.FailConversationUpdates"/>, a block is answered with no success, is recorded, and the
+    /// conversation stays in the inbox.
+    /// </summary>
+    [TestMethod]
+    public async Task UpdateConversation_Fail_ChangesNothing()
+    {
+        await using Rig rig = await PairedAsync();
+        rig.Server.Phone.FailConversationUpdates = true;
+        var request = new UpdateConversationRequest
+        {
+            Action         = ConversationActionStatus.BlockAndReport,
+            ConversationID = "c-ann",
+            DeleteData     = new DeleteConversationData { ConversationID = "c-ann" },
+        };
+
+        UpdateConversationResponse answer = await rig.Client.UpdateConversationAsync(request, CancellationToken.None).WaitAsync(HangGuard);
+
+        Assert.IsFalse(answer.Success);
+        Assert.HasCount(1, rig.Server.Phone.ConversationUpdates);
+        ListConversationsResponse inbox = await rig.Client.ListConversationsAsync(ListConversationsRequest.Types.Folder.Inbox, 25, null, CancellationToken.None).WaitAsync(HangGuard);
+        CollectionAssert.AreEquivalent(InboxIds, inbox.Conversations.Select(c => c.ConversationID).ToArray());
+        lock (rig.Events)
+        {
+            Assert.IsFalse(rig.Events.OfType<ConversationUpdated>().Any(e => e.Conversation.ConversationID == "c-ann"), "nothing pushed");
+        }
+    }
+
+    /// <summary>
+    /// A pushed alert raises UserAlert with its type.
+    /// </summary>
+    [TestMethod]
+    public async Task PushAlert_RaisesUserAlert()
+    {
+        await using Rig rig = await PairedAsync();
+
+        rig.Server.Phone.PushAlert(AlertType.MobileBatteryLow);
+
+        WaitForEvent<UserAlert>(rig.Events, e => e.Alert.AlertType == AlertType.MobileBatteryLow, "battery low alert");
+    }
+
+    /// <summary>
     /// Pushed typing raises TypingChanged with the conversation, number and start or stop; the app's own typing
     /// update reaches the phone.
     /// </summary>

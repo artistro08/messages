@@ -19,6 +19,9 @@ public sealed class GmMessagingClient(GmClient client) : IMessagingClient
     public Task<GetOrCreateConversationResponse> GetOrCreateConversationAsync(GetOrCreateConversationRequest request, CancellationToken ct) => client.GetOrCreateConversationAsync(request, ct);
 
     /// <inheritdoc />
+    public Task<UpdateConversationResponse> UpdateConversationAsync(UpdateConversationRequest request, CancellationToken ct) => client.UpdateConversationAsync(request, ct);
+
+    /// <inheritdoc />
     public Task<ListMessagesResponse> FetchMessagesAsync(string conversationId, long count, Cursor? cursor, CancellationToken ct) => client.FetchMessagesAsync(conversationId, count, cursor, ct);
 
     /// <inheritdoc />

@@ -143,7 +143,7 @@ public sealed class FakeChats
     // ANSWERS
     // =========================================================================
 
-    // The Conversations Of A Folder, Newest First; Inbox = Active, Spam And Blocked = Spam Or Blocked Folder
+    // The Conversations Of A Folder, Newest First; Inbox = Active, Archive = Archived Or Keep Archived, Spam And Blocked = Spam Or Blocked Folder
     internal List<Conversation> List(ListConversationsRequest.Types.Folder folder)
     {
         lock (_lock)
@@ -152,7 +152,7 @@ public sealed class FakeChats
                 .Where(c => folder switch
                 {
                     ListConversationsRequest.Types.Folder.Inbox       => c.Status == ConversationStatus.Active,
-                    ListConversationsRequest.Types.Folder.Archive     => c.Status == ConversationStatus.Archived,
+                    ListConversationsRequest.Types.Folder.Archive     => c.Status is ConversationStatus.Archived or ConversationStatus.KeepArchived,
                     ListConversationsRequest.Types.Folder.SpamBlocked => c.Status is ConversationStatus.SpamFolder or ConversationStatus.BlockedFolder,
                     _                                                 => false,
                 })
@@ -292,6 +292,26 @@ public sealed class FakeChats
 
             message.MessageStatus = new MessageStatus { Status = status };
             return message.Clone();
+        }
+    }
+
+    // A New Status On A Conversation (Null Keeps It); The Conversation After, Or Null For An Unknown One
+    internal Conversation? SetConversationStatus(string conversationId, ConversationStatus? status)
+    {
+        lock (_lock)
+        {
+            Conversation? conversation = _conversations.FirstOrDefault(c => c.ConversationID == conversationId);
+            if (conversation is null)
+            {
+                return null;
+            }
+
+            if (status is { } new_status)
+            {
+                conversation.Status = new_status;
+            }
+
+            return conversation.Clone();
         }
     }
 

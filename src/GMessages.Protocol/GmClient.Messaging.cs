@@ -90,6 +90,30 @@ public sealed partial class GmClient
         return Typed<GetOrCreateConversationResponse>(answer);
     }
 
+    /// <summary>
+    /// Archives, unarchives, mutes, unmutes, blocks, unblocks or deletes a conversation.
+    /// </summary>
+    /// <remarks>
+    /// Ported from <see href="https://github.com/mautrix/gmessages/blob/ba33f4875a491f5cb47db8a6baf42a8869f5f383/pkg/libgm/methods.go">UpdateConversation</see>.
+    /// Sent as user-initiated, like <see cref="SendMessageAsync"/>. Archive and mute go in the request's update data
+    /// (a new status or mute state); block, unblock and delete go in its action, with the delete data. The phone then
+    /// sends the conversation again with its new state.
+    /// </remarks>
+    /// <param name="request">The conversation ID, the action and the update or delete data.</param>
+    /// <param name="ct">Cancels the wait.</param>
+    /// <returns>Whether the phone accepted the update.</returns>
+    /// <exception cref="InvalidDataException">The phone answered with another type.</exception>
+    /// <exception cref="PhoneNotRespondingException">No answer within 60 seconds.</exception>
+    /// <exception cref="ConnectionClosedException">Not connected, or the connection closed while waiting.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="ct"/> was canceled.</exception>
+    public async Task<UpdateConversationResponse> UpdateConversationAsync(UpdateConversationRequest request, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        IncomingRpc answer = await Rpc.SendAsync(new SendParams(ActionType.UpdateConversation, request, UserInitiated: true), ct).ConfigureAwait(false);
+        return Typed<UpdateConversationResponse>(answer);
+    }
+
     // =========================================================================
     // MESSAGES
     // =========================================================================

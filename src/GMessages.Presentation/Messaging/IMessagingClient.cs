@@ -17,6 +17,9 @@ public interface IMessagingClient
     /// <summary>Finds the conversation with the given numbers, or creates it.</summary>
     Task<GetOrCreateConversationResponse> GetOrCreateConversationAsync(GetOrCreateConversationRequest request, CancellationToken ct);
 
+    /// <summary>Archives, unarchives, mutes, unmutes, blocks, unblocks or deletes a conversation.</summary>
+    Task<UpdateConversationResponse> UpdateConversationAsync(UpdateConversationRequest request, CancellationToken ct);
+
     /// <summary>Fetches a page of messages of a conversation, newest first.</summary>
     Task<ListMessagesResponse> FetchMessagesAsync(string conversationId, long count, Cursor? cursor, CancellationToken ct);
 
