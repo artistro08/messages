@@ -772,6 +772,20 @@ public sealed class ChatStoreTests
     }
 
     [TestMethod]
+    [DataRow(ConversationAction.Archive, ConversationStatus.Archived)]
+    [DataRow(ConversationAction.Unarchive, ConversationStatus.Active)]
+    [DataRow(ConversationAction.Mute, null)]
+    [DataRow(ConversationAction.Unmute, null)]
+    [DataRow(ConversationAction.Block, ConversationStatus.BlockedFolder)]
+    [DataRow(ConversationAction.BlockAndReport, ConversationStatus.BlockedFolder)]
+    [DataRow(ConversationAction.Unblock, ConversationStatus.Active)]
+    [DataRow(ConversationAction.Delete, ConversationStatus.Deleted)]
+    public void StatusAfter_Table(ConversationAction action, ConversationStatus? expected)
+    {
+        Assert.AreEqual(expected, ChatStore.StatusAfter(action));
+    }
+
+    [TestMethod]
     public void BuildRequest_Unmute_SerializesMuteField()
     {
         // Unmute Is Proto3's Zero Value; Inside A Oneof It Must Still Go On The Wire
