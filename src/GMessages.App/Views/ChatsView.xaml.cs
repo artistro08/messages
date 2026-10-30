@@ -325,8 +325,14 @@ public sealed partial class ChatsView : UserControl
 
     private void OnActionErrorClosed(InfoBar sender, object args) => ViewModel.DismissActionError();
 
-    // The Battery Banner Closed (By The User Or Because The Phone Recovered)
-    private void OnBatteryLowClosed(InfoBar sender, InfoBarClosedEventArgs args) => ViewModel.DismissPhoneBattery();
+    // The Battery Banner's Own Close Button Dismisses It; The View Model Closing It On Recovery Doesn't
+    private void OnBatteryLowClosed(InfoBar sender, InfoBarClosedEventArgs args)
+    {
+        if (args.Reason == InfoBarCloseReason.CloseButton)
+        {
+            ViewModel.DismissPhoneBattery();
+        }
+    }
 
     // A Row's ⋮: Its Menu Opens Below The Button. The Sender Is The Row That Raised It (A Plain .NET Event, Not Read From
     // The Visual Tree)
