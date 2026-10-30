@@ -33,11 +33,11 @@ internal static class SignIn
     public const string SessionCookie = "__Secure-1PSIDTS";
 
     /// <summary>The main sign-in cookie, captured alongside <see cref="SessionCookie"/> (<c>__Secure-1PSID</c> + <c>__Secure-1PSIDTS</c>).</summary>
-    public const string RotationCookie = "__Secure-1PSID";
+    public const string MainSessionCookie = "__Secure-1PSID";
 
     /// <summary>How long to wait for <see cref="SessionCookie"/> after <see cref="SignedInCookie"/> appears.</summary>
     public static readonly TimeSpan SessionCookieWait = TimeSpan.FromSeconds(5);
 
     /// <summary>The cookies pairing needs; every other cookie is ignored.</summary>
-    public static readonly string[] WantedNames = ["SID", "HSID", "SSID", "OSID", "APISID", SignedInCookie, SessionCookie, RotationCookie];
+    public static readonly string[] WantedNames = ["SID", "HSID", "SSID", "OSID", "APISID", SignedInCookie, SessionCookie, MainSessionCookie];
 }
