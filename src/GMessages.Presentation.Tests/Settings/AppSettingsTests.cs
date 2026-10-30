@@ -25,6 +25,7 @@ public sealed class AppSettingsTests
         Assert.AreEqual(LogLevel.Information, settings.LogLevel);
         Assert.AreEqual(15, settings.SnoozeMinutes);
         Assert.IsNull(settings.ListWidth);
+        Assert.IsNull(settings.MicrophoneId);
     }
 
     [TestMethod]
@@ -48,6 +49,7 @@ public sealed class AppSettingsTests
             LogLevel             = LogLevel.Debug,
             SnoozeMinutes        = 60,
             ListWidth            = 412.5,
+            MicrophoneId         = @"\\?\SWD#MMDEVAPI#{0.0.1.00000000}.{mic}",
         };
 
         var reloaded = new AppSettings(new JsonFileSettingsStore(path));
@@ -58,6 +60,18 @@ public sealed class AppSettingsTests
         Assert.AreEqual(LogLevel.Debug, reloaded.LogLevel);
         Assert.AreEqual(60, reloaded.SnoozeMinutes);
         Assert.AreEqual(412.5, reloaded.ListWidth);
+        Assert.AreEqual(@"\\?\SWD#MMDEVAPI#{0.0.1.00000000}.{mic}", reloaded.MicrophoneId);
+    }
+
+    [TestMethod]
+    public void MicrophoneId_Null_GoesBackToWindowsDefault()
+    {
+        var store = new InMemorySettingsStore();
+        _ = new AppSettings(store) { MicrophoneId = "mic-1" };
+
+        _ = new AppSettings(store) { MicrophoneId = null };
+
+        Assert.IsNull(new AppSettings(store).MicrophoneId);
     }
 
     [TestMethod]

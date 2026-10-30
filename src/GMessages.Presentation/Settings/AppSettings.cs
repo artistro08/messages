@@ -20,6 +20,7 @@ public sealed class AppSettings : INotifyPropertyChanged
     private const string LogLevelKey             = "LogLevel";
     private const string SnoozeMinutesKey        = "SnoozeMinutes";
     private const string ListWidthKey            = "ListWidth";
+    private const string MicrophoneIdKey         = "MicrophoneId";
 
     // Snooze Lengths, In Minutes (The Choices Settings Offers), And The Default
     private const int DefaultSnoozeMinutes = 15;
@@ -92,6 +93,17 @@ public sealed class AppSettings : INotifyPropertyChanged
     {
         get => double.TryParse(_store.GetString(ListWidthKey), NumberStyles.Float, CultureInfo.InvariantCulture, out double width) && double.IsFinite(width) ? width : null;
         set => Set(ListWidthKey, value?.ToString(CultureInfo.InvariantCulture) ?? string.Empty);
+    }
+
+    /// <summary>
+    /// The Windows device ID of the microphone that records voice messages, or null for Windows' default microphone.
+    /// Kept while that device is unplugged (recording falls back to the default), so it's used again once it's back.
+    /// Never logged.
+    /// </summary>
+    public string? MicrophoneId
+    {
+        get => _store.GetString(MicrophoneIdKey) is { Length: > 0 } id ? id : null;
+        set => Set(MicrophoneIdKey, value ?? string.Empty);
     }
 
     /// <summary>

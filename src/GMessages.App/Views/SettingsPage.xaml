@@ -175,6 +175,28 @@
                     </Grid>
                 </Border>
 
+                <!-- Voice Messages -->
+                <TextBlock Style="{StaticResource GroupHeaderStyle}" Text="Voice messages" />
+
+                <!-- Microphone: "Windows default", then each active microphone by name -->
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
+                        <FontIcon Glyph="&#xE720;" Style="{StaticResource CardIconStyle}" />
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock x:Name="MicrophoneHeader" TextWrapping="Wrap" />
+                            <TextBlock x:Name="MicrophoneDescription" Style="{StaticResource CardDescriptionStyle}" />
+                        </StackPanel>
+                        <ComboBox
+                            x:Name="MicrophoneBox"
+                            Grid.Column="2"
+                            MinWidth="220"
+                            MaxWidth="320"
+                            VerticalAlignment="Center"
+                            AutomationProperties.AutomationId="Settings.Microphone"
+                            SelectedIndex="{x:Bind ViewModel.MicrophoneIndex, Mode=TwoWay}" />
+                    </Grid>
+                </Border>
+
                 <!-- Account And Logs -->
                 <TextBlock Style="{StaticResource GroupHeaderStyle}" Text="Account" />
 

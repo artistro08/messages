@@ -1,4 +1,5 @@
 using GMessages.Presentation.Connection;
+using GMessages.Presentation.Messaging;
 using GMessages.Presentation.Settings;
 using GMessages.Presentation.Tests.Connection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -70,6 +71,53 @@ public sealed class SettingsViewModelTests
 
         Assert.AreEqual(240, new AppSettings(store).SnoozeMinutes);
         Assert.AreEqual(3, Create(store).SnoozeIndex);
+    }
+
+    /// <summary>
+    /// The microphone box starts on "Windows default" with only that choice; once the devices load, picking one saves
+    /// its ID, and picking "Windows default" clears it.
+    /// </summary>
+    [TestMethod]
+    public void MicrophoneIndex_DefaultsToWindowsDefault_SavesTheChosenDevice()
+    {
+        var store = new InMemorySettingsStore();
+        var vm    = Create(store);
+
+        Assert.AreEqual(0, vm.MicrophoneIndex);
+        Assert.AreEqual(ChatCopy.WindowsDefault, string.Join("|", vm.MicrophoneChoices));
+
+        vm.SetMicrophones([("mic-1", "Headset"), ("mic-2", "Webcam")]);
+        Assert.AreEqual($"{ChatCopy.WindowsDefault}|Headset|Webcam", string.Join("|", vm.MicrophoneChoices));
+
+        vm.MicrophoneIndex = 2;
+        vm.MicrophoneIndex = 9;
+        Assert.AreEqual("mic-2", new AppSettings(store).MicrophoneId);
+        Assert.AreEqual(2, vm.MicrophoneIndex);
+
+        vm.MicrophoneIndex = 0;
+        Assert.IsNull(new AppSettings(store).MicrophoneId);
+    }
+
+    /// <summary>
+    /// A saved microphone that isn't plugged in shows "Windows default" but stays saved, so it's picked again once it
+    /// comes back.
+    /// </summary>
+    [TestMethod]
+    public void MicrophoneIndex_SavedDeviceMissing_ShowsWindowsDefaultAndKeepsTheChoice()
+    {
+        var store = new InMemorySettingsStore();
+        _ = new AppSettings(store) { MicrophoneId = "mic-2" };
+        var vm    = Create(store);
+
+        vm.SetMicrophones([("mic-1", "Headset")]);
+        Assert.AreEqual(0, vm.MicrophoneIndex);
+
+        // The Box Writing Its Shown Index Back Doesn't Forget The Saved Device
+        vm.MicrophoneIndex = 0;
+        Assert.AreEqual("mic-2", new AppSettings(store).MicrophoneId);
+
+        vm.SetMicrophones([("mic-1", "Headset"), ("mic-2", "Webcam")]);
+        Assert.AreEqual(2, vm.MicrophoneIndex);
     }
 
     /// <summary>

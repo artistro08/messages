@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices.WindowsRuntime;
 using GMessages.Presentation.Messaging;
+using Windows.Devices.Enumeration;
 using Windows.Media;
 using Windows.Media.Audio;
 using Windows.Media.Capture;
@@ -46,7 +47,8 @@ internal sealed class MicrophoneUnavailableException : Exception
 }
 
 /// <summary>
-/// Records a voice message from the default microphone straight to an M4A/AAC temp file, with live input levels.
+/// Records a voice message from the microphone chosen in Settings (or Windows' default) straight to an M4A/AAC temp
+/// file, with live input levels.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -93,9 +95,13 @@ internal sealed class VoiceRecorder : IDisposable
     /// Starts recording to a new file.
     /// </summary>
     /// <param name="path">The temp file to record to (its folder is made if missing).</param>
+    /// <param name="microphoneId">
+    /// The Windows device ID of the microphone chosen in Settings, or null for Windows' default. A chosen microphone that
+    /// isn't plugged in records from the default instead.
+    /// </param>
     /// <returns>The running recorder.</returns>
     /// <exception cref="MicrophoneUnavailableException">Microphone access is off, or there is no microphone.</exception>
-    public static async Task<VoiceRecorder> StartAsync(string path)
+    public static async Task<VoiceRecorder> StartAsync(string path, string? microphoneId)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
 
@@ -129,7 +135,7 @@ internal sealed class VoiceRecorder : IDisposable
             graph = created.Graph;
 
             // The Microphone
-            CreateAudioDeviceInputNodeResult input = await graph.CreateDeviceInputNodeAsync(MediaCategory.Speech);
+            CreateAudioDeviceInputNodeResult input = await CreateInputAsync(graph, microphoneId);
             if (input.Status != AudioDeviceNodeCreationStatus.Success)
             {
                 MicrophoneConsent.Log("device input", input.Status.ToString());
@@ -162,6 +168,46 @@ internal sealed class VoiceRecorder : IDisposable
         {
             graph?.Dispose();
         }
+    }
+
+    /// <summary>
+    /// Makes the graph's input node from the microphone chosen in Settings, or from Windows' default microphone when
+    /// none is chosen or the chosen one isn't plugged in.
+    /// </summary>
+    /// <remarks>
+    /// The chosen device comes from <see cref="DeviceInformation.CreateFromIdAsync(string)"/>; a device that's gone either
+    /// throws there or reads <see cref="DeviceInformation.IsEnabled"/> false. Only "chosen" or "default" is logged, never
+    /// the device's name or ID.
+    /// </remarks>
+    /// <param name="graph">The graph to add the node to.</param>
+    /// <param name="microphoneId">The chosen microphone's device ID, or null for the default.</param>
+    /// <returns>The node creation result.</returns>
+    private static async Task<CreateAudioDeviceInputNodeResult> CreateInputAsync(AudioGraph graph, string? microphoneId)
+    {
+        DeviceInformation? device = null;
+        if (microphoneId is not null)
+        {
+            try
+            {
+                device = await DeviceInformation.CreateFromIdAsync(microphoneId);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                // Unplugged Or Removed: Record From The Default
+                device = null;
+            }
+        }
+
+        // Windows' Default Microphone
+        if (device is not { IsEnabled: true })
+        {
+            MicrophoneConsent.Log("device", "default");
+            return await graph.CreateDeviceInputNodeAsync(MediaCategory.Speech);
+        }
+
+        // The Chosen Microphone
+        MicrophoneConsent.Log("device", "chosen");
+        return await graph.CreateDeviceInputNodeAsync(MediaCategory.Other, null, device);
     }
 
     /// <summary>

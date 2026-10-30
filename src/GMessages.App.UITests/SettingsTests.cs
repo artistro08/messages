@@ -42,6 +42,7 @@ public sealed class SettingsTests : UiTest
         WaitForToggle("Settings.NotifyViewedChat", ToggleState.Off);
         WaitForToggle("Settings.StartWithWindows", ToggleState.Off);
         Assert.AreEqual(ChatCopy.Minutes15, SnoozeLength(), "Snooze length should start at 15 minutes.");
+        Wait.Until(() => Microphone() == ChatCopy.WindowsDefault, AppDriver.DefaultTimeout, () => $"Microphone shows '{Microphone()}', not Windows default.");
 
         // Theme Flips The Tray Menu Live, Both Ways (So It Doesn't Depend On The System Theme)
         SelectTheme(LightIndex);
@@ -155,6 +156,8 @@ public sealed class SettingsTests : UiTest
     private int ThemeIndex() => Array.IndexOf(ThemeNames, AppDriver.SafeName(App.Find("Settings.Theme").AsComboBox().SelectedItem));
 
     private string SnoozeLength() => AppDriver.SafeName(App.Find("Settings.SnoozeLength").AsComboBox().SelectedItem);
+
+    private string Microphone() => AppDriver.SafeName(App.Find("Settings.Microphone").AsComboBox().SelectedItem);
 
     private void SelectTheme(int index)
     {

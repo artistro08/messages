@@ -32,6 +32,7 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged, IDisposa
     private bool _startWithWindows;
     private string? _startupMessage;
     private bool _isUnpairing;
+    private List<(string Id, string Name)> _microphones = [];
 
     /// <summary>
     /// Creates the view model. Call <see cref="LoadAsync"/> when the window opens.
@@ -175,6 +176,54 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged, IDisposa
             _settings.SnoozeMinutes = AppSettings.SnoozeChoices[value];
             Raise();
         }
+    }
+
+    // =========================================================================
+    // MICROPHONE
+    // =========================================================================
+
+    /// <summary>
+    /// Gets the microphone dropdown's items: "Windows default" first, then each microphone from
+    /// <see cref="SetMicrophones"/> by its name.
+    /// </summary>
+    public IReadOnlyList<string> MicrophoneChoices => [ChatCopy.WindowsDefault, .. _microphones.Select(mic => mic.Name)];
+
+    /// <summary>
+    /// Gets or sets the microphone dropdown's selection: 0 is Windows' default microphone, and 1 on are the
+    /// microphones from <see cref="SetMicrophones"/>.
+    /// </summary>
+    /// <remarks>
+    /// A saved microphone that isn't plugged in shows 0 but stays saved, so it's picked again once it's back. Setting
+    /// the index already shown does nothing (the dropdown writing back that 0 keeps the saved choice); any index outside
+    /// the choices is ignored.
+    /// </remarks>
+    public int MicrophoneIndex
+    {
+        get => _microphones.FindIndex(mic => mic.Id == _settings.MicrophoneId) + 1;
+        set
+        {
+            if (value < 0 || value > _microphones.Count || value == MicrophoneIndex)
+            {
+                return;
+            }
+
+            _settings.MicrophoneId = value == 0 ? null : _microphones[value - 1].Id;
+            Raise();
+        }
+    }
+
+    /// <summary>
+    /// Sets the microphones the dropdown offers. The settings page calls it each time it opens, with Windows' active
+    /// audio capture devices.
+    /// </summary>
+    /// <param name="microphones">Each microphone's Windows device ID and friendly name, in the order to show them.</param>
+    public void SetMicrophones(IReadOnlyList<(string Id, string Name)> microphones)
+    {
+        ArgumentNullException.ThrowIfNull(microphones);
+
+        _microphones = [.. microphones];
+        Raise(nameof(MicrophoneChoices));
+        Raise(nameof(MicrophoneIndex));
     }
 
     // =========================================================================
