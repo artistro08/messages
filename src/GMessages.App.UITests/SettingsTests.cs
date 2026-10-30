@@ -42,7 +42,8 @@ public sealed class SettingsTests : UiTest
         WaitForToggle("Settings.NotifyViewedChat", ToggleState.Off);
         WaitForToggle("Settings.StartWithWindows", ToggleState.Off);
         Assert.AreEqual(ChatCopy.Minutes15, SnoozeLength(), "Snooze length should start at 15 minutes.");
-        Wait.Until(() => Microphone() == ChatCopy.WindowsDefault, AppDriver.DefaultTimeout, () => $"Microphone shows '{Microphone()}', not Windows default.");
+        // "Windows Default" Can Name Today's Default Microphone After It: "Windows default (…)"
+        Wait.Until(() => Microphone().StartsWith(ChatCopy.WindowsDefault, StringComparison.Ordinal), AppDriver.DefaultTimeout, () => $"Microphone shows '{Microphone()}', not Windows default.");
 
         // Theme Flips The Tray Menu Live, Both Ways (So It Doesn't Depend On The System Theme)
         SelectTheme(LightIndex);
