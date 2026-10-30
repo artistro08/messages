@@ -15,23 +15,23 @@
         Background="Transparent"
         ColumnDefinitions="Auto,*,Auto,Auto">
 
-        <!-- Hover: the ⋮ takes its 32 px at the right edge and fades in, and this row's time and icons slide left to make
-             room. The ⋮'s width changes once, at the start of the hover (and once at the end of the slide back), so the
-             name trims once per hover, never per frame; the slide itself is a render transform. The group must stay on
-             the control's root element: GoToState only looks there -->
+        <!-- Hover: the ⋮ (collapsed until then, so it takes no space and screen readers don't find it) takes its 32 px
+             at the right edge and fades in, and this row's time and icons slide left to make room. The ⋮ shows or
+             collapses once per hover (at the start of the slide in, at the end of the slide back), so the name trims
+             once, never per frame; the slide itself is a render transform. The slide never names a start: it runs
+             from wherever the time is, so a hover that comes back mid-slide turns around smoothly (the code behind sets
+             the start for a slide in from rest). The group must stay on the control's root element: GoToState only
+             looks there -->
         <VisualStateManager.VisualStateGroups>
             <VisualStateGroup x:Name="Hover">
                 <VisualStateGroup.Transitions>
 
-                    <!-- In: the ⋮'s space at once, while the time starts where it was and slides left -->
+                    <!-- In: the ⋮'s space at once, while the time slides left from where it is -->
                     <VisualTransition To="Shown">
                         <Storyboard>
-                            <DoubleAnimationUsingKeyFrames
-                                EnableDependentAnimation="True"
-                                Storyboard.TargetName="MoreButton"
-                                Storyboard.TargetProperty="Width">
-                                <DiscreteDoubleKeyFrame KeyTime="0" Value="32" />
-                            </DoubleAnimationUsingKeyFrames>
+                            <ObjectAnimationUsingKeyFrames Storyboard.TargetName="MoreButton" Storyboard.TargetProperty="Visibility">
+                                <DiscreteObjectKeyFrame KeyTime="0" Value="Visible" />
+                            </ObjectAnimationUsingKeyFrames>
                             <DoubleAnimationUsingKeyFrames Storyboard.TargetName="MoreButton" Storyboard.TargetProperty="Opacity">
                                 <SplineDoubleKeyFrame
                                     KeySpline="{StaticResource ControlFastOutSlowInKeySpline}"
@@ -39,7 +39,6 @@
                                     Value="1" />
                             </DoubleAnimationUsingKeyFrames>
                             <DoubleAnimationUsingKeyFrames Storyboard.TargetName="TimeShift" Storyboard.TargetProperty="X">
-                                <DiscreteDoubleKeyFrame KeyTime="0" Value="32" />
                                 <SplineDoubleKeyFrame
                                     KeySpline="{StaticResource ControlFastOutSlowInKeySpline}"
                                     KeyTime="{StaticResource ControlFastAnimationDuration}"
@@ -48,16 +47,13 @@
                         </Storyboard>
                     </VisualTransition>
 
-                    <!-- Out: the time slides back while the ⋮ keeps its space and fades; Hidden then takes the space back, with
-                         the time already at the right edge, so nothing jumps -->
+                    <!-- Out: the time slides back while the ⋮ keeps its space and fades; Hidden then collapses the ⋮, with the
+                         time already at the right edge, so nothing jumps -->
                     <VisualTransition To="Hidden">
                         <Storyboard>
-                            <DoubleAnimationUsingKeyFrames
-                                EnableDependentAnimation="True"
-                                Storyboard.TargetName="MoreButton"
-                                Storyboard.TargetProperty="Width">
-                                <DiscreteDoubleKeyFrame KeyTime="0" Value="32" />
-                            </DoubleAnimationUsingKeyFrames>
+                            <ObjectAnimationUsingKeyFrames Storyboard.TargetName="MoreButton" Storyboard.TargetProperty="Visibility">
+                                <DiscreteObjectKeyFrame KeyTime="0" Value="Visible" />
+                            </ObjectAnimationUsingKeyFrames>
                             <DoubleAnimationUsingKeyFrames Storyboard.TargetName="MoreButton" Storyboard.TargetProperty="Opacity">
                                 <SplineDoubleKeyFrame
                                     KeySpline="{StaticResource ControlFastOutSlowInKeySpline}"
@@ -73,19 +69,23 @@
                         </Storyboard>
                     </VisualTransition>
                 </VisualStateGroup.Transitions>
+
+                <!-- Hidden: the ⋮ stays collapsed (its default) and the time sits at rest -->
                 <VisualState x:Name="Hidden" />
                 <VisualState x:Name="Shown">
                     <Storyboard>
-                        <DoubleAnimation
-                            EnableDependentAnimation="True"
-                            Storyboard.TargetName="MoreButton"
-                            Storyboard.TargetProperty="Width"
-                            To="32"
-                            Duration="0" />
+                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="MoreButton" Storyboard.TargetProperty="Visibility">
+                            <DiscreteObjectKeyFrame KeyTime="0" Value="Visible" />
+                        </ObjectAnimationUsingKeyFrames>
                         <DoubleAnimation
                             Storyboard.TargetName="MoreButton"
                             Storyboard.TargetProperty="Opacity"
                             To="1"
+                            Duration="0" />
+                        <DoubleAnimation
+                            Storyboard.TargetName="TimeShift"
+                            Storyboard.TargetProperty="X"
+                            To="0"
                             Duration="0" />
                     </Storyboard>
                     <VisualState.Setters>
@@ -165,12 +165,12 @@
             </StackPanel>
         </StackPanel>
 
-        <!-- More Options: the ⋮, 0 px wide until the row is hovered (see Hover above), then 32 px. Not a tab stop: the
-             keyboard opens the same menu with the Application key or Shift + F10 on the row -->
+        <!-- More Options: the ⋮, collapsed until the row is hovered (see Hover above). Not a tab stop: the keyboard opens
+             the same menu with the Application key or Shift + F10 on the row -->
         <Button
             x:Name="MoreButton"
             Grid.Column="3"
-            Width="0"
+            Width="32"
             Height="32"
             Padding="0"
             VerticalAlignment="Center"
@@ -179,7 +179,8 @@
             IsHitTestVisible="False"
             IsTabStop="False"
             Opacity="0"
-            Style="{StaticResource SubtleButtonStyle}">
+            Style="{StaticResource SubtleButtonStyle}"
+            Visibility="Collapsed">
             <FontIcon FontSize="16" Glyph="&#xE712;" />
         </Button>
     </Grid>
