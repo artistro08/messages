@@ -45,20 +45,22 @@ public static class ShortcutMap
     /// <remarks>
     /// Chords must match their modifiers exactly, so Ctrl + Alt + k is not a shortcut. The bare "r", Shift + + and
     /// Ctrl + Enter depend on <paramref name="focusInTextBox"/>; they are ignored while typing. The conversation
-    /// shortcuts (Ctrl + d, Ctrl + Alt + h, Ctrl + Shift + o) work while typing too.
+    /// shortcuts (Ctrl + d, Ctrl + Alt + h, Ctrl + Shift + o) work while typing too. Ctrl + Alt + h is not a shortcut
+    /// while Right Alt is down: Windows reports AltGr as Left Ctrl + Right Alt, and AltGr + h types on some layouts.
     /// </remarks>
     /// <param name="key">The pressed key.</param>
     /// <param name="ctrl">Whether Ctrl is held.</param>
     /// <param name="shift">Whether Shift is held.</param>
     /// <param name="alt">Whether Alt is held.</param>
     /// <param name="focusInTextBox">Whether a text box has keyboard focus.</param>
+    /// <param name="rightAlt">Whether the Right Alt key (AltGr) is held.</param>
     /// <returns>The matching command, or null.</returns>
-    public static ShortcutCommand? Resolve(VirtualKey key, bool ctrl, bool shift, bool alt, bool focusInTextBox)
+    public static ShortcutCommand? Resolve(VirtualKey key, bool ctrl, bool shift, bool alt, bool focusInTextBox, bool rightAlt = false)
     {
-        // Ctrl + Alt Chords: Only Ctrl + Alt + h
+        // Ctrl + Alt Chords: Only Ctrl + Alt + h, And Never With AltGr
         if (alt)
         {
-            return ctrl && !shift && key == VirtualKey.H ? ShortcutCommand.ArchiveConversation : null;
+            return ctrl && !shift && !rightAlt && key == VirtualKey.H ? ShortcutCommand.ArchiveConversation : null;
         }
 
         // Bare Keys

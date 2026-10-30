@@ -504,7 +504,7 @@ public sealed partial class MainWindow : Window
         // Matched By Name, Not By Type (The Native AOT Build Can Hand The Box Back As A Base Type). These Are The App's
         // Only Text Boxes: A New One Must Be Added Here
         bool focus_in_text_box = FocusManager.GetFocusedElement(RootGrid.XamlRoot) is FrameworkElement { Name: "DraftBox" or "QueryBox" };
-        if (ShortcutMap.Resolve(e.Key, IsDown(VirtualKey.Control), IsDown(VirtualKey.Shift), IsDown(VirtualKey.Menu), focus_in_text_box) is { } command)
+        if (ShortcutMap.Resolve(e.Key, IsDown(VirtualKey.Control), IsDown(VirtualKey.Shift), IsDown(VirtualKey.Menu), focus_in_text_box, IsDown(VirtualKey.RightMenu)) is { } command)
         {
             e.Handled = Run(chats, command);
         }

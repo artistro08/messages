@@ -41,6 +41,10 @@ namespace GMessages.App.Views;
 /// bubble's pill or menu, or Shift + + on its row, opens it over that bubble. A bubble's Reply, or Ctrl + Enter on its
 /// row, starts the reply and moves to the message box. The Application key or Shift + F10 on a row opens its menu.
 /// </para>
+/// <para>
+/// The header's ⋮ (<c>Chat.More</c>), or a right-click on the header, raises <see cref="MenuRequested"/>; the chats
+/// show the conversation's menu.
+/// </para>
 /// </remarks>
 public sealed partial class ChatPane : UserControl
 {
@@ -111,6 +115,15 @@ public sealed partial class ChatPane : UserControl
 
     /// <summary>Gets the reply chip's close button name.</summary>
     public static string CancelReplyText => ChatCopy.CancelReply;
+
+    /// <summary>Gets the header ⋮'s tooltip and name.</summary>
+    public static string MoreOptionsText => ChatCopy.MoreOptions;
+
+    /// <summary>
+    /// Raised when the header's ⋮ is clicked or the header is right-clicked (or gets the Application key or Shift + F10);
+    /// the chats show the conversation's menu at the target, at the point when there is one.
+    /// </summary>
+    public event EventHandler<(FrameworkElement Target, Windows.Foundation.Point? Position)>? MenuRequested;
 
     /// <summary>Gets or sets the open conversation, or null.</summary>
     public ChatViewModel? Chat
@@ -490,6 +503,16 @@ public sealed partial class ChatPane : UserControl
 
         e.Handled = true;
         view.ShowMenu();
+    }
+
+    // The Header's ⋮: The Menu Opens Below It
+    private void OnMoreClick(object sender, RoutedEventArgs e) => MenuRequested?.Invoke(this, (MoreButton, null));
+
+    // Right-Click On The Header Opens The Menu At The Pointer; From The Keyboard (The ⋮ Focused) It Opens Below The ⋮
+    private void OnHeaderContextRequested(UIElement sender, ContextRequestedEventArgs e)
+    {
+        e.Handled = true;
+        MenuRequested?.Invoke(this, e.TryGetPosition(HeaderBar, out Windows.Foundation.Point at) ? (HeaderBar, at) : (MoreButton, null));
     }
 
     private void OnEmojiClick(object sender, RoutedEventArgs e) => ToggleEmojiPanel();
