@@ -1,5 +1,6 @@
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.Numerics;
 using System.Runtime.InteropServices;
 using GMessages.App.Views.Controls;
 using GMessages.Presentation.Main;
@@ -14,8 +15,10 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Shapes;
 using Windows.System;
 using Windows.UI.Core;
+using Windows.UI.ViewManagement;
 using WinRT;
 
 namespace GMessages.App.Views;
@@ -46,6 +49,11 @@ namespace GMessages.App.Views;
 /// The header's ⋮ (<c>Chat.More</c>), or a right-click on the header, raises <see cref="MenuRequested"/>; the chats
 /// show the conversation's menu.
 /// </para>
+/// <para>
+/// While the other person types, the typing bubble (<c>Chat.Typing</c>) shows three dots that bounce in turn, like Google
+/// Messages and Teams: a Composition loop that runs only while the bubble shows, and not at all when Windows' animation
+/// effects are off.
+/// </para>
 /// </remarks>
 public sealed partial class ChatPane : UserControl
 {
@@ -66,6 +74,14 @@ public sealed partial class ChatPane : UserControl
 
     // Another Chat Fades In Over WinUI's Normal Control Animation Time
     private static readonly TimeSpan ChatFadeIn = TimeSpan.FromMilliseconds(250);
+
+    // Typing Dots: Each Rises This Far And Back Within Its Beat, The Next Starting This Much Later, Every Cycle
+    private const float TypingRise = 4;
+    private static readonly TimeSpan TypingCycle   = TimeSpan.FromMilliseconds(1200);
+    private static readonly TimeSpan TypingStagger = TimeSpan.FromMilliseconds(150);
+
+    // Reads The Windows Animation Setting Live (Settings > Accessibility > Visual Effects)
+    private static readonly UISettings Ui = new();
 
     private ScrollViewer? _scroller;
 
@@ -116,6 +132,9 @@ public sealed partial class ChatPane : UserControl
             _reactView?.KeepShown(false);
             _reactView = null;
         };
+
+        // Typing Dots Bounce Only While Their Bubble Shows
+        TypingBubble.RegisterPropertyChangedCallback(VisibilityProperty, (_, _) => AnimateTypingDots(TypingBubble.Visibility == Visibility.Visible));
     }
 
     /// <summary>Gets the lock's tooltip and name.</summary>
@@ -293,6 +312,51 @@ public sealed partial class ChatPane : UserControl
         fade.InsertKeyFrame(1, 1);
         fade.Duration = ChatFadeIn;
         visual.StartAnimation(nameof(Visual.Opacity), fade);
+    }
+
+    // Starts The Dots' Loop (Each Rises And Falls, Brightening On The Way Up, A Beat After The One Before) Or Stops It And
+    // Puts Them Back At Rest. With Animation Effects Off They Stay Still
+    private void AnimateTypingDots(bool run)
+    {
+        Ellipse[] dots = [TypingDot1, TypingDot2, TypingDot3];
+        for (int i = 0; i < dots.Length; i++)
+        {
+            Visual visual = ElementCompositionPreview.GetElementVisual(dots[i]);
+            ElementCompositionPreview.SetIsTranslationEnabled(dots[i], true);
+            visual.StopAnimation("Translation.Y");
+            visual.StopAnimation(nameof(Visual.Opacity));
+            visual.Properties.InsertVector3("Translation", Vector3.Zero);
+            visual.Opacity = 1;
+            if (!run || !Ui.AnimationsEnabled)
+            {
+                continue;
+            }
+
+            Compositor compositor          = visual.Compositor;
+            CubicBezierEasingFunction ease = compositor.CreateCubicBezierEasingFunction(new Vector2(0.4f, 0), new Vector2(0.6f, 1));
+
+            ScalarKeyFrameAnimation rise = compositor.CreateScalarKeyFrameAnimation();
+            rise.InsertKeyFrame(0, 0);
+            rise.InsertKeyFrame(0.2f, -TypingRise, ease);
+            rise.InsertKeyFrame(0.4f, 0, ease);
+            rise.InsertKeyFrame(1, 0);
+            rise.Duration          = TypingCycle;
+            rise.DelayTime         = TypingStagger * i;
+            rise.IterationBehavior = AnimationIterationBehavior.Forever;
+
+            ScalarKeyFrameAnimation glow = compositor.CreateScalarKeyFrameAnimation();
+            glow.InsertKeyFrame(0, 0.5f);
+            glow.InsertKeyFrame(0.2f, 1, ease);
+            glow.InsertKeyFrame(0.4f, 0.5f, ease);
+            glow.InsertKeyFrame(1, 0.5f);
+            glow.Duration          = TypingCycle;
+            glow.DelayTime         = TypingStagger * i;
+            glow.DelayBehavior     = AnimationDelayBehavior.SetInitialValueBeforeDelay;
+            glow.IterationBehavior = AnimationIterationBehavior.Forever;
+
+            visual.StartAnimation("Translation.Y", rise);
+            visual.StartAnimation(nameof(Visual.Opacity), glow);
+        }
     }
 
     /// <summary>

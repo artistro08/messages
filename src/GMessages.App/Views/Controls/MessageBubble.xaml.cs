@@ -1,12 +1,15 @@
 using System.ComponentModel;
+using System.Numerics;
 using System.Runtime.InteropServices;
 using GMessages.Presentation.Main;
 using GMessages.Presentation.Messaging;
+using Microsoft.UI.Composition;
 using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Documents;
+using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Windows.ApplicationModel.DataTransfer;
@@ -79,6 +82,12 @@ namespace GMessages.App.Views.Controls;
 /// its type's icon, the name, and the size as Explorer writes it. A click shows "Downloading…" while it downloads, then
 /// opens it in its default app; a failure reads "Couldn't open this file." until the next click.
 /// </para>
+/// <para>
+/// A bubble the chat added live (sent, or arrived while the chat is open; see
+/// <see cref="MessageBubbleViewModel.TakeNew"/>) fades in and rises 12 px into place once, on its composition visual, so
+/// layout and the list's scroll pin never see it move. The first page, older pages, cached bubbles and recycled rows
+/// show without it, and so does everything when Windows' animation effects are off.
+/// </para>
 /// </remarks>
 public sealed partial class MessageBubble : UserControl
 {
@@ -127,6 +136,10 @@ public sealed partial class MessageBubble : UserControl
 
     // How Long A Thumbnail-Only Photo Waits For The Phone's Full Size Before It Offers To Try Again
     private static readonly TimeSpan FullSizeWait = TimeSpan.FromSeconds(30);
+
+    // A New Bubble's Entrance: A Fade And A Rise From This Far Below, Over WinUI's Normal Control Animation Time
+    private const float EntranceRise = 12;
+    private static readonly TimeSpan EntranceTime = TimeSpan.FromMilliseconds(250);
 
     // Reads The Windows Animation Setting Live (Settings > Accessibility > Visual Effects)
     private static readonly UISettings Ui = new();
@@ -531,6 +544,38 @@ public sealed partial class MessageBubble : UserControl
         view.ShowPreviewImage();
         view.ShowPhoto();
         view.ShowFile();
+
+        // A Bubble Added Live Animates In, Once (The Flag Clears, So A Recycled Row Never Replays It)
+        if (view.Bubble?.TakeNew() == true && Ui.AnimationsEnabled)
+        {
+            view.AnimateIn();
+        }
+    }
+
+    // Fades In And Rises Into Place On The Row's Composition Visual (Opacity And Translation), Easing Like WinUI's Own
+    // Controls (ControlFastOutSlowInKeySpline: 0,0,0,1). Layout Never Moves, So The Scroll Pin Is Unaffected
+    private void AnimateIn()
+    {
+        Visual visual                  = ElementCompositionPreview.GetElementVisual(Row);
+        Compositor compositor          = visual.Compositor;
+        CubicBezierEasingFunction ease = compositor.CreateCubicBezierEasingFunction(new Vector2(0, 0), new Vector2(0, 1));
+        ElementCompositionPreview.SetIsTranslationEnabled(Row, true);
+
+        ScalarKeyFrameAnimation fade = compositor.CreateScalarKeyFrameAnimation();
+        fade.InsertKeyFrame(0, 0);
+        fade.InsertKeyFrame(1, 1, ease);
+        fade.Duration = EntranceTime;
+
+        Vector3KeyFrameAnimation rise = compositor.CreateVector3KeyFrameAnimation();
+        rise.InsertKeyFrame(0, new Vector3(0, EntranceRise, 0));
+        rise.InsertKeyFrame(1, Vector3.Zero, ease);
+        rise.Duration = EntranceTime;
+
+        visual.StartAnimation(nameof(Visual.Opacity), fade);
+        visual.StartAnimation("Translation", rise);
+
+        string id = PartIdOf(string.Empty, Bubble?.Id ?? string.Empty, Bubble?.TmpId ?? string.Empty);
+        AppLog.BubbleAnimatedIn(App.ShellLog, id);
     }
 
     // An Echo Can Make A Sending Bubble RCS, My Reaction Comes And Goes, And A Preview Card Arrives

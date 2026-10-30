@@ -75,6 +75,9 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     // How Many Phone Pages Were Shown; A Saved Copy That Lands After One Is Stale And Dropped
     private int _phonePages;
 
+    // A Page (Saved Or From The Phone) Has Shown: Bubbles Added Live From Now On Animate In
+    private bool _pageShown;
+
     private string _draft = string.Empty;
 
     /// <summary>
@@ -406,6 +409,7 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
             IsRcs     = _store.Find(ConversationId)?.IsRcs == true,
         };
         var bubble = NewBubble(pending);
+        MarkNewIfShown(bubble);
         Messages.Add(bubble);
         RefreshBubbles();
 
@@ -538,7 +542,9 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
         }
         else
         {
-            Messages.Add(NewBubble(m));
+            var added = NewBubble(m);
+            MarkNewIfShown(added);
+            Messages.Add(added);
         }
 
         RefreshBubbles();
@@ -657,6 +663,7 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     // Stay At The Bottom Unless The Page Holds Them; Older Pages Above Are Dropped
     private void ShowPage(IReadOnlyList<ChatMessage> page)
     {
+        _pageShown = true;
         List<MessageBubbleViewModel> wanted = [];
         foreach (ChatMessage m in page.Where(m => m.Kind != MessageKind.Tombstone))
         {
@@ -726,6 +733,16 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
 
     // A Bubble That Knows The Conversation, So It Can Tell Which Reaction Is Mine
     private MessageBubbleViewModel NewBubble(ChatMessage m) => new(m, _store.Find(ConversationId));
+
+    // A Bubble Added Live (Sent, Or Arrived) Animates In, But Not Before The Chat's First Page Has Shown (The Chat's Own
+    // Fade Covers That)
+    private void MarkNewIfShown(MessageBubbleViewModel bubble)
+    {
+        if (_pageShown)
+        {
+            bubble.MarkNew();
+        }
+    }
 
     // Brings Everything That Depends On The Bubbles Up To Date After Any Change: Senders, Quotes, The Status Line And The Lock
     private void RefreshBubbles()

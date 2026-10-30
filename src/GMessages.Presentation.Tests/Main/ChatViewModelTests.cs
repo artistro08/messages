@@ -162,6 +162,26 @@ public sealed class ChatViewModelTests
         Assert.AreEqual(chat.Messages[0].TmpId, rig.Client.Sent[0].TmpID);
     }
 
+    /// <summary>
+    /// The first page's bubbles don't animate in; a sent bubble and a live arrival do, once.
+    /// </summary>
+    [TestMethod]
+    public async Task NewBubbles_OnlyLiveOnesAnimateIn_Once()
+    {
+        using var rig = new MainRig();
+        using ChatViewModel chat = NewChat(rig, null, Msg("m1", "one"));
+        await chat.LoadAsync();
+        Assert.IsFalse(chat.Messages[0].TakeNew(), "A first-page bubble was new.");
+
+        chat.Draft = "hello";
+        await chat.SendAsync();
+        await rig.LiveMessage(Msg("m2", "two", ts: 1_761_700_000_000_001));
+
+        Assert.IsTrue(chat.Messages[1].TakeNew(), "The sent bubble wasn't new.");
+        Assert.IsTrue(chat.Messages[2].TakeNew(), "The arrived bubble wasn't new.");
+        Assert.IsFalse(chat.Messages[2].TakeNew(), "The new flag didn't clear.");
+    }
+
     [TestMethod]
     public async Task Send_EchoWithTmpId_ReplacesBubble_NoDuplicate()
     {

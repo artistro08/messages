@@ -141,6 +141,67 @@ public sealed class ChatTests : UiTest
     }
 
     /// <summary>
+    /// A message arriving in the open chat animates in once, then sits still in its final place, with the chat on its
+    /// newest message.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task LiveIncoming_AnimatesIn_EndsInPlace()
+    {
+        await OpenAnnAsync();
+
+        Message message = Server.Phone.PushIncoming("c-ann", "Coming in");
+        AutomationElement bubble = App.Find("Bubble." + message.MessageID);
+        Wait.Until(() => ReadLog().Contains($"Bubble animated in ({message.MessageID})", StringComparison.Ordinal), AppDriver.DefaultTimeout,
+            () => "The arriving bubble didn't animate in.");
+
+        Thread.Sleep(400);
+        System.Drawing.Rectangle settled = bubble.BoundingRectangle;
+        Thread.Sleep(400);
+        Assert.AreEqual(settled, bubble.BoundingRectangle, "The bubble kept moving after its entrance.");
+        AssertAtNewest("The entrance");
+        Assert.AreEqual(1, AnimatedCount(), "More than the one new bubble animated in.");
+    }
+
+    /// <summary>
+    /// Opening a chat and its older pages loading show their bubbles without the entrance; a sent bubble then animates in.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task OpenAndOlderPages_DoNotAnimate_SendDoes()
+    {
+        // The Short First Page Loads Its Older Pages On Its Own (See ShortFirstPage_LoadsOlderUntilItScrolls)
+        Conversation old = FakeChats.NewConversation("c-old", "Old Pal", false, ConversationStatus.Active, false, false, FakeChats.Person("p-old", "Old Pal", "+15550000005"));
+        long time        = DateTimeOffset.UtcNow.AddDays(-1).ToUnixTimeMilliseconds() * 1000;
+        Message[] texts  = [.. Enumerable.Range(1, 5).Select(i => Line($"Old {i}", MessageStatusType.IncomingComplete))];
+        Message[] lines  = [.. Enumerable.Range(1, ChatStore.PageSize).Select(i => Line($"System {i}", (MessageStatusType)200))];
+        Server.Phone.Chats.Add(old, [.. texts, .. lines]);
+
+        await OpenMainAsync();
+        App.Find("Row.c-old").Patterns.SelectionItem.Pattern.Select();
+        Wait.Until(() => Bubbles().Count == 5, AppDriver.DefaultTimeout, () => $"The short chat showed {Bubbles().Count} bubbles, not the 5 older ones.");
+        Thread.Sleep(500);
+        Assert.AreEqual(0, AnimatedCount(), "Opening the chat or loading its older pages animated bubbles in.");
+
+        TypeInDraft("Hello again");
+        Wait.Until(() => AnimatedCount() == 1, AppDriver.DefaultTimeout, () => $"The sent bubble animated in {AnimatedCount()} times, not once.");
+
+        Message Line(string text, MessageStatusType status)
+        {
+            var message = new Message
+            {
+                MessageID      = "m-" + text.Replace(' ', '-'),
+                ConversationID = "c-old",
+                ParticipantID  = "p-old",
+                Timestamp      = time += 1_000_000,
+                MessageStatus  = new MessageStatus { Status = status },
+            };
+            message.MessageInfo.Add(new MessageInfo { MessageContent = new MessageContent { Content = text } });
+            return message;
+        }
+    }
+
+    /// <summary>
     /// Start chat: typing a name filters the contacts, picking Ann and pressing Go opens her conversation in place
     /// of the Start chat pane.
     /// </summary>
@@ -592,6 +653,10 @@ public sealed class ChatTests : UiTest
     // =========================================================================
     // HELPERS
     // =========================================================================
+
+    // How Many Bubbles Have Animated In So Far (The App Logs Each Entrance By Message ID)
+    private int AnimatedCount() =>
+        ReadLog().Split('\n').Count(line => line.Contains("Bubble animated in (", StringComparison.Ordinal));
 
     // True When The List Holds At Least One Bubble (A Blanked List Holds None)
     private static bool AnyBubble(AutomationElement list)
