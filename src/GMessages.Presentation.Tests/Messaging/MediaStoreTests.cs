@@ -127,6 +127,43 @@ public sealed class MediaStoreTests
     }
 
     /// <summary>
+    /// A Clear during a download still hands the caller its bytes, but keeps nothing: the next ask downloads again.
+    /// </summary>
+    [TestMethod]
+    public async Task Clear_DuringDownload_NotCached()
+    {
+        using var rig           = new Rig();
+        rig.Client.Media["m-1"] = [1, 2, 3];
+        rig.Client.DownloadGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        Task<byte[]> held = rig.Store.GetAsync(Part("m-1"), thumbnail: false, Ct);
+        rig.Store.Clear();
+        rig.Client.DownloadGate.SetResult();
+
+        CollectionAssert.AreEqual(new byte[] { 1, 2, 3 }, await held);
+        CollectionAssert.AreEqual(new byte[] { 1, 2, 3 }, await rig.Store.GetAsync(Part("m-1"), thumbnail: false, Ct));
+        Assert.HasCount(2, rig.Client.DownloadCalls);
+    }
+
+    /// <summary>
+    /// A Clear (sign-out) during a save's download means no decrypted file is written.
+    /// </summary>
+    [TestMethod]
+    public async Task SaveToTemp_AfterClear_WritesNothing()
+    {
+        using var rig           = new Rig();
+        rig.Client.Media["m-1"] = [1, 2, 3];
+        rig.Client.DownloadGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        Task<string> save = rig.Store.SaveToTempAsync(Part("m-1"), Ct);
+        rig.Store.Clear();
+        rig.Client.DownloadGate.SetResult();
+
+        await Assert.ThrowsExactlyAsync<OperationCanceledException>(() => save);
+        Assert.IsFalse(Directory.Exists(rig.Folder) && Directory.EnumerateFileSystemEntries(rig.Folder).Any());
+    }
+
+    /// <summary>
     /// Saved files land in their own folder under the temp folder, with a safe name.
     /// </summary>
     [TestMethod]

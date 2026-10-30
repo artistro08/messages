@@ -277,7 +277,7 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
         }
 
         await using Stream stream = await content.ReadAsStreamAsync(ct).ConfigureAwait(false);
-        using var buffer          = new MemoryStream();
+        using var buffer          = new MemoryStream((int)Math.Min(content.Headers.ContentLength ?? 0, 104L * 1024 * 1024));
         byte[] chunk              = new byte[81920];
         int read;
         while ((read = await stream.ReadAsync(chunk, ct).ConfigureAwait(false)) > 0)
