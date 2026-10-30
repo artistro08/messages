@@ -482,12 +482,8 @@ public sealed partial class ChatStore : IDisposable
     /// Uploads an attachment and sends it, with an optional caption, the way the bridge does.
     /// </summary>
     /// <remarks>
-    /// Ported from <c>ConvertMatrixMessage</c> in the Go connector (handlematrix.go): the uploaded
-    /// <see cref="MediaContent"/> is the message's first <see cref="MessageInfo"/>, and the caption a second one holding
-    /// its text. RCS refuses captions on media (capabilities.go), so in an RCS chat the caption goes as its own text
-    /// message right after. Sent as the conversation's default outgoing participant with its SIM, as
-    /// <see cref="SendTextAsync"/> is. A file over <see cref="MaxAttachmentBytes"/> is refused before anything uploads.
-    /// The file name and type are never logged.
+    /// <see cref="UploadAttachmentAsync"/>, then <see cref="SendUploadedMediaAsync"/>. A file over
+    /// <see cref="MaxAttachmentBytes"/> is refused before anything uploads. The file name and type are never logged.
     /// </remarks>
     /// <param name="conversationId">The conversation ID.</param>
     /// <param name="bytes">The file's bytes.</param>
@@ -504,6 +500,30 @@ public sealed partial class ChatStore : IDisposable
     /// <exception cref="MessageSendException">The phone answered with a status other than success.</exception>
     public async Task<ChatMessage> SendMediaAsync(string conversationId, ReadOnlyMemory<byte> bytes, string fileName, string mime, string? caption, string tmpId, IProgress<double>? progress, CancellationToken ct)
     {
+        // Upload, Then Send
+        MediaContent media = await UploadAttachmentAsync(bytes, fileName, mime, progress, ct).ConfigureAwait(false);
+        return await SendUploadedMediaAsync(conversationId, media, caption, tmpId, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Uploads an attachment, encrypted, without sending it yet.
+    /// </summary>
+    /// <remarks>
+    /// The answer is the <see cref="MediaContent"/> to send (its media ID and decryption key), which a retry sends again
+    /// as is, without a new upload. A file over <see cref="MaxAttachmentBytes"/> is refused before anything uploads. The
+    /// file name and type are never logged.
+    /// </remarks>
+    /// <param name="bytes">The file's bytes.</param>
+    /// <param name="fileName">The file name the other side sees.</param>
+    /// <param name="mime">The mime type, such as <c>image/jpeg</c>.</param>
+    /// <param name="progress">Gets the share of the upload done, from 0 to 1; may be null.</param>
+    /// <param name="ct">Cancels the upload.</param>
+    /// <returns>The uploaded media part.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="fileName"/> or <paramref name="mime"/> is null.</exception>
+    /// <exception cref="AttachmentTooBigException">The file is over <see cref="MaxAttachmentBytes"/>.</exception>
+    /// <exception cref="MessagingUnavailableException">Not connected.</exception>
+    public Task<MediaContent> UploadAttachmentAsync(ReadOnlyMemory<byte> bytes, string fileName, string mime, IProgress<double>? progress, CancellationToken ct)
+    {
         ArgumentNullException.ThrowIfNull(fileName);
         ArgumentNullException.ThrowIfNull(mime);
 
@@ -512,6 +532,32 @@ public sealed partial class ChatStore : IDisposable
             throw new AttachmentTooBigException();
         }
 
+        return RequireClient().UploadMediaAsync(bytes, fileName, mime, progress, ct);
+    }
+
+    /// <summary>
+    /// Sends an uploaded attachment, with an optional caption, the way the bridge does.
+    /// </summary>
+    /// <remarks>
+    /// Ported from <c>ConvertMatrixMessage</c> in the Go connector (handlematrix.go): the uploaded
+    /// <see cref="MediaContent"/> is the message's first <see cref="MessageInfo"/>, and the caption a second one holding
+    /// its text. RCS refuses captions on media (capabilities.go), so in an RCS chat the caption goes as its own text
+    /// message right after. Sent as the conversation's default outgoing participant with its SIM, as
+    /// <see cref="SendTextAsync"/> is. A retry sends the same media part again. The file name and type are never logged.
+    /// </remarks>
+    /// <param name="conversationId">The conversation ID.</param>
+    /// <param name="media">The uploaded media part (see <see cref="UploadAttachmentAsync"/>).</param>
+    /// <param name="caption">The caption, or null or empty for none.</param>
+    /// <param name="tmpId">The temporary ID (<c>GmClient.NewTmpId()</c>), so the echo can be matched to the pending bubble.</param>
+    /// <param name="ct">Cancels the wait.</param>
+    /// <returns>The pending media message as sent (without the caption when it went apart).</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="media"/> is null.</exception>
+    /// <exception cref="MessagingUnavailableException">Not connected.</exception>
+    /// <exception cref="MessageSendException">The phone answered with a status other than success.</exception>
+    public async Task<ChatMessage> SendUploadedMediaAsync(string conversationId, MediaContent media, string? caption, string tmpId, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(media);
+
         IMessagingClient client = RequireClient();
 
         int generation                = Generation;
@@ -519,8 +565,7 @@ public sealed partial class ChatStore : IDisposable
         string text                   = caption ?? string.Empty;
         bool caption_apart            = conversation.IsRcs && text.Length > 0;
 
-        // Upload, Then Send The Media With Its Caption (RCS: Without)
-        MediaContent media         = await client.UploadMediaAsync(bytes, fileName, mime, progress, ct).ConfigureAwait(false);
+        // Send The Media With Its Caption (RCS: Without)
         SendMessageRequest request = NewSendRequest(conversationId, conversation, tmpId);
         request.MessagePayload.MessageInfo.Add(new MessageInfo { MediaContent = media });
         if (text.Length > 0 && !caption_apart)
@@ -529,7 +574,7 @@ public sealed partial class ChatStore : IDisposable
         }
 
         await SendCheckedAsync(client, request, ct).ConfigureAwait(false);
-        LogMediaSent(conversationId, bytes.Length);
+        LogMediaSent(conversationId, media.Size);
 
         var pending = new ChatMessage(string.Empty, tmpId, conversationId, conversation.DefaultOutgoingId, DateTimeOffset.UtcNow, true, MediaPart.KindOf(media.Format), caption_apart ? string.Empty : text, MessageStatusType.OutgoingSending)
         {
@@ -1229,7 +1274,7 @@ public sealed partial class ChatStore : IDisposable
     private partial void LogSendRefused(string conversationId, string status);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Sent an attachment of {Size} bytes in {ConversationId}")]
-    private partial void LogMediaSent(string conversationId, int size);
+    private partial void LogMediaSent(string conversationId, long size);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Phone refused a conversation update ({ConversationId})")]
     private partial void LogConversationUpdateRefused(string conversationId);
