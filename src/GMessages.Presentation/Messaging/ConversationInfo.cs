@@ -42,6 +42,9 @@ public sealed record ConversationInfo(
     /// <summary>Gets the name the phone gives the newest message's sender (shown before a group's snippet), or empty.</summary>
     public string SnippetSender { get; init; } = string.Empty;
 
+    /// <summary>Gets whether the conversation is muted on the phone, so its messages don't notify.</summary>
+    public bool IsMuted { get; init; }
+
     /// <summary>
     /// Copies the fields the app needs out of a protocol conversation.
     /// </summary>
@@ -69,8 +72,20 @@ public sealed record ConversationInfo(
         {
             IsRcs         = c.Type == ConversationType.Rcs,
             SnippetSender = c.LatestMessage?.DisplayName ?? string.Empty,
+            IsMuted       = MutedOf(c),
         };
     }
+
+    /// <summary>
+    /// Gets whether the phone says a conversation is muted.
+    /// </summary>
+    /// <remarks>
+    /// Field 7 of the conversation, which LibGM doesn't name: the Plan 5 probe saw the phone set it to 1 when a chat
+    /// was muted and drop it on unmute.
+    /// </remarks>
+    /// <param name="c">The protocol conversation.</param>
+    /// <returns>True when muted.</returns>
+    internal static bool MutedOf(Conversation c) => c.Muted == ConversationMuteStatus.Mute;
 
     /// <summary>
     /// Finds a participant by ID.

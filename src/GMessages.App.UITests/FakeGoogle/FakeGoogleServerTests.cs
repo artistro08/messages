@@ -516,7 +516,7 @@ public sealed class FakeGoogleServerTests
 
     /// <summary>
     /// Each successful update leaves the phone's conversation in the status its action or update data names, and the
-    /// conversation comes back with that status. A mute leaves the status as it was and still comes back.
+    /// conversation comes back with that status. A mute leaves the status as it was and comes back muted.
     /// </summary>
     /// <param name="conversationId">The conversation to update.</param>
     /// <param name="action">The request's action.</param>
@@ -550,9 +550,13 @@ public sealed class FakeGoogleServerTests
 
         UpdateConversationResponse answer = await rig.Client.UpdateConversationAsync(request, CancellationToken.None).WaitAsync(HangGuard);
 
+        // Only The Mute Row Comes Back Muted
+        ConversationMuteStatus muted = data == "mute" ? ConversationMuteStatus.Mute : ConversationMuteStatus.Unmute;
+
         Assert.IsTrue(answer.Success);
-        WaitForEvent<ConversationUpdated>(rig.Events, e => e.Conversation.ConversationID == conversationId && e.Conversation.Status == expected, "echoed conversation");
+        WaitForEvent<ConversationUpdated>(rig.Events, e => e.Conversation.ConversationID == conversationId && e.Conversation.Status == expected && e.Conversation.Muted == muted, "echoed conversation");
         Assert.AreEqual(expected, rig.Server.Phone.Chats.Get(conversationId)?.Status, "phone's stored status");
+        Assert.AreEqual(muted, rig.Server.Phone.Chats.Get(conversationId)?.Muted, "phone's stored mute");
         Assert.HasCount(1, rig.Server.Phone.ConversationUpdates);
     }
 

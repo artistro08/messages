@@ -11,7 +11,7 @@ public static class NotificationPolicy
     /// Says whether to show a toast for a message.
     /// </summary>
     /// <remarks>
-    /// Only live, new, incoming text or attachments in a main-list conversation notify. The chat on screen
+    /// Only live, new, incoming text or attachments in an unmuted main-list conversation notify. The chat on screen
     /// stays quiet while the window has focus, unless <paramref name="notifyForViewedChat"/> is on.
     /// </remarks>
     /// <param name="e">The arrived message.</param>
@@ -29,8 +29,7 @@ public static class NotificationPolicy
             return false;
         }
 
-        // TODO: skip muted conversations. LibGM's Conversation has no mute field yet, so this is not guessed.
-        if (e.Conversation is null || !e.Conversation.IsMainView)
+        if (e.Conversation is null || !e.Conversation.IsMainView || e.Conversation.IsMuted)
         {
             return false;
         }
