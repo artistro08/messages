@@ -32,9 +32,9 @@ namespace GMessages.App.Views;
 /// </para>
 /// <para>
 /// The settings page covers the body but keeps it running (a sign-in in progress, the open chat), so Back returns to it
-/// as it was. ☰ and the profile picture hide while pairing, since there is nothing for them yet. On Settings and on Spam
-/// &amp; blocked the title bar's own Back button shows in place of ☰, carrying the AutomationId <c>Settings.Back</c> or
-/// <c>Main.SpamBack</c>.
+/// as it was. ☰ and the profile picture hide while pairing, since there is nothing for them yet. On Settings, Archived
+/// and Spam &amp; blocked the title bar's own Back button shows in place of ☰, carrying the AutomationId
+/// <c>Settings.Back</c>, <c>Main.ArchivedBack</c> or <c>Main.SpamBack</c>.
 /// </para>
 /// </remarks>
 public sealed partial class MainWindow : Window
@@ -79,6 +79,7 @@ public sealed partial class MainWindow : Window
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"));
 
         // Copy
+        ProfileArchived.Text    = ChatCopy.Archived;
         ProfileSpamBlocked.Text = ChatCopy.SpamAndBlocked;
 
         // Behavior
@@ -277,12 +278,11 @@ public sealed partial class MainWindow : Window
     }
 
     // ☰ And The Profile Picture Have Nothing To Show While Pairing. A Narrow Window Has No ☰ (It Shows One Pane, So There
-    // Is No List To Hide). Settings, Spam & Blocked And A Narrow Window's Open Chat Show The Title Bar's Back In Place Of
-    // ☰, Named For The Page It Leaves (The Tests Find It By That). Returns Back While It Shows
+    // Is No List To Hide). Settings, Archived, Spam & Blocked And A Narrow Window's Open Chat Show The Title Bar's Back In
+    // Place Of ☰, Named For The Page It Leaves (The Tests Find It By That). Returns Back While It Shows
     private Button? ShowTitleBarButtons()
     {
-        bool narrow_chat = ViewModel?.ShowChatPane == true;
-        bool show_back   = _settingsPage is not null || ViewModel?.IsSpamView == true || narrow_chat;
+        bool show_back = ShowsBack();
 
         AppTitleBar.IsBackButtonVisible = show_back;
         MenuButton.Visibility           = _chats is not null && !show_back && ViewModel?.IsNarrow != true ? Visibility.Visible : Visibility.Collapsed;
@@ -305,11 +305,21 @@ public sealed partial class MainWindow : Window
 
         if (_backButton is not null)
         {
-            AutomationProperties.SetAutomationId(_backButton, _settingsPage is not null ? "Settings.Back" : narrow_chat ? "Chat.Back" : "Main.SpamBack");
+            AutomationProperties.SetAutomationId(_backButton, BackId());
         }
 
         return _backButton;
     }
+
+    // Back Shows On Settings, In A Folder (Archived, Spam & Blocked) And Over A Narrow Window's Open Chat
+    private bool ShowsBack() => _settingsPage is not null || ViewModel?.IsFolderView == true || ViewModel?.ShowChatPane == true;
+
+    // Back's AutomationId, For The Page It Leaves
+    private string BackId() =>
+        _settingsPage is not null ? "Settings.Back"
+        : ViewModel?.ShowChatPane == true ? "Chat.Back"
+        : ViewModel?.IsArchivedView == true ? "Main.ArchivedBack"
+        : "Main.SpamBack";
 
     // The Open Chat Counts As Viewed Only While The Window Is Active And Settings Doesn't Cover It
     private void ShowChatFocus()
@@ -375,22 +385,21 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    // Spam & Blocked Opened Or Closed, The Window Went Narrow Or Wide, Or A Narrow Window's Chat Opened Or Closed: Back
+    // A Folder Opened Or Closed, The Window Went Narrow Or Wide, Or A Narrow Window's Chat Opened Or Closed: Back
     // Or ☰ (Other Changes Leave The Title Bar Alone)
     private void OnChatsChanged(object? sender, PropertyChangedEventArgs e)
     {
         // The View Model Raises Everything At Once (An Empty Name), So The Title Bar Is Only Touched When It Would Change
-        bool narrow_chat = ViewModel?.ShowChatPane == true;
-        bool show_back   = _settingsPage is not null || ViewModel?.IsSpamView == true || narrow_chat;
-        bool show_menu   = _chats is not null && !show_back && ViewModel?.IsNarrow != true;
+        bool show_back = ShowsBack();
+        bool show_menu = _chats is not null && !show_back && ViewModel?.IsNarrow != true;
         if (AppTitleBar.IsBackButtonVisible != show_back || (MenuButton.Visibility == Visibility.Visible) != show_menu
-            || (narrow_chat && _backButton is not null && AutomationProperties.GetAutomationId(_backButton) != "Chat.Back"))
+            || (show_back && _backButton is not null && AutomationProperties.GetAutomationId(_backButton) != BackId()))
         {
             ShowTitleBarButtons();
         }
     }
 
-    // The Title Bar's Back: Leaves Settings, Else A Narrow Window's Chat (Back To The List), Else Spam & Blocked
+    // The Title Bar's Back: Leaves Settings, Else A Narrow Window's Chat (Back To The List), Else Archived Or Spam & Blocked
     private void OnTitleBarBackRequested(TitleBar sender, object args)
     {
         if (_settingsPage is not null)
@@ -445,7 +454,13 @@ public sealed partial class MainWindow : Window
 
     private void OnMenuClick(object sender, RoutedEventArgs e) => ViewModel?.ToggleList();
 
-    // Spam & Blocked Is A List, So It Closes Settings To Show It
+    // Archived And Spam & Blocked Are Lists, So They Close Settings To Show Them
+    private void OnArchivedClick(object sender, RoutedEventArgs e)
+    {
+        CloseSettings();
+        ViewModel?.OpenArchived();
+    }
+
     private void OnSpamBlockedClick(object sender, RoutedEventArgs e)
     {
         CloseSettings();

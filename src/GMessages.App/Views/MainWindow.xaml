@@ -47,7 +47,7 @@
                 </Button>
             </TitleBar.LeftHeader>
 
-            <!-- Profile Button: Spam & blocked, Settings and Unpair. Just the picture, no hover or pressed background. It
+            <!-- Profile Button: Archived, Spam & blocked, Settings and Unpair. Just the picture, no hover or pressed background. It
                  sits at the right end of the title bar's content, which fills the space up to the caption buttons, so it
                  moves with the window edge in the same layout pass (Leaf Calendar's way, see the window's code). Only
                  the picture takes clicks; the empty content around it drags the window -->
@@ -74,6 +74,14 @@
                             Height="28" />
                         <Button.Flyout>
                             <MenuFlyout Placement="BottomEdgeAlignedRight">
+                                <MenuFlyoutItem
+                                    x:Name="ProfileArchived"
+                                    AutomationProperties.AutomationId="Main.Profile.Archived"
+                                    Click="OnArchivedClick">
+                                    <MenuFlyoutItem.Icon>
+                                        <FontIcon Glyph="&#xE7B8;" />
+                                    </MenuFlyoutItem.Icon>
+                                </MenuFlyoutItem>
                                 <MenuFlyoutItem
                                     x:Name="ProfileSpamBlocked"
                                     AutomationProperties.AutomationId="Main.Profile.SpamBlocked"

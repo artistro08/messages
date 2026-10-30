@@ -10,15 +10,17 @@ using GMessages.Presentation.Shortcuts;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using Windows.System;
 using WinRT;
 
 namespace GMessages.App.Views;
 
 /// <summary>
-/// The chats, shown in the main window below the title bar once paired: the conversation list (or Spam &amp; blocked)
-/// and the chat pane.
+/// The chats, shown in the main window below the title bar once paired: the conversation list (or Archived, or Spam
+/// &amp; blocked) and the chat pane.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -46,6 +48,11 @@ namespace GMessages.App.Views;
 /// In a wide window the edge between the list and the island (<see cref="PaneSplitter"/>) resizes the list, from a bit
 /// narrower than its default up to half the window. The width is saved in the settings, so it comes back in the next
 /// window and after a restart.
+/// </para>
+/// <para>
+/// A row's menu (archive, mute, block &amp; report spam, move to trash) opens on right-click, the Application key or
+/// Shift + F10 on the row, and from the ⋮ the row shows on hover (<see cref="ConversationMenuFlyout"/>). A failed action
+/// shows the banner above the list.
 /// </para>
 /// </remarks>
 public sealed partial class ChatsView : UserControl
@@ -90,7 +97,6 @@ public sealed partial class ChatsView : UserControl
 
         // Copy
         StartChatText.Text  = ChatCopy.StartChat;
-        ListTitle.Text      = ChatCopy.SpamAndBlocked;
         EmptyStateText.Text = ChatCopy.StartAConversation;
 
         // Behavior
@@ -175,6 +181,13 @@ public sealed partial class ChatsView : UserControl
     /// <returns>The empty state's visibility.</returns>
     public static Visibility EmptyStateVisibility(bool isChatOpen, bool isStartChatOpen) =>
         !isChatOpen && !isStartChatOpen ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>
+    /// The folder list's title (shown only in a folder; the inbox has none).
+    /// </summary>
+    /// <param name="isArchivedView">True while Archived shows.</param>
+    /// <returns>Archived, else Spam &amp; blocked.</returns>
+    public static string FolderTitle(bool isArchivedView) => isArchivedView ? ChatCopy.Archived : ChatCopy.SpamAndBlocked;
 
     // =========================================================================
     // EVENT HANDLERS
@@ -305,6 +318,35 @@ public sealed partial class ChatsView : UserControl
     // Start Chat Opened (Or Found) The Conversation: Show It In Place Of Start Chat
     private void OnChatStarted(object? sender, string conversationId) => ViewModel.Select(conversationId);
 
+    private void OnActionErrorClosed(InfoBar sender, object args) => ViewModel.DismissActionError();
+
+    // A Row's ⋮: Its Menu Opens Below The Button. The Sender Is The Row That Raised It (A Plain .NET Event, Not Read From
+    // The Visual Tree)
+    private void OnRowMoreRequested(object? sender, EventArgs e)
+    {
+        if (sender is not ConversationRow { Row: { } row } view)
+        {
+            return;
+        }
+
+        ShowConversationMenu(row.Id, view.MoreAnchor, position: null);
+    }
+
+    // Right-Click On A Row Opens Its Menu At The Pointer; The Application Key Or Shift + F10 On The Focused Row Opens It
+    // On The Row. The Row Is Found By Walking Up From The Source To The List's Container, Matched By Index And Never By
+    // A Type Test (See ChatPane.FindPart)
+    private void OnConversationListContextRequested(UIElement sender, ContextRequestedEventArgs e)
+    {
+        if (e.OriginalSource is null || RowContainer(e.OriginalSource.As<DependencyObject>()) is not { } container
+            || ConversationList.ItemFromContainer(container) is not ConversationRowViewModel row)
+        {
+            return;
+        }
+
+        FrameworkElement target = container.As<FrameworkElement>();
+        e.Handled               = true;
+        ShowConversationMenu(row.Id, target, e.TryGetPosition(target, out Windows.Foundation.Point at) ? at : null);
+    }
 
     // Picking A Row Opens It; A Cleared Selection (List Swapped, Row Moved) Keeps The Open Conversation
     private void OnSelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -379,6 +421,34 @@ public sealed partial class ChatsView : UserControl
     // =========================================================================
     // HELPERS
     // =========================================================================
+
+    // The List's Row Container Holding An Element (The Element Itself When It Is One), Or Null Outside The Rows
+    private DependencyObject? RowContainer(DependencyObject? element)
+    {
+        while (element is not null && ConversationList.IndexFromContainer(element) < 0)
+        {
+            element = VisualTreeHelper.GetParent(element);
+        }
+
+        return element;
+    }
+
+    // Opens A Conversation's Menu, Read Fresh From The Store So It Matches The Conversation Now (Archived, Muted)
+    private void ShowConversationMenu(string conversationId, FrameworkElement target, Windows.Foundation.Point? position)
+    {
+        if (ViewModel.FindConversation(conversationId) is not { } c || XamlRoot is not { } root)
+        {
+            return;
+        }
+
+        MenuFlyout menu = ConversationMenuFlyout.Build(ConversationMenu.For(c, inHeader: false), item => RunMenuItem(root, c, item));
+        menu.ShowAt(target, new FlyoutShowOptions { Position = position });
+    }
+
+    // Async Void Like A Click Handler, So A Failure Reaches The App's Unhandled Error Log (The Action's Own Failures Show
+    // The Banner)
+    private async void RunMenuItem(XamlRoot root, ConversationInfo c, ConversationMenuItem item) =>
+        await ConversationMenuFlyout.RunAsync(ViewModel, root, c, item, showDetails: null);
 
     // A List Width That Fits: No Narrower Than Its Minimum, No Wider Than Half The View (Unless That Is Below The Minimum)
     private static double FitListWidth(double width, double viewWidth) =>
