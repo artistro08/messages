@@ -289,7 +289,7 @@
                         Padding="0"
                         VerticalAlignment="Center"
                         AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('HoverReply.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
-                        Click="OnReplyClick"
+                        Click="OnHoverReplyClick"
                         IsHitTestVisible="False"
                         IsTabStop="False"
                         Style="{StaticResource SubtleButtonStyle}">

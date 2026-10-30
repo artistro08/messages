@@ -294,8 +294,9 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// The hover strip's space is always kept: hovering Ann's newest bubble moves neither it nor the bubble above it in its
-    /// group, and the strip sits right of the received bubble.
+    /// The hover strip's space is always kept: hovering my bubble moves it not, with the strip on its left; hovering Ann's
+    /// newest bubble moves neither it nor the bubble above it in its group, with the strip on its right. The strip's React
+    /// then opens the picker, so the hover took effect.
     /// </summary>
     /// <returns>A task for the test.</returns>
     [TestMethod]
@@ -304,28 +305,75 @@ public sealed class RcsTests : UiTest
         await OpenChatAsync("Row.c-ann");
 
         // A Second Message From Ann, A Second After Her Last: The Two Make One Group
-        Message newest                           = Server.Phone.PushIncoming("c-ann", "See you then");
-        string neighbor_id                       = Find("c-ann", AnnLast).MessageID;
+        Message newest     = Server.Phone.PushIncoming("c-ann", "See you then");
+        string neighbor_id = Find("c-ann", AnnLast).MessageID;
+        string mine_id     = Find("c-ann", MyReply).MessageID;
         App.Find("Bubble." + newest.MessageID);
 
         // Settle Wait For The List To Finish Scrolling To The New Bubble
         Thread.Sleep(1000);
-        System.Drawing.Rectangle bubble_before  = App.Find("Bubble." + newest.MessageID).BoundingRectangle;
+
+        // Mine: The Strip On The Left
+        System.Drawing.Rectangle mine_before = App.Find("Bubble." + mine_id).BoundingRectangle;
+        AutomationElement mine_react         = HoverStripButton(mine_id, "HoverReact.");
+        System.Drawing.Rectangle mine_after  = App.Find("Bubble." + mine_id).BoundingRectangle;
+        AssertSame(mine_before, mine_after, "My hovered bubble");
+        Assert.IsTrue(mine_react.BoundingRectangle.Right <= mine_after.Left,
+            $"The strip ({mine_react.BoundingRectangle}) isn't left of my bubble ({mine_after}).");
+
+        // Ann's: The Strip On The Right, And Her Grouped Bubble Above Stays Put
+        System.Drawing.Rectangle bubble_before   = App.Find("Bubble." + newest.MessageID).BoundingRectangle;
         System.Drawing.Rectangle neighbor_before = App.Find("Bubble." + neighbor_id).BoundingRectangle;
-
-        AutomationElement react                 = HoverStripButton(newest.MessageID, "HoverReact.");
-        System.Drawing.Rectangle bubble_after   = App.Find("Bubble." + newest.MessageID).BoundingRectangle;
-        System.Drawing.Rectangle neighbor_after = App.Find("Bubble." + neighbor_id).BoundingRectangle;
-
+        AutomationElement react                  = HoverStripButton(newest.MessageID, "HoverReact.");
+        System.Drawing.Rectangle bubble_after    = App.Find("Bubble." + newest.MessageID).BoundingRectangle;
+        System.Drawing.Rectangle neighbor_after  = App.Find("Bubble." + neighbor_id).BoundingRectangle;
         AssertSame(bubble_before, bubble_after, "Ann's hovered bubble");
         AssertSame(neighbor_before, neighbor_after, "The bubble above it in its group");
         Assert.IsTrue(react.BoundingRectangle.Left >= bubble_after.Right,
             $"The strip ({react.BoundingRectangle}) isn't right of Ann's bubble ({bubble_after}).");
 
+        // The Hover Took Effect: The Strip Takes Clicks
+        react.Click();
+        App.Find("ReactionPicker");
+
         static void AssertSame(System.Drawing.Rectangle before, System.Drawing.Rectangle after, string what) =>
             Assert.IsTrue(Math.Abs(before.Left - after.Left) <= 1 && Math.Abs(before.Top - after.Top) <= 1
                 && Math.Abs(before.Width - after.Width) <= 1 && Math.Abs(before.Height - after.Height) <= 1,
                 $"{what} moved on hover: {before} became {after}.");
+    }
+
+    /// <summary>
+    /// My failed bubble takes no strip; retried with the pointer resting on it, the strip shows once the phone echoes it
+    /// (no pointer move needed), and its ⋮ opens the bubble menu.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task HoverBubble_SentWhileHovered_ShowsStrip()
+    {
+        await OpenChatAsync("Row.c-ann");
+        Server.Phone.FailSends = true;
+
+        App.Find("Chat.Draft").Focus();
+        Keyboard.Type("Running late");
+        Keyboard.Type(VirtualKeyShort.RETURN);
+        AutomationElement? retry = null;
+        Wait.Until(() => (retry = App.TryFind("Chat.Messages") is { } list ? AppDriver.Search(list, e => AppDriver.SafeName(e) == ChatCopy.NotSentRetry) : null) is not null,
+            AppDriver.DefaultTimeout, () => $"'{ChatCopy.NotSentRetry}' never showed.");
+
+        // The Pointer Rests On The Failed Bubble's Text, Then The Retry Goes Through Without It Moving
+        PointerInput.Hover(App.Find("Bubble." + Server.Phone.Sent[0].TmpID).BoundingRectangle);
+        Server.Phone.FailSends = false;
+        retry!.Patterns.Invoke.Pattern.Invoke();
+        Wait.Until(() => Server.Phone.Sent.Count == 2, AppDriver.DefaultTimeout, () => $"The phone got {Server.Phone.Sent.Count} sends, not 2.");
+        string id = Newest("c-ann").MessageID;
+        App.Find("Bubble." + id);
+
+        // Settle Wait For The Strip's Fade In (167 ms)
+        Thread.Sleep(500);
+        App.Find("HoverMore." + id).Click();
+
+        App.Find("Bubble.Copy");
+        Keyboard.Type(VirtualKeyShort.ESCAPE);
     }
 
     /// <summary>
