@@ -101,12 +101,25 @@
                         Spacing="2"
                         XYFocusKeyboardNavigation="Enabled">
                         <StackPanel.Resources>
-                            <Style BasedOn="{StaticResource DefaultButtonStyle}" TargetType="Button">
+                            <Style
+                                x:Key="ReactionButtonStyle"
+                                BasedOn="{StaticResource DefaultButtonStyle}"
+                                TargetType="Button">
                                 <Setter Property="MinWidth" Value="40" />
                                 <Setter Property="Padding" Value="6,4" />
                                 <Setter Property="Background" Value="{ThemeResource SubtleFillColorTransparentBrush}" />
                                 <Setter Property="BorderBrush" Value="{ThemeResource SubtleFillColorTransparentBrush}" />
                                 <Setter Property="FontSize" Value="20" />
+                            </Style>
+                            <Style BasedOn="{StaticResource ReactionButtonStyle}" TargetType="Button" />
+                            <!-- My Reaction: the same soft accent fill as my reaction pill, set from code when the picker opens -->
+                            <Style
+                                x:Key="ReactionButtonSelectedStyle"
+                                BasedOn="{StaticResource ReactionButtonStyle}"
+                                TargetType="Button">
+                                <Setter Property="Background" Value="{ThemeResource ReactionPillMineBrush}" />
+                                <Setter Property="BorderBrush" Value="{ThemeResource ReactionPillMineBrush}" />
+                                <Setter Property="CornerRadius" Value="8" />
                             </Style>
                         </StackPanel.Resources>
                     </StackPanel>

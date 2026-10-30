@@ -172,6 +172,7 @@ internal static class ConversationMenuFlyout
             DefaultButton     = ContentDialogButton.Close,
         };
         AutomationProperties.SetAutomationId(dialog, automationId);
+        Dialogs.UseFluentStyle(dialog);
         return dialog;
     }
 

@@ -85,6 +85,14 @@
                 TargetType="Button">
                 <Setter Property="Padding" Value="0" />
             </Style>
+
+            <!-- Who Reacted: the flyout's thin edge matches a menu's, so the compact rows sit close to its border -->
+            <Style
+                x:Key="ReactorsFlyoutPresenterStyle"
+                BasedOn="{StaticResource DefaultFlyoutPresenterStyle}"
+                TargetType="FlyoutPresenter">
+                <Setter Property="Padding" Value="0,4" />
+            </Style>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

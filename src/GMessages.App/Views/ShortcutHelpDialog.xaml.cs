@@ -26,6 +26,7 @@ public sealed partial class ShortcutHelpDialog : ContentDialog
     public ShortcutHelpDialog()
     {
         InitializeComponent();
+        Controls.Dialogs.UseFluentStyle(this);
 
         // One Grid Row Per Shortcut: Keys Left, Action Right
         for (int i = 0; i < ShortcutMap.HelpRows.Count; i++)

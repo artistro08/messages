@@ -244,6 +244,28 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
+    /// The picker for a message I reacted to marks my reaction selected (Narrator reads "Selected"); the others aren't.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Picker_MarksMyReactionSelected()
+    {
+        await OpenChatAsync("Row.c-ann");
+        string id = Find("c-ann", AnnLast).MessageID;
+
+        Server.Phone.PushReactions("c-ann", id, (EmojiType.Laugh, FakeChats.MyParticipantId));
+        string last = "";
+        Wait.Until(() => (last = AppDriver.SafeName(App.TryFind("Reactions." + id))).Contains("\U0001F602", StringComparison.Ordinal), AppDriver.DefaultTimeout,
+            () => $"The reaction pill read '{last}', without 😂.");
+        App.Find("Reactions." + id).Click();
+
+        App.Find("ReactionPicker");
+        Assert.AreEqual(ChatCopy.Selected, App.Find("ReactionPicker." + (int)EmojiType.Laugh).Properties.ItemStatus.ValueOrDefault);
+        Assert.AreEqual("", App.Find("ReactionPicker.1").Properties.ItemStatus.ValueOrDefault ?? "");
+        Keyboard.Type(VirtualKeyShort.ESCAPE);
+    }
+
+    /// <summary>
     /// In Ann's one-on-one chat the reaction pill still opens the reaction picker, not a list of who reacted.
     /// </summary>
     /// <returns>A task for the test.</returns>
