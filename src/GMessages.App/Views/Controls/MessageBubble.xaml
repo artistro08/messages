@@ -234,7 +234,7 @@
                 AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Reactions.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
                 Background="{ThemeResource SolidBackgroundFillColorTertiaryBrush}"
                 BackgroundSizing="OuterBorderEdge"
-                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderBrush="{ThemeResource ReactionPillBorderBrush}"
                 BorderThickness="1"
                 Click="OnReactClick"
                 Content="{x:Bind Bubble.ReactionsText, Mode=OneWay, FallbackValue=''}"
@@ -245,28 +245,32 @@
 
                 <!-- Hover And Press: opaque shades of the pill's own fill, so the button's 83 ms brush transition blends
                      smoothly. The default hover fill is a faint see-through white, and blending the opaque fill into it
-                     passes through a bright half-opaque gray for a frame or two (the flash). The border stays as it is. High
-                     contrast keeps the system button's own hover and press colors, so hover still shows -->
+                     passes through a bright half-opaque gray for a frame or two (the flash). No outline: the 1 px border is clear
+                     (the fill runs under it, so the pill keeps its size). High contrast keeps an edge and the system
+                     button's own hover and press colors, so the pill and its hover still show -->
                 <Button.Resources>
                     <ResourceDictionary>
                         <ResourceDictionary.ThemeDictionaries>
                             <ResourceDictionary x:Key="Default">
+                                <SolidColorBrush x:Key="ReactionPillBorderBrush" Color="Transparent" />
                                 <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="SolidBackgroundFillColorQuarternaryBrush" />
                                 <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="SolidBackgroundFillColorSecondaryBrush" />
-                                <StaticResource x:Key="ButtonBorderBrushPointerOver" ResourceKey="CardStrokeColorDefaultBrush" />
-                                <StaticResource x:Key="ButtonBorderBrushPressed" ResourceKey="CardStrokeColorDefaultBrush" />
+                                <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="Transparent" />
+                                <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="Transparent" />
                             </ResourceDictionary>
                             <ResourceDictionary x:Key="Light">
+                                <SolidColorBrush x:Key="ReactionPillBorderBrush" Color="Transparent" />
                                 <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="SolidBackgroundFillColorQuarternaryBrush" />
                                 <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="SolidBackgroundFillColorSecondaryBrush" />
-                                <StaticResource x:Key="ButtonBorderBrushPointerOver" ResourceKey="CardStrokeColorDefaultBrush" />
-                                <StaticResource x:Key="ButtonBorderBrushPressed" ResourceKey="CardStrokeColorDefaultBrush" />
+                                <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="Transparent" />
+                                <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="Transparent" />
                             </ResourceDictionary>
                             <ResourceDictionary x:Key="HighContrast">
-                                <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="SystemColorHighlightTextColorBrush" />
-                                <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="SystemColorHighlightTextColorBrush" />
-                                <StaticResource x:Key="ButtonBorderBrushPointerOver" ResourceKey="SystemColorHighlightColorBrush" />
-                                <StaticResource x:Key="ButtonBorderBrushPressed" ResourceKey="SystemColorHighlightTextColorBrush" />
+                                <SolidColorBrush x:Key="ReactionPillBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+                                <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="{ThemeResource SystemColorHighlightTextColor}" />
+                                <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="{ThemeResource SystemColorHighlightTextColor}" />
+                                <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="{ThemeResource SystemColorHighlightColor}" />
+                                <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="{ThemeResource SystemColorHighlightTextColor}" />
                             </ResourceDictionary>
                         </ResourceDictionary.ThemeDictionaries>
                     </ResourceDictionary>
