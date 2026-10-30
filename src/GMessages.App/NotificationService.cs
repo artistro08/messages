@@ -129,7 +129,7 @@ internal sealed class NotificationService(ChatStore store, AppSettings settings,
     }
 
     /// <summary>
-    /// Removes every toast of a conversation (it was opened, so they're read).
+    /// Removes every toast of a conversation and cancels its waiting snoozes (it was read, muted or left the main list).
     /// </summary>
     /// <param name="conversationId">The conversation ID.</param>
     public void RemoveConversation(string conversationId)
@@ -215,11 +215,13 @@ internal sealed class NotificationService(ChatStore store, AppSettings settings,
     // HELPERS
     // =========================================================================
 
-    // A Conversation Read Anywhere (Here, A Toast Reply Or The Phone) Takes Its Toasts With It; See NotificationPolicy.ShouldDismissOnRead
+    // A Conversation Read, Muted Or Moved Out Of The Main List Anywhere (Here, A Toast Reply Or The Phone) Takes Its
+    // Toasts And Waiting Snoozes With It; See NotificationPolicy.ShouldDismissOnLeave And ShouldDismissOnRead
     private void OnConversationChanged(object? sender, ConversationInfo conversation) => dispatcher.TryEnqueue(() =>
     {
         MainViewModel? view = mainView();
-        if (NotificationPolicy.ShouldDismissOnRead(conversation, view?.SelectedConversationId, view?.IsWindowFocused == true, settings.NotifyForViewedChat))
+        if (NotificationPolicy.ShouldDismissOnLeave(conversation)
+            || NotificationPolicy.ShouldDismissOnRead(conversation, view?.SelectedConversationId, view?.IsWindowFocused == true, settings.NotifyForViewedChat))
         {
             RemoveConversation(conversation.Id);
         }

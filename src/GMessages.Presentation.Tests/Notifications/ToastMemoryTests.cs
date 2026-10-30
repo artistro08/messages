@@ -66,6 +66,44 @@ public sealed class ToastMemoryTests
     }
 
     /// <summary>
+    /// A snoozed toast whose chat is then archived or muted doesn't wake: the gate NotificationService runs on a
+    /// conversation change dismisses it, as a read does. A still active, unread chat's snooze stays.
+    /// </summary>
+    [TestMethod]
+    public void LeftTheInboxOrMuted_CancelsTheSnooze()
+    {
+        var memory = new ToastMemory(5);
+        memory.Remember(Toast("m1"));
+        memory.Remember(Toast("m2", "c2"));
+        memory.Remember(Toast("m3", "c3"));
+        ShownToast archived = memory.Snooze("m1", "c1")!;
+        ShownToast muted    = memory.Snooze("m2", "c2")!;
+        ShownToast active   = memory.Snooze("m3", "c3")!;
+
+        // The Gate NotificationService.OnConversationChanged Runs, With Every Chat Still Unread
+        ConversationInfo[] changed =
+        [
+            Unread("c1") with { Status = ConversationStatus.Archived },
+            Unread("c2") with { IsMuted = true },
+            Unread("c3"),
+        ];
+        foreach (ConversationInfo conversation in changed)
+        {
+            if (NotificationPolicy.ShouldDismissOnLeave(conversation) || NotificationPolicy.ShouldDismissOnRead(conversation, null, false, false))
+            {
+                memory.RemoveConversation(conversation.Id);
+            }
+        }
+
+        Assert.IsFalse(memory.Wake(archived));
+        Assert.IsFalse(memory.Wake(muted));
+        Assert.IsTrue(memory.Wake(active), "A still active, unread chat's snooze stays.");
+    }
+
+    private static ConversationInfo Unread(string id) =>
+        new(id, "Ann", false, ConversationStatus.Active, true, false, DateTimeOffset.UnixEpoch, "", false, "", [], "me", "m1");
+
+    /// <summary>
     /// The real phone sends several updates per incoming message (status changes, reactions). Even when every one of
     /// them reaches the toast gate as new, the message gets one toast; a snooze wake still shows its own toast again.
     /// </summary>

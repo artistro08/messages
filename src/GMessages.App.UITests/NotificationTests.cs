@@ -261,6 +261,26 @@ public sealed class NotificationTests : UiTest
         Wait.Until(() => _toasts.TryFind("snoozed marker") is null, SignOutTime, () => "The toast stayed after sign-out.");
     }
 
+    /// <summary>
+    /// Archiving a chat on the phone removes its toast, as reading it does.
+    /// </summary>
+    /// <remarks>
+    /// Muting, blocking and deleting take the same path (<c>NotificationPolicyTests</c>); that it also cancels a waiting
+    /// snooze is covered by <c>ToastMemoryTests</c>.
+    /// </remarks>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Archived_RemovesToast()
+    {
+        await PairAsync();
+        Server.Phone.PushIncoming("c-ann", "archive marker");
+        _toasts.WaitFor(AppDriver.DefaultTimeout, "Ann Lee", "archive marker");
+
+        Server.Phone.PushConversationStatus("c-ann", ConversationStatus.Archived);
+
+        Wait.Until(() => _toasts.TryFind("archive marker") is null, AppDriver.DefaultTimeout, () => "The toast stayed after the chat was archived.");
+    }
+
     // =========================================================================
     // HELPERS
     // =========================================================================
