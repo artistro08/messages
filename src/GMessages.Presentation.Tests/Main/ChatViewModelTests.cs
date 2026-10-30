@@ -720,7 +720,7 @@ public sealed class ChatViewModelTests
     }
 
     /// <summary>
-    /// A chat not in memory shows its saved copy from the database before the phone answers, under the small top ring.
+    /// A chat not in memory shows its saved copy from the database before the phone answers, with no ring.
     /// </summary>
     [TestMethod]
     public async Task Load_SavedCopy_ShowsBeforePhoneAnswers()
