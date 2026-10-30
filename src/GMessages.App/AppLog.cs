@@ -89,6 +89,9 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 927, Level = LogLevel.Information, Message = "Picked {Picked} files in {ConversationId}; {Attached} attachments wait")]
     public static partial void AttachmentsPicked(ILogger logger, string conversationId, int picked, int attached);
 
+    [LoggerMessage(EventId = 928, Level = LogLevel.Information, Message = "Microphone {Step}: {Result} (thread {ThreadId}, {Apartment})")]
+    public static partial void MicrophoneStep(ILogger logger, string step, string result, int threadId, string apartment);
+
     [LoggerMessage(EventId = 951,Level = LogLevel.Information, Message = "Test endpoint {Endpoint}, data folder {DataFolder}")]
     public static partial void TestEndpoint(ILogger logger, string endpoint, string dataFolder);
 }

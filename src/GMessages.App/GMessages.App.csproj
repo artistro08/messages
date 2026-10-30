@@ -15,6 +15,8 @@
     <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
     <!-- Tray app with a small heap: no background GC thread and its reserved memory -->
     <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+    <!-- LibraryImport And Generated COM (Microphone Consent) Generate Unsafe Code -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- Exe icon, drawn by scripts/New-AppAssets.ps1 -->
     <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
   </PropertyGroup>
