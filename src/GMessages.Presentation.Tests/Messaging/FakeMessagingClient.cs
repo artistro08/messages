@@ -156,12 +156,20 @@ internal sealed class FakeMessagingClient : IMessagingClient
     /// <summary>When set, the next send answers only after this completes.</summary>
     public TaskCompletionSource? SendAnswerGate { get; set; }
 
+    /// <summary>When set, a send it answers true for throws an <see cref="HttpRequestException"/>.</summary>
+    public Func<SendMessageRequest, bool>? SendFails { get; set; }
+
     public async Task<SendMessageResponse> SendMessageAsync(SendMessageRequest request, CancellationToken ct)
     {
         Sent.Add(request);
         if (SendAnswerGate is { } gate)
         {
             await gate.Task;
+        }
+
+        if (SendFails?.Invoke(request) == true)
+        {
+            throw new HttpRequestException();
         }
 
         return SendThrows is { } ex ? throw ex : SendAnswer;

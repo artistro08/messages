@@ -293,8 +293,8 @@
 
         <!-- Over The Message Box: the attachment chips, then the reply chip -->
         <StackPanel Grid.Row="3">
-            <!-- Attachments: a chip per picked photo (the photo itself) or file (its icon and name), in send order, each with a
-                 button to drop it. The too-big note shows over them when a picked file was refused -->
+            <!-- Chips: the voice preview first, then a chip per picked photo (the photo itself) or file (its icon and name), in
+                 send order, each with a button to drop it. The too-big note shows over them when a picked file was refused -->
             <TextBlock
                 Margin="12,8,12,0"
                 AutomationProperties.AutomationId="Chat.AttachError"
@@ -310,64 +310,122 @@
                 HorizontalScrollMode="Auto"
                 VerticalScrollBarVisibility="Disabled"
                 VerticalScrollMode="Disabled"
-                Visibility="{x:Bind Chat.HasAttachments, Mode=OneWay, FallbackValue=Collapsed}">
-                <ItemsControl x:Name="AttachmentList" AutomationProperties.AutomationId="Chat.Attachments">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <StackPanel Orientation="Horizontal" Spacing="8" />
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="main:PendingAttachment">
-                            <Grid
-                                Height="64"
-                                MinWidth="64"
-                                AutomationProperties.AutomationId="{x:Bind local:ChatPane.ChipIdOf('Chat.Attachment.', Id)}"
-                                AutomationProperties.Name="{x:Bind Name}"
-                                Background="{ThemeResource ControlFillColorDefaultBrush}"
-                                BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
-                                BorderThickness="1"
-                                CornerRadius="8">
-                                <Image
-                                    Width="64"
+                Visibility="{x:Bind local:ChatPane.AnyChips(Chat.HasAttachments, Chat.Voice.IsPreview), Mode=OneWay, FallbackValue=Collapsed}">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <!-- Voice Preview: the recording waiting for Send, the first chip since it sends first, with play or pause,
+                         its waveform (a click or the arrow keys seek), its length and the chip's remove button (which deletes it) -->
+                    <Grid
+                        Height="64"
+                        MinWidth="64"
+                        Background="{ThemeResource ControlFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Visibility="{x:Bind Chat.Voice.IsPreview, Mode=OneWay, FallbackValue=Collapsed}">
+                        <StackPanel
+                            Padding="4,0,36,0"
+                            VerticalAlignment="Center"
+                            Orientation="Horizontal"
+                            Spacing="8">
+                            <Button
+                                x:Name="PreviewPlay"
+                                Width="32"
+                                Height="32"
+                                AutomationProperties.AutomationId="Chat.VoicePlay"
+                                Click="OnPreviewPlayClick"
+                                Style="{StaticResource IconButtonStyle}">
+                                <FontIcon x:Name="PreviewGlyph" FontSize="16" />
+                            </Button>
+                            <controls:Waveform
+                                x:Name="PreviewBars"
+                                VerticalAlignment="Center"
+                                AutomationProperties.AutomationId="Chat.VoiceWave"
+                                BarBrush="{ThemeResource TextFillColorPrimaryBrush}"
+                                SeekRequested="OnPreviewSeekRequested" />
+                            <TextBlock
+                                VerticalAlignment="Center"
+                                AutomationProperties.AutomationId="Chat.VoiceLength"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Text="{x:Bind Chat.Voice.LengthText, Mode=OneWay, FallbackValue=''}" />
+                        </StackPanel>
+                        <Button
+                            Width="24"
+                            Height="24"
+                            Margin="0,4,4,0"
+                            Padding="0"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Top"
+                            AutomationProperties.AutomationId="Chat.VoiceRemove"
+                            AutomationProperties.Name="{x:Bind local:ChatPane.RemoveAttachmentText}"
+                            Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}"
+                            Click="OnPreviewRemoveClick"
+                            CornerRadius="12"
+                            Style="{StaticResource IconButtonStyle}"
+                            ToolTipService.ToolTip="{x:Bind local:ChatPane.RemoveAttachmentText}">
+                            <FontIcon FontSize="10" Glyph="&#xE711;" />
+                        </Button>
+                    </Grid>
+                    <!-- /Voice Preview -->
+
+                    <ItemsControl x:Name="AttachmentList" AutomationProperties.AutomationId="Chat.Attachments">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal" Spacing="8" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="main:PendingAttachment">
+                                <Grid
                                     Height="64"
-                                    Source="{x:Bind local:ChatPane.ChipImage(Bytes, IsPhoto)}"
-                                    Stretch="UniformToFill"
-                                    Visibility="{x:Bind IsPhoto}" />
-                                <StackPanel
-                                    Padding="12,0,36,0"
-                                    VerticalAlignment="Center"
-                                    Orientation="Horizontal"
-                                    Spacing="8"
-                                    Visibility="{x:Bind local:ChatPane.Not(IsPhoto)}">
-                                    <FontIcon FontSize="20" Glyph="&#xE8A5;" />
-                                    <TextBlock
-                                        MaxWidth="160"
+                                    MinWidth="64"
+                                    AutomationProperties.AutomationId="{x:Bind local:ChatPane.ChipIdOf('Chat.Attachment.', Id)}"
+                                    AutomationProperties.Name="{x:Bind Name}"
+                                    Background="{ThemeResource ControlFillColorDefaultBrush}"
+                                    BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="8">
+                                    <Image
+                                        Width="64"
+                                        Height="64"
+                                        Source="{x:Bind local:ChatPane.ChipImage(Open, IsPhoto)}"
+                                        Stretch="UniformToFill"
+                                        Visibility="{x:Bind IsPhoto}" />
+                                    <StackPanel
+                                        Padding="12,0,36,0"
                                         VerticalAlignment="Center"
-                                        MaxLines="1"
-                                        Text="{x:Bind Name}"
-                                        TextTrimming="CharacterEllipsis" />
-                                </StackPanel>
-                                <Button
-                                    Width="24"
-                                    Height="24"
-                                    Margin="0,4,4,0"
-                                    Padding="0"
-                                    HorizontalAlignment="Right"
-                                    VerticalAlignment="Top"
-                                    AutomationProperties.AutomationId="{x:Bind local:ChatPane.ChipIdOf('Chat.RemoveAttachment.', Id)}"
-                                    AutomationProperties.Name="{x:Bind local:ChatPane.RemoveAttachmentText}"
-                                    Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}"
-                                    Click="OnRemoveAttachmentClick"
-                                    CornerRadius="12"
-                                    Style="{StaticResource IconButtonStyle}"
-                                    ToolTipService.ToolTip="{x:Bind local:ChatPane.RemoveAttachmentText}">
-                                    <FontIcon FontSize="10" Glyph="&#xE711;" />
-                                </Button>
-                            </Grid>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                                        Orientation="Horizontal"
+                                        Spacing="8"
+                                        Visibility="{x:Bind local:ChatPane.Not(IsPhoto)}">
+                                        <FontIcon FontSize="20" Glyph="&#xE8A5;" />
+                                        <TextBlock
+                                            MaxWidth="160"
+                                            VerticalAlignment="Center"
+                                            MaxLines="1"
+                                            Text="{x:Bind Name}"
+                                            TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+                                    <Button
+                                        Width="24"
+                                        Height="24"
+                                        Margin="0,4,4,0"
+                                        Padding="0"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Top"
+                                        AutomationProperties.AutomationId="{x:Bind local:ChatPane.ChipIdOf('Chat.RemoveAttachment.', Id)}"
+                                        AutomationProperties.Name="{x:Bind local:ChatPane.RemoveAttachmentText}"
+                                        Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}"
+                                        Click="OnRemoveAttachmentClick"
+                                        CornerRadius="12"
+                                        Style="{StaticResource IconButtonStyle}"
+                                        ToolTipService.ToolTip="{x:Bind local:ChatPane.RemoveAttachmentText}">
+                                        <FontIcon FontSize="10" Glyph="&#xE711;" />
+                                    </Button>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
             </ScrollViewer>
             <!-- /Attachments -->
 
@@ -382,55 +440,6 @@
                 Style="{StaticResource CaptionTextBlockStyle}"
                 TextWrapping="Wrap"
                 Visibility="{x:Bind Chat.Voice.IsMicrophoneOff, Mode=OneWay, FallbackValue=Collapsed}" />
-
-            <!-- Voice Preview: the recording waiting for Send, with play or pause, its waveform (a click seeks), its length and
-                 a button to remove it (which deletes it) -->
-            <Grid
-                Margin="12,8,12,0"
-                Padding="4,4,4,4"
-                HorizontalAlignment="Left"
-                Background="{ThemeResource ControlFillColorDefaultBrush}"
-                BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
-                BorderThickness="1"
-                ColumnDefinitions="Auto,Auto,Auto,Auto"
-                ColumnSpacing="8"
-                CornerRadius="8"
-                Visibility="{x:Bind Chat.Voice.IsPreview, Mode=OneWay, FallbackValue=Collapsed}">
-                <Button
-                    x:Name="PreviewPlay"
-                    Width="32"
-                    Height="32"
-                    AutomationProperties.AutomationId="Chat.VoicePlay"
-                    Click="OnPreviewPlayClick"
-                    Style="{StaticResource IconButtonStyle}">
-                    <FontIcon x:Name="PreviewGlyph" FontSize="16" />
-                </Button>
-                <controls:Waveform
-                    x:Name="PreviewBars"
-                    Grid.Column="1"
-                    VerticalAlignment="Center"
-                    BarBrush="{ThemeResource TextFillColorPrimaryBrush}"
-                    SeekRequested="OnPreviewSeekRequested" />
-                <TextBlock
-                    Grid.Column="2"
-                    VerticalAlignment="Center"
-                    AutomationProperties.AutomationId="Chat.VoiceLength"
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                    Style="{StaticResource CaptionTextBlockStyle}"
-                    Text="{x:Bind Chat.Voice.LengthText, Mode=OneWay, FallbackValue=''}" />
-                <Button
-                    Grid.Column="3"
-                    Width="32"
-                    Height="32"
-                    AutomationProperties.AutomationId="Chat.VoiceRemove"
-                    AutomationProperties.Name="{x:Bind local:ChatPane.RemoveAttachmentText}"
-                    Click="OnPreviewRemoveClick"
-                    Style="{StaticResource IconButtonStyle}"
-                    ToolTipService.ToolTip="{x:Bind local:ChatPane.RemoveAttachmentText}">
-                    <FontIcon FontSize="12" Glyph="&#xE711;" />
-                </Button>
-            </Grid>
-            <!-- /Voice Preview -->
 
             <!-- Replying To: joined to the top of the message box as one control (the same width and left edge, rounded on top
                  only, while the box squares its top corners): an accent bar, the quoted text and a button to drop the reply -->
@@ -472,14 +481,15 @@
             </Grid>
         </StackPanel>
 
-        <!-- Compose: the message box (Enter sends, Shift + Enter adds a line), with the attach and emoji icons inside it on the
-             left and the mic and send inside it on the right, icons only. Under the reply chip it meets the chip with square top corners -->
+        <!-- Compose: the message box (Enter sends, Shift + Enter adds a line), with the emoji icon inside it on the left and the
+             paperclip and mic inside it on the right, then send, icons only. Its padding keeps the text clear of them. Under the
+             reply chip it meets the chip with square top corners -->
         <Grid Grid.Row="4" Padding="{x:Bind local:ChatPane.ComposePadding(Chat.IsReplying), Mode=OneWay}">
             <TextBox
                 x:Name="DraftBox"
                 MinHeight="44"
                 MaxHeight="160"
-                Padding="76,11,76,11"
+                Padding="44,11,108,11"
                 AcceptsReturn="True"
                 AutomationProperties.AutomationId="Chat.Draft"
                 AutomationProperties.Name="Message"
@@ -511,27 +521,10 @@
                 </TextBox.Resources>
             </TextBox>
 
-            <!-- Attach: the ＋ opens the file picker for any files (Ctrl + Shift + a; Ctrl + Shift + p for photos) -->
             <Button
                 Width="32"
                 Height="32"
                 Margin="6,0,0,6"
-                HorizontalAlignment="Left"
-                VerticalAlignment="Bottom"
-                AutomationProperties.AutomationId="Chat.Attach"
-                AutomationProperties.Name="{x:Bind local:ChatPane.AttachText}"
-                Click="OnAttachClick"
-                Style="{StaticResource IconButtonStyle}"
-                ToolTipService.ToolTip="{x:Bind local:ChatPane.AttachText}">
-                <FontIcon
-                    FontSize="16"
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                    Glyph="&#xE710;" />
-            </Button>
-            <Button
-                Width="32"
-                Height="32"
-                Margin="38,0,0,6"
                 HorizontalAlignment="Left"
                 VerticalAlignment="Bottom"
                 AutomationProperties.AutomationId="Chat.Emoji"
@@ -542,6 +535,24 @@
                     FontSize="16"
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                     Glyph="&#xE76E;" />
+            </Button>
+            <!-- Attach: the paperclip, inside the box's right edge left of the mic, opens the file picker for any files
+                 (Ctrl + Shift + a; Ctrl + Shift + p for photos) -->
+            <Button
+                Width="32"
+                Height="32"
+                Margin="0,0,70,6"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Bottom"
+                AutomationProperties.AutomationId="Chat.Attach"
+                AutomationProperties.Name="{x:Bind local:ChatPane.AttachText}"
+                Click="OnAttachClick"
+                Style="{StaticResource IconButtonStyle}"
+                ToolTipService.ToolTip="{x:Bind local:ChatPane.AttachText}">
+                <FontIcon
+                    FontSize="16"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Glyph="&#xE723;" />
             </Button>
             <!-- Record: the mic, inside the box's right edge beside Send, always there -->
             <Button

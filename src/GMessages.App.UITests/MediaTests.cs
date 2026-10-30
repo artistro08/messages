@@ -181,12 +181,109 @@ public sealed partial class MediaTests : UiTest
         Assert.AreEqual("Look", FakeGoogle.FakePhone.SentText(Server.Phone.Sent[1]), "The text didn't follow the photo.");
         Wait.Until(() => App.TryFind("Chat.Attachment.1") is null, AppDriver.DefaultTimeout, () => "The chip stayed after Send.");
 
-        // The Photo's Echo (Before The Text's) Downloads And Shows The Photo, In The Photo's Shape
+        // The Photo's Echo (Before The Text's) Keeps Showing The Photo, In The Photo's Shape
         string echo_id          = Server.Phone.Chats.Page("c-media", 2, null).Page[1].MessageID;
         AutomationElement photo = App.Find("Bubble.Photo." + echo_id);
         WaitForStatus(photo, Full);
         System.Drawing.Rectangle box = photo.BoundingRectangle;
         Assert.AreEqual(1.5, (double)box.Width / box.Height, 0.03, $"The sent photo's box {box} doesn't keep its 3:2 shape.");
+    }
+
+    /// <summary>
+    /// A sent photo's echo (which brings its media ID) keeps the photo on screen: it never clears, and nothing downloads
+    /// it again, since the bytes sent are the photo.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task SentPhoto_Echo_NoReload()
+    {
+        await OpenMediaChatAsync();
+        AutomationElement? first = null;
+        Wait.Until(() => (first = FirstPhoto()) is not null, AppDriver.DefaultTimeout, () => "Mia's chat showed no photo.");
+        string seeded = first!.Properties.AutomationId.ValueOrDefault ?? string.Empty;
+        Pick(("split.png", Png(300, 200, SplitColors)));
+        App.Find("Chat.Attach").Patterns.Invoke.Pattern.Invoke();
+        App.Find("Chat.Attachment.1");
+        App.Find("Chat.Send").Patterns.Invoke.Pattern.Invoke();
+
+        // The Sent Photo, Shown From Its Own Bytes
+        AutomationElement? photo = null;
+        Wait.Until(() => (photo = SentPhoto(seeded)) is not null, AppDriver.DefaultTimeout, () => "The sent photo didn't show.");
+        WaitForStatus(photo!, Full);
+        Wait.Until(() => Server.Phone.Sent.Count == 1, AppDriver.DefaultTimeout, () => "The phone didn't get the photo.");
+        string media_id = Server.Phone.Sent[0].MessagePayload.MessageInfo.Single().MediaContent.MediaID;
+        string echo_id  = Server.Phone.Chats.Page("c-media", 1, null).Page[0].MessageID;
+
+        // Through The Echo And A Moment After, It Stays Full
+        bool echoed    = false;
+        DateTime until = DateTime.UtcNow + TimeSpan.FromSeconds(3);
+        while (DateTime.UtcNow < until)
+        {
+            Assert.AreEqual(Full, photo!.Properties.ItemStatus.ValueOrDefault, "The sent photo cleared when its echo arrived.");
+            echoed |= photo.Properties.AutomationId.ValueOrDefault == "Bubble.Photo." + echo_id;
+            Thread.Sleep(30);
+        }
+
+        Assert.IsTrue(echoed, "The sent photo's echo never arrived.");
+        CollectionAssert.DoesNotContain(Server.DownloadedMediaIds.ToList(), media_id, "The sent photo downloaded again after its echo.");
+    }
+
+    /// <summary>
+    /// A download that stalls gives up after the download timeout (shortened by the test hook) and shows the photo's
+    /// failure; a click tries again and shows it.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task StalledDownload_ShowsFailed()
+    {
+        await OpenMediaChatAsync();
+        File.WriteAllText(Path.Combine(App.DataDir, "download-timeout.txt"), "2");
+        Server.MediaDownloadDelay = TimeSpan.FromSeconds(60);
+
+        Message message         = Server.Phone.PushIncomingMedia("c-media", "image/png", Png(64, 64, SplitColors), "stalled.png");
+        AutomationElement photo = App.Find("Bubble.Photo." + message.MessageID);
+        WaitForStatus(photo, Failed);
+        Assert.IsTrue(HasText(photo, ChatCopy.PhotoLoadFailed), $"'{ChatCopy.PhotoLoadFailed}' didn't show on the stalled photo.");
+
+        Server.MediaDownloadDelay = TimeSpan.Zero;
+        photo.Click();
+        WaitForStatus(photo, Full);
+    }
+
+    /// <summary>
+    /// A thumbnail-only photo whose full size never comes from the phone offers to try again once the wait (shortened by
+    /// the test hook) runs out.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task ReceivedPhoto_FullSizeNeverArrives_ShowsRetry()
+    {
+        await OpenMediaChatAsync();
+        File.WriteAllText(Path.Combine(App.DataDir, "full-size-wait.txt"), "2");
+        Server.Phone.FullSizeDelay = Timeout.InfiniteTimeSpan;
+
+        Message message         = Server.Phone.PushIncomingMedia("c-media", "image/png", Png(300, 200, SplitColors), "never.png", withThumbnail: true);
+        AutomationElement photo = App.Find("Bubble.Photo." + message.MessageID);
+        WaitForStatus(photo, Blurred);
+        WaitForStatus(photo, Failed);
+        Assert.IsTrue(HasText(photo, ChatCopy.PhotoLoadFailed), $"'{ChatCopy.PhotoLoadFailed}' didn't show when the full size never came.");
+    }
+
+    /// <summary>
+    /// The paperclip sits inside the message box's right edge, left of the mic.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Attach_InsideDraftBox_LeftOfMic()
+    {
+        await OpenMediaChatAsync();
+
+        System.Drawing.Rectangle box    = App.Find("Chat.Draft").BoundingRectangle;
+        System.Drawing.Rectangle attach = App.Find("Chat.Attach").BoundingRectangle;
+        System.Drawing.Rectangle record = App.Find("Chat.Record").BoundingRectangle;
+        Assert.IsTrue(box.Contains(attach), $"The paperclip {attach} isn't inside the message box {box}.");
+        Assert.IsTrue(attach.Right <= record.Left, $"The paperclip {attach} isn't left of the mic {record}.");
+        Assert.IsTrue(attach.Left > box.Left + (box.Width / 2), $"The paperclip {attach} isn't on the message box's right side {box}.");
     }
 
     /// <summary>
@@ -469,6 +566,12 @@ public sealed partial class MediaTests : UiTest
     private AutomationElement? FirstPhoto() =>
         App.TryFind("Chat.Messages") is { } list
             ? AppDriver.Search(list, e => e.Properties.AutomationId.ValueOrDefault?.StartsWith("Bubble.Photo.", StringComparison.Ordinal) == true)
+            : null;
+
+    // The Newest Photo That Isn't The Seeded One (A Sent Photo), Or Null
+    private AutomationElement? SentPhoto(string seeded) =>
+        App.TryFind("Chat.Messages") is { } list
+            ? AppDriver.Search(list, e => e.Properties.AutomationId.ValueOrDefault is { } id && id.StartsWith("Bubble.Photo.", StringComparison.Ordinal) && id != seeded)
             : null;
 
     // Waits For The Photo's Load State (Its Item Status Under The Test Hooks)

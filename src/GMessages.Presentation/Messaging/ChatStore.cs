@@ -502,7 +502,7 @@ public sealed partial class ChatStore : IDisposable
     {
         // Upload, Then Send
         MediaContent media = await UploadAttachmentAsync(bytes, fileName, mime, progress, ct).ConfigureAwait(false);
-        return await SendUploadedMediaAsync(conversationId, media, caption, tmpId, ct).ConfigureAwait(false);
+        return await SendUploadedMediaAsync(conversationId, media, caption, tmpId, null, ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -542,19 +542,22 @@ public sealed partial class ChatStore : IDisposable
     /// Ported from <c>ConvertMatrixMessage</c> in the Go connector (handlematrix.go): the uploaded
     /// <see cref="MediaContent"/> is the message's first <see cref="MessageInfo"/>, and the caption a second one holding
     /// its text. RCS refuses captions on media (capabilities.go), so in an RCS chat the caption goes as its own text
-    /// message right after. Sent as the conversation's default outgoing participant with its SIM, as
-    /// <see cref="SendTextAsync"/> is. A retry sends the same media part again. The file name and type are never logged.
+    /// message right after; if only that caption fails, the media still counts as sent (the failure is logged by type),
+    /// so a retry never sends the media twice. Sent as the conversation's default outgoing participant with its SIM, as
+    /// <see cref="SendTextAsync"/> is. A reply carries the quoted message's ID, as a text reply does. A retry sends the
+    /// same media part again. The file name and type are never logged.
     /// </remarks>
     /// <param name="conversationId">The conversation ID.</param>
     /// <param name="media">The uploaded media part (see <see cref="UploadAttachmentAsync"/>).</param>
     /// <param name="caption">The caption, or null or empty for none.</param>
     /// <param name="tmpId">The temporary ID (<c>GmClient.NewTmpId()</c>), so the echo can be matched to the pending bubble.</param>
+    /// <param name="replyToId">The ID of the message replied to, or null.</param>
     /// <param name="ct">Cancels the wait.</param>
     /// <returns>The pending media message as sent (without the caption when it went apart).</returns>
     /// <exception cref="ArgumentNullException"><paramref name="media"/> is null.</exception>
     /// <exception cref="MessagingUnavailableException">Not connected.</exception>
     /// <exception cref="MessageSendException">The phone answered with a status other than success.</exception>
-    public async Task<ChatMessage> SendUploadedMediaAsync(string conversationId, MediaContent media, string? caption, string tmpId, CancellationToken ct)
+    public async Task<ChatMessage> SendUploadedMediaAsync(string conversationId, MediaContent media, string? caption, string tmpId, string? replyToId, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(media);
 
@@ -573,23 +576,37 @@ public sealed partial class ChatStore : IDisposable
             request.MessagePayload.MessageInfo.Add(new MessageInfo { MessageContent = new MessageContent { Content = text } });
         }
 
+        // A Reply Carries The Quoted Message's ID (handlematrix.go)
+        if (replyToId is not null)
+        {
+            request.Reply = new ReplyPayload { MessageID = replyToId };
+        }
+
         await SendCheckedAsync(client, request, ct).ConfigureAwait(false);
         LogMediaSent(conversationId, media.Size);
 
         var pending = new ChatMessage(string.Empty, tmpId, conversationId, conversation.DefaultOutgoingId, DateTimeOffset.UtcNow, true, MediaPart.KindOf(media.Format), caption_apart ? string.Empty : text, MessageStatusType.OutgoingSending)
         {
             Media = MediaPart.From(media),
-            IsRcs = conversation.IsRcs,
+            IsRcs     = conversation.IsRcs,
+            ReplyToId = replyToId ?? string.Empty,
         };
         if (generation == Generation)
         {
             CacheMessage(pending);
         }
 
-        // RCS: The Caption Follows As Its Own Message
+        // RCS: The Caption Follows As Its Own Message; Its Failure Leaves The Media Sent
         if (caption_apart)
         {
-            await SendTextAsync(conversationId, text, GmClient.NewTmpId(), null, ct).ConfigureAwait(false);
+            try
+            {
+                await SendTextAsync(conversationId, text, GmClient.NewTmpId(), null, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                LogActionFailed("send caption", ex.GetType().Name);
+            }
         }
 
         return pending;

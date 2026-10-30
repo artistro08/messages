@@ -34,6 +34,9 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     /// <summary>The longest gap between two messages from the same sender that still groups their bubbles.</summary>
     public static readonly TimeSpan GroupGap = TimeSpan.FromMinutes(3);
 
+    /// <summary>The most the chips may hold together, in bytes: 200 MiB.</summary>
+    public const long MaxTotalAttachmentBytes = 200L * 1024 * 1024;
+
     private readonly ChatStore _store;
     private readonly TimeProvider _time;
     private readonly Action<Action> _post;
@@ -442,8 +445,14 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     /// <para>
     /// A recording waiting in the preview chip goes first, as <c>Voice message.m4a</c> (<c>audio/mp4</c>), its temp file
     /// deleted. Attachments go first, one at a time in order, each its own bubble showing its upload. Off RCS the text rides on
-    /// the last one as its caption; RCS refuses captions on media, so there the text follows as its own message. A
-    /// failed attachment fails only its own bubble, which retries on its own.
+    /// the last one as its caption; RCS refuses captions on media, so there the text follows as its own message. A reply
+    /// rides on the text, or on the first attachment when there is no text message. A failed attachment fails only its
+    /// own bubble, which retries on its own.
+    /// </para>
+    /// <para>
+    /// The picked files are read only now, each into one array. A file that can no longer be read stays as its chip,
+    /// with <see cref="ChatCopy.AttachSendFailed"/> over the chips. An attachment's bytes are let go once its upload is
+    /// done; only a failure before that keeps them for the retry.
     /// </para>
     /// </remarks>
     /// <returns>A task that completes when the phone answered or the bubbles failed.</returns>
@@ -456,32 +465,54 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
 
         string text                         = string.IsNullOrWhiteSpace(Draft) ? string.Empty : Draft;
         List<PendingAttachment> attachments = [.. Attachments];
-
-        // The Recording Goes First, As An Attachment (Its Temp File Is Deleted Now)
-        if (Voice.Take() is { } voice)
-        {
-            attachments.Insert(0, new PendingAttachment(++_nextAttachmentId, VoiceDraft.FileName, VoiceDraft.Mime, voice, 0, 0));
-        }
         bool is_rcs                         = _store.Find(ConversationId)?.IsRcs == true;
         string? reply_to                    = ReplyingTo is { IsRcs: true, Id.Length: > 0 } quoted ? quoted.Id : null;
-        bool caption_on_media               = attachments.Count > 0 && !is_rcs && text.Length > 0;
 
+        // Cleared Before Reading, So A Second Send Can't Send The Same Files Again
         Draft = string.Empty;
         Attachments.Clear();
         AttachError = string.Empty;
         CancelReply();
 
-        // Optimistic Bubbles: The Attachments (Showing Their Own Bytes), Then The Text
-        List<MessageBubbleViewModel> bubbles = [];
-        for (int i = 0; i < attachments.Count; i++)
+        // Read The Picked Files Now; One That Can't Be Read Goes Back As Its Chip
+        List<(string Name, string Mime, byte[] Bytes, int Width, int Height)> ready = [];
+        foreach (PendingAttachment attachment in attachments)
         {
-            string caption = caption_on_media && i == attachments.Count - 1 ? text : string.Empty;
-            MessageBubbleViewModel media_bubble = AddPending(MediaMessage(attachments[i], caption, is_rcs));
-            _outgoing[media_bubble]             = new OutgoingMedia(attachments[i].Bytes, attachments[i].Name, attachments[i].Mime);
+            try
+            {
+                ready.Add((attachment.Name, attachment.Mime, await attachment.ReadAsync(), attachment.Width, attachment.Height));
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                _store.LogFailure("read attachment", ex);
+                Attachments.Add(attachment);
+                AttachError = ChatCopy.AttachSendFailed;
+            }
+        }
+
+        // The Recording Goes First, As An Attachment (Its Temp File Is Deleted Now)
+        if (Voice.Take() is { } voice)
+        {
+            ready.Insert(0, (VoiceDraft.FileName, VoiceDraft.Mime, voice, 0, 0));
+        }
+
+        bool caption_on_media = ready.Count > 0 && !is_rcs && text.Length > 0;
+        bool text_apart       = text.Length > 0 && !caption_on_media;
+
+        // Optimistic Bubbles: The Attachments (Showing Their Own Bytes), Then The Text. A Reply With No Text Message
+        // Rides On The First Attachment
+        List<MessageBubbleViewModel> bubbles = [];
+        for (int i = 0; i < ready.Count; i++)
+        {
+            var a                               = ready[i];
+            string caption                      = caption_on_media && i == ready.Count - 1 ? text : string.Empty;
+            string? media_reply                 = i == 0 && !text_apart ? reply_to : null;
+            MessageBubbleViewModel media_bubble = AddPending(MediaMessage(a.Name, a.Mime, a.Bytes, a.Width, a.Height, caption, media_reply, is_rcs));
+            _outgoing[media_bubble]             = new OutgoingMedia(a.Bytes, a.Name, a.Mime);
             bubbles.Add(media_bubble);
         }
 
-        if (text.Length > 0 && !caption_on_media)
+        if (text_apart)
         {
             bubbles.Add(AddPending(new ChatMessage(string.Empty, GmClient.NewTmpId(), ConversationId, string.Empty, _time.GetUtcNow(), true, MessageKind.Text, text, MessageStatusType.OutgoingSending)
             {
@@ -500,12 +531,37 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
-    /// Adds a picked photo or file as a chip, unless it is over <see cref="ChatStore.MaxAttachmentBytes"/>.
+    /// Adds a picked photo or file as a chip, unless <see cref="CanAttach"/> refuses its size.
     /// </summary>
     /// <remarks>
-    /// Check <see cref="CanAttach"/> with the file's size before reading it, so a huge file is never read in. A refused
+    /// The file is not read now: <paramref name="open"/> opens it for the chip's picture, and Send reads it. A refused
     /// file shows <see cref="AttachError"/> until the next pick (<see cref="ClearAttachError"/>), a removed chip or Send.
     /// </remarks>
+    /// <param name="name">The file name the other side sees.</param>
+    /// <param name="mime">The mime type.</param>
+    /// <param name="size">The file's size in bytes.</param>
+    /// <param name="open">Opens the file for reading.</param>
+    /// <param name="width">A photo's width in pixels, or 0 when unknown.</param>
+    /// <param name="height">A photo's height in pixels, or 0 when unknown.</param>
+    /// <returns>True when the chip was added.</returns>
+    public bool Attach(string name, string mime, long size, Func<Task<Stream>> open, int width = 0, int height = 0)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        ArgumentNullException.ThrowIfNull(mime);
+        ArgumentNullException.ThrowIfNull(open);
+
+        if (!CanAttach(size))
+        {
+            return false;
+        }
+
+        Attachments.Add(new PendingAttachment(++_nextAttachmentId, name, mime, size, width, height, open));
+        return true;
+    }
+
+    /// <summary>
+    /// Adds bytes already in memory as a chip (see the overload that opens a file).
+    /// </summary>
     /// <param name="name">The file name the other side sees.</param>
     /// <param name="mime">The mime type.</param>
     /// <param name="bytes">The file's bytes.</param>
@@ -514,29 +570,30 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     /// <returns>True when the chip was added.</returns>
     public bool Attach(string name, string mime, byte[] bytes, int width = 0, int height = 0)
     {
-        ArgumentNullException.ThrowIfNull(name);
-        ArgumentNullException.ThrowIfNull(mime);
         ArgumentNullException.ThrowIfNull(bytes);
 
-        if (!CanAttach(bytes.LongLength))
-        {
-            return false;
-        }
-
-        Attachments.Add(new PendingAttachment(++_nextAttachmentId, name, mime, bytes, width, height));
-        return true;
+        return Attach(name, mime, bytes.LongLength, () => Task.FromResult<Stream>(new MemoryStream(bytes, writable: false)), width, height);
     }
 
     /// <summary>
     /// Tells whether a file of this size may be attached; when not, <see cref="AttachError"/> says it is too big.
     /// </summary>
     /// <param name="size">The file's size in bytes.</param>
-    /// <returns>False when the file is over <see cref="ChatStore.MaxAttachmentBytes"/>.</returns>
+    /// <returns>
+    /// False when the file is over <see cref="ChatStore.MaxAttachmentBytes"/>, or would take the chips past
+    /// <see cref="MaxTotalAttachmentBytes"/> together.
+    /// </returns>
     public bool CanAttach(long size)
     {
         if (size > ChatStore.MaxAttachmentBytes)
         {
             AttachError = ChatCopy.AttachTooBig;
+            return false;
+        }
+
+        if (Attachments.Sum(a => a.Size) + size > MaxTotalAttachmentBytes)
+        {
+            AttachError = ChatCopy.AttachTotalTooBig;
             return false;
         }
 
@@ -650,8 +707,9 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
                     outgoing.Bytes    = [];
                 }
 
-                string caption = bubble.Caption;
-                await _store.SendUploadedMediaAsync(ConversationId, outgoing.Uploaded, caption.Length > 0 ? caption : null, bubble.TmpId, CancellationToken.None);
+                string caption      = bubble.Caption;
+                string? media_reply = bubble.ReplyToId.Length > 0 ? bubble.ReplyToId : null;
+                await _store.SendUploadedMediaAsync(ConversationId, outgoing.Uploaded, caption.Length > 0 ? caption : null, bubble.TmpId, media_reply, CancellationToken.None);
                 return;
             }
 
@@ -829,15 +887,16 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
 
     // An Attachment's Pending Message: Its Bytes Ride As Inline Data, So The Bubble Shows (And Plays) Them Before Any
     // Upload
-    private ChatMessage MediaMessage(PendingAttachment a, string caption, bool isRcs)
+    private ChatMessage MediaMessage(string name, string mime, byte[] bytes, int width, int height, string caption, string? replyTo, bool isRcs)
     {
-        MessageKind kind = a.Kind;
-        var media        = new MediaPart(string.Empty, [], string.Empty, [], a.Bytes, a.Name, a.Bytes.LongLength, a.Width, a.Height, kind, a.Mime);
+        MessageKind kind = MediaPart.KindOf(MediaFormatsMap.FromMime(mime));
+        var media        = new MediaPart(string.Empty, [], string.Empty, [], bytes, name, bytes.LongLength, width, height, kind, mime);
 
         return new ChatMessage(string.Empty, GmClient.NewTmpId(), ConversationId, string.Empty, _time.GetUtcNow(), true, kind, caption, MessageStatusType.OutgoingSending)
         {
-            Media = media,
-            IsRcs = isRcs,
+            Media     = media,
+            IsRcs     = isRcs,
+            ReplyToId = replyTo ?? string.Empty,
         };
     }
 
@@ -883,10 +942,20 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
         public MediaContent? Uploaded { get; set; }
     }
 
-    // Reports On The UI Thread Through The Chat's Post, Not On The Upload's Thread
+    // Reports On The UI Thread Through The Chat's Post, Not On The Upload's Thread; Only When The Whole Percent Moves,
+    // So A Big Upload Doesn't Flood The UI Thread
     private sealed class PostedProgress(Action<double> report) : IProgress<double>
     {
-        public void Report(double value) => report(value);
+        private int _percent = -1;
+
+        public void Report(double value)
+        {
+            int percent = (int)(Math.Clamp(value, 0, 1) * 100);
+            if (Interlocked.Exchange(ref _percent, percent) != percent)
+            {
+                report(value);
+            }
+        }
     }
 
     // Match By ID, Then By The Temporary ID Of A Bubble Sent From Here
