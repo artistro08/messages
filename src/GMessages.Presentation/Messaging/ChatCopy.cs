@@ -113,6 +113,13 @@ public static class ChatCopy
     public const string FileOpenFailed  = "Couldn't open this file.";
     public const string PhotoPending    = "Waiting for the photo from your phone…";
 
+    // Attaching (Plan 6; Controller Copy, The Owner Signs Off At The Gate)
+    public const string Attach           = "Attach";
+    public const string AttachPhoto      = "Attach photo";
+    public const string RemoveAttachment = "Remove attachment";
+    public const string AttachTooBig     = "This file is too big to send (100 MB max).";
+    public const string AttachSendFailed = "Couldn't send this attachment. Try again.";
+
     // Startup
     public const string StartupRefused = "You'll have to manually enable startup. Turn it on in Settings > Apps > Startup.";
 }

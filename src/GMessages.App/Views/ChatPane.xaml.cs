@@ -2,6 +2,7 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Numerics;
 using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.WindowsRuntime;
 using GMessages.App.Views.Controls;
 using GMessages.Presentation.Main;
 using GMessages.Presentation.Messaging;
@@ -15,7 +16,12 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.UI.Xaml.Shapes;
+using Windows.Graphics.Imaging;
+using Windows.Storage;
+using Windows.Storage.Pickers;
+using Windows.Storage.Streams;
 using Windows.System;
 using Windows.UI.Core;
 using Windows.UI.ViewManagement;
@@ -71,6 +77,23 @@ public sealed partial class ChatPane : UserControl
 
     // A Disabled Icon That Keeps Its Own Color Shows At This Opacity
     private const double DisabledOpacity = 0.4;
+
+    // A Photo Chip's Side, In Effective Pixels
+    private const int ChipSide = 64;
+
+    // The Photo Picker's Types (The Spec's Photos) With Their Mime Types: Windows Doesn't Always Know Them (A PC Whose
+    // Registry Has No Content Type For .png Reports None)
+    private static readonly Dictionary<string, string> PhotoMimes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        [".jpg"]  = "image/jpeg",
+        [".jpeg"] = "image/jpeg",
+        [".png"]  = "image/png",
+        [".gif"]  = "image/gif",
+        [".bmp"]  = "image/bmp",
+        [".webp"] = "image/webp",
+        [".heic"] = "image/heic",
+    };
+    private static readonly string[] AnyType = ["*"];
 
     // Typing Dots: Each Rises This Far And Back Within Its Beat (See TypingCycle)
     private const float TypingRise = 4;
@@ -177,6 +200,12 @@ public sealed partial class ChatPane : UserControl
     /// <summary>Gets the reply chip's close button name.</summary>
     public static string CancelReplyText => ChatCopy.CancelReply;
 
+    /// <summary>Gets the ＋ button's tooltip and name.</summary>
+    public static string AttachText => ChatCopy.Attach;
+
+    /// <summary>Gets a chip's remove button tooltip and name.</summary>
+    public static string RemoveAttachmentText => ChatCopy.RemoveAttachment;
+
     /// <summary>Gets the header ⋮'s tooltip and name.</summary>
     public static string MoreOptionsText => ChatCopy.MoreOptions;
 
@@ -247,9 +276,64 @@ public sealed partial class ChatPane : UserControl
         return DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, SendEmojiShortcut);
     }
 
+    /// <summary>
+    /// Opens the file picker over this window and adds what is picked as chips (the ＋ button, Ctrl + Shift + a and
+    /// Ctrl + Shift + p).
+    /// </summary>
+    /// <remarks>
+    /// Several files may be picked. Each one's size is checked before it is read, so a file over 100 MB is refused
+    /// with a note and never read in. Under the test hooks the picked files come from the test (see
+    /// <see cref="TestHooks.PickFiles"/>) and no picker opens.
+    /// </remarks>
+    /// <param name="photos">True for the photo picker (the spec's photo types only).</param>
+    /// <returns>True when the picker was asked for (false while no chat shows).</returns>
+    public bool OpenAttachPicker(bool photos)
+    {
+        if (Chat is not { } chat)
+        {
+            return false;
+        }
+
+        _ = PickAttachmentsAsync(chat, photos);
+        return true;
+    }
+
     // =========================================================================
     // X:BIND HELPERS
     // =========================================================================
+
+    /// <summary>
+    /// Gives a chip part's AutomationId: the prefix and the chip's number.
+    /// </summary>
+    /// <param name="prefix">The prefix, such as <c>Chat.Attachment.</c>.</param>
+    /// <param name="id">The chip's number.</param>
+    /// <returns>The AutomationId.</returns>
+    public static string ChipIdOf(string prefix, int id) => prefix + id.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// Gives a photo chip its picture, decoded small; the image fills in once decoded. A file chip gets none.
+    /// </summary>
+    /// <param name="bytes">The photo's bytes.</param>
+    /// <param name="isPhoto">True for a photo.</param>
+    /// <returns>The image, or null for a file.</returns>
+    public static ImageSource? ChipImage(byte[] bytes, bool isPhoto)
+    {
+        if (!isPhoto)
+        {
+            return null;
+        }
+
+        var image = new BitmapImage { DecodePixelHeight = ChipSide, DecodePixelType = DecodePixelType.Logical };
+        _ = LoadChipImageAsync(image, bytes);
+        return image;
+    }
+
+    /// <summary>
+    /// Shows an element when the flag is off.
+    /// </summary>
+    /// <param name="value">The flag.</param>
+    /// <returns>Collapsed when true, else Visible.</returns>
+    public static Visibility Not(bool value) => value ? Visibility.Collapsed : Visibility.Visible;
 
     /// <summary>
     /// Gives the compose area's padding: none on top while replying, so the message box meets the reply chip.
@@ -316,6 +400,7 @@ public sealed partial class ChatPane : UserControl
 
         var chat = (ChatViewModel?)e.NewValue;
         BindableList.Show(pane.MessageList, chat?.Messages);
+        BindableList.Show(pane.AttachmentList, chat?.Attachments);
         if (chat is not null)
         {
             pane.FadeInMessages();
@@ -629,6 +714,118 @@ public sealed partial class ChatPane : UserControl
     {
         Chat?.CancelReply();
         DraftBox.Focus(FocusState.Programmatic);
+    }
+
+    // The ＋: Any Files
+    private void OnAttachClick(object sender, RoutedEventArgs e) => OpenAttachPicker(photos: false);
+
+    // A Chip's Remove Button: That Attachment Goes, And The Cursor Goes Back To The Message Box
+    private void OnRemoveAttachmentClick(object sender, RoutedEventArgs e)
+    {
+        if (sender.As<FrameworkElement>().DataContext is PendingAttachment attachment && Chat is not null)
+        {
+            Chat.RemoveAttachment(attachment);
+            DraftBox.Focus(FocusState.Programmatic);
+        }
+    }
+
+    // =========================================================================
+    // ATTACHING
+    // =========================================================================
+
+    // The Picked Files (The Test's, Or The Picker's Over This Window), Each Checked For Size Before It Is Read, Then
+    // Added As Chips In Order. A File That Can't Be Read Is Skipped And Logged By Its Error Type Only
+    private async Task PickAttachmentsAsync(ChatViewModel chat, bool photos)
+    {
+        try
+        {
+            IReadOnlyList<StorageFile> files = TestHooks.PickFiles(photos) is { } paths
+                ? await Task.WhenAll(paths.Select(p => StorageFile.GetFileFromPathAsync(p).AsTask()))
+                : await PickWithDialogAsync(photos);
+            if (files.Count == 0)
+            {
+                return;
+            }
+
+            chat.ClearAttachError();
+            foreach (StorageFile file in files)
+            {
+                Windows.Storage.FileProperties.BasicProperties properties = await file.GetBasicPropertiesAsync();
+                if (!chat.CanAttach((long)properties.Size))
+                {
+                    continue;
+                }
+
+                byte[] bytes            = (await FileIO.ReadBufferAsync(file)).ToArray();
+                string mime             = PhotoMimes.GetValueOrDefault(file.FileType) ?? (file.ContentType.Length > 0 ? file.ContentType : "application/octet-stream");
+                (int width, int height) = mime.StartsWith("image/", StringComparison.Ordinal) ? await PhotoSizeAsync(bytes) : (0, 0);
+                chat.Attach(file.Name, mime, bytes, width, height);
+            }
+
+            AppLog.AttachmentsPicked(App.ShellLog, chat.ConversationId, files.Count, chat.Attachments.Count);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            AppLog.MediaFailed(App.ShellLog, "attach", chat.ConversationId, ex.GetType().Name);
+        }
+
+        DraftBox.Focus(FocusState.Programmatic);
+    }
+
+    // The Windows File Picker Over This Window: Any Files, Or Photos Only; Several May Be Picked
+    private async Task<IReadOnlyList<StorageFile>> PickWithDialogAsync(bool photos)
+    {
+        if (XamlRoot?.ContentIslandEnvironment is not { } island)
+        {
+            return [];
+        }
+
+        var picker = new FileOpenPicker
+        {
+            SuggestedStartLocation = photos ? PickerLocationId.PicturesLibrary : PickerLocationId.DocumentsLibrary,
+            ViewMode               = photos ? PickerViewMode.Thumbnail : PickerViewMode.List,
+            CommitButtonText       = photos ? ChatCopy.AttachPhoto : ChatCopy.Attach,
+        };
+        foreach (string type in photos ? (IEnumerable<string>)PhotoMimes.Keys : AnyType)
+        {
+            picker.FileTypeFilter.Add(type);
+        }
+
+        WinRT.Interop.InitializeWithWindow.Initialize(picker, Microsoft.UI.Win32Interop.GetWindowFromWindowId(island.AppWindowId));
+        return await picker.PickMultipleFilesAsync();
+    }
+
+    // A Photo's Size As Shown (Turned By Its EXIF Orientation), So Its Bubble Keeps Its Shape; 0 x 0 When It Won't Decode
+    private static async Task<(int Width, int Height)> PhotoSizeAsync(byte[] bytes)
+    {
+        try
+        {
+            using var stream = new InMemoryRandomAccessStream();
+            await stream.WriteAsync(bytes.AsBuffer());
+            stream.Seek(0);
+            BitmapDecoder decoder = await BitmapDecoder.CreateAsync(stream);
+            return ((int)decoder.OrientedPixelWidth, (int)decoder.OrientedPixelHeight);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            return (0, 0);
+        }
+    }
+
+    // A Photo Chip's Picture; Bytes Windows Can't Read Leave The Chip Blank
+    private static async Task LoadChipImageAsync(BitmapImage image, byte[] bytes)
+    {
+        try
+        {
+            using var stream = new InMemoryRandomAccessStream();
+            await stream.WriteAsync(bytes.AsBuffer());
+            stream.Seek(0);
+            await image.SetSourceAsync(stream);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            AppLog.MediaFailed(App.ShellLog, "chip", string.Empty, ex.GetType().Name);
+        }
     }
 
     // The Application Key Or Shift + F10 On A Bubble's Row Opens That Bubble's Menu (A Right-Click On The Bubble Opens It

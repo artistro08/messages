@@ -310,6 +310,127 @@ public sealed class ChatViewModelTests
     }
 
     /// <summary>
+    /// Attachments send first, one bubble each in order, showing their own bytes; off RCS the text is the last one's caption.
+    /// </summary>
+    [TestMethod]
+    public async Task SendMedia_InOrder_CaptionOnLast()
+    {
+        using var rig = new MainRig();
+        using ChatViewModel chat = NewChat(rig);
+        await chat.LoadAsync();
+        chat.Attach("a.png", "image/png", [1], 40, 30);
+        chat.Attach("b.pdf", "application/pdf", [2]);
+        chat.Draft = "both";
+        Assert.HasCount(2, chat.Attachments);
+
+        await chat.SendAsync();
+
+        Assert.IsEmpty(chat.Attachments);
+        Assert.AreEqual(string.Empty, chat.Draft);
+        Assert.HasCount(2, chat.Messages);
+        Assert.IsTrue(chat.Messages[0].HasPhoto);
+        CollectionAssert.AreEqual(new byte[] { 1 }, chat.Messages[0].Media!.InlineData);
+        Assert.IsTrue(chat.Messages[1].HasFileCard);
+        Assert.AreEqual("both", chat.Messages[1].Text);
+        Assert.AreEqual(100, chat.Messages[0].UploadPercent);
+
+        Assert.HasCount(2, rig.Client.Sent);
+        Assert.AreEqual("a.png", rig.Client.Sent[0].MessagePayload.MessageInfo.Single().MediaContent.MediaName);
+        Assert.AreEqual("b.pdf", rig.Client.Sent[1].MessagePayload.MessageInfo[0].MediaContent.MediaName);
+        Assert.AreEqual("both", rig.Client.Sent[1].MessagePayload.MessageInfo[1].MessageContent.Content);
+        Assert.AreEqual(chat.Messages[0].TmpId, rig.Client.Sent[0].TmpID);
+
+        // The Phone's Echo Carries No Dimensions: The Bubble Keeps The Picked Photo's, So It Keeps Its Shape
+        Message echo = Mine("m9", string.Empty, chat.Messages[0].TmpId, MessageStatusType.OutgoingComplete);
+        echo.MessageInfo.Clear();
+        echo.MessageInfo.Add(new MessageInfo { MediaContent = new MediaContent { MediaID = "media-1", MediaName = "a.png", Format = MediaFormats.ImagePng } });
+        await rig.LiveMessage(echo);
+
+        Assert.AreEqual("media-1", chat.Messages[0].Media!.MediaId);
+        Assert.AreEqual((40, 30), (chat.Messages[0].Media!.Width, chat.Messages[0].Media!.Height));
+        Assert.IsFalse(chat.Messages[0].IsLocalMedia);
+    }
+
+    /// <summary>
+    /// In an RCS chat the text goes as its own bubble after the attachment, not as a caption.
+    /// </summary>
+    [TestMethod]
+    public async Task SendMedia_Rcs_TextIsOwnBubble()
+    {
+        using var rig            = new MainRig();
+        using ChatViewModel chat = await RcsChat(rig, TimeProvider.System);
+        chat.Attach("a.png", "image/png", [1]);
+        chat.Draft = "hi";
+
+        await chat.SendAsync();
+
+        Assert.HasCount(2, chat.Messages);
+        Assert.AreEqual(string.Empty, chat.Messages[0].BodyText);
+        Assert.AreEqual("hi", chat.Messages[1].Text);
+        Assert.HasCount(2, rig.Client.Sent);
+        Assert.AreEqual(1, rig.Client.Sent[0].MessagePayload.MessageInfo.Count);
+        Assert.AreEqual("hi", rig.Client.Sent[1].MessagePayload.MessageInfo.Single().MessageContent.Content);
+    }
+
+    /// <summary>
+    /// A failed attachment fails only its own bubble, says so, and retries alone with its bytes.
+    /// </summary>
+    [TestMethod]
+    public async Task SendMedia_Fails_MarksBubbleFailed()
+    {
+        using var rig = new MainRig();
+        using ChatViewModel chat = NewChat(rig);
+        await chat.LoadAsync();
+        chat.Attach("a.png", "image/png", [1]);
+        chat.Attach("b.png", "image/png", [2]);
+        rig.Client.SendThrows = new HttpRequestException();
+
+        await chat.SendAsync();
+
+        Assert.IsTrue(chat.Messages[0].IsFailed);
+        Assert.IsTrue(chat.Messages[1].IsFailed);
+        Assert.AreEqual("Couldn't send this attachment. Try again.", chat.Messages[0].NotSentText);
+
+        rig.Client.SendThrows = null;
+        await chat.RetryAsync(chat.Messages[1]);
+
+        Assert.IsTrue(chat.Messages[0].IsFailed);
+        Assert.IsTrue(chat.Messages[1].IsSending);
+        Assert.HasCount(3, rig.Client.Sent, "Both tries, then the retry");
+        Assert.AreEqual(chat.Messages[1].TmpId, rig.Client.Sent[^1].TmpID);
+        CollectionAssert.AreEqual(new byte[] { 2 }, rig.Client.Media[rig.Client.Sent[^1].MessagePayload.MessageInfo[0].MediaContent.MediaID]);
+    }
+
+    /// <summary>
+    /// A file over 100 MiB never becomes a chip: the note says so (a good file picked with it keeps the note), and a
+    /// removed chip or a new pick clears it.
+    /// </summary>
+    [TestMethod]
+    public async Task Attach_TooBig_Refused()
+    {
+        using var rig = new MainRig();
+        using ChatViewModel chat = NewChat(rig);
+        await chat.LoadAsync();
+
+        Assert.IsFalse(chat.CanAttach(ChatStore.MaxAttachmentBytes + 1));
+        Assert.AreEqual("This file is too big to send (100 MB max).", chat.AttachError);
+        Assert.IsFalse(chat.CanSend);
+
+        Assert.IsTrue(chat.Attach("a.png", "image/png", [1]));
+        Assert.IsTrue(chat.HasAttachError);
+        Assert.IsTrue(chat.CanSend);
+
+        chat.RemoveAttachment(chat.Attachments[0]);
+        Assert.IsFalse(chat.HasAttachError);
+        Assert.IsFalse(chat.HasAttachments);
+        Assert.IsFalse(chat.CanSend);
+
+        Assert.IsFalse(chat.CanAttach(ChatStore.MaxAttachmentBytes + 1));
+        chat.ClearAttachError();
+        Assert.IsFalse(chat.HasAttachError);
+    }
+
+    /// <summary>
     /// A load or older-page load that fails with any error (not only phone problems) leaves the bubbles alone and stops
     /// the short-list fill, so the view never loops.
     /// </summary>

@@ -557,6 +557,13 @@ public sealed partial class ChatsView : UserControl
             case ShortcutCommand.ToggleEmoji:
                 return ChatView.ToggleEmojiPanel();
 
+            // The File Picker Over The Open Chat: Any Files, Or Photos Only
+            case ShortcutCommand.AttachFiles:
+                return ChatView.OpenAttachPicker(photos: false);
+
+            case ShortcutCommand.AttachPhotos:
+                return ChatView.OpenAttachPicker(photos: true);
+
             case ShortcutCommand.FocusMessages:
                 return ChatView.FocusMessages();
 

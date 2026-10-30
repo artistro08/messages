@@ -290,54 +290,134 @@
         </Border>
         <!-- /Typing -->
 
-        <!-- Replying To: joined to the top of the message box as one control (the same width and left edge, rounded on top
-             only, while the box squares its top corners): an accent bar, the quoted text and a button to drop the reply -->
-        <Grid
-            Grid.Row="3"
-            Margin="12,8,12,0"
-            Padding="8,6,4,6"
-            Background="{ThemeResource ControlFillColorDefaultBrush}"
-            BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
-            BorderThickness="1,1,1,0"
-            ColumnDefinitions="Auto,*,Auto"
-            ColumnSpacing="8"
-            CornerRadius="4,4,0,0"
-            Visibility="{x:Bind Chat.IsReplying, Mode=OneWay, FallbackValue=Collapsed}">
-            <Border
-                Width="3"
-                Background="{ThemeResource QuoteBarBrush}"
-                CornerRadius="1.5" />
+        <!-- Over The Message Box: the attachment chips, then the reply chip -->
+        <StackPanel Grid.Row="3">
+            <!-- Attachments: a chip per picked photo (the photo itself) or file (its icon and name), in send order, each with a
+                 button to drop it. The too-big note shows over them when a picked file was refused -->
             <TextBlock
-                Grid.Column="1"
-                VerticalAlignment="Center"
-                AutomationProperties.AutomationId="Chat.ReplyingTo"
-                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                MaxLines="2"
-                Text="{x:Bind Chat.ReplyingTo.DisplayText, Mode=OneWay, FallbackValue=''}"
-                TextTrimming="CharacterEllipsis"
-                TextWrapping="Wrap" />
-            <Button
-                Grid.Column="2"
-                Width="32"
-                Height="32"
-                VerticalAlignment="Center"
-                AutomationProperties.AutomationId="Chat.CancelReply"
-                AutomationProperties.Name="{x:Bind local:ChatPane.CancelReplyText}"
-                Click="OnCancelReplyClick"
-                Style="{StaticResource IconButtonStyle}"
-                ToolTipService.ToolTip="{x:Bind local:ChatPane.CancelReplyText}">
-                <FontIcon FontSize="12" Glyph="&#xE711;" />
-            </Button>
-        </Grid>
+                Margin="12,8,12,0"
+                AutomationProperties.AutomationId="Chat.AttachError"
+                AutomationProperties.LiveSetting="Polite"
+                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                Style="{StaticResource CaptionTextBlockStyle}"
+                Text="{x:Bind Chat.AttachError, Mode=OneWay, FallbackValue=''}"
+                TextWrapping="Wrap"
+                Visibility="{x:Bind Chat.HasAttachError, Mode=OneWay, FallbackValue=Collapsed}" />
+            <ScrollViewer
+                Margin="12,8,12,0"
+                HorizontalScrollBarVisibility="Auto"
+                HorizontalScrollMode="Auto"
+                VerticalScrollBarVisibility="Disabled"
+                VerticalScrollMode="Disabled"
+                Visibility="{x:Bind Chat.HasAttachments, Mode=OneWay, FallbackValue=Collapsed}">
+                <ItemsControl x:Name="AttachmentList" AutomationProperties.AutomationId="Chat.Attachments">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal" Spacing="8" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="main:PendingAttachment">
+                            <Grid
+                                Height="64"
+                                MinWidth="64"
+                                AutomationProperties.AutomationId="{x:Bind local:ChatPane.ChipIdOf('Chat.Attachment.', Id)}"
+                                AutomationProperties.Name="{x:Bind Name}"
+                                Background="{ThemeResource ControlFillColorDefaultBrush}"
+                                BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8">
+                                <Image
+                                    Width="64"
+                                    Height="64"
+                                    Source="{x:Bind local:ChatPane.ChipImage(Bytes, IsPhoto)}"
+                                    Stretch="UniformToFill"
+                                    Visibility="{x:Bind IsPhoto}" />
+                                <StackPanel
+                                    Padding="12,0,36,0"
+                                    VerticalAlignment="Center"
+                                    Orientation="Horizontal"
+                                    Spacing="8"
+                                    Visibility="{x:Bind local:ChatPane.Not(IsPhoto)}">
+                                    <FontIcon FontSize="20" Glyph="&#xE8A5;" />
+                                    <TextBlock
+                                        MaxWidth="160"
+                                        VerticalAlignment="Center"
+                                        MaxLines="1"
+                                        Text="{x:Bind Name}"
+                                        TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                                <Button
+                                    Width="24"
+                                    Height="24"
+                                    Margin="0,4,4,0"
+                                    Padding="0"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Top"
+                                    AutomationProperties.AutomationId="{x:Bind local:ChatPane.ChipIdOf('Chat.RemoveAttachment.', Id)}"
+                                    AutomationProperties.Name="{x:Bind local:ChatPane.RemoveAttachmentText}"
+                                    Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}"
+                                    Click="OnRemoveAttachmentClick"
+                                    CornerRadius="12"
+                                    Style="{StaticResource IconButtonStyle}"
+                                    ToolTipService.ToolTip="{x:Bind local:ChatPane.RemoveAttachmentText}">
+                                    <FontIcon FontSize="10" Glyph="&#xE711;" />
+                                </Button>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+            <!-- /Attachments -->
 
-        <!-- Compose: the message box (Enter sends, Shift + Enter adds a line), with the emoji icon inside it on the left and
-             send inside it on the right, icons only. Under the reply chip it meets the chip with square top corners -->
+            <!-- Replying To: joined to the top of the message box as one control (the same width and left edge, rounded on top
+                 only, while the box squares its top corners): an accent bar, the quoted text and a button to drop the reply -->
+            <Grid
+                Margin="12,8,12,0"
+                Padding="8,6,4,6"
+                Background="{ThemeResource ControlFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                BorderThickness="1,1,1,0"
+                ColumnDefinitions="Auto,*,Auto"
+                ColumnSpacing="8"
+                CornerRadius="4,4,0,0"
+                Visibility="{x:Bind Chat.IsReplying, Mode=OneWay, FallbackValue=Collapsed}">
+                <Border
+                    Width="3"
+                    Background="{ThemeResource QuoteBarBrush}"
+                    CornerRadius="1.5" />
+                <TextBlock
+                    Grid.Column="1"
+                    VerticalAlignment="Center"
+                    AutomationProperties.AutomationId="Chat.ReplyingTo"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    MaxLines="2"
+                    Text="{x:Bind Chat.ReplyingTo.DisplayText, Mode=OneWay, FallbackValue=''}"
+                    TextTrimming="CharacterEllipsis"
+                    TextWrapping="Wrap" />
+                <Button
+                    Grid.Column="2"
+                    Width="32"
+                    Height="32"
+                    VerticalAlignment="Center"
+                    AutomationProperties.AutomationId="Chat.CancelReply"
+                    AutomationProperties.Name="{x:Bind local:ChatPane.CancelReplyText}"
+                    Click="OnCancelReplyClick"
+                    Style="{StaticResource IconButtonStyle}"
+                    ToolTipService.ToolTip="{x:Bind local:ChatPane.CancelReplyText}">
+                    <FontIcon FontSize="12" Glyph="&#xE711;" />
+                </Button>
+            </Grid>
+        </StackPanel>
+
+        <!-- Compose: the message box (Enter sends, Shift + Enter adds a line), with the attach and emoji icons inside it on the
+             left and send inside it on the right, icons only. Under the reply chip it meets the chip with square top corners -->
         <Grid Grid.Row="4" Padding="{x:Bind local:ChatPane.ComposePadding(Chat.IsReplying), Mode=OneWay}">
             <TextBox
                 x:Name="DraftBox"
                 MinHeight="44"
                 MaxHeight="160"
-                Padding="44,11,44,11"
+                Padding="76,11,44,11"
                 AcceptsReturn="True"
                 AutomationProperties.AutomationId="Chat.Draft"
                 AutomationProperties.Name="Message"
@@ -368,10 +448,28 @@
                     </ResourceDictionary>
                 </TextBox.Resources>
             </TextBox>
+
+            <!-- Attach: the ＋ opens the file picker for any files (Ctrl + Shift + a; Ctrl + Shift + p for photos) -->
             <Button
                 Width="32"
                 Height="32"
                 Margin="6,0,0,6"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Bottom"
+                AutomationProperties.AutomationId="Chat.Attach"
+                AutomationProperties.Name="{x:Bind local:ChatPane.AttachText}"
+                Click="OnAttachClick"
+                Style="{StaticResource IconButtonStyle}"
+                ToolTipService.ToolTip="{x:Bind local:ChatPane.AttachText}">
+                <FontIcon
+                    FontSize="16"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Glyph="&#xE710;" />
+            </Button>
+            <Button
+                Width="32"
+                Height="32"
+                Margin="38,0,0,6"
                 HorizontalAlignment="Left"
                 VerticalAlignment="Bottom"
                 AutomationProperties.AutomationId="Chat.Emoji"

@@ -245,9 +245,6 @@ public sealed partial class MessageBubble : UserControl
     /// </summary>
     public event EventHandler? ReplyRequested;
 
-    /// <summary>Gets the "Not sent" link text.</summary>
-    public static string NotSentText => ChatCopy.NotSentRetry;
-
     /// <summary>Gets the menu's Copy text.</summary>
     public static string CopyText => ChatCopy.Copy;
 

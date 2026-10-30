@@ -36,6 +36,9 @@ public sealed partial class ChatStore : IDisposable
     /// <summary>How many conversations keep their newest page of messages in memory.</summary>
     public const int CachedChatCount = 20;
 
+    /// <summary>The biggest attachment that may be sent, in bytes: 100 MiB (LibGM's <c>MaxFileSize</c>).</summary>
+    public const long MaxAttachmentBytes = 100L * 1024 * 1024;
+
     private const int NotifiedRingSize = 256;
 
     // A Message Older Than This Never Counts As New (A Reaction Or Status Update To An Old Message)
@@ -452,20 +455,7 @@ public sealed partial class ChatStore : IDisposable
         ConversationInfo conversation = await RequireConversationAsync(client, conversationId, generation, ct);
         string outgoing_id            = conversation.DefaultOutgoingId;
 
-        var request = new SendMessageRequest
-        {
-            ConversationID = conversationId,
-            MessagePayload = new MessagePayload
-            {
-                TmpID          = tmpId,
-                ConversationID = conversationId,
-                ParticipantID  = outgoing_id,
-                TmpID2         = tmpId,
-            },
-            SIMPayload = SimOf(conversation),
-            TmpID      = tmpId,
-            ForceRCS   = false,
-        };
+        SendMessageRequest request = NewSendRequest(conversationId, conversation, tmpId);
         request.MessagePayload.MessageInfo.Add(new MessageInfo { MessageContent = new MessageContent { Content = text } });
 
         // A Reply Carries The Quoted Message's ID (handlematrix.go)
@@ -474,12 +464,7 @@ public sealed partial class ChatStore : IDisposable
             request.Reply = new ReplyPayload { MessageID = replyToId };
         }
 
-        SendMessageResponse response = await client.SendMessageAsync(request, ct).ConfigureAwait(false);
-        if (response.Status != SendMessageResponse.Types.Status.Success)
-        {
-            LogSendRefused(conversationId, response.Status.ToString());
-            throw new MessageSendException(response.Status.ToString());
-        }
+        await SendCheckedAsync(client, request, ct).ConfigureAwait(false);
 
         var pending = new ChatMessage(string.Empty, tmpId, conversationId, outgoing_id, DateTimeOffset.UtcNow, true, MessageKind.Text, text, MessageStatusType.OutgoingSending)
         {
@@ -488,6 +473,78 @@ public sealed partial class ChatStore : IDisposable
         if (generation == Generation)
         {
             CacheMessage(pending);
+        }
+
+        return pending;
+    }
+
+    /// <summary>
+    /// Uploads an attachment and sends it, with an optional caption, the way the bridge does.
+    /// </summary>
+    /// <remarks>
+    /// Ported from <c>ConvertMatrixMessage</c> in the Go connector (handlematrix.go): the uploaded
+    /// <see cref="MediaContent"/> is the message's first <see cref="MessageInfo"/>, and the caption a second one holding
+    /// its text. RCS refuses captions on media (capabilities.go), so in an RCS chat the caption goes as its own text
+    /// message right after. Sent as the conversation's default outgoing participant with its SIM, as
+    /// <see cref="SendTextAsync"/> is. A file over <see cref="MaxAttachmentBytes"/> is refused before anything uploads.
+    /// The file name and type are never logged.
+    /// </remarks>
+    /// <param name="conversationId">The conversation ID.</param>
+    /// <param name="bytes">The file's bytes.</param>
+    /// <param name="fileName">The file name the other side sees.</param>
+    /// <param name="mime">The mime type, such as <c>image/jpeg</c>.</param>
+    /// <param name="caption">The caption, or null or empty for none.</param>
+    /// <param name="tmpId">The temporary ID (<c>GmClient.NewTmpId()</c>), so the echo can be matched to the pending bubble.</param>
+    /// <param name="progress">Gets the share of the upload done, from 0 to 1; may be null.</param>
+    /// <param name="ct">Cancels the upload and the wait.</param>
+    /// <returns>The pending media message as sent (without the caption when it went apart).</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="fileName"/> or <paramref name="mime"/> is null.</exception>
+    /// <exception cref="AttachmentTooBigException">The file is over <see cref="MaxAttachmentBytes"/>.</exception>
+    /// <exception cref="MessagingUnavailableException">Not connected.</exception>
+    /// <exception cref="MessageSendException">The phone answered with a status other than success.</exception>
+    public async Task<ChatMessage> SendMediaAsync(string conversationId, ReadOnlyMemory<byte> bytes, string fileName, string mime, string? caption, string tmpId, IProgress<double>? progress, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(fileName);
+        ArgumentNullException.ThrowIfNull(mime);
+
+        if (bytes.Length > MaxAttachmentBytes)
+        {
+            throw new AttachmentTooBigException();
+        }
+
+        IMessagingClient client = RequireClient();
+
+        int generation                = Generation;
+        ConversationInfo conversation = await RequireConversationAsync(client, conversationId, generation, ct);
+        string text                   = caption ?? string.Empty;
+        bool caption_apart            = conversation.IsRcs && text.Length > 0;
+
+        // Upload, Then Send The Media With Its Caption (RCS: Without)
+        MediaContent media         = await client.UploadMediaAsync(bytes, fileName, mime, progress, ct).ConfigureAwait(false);
+        SendMessageRequest request = NewSendRequest(conversationId, conversation, tmpId);
+        request.MessagePayload.MessageInfo.Add(new MessageInfo { MediaContent = media });
+        if (text.Length > 0 && !caption_apart)
+        {
+            request.MessagePayload.MessageInfo.Add(new MessageInfo { MessageContent = new MessageContent { Content = text } });
+        }
+
+        await SendCheckedAsync(client, request, ct).ConfigureAwait(false);
+        LogMediaSent(conversationId, bytes.Length);
+
+        var pending = new ChatMessage(string.Empty, tmpId, conversationId, conversation.DefaultOutgoingId, DateTimeOffset.UtcNow, true, MediaPart.KindOf(media.Format), caption_apart ? string.Empty : text, MessageStatusType.OutgoingSending)
+        {
+            Media = MediaPart.From(media),
+            IsRcs = conversation.IsRcs,
+        };
+        if (generation == Generation)
+        {
+            CacheMessage(pending);
+        }
+
+        // RCS: The Caption Follows As Its Own Message
+        if (caption_apart)
+        {
+            await SendTextAsync(conversationId, text, GmClient.NewTmpId(), null, ct).ConfigureAwait(false);
         }
 
         return pending;
@@ -569,6 +626,34 @@ public sealed partial class ChatStore : IDisposable
     // The SIM Card Of The Participant The Conversation Sends As (From The Last Settings Event), Or Null
     private SIMPayload? SimOf(ConversationInfo conversation) =>
         _sims.FirstOrDefault(s => s.SIMParticipant?.ID == conversation.DefaultOutgoingId)?.SIMData?.SIMPayload;
+
+    // A Send Request Without Its Parts, As The Bridge Builds It: The Same Temporary ID In The Request And The Payload,
+    // Sent As The Conversation's Default Outgoing Participant With Its SIM
+    private SendMessageRequest NewSendRequest(string conversationId, ConversationInfo conversation, string tmpId) => new()
+    {
+        ConversationID = conversationId,
+        MessagePayload = new MessagePayload
+        {
+            TmpID          = tmpId,
+            ConversationID = conversationId,
+            ParticipantID  = conversation.DefaultOutgoingId,
+            TmpID2         = tmpId,
+        },
+        SIMPayload = SimOf(conversation),
+        TmpID      = tmpId,
+        ForceRCS   = false,
+    };
+
+    // Sends, Throwing When The Phone Answers Anything But Success
+    private async Task SendCheckedAsync(IMessagingClient client, SendMessageRequest request, CancellationToken ct)
+    {
+        SendMessageResponse response = await client.SendMessageAsync(request, ct).ConfigureAwait(false);
+        if (response.Status != SendMessageResponse.Types.Status.Success)
+        {
+            LogSendRefused(request.ConversationID, response.Status.ToString());
+            throw new MessageSendException(response.Status.ToString());
+        }
+    }
 
     /// <summary>
     /// Tells the phone a conversation was read up to a message, then marks the cached conversation read.
@@ -1142,6 +1227,9 @@ public sealed partial class ChatStore : IDisposable
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Phone refused a send in {ConversationId} ({Status})")]
     private partial void LogSendRefused(string conversationId, string status);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Sent an attachment of {Size} bytes in {ConversationId}")]
+    private partial void LogMediaSent(string conversationId, int size);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Phone refused a conversation update ({ConversationId})")]
     private partial void LogConversationUpdateRefused(string conversationId);

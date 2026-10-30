@@ -37,3 +37,14 @@ public sealed class MediaPendingException : Exception
     {
     }
 }
+
+/// <summary>
+/// Thrown when an attachment is over <see cref="ChatStore.MaxAttachmentBytes"/>, before anything uploads.
+/// </summary>
+public sealed class AttachmentTooBigException : Exception
+{
+    /// <summary>Creates the exception.</summary>
+    public AttachmentTooBigException() : base("The attachment is over the size limit.")
+    {
+    }
+}

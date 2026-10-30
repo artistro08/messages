@@ -77,6 +77,32 @@ internal static class TestHooks
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetItemStatus(element, state);
         }
     }
+
+    /// <summary>
+    /// When pointed at the fake server, stands in for the file picker: notes which picker opened ("files" or "photos")
+    /// in <c>{data folder}\picker.txt</c>, and answers with the full paths in <c>{data folder}\pick.txt</c> (one per
+    /// line), which it then deletes. No real picker ever opens in a test.
+    /// </summary>
+    /// <param name="photos">True for the photo picker.</param>
+    /// <returns>The picked paths (empty when nothing waits), or null on a normal run (open the real picker).</returns>
+    public static IReadOnlyList<string>? PickFiles(bool photos)
+    {
+        if (!BlockLaunches || DataDir is null)
+        {
+            return null;
+        }
+
+        File.AppendAllText(Path.Combine(DataDir, "picker.txt"), (photos ? "photos" : "files") + Environment.NewLine);
+        string pick = Path.Combine(DataDir, "pick.txt");
+        if (!File.Exists(pick))
+        {
+            return [];
+        }
+
+        string[] paths = File.ReadAllLines(pick).Where(p => p.Length > 0).ToArray();
+        File.Delete(pick);
+        return paths;
+    }
 }
 #else
 /// <summary>
@@ -113,5 +139,10 @@ internal static class TestHooks
     public static void ShowState(Microsoft.UI.Xaml.DependencyObject element, string state)
     {
     }
+
+    /// <summary>Always null in Release: the real file picker opens.</summary>
+    /// <param name="photos">True for the photo picker.</param>
+    /// <returns>Null.</returns>
+    public static IReadOnlyList<string>? PickFiles(bool photos) => null;
 }
 #endif
