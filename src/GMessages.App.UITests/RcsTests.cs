@@ -19,6 +19,7 @@ public sealed class RcsTests : UiTest
 {
     private const string AnnFirst = "Hi, it's Ann";
     private const string AnnLast  = "Are you free later?";
+    private const string MyReply  = "Hey Ann";
     private const string AnnPhone = "+15550000001";
 
     /// <summary>
@@ -57,6 +58,25 @@ public sealed class RcsTests : UiTest
 
         App.Find("Row.c-ann").Patterns.SelectionItem.Pattern.Select();
         Assert.AreEqual(ChatCopy.ChatMessage, ItemType("Bubble." + Find("c-ann", AnnLast).MessageID));
+    }
+
+    /// <summary>
+    /// My bubble sits on the right and Ann's on the left. Every bubble showed on the left while the side's visual states
+    /// sat below the bubble's root element, where GoToState never finds them.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task SentAndReceived_SitOnTheirSides()
+    {
+        await OpenChatAsync("Row.c-ann");
+
+        System.Drawing.Rectangle list     = App.Find("Chat.Messages").BoundingRectangle;
+        System.Drawing.Rectangle mine     = App.Find("Bubble." + Find("c-ann", MyReply).MessageID).BoundingRectangle;
+        System.Drawing.Rectangle received = App.Find("Bubble." + Find("c-ann", AnnFirst).MessageID).BoundingRectangle;
+        int middle                        = list.Left + (list.Width / 2);
+
+        Assert.IsTrue(mine.Left > middle, $"My bubble ({mine}) isn't on the right of the list ({list}).");
+        Assert.IsTrue(received.Right < middle, $"Ann's bubble ({received}) isn't on the left of the list ({list}).");
     }
 
     /// <summary>
