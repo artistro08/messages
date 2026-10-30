@@ -33,7 +33,9 @@ public sealed partial class MediaStore
     public const long MemoryCapBytes = 64L * 1024 * 1024;
 
     /// <summary>How long one download may take before it fails, unless <see cref="DownloadTimeout"/> says otherwise.</summary>
-    public static readonly TimeSpan DefaultDownloadTimeout = TimeSpan.FromMinutes(2);
+    /// <remarks>Long enough for a 100 MB file on a slow connection, under the media client's 30 minute cap.</remarks>
+    // ponytail: a whole-download deadline, not a stall check; reset a timer per chunk read if slow links need more
+    public static readonly TimeSpan DefaultDownloadTimeout = TimeSpan.FromMinutes(15);
 
     /// <summary>The longest file name written to the temp folder, extension included.</summary>
     public const int MaxNameLength = 100;
@@ -491,8 +493,9 @@ public sealed partial class MediaStore
 
             return bytes;
         }
-        catch (Exception ex) when (ex is not OutOfMemoryException)
+        catch (Exception ex) when (ex is not OutOfMemoryException && !clear.IsCancellationRequested)
         {
+            // A Sign-Out Aborting It Isn't A Failure Worth Logging
             LogDownloadFailed(id, ex.GetType().Name);
             throw;
         }
