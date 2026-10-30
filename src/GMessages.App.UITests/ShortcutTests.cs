@@ -215,33 +215,4 @@ public sealed class ShortcutTests : UiTest
 
     private void WaitForSelected(string rowId) =>
         Wait.Until(() => IsSelected(rowId), AppDriver.DefaultTimeout, () => $"{rowId} wasn't highlighted in the list.");
-
-    // Waits Until The Keyboard Focus Is On The Control Or Inside It (A List's Focus Sits On One Of Its Items)
-    private void WaitForFocusIn(string automationId)
-    {
-        string last = "";
-        Wait.Until(() => FocusPath(out last).Contains(automationId), AppDriver.DefaultTimeout,
-            () => $"Focus wasn't in '{automationId}'; it was in [{last}].");
-    }
-
-    // The AutomationIds From The Focused Element Up To The Window
-    private List<string> FocusPath(out string text)
-    {
-        var ids = new List<string>();
-        try
-        {
-            var walker = App.Automation.TreeWalkerFactory.GetControlViewWalker();
-            for (AutomationElement? e = App.Automation.FocusedElement(); e is not null && ids.Count < 50; e = walker.GetParent(e))
-            {
-                ids.Add(e.Properties.AutomationId.ValueOrDefault ?? "");
-            }
-        }
-        catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or FlaUI.Core.Exceptions.ElementNotAvailableException)
-        {
-            // Focus Moved Mid-Walk; Read Again
-        }
-
-        text = string.Join(" < ", ids);
-        return ids;
-    }
 }

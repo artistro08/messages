@@ -353,7 +353,8 @@ public sealed class ConversationActionTests : UiTest
     }
 
     /// <summary>
-    /// Move to trash from the header's menu, once confirmed, closes the chat: the empty state shows and the header goes.
+    /// Move to trash from the header's menu, once confirmed, closes the chat: the empty state shows, the header goes and
+    /// the keyboard focus moves to the conversation list.
     /// </summary>
     /// <returns>A task for the test.</returns>
     [TestMethod]
@@ -369,6 +370,7 @@ public sealed class ConversationActionTests : UiTest
         Assert.AreEqual(ConversationActionStatus.Delete, Server.Phone.ConversationUpdates[0].Action);
         App.Find("Main.EmptyState");
         WaitForGone("Chat.Header");
+        WaitForFocusIn("Main.ConversationList");
     }
 
     /// <summary>
@@ -478,7 +480,8 @@ public sealed class ConversationActionTests : UiTest
     }
 
     /// <summary>
-    /// Ctrl + d asks first; Move to trash sends a delete and closes the chat.
+    /// Ctrl + d asks first; Move to trash sends a delete and closes the chat, and the keyboard focus moves to the
+    /// conversation list.
     /// </summary>
     /// <returns>A task for the test.</returns>
     [TestMethod]
@@ -493,6 +496,7 @@ public sealed class ConversationActionTests : UiTest
         Assert.AreEqual(ConversationActionStatus.Delete, Server.Phone.ConversationUpdates[0].Action);
         App.Find("Main.EmptyState");
         WaitForGone("Row.c-ann");
+        WaitForFocusIn("Main.ConversationList");
     }
 
     /// <summary>
@@ -533,6 +537,30 @@ public sealed class ConversationActionTests : UiTest
         Assert.AreEqual(ConversationStatus.Archived, Server.Phone.ConversationUpdates[0].UpdateData.Status);
         App.Find("Main.EmptyState");
         WaitForGone("Row.c-ann");
+    }
+
+    /// <summary>
+    /// Ctrl + Alt + h on an open spam chat does nothing, as its header menu offers no Archive. Ctrl + Shift + o then
+    /// opens its Details, so the keys did reach the app.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task CtrlAltH_SpamChat_SendsNothing()
+    {
+        await OpenListAsync();
+        Invoke("Main.ProfileButton");
+        Invoke("Main.Profile.SpamBlocked");
+        App.WaitForText("Main.ListTitle", ChatCopy.SpamAndBlocked);
+        App.Find("Row.c-spam").Patterns.SelectionItem.Pattern.Select();
+        App.Find("Chat.Header");
+
+        Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.ALT, VirtualKeyShort.KEY_H);
+        Thread.Sleep(500);
+        Assert.IsEmpty(Server.Phone.ConversationUpdates, "Ctrl + Alt + h sent the phone an update for a spam chat.");
+
+        Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.SHIFT, VirtualKeyShort.KEY_O);
+        App.Find("Dialog.Details");
+        App.Find("Row.c-spam");
     }
 
     // =========================================================================

@@ -123,6 +123,38 @@ public abstract class UiTest
         Wait.Until(() => App.TryFind(automationId) is null, AppDriver.DefaultTimeout, () => $"'{automationId}' still shows.");
 
     /// <summary>
+    /// Waits until the keyboard focus is on a control or inside it (a list's focus sits on one of its items).
+    /// </summary>
+    /// <param name="automationId">The control's AutomationId, such as <c>Main.ConversationList</c>.</param>
+    protected void WaitForFocusIn(string automationId)
+    {
+        string last = "";
+        Wait.Until(() => FocusPath(out last).Contains(automationId), AppDriver.DefaultTimeout,
+            () => $"Focus wasn't in '{automationId}'; it was in [{last}].");
+    }
+
+    // The AutomationIds From The Focused Element Up To The Window
+    private List<string> FocusPath(out string text)
+    {
+        var ids = new List<string>();
+        try
+        {
+            var walker = App.Automation.TreeWalkerFactory.GetControlViewWalker();
+            for (AutomationElement? e = App.Automation.FocusedElement(); e is not null && ids.Count < 50; e = walker.GetParent(e))
+            {
+                ids.Add(e.Properties.AutomationId.ValueOrDefault ?? "");
+            }
+        }
+        catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or FlaUI.Core.Exceptions.ElementNotAvailableException)
+        {
+            // Focus Moved Mid-Walk; Read Again
+        }
+
+        text = string.Join(" < ", ids);
+        return ids;
+    }
+
+    /// <summary>
     /// Closes the main window with its close button and waits until it is gone.
     /// </summary>
     protected void CloseMainWindow()
