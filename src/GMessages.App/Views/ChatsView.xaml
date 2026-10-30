@@ -72,6 +72,14 @@
                     Loaded="OnConversationListLoaded"
                     SelectionChanged="OnSelectionChanged"
                     SelectionMode="Single">
+                    <!-- Rows: a click opens the chat without taking the focus, so the message box keeps it and never shows its
+                         unfocused look between chats (the owner saw that as a flash). Tab and the arrow keys still reach the rows -->
+
+                    <ListView.ItemContainerStyle>
+                        <Style TargetType="ListViewItem">
+                            <Setter Property="AllowFocusOnInteraction" Value="False" />
+                        </Style>
+                    </ListView.ItemContainerStyle>
                     <ListView.ItemTemplate>
                         <DataTemplate x:DataType="main:ConversationRowViewModel">
                             <controls:ConversationRow MoreRequested="OnRowMoreRequested" Row="{x:Bind}" />

@@ -362,6 +362,51 @@ public sealed class ChatTests : UiTest
     }
 
     /// <summary>
+    /// Clicking between chats (never opened and opened before) shows no flash, sampled about every 8 ms from the click:
+    /// the message box keeps its focused look (a click on a row once took the focus for a moment), and no frame paints
+    /// the list's gray scrolling placeholders over the rows.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task SwitchChats_ByClick_NoFlash()
+    {
+        // Three Chats Of Two Pages Each, Like Real Ones
+        long time = DateTimeOffset.UtcNow.AddDays(-1).ToUnixTimeMilliseconds() * 1000;
+        foreach (string id in new[] { "fa", "fb", "fc" })
+        {
+            Conversation chat = FakeChats.NewConversation("c-" + id, "Pal " + id, false, ConversationStatus.Active, false, false, FakeChats.Person("p-" + id, "Pal " + id, "+1555000002" + id.Length));
+            Server.Phone.Chats.Add(chat, [.. Enumerable.Range(1, ChatStore.PageSize * 2).Select(i => Line(id, i))]);
+        }
+
+        await OpenMainAsync();
+        App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).SetForeground();
+        App.Find("Row.c-fa").Click();
+        WaitForNewest("fa");
+        Wait.Until(() => App.Find("Chat.Draft").Properties.HasKeyboardFocus.ValueOrDefault, AppDriver.DefaultTimeout, () => "Opening fa didn't focus the message box.");
+        Thread.Sleep(1000);
+
+        // Never Opened, Opened Before, Never Opened, Opened Before
+        foreach (string id in new[] { "fb", "fa", "fc", "fb" })
+        {
+            AssertNoFlash(id);
+        }
+
+        Message Line(string id, int i)
+        {
+            var message = new Message
+            {
+                MessageID      = $"{id}-{i}",
+                ConversationID = "c-" + id,
+                ParticipantID  = i % 2 == 0 ? FakeChats.MyParticipantId : "p-" + id,
+                Timestamp      = time += 1_000_000,
+                MessageStatus  = new MessageStatus { Status = i % 2 == 0 ? MessageStatusType.OutgoingComplete : MessageStatusType.IncomingComplete },
+            };
+            message.MessageInfo.Add(new MessageInfo { MessageContent = new MessageContent { Content = i % 3 == 0 ? $"Line {i} \U0001F923\U0001F923" : $"Line {i}" } });
+            return message;
+        }
+    }
+
+    /// <summary>
     /// While an older page loads and lands, the bubbles on screen stay where they are: no blanking, no jump. The
     /// oldest shown bubble keeps its place on screen (within 4 px) from the loading ring showing until a second after
     /// the page landed.
@@ -557,6 +602,70 @@ public sealed class ChatTests : UiTest
             return false;
         }
     }
+
+    // Waits For A Chat's Newest Bubble (Line Two Pages In)
+    private void WaitForNewest(string id) =>
+        Wait.Until(() => App.TryFind($"Bubble.{id}-{ChatStore.PageSize * 2}") is not null, AppDriver.DefaultTimeout, () => $"Chat {id} didn't show its newest bubble.");
+
+    // Clicks A Chat's Row (Real Input) And Reads The Screen About Every 8 ms For 800 ms. Each Reading Holds The Message
+    // Box's Brightness And How Much Lighter (Or Darker) The Empty Middle Of The List Is Than Its Left Padding, Averaged
+    // Down The List. The Gray Placeholders Cover The Rows But Not The Padding, And The Middle Column Holds No Bubble Here
+    // (Received Ones Sit Left, Sent Ones Right), So Before The Click Both Read The Same
+    private void AssertNoFlash(string id)
+    {
+        App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).SetForeground();
+        System.Drawing.Rectangle view  = App.Find("Chat.Messages").BoundingRectangle;
+        System.Drawing.Rectangle draft = App.Find("Chat.Draft").BoundingRectangle;
+        System.Drawing.Rectangle row   = App.Find("Row.c-" + id).BoundingRectangle;
+        System.Drawing.Rectangle strip = System.Drawing.Rectangle.FromLTRB(view.Left, view.Top, view.Left + (view.Width / 2) + 1, draft.Bottom);
+        FlaUI.Core.Input.Mouse.MoveTo(row.X + (row.Width / 2), row.Y + (row.Height / 2));
+        Thread.Sleep(300);
+
+        (double Draft, double Lighter) Read()
+        {
+            using FlaUI.Core.Capturing.CaptureImage capture = FlaUI.Core.Capturing.Capture.Rectangle(strip);
+            System.Drawing.Bitmap bitmap = capture.Bitmap;
+            double draft_luma            = Luma(bitmap.GetPixel(draft.Left + 120 - strip.Left, draft.Top + (draft.Height / 2) - strip.Top));
+            double lighter               = 0;
+            int rows                     = 0;
+            for (int y = 40; y < view.Height - 40; y += 40, rows++)
+            {
+                lighter += Luma(bitmap.GetPixel(view.Width / 2, y)) - Luma(bitmap.GetPixel(5, y));
+            }
+
+            return (draft_luma, lighter / rows);
+        }
+
+        // Before: The Focused Message Box, And The List's Middle As Dark As Its Padding
+        (double draft_before, double lighter_before) = Read();
+        Assert.IsTrue(Math.Abs(lighter_before) < 1, $"Before opening {id}, the list's middle read {lighter_before:0.0} off its padding; the check needs it empty.");
+
+        // Click, Then Sample On A Second Thread So The Readings Keep Their Pace
+        var samples = new List<(double Ms, double Draft, double Lighter)>();
+        var clock   = System.Diagnostics.Stopwatch.StartNew();
+        var sampler = new Thread(() =>
+        {
+            while (clock.ElapsedMilliseconds < 800)
+            {
+                (double d, double l) = Read();
+                samples.Add((clock.Elapsed.TotalMilliseconds, d, l));
+                Thread.Sleep(1);
+            }
+        });
+        sampler.Start();
+        FlaUI.Core.Input.Mouse.Click();
+        sampler.Join();
+
+        string trace = string.Join(" ", samples.Select(s => $"{s.Ms:0}:{s.Draft - draft_before:0}/{s.Lighter:0.0}"));
+        TestContext.WriteLine($"{id}: {samples.Count} readings (ms:box/list) {trace}");
+        WaitForNewest(id);
+        Assert.IsTrue(samples.Count >= 40, $"Only {samples.Count} readings in 800 ms; too slow to catch a one-frame flash.");
+        Assert.IsFalse(samples.Any(s => Math.Abs(s.Draft - draft_before) > 8), $"Opening {id}, the message box lost its focused look for a moment. Readings: {trace}");
+        Assert.IsFalse(samples.Any(s => Math.Abs(s.Lighter) >= 1.5), $"Opening {id}, the list's rows flashed gray. Readings: {trace}");
+        Thread.Sleep(1000);
+    }
+
+    private static double Luma(System.Drawing.Color pixel) => (0.299 * pixel.R) + (0.587 * pixel.G) + (0.114 * pixel.B);
 
     // Scrolls Up Until The Loading Ring Shows, Then Checks The Bubble Stays Put (Within 4 px) Every 50 ms From Its Settled
     // Place Until The Ring Has Been Gone A Second: The Page Lands Above Without Moving It, Blanking The List Or Asking

@@ -116,7 +116,10 @@
             ContextRequested="OnMessageListContextRequested"
             Loaded="OnMessageListLoaded"
             PreviewKeyDown="OnMessageListKeyDown"
-            SelectionMode="None">
+            SelectionMode="None"
+            ShowsScrollingPlaceholders="False">
+            <!-- No scrolling placeholders: the jump to the newest message on a chat switch counted as fast scrolling, so the
+                 list painted its gray placeholder over every row for a frame or two (the flash between chats) -->
             <!-- KeepItemsInView, not KeepLastItemInView: that one puts the last bubble at the bottom edge without the list's
                  bottom padding, scrolling a just-opened chat 8 px short of its end under the bottom fade. Staying on
                  the newest message is ChatPane's pin -->
