@@ -232,7 +232,8 @@ public sealed partial class ChatStore : IDisposable
         {
             ConversationFolder.SpamBlocked => ListConversationsRequest.Types.Folder.SpamBlocked,
             ConversationFolder.Archived    => ListConversationsRequest.Types.Folder.Archive,
-            _                              => ListConversationsRequest.Types.Folder.Inbox,
+            ConversationFolder.Inbox       => ListConversationsRequest.Types.Folder.Inbox,
+            _                              => throw new ArgumentOutOfRangeException(nameof(folder)),
         };
 
         int generation                     = Generation;
@@ -585,7 +586,8 @@ public sealed partial class ChatStore : IDisposable
     /// Sends the request <see cref="BuildRequest"/> builds. Only once the phone says it succeeded does the cached
     /// conversation take its new status (<see cref="StatusAfter"/>), in memory only, raising
     /// <see cref="ConversationChanged"/> so the lists move it at once; the phone's echo is what gets saved. A
-    /// <see cref="Reset"/> while the phone is answering applies nothing. Failures are logged by type only.
+    /// <see cref="Reset"/> while the phone is answering applies nothing. A refusal is logged here;
+    /// callers log every other failure, as they do for the other writers.
     /// </remarks>
     /// <param name="conversationId">The conversation ID.</param>
     /// <param name="action">What to do.</param>
@@ -595,36 +597,29 @@ public sealed partial class ChatStore : IDisposable
     /// <exception cref="MessageSendException">The phone refused the update, or the conversation is unknown.</exception>
     public async Task UpdateConversationAsync(string conversationId, ConversationAction action, CancellationToken ct)
     {
-        try
+        IMessagingClient client = RequireClient();
+
+        // No ConfigureAwait(false): ConversationChanged Must Be Raised On The Caller Thread
+        int generation                = Generation;
+        ConversationInfo conversation = await RequireConversationAsync(client, conversationId, generation, ct);
+
+        UpdateConversationResponse response = await client.UpdateConversationAsync(BuildRequest(conversation, action), ct);
+        if (!response.Success)
         {
-            IMessagingClient client = RequireClient();
-
-            // No ConfigureAwait(false): ConversationChanged Must Be Raised On The Caller Thread
-            int generation                = Generation;
-            ConversationInfo conversation = await RequireConversationAsync(client, conversationId, generation, ct);
-
-            UpdateConversationResponse response = await client.UpdateConversationAsync(BuildRequest(conversation, action), ct);
-            if (!response.Success)
-            {
-                throw new MessageSendException("ConversationUpdateRefused");
-            }
-
-            // Unpaired Or Signed Out Meanwhile, Or Nothing To Show Locally (Mute Is Kept Elsewhere)
-            if (generation != Generation || StatusAfter(action) is not { } status || Find(conversationId) is not { } cached)
-            {
-                return;
-            }
-
-            ConversationInfo updated = cached with { Status = status };
-            if (Upsert(updated))
-            {
-                ConversationChanged?.Invoke(this, updated);
-            }
+            LogSendRefused(conversationId, "ConversationUpdateRefused");
+            throw new MessageSendException("ConversationUpdateRefused");
         }
-        catch (Exception ex) when (ex is not OutOfMemoryException)
+
+        // Unpaired Or Signed Out Meanwhile, Or Nothing To Show Locally (Mute Is Kept Elsewhere)
+        if (generation != Generation || StatusAfter(action) is not { } status || Find(conversationId) is not { } cached)
         {
-            LogFailure($"{action} conversation {conversationId}", ex);
-            throw;
+            return;
+        }
+
+        ConversationInfo updated = cached with { Status = status };
+        if (Upsert(updated))
+        {
+            ConversationChanged?.Invoke(this, updated);
         }
     }
 
@@ -672,7 +667,8 @@ public sealed partial class ChatStore : IDisposable
                 ConversationAction.Delete         => ConversationActionStatus.Delete,
                 ConversationAction.Block          => ConversationActionStatus.Block,
                 ConversationAction.BlockAndReport => ConversationActionStatus.BlockAndReport,
-                _                                 => ConversationActionStatus.Unblock,
+                ConversationAction.Unblock        => ConversationActionStatus.Unblock,
+                _                                 => throw new ArgumentOutOfRangeException(nameof(action)),
             },
             ConversationID = id,
             DeleteData     = delete_data,
@@ -697,7 +693,8 @@ public sealed partial class ChatStore : IDisposable
         ConversationAction.Unarchive or ConversationAction.Unblock      => ConversationStatus.Active,
         ConversationAction.Block or ConversationAction.BlockAndReport   => ConversationStatus.BlockedFolder,
         ConversationAction.Delete                                       => ConversationStatus.Deleted,
-        _                                                               => null,
+        ConversationAction.Mute or ConversationAction.Unmute            => null,
+        _                                                               => throw new ArgumentOutOfRangeException(nameof(action)),
     };
 
     /// <summary>
