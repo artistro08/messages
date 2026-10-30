@@ -861,11 +861,11 @@ public sealed partial class ChatStore : IDisposable
         // No ConfigureAwait(false) Below: Events Must Be Raised On The Thread That Delivered The Client Event
         // Decide IsNew Before Any Await, So Two Quick Events Of One Message Can't Both Be New. A Message Older Than A Day
         // Is Never New Either: A Reaction Or Status Update To It Must Not Notify (mautrix-gmessages, GetReactions). Nor
-        // Is A Message Already In Its Cached Page, Or One That Carries Reactions: Both Are The Phone Echoing An Update
-        // (A Reaction Made Here Or On The Phone), Which The Notified Ring Misses After A Restart
+        // Is A Message Already In Its Cached Page, Or One Carrying My Own Reaction: Both Are The Phone Echoing An Update
+        // (A Reaction Made Here Or On The Phone), Which The Notified Ring Misses After A Restart. Others' Reactions Don't Count
         int generation = Generation;
         bool is_new    = MarkNotified(message.Id)
-                         && message.Reactions.Count == 0
+                         && !HasMyReaction(message)
                          && !IsCached(message)
                          && message.Time >= _time.GetUtcNow() - NewMessageAge;
         CacheMessage(message);
@@ -986,6 +986,10 @@ public sealed partial class ChatStore : IDisposable
             }
         }
     }
+
+    // True When One Of The Message's Reactions Is Mine (My Participant ID Is Known Once Any Conversation Has Loaded)
+    private bool HasMyReaction(ChatMessage message) =>
+        _me is { } me && message.Reactions.Any(r => r.ParticipantIds.Contains(me.Id));
 
     // True When A Message With This ID Is Already In Its Conversation's Cached Page
     private bool IsCached(ChatMessage message)

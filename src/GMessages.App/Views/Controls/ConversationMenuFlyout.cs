@@ -161,18 +161,13 @@ internal static class ConversationMenuFlyout
     // A Confirm Dialog: Enter Picks Cancel (DefaultButton Close), So Nothing Happens By Accident
     private static ContentDialog NewDialog(XamlRoot root, string automationId, string title, UIElement content, string primary)
     {
-        var dialog = new ContentDialog
-        {
-            XamlRoot          = root,
-            RequestedTheme    = root.Content.As<FrameworkElement>().ActualTheme,
-            Title             = title,
-            Content           = content,
-            PrimaryButtonText = primary,
-            CloseButtonText   = ChatCopy.Cancel,
-            DefaultButton     = ContentDialogButton.Close,
-        };
+        ContentDialog dialog     = Dialogs.Create(root);
+        dialog.Title             = title;
+        dialog.Content           = content;
+        dialog.PrimaryButtonText = primary;
+        dialog.CloseButtonText   = ChatCopy.Cancel;
+        dialog.DefaultButton     = ContentDialogButton.Close;
         AutomationProperties.SetAutomationId(dialog, automationId);
-        Dialogs.UseFluentStyle(dialog);
         return dialog;
     }
 

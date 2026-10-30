@@ -73,10 +73,10 @@ public sealed record NotificationContent(string Tag, string Group, string Title,
             return line;
         }
 
-        // Cut At The Last Space In The Last 20 Text Elements (The Element Right After Counts: It Ends A Whole Word)
+        // Cut At The Last Space Or Tab In The Last 20 Text Elements (The Element Right After Counts: It Ends A Whole Word)
         string kept  = info.SubstringByTextElements(0, MaxBodyLength);
         int earliest = info.SubstringByTextElements(0, MaxBodyLength - WordSearchLength).Length;
-        int space    = char.IsWhiteSpace(info.SubstringByTextElements(MaxBodyLength, 1)[0]) ? kept.Length : kept.LastIndexOf(' ');
+        int space    = char.IsWhiteSpace(info.SubstringByTextElements(MaxBodyLength, 1)[0]) ? kept.Length : kept.LastIndexOfAny([' ', '	']);
         int end      = space >= earliest ? space : kept.Length;
 
         // Trim Trailing Spaces And Punctuation (Single Characters, So No Text Element Is Split)
