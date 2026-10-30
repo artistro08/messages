@@ -502,10 +502,58 @@ public sealed class FakeGoogleServerTests
         Assert.HasCount(1, rig.Server.Phone.ConversationUpdates);
         ListConversationsResponse inbox = await rig.Client.ListConversationsAsync(ListConversationsRequest.Types.Folder.Inbox, 25, null, CancellationToken.None).WaitAsync(HangGuard);
         CollectionAssert.AreEquivalent(InboxIds, inbox.Conversations.Select(c => c.ConversationID).ToArray());
-        lock (rig.Events)
+
+        // A Late Push Would Show Up Within This Bounded Wait
+        bool pushed = SpinWait.SpinUntil(() =>
         {
-            Assert.IsFalse(rig.Events.OfType<ConversationUpdated>().Any(e => e.Conversation.ConversationID == "c-ann"), "nothing pushed");
+            lock (rig.Events)
+            {
+                return rig.Events.OfType<ConversationUpdated>().Any(e => e.Conversation.ConversationID == "c-ann");
+            }
+        }, TimeSpan.FromSeconds(1));
+        Assert.IsFalse(pushed, "nothing pushed");
+    }
+
+    /// <summary>
+    /// Each successful update leaves the phone's conversation in the status its action or update data names, and the
+    /// conversation comes back with that status. A mute leaves the status as it was and still comes back.
+    /// </summary>
+    /// <param name="conversationId">The conversation to update.</param>
+    /// <param name="action">The request's action.</param>
+    /// <param name="data">The request's data: <c>delete</c>, <c>archive</c> or <c>mute</c>.</param>
+    /// <param name="expected">The status the phone ends with.</param>
+    [TestMethod]
+    [DataRow("c-ann", ConversationActionStatus.Delete, "delete", ConversationStatus.Deleted)]
+    [DataRow("c-ann", ConversationActionStatus.Block, "delete", ConversationStatus.BlockedFolder)]
+    [DataRow("c-ann", ConversationActionStatus.BlockAndReport, "delete", ConversationStatus.BlockedFolder)]
+    [DataRow("c-spam", ConversationActionStatus.Unblock, "delete", ConversationStatus.Active)]
+    [DataRow("c-ann", ConversationActionStatus.UnknownActionStatus, "archive", ConversationStatus.Archived)]
+    [DataRow("c-spam", ConversationActionStatus.UnknownActionStatus, "mute", ConversationStatus.SpamFolder)]
+    public async Task UpdateConversation_Success_AppliesAndEchoesStatus(string conversationId, ConversationActionStatus action, string data, ConversationStatus expected)
+    {
+        await using Rig rig = await PairedAsync();
+        var request = new UpdateConversationRequest { Action = action, ConversationID = conversationId };
+        switch (data)
+        {
+            case "archive":
+                request.UpdateData = new UpdateConversationData { ConversationID = conversationId, Status = ConversationStatus.Archived };
+                break;
+
+            case "mute":
+                request.UpdateData = new UpdateConversationData { ConversationID = conversationId, Mute = ConversationMuteStatus.Mute };
+                break;
+
+            default:
+                request.DeleteData = new DeleteConversationData { ConversationID = conversationId };
+                break;
         }
+
+        UpdateConversationResponse answer = await rig.Client.UpdateConversationAsync(request, CancellationToken.None).WaitAsync(HangGuard);
+
+        Assert.IsTrue(answer.Success);
+        WaitForEvent<ConversationUpdated>(rig.Events, e => e.Conversation.ConversationID == conversationId && e.Conversation.Status == expected, "echoed conversation");
+        Assert.AreEqual(expected, rig.Server.Phone.Chats.Get(conversationId)?.Status, "phone's stored status");
+        Assert.HasCount(1, rig.Server.Phone.ConversationUpdates);
     }
 
     /// <summary>
