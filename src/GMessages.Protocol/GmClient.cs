@@ -48,10 +48,8 @@ public sealed partial class GmClient : IAsyncDisposable
     private readonly ILogger _log;
     private readonly HttpClient _httpClient;
     private readonly HttpClient _longPollClient;
-    private readonly HttpClient _rotationClient;
     private readonly HttpMessageHandler? _ownedHandler;
     private readonly TokenRefresher _refresher;
-    private readonly CookieRotator _rotator;
     private readonly UpdateDispatcher _dispatcher;
     private readonly LongPollLoop _loop;
     private readonly GaiaSignIn _signIn;
@@ -78,7 +76,7 @@ public sealed partial class GmClient : IAsyncDisposable
     private bool _savesSuspended;
     private int _saveCount;
 
-    private GmClient(AuthData auth, SessionStore store, GmEndpoints endpoints, TimeProvider time, ILoggerFactory logs, HttpMessageHandler handler, bool ownsHandler, HttpMessageHandler? rotationHandler = null)
+    private GmClient(AuthData auth, SessionStore store, GmEndpoints endpoints, TimeProvider time, ILoggerFactory logs, HttpMessageHandler handler, bool ownsHandler)
     {
         _auth           = auth;
         _store          = store;
@@ -88,16 +86,12 @@ public sealed partial class GmClient : IAsyncDisposable
         _httpClient     = new HttpClient(handler, disposeHandler: false);
         _longPollClient = new HttpClient(handler, disposeHandler: false) { Timeout = GmHttpClient.LongPollTimeout };
 
-        // Cookie Rotation Gets Its Own Client: A Short Timeout, And (On The Real Network) No Redirects
-        _rotationClient = new HttpClient(rotationHandler ?? handler, disposeHandler: rotationHandler is not null) { Timeout = CookieRotator.RequestTimeout };
-
         // Wire The Pieces
         var http    = new GmHttpClient(_httpClient, _longPollClient, auth.Cookies, time, logs.CreateLogger<GmHttpClient>());
         Rpc         = new RpcSession(http, auth, endpoints, time, logs.CreateLogger<RpcSession>());
         _refresher  = new TokenRefresher(http, auth, endpoints, time, logs.CreateLogger<TokenRefresher>());
-        _rotator    = new CookieRotator(new GmHttpClient(_rotationClient, _rotationClient, auth.Cookies, time, logs.CreateLogger<GmHttpClient>()), auth, endpoints, time, logs.CreateLogger<CookieRotator>());
         _dispatcher = new UpdateDispatcher(Rpc, logs.CreateLogger<UpdateDispatcher>());
-        _loop       = new LongPollLoop(http, Rpc, auth, endpoints, _refresher, _dispatcher, time, logs.CreateLogger<LongPollLoop>()) { Rotator = _rotator };
+        _loop       = new LongPollLoop(http, Rpc, auth, endpoints, _refresher, _dispatcher, time, logs.CreateLogger<LongPollLoop>());
         _signIn     = new GaiaSignIn(http, auth, endpoints, time, logs.CreateLogger<GaiaSignIn>());
         _pairing    = new GaiaPairing(_signIn, Rpc, _loop, auth, time, logs.CreateLogger<GaiaPairing>());
 
@@ -180,14 +174,7 @@ public sealed partial class GmClient : IAsyncDisposable
             AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate | DecompressionMethods.Brotli,
         };
 
-        // Cookie Rotation: The Cookie Header Is Set By Hand, So A Redirect Must Never Carry It Elsewhere
-        var rotation_handler = new SocketsHttpHandler
-        {
-            UseCookies             = false,
-            AllowAutoRedirect      = false,
-            AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate | DecompressionMethods.Brotli,
-        };
-        return new GmClient(auth, store, endpoints, time, logs, socket_handler, ownsHandler: true, rotation_handler);
+        return new GmClient(auth, store, endpoints, time, logs, socket_handler, ownsHandler: true);
     }
 
     // =========================================================================
@@ -198,8 +185,7 @@ public sealed partial class GmClient : IAsyncDisposable
     /// Refreshes the token if needed and starts listening for events.
     /// </summary>
     /// <remarks>
-    /// Ported from <c>Connect</c>. First the <c>__Secure-1PSIDTS</c> cookie is rotated when due (C#-only, see
-    /// <see cref="CookieRotator"/>). The refresh happens here, not only in the long poll, so bad credentials fail the
+    /// Ported from <c>Connect</c>. The refresh happens here, not only in the long poll, so bad credentials fail the
     /// call. A refresh error that can be retried (network, 5xx) is logged and left to the long poll. Returns once the
     /// long poll is started; it opens and sends <c>GET_UPDATES</c> in the background. A call while the long poll is
     /// already running makes it reconnect right away (dropping any backoff wait), the way Go's <c>Connect</c> retries
@@ -225,9 +211,6 @@ public sealed partial class GmClient : IAsyncDisposable
                 _loop.RequestReconnect();
                 return;
             }
-
-            // Rotate Cookies When Due, So The First Request After A Start Goes Out With A Fresh __Secure-1PSIDTS
-            await _rotator.RotateIfDueAsync(ct).ConfigureAwait(false);
 
             // Refresh The Token (Its Event Goes Out Here; No Long Poll Is Relaying Refresher Events Now)
             _refresher.EventRaised += Raise;
@@ -494,7 +477,6 @@ public sealed partial class GmClient : IAsyncDisposable
             _loop.EventRaised      -= Raise;
             _httpClient.Dispose();
             _longPollClient.Dispose();
-            _rotationClient.Dispose();
             _ownedHandler?.Dispose();
         }
     }

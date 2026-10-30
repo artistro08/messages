@@ -189,49 +189,20 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
     }
 
     /// <summary>
-    /// Sends a request that is not a Messages call (Google's cookie rotation) with the jar's cookies, and absorbs the
-    /// <c>Set-Cookie</c> values a 2xx answer returns.
+    /// Tells whether an HTTP header belongs to Device Bound Session Credentials (DBSC).
     /// </summary>
     /// <remarks>
-    /// The caller builds the request with its own headers; only the <c>Cookie</c> header is added (no relay headers,
-    /// no SAPISIDHASH). A 2xx answer's cookies that <paramref name="acceptSetCookie"/> keeps go through
-    /// <see cref="CookieJar.UpdateFrom"/> like every other response, so the session is saved. A refused answer's
-    /// cookies are never taken: a cleared <c>__Secure-1PSIDTS</c> there would sign the user out. Not retried. The
-    /// caller owns and must dispose the response.
+    /// The W3C draft's <c>Secure-Session-Registration</c>, <c>-Challenge</c>, <c>-Response</c>, <c>-Skipped</c> and
+    /// <c>Sec-Secure-Session-Id</c> (<see href="https://w3c.github.io/webappsec-dbsc/"/>), and the <c>Sec-Session-*</c>
+    /// names of earlier drafts and Chrome's Google-only prototype (<c>Sec-Session-Google-Registration</c>). A bound
+    /// session's <c>__Secure-1PSIDTS</c> can only be renewed with the browser's private key, which this app never has.
     /// </remarks>
-    /// <param name="request">The request to send.</param>
-    /// <param name="acceptSetCookie">Keeps only the raw <c>Set-Cookie</c> lines it returns true for.</param>
-    /// <param name="ct">Cancels the request.</param>
-    /// <returns>The response, whatever its status.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="request"/> or <paramref name="acceptSetCookie"/> is null.</exception>
-    /// <exception cref="HttpRequestException">The request failed before any response arrived.</exception>
-    /// <exception cref="OperationCanceledException"><paramref name="ct"/> was canceled, or the client timed out.</exception>
-    public async Task<HttpResponseMessage> SendWithCookiesAsync(HttpRequestMessage request, Func<string, bool> acceptSetCookie, CancellationToken ct)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-        ArgumentNullException.ThrowIfNull(acceptSetCookie);
-
-        cookies.ApplyTo(request, time.GetUtcNow().ToUnixTimeSeconds(), withAuthorization: false);
-        HttpResponseMessage res = await http.SendAsync(request, ct).ConfigureAwait(false);
-
-        // Only A 2xx Answer's Cookies Reach The Jar
-        if (res.IsSuccessStatusCode)
-        {
-            cookies.UpdateFrom(res, acceptSetCookie);
-        }
-
-        return res;
-    }
-
-    /// <summary>
-    /// Describes the cookies a response sets by name and expiry, never by value.
-    /// </summary>
-    /// <remarks>The same text as the <c>Cookies set by</c> diagnostics, for example <c>SIDCC (expires 2027-10-29T12:00:00Z)</c>.</remarks>
-    /// <param name="res">The response to read.</param>
-    /// <param name="now">The current time, for <c>Max-Age</c>.</param>
-    /// <param name="accept">Describes only the raw <c>Set-Cookie</c> lines it returns true for; null describes all.</param>
-    /// <returns>The names with expiry, comma separated; empty when the response sets none.</returns>
-    public static string DescribeSetCookies(HttpResponseMessage res, DateTimeOffset now, Func<string, bool>? accept = null) => string.Join(", ", ParseSetCookies(res, now, accept).Select(c => $"{c.Name} ({c.When})"));
+    /// <param name="name">The header name.</param>
+    /// <returns>True for a DBSC header.</returns>
+    public static bool IsBoundSessionHeader(string name) =>
+        name.StartsWith("Secure-Session-", StringComparison.OrdinalIgnoreCase)
+        || name.StartsWith("Sec-Secure-Session-", StringComparison.OrdinalIgnoreCase)
+        || name.StartsWith("Sec-Session-", StringComparison.OrdinalIgnoreCase);
 
     // =========================================================================
     // HELPERS
@@ -291,7 +262,7 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
     }
 
     // The Name, Readable Expiry And Raw Expiry Attribute Of Each Set-Cookie Line; Values Are Never Read
-    private static List<(string Name, string When, string Stamp)> ParseSetCookies(HttpResponseMessage res, DateTimeOffset now, Func<string, bool>? accept = null)
+    private static List<(string Name, string When, string Stamp)> ParseSetCookies(HttpResponseMessage res, DateTimeOffset now)
     {
         var set = new List<(string Name, string When, string Stamp)>();
         if (!res.Headers.TryGetValues("Set-Cookie", out IEnumerable<string>? lines))
@@ -299,7 +270,7 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
             return set;
         }
 
-        foreach (string line in lines.Where(l => accept is null || accept(l)))
+        foreach (string line in lines)
         {
             string[] parts = line.Split(';');
             int eq         = parts[0].IndexOf('=');

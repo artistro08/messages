@@ -21,8 +21,7 @@ namespace GMessages.App.UITests.FakeGoogle;
 /// page: it sets no cookies until its "Sign in" button (<c>id="signin"</c>) posts to <c>/web/authentication/login</c>.
 /// The long poll answers <c>[[</c> and a startup ack (counting the phone's catch-up messages, which come first) at once, then pushed payloads, with a heartbeat every 10 seconds,
 /// and stays open until the client leaves or <see cref="KillLongPoll"/>. <c>SendMessage</c> requests go to
-/// <see cref="Phone"/>, whose answers come back on the long poll. <c>/RotateCookies</c> (with the accounts base set to
-/// <see cref="BaseUrl"/> too) sets a fresh <c>__Secure-1PSIDTS</c> on every call. Each request is served on its own task. Binds
+/// <see cref="Phone"/>, whose answers come back on the long poll. Each request is served on its own task. Binds
 /// 127.0.0.1 only and never contacts anything.
 /// </remarks>
 public sealed class FakeGoogleServer : IAsyncDisposable
@@ -115,7 +114,6 @@ public sealed class FakeGoogleServer : IAsyncDisposable
     private int _killStatus;
     private volatile bool _rejectCookies;
     private volatile bool _slowStart;
-    private int _rotations;
 
     /// <summary>
     /// Starts the server on a free port of 127.0.0.1.
@@ -303,13 +301,6 @@ public sealed class FakeGoogleServer : IAsyncDisposable
                     }
 
                     await RespondAsync(context.Response, 200, "text/html; charset=utf-8", Encoding.UTF8.GetBytes(SignedInPage));
-                    break;
-
-                case "/RotateCookies" when request.HttpMethod == "POST":
-                    // Google's Cookie Rotation: A Fresh __Secure-1PSIDTS For All Of google.com Each Time
-                    int rotation = Interlocked.Increment(ref _rotations);
-                    context.Response.Headers.Add("Set-Cookie", $"__Secure-1PSIDTS=fake-1psidts-rotated-{rotation}; Domain=.google.com; Max-Age=31536000; Path=/; Secure; HttpOnly");
-                    await RespondAsync(context.Response, 200, "application/json", "[]"u8.ToArray());
                     break;
 
                 case "/preview-page" when request.HttpMethod == "GET":
