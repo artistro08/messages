@@ -77,6 +77,9 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 923, Level = LogLevel.Information, Message = "Media opened for {MessageId} (launched: {Launched})")]
     public static partial void MediaOpened(ILogger logger, string messageId, bool launched);
 
+    [LoggerMessage(EventId = 924, Level = LogLevel.Information, Message = "Bubble animated in ({MessageId})")]
+    public static partial void BubbleAnimatedIn(ILogger logger, string messageId);
+
     [LoggerMessage(EventId = 951,Level = LogLevel.Information, Message = "Test endpoint {Endpoint}, data folder {DataFolder}")]
     public static partial void TestEndpoint(ILogger logger, string endpoint, string dataFolder);
 }

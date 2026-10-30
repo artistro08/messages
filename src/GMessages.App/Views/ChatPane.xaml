@@ -227,26 +227,49 @@
         </Button>
 
         <!-- Typing: a received-style bubble with three dots while the other person types; outside the list, so it never
-             moves the scroll -->
+             moves the scroll. The dots bounce in turn while it shows (started from code) -->
         <Border
+            x:Name="TypingBubble"
             Grid.Row="2"
             Margin="12,4,12,0"
-            Padding="12,6"
+            Padding="14,6"
             HorizontalAlignment="Left"
             Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
             BorderThickness="1"
             CornerRadius="18"
             Visibility="{x:Bind Chat.IsTyping, Mode=OneWay, FallbackValue=Collapsed}">
-            <TextBlock
-                AutomationProperties.AutomationId="Chat.Typing"
-                AutomationProperties.LiveSetting="Polite"
-                AutomationProperties.Name="{x:Bind local:ChatPane.TypingText}"
-                FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                FontSize="16"
-                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                Text="&#xE712;" />
+            <Grid Height="21">
+                <StackPanel
+                    VerticalAlignment="Center"
+                    Orientation="Horizontal"
+                    Spacing="4">
+                    <Ellipse
+                        x:Name="TypingDot1"
+                        Width="6"
+                        Height="6"
+                        Fill="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <Ellipse
+                        x:Name="TypingDot2"
+                        Width="6"
+                        Height="6"
+                        Fill="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <Ellipse
+                        x:Name="TypingDot3"
+                        Width="6"
+                        Height="6"
+                        Fill="{ThemeResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
+
+                <!-- Name: "Typing" for screen readers and the tests; draws nothing -->
+                <TextBlock
+                    AutomationProperties.AccessibilityView="Content"
+                    AutomationProperties.AutomationId="Chat.Typing"
+                    AutomationProperties.LiveSetting="Polite"
+                    AutomationProperties.Name="{x:Bind local:ChatPane.TypingText}" />
+            </Grid>
         </Border>
+        <!-- /Typing -->
 
         <!-- Replying To: joined to the top of the message box as one control (the same width and left edge, rounded on top
              only, while the box squares its top corners): an accent bar, the quoted text and a button to drop the reply -->

@@ -28,6 +28,12 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     // The Message As Last Filled, For The Full-Size Photo Request
     private ChatMessage _message = null!;
 
+    // When The Chat Marked The Bubble New (Environment.TickCount64), Or 0; See TakeNew
+    private long _newAt;
+
+    // A New Bubble Animates In Only When It Shows This Soon After It Was Added (Not Later, Scrolled Into View)
+    private const long NewWindowMs = 1000;
+
     // The Photo Bubble's Height Cap, And The Size A Tiny Photo Grows To, In Effective Pixels
     private const double MaxPhotoHeight = 360;
     private const double MinPhotoSide   = 120;
@@ -294,6 +300,18 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     }
 
     /// <summary>
+    /// Says whether the bubble should animate in, once: true for a bubble the chat added live (sent, or arrived while the
+    /// chat was open) that shows within a second of being added. The flag clears, so a recycled container never replays it.
+    /// </summary>
+    /// <returns>True the first time a new bubble shows.</returns>
+    public bool TakeNew()
+    {
+        bool is_new = _newAt != 0 && Environment.TickCount64 - _newAt <= NewWindowMs;
+        _newAt      = 0;
+        return is_new;
+    }
+
+    /// <summary>
     /// Asks the phone for the full-size photo when only its thumbnail came (see <see cref="MediaStore.RequestFullSizeAsync"/>).
     /// </summary>
     /// <param name="media">The media store.</param>
@@ -455,6 +473,9 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         BodyText = BodyOf(Text, DisplayText, _link, preview);
         PropertyChanged?.Invoke(this, AllChanged);
     }
+
+    // Added Live (Sent, Or Arrived In The Open Chat): Animates In When It First Shows
+    internal void MarkNew() => _newAt = Environment.TickCount64;
 
     internal void MarkFailed()
     {
