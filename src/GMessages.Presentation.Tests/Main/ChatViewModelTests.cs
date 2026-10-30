@@ -492,10 +492,10 @@ public sealed class ChatViewModelTests
     }
 
     /// <summary>
-    /// Over a cached page the small top ring shows (not the big one) until the phone answers.
+    /// Over a cached page no ring shows while the phone answers: not the big one, not the small top one.
     /// </summary>
     [TestMethod]
-    public async Task Load_WithCachedPage_IsRefreshingUntilPhoneAnswers()
+    public async Task Load_WithCachedPage_ShowsNoRing()
     {
         using var rig = new MainRig();
         using (ChatViewModel first = NewChat(rig, null, Msg("m1", "one")))
@@ -508,14 +508,13 @@ public sealed class ChatViewModelTests
         using var chat       = new ChatViewModel(rig.Store, "a", TimeProvider.System, a => a());
 
         Task load = chat.LoadAsync();
-        Assert.IsTrue(chat.IsRefreshing);
-        Assert.IsTrue(chat.ShowsTopRing);
+        Assert.IsTrue(chat.IsLoading);
+        Assert.IsFalse(chat.IsLoadingOlder);
         Assert.IsFalse(chat.IsLoadingHistory);
 
         gate.SetResult();
         await load;
-        Assert.IsFalse(chat.IsRefreshing);
-        Assert.IsFalse(chat.ShowsTopRing);
+        Assert.IsFalse(chat.IsLoading);
     }
 
     /// <summary>
@@ -531,8 +530,7 @@ public sealed class ChatViewModelTests
 
         Task load = chat.LoadAsync();
         Assert.IsTrue(chat.IsLoadingHistory);
-        Assert.IsFalse(chat.IsRefreshing);
-        Assert.IsFalse(chat.ShowsTopRing);
+        Assert.IsFalse(chat.IsLoadingOlder);
 
         gate.SetResult();
         await load;
@@ -738,7 +736,7 @@ public sealed class ChatViewModelTests
 
         Assert.AreEqual("saved", chat.Messages[0].Text);
         Assert.IsFalse(chat.IsLoadingHistory);
-        Assert.IsTrue(chat.IsRefreshing);
+        Assert.IsFalse(chat.IsLoadingOlder);
 
         gate.SetResult();
         await load;

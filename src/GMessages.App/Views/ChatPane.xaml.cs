@@ -90,10 +90,12 @@ public sealed partial class ChatPane : UserControl
     {
         InitializeComponent();
 
-        // Reaction Picker: One Button Per Reaction In Enum Order, Labeled With Its Emoji (Styled By The Panel)
+        // Reaction Picker: One Button Per Reaction In Enum Order, Labeled With Its Emoji (Styled By The Panel); Love Shows
+        // Google's Red Heart Instead Of Heart Eyes
         for (int i = 1; i <= ReactionCount; i++)
         {
-            string emoji = EmojiTypes.Unicode((EmojiType)i);
+            EmojiType type = (EmojiType)i == EmojiType.Love ? EmojiType.RedHeart : (EmojiType)i;
+            string emoji   = EmojiTypes.Unicode(type);
             var button   = new Button { Content = emoji };
             AutomationProperties.SetAutomationId(button, "ReactionPicker." + i);
             button.Click += (_, _) => React(emoji);

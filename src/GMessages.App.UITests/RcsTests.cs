@@ -193,6 +193,9 @@ public sealed class RcsTests : UiTest
 
         App.Find("ReactionPicker");
         App.Find("ReactionPicker.7");
+
+        // Love Shows Google's Red Heart, Not Heart Eyes
+        Assert.AreEqual("❤️", App.Find("ReactionPicker.2").Name);
     }
 
     /// <summary>

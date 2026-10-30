@@ -68,7 +68,6 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     private bool _isLoading;
     private bool _isLoadingHistory;
     private bool _isLoadingOlder;
-    private bool _isRefreshing;
 
     // A Reload Asked For While A Load Was Running; Runs When That Load Ends
     private bool _reloadPending;
@@ -230,30 +229,12 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
         private set => Set(ref _isLoadingHistory, value, nameof(IsLoadingHistory));
     }
 
-    /// <summary>Gets whether an older page is loading above the bubbles: the small ring at the top.</summary>
+    /// <summary>Gets whether an older page is loading above the bubbles: the small ring at the top. A refresh of the cached copy shows no ring (owner's call).</summary>
     public bool IsLoadingOlder
     {
         get => _isLoadingOlder;
-        private set
-        {
-            Set(ref _isLoadingOlder, value, nameof(IsLoadingOlder));
-            Raise(nameof(ShowsTopRing));
-        }
+        private set => Set(ref _isLoadingOlder, value, nameof(IsLoadingOlder));
     }
-
-    /// <summary>Gets whether the newest page is loading with bubbles already shown (the cached copy): the small ring at the top.</summary>
-    public bool IsRefreshing
-    {
-        get => _isRefreshing;
-        private set
-        {
-            Set(ref _isRefreshing, value, nameof(IsRefreshing));
-            Raise(nameof(ShowsTopRing));
-        }
-    }
-
-    /// <summary>Gets whether the small raised ring at the top shows: an older page or a refresh of the cached copy is loading.</summary>
-    public bool ShowsTopRing => IsLoadingOlder || IsRefreshing;
 
     // =========================================================================
     // LOADING
@@ -274,7 +255,6 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
 
         IsLoading        = true;
         IsLoadingHistory = Messages.Count == 0;
-        IsRefreshing     = Messages.Count > 0;
 
         // Opened Before (Also Before A Restart): The Saved Copy Shows Alongside The Phone Fetch. A Copy In Memory Shows At
         // Once; The Database Is Read Off The UI Thread And Shows Only If The Phone's Page Hasn't Come First
@@ -312,14 +292,13 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
         {
             IsLoading        = false;
             IsLoadingHistory = false;
-            IsRefreshing     = false;
         }
 
         await RunPendingReloadAsync();
     }
 
-    // Shows The Saved Copy Unless A Phone Page Was Shown Since It Was Asked For; Over It The Small Top Ring Replaces The
-    // Big One. A Copy In Memory Completes At Once, So It Shows Before LoadAsync Awaits Anything
+    // Shows The Saved Copy Unless A Phone Page Was Shown Since It Was Asked For; Over It The Big Ring Goes Away With No
+    // Ring In Its Place. A Copy In Memory Completes At Once, So It Shows Before LoadAsync Awaits Anything
     private async Task ShowSavedPageAsync(Task<IReadOnlyList<ChatMessage>?> saved, int phonePages)
     {
         if (await saved is not { } page || _phonePages != phonePages)
@@ -328,11 +307,7 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
         }
 
         ShowPage(page);
-        if (IsLoading)
-        {
-            IsLoadingHistory = false;
-            IsRefreshing     = true;
-        }
+        IsLoadingHistory = false;
     }
 
     /// <summary>

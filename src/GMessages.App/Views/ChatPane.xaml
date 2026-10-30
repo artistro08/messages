@@ -163,8 +163,7 @@
             AutomationProperties.AutomationId="Chat.Loading"
             IsActive="{x:Bind Chat.IsLoadingHistory, Mode=OneWay, FallbackValue=False}" />
 
-        <!-- Top Ring: a ring in a small raised circle at the top while older messages load, or the phone's page loads over
-             the cached messages -->
+        <!-- Top Ring: a ring in a small raised circle at the top while older messages load -->
         <Border
             Grid.Row="1"
             AutomationProperties.AutomationId="Chat.TopRing"
@@ -178,7 +177,7 @@
             BorderThickness="1"
             CornerRadius="20"
             Translation="0,0,16"
-            Visibility="{x:Bind Chat.ShowsTopRing, Mode=OneWay, FallbackValue=Collapsed}">
+            Visibility="{x:Bind Chat.IsLoadingOlder, Mode=OneWay, FallbackValue=Collapsed}">
             <Border.Shadow>
                 <ThemeShadow />
             </Border.Shadow>
@@ -186,7 +185,7 @@
                 Width="20"
                 Height="20"
                 AutomationProperties.AutomationId="Chat.LoadingOlder"
-                IsActive="{x:Bind Chat.ShowsTopRing, Mode=OneWay, FallbackValue=False}" />
+                IsActive="{x:Bind Chat.IsLoadingOlder, Mode=OneWay, FallbackValue=False}" />
         </Border>
 
         <!-- Scroll To Bottom: floats just above the message box, fading in once the newest messages are a screen or more

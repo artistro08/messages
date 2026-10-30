@@ -494,12 +494,12 @@ public sealed class ChatTests : UiTest
     }
 
     /// <summary>
-    /// Reopening a chat the app kept shows its bubbles at once, with the small top ring up while the phone's page loads,
-    /// then the ring goes away.
+    /// Reopening a chat the app kept shows its bubbles at once, with no ring (big or small) while the phone's page loads
+    /// (owner's call).
     /// </summary>
     /// <returns>A task for the test.</returns>
     [TestMethod]
-    public async Task Reopen_CachedChat_ShowsTopRingWhilePhoneLoads()
+    public async Task Reopen_CachedChat_ShowsNoRingWhilePhoneLoads()
     {
         // Ann And Team Opened Once, So Both Are Kept
         await OpenAnnAsync();
@@ -510,12 +510,16 @@ public sealed class ChatTests : UiTest
         Server.Phone.MessagesDelay = TimeSpan.FromSeconds(3);
         App.Find("Row.c-ann").Patterns.SelectionItem.Pattern.Select();
 
-        Wait.Until(() => Bubbles().Count == 3 && App.TryFind("Chat.LoadingOlder") is not null, TimeSpan.FromSeconds(2),
-            () => $"Ann's kept bubbles and the top ring didn't show together; bubbles: {Bubbles().Count}.");
-        Assert.IsTrue(App.TryFind("Chat.Loading") is not { IsOffscreen: false }, "The big ring showed over kept bubbles.");
+        Wait.Until(() => Bubbles().Count == 3, TimeSpan.FromSeconds(2), () => $"Ann's kept bubbles didn't show at once; bubbles: {Bubbles().Count}.");
 
-        // The Phone Answers, The Ring Goes
-        Wait.Until(() => App.TryFind("Chat.LoadingOlder") is null, AppDriver.DefaultTimeout, () => "The top ring stayed after the phone answered.");
+        // No Ring While The Phone Is Slow
+        DateTime until = DateTime.UtcNow.AddSeconds(2);
+        while (DateTime.UtcNow < until)
+        {
+            Assert.IsNull(App.TryFind("Chat.LoadingOlder"), "The top ring showed over kept bubbles.");
+            Assert.IsTrue(App.TryFind("Chat.Loading") is not { IsOffscreen: false }, "The big ring showed over kept bubbles.");
+            Thread.Sleep(100);
+        }
     }
 
     /// <summary>
