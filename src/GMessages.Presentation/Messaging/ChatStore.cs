@@ -860,9 +860,14 @@ public sealed partial class ChatStore : IDisposable
 
         // No ConfigureAwait(false) Below: Events Must Be Raised On The Thread That Delivered The Client Event
         // Decide IsNew Before Any Await, So Two Quick Events Of One Message Can't Both Be New. A Message Older Than A Day
-        // Is Never New Either: A Reaction Or Status Update To It Must Not Notify (mautrix-gmessages, GetReactions)
+        // Is Never New Either: A Reaction Or Status Update To It Must Not Notify (mautrix-gmessages, GetReactions). Nor
+        // Is A Message Already In Its Cached Page, Or One That Carries Reactions: Both Are The Phone Echoing An Update
+        // (A Reaction Made Here Or On The Phone), Which The Notified Ring Misses After A Restart
         int generation = Generation;
-        bool is_new    = MarkNotified(message.Id) && message.Time >= _time.GetUtcNow() - NewMessageAge;
+        bool is_new    = MarkNotified(message.Id)
+                         && message.Reactions.Count == 0
+                         && !IsCached(message)
+                         && message.Time >= _time.GetUtcNow() - NewMessageAge;
         CacheMessage(message);
         SaveMessages(message.ConversationId, [received.Message], generation);
         NoteEncryption(message.ConversationId, [message], generation);
@@ -979,6 +984,17 @@ public sealed partial class ChatStore : IDisposable
             {
                 page.RemoveAt(0);
             }
+        }
+    }
+
+    // True When A Message With This ID Is Already In Its Conversation's Cached Page
+    private bool IsCached(ChatMessage message)
+    {
+        lock (_pagesLock)
+        {
+            return message.Id.Length > 0
+                && _pages.TryGetValue(message.ConversationId, out List<ChatMessage>? page)
+                && page.Exists(m => m.Id == message.Id);
         }
     }
 

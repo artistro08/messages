@@ -223,6 +223,37 @@ public sealed class NotificationTests : UiTest
     }
 
     /// <summary>
+    /// A reaction made here, which the phone echoes back on the reacted message, never toasts, even with the setting
+    /// that notifies for the chat on screen; a live message still does.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task MyReaction_NoToast_LiveStillToasts()
+    {
+        // Ann's Chat Open, Notifying Even For The Chat On Screen, So Only The Fix Keeps The Echo Quiet
+        await OpenMainAsync();
+        App.Find("Row.c-ann").Patterns.SelectionItem.Pattern.Select();
+        App.WaitForText("Chat.Header", "Ann Lee");
+        FocusMainWindow();
+        InvokeTrayMenu("TrayMenu.Settings");
+        App.Find("Settings.NotifyViewedChat").Patterns.Toggle.Pattern.Toggle();
+        App.Find("Settings.Back").Patterns.Invoke.Pattern.Invoke();
+        WaitForGone("Settings.Back");
+        App.WaitForText("Chat.Header", "Ann Lee");
+        FocusMainWindow();
+
+        // React To Ann's Last Message
+        string id = Server.Phone.Chats.Page("c-ann", 1, null).Page[0].MessageID;
+        App.Find("Bubble." + id).RightClick();
+        App.Find("Bubble.React").Patterns.Invoke.Pattern.Invoke();
+        App.Find("ReactionPicker.1").Patterns.Invoke.Pattern.Invoke();
+        Wait.Until(() => Server.Phone.Reactions.Count == 1, AppDriver.DefaultTimeout, () => "The phone never got the reaction.");
+
+        _toasts.AssertNone("Are you free later?", QuietPeriod);
+        AssertLiveStillToasts();
+    }
+
+    /// <summary>
     /// Signing out (Google ends the session) removes the toasts that were showing.
     /// </summary>
     /// <returns>A task for the test.</returns>
