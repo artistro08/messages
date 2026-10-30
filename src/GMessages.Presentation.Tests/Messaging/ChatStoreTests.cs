@@ -1216,4 +1216,55 @@ public sealed class ChatStoreTests
 
         Assert.AreEqual(0, raised);
     }
+
+    private static UserAlert Alert(AlertType type) => new(new UserAlertEvent { AlertType = type });
+
+    /// <summary>Low sets the flag and raises once (a repeat is silent); restored clears it and raises.</summary>
+    [TestMethod]
+    public async Task BatteryLow_SetsAndRaisesOnce_RestoredClears()
+    {
+        using var rig = new Rig();
+        int raised = 0;
+        rig.Store.PhoneBatteryChanged += (_, _) => raised++;
+        Assert.IsFalse(rig.Store.IsPhoneBatteryLow);
+
+        await rig.Store.HandleEventAsync(Alert(AlertType.MobileBatteryLow));
+        await rig.Store.HandleEventAsync(Alert(AlertType.MobileBatteryLow));
+        Assert.IsTrue(rig.Store.IsPhoneBatteryLow);
+        Assert.AreEqual(1, raised);
+
+        await rig.Store.HandleEventAsync(Alert(AlertType.MobileBatteryRestored));
+        Assert.IsFalse(rig.Store.IsPhoneBatteryLow);
+        Assert.AreEqual(2, raised);
+    }
+
+    /// <summary>Alerts other than the two battery ones change nothing and raise nothing.</summary>
+    [TestMethod]
+    public async Task BatteryLow_OtherAlerts_Ignored()
+    {
+        using var rig = new Rig();
+        int raised = 0;
+        rig.Store.PhoneBatteryChanged += (_, _) => raised++;
+
+        await rig.Store.HandleEventAsync(Alert(AlertType.BrowserInactive));
+        await rig.Store.HandleEventAsync(Alert(AlertType.Unknown));
+
+        Assert.IsFalse(rig.Store.IsPhoneBatteryLow);
+        Assert.AreEqual(0, raised);
+    }
+
+    /// <summary>Reset forgets a low battery and tells the views.</summary>
+    [TestMethod]
+    public async Task BatteryLow_ClearedOnReset()
+    {
+        using var rig = new Rig();
+        await rig.Store.HandleEventAsync(Alert(AlertType.MobileBatteryLow));
+        int raised = 0;
+        rig.Store.PhoneBatteryChanged += (_, _) => raised++;
+
+        rig.Store.Reset();
+
+        Assert.IsFalse(rig.Store.IsPhoneBatteryLow);
+        Assert.AreEqual(1, raised);
+    }
 }

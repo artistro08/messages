@@ -42,6 +42,9 @@ public sealed partial class ChatStore : IDisposable
     private static readonly TimeSpan NewMessageAge = TimeSpan.FromDays(1);
 
     private readonly ConnectionController _connection;
+
+    // Set By A Live MOBILE_BATTERY_LOW, Cleared By MOBILE_BATTERY_RESTORED Or Reset
+    private bool _batteryLow;
     private readonly Func<IMessagingClient?> _client;
     private readonly ILogger _log;
     private readonly MessageDatabase? _database;
@@ -109,6 +112,16 @@ public sealed partial class ChatStore : IDisposable
 
     /// <summary>Raised when someone in a cached conversation starts or stops typing.</summary>
     public event EventHandler<TypingEventArgs>? TypingChanged;
+
+    /// <summary>Raised when <see cref="IsPhoneBatteryLow"/> changed.</summary>
+    public event EventHandler? PhoneBatteryChanged;
+
+    /// <summary>
+    /// Gets whether the phone reported a low battery and has not said it recovered. The level isn't known at start, so
+    /// this is false until a live alert arrives (the protocol drops catch-up alerts). It lives here so it survives the
+    /// window closing; <see cref="Reset"/> clears it.
+    /// </summary>
+    public bool IsPhoneBatteryLow => Volatile.Read(ref _batteryLow);
 
     /// <summary>Gets the first participant marked as the phone's owner in any cached conversation.</summary>
     public ParticipantInfo? Me => _me;
@@ -719,6 +732,7 @@ public sealed partial class ChatStore : IDisposable
 
         _ = Enqueue(database => database.Delete());
         _sims = [];
+        SetBatteryLow(false);
 
         lock (_ringLock)
         {
@@ -778,6 +792,10 @@ public sealed partial class ChatStore : IDisposable
                 _sims = [.. settings.Settings.SIMCards];
                 break;
 
+            case UserAlert alert when alert.Alert.AlertType is AlertType.MobileBatteryLow or AlertType.MobileBatteryRestored:
+                SetBatteryLow(alert.Alert.AlertType == AlertType.MobileBatteryLow);
+                break;
+
             case ListenRecovered:
                 Resynced?.Invoke(this, EventArgs.Empty);
                 break;
@@ -786,6 +804,15 @@ public sealed partial class ChatStore : IDisposable
             case GMessages.Protocol.Events.TypingChanged typing:
                 RaiseTyping(typing.Data);
                 break;
+        }
+    }
+
+    // Sets The Battery State And Raises Only On A Change
+    private void SetBatteryLow(bool low)
+    {
+        if (Interlocked.Exchange(ref _batteryLow, low) != low)
+        {
+            PhoneBatteryChanged?.Invoke(this, EventArgs.Empty);
         }
     }
 

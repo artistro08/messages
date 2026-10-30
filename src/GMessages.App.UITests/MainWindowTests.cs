@@ -38,6 +38,24 @@ public sealed class MainWindowTests : UiTest
     }
 
     /// <summary>
+    /// A live low battery alert from the phone shows the warning banner, and the restored alert hides it.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task BatteryLow_ShowsBanner_RestoredHides()
+    {
+        await OpenMainAsync();
+        WaitForRows(InboxRows);
+        Assert.IsNull(App.TryFind("Main.BatteryLow"), "The battery banner showed before any alert.");
+
+        Server.Phone.PushAlert(AlertType.MobileBatteryLow);
+        App.Find("Main.BatteryLow");
+
+        Server.Phone.PushAlert(AlertType.MobileBatteryRestored);
+        Wait.Until(() => App.TryFind("Main.BatteryLow") is null, AppDriver.DefaultTimeout, () => "The restored alert didn't hide the battery banner.");
+    }
+
+    /// <summary>
     /// Ann's row shows the photo the phone has for her; Team's members have none, so its avatar keeps the initials.
     /// </summary>
     /// <returns>A task for the test.</returns>

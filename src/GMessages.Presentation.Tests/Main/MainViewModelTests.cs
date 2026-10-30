@@ -487,4 +487,38 @@ public sealed class MainViewModelTests
         vm.Select("b");
         Assert.AreEqual(string.Empty, vm.Chat!.Draft);
     }
+
+    private static UserAlert Alert(AlertType type) => new(new UserAlertEvent { AlertType = type });
+
+    /// <summary>A window opened after the alert shows the banner right away.</summary>
+    [TestMethod]
+    public async Task MainViewModel_NewWindow_ReadsBatteryState()
+    {
+        using var rig = new MainRig();
+        await rig.Store.HandleEventAsync(Alert(AlertType.MobileBatteryLow));
+
+        using MainViewModel vm = await NewMainAsync(rig);
+
+        Assert.IsTrue(vm.IsPhoneBatteryLow);
+    }
+
+    /// <summary>Closing the banner hides it, and the next low alert shows it again even though the store was already low.</summary>
+    [TestMethod]
+    public async Task BatteryLow_ClosedThenNewLow_ShowsAgain()
+    {
+        using var rig = new MainRig();
+        using MainViewModel vm = await NewMainAsync(rig);
+        Assert.IsFalse(vm.IsPhoneBatteryLow);
+
+        await rig.Store.HandleEventAsync(Alert(AlertType.MobileBatteryLow));
+        Assert.IsTrue(vm.IsPhoneBatteryLow);
+
+        vm.DismissPhoneBattery();
+        Assert.IsFalse(vm.IsPhoneBatteryLow);
+
+        // Restored Then Low Again
+        await rig.Store.HandleEventAsync(Alert(AlertType.MobileBatteryRestored));
+        await rig.Store.HandleEventAsync(Alert(AlertType.MobileBatteryLow));
+        Assert.IsTrue(vm.IsPhoneBatteryLow);
+    }
 }
