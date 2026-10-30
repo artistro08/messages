@@ -56,9 +56,10 @@ internal sealed class MicrophoneUnavailableException : Exception
 /// is needed under Native AOT; the copy's <c>Length</c> must be set to the frame's, since it comes back 0.
 /// </para>
 /// <para>
-/// Before the graph, <see cref="AppCapability"/> checks that microphone access is on. A desktop app can't make Windows
-/// ask for it (the <c>Request*</c> methods aren't supported in desktop apps), so access that isn't on throws and the
-/// chat pane's own dialog points to Windows' settings.
+/// Before the graph, <see cref="AppCapability"/> checks that microphone access is on. If the user hasn't decided yet,
+/// <see cref="MicrophoneConsent"/> asks through <c>ActivateAudioInterfaceAsync</c>, which shows Windows' consent prompt
+/// to desktop apps (<c>AppCapability.RequestAccessAsync</c> needs a CoreWindow, which a desktop app doesn't have).
+/// Access that ends up off throws, and the chat pane's own dialog points to Windows' settings.
 /// </para>
 /// <para>
 /// <see cref="StopAsync"/> finishes the file; disposing without it drops the graph (the caller deletes the file). Access
@@ -112,8 +113,8 @@ internal sealed class VoiceRecorder : IDisposable
             return new VoiceRecorder(null, null, null);
         }
 
-        // Access Must Be On First: A Desktop App Can't Show Windows' Prompt, And An AudioGraph Alone Is Only Refused
-        CheckMicrophone();
+        // Access Must Be On First: Ask Windows (Its Prompt) If Undecided, Since An AudioGraph Alone Is Only Refused
+        await EnsureMicrophoneAsync();
 
         AudioGraph? graph = null;
         try
@@ -131,6 +132,7 @@ internal sealed class VoiceRecorder : IDisposable
             CreateAudioDeviceInputNodeResult input = await graph.CreateDeviceInputNodeAsync(MediaCategory.Speech);
             if (input.Status != AudioDeviceNodeCreationStatus.Success)
             {
+                MicrophoneConsent.Log("device input", input.Status.ToString());
                 throw new MicrophoneUnavailableException(input.Status.ToString());
             }
 
@@ -163,34 +165,78 @@ internal sealed class VoiceRecorder : IDisposable
     }
 
     /// <summary>
-    /// Checks whether Windows lets Messages use the microphone, without asking.
+    /// Makes sure Windows lets Messages use the microphone, asking with Windows' own prompt if the user hasn't decided.
     /// </summary>
     /// <remarks>
-    /// A desktop app can't show Windows' "Let Messages use your microphone?" prompt: Microsoft lists the <c>Request*</c>
-    /// methods as unsupported in desktop apps, and <see cref="AppCapability.RequestAccessAsync"/> failed with
-    /// <c>RPC_E_DISCONNECTED</c> (0x80010108) on the UI thread (owner's 0.5.2 log), as <c>MediaCapture</c> did in 0.5.1.
-    /// An <see cref="AudioGraph"/> alone is only refused. So anything but <see cref="AppCapabilityAccessStatus.Allowed"/>
-    /// (undecided, refused, or off for the whole PC) throws <see cref="MicrophoneUnavailableException"/> with the status
-    /// name, and the chat pane shows its own dialog that opens Windows' microphone settings.
+    /// <para>
+    /// Runs on the UI thread (no <c>ConfigureAwait(false)</c> on the way from the chat pane), since
+    /// <c>ActivateAudioInterfaceAsync</c> must be called there for Windows to show its prompt. Microsoft documents that
+    /// call for desktop apps; <see cref="AppCapability.RequestAccessAsync"/> isn't supported in them (it needs a
+    /// CoreWindow) and failed with <c>RPC_E_DISCONNECTED</c> (0x80010108) in the owner's 0.5.2 log, as
+    /// <c>MediaCapture</c> did in 0.5.1. An <see cref="AudioGraph"/> alone is only refused.
+    /// </para>
+    /// <para>
+    /// Allowed records. Undecided asks through <see cref="MicrophoneConsent"/>, then checks again, and
+    /// <see cref="MicrophoneAccess.CanRecord"/> decides. Refused, off for the whole PC, or not declared throws at once.
+    /// Anything that can't record throws <see cref="MicrophoneUnavailableException"/>, and the chat pane shows its own
+    /// dialog that opens Windows' microphone settings.
+    /// </para>
     /// </remarks>
-    /// <exception cref="MicrophoneUnavailableException">Access isn't on, or the check failed.</exception>
-    private static void CheckMicrophone()
+    /// <returns>A task that completes once access is on.</returns>
+    /// <exception cref="MicrophoneUnavailableException">Access isn't on, there's no microphone, or the check failed.</exception>
+    private static async Task EnsureMicrophoneAsync()
     {
-        AppCapabilityAccessStatus status;
+        AppCapability capability;
+        AppCapabilityAccessStatus before;
         try
         {
-            status = AppCapability.Create("microphone").CheckAccess();
+            capability = AppCapability.Create("microphone");
+            before     = capability.CheckAccess();
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             throw new MicrophoneUnavailableException($"{ex.GetType().Name} 0x{ex.HResult:X8}", ex);
         }
 
-        if (status != AppCapabilityAccessStatus.Allowed)
+        MicrophoneConsent.Log("check before", before.ToString());
+
+        // Decided Already: Allowed Records, Anything Else Shows The Settings Dialog
+        if (!MicrophoneAccess.ShouldAsk(AccessOf(before)))
         {
-            throw new MicrophoneUnavailableException(status.ToString());
+            if (before != AppCapabilityAccessStatus.Allowed)
+            {
+                throw new MicrophoneUnavailableException(before.ToString());
+            }
+
+            return;
+        }
+
+        // Undecided: Windows Shows Its Prompt, Then Check Again
+        int activated = await MicrophoneConsent.RequestAsync();
+        AppCapabilityAccessStatus after;
+        try
+        {
+            after = capability.CheckAccess();
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            throw new MicrophoneUnavailableException($"{ex.GetType().Name} 0x{ex.HResult:X8}", ex);
+        }
+
+        MicrophoneConsent.Log("check after", after.ToString());
+        if (!MicrophoneAccess.CanRecord(AccessOf(before), activated, AccessOf(after)))
+        {
+            throw new MicrophoneUnavailableException("AccessDenied");
         }
     }
+
+    // Windows' Access Status, As The Decision Reads It
+    private static MicrophoneAccessStatus AccessOf(AppCapabilityAccessStatus status) => status switch
+    {
+        AppCapabilityAccessStatus.Allowed            => MicrophoneAccessStatus.Allowed,
+        AppCapabilityAccessStatus.UserPromptRequired => MicrophoneAccessStatus.Undecided,
+        _                                            => MicrophoneAccessStatus.Refused,
+    };
 
     /// <summary>
     /// Gives the loudest input since the last call, for the live waveform.
