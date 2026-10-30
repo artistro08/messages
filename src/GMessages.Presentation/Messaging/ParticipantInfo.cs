@@ -16,6 +16,9 @@ public sealed record ParticipantInfo(string Id, string FullName, string FirstNam
     /// <summary>Gets the raw phone number the phone names this participant by in typing events, or empty.</summary>
     public string Number { get; init; } = string.Empty;
 
+    /// <summary>Gets whether the phone shows this participant (a one-on-one chat's number comes from a visible one).</summary>
+    public bool IsVisible { get; init; }
+
     /// <summary>
     /// Copies the fields the app needs out of a protocol participant.
     /// </summary>
@@ -33,7 +36,8 @@ public sealed record ParticipantInfo(string Id, string FullName, string FirstNam
             p.IsMe,
             string.IsNullOrEmpty(p.FormattedNumber) ? null : p.FormattedNumber)
         {
-            Number = p.ID?.Number ?? string.Empty,
+            Number    = p.ID?.Number ?? string.Empty,
+            IsVisible = p.IsVisible,
         };
     }
 }

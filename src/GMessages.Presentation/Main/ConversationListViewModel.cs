@@ -15,7 +15,7 @@ namespace GMessages.Presentation.Main;
 /// </para>
 /// <para>
 /// Folder membership follows the status: the inbox shows active conversations, spam and blocked shows the spam and
-/// blocked folders. A live update that moves a conversation out of the folder removes its row.
+/// blocked folders, and archived shows archived and kept-archived ones. A live update that moves a conversation out of the folder removes its row.
 /// </para>
 /// </remarks>
 public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposable
@@ -243,9 +243,12 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
         }
     }
 
-    private bool BelongsHere(ConversationInfo c) => _folder == ConversationFolder.Inbox
-        ? c.IsMainView
-        : c.Status is ConversationStatus.SpamFolder or ConversationStatus.BlockedFolder;
+    private bool BelongsHere(ConversationInfo c) => _folder switch
+    {
+        ConversationFolder.Inbox    => c.IsMainView,
+        ConversationFolder.Archived => c.Status is ConversationStatus.Archived or ConversationStatus.KeepArchived,
+        _                           => c.Status is ConversationStatus.SpamFolder or ConversationStatus.BlockedFolder,
+    };
 
     private int IndexOf(string id)
     {

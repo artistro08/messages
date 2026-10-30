@@ -108,10 +108,19 @@ internal sealed class FakeMessagingClient : IMessagingClient
     /// <summary>When set, conversation updates are answered with <c>Success = false</c>.</summary>
     public bool RefuseUpdates { get; set; }
 
-    public Task<UpdateConversationResponse> UpdateConversationAsync(UpdateConversationRequest request, CancellationToken ct)
+    /// <summary>When set, the next conversation update answers only after this completes.</summary>
+    public TaskCompletionSource? UpdateGate { get; set; }
+
+    public async Task<UpdateConversationResponse> UpdateConversationAsync(UpdateConversationRequest request, CancellationToken ct)
     {
         ConversationUpdates.Add(request.Clone());
-        return Task.FromResult(new UpdateConversationResponse { Success = !RefuseUpdates });
+        if (UpdateGate is { } gate)
+        {
+            UpdateGate = null;
+            await gate.Task;
+        }
+
+        return new UpdateConversationResponse { Success = !RefuseUpdates };
     }
 
     /// <summary>Pages returned by successive message fetches before falling back to <see cref="MessagesPage"/>.</summary>
