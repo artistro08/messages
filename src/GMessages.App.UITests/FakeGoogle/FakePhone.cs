@@ -30,6 +30,8 @@ namespace GMessages.App.UITests.FakeGoogle;
 /// after every <c>GET_UPDATES</c>. <see cref="PushIncoming"/> sends a live message, or, with <c>old</c>, one in the
 /// startup catch-up batch; <see cref="PushStatusUpdate"/> and <see cref="PushStatus"/> send a message again with a new
 /// status, as a real phone does several times per message; <see cref="PushTyping"/> sends a typing event.
+/// <see cref="PushIncomingMedia"/> sends an attachment, and a full-size image request sends a thumbnail-only photo again
+/// with its full media ID.
 /// Conversation updates (archive, mute, block, delete) are kept in <see cref="ConversationUpdates"/>, answered, applied
 /// and the conversation sent again, unless <see cref="FailConversationUpdates"/>. <see cref="PushConversationStatus"/>
 /// moves a conversation on the phone's side and <see cref="PushAlert"/> sends a user alert.
@@ -39,9 +41,6 @@ public sealed class FakePhone
 {
     // Copied Verbatim From encryptionKeyInfo In pair_google.go
     private static readonly byte[] EncryptionKeyInfo = [130, 170, 85, 160, 211, 151, 248, 131, 70, 202, 28, 238, 141, 57, 9, 185, 95, 19, 250, 125, 235, 29, 74, 179, 131, 118, 184, 37, 109, 168, 85, 16];
-
-    // Ann's Photo: A 1x1 Blue PNG
-    private const string AnnPhotoPng = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGOQKn4BAAIgAXZmNuK1AAAAAElFTkSuQmCC";
 
     private readonly Lock _lock = new();
     private readonly Action<IncomingRPCMessage> _push;
@@ -329,10 +328,22 @@ public sealed class FakePhone
                 var photos     = new GetThumbnailResponse();
                 if (thumbnails.Identifiers.Contains("p-ann"))
                 {
-                    photos.Thumbnail.Add(new GetThumbnailResponse.Types.Thumbnail { Identifier = "p-ann", Data = new ThumbnailData { ImageBuffer = ByteString.FromBase64(AnnPhotoPng) } });
+                    photos.Thumbnail.Add(new GetThumbnailResponse.Types.Thumbnail { Identifier = "p-ann", Data = new ThumbnailData { ImageBuffer = ByteString.FromBase64(FakeChats.BluePng) } });
                 }
 
                 Reply(data.RequestID, data.Action, photos, encrypt: true);
+                break;
+
+            // A Thumbnail-Only Photo: Answered, Then Sent Again With Its Full Media ID
+            case ActionType.GetFullSizeImage when RequestCrypto is not null:
+                var full_size = Open(data, GetFullSizeImageRequest.Parser);
+                Message? full = Chats.ReleaseFullSize(full_size.MessageID);
+                Reply(data.RequestID, data.Action, new GetFullSizeImageResponse(), encrypt: true);
+                if (full is not null)
+                {
+                    PushUpdate(new UpdateEvents { MessageEvent = new MessageEvent { Data = { full } } }, _push);
+                }
+
                 break;
 
             // No Contact Photos: An Empty Thumbnail List
@@ -370,6 +381,30 @@ public sealed class FakePhone
         Action<IncomingRPCMessage> push = old ? _pushCatchUp : _push;
         PushUpdate(new UpdateEvents { ConversationEvent = new ConversationEvent { Data = { conversation } } }, push);
         PushUpdate(new UpdateEvents { MessageEvent = new MessageEvent { Data = { message } } }, push);
+        return message;
+    }
+
+    /// <summary>
+    /// Pushes an attachment from the other side of a conversation, as a live update.
+    /// </summary>
+    /// <remarks>
+    /// The file is encrypted with <see cref="MediaCrypto"/> and a fresh key and stored, so the client can download it
+    /// from <c>/upload</c>. With <paramref name="withThumbnail"/>, the message carries only a thumbnail (the same
+    /// bytes, under its own ID and key); <c>GET_FULL_SIZE_IMAGE</c> then sends it again with the full media ID, as a
+    /// real phone does. A <c>ConversationEvent</c> goes first, then the <c>MessageEvent</c>.
+    /// </remarks>
+    /// <param name="conversationId">The conversation ID.</param>
+    /// <param name="mime">The kind of file, as a mime type such as <c>image/png</c>.</param>
+    /// <param name="bytes">The file's bytes.</param>
+    /// <param name="fileName">The file name.</param>
+    /// <param name="withThumbnail">True to send a thumbnail only and hold the full media ID until it is asked for.</param>
+    /// <returns>The message as pushed.</returns>
+    /// <exception cref="InvalidOperationException">Pairing has not reached the client finished message.</exception>
+    public Message PushIncomingMedia(string conversationId, string mime, byte[] bytes, string fileName, bool withThumbnail = false)
+    {
+        (Conversation conversation, Message message) = Chats.AddIncomingMedia(conversationId, mime, bytes, fileName, withThumbnail);
+        PushUpdate(new UpdateEvents { ConversationEvent = new ConversationEvent { Data = { conversation } } }, _push);
+        PushUpdate(new UpdateEvents { MessageEvent = new MessageEvent { Data = { message } } }, _push);
         return message;
     }
 
@@ -527,7 +562,7 @@ public sealed class FakePhone
         }
 
         string text     = SentText(request);
-        Message message = Chats.AddOutgoing(request.ConversationID, text, request.TmpID, request.Reply?.MessageID);
+        Message message = Chats.AddOutgoing(request.ConversationID, text, request.TmpID, request.Reply?.MessageID, request.MessagePayload?.MessageInfo);
         Reply(data.RequestID, data.Action, new SendMessageResponse { Status = SendMessageResponse.Types.Status.Success }, encrypt: true);
         PushUpdate(new UpdateEvents { MessageEvent = new MessageEvent { Data = { message } } }, _push);
     }

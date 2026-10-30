@@ -54,6 +54,8 @@ public sealed partial class GmClient : IAsyncDisposable
     private readonly LongPollLoop _loop;
     private readonly GaiaSignIn _signIn;
     private readonly GaiaPairing _pairing;
+    private readonly GmHttpClient _http;
+    private readonly GmEndpoints _endpoints;
 
     // One Connect, Disconnect, Pair Or Unpair At A Time
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -94,6 +96,8 @@ public sealed partial class GmClient : IAsyncDisposable
         _loop       = new LongPollLoop(http, Rpc, auth, endpoints, _refresher, _dispatcher, time, logs.CreateLogger<LongPollLoop>());
         _signIn     = new GaiaSignIn(http, auth, endpoints, time, logs.CreateLogger<GaiaSignIn>());
         _pairing    = new GaiaPairing(_signIn, Rpc, _loop, auth, time, logs.CreateLogger<GaiaPairing>());
+        _http       = http;
+        _endpoints  = endpoints;
 
         // Requests Waiting For An Answer Fail Fast While No Long Poll Runs (Pairing's Own Poll Counts)
         Rpc.IsListening = () => _loop.IsRunning;

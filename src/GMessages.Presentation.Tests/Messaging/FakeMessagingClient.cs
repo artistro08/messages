@@ -237,4 +237,26 @@ internal sealed class FakeMessagingClient : IMessagingClient
     }
 
     public Task<GetThumbnailResponse> GetContactThumbnailAsync(IReadOnlyList<string> contactIds, CancellationToken ct) => throw new NotSupportedException();
+
+    /// <summary>Uploaded files by media ID (plain bytes), and what downloads answer with.</summary>
+    public Dictionary<string, byte[]> Media { get; } = [];
+
+    public List<(string MessageId, string ActionMessageId)> FullSizeCalls { get; } = [];
+
+    public Task<MediaContent> UploadMediaAsync(ReadOnlyMemory<byte> plain, string fileName, string mime, IProgress<double>? progress, CancellationToken ct)
+    {
+        string id = "media-" + (Media.Count + 1);
+        Media[id] = plain.ToArray();
+        progress?.Report(1);
+        return Task.FromResult(new MediaContent { MediaID = id, MediaName = fileName, MimeType = mime, Size = plain.Length, Format = GMessages.Protocol.MediaFormatsMap.FromMime(mime) });
+    }
+
+    public Task<byte[]> DownloadMediaAsync(string mediaId, ReadOnlyMemory<byte> key, CancellationToken ct) =>
+        Media.TryGetValue(mediaId, out byte[]? bytes) ? Task.FromResult(bytes) : Task.FromException<byte[]>(new KeyNotFoundException(mediaId));
+
+    public Task GetFullSizeImageAsync(string messageId, string actionMessageId, CancellationToken ct)
+    {
+        FullSizeCalls.Add((messageId, actionMessageId));
+        return Task.CompletedTask;
+    }
 }

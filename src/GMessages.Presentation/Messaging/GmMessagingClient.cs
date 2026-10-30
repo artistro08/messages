@@ -47,4 +47,13 @@ public sealed class GmMessagingClient(GmClient client) : IMessagingClient
 
     /// <inheritdoc />
     public Task<GetThumbnailResponse> GetContactThumbnailAsync(IReadOnlyList<string> contactIds, CancellationToken ct) => client.GetContactThumbnailAsync(contactIds, ct);
+
+    /// <inheritdoc />
+    public Task<MediaContent> UploadMediaAsync(ReadOnlyMemory<byte> plain, string fileName, string mime, IProgress<double>? progress, CancellationToken ct) => client.UploadMediaAsync(plain, fileName, mime, progress, ct);
+
+    /// <inheritdoc />
+    public Task<byte[]> DownloadMediaAsync(string mediaId, ReadOnlyMemory<byte> key, CancellationToken ct) => client.DownloadMediaAsync(mediaId, key, ct);
+
+    /// <inheritdoc />
+    public Task GetFullSizeImageAsync(string messageId, string actionMessageId, CancellationToken ct) => client.GetFullSizeImageAsync(messageId, actionMessageId, ct);
 }

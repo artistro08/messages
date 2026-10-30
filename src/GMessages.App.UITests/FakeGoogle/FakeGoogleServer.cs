@@ -21,7 +21,11 @@ namespace GMessages.App.UITests.FakeGoogle;
 /// page: it sets no cookies until its "Sign in" button (<c>id="signin"</c>) posts to <c>/web/authentication/login</c>.
 /// The long poll answers <c>[[</c> and a startup ack (counting the phone's catch-up messages, which come first) at once, then pushed payloads, with a heartbeat every 10 seconds,
 /// and stays open until the client leaves or <see cref="KillLongPoll"/>. <c>SendMessage</c> requests go to
-/// <see cref="Phone"/>, whose answers come back on the long poll. Each request is served on its own task. Binds
+/// <see cref="Phone"/>, whose answers come back on the long poll. <c>/upload</c> serves media as Google does: a
+/// <c>start</c> POST answers with an upload URL and granularity, a <c>upload, finalize</c> POST to that URL stores the
+/// encrypted file in the phone's <see cref="FakePhone.Chats"/> and answers with a base64 <c>UploadMediaResponse</c>,
+/// and a GET answers with the stored bytes of the attachment ID in <c>x-goog-download-metadata</c> (404 when there are
+/// none). Each request is served on its own task. Binds
 /// 127.0.0.1 only and never contacts anything.
 /// </remarks>
 public sealed class FakeGoogleServer : IAsyncDisposable
@@ -333,6 +337,28 @@ public sealed class FakeGoogleServer : IAsyncDisposable
                 case not null when path.EndsWith("Messaging/SendMessage", StringComparison.Ordinal):
                     Phone.Handle(PbLiteSerializer.Deserialize<OutgoingRPCMessage>(await ReadBodyAsync(request)));
                     await RespondAsync(context.Response, 200, PbLiteMime, "[]"u8.ToArray());
+                    break;
+
+                // Media: Upload Start, Upload Finalize, Download
+                case "/upload" when request.HttpMethod == "POST" && request.Headers["x-goog-upload-command"] == "start":
+                    context.Response.Headers.Add("x-goog-upload-url", new Uri(BaseUrl, "/upload/session/" + Guid.NewGuid().ToString("N")).AbsoluteUri);
+                    context.Response.Headers.Add("x-goog-upload-chunk-granularity", "262144");
+                    context.Response.Headers.Add("x-goog-upload-status", "active");
+                    await RespondAsync(context.Response, 200, "text/plain", []);
+                    break;
+
+                case not null when path.StartsWith("/upload/session/", StringComparison.Ordinal) && request.HttpMethod == "POST" && request.Headers["x-goog-upload-command"] == "upload, finalize":
+                    string media_id = Phone.Chats.StoreUpload(await ReadBodyAsync(request));
+                    var uploaded    = new UploadMediaResponse { Media = new UploadedMedia { MediaID = media_id, MediaNumber = 1 } };
+                    await RespondAsync(context.Response, 200, "text/plain", Encoding.ASCII.GetBytes(Convert.ToBase64String(uploaded.ToByteArray())));
+                    break;
+
+                case "/upload" when request.HttpMethod == "GET":
+                    var download  = DownloadAttachmentRequest.Parser.ParseFrom(Convert.FromBase64String(request.Headers["x-goog-download-metadata"] ?? ""));
+                    byte[]? media = Phone.Chats.MediaBytes(download.Info?.AttachmentID ?? "");
+                    await (media is null
+                        ? RespondAsync(context.Response, 404, "text/plain", "No such media"u8.ToArray())
+                        : RespondAsync(context.Response, 200, "application/octet-stream", media));
                     break;
 
                 case not null when path.EndsWith("Messaging/AckMessages", StringComparison.Ordinal):

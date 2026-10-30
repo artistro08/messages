@@ -189,6 +189,60 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
     }
 
     /// <summary>
+    /// Sends a raw media request (upload start, upload finalize or download) with only the caller's headers.
+    /// </summary>
+    /// <remarks>
+    /// Media requests carry LibGM's upload headers alone (Go: <c>NewMediaUploadHeaders</c> and <c>BuildUploadHeaders</c>
+    /// in util/func.go): no api key, no <c>x-user-agent</c> and no cookies, so the jar is neither read nor updated. A
+    /// header that belongs on the content, such as <c>content-type</c>, goes there. Unlike Go's download, the status is
+    /// always checked. Sent on the long-poll client (30 minute timeout), since a big file can outlast the normal 100 s. Not
+    /// retried, as in Go. Bodies and headers are never logged.
+    /// </remarks>
+    /// <param name="method">The HTTP method.</param>
+    /// <param name="url">The target URL.</param>
+    /// <param name="headers">Every header to send.</param>
+    /// <param name="content">The body, or null for none; the request disposes it.</param>
+    /// <param name="ct">Cancels the request.</param>
+    /// <returns>The status, the response headers (case-insensitive, content headers included) and the body.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="method"/>, <paramref name="url"/> or <paramref name="headers"/> is null.</exception>
+    /// <exception cref="GmRequestException">The status was not 2xx.</exception>
+    /// <exception cref="HttpRequestException">The request failed before any response arrived.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="ct"/> was canceled.</exception>
+    public async Task<GmMediaResponse> SendMediaAsync(HttpMethod method, Uri url, IEnumerable<KeyValuePair<string, string>> headers, HttpContent? content, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(method);
+        ArgumentNullException.ThrowIfNull(url);
+        ArgumentNullException.ThrowIfNull(headers);
+
+        // Build Request: Caller Headers Only
+        using var request = new HttpRequestMessage(method, url) { Content = content };
+        foreach ((string name, string value) in headers)
+        {
+            if (!request.Headers.TryAddWithoutValidation(name, value))
+            {
+                content?.Headers.TryAddWithoutValidation(name, value);
+            }
+        }
+
+        // Send And Read On The Long-Poll Client: A Big File Can Take Longer Than The Normal 100 s Timeout
+        using HttpResponseMessage res = await longPollHttp.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+        byte[] body = await res.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
+        int status  = (int)res.StatusCode;
+        if (status is < 200 or >= 300)
+        {
+            throw new GmRequestException(status, null, body);
+        }
+
+        var response_headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach ((string name, IEnumerable<string> values) in res.Headers.Concat(res.Content.Headers))
+        {
+            response_headers[name] = string.Join(",", values);
+        }
+
+        return new GmMediaResponse(status, response_headers, body);
+    }
+
+    /// <summary>
     /// Tells whether an HTTP header belongs to Device Bound Session Credentials (DBSC).
     /// </summary>
     /// <remarks>
@@ -384,3 +438,11 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
     [LoggerMessage(Level = LogLevel.Debug, Message = "Error response body (status {StatusCode}) did not decode")]
     private static partial void LogErrorBodyNotDecoded(ILogger logger, int statusCode, Exception exception);
 }
+
+/// <summary>
+/// The answer to a raw media request sent with <see cref="GmHttpClient.SendMediaAsync"/>.
+/// </summary>
+/// <param name="StatusCode">The HTTP status, always 2xx.</param>
+/// <param name="Headers">The response and content headers by name, case-insensitive; repeated values are joined with commas.</param>
+/// <param name="Body">The response body.</param>
+public sealed record GmMediaResponse(int StatusCode, IReadOnlyDictionary<string, string> Headers, byte[] Body);
