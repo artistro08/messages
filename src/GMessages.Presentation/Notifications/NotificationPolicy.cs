@@ -63,4 +63,20 @@ public static class NotificationPolicy
 
         return !notifyForViewedChat || !windowFocused || conversation.Id != viewedConversationId;
     }
+
+    /// <summary>
+    /// Says whether a conversation's toasts should go because it left the main list or was muted.
+    /// </summary>
+    /// <remarks>
+    /// The same rule <see cref="ShouldNotify"/> uses to stay quiet: an archived, blocked, spam or deleted conversation,
+    /// or a muted one, keeps no toast, wherever the change was made (here or on the phone).
+    /// </remarks>
+    /// <param name="conversation">The changed conversation.</param>
+    /// <returns>True to remove the conversation's toasts.</returns>
+    public static bool ShouldDismissOnLeave(ConversationInfo conversation)
+    {
+        ArgumentNullException.ThrowIfNull(conversation);
+
+        return !conversation.IsMainView || conversation.IsMuted;
+    }
 }

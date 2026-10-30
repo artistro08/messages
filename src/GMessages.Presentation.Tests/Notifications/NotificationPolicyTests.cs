@@ -39,6 +39,12 @@ public sealed class NotificationPolicyTests
     [TestMethod] public void ReadWhileUnfocused_NotifyForViewedOn_DismissesToasts() => Assert.IsTrue(NotificationPolicy.ShouldDismissOnRead(Read(), "c1", false, true));
     [TestMethod] public void ReadOtherChat_NotifyForViewedOn_DismissesToasts() => Assert.IsTrue(NotificationPolicy.ShouldDismissOnRead(Read(), "c2", true, true));
 
+    [TestMethod] public void Muted_DismissesToasts() => Assert.IsTrue(NotificationPolicy.ShouldDismissOnLeave(Conv() with { IsMuted = true }));
+    [TestMethod] public void Archived_DismissesToasts() => Assert.IsTrue(NotificationPolicy.ShouldDismissOnLeave(Conv(ConversationStatus.Archived)));
+    [TestMethod] public void Blocked_DismissesToasts() => Assert.IsTrue(NotificationPolicy.ShouldDismissOnLeave(Conv(ConversationStatus.BlockedFolder)));
+    [TestMethod] public void Deleted_DismissesToasts() => Assert.IsTrue(NotificationPolicy.ShouldDismissOnLeave(Conv(ConversationStatus.Deleted)));
+    [TestMethod] public void StillActive_KeepsToasts() => Assert.IsFalse(NotificationPolicy.ShouldDismissOnLeave(Conv()));
+
     [TestMethod]
     public void Compose_Group_PrefixesSenderName()
     {
