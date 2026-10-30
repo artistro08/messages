@@ -78,6 +78,8 @@
                     <ListView.ItemContainerStyle>
                         <Style BasedOn="{StaticResource DefaultListViewItemStyle}" TargetType="ListViewItem">
                             <Setter Property="AllowFocusOnInteraction" Value="False" />
+                            <!-- Every row spans the list, so each row's time ends at the same right edge -->
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                         </Style>
                     </ListView.ItemContainerStyle>
                     <ListView.ItemTemplate>

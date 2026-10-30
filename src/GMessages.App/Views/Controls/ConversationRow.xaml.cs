@@ -13,8 +13,9 @@ namespace GMessages.App.Views.Controls;
 /// </summary>
 /// <remarks>
 /// Unread rows draw the name, snippet and time bold. The row view model raises one change for every update, so every
-/// <c>x:Bind</c> here re-reads it. The ⋮ (<c>Row.More.{id}</c>) fades in while the pointer is over the row, through the
-/// <c>Hover</c> visual states on the root element, and raises <see cref="MoreRequested"/> when clicked.
+/// <c>x:Bind</c> here re-reads it. The ⋮ (<c>Row.More.{id}</c>) takes no space until the pointer is over the row; then it
+/// takes 32 px at the right edge and fades in while this row's time and icons slide left (the <c>Hover</c> visual states
+/// on the root element, snapped when Windows animations are off). It raises <see cref="MoreRequested"/> when clicked.
 /// </remarks>
 public sealed partial class ConversationRow : UserControl
 {
