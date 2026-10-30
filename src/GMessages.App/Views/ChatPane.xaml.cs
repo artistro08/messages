@@ -329,7 +329,9 @@ public sealed partial class ChatPane : UserControl
     }
 
     // The List's Own Scroller Tells When The Top Is Reached. Found On First Need: While The Pane Is Still Collapsed At
-    // Load, The List Has No Template Yet, So There Is No Scroller To Find
+    // Load, The List Has No Template Yet, So There Is No Scroller To Find. No Edge Fade Here (Unlike The Chat List): Its
+    // Gradient Fades Each Pixel By Its Distance From The Edge, So A Bubble Cut By The Top Edge Showed Its Lower Fill
+    // Strong While Its Text Above Faded Out (Owner Report). The Scroller's Plain Clip Cuts Text And Fill On One Line
     private ScrollViewer? Scroller()
     {
         if (_scroller is null && FindScroller(MessageList) is { } found)
@@ -337,7 +339,6 @@ public sealed partial class ChatPane : UserControl
             _scroller                  = found;
             _scroller.ViewChanged     += OnScrolled;
             MessageList.LayoutUpdated += OnMessageListLayoutUpdated;
-            _                          = ScrollFade.Attach(found);
         }
 
         return _scroller;
@@ -423,7 +424,7 @@ public sealed partial class ChatPane : UserControl
     }
 
     // Bubbles Measure Their Real Heights After They Show (The List Only Estimates Them First), So A Just-Opened Chat Would
-    // Stop A Few Pixels Short Of Its Newest Message, Showing The Bottom Fade. While Pinned, Each Change In Content Height
+    // Stop A Few Pixels Short Of Its Newest Message. While Pinned, Each Change In Content Height
     // Puts It Back At The Bottom. Scrolling (Same Height) Is Left To OnScrolled
     private void OnMessageListLayoutUpdated(object? sender, object e)
     {
