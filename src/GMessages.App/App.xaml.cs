@@ -64,6 +64,7 @@ public partial class App : Application, IDisposable
     private ChatStore? _store;
     private MediaStore? _media;
     private NotificationService? _notifications;
+    private UnreadBadge? _badge;
     private AppNotificationActivatedEventArgs? _launchNotification;
     private DispatcherQueueTimer? _launchNotificationTimeout;
     private MainWindow? _mainWindow;
@@ -181,6 +182,12 @@ public partial class App : Application, IDisposable
         store.MessageArrived                     += (_, e) => _ = _notifications.ShowAsync(e);
         _notifications.Register();
 
+        // Taskbar Badge: the unread chat count, recounted on every conversation change
+        ILogger badge_log          = _logProvider.CreateLogger("GMessages.Badge");
+        var badge                  = new UnreadBadge(store.CachedConversations, count => TaskbarBadge.Show(count, badge_log), TimeProvider.System);
+        _badge                     = badge;
+        store.ConversationChanged += (_, _) => badge.Update();
+
         // Started By A Toast Click: Read After Register, As The Windows App SDK Requires. A Reply Waits For Connected; An
         // Open Shows The Main Window At Once (Held Until Start-Up Ends)
         AppNotificationActivatedEventArgs? launched = AppInstance.GetCurrent().GetActivatedEventArgs() is { Kind: ExtendedActivationKind.AppNotification, Data: AppNotificationActivatedEventArgs toast } ? toast : null;
@@ -266,6 +273,7 @@ public partial class App : Application, IDisposable
         if (!NeedsPairing() && _store is { } store)
         {
             await Task.WhenAny(store.LoadSavedAsync(), Task.Delay(TimeSpan.FromSeconds(2)));
+            _badge?.Update();
         }
 
         // NotPaired is the starting state, so StartAsync raises nothing for it
@@ -302,6 +310,7 @@ public partial class App : Application, IDisposable
             _lastConversationId    = null;
             ShowMainWindow();
             _store?.Reset();
+            _badge?.Clear();
             _ = _notifications?.RemoveAllAsync();
             return;
         }
@@ -682,6 +691,7 @@ public partial class App : Application, IDisposable
         _networkDebounce?.Stop();
         _launchNotificationTimeout?.Stop();
         _notifications?.Dispose();
+        _badge?.Dispose();
         _trayIcon?.Dispose();
         _trayMenu?.Close();
         CloseWindows();
