@@ -76,7 +76,7 @@
                          unfocused look between chats (the owner saw that as a flash). Tab and the arrow keys still reach the rows -->
 
                     <ListView.ItemContainerStyle>
-                        <Style TargetType="ListViewItem">
+                        <Style BasedOn="{StaticResource DefaultListViewItemStyle}" TargetType="ListViewItem">
                             <Setter Property="AllowFocusOnInteraction" Value="False" />
                         </Style>
                     </ListView.ItemContainerStyle>
