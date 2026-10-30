@@ -74,9 +74,8 @@ public sealed class CookieJar
     /// </remarks>
     /// <param name="req">The request to modify.</param>
     /// <param name="unixSeconds">The current time in Unix seconds, used for the SAPISIDHASH.</param>
-    /// <param name="withAuthorization">False to send only the cookies, as a browser does outside Messages (cookie rotation).</param>
     /// <exception cref="ArgumentNullException"><paramref name="req"/> is null.</exception>
-    public void ApplyTo(HttpRequestMessage req, long unixSeconds, bool withAuthorization = true)
+    public void ApplyTo(HttpRequestMessage req, long unixSeconds)
     {
         ArgumentNullException.ThrowIfNull(req);
 
@@ -100,7 +99,7 @@ public sealed class CookieJar
         }
 
         // Authorization Header
-        if (withAuthorization && sapisid is not null)
+        if (sapisid is not null)
         {
             req.Headers.TryAddWithoutValidation("Authorization", SapisidHash("https://messages.google.com", sapisid, unixSeconds));
         }
@@ -115,9 +114,8 @@ public sealed class CookieJar
     /// released, if any value was added or changed.
     /// </remarks>
     /// <param name="res">The response to read.</param>
-    /// <param name="accept">Keeps only the raw <c>Set-Cookie</c> lines it returns true for; null keeps all.</param>
     /// <exception cref="ArgumentNullException"><paramref name="res"/> is null.</exception>
-    public void UpdateFrom(HttpResponseMessage res, Func<string, bool>? accept = null)
+    public void UpdateFrom(HttpResponseMessage res)
     {
         ArgumentNullException.ThrowIfNull(res);
 
@@ -136,7 +134,7 @@ public sealed class CookieJar
 
             foreach (string line in lines)
             {
-                if ((accept is not null && !accept(line)) || !TryParseSetCookie(line, out string name, out string value))
+                if (!TryParseSetCookie(line, out string name, out string value))
                 {
                     continue;
                 }

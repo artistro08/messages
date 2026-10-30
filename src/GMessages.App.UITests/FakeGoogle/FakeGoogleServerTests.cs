@@ -41,7 +41,7 @@ public sealed class FakeGoogleServerTests
             Auth = AuthData.CreateNew();
             Auth.Cookies.Set(FakeGoogleServer.SignInCookies);
             SessionPath = Path.Combine(Path.GetTempPath(), "fake-google-test-" + Guid.NewGuid().ToString("N") + ".bin");
-            Endpoints   = new GmEndpoints(Server.BaseUrl, Server.BaseUrl, Server.BaseUrl) { AccountsBase = Server.BaseUrl };
+            Endpoints   = new GmEndpoints(Server.BaseUrl, Server.BaseUrl, Server.BaseUrl);
             Client      = GmClient.Create(Auth, new SessionStore(SessionPath), Endpoints, TimeProvider.System, NullLoggerFactory.Instance);
             Client.EventRaised += e =>
             {
@@ -304,27 +304,6 @@ public sealed class FakeGoogleServerTests
         Assert.AreEqual(HttpStatusCode.OK, login.StatusCode);
         CollectionAssert.AreEquivalent(CookieNames, names);
         StringAssert.Contains(await login.Content.ReadAsStringAsync(), "Signed in");
-    }
-
-    /// <summary>
-    /// Cookie rotation answers with a fresh <c>__Secure-1PSIDTS</c> for all of google.com, different each time.
-    /// </summary>
-    [TestMethod]
-    public async Task RotateCookies_SetsAFreshPsidtsEachTime()
-    {
-        await using var server = new FakeGoogleServer();
-        using var http         = new HttpClient();
-        var url                = new GmEndpoints(server.BaseUrl, server.BaseUrl, server.BaseUrl) { AccountsBase = server.BaseUrl }.RotateCookies;
-
-        using HttpResponseMessage first  = await http.PostAsync(url, new StringContent("[000,\"-0000000000000000000\"]")).WaitAsync(HangGuard);
-        using HttpResponseMessage second = await http.PostAsync(url, new StringContent("[000,\"-0000000000000000000\"]")).WaitAsync(HangGuard);
-        string a = first.Headers.GetValues("Set-Cookie").Single();
-        string b = second.Headers.GetValues("Set-Cookie").Single();
-
-        Assert.AreEqual(HttpStatusCode.OK, first.StatusCode);
-        StringAssert.StartsWith(a, "__Secure-1PSIDTS=");
-        StringAssert.Contains(a, "Domain=.google.com");
-        Assert.AreNotEqual(a, b);
     }
 
     // =========================================================================

@@ -114,7 +114,6 @@ public class GmClientTests
         string go_session     = go.GetProperty("sessionId").GetString()!;
 
         AuthData auth = AuthDataGoldenTests.BuildGolden();
-        auth.Cookies.Set(new Dictionary<string, string>(auth.Cookies.Snapshot()) { ["__Secure-1PSID"] = "fake-1psid" });
         await using Rig rig = CreateRig(auth);
         auth.TachyonExpiry = rig.Time.GetUtcNow() + TimeSpan.FromMinutes(30);
         rig.Respond = req =>
@@ -148,10 +147,6 @@ public class GmClientTests
         {
             sent = [.. rig.Handler.Requests];
         }
-
-        // C#-Only Cookie Rotation Goes First (Checked In CookieRotatorTests); The Rest Is Go's Connect
-        Assert.AreEqual(GmEndpoints.Production.RotateCookies.AbsoluteUri, sent[0].Url, "cookie rotation first");
-        sent = sent[1..];
 
         Assert.AreEqual(go_reqs.Length, sent.Length, "request count");
         for (int i = 0; i < go_reqs.Length; i++)
@@ -189,6 +184,22 @@ public class GmClientTests
 
         await rig.Client.DisconnectAsync().WaitAsync(HangGuard);
         Assert.IsFalse(rig.Client.IsConnected);
+    }
+
+    /// <summary>
+    /// A session that holds the main sign-in cookie still sends no cookie rotation request when it connects.
+    /// </summary>
+    [TestMethod]
+    public async Task Connect_SendsNoRotateCookies()
+    {
+        AuthData auth = AuthDataGoldenTests.BuildGolden();
+        auth.Cookies.Set(new Dictionary<string, string>(auth.Cookies.Snapshot()) { ["__Secure-1PSID"] = "fake-1psid" });
+        await using Rig rig = CreateRig(auth);
+        await rig.Client.ConnectAsync(CancellationToken.None).WaitAsync(HangGuard);
+        WaitUntil(() => rig.Client.IsConnected && rig.Requests("/ReceiveMessages").Length > 0, "long poll opened");
+
+        Assert.AreEqual(0, rig.Requests("/RotateCookies").Length);
+        Assert.IsFalse(rig.Handler.Requests.Any(r => r.Url.Contains("accounts.google.com", StringComparison.Ordinal)));
     }
 
     /// <summary>

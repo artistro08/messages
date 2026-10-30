@@ -9,8 +9,6 @@ namespace GMessages.Protocol.Http;
 /// Ported from
 /// <see href="https://github.com/mautrix/gmessages/blob/ba33f4875a491f5cb47db8a6baf42a8869f5f383/pkg/libgm/util/paths.go">util/paths.go</see>.
 /// The "Google" variants are the same calls on the <c>clients6.google.com</c> host that Google accounts use.
-/// <see cref="AccountsBase"/> (Google's sign-in host, for cookie rotation) is not part of LibGM, so it is an init
-/// property that defaults to the real host; a fake server sets it too.
 /// </remarks>
 /// <param name="MessagesBase">The web app origin, for example <c>https://messages.google.com</c>.</param>
 /// <param name="InstantMessagingBase">The instant messaging API origin used by the pairing and QR flow.</param>
@@ -28,12 +26,6 @@ public sealed record GmEndpoints(Uri MessagesBase, Uri InstantMessagingBase, Uri
         new Uri("https://messages.google.com"),
         new Uri("https://instantmessaging-pa.googleapis.com"),
         new Uri("https://instantmessaging-pa.clients6.google.com"));
-
-    /// <summary>Google's sign-in host, for example <c>https://accounts.google.com</c>.</summary>
-    public Uri AccountsBase { get; init; } = new("https://accounts.google.com");
-
-    /// <summary>Google's cookie rotation endpoint, which renews <c>__Secure-1PSIDTS</c> (<c>/RotateCookies</c>).</summary>
-    public Uri RotateCookies => new(AccountsBase, "/RotateCookies");
 
     /// <summary>Web app authentication page (<c>/web/authentication</c>).</summary>
     public Uri Authentication => new(MessagesBase, "/web/authentication");

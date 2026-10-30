@@ -32,7 +32,7 @@ internal static class SignIn
     /// <summary>The fresh-session cookie waited for (up to <see cref="SessionCookieWait"/>) once signed in.</summary>
     public const string SessionCookie = "__Secure-1PSIDTS";
 
-    /// <summary>The main sign-in cookie, which Google's cookie rotation needs alongside <see cref="SessionCookie"/> (gemini-webapi: <c>__Secure-1PSID</c> + <c>__Secure-1PSIDTS</c>).</summary>
+    /// <summary>The main sign-in cookie, captured alongside <see cref="SessionCookie"/> (<c>__Secure-1PSID</c> + <c>__Secure-1PSIDTS</c>).</summary>
     public const string RotationCookie = "__Secure-1PSID";
 
     /// <summary>How long to wait for <see cref="SessionCookie"/> after <see cref="SignedInCookie"/> appears.</summary>

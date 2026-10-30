@@ -1,7 +1,6 @@
 using System.ComponentModel;
 using System.Globalization;
 using GMessages.Presentation.Pairing;
-using GMessages.Protocol.Auth;
 using GMessages.Protocol.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Dispatching;
@@ -238,7 +237,7 @@ public sealed partial class PairingPage : UserControl
             string host = new Uri(e.Request.Uri).Host;
             foreach (KeyValuePair<string, string> header in e.Response.Headers)
             {
-                if (CookieRotator.IsBoundSessionHeader(header.Key))
+                if (GmHttpClient.IsBoundSessionHeader(header.Key))
                 {
                     _boundHeaders.Add($"{host} response {header.Key}");
                 }
@@ -246,7 +245,7 @@ public sealed partial class PairingPage : UserControl
 
             foreach (KeyValuePair<string, string> header in e.Request.Headers)
             {
-                if (CookieRotator.IsBoundSessionHeader(header.Key))
+                if (GmHttpClient.IsBoundSessionHeader(header.Key))
                 {
                     _boundHeaders.Add($"{host} request {header.Key}");
                 }

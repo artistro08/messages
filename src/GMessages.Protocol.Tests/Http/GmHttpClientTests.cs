@@ -417,4 +417,22 @@ public class GmHttpClientTests
         Assert.AreEqual("application/x-protobuf", rig.Handler.Requests[0].Headers["content-type"]);
         CollectionAssert.AreEqual(RelayBody.ToByteArray(), rig.Handler.Requests[0].Body);
     }
+
+    /// <summary>
+    /// The DBSC header names (the W3C draft's <c>Secure-Session-*</c> and <c>Sec-Secure-Session-Id</c>, and
+    /// Chrome's Google-only <c>Sec-Session-Google-*</c>) are recognized, any case; other headers are not.
+    /// </summary>
+    [TestMethod]
+    public void IsBoundSessionHeader_KnowsTheDbscNames()
+    {
+        foreach (string name in new[] { "Secure-Session-Registration", "secure-session-challenge", "Sec-Secure-Session-Id", "Sec-Session-Google-Registration", "Sec-Session-Registration" })
+        {
+            Assert.IsTrue(GmHttpClient.IsBoundSessionHeader(name), name);
+        }
+
+        foreach (string name in new[] { "Set-Cookie", "Sec-Fetch-Site", "X-Session" })
+        {
+            Assert.IsFalse(GmHttpClient.IsBoundSessionHeader(name), name);
+        }
+    }
 }
