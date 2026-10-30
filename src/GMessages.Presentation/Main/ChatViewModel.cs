@@ -825,7 +825,7 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
-        string text = quoted.Kind == MessageKind.Text ? quoted.Text : ChatFormat.KindLabel(quoted.Kind);
+        string text = ChatFormat.ShownText(quoted);
         _post(() =>
         {
             if (!_disposed && bubble.ReplyToId == replyToId)

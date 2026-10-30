@@ -24,7 +24,7 @@ public sealed record NotificationContent(string Tag, string Group, string Title,
         ArgumentNullException.ThrowIfNull(m);
         ArgumentNullException.ThrowIfNull(c);
 
-        string body = m.Kind == MessageKind.Text ? m.Text : ChatFormat.KindLabel(m.Kind);
+        string body = ChatFormat.ShownText(m);
 
         // Name The Sender In Groups
         if (c.IsGroup)

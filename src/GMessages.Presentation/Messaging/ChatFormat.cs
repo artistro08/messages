@@ -249,6 +249,19 @@ public static class ChatFormat
     };
 
     /// <summary>
+    /// The text that stands for a message wherever text is shown (bubble, notification, reply quote).
+    /// </summary>
+    /// <remarks>A text message's text, a media message's caption when it has one, else <see cref="KindLabel"/>.</remarks>
+    /// <param name="m">The message.</param>
+    /// <returns>The text to show.</returns>
+    public static string ShownText(ChatMessage m)
+    {
+        ArgumentNullException.ThrowIfNull(m);
+
+        return m.Kind == MessageKind.Text || (m.Media is not null && m.Text.Length > 0) ? m.Text : KindLabel(m.Kind);
+    }
+
+    /// <summary>
     /// How a participant is named: full name, else first name, else phone number.
     /// </summary>
     /// <param name="p">The participant, or null.</param>

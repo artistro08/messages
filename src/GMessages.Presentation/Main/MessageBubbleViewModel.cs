@@ -390,7 +390,7 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         Id            = m.Id.Length > 0 ? m.Id : Id;
         TmpId         = m.TmpId.Length > 0 ? m.TmpId : TmpId;
         ParticipantId = m.ParticipantId;
-        Text          = m.Kind == MessageKind.Text ? m.Text : ChatFormat.KindLabel(m.Kind);
+        Text          = ChatFormat.ShownText(m);
         DisplayText   = ChatFormat.WithColorEmoji(Text);
         FromMe        = m.FromMe;
         SentAt        = m.Time;
