@@ -358,6 +358,7 @@ public partial class App : Application, IDisposable
         }
 
         ShowMainWindow();
+        BringToFront(_mainWindow);
         SelectPendingConversation();
     }
 
@@ -392,6 +393,41 @@ public partial class App : Application, IDisposable
 
         ShowBody();
         _mainWindow.Activate();
+    }
+
+    // Asked For By The Person (Tray, Second Launch, A Toast Click): The Window Comes To The Front, Restored If Minimized.
+    // Activate Alone Can Leave It Behind Other Windows When A Toast Started It: Windows App SDK Apps Must Bring Their Own
+    // Window Forward (Microsoft's Toast Migration Guide: ShowWindow(SW_RESTORE), Then SetForegroundWindow). When Windows
+    // Still Refuses (The Foreground Lock), The Input Of The Foreground Window's Thread Is Joined For A Moment, Which Lets
+    // The Call Through, Then Let Go Again
+    private static void BringToFront(Window? window)
+    {
+        if (window is null)
+        {
+            return;
+        }
+
+        IntPtr hwnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
+        if (NativeMethods.IsIconic(hwnd))
+        {
+            NativeMethods.ShowWindow(hwnd, NativeMethods.SW_RESTORE);
+        }
+
+        if (NativeMethods.SetForegroundWindow(hwnd))
+        {
+            return;
+        }
+
+        uint foreground_thread = NativeMethods.GetWindowThreadProcessId(NativeMethods.GetForegroundWindow(), IntPtr.Zero);
+        uint my_thread         = NativeMethods.GetCurrentThreadId();
+        if (foreground_thread == 0 || foreground_thread == my_thread || !NativeMethods.AttachThreadInput(my_thread, foreground_thread, true))
+        {
+            return;
+        }
+
+        NativeMethods.BringWindowToTop(hwnd);
+        NativeMethods.SetForegroundWindow(hwnd);
+        NativeMethods.AttachThreadInput(my_thread, foreground_thread, false);
     }
 
     // Pairing While Unpaired Or Signed Out, Else The Chats. An Open Window Switches In Place Only When That Changes, So

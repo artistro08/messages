@@ -290,4 +290,34 @@ public sealed class MainViewModelTests
         vm.ToggleList();
         Assert.IsFalse(vm.IsListCollapsed);
     }
+
+    /// <summary>
+    /// Each chat keeps its own draft while the window is open: switching chats or closing one with Escape and opening
+    /// it again brings back what was typed.
+    /// </summary>
+    [TestMethod]
+    public async Task Drafts_KeptPerConversation()
+    {
+        using var rig = new MainRig();
+        using MainViewModel vm = await NewMainAsync(rig);
+
+        vm.Select("a");
+        vm.Chat!.Draft = "for ann";
+        vm.Select("b");
+        Assert.AreEqual(string.Empty, vm.Chat!.Draft);
+        vm.Chat.Draft = "for bo";
+
+        vm.Select("a");
+        Assert.AreEqual("for ann", vm.Chat!.Draft);
+
+        vm.ExitConversation();
+        vm.Select("b");
+        Assert.AreEqual("for bo", vm.Chat!.Draft);
+
+        // Sent (Cleared) Drafts Are Forgotten
+        vm.Chat.Draft = string.Empty;
+        vm.Select("a");
+        vm.Select("b");
+        Assert.AreEqual(string.Empty, vm.Chat!.Draft);
+    }
 }

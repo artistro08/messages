@@ -88,6 +88,29 @@ public sealed class ShortcutTests : UiTest
     }
 
     /// <summary>
+    /// Escape in the message box closes the chat too, and the typed draft comes back when the chat opens again.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Escape_InDraft_ExitsAndKeepsDraft()
+    {
+        await OpenChatAsync("Row.c-ann");
+        App.Find("Chat.Draft").Focus();
+        WaitForFocusIn("Chat.Draft");
+        Keyboard.Type("keep me");
+        Wait.Until(() => DraftText() == "keep me", AppDriver.DefaultTimeout, () => "The draft never read 'keep me'.");
+
+        Keyboard.Type(VirtualKeyShort.ESCAPE);
+        Wait.Until(() => App.TryFind("Chat.Draft") is null, AppDriver.DefaultTimeout, () => "The chat stayed open after Escape in the message box.");
+
+        // Opened Again: The Draft Is Back, With The Cursor In The Box
+        App.Find("Row.c-ann").Patterns.SelectionItem.Pattern.Select();
+        string last = "";
+        Wait.Until(() => (last = DraftText()) == "keep me", AppDriver.DefaultTimeout, () => $"The draft read '{last}' after reopening, not 'keep me'.");
+        WaitForFocusIn("Chat.Draft");
+    }
+
+    /// <summary>
     /// Ctrl + s opens the settings page.
     /// </summary>
     /// <returns>A task for the test.</returns>
@@ -154,13 +177,15 @@ public sealed class ShortcutTests : UiTest
     // HELPERS
     // =========================================================================
 
-    // Opens The Main Window And A Row's Chat, Brings The Window To The Front And Leaves The Focus On That Row
+    // Opens The Main Window And A Row's Chat, Brings The Window To The Front, Checks That Opening The Chat Put The Cursor
+    // In The Message Box, Then Leaves The Focus On That Row
     private async Task OpenChatAsync(string rowId)
     {
         await OpenMainAsync();
         App.Find(rowId).Patterns.SelectionItem.Pattern.Select();
         App.Find("Chat.Draft");
         App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).SetForeground();
+        WaitForFocusIn("Chat.Draft");
         App.Find(rowId).Focus();
         WaitForFocusIn(rowId);
     }

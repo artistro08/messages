@@ -372,8 +372,10 @@ public sealed partial class ChatsView : UserControl
             case ShortcutCommand.ReplyToMessage:
                 return ChatView.ReplyToFocused();
 
+            // The Message Box Goes With The Chat, So Focus Goes Back To The List (Not Lost)
             case ShortcutCommand.ExitConversation:
                 ViewModel.ExitConversation();
+                DispatcherQueue.TryEnqueue(() => ConversationList.Focus(FocusState.Programmatic));
                 return true;
 
             case ShortcutCommand.NextConversation:

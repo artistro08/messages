@@ -30,6 +30,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     // Fetches Link Preview Cards For The Open Chat; Null Means None
     private readonly LinkPreviewer? _previews;
 
+    // Each Conversation's Unsent Draft While The Window Is Open, So Escape Or Another Chat Loses Nothing (Memory Only)
+    private readonly Dictionary<string, string> _drafts = new(StringComparer.Ordinal);
+
     private ConversationListViewModel? _spamBlocked;
     private ConnectionState _state;
     private bool _phoneSilent;
@@ -199,7 +202,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         Changed();
     }
 
-    /// <summary>Escape: closes the open conversation or Start chat; in narrow mode that shows the list.</summary>
+    /// <summary>Escape: closes the open conversation or Start chat; in narrow mode that shows the list. The draft is kept for the next open.</summary>
     public void ExitConversation()
     {
         SelectedConversationId = null;
@@ -255,15 +258,34 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         Chat?.Dispose();
     }
 
-    // Disposes The Open Chat And Opens One For The New Selection (Null Closes It)
+    // Disposes The Open Chat And Opens One For The New Selection (Null Closes It). The Closing Chat's Draft Is Kept (An
+    // Empty One Forgotten) And The Opening Chat's Put Back
     private void ReplaceChat(string? conversationId)
     {
-        Chat?.Dispose();
+        if (Chat is { } closing)
+        {
+            if (closing.Draft.Length > 0)
+            {
+                _drafts[closing.ConversationId] = closing.Draft;
+            }
+            else
+            {
+                _drafts.Remove(closing.ConversationId);
+            }
+
+            closing.Dispose();
+        }
+
         Chat = null;
 
         if (conversationId is not null)
         {
             Chat = new ChatViewModel(_store, conversationId, _time, _post, _previews);
+            if (_drafts.TryGetValue(conversationId, out string? draft))
+            {
+                Chat.RestoreDraft(draft);
+            }
+
             _ = Chat.LoadAsync();
         }
 

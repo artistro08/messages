@@ -561,6 +561,11 @@ public sealed class ChatTests : UiTest
         await OpenMainAsync();
         App.Find("Row.c-ann").Patterns.SelectionItem.Pattern.Select();
         Wait.Until(() => Bubbles().Count == 3, AppDriver.DefaultTimeout, () => $"Ann's chat showed {Bubbles().Count} bubbles, not 3.");
+
+        // Opening The Chat Puts The Cursor In The Message Box; Waited For (Window In Front), So It Can't Take Focus From A
+        // Row Later
+        App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).SetForeground();
+        Wait.Until(() => App.Find("Chat.Draft").Properties.HasKeyboardFocus.ValueOrDefault, AppDriver.DefaultTimeout, () => "Opening Ann's chat didn't focus the message box.");
     }
 
     // Types Each Line In The Message Box, Shift + Enter Between Them, Then Enter To Send

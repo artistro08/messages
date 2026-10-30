@@ -248,7 +248,7 @@ public sealed class RcsTests : UiTest
     // =========================================================================
 
     // Opens The Main Window And A Row's Chat, Waits For Its Bubbles And Brings The Window To The Front (A Real Right-Click
-    // Lands On Whatever Window Is On Top)
+    // Lands On Whatever Window Is On Top), With The Cursor In The Message Box
     private async Task OpenChatAsync(string rowId)
     {
         await OpenMainAsync();
@@ -256,6 +256,9 @@ public sealed class RcsTests : UiTest
         App.Find("Chat.Draft");
         Wait.Until(() => RowCount() > 0, AppDriver.DefaultTimeout, () => $"{rowId}'s chat showed no bubbles.");
         App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).SetForeground();
+
+        // Opening The Chat Puts The Cursor In The Message Box; Waited For, So It Can't Take Focus From A Row Later
+        WaitForFocus("Chat.Draft");
     }
 
     // The Newest Bubble's Row Takes Keyboard Focus
