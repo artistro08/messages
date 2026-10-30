@@ -17,7 +17,7 @@ namespace GMessages.App.Views.Controls;
 /// adds the newest input level on the right and moves the rest left, for a live waveform.
 /// </para>
 /// <para>
-/// The bars take <see cref="BarBrush"/>: a theme brush in the compose area, the text's color in a bubble (so they read on
+/// The bars take <see cref="BarBrush"/>: the primary text brush, or the on-accent text brush on an SMS bubble (so they read on
 /// every bubble color and in high contrast).
 /// </para>
 /// </remarks>

@@ -14,6 +14,7 @@ using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Documents;
 using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
@@ -82,6 +83,12 @@ public sealed partial class ChatPane : UserControl
     // A Photo Chip's Side, In Effective Pixels
     private const int ChipSide = 64;
 
+    // The Recording Preview's Name In The Voice Player
+    private const string PreviewKey = "Chat.VoicePreview";
+
+    // How Often The Recording's Time And Level Update
+    private static readonly TimeSpan RecordTick = TimeSpan.FromMilliseconds(50);
+
     // The Photo Picker's Types (The Spec's Photos) With Their Mime Types: Windows Doesn't Always Know Them (A PC Whose
     // Registry Has No Content Type For .png Reports None)
     private static readonly Dictionary<string, string> PhotoMimes = new(StringComparer.OrdinalIgnoreCase)
@@ -147,6 +154,12 @@ public sealed partial class ChatPane : UserControl
     // Plays The Chat's Voice Messages, One At A Time; Made On The First Play, Let Go On A Chat Switch Or Unload
     private VoicePlayer? _voice;
 
+    // Recording: The Recorder And Its File While One Runs, And The Timer That Shows Its Time And Level
+    private VoiceRecorder? _recorder;
+    private string _recordPath = string.Empty;
+    private long _recordStart;
+    private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _recordTimer;
+
     /// <summary>
     /// Creates the pane.
     /// </summary>
@@ -190,10 +203,29 @@ public sealed partial class ChatPane : UserControl
             Ui.AnimationsEnabledChanged -= OnAnimationsEnabledChanged;
             Ui.ColorValuesChanged       -= OnColorValuesChanged;
             StopVoice();
+            DropRecorder();
         };
 
         // A Recycled Row Starts Below Its Neighbors Again (A Focused Row Was Raised For Its Ring)
         MessageList.ContainerContentChanging += (_, args) => Canvas.SetZIndex(args.ItemContainer, 0);
+
+        // Recording: The Time And The Input Level, 20 Times A Second
+        _recordTimer          = DispatcherQueue.CreateTimer();
+        _recordTimer.Interval = RecordTick;
+        _recordTimer.Tick    += (_, _) => ShowRecording();
+
+        // Microphone Off: The Copy, With Its Settings Path As The Link
+        string copy  = ChatCopy.MicrophoneOff;
+        int link     = copy.IndexOf("Settings", StringComparison.Ordinal);
+        int link_end = copy.LastIndexOf('.');
+        var settings = new Hyperlink { NavigateUri = new Uri("ms-settings:privacy-microphone") };
+        settings.Inlines.Add(new Run { Text = copy[link..link_end] });
+        AutomationProperties.SetAutomationId(settings, "Chat.MicSettings");
+        MicError.Inlines.Add(new Run { Text = copy[..link] });
+        MicError.Inlines.Add(settings);
+        MicError.Inlines.Add(new Run { Text = copy[link_end..] });
+
+        ShowPreviewPlaying(false, 0);
     }
 
     /// <summary>Gets the lock's tooltip and name.</summary>
@@ -213,6 +245,15 @@ public sealed partial class ChatPane : UserControl
 
     /// <summary>Gets the header ⋮'s tooltip and name.</summary>
     public static string MoreOptionsText => ChatCopy.MoreOptions;
+
+    /// <summary>Gets the mic button's tooltip and name.</summary>
+    public static string RecordText => ChatCopy.RecordVoiceMessage;
+
+    /// <summary>Gets the recording's Stop tooltip and name.</summary>
+    public static string StopText => ChatCopy.Stop;
+
+    /// <summary>Gets the recording's Cancel recording tooltip and name.</summary>
+    public static string CancelRecordingText => ChatCopy.CancelRecording;
 
     /// <summary>
     /// Raised when the header's ⋮ is clicked or the header is right-clicked (or gets the Application key or Shift + F10);
@@ -405,6 +446,7 @@ public sealed partial class ChatPane : UserControl
 
         var chat = (ChatViewModel?)e.NewValue;
         pane.StopVoice();
+        pane.DropRecorder();
         BindableList.Show(pane.MessageList, chat?.Messages);
         BindableList.Show(pane.AttachmentList, chat?.Attachments);
         if (chat is not null)
@@ -572,6 +614,16 @@ public sealed partial class ChatPane : UserControl
         {
             DispatcherQueue.TryEnqueue(FillWithOlder);
         }
+
+        // The Recording Moved On: The Preview Chip Shows Its Waveform, And Stops Playing Once Sent Or Removed
+        if (e.PropertyName == nameof(ChatViewModel.Voice) && sender == Chat && Chat is { } chat)
+        {
+            PreviewBars.Show(chat.Voice.Wave?.Peaks);
+            if (!chat.Voice.IsPreview && _voice?.Key == PreviewKey)
+            {
+                StopVoice();
+            }
+        }
     }
 
     // Each Older Page Ends In Another IsLoading Change, So This Repeats While The List Is Too Short To Scroll Or Still
@@ -709,6 +761,161 @@ public sealed partial class ChatPane : UserControl
     {
         _voice?.Dispose();
         _voice = null;
+    }
+
+    // =========================================================================
+    // RECORDING
+    // =========================================================================
+
+    // The Mic: Records To A New Temp File In The Media Store's Private Folder. Access Off Or No Microphone Shows The
+    // Settings Message; Any Other Failure Goes Back To The Mic. A Cancel Or Chat Switch While Starting Drops The Recorder
+    private async void OnRecordClick(object sender, RoutedEventArgs e)
+    {
+        if (Chat is not { Voice.IsIdle: true } chat || (Application.Current as App)?.Media is not { } media)
+        {
+            return;
+        }
+
+        string path = System.IO.Path.Combine(media.TempFolder, "voice-" + Guid.NewGuid().ToString("N") + ".m4a");
+        chat.Voice.Start(path);
+
+        VoiceRecorder recorder;
+        try
+        {
+            recorder = await VoiceRecorder.StartAsync(path);
+        }
+        catch (MicrophoneUnavailableException ex)
+        {
+            AppLog.MediaFailed(App.ShellLog, "record", chat.ConversationId, ex.Message);
+            chat.Voice.MicrophoneOff();
+            return;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            AppLog.MediaFailed(App.ShellLog, "record", chat.ConversationId, ex.GetType().Name);
+            chat.Voice.Cancel();
+            return;
+        }
+
+        // Cancelled Or Switched Away While Starting
+        if (!ReferenceEquals(chat, Chat) || !chat.Voice.IsRecording || chat.Voice.FilePath != path)
+        {
+            recorder.Dispose();
+            VoiceDraft.DeleteFile(path);
+            return;
+        }
+
+        _recorder    = recorder;
+        _recordPath  = path;
+        _recordStart = Environment.TickCount64;
+        RecordBars.Show(null);
+        ShowRecording();
+        _recordTimer.Start();
+
+        // The Mic Is Covered Now: Focus Goes To Stop
+        StopRecordingButton.Focus(FocusState.Programmatic);
+    }
+
+    // Stop: The File Is Finished, Read Back With Its Waveform, And Waits In The Preview Chip. A Failure Drops It
+    private async void OnStopRecordingClick(object sender, RoutedEventArgs e)
+    {
+        if (_recorder is not { } recorder || Chat is not { } chat)
+        {
+            return;
+        }
+
+        string path = _recordPath;
+        _recorder   = null;
+        _recordPath = string.Empty;
+        _recordTimer.Stop();
+
+        try
+        {
+            await recorder.StopAsync();
+            recorder.Dispose();
+            byte[] audio   = await File.ReadAllBytesAsync(path);
+            VoiceWave wave = await WaveformReader.ReadAsync(audio);
+
+            // Dropped Meanwhile (A Chat Switch): The File Goes
+            if (!chat.Voice.Stop(audio, wave))
+            {
+                VoiceDraft.DeleteFile(path);
+                return;
+            }
+
+            DraftBox.Focus(FocusState.Programmatic);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            AppLog.MediaFailed(App.ShellLog, "record", chat.ConversationId, ex.GetType().Name);
+            recorder.Dispose();
+            chat.Voice.Cancel();
+            VoiceDraft.DeleteFile(path);
+        }
+    }
+
+    // Cancel Recording: The Recorder Lets Go Of The File, Which Is Deleted
+    private void OnCancelRecordingClick(object sender, RoutedEventArgs e)
+    {
+        DropRecorder();
+        Chat?.Voice.Cancel();
+        DraftBox.Focus(FocusState.Programmatic);
+    }
+
+    // Stops A Running Recorder And Deletes Its File (A Cancel, A Chat Switch Or The Pane Unloading)
+    private void DropRecorder()
+    {
+        _recordTimer.Stop();
+        _recorder?.Dispose();
+        _recorder = null;
+        VoiceDraft.DeleteFile(_recordPath);
+        _recordPath = string.Empty;
+    }
+
+    // The Running Time (Whole Seconds) And The Newest Input Level
+    private void ShowRecording()
+    {
+        if (_recorder is not { } recorder)
+        {
+            return;
+        }
+
+        long seconds     = (Environment.TickCount64 - _recordStart) / 1000;
+        RecordTimer.Text = VoiceWave.LengthText(TimeSpan.FromSeconds(seconds));
+        RecordBars.Push(recorder.TakeLevel());
+    }
+
+    // The Preview Chip: Play Or Pause, And A Click On Its Waveform Seeks
+    private void OnPreviewPlayClick(object sender, RoutedEventArgs e) => RequestPreview(null);
+
+    private void OnPreviewSeekRequested(object? sender, double share) => RequestPreview(share);
+
+    private void RequestPreview(double? seekTo)
+    {
+        if (Chat is not { Voice: { IsPreview: true, Wave: { } wave } voice })
+        {
+            return;
+        }
+
+        OnVoiceRequested(this, new VoiceRequest(PreviewKey, voice.Audio, wave.Length, seekTo, ShowPreviewPlaying));
+    }
+
+    // The Preview Chip's Remove: The Recording And Its File Go
+    private void OnPreviewRemoveClick(object sender, RoutedEventArgs e)
+    {
+        Chat?.Voice.Cancel();
+        DraftBox.Focus(FocusState.Programmatic);
+    }
+
+    // The Preview's Play Becomes Pause While It Plays, And Its Waveform Fills Up To How Much Has Played
+    private void ShowPreviewPlaying(bool playing, double share)
+    {
+        string name        = playing ? ChatCopy.Pause : ChatCopy.Play;
+        PreviewGlyph.Glyph = playing ? "\uE769" : "\uE768";
+        AutomationProperties.SetName(PreviewPlay, name);
+        ToolTipService.SetToolTip(PreviewPlay, name);
+        PreviewBars.ShowProgress(share);
+        TestHooks.ShowState(PreviewPlay, playing ? "Playing" : "Paused");
     }
 
     // A Bubble's Pill, Its Menu's React Or Its Hover Strip's React: The Picker Opens Over The Element Given

@@ -46,6 +46,7 @@
                         <Setter Target="FileDetail.Foreground" Value="{ThemeResource TextOnAccentFillColorSecondaryBrush}" />
                         <Setter Target="VoicePlay.Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
                         <Setter Target="VoiceLength.Foreground" Value="{ThemeResource TextOnAccentFillColorSecondaryBrush}" />
+                        <Setter Target="VoiceBars.BarBrush" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
                         <Setter Target="Pill.HorizontalAlignment" Value="Left" />
                         <Setter Target="Footer.HorizontalAlignment" Value="Right" />
                         <Setter Target="StatusRow.HorizontalAlignment" Value="Right" />
@@ -345,6 +346,7 @@
                                 x:Name="VoiceBars"
                                 Grid.Column="1"
                                 VerticalAlignment="Center"
+                                BarBrush="{ThemeResource TextFillColorPrimaryBrush}"
                                 SeekRequested="OnVoiceSeekRequested" />
                             <TextBlock
                                 x:Name="VoiceLength"
