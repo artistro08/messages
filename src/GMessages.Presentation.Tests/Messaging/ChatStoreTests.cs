@@ -1267,4 +1267,19 @@ public sealed class ChatStoreTests
         Assert.IsFalse(rig.Store.IsPhoneBatteryLow);
         Assert.AreEqual(1, raised);
     }
+
+    /// <summary>Every low alert raises the alerted event, a repeat too; restored does not.</summary>
+    [TestMethod]
+    public async Task BatteryLow_AlertedRaisesOnEveryLow()
+    {
+        using var rig = new Rig();
+        int alerted = 0;
+        rig.Store.PhoneBatteryLowAlerted += (_, _) => alerted++;
+
+        await rig.Store.HandleEventAsync(Alert(AlertType.MobileBatteryLow));
+        await rig.Store.HandleEventAsync(Alert(AlertType.MobileBatteryLow));
+        await rig.Store.HandleEventAsync(Alert(AlertType.MobileBatteryRestored));
+
+        Assert.AreEqual(2, alerted);
+    }
 }

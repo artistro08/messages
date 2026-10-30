@@ -42,9 +42,6 @@ public sealed partial class ChatStore : IDisposable
     private static readonly TimeSpan NewMessageAge = TimeSpan.FromDays(1);
 
     private readonly ConnectionController _connection;
-
-    // Set By A Live MOBILE_BATTERY_LOW, Cleared By MOBILE_BATTERY_RESTORED Or Reset
-    private bool _batteryLow;
     private readonly Func<IMessagingClient?> _client;
     private readonly ILogger _log;
     private readonly MessageDatabase? _database;
@@ -77,6 +74,9 @@ public sealed partial class ChatStore : IDisposable
 
     private volatile ParticipantInfo? _me;
     private volatile IReadOnlyList<SIMCard> _sims = [];
+
+    // Set By A Live MOBILE_BATTERY_LOW, Cleared By MOBILE_BATTERY_RESTORED Or Reset
+    private bool _batteryLow;
 
     /// <summary>
     /// Creates the store and starts listening to live events.
@@ -115,6 +115,9 @@ public sealed partial class ChatStore : IDisposable
 
     /// <summary>Raised when <see cref="IsPhoneBatteryLow"/> changed.</summary>
     public event EventHandler? PhoneBatteryChanged;
+
+    /// <summary>Raised on every live low battery alert, even a repeat, so a closed banner can return.</summary>
+    public event EventHandler? PhoneBatteryLowAlerted;
 
     /// <summary>
     /// Gets whether the phone reported a low battery and has not said it recovered. The level isn't known at start, so
@@ -793,7 +796,13 @@ public sealed partial class ChatStore : IDisposable
                 break;
 
             case UserAlert alert when alert.Alert.AlertType is AlertType.MobileBatteryLow or AlertType.MobileBatteryRestored:
-                SetBatteryLow(alert.Alert.AlertType == AlertType.MobileBatteryLow);
+                bool low = alert.Alert.AlertType == AlertType.MobileBatteryLow;
+                SetBatteryLow(low);
+                if (low)
+                {
+                    PhoneBatteryLowAlerted?.Invoke(this, EventArgs.Empty);
+                }
+
                 break;
 
             case ListenRecovered:

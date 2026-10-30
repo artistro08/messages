@@ -56,6 +56,24 @@ public sealed class MainWindowTests : UiTest
     }
 
     /// <summary>
+    /// Closing the battery banner hides it, and the next low alert (no restored between) shows it again.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task BatteryLow_Closed_ReturnsOnNextLow()
+    {
+        await OpenMainAsync();
+        WaitForRows(InboxRows);
+        Server.Phone.PushAlert(AlertType.MobileBatteryLow);
+
+        App.Find("Main.BatteryLow").FindFirstDescendant(cf => cf.ByAutomationId("CloseButton"))?.Patterns.Invoke.Pattern.Invoke();
+        Wait.Until(() => App.TryFind("Main.BatteryLow") is null, AppDriver.DefaultTimeout, () => "Closing the battery banner didn't hide it.");
+
+        Server.Phone.PushAlert(AlertType.MobileBatteryLow);
+        App.Find("Main.BatteryLow");
+    }
+
+    /// <summary>
     /// Ann's row shows the photo the phone has for her; Team's members have none, so its avatar keeps the initials.
     /// </summary>
     /// <returns>A task for the test.</returns>

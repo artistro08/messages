@@ -25,10 +25,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
     private readonly ConnectionController _connection;
     private readonly ChatStore _store;
-
-    // Battery Banner: The Store's State, And Whether The User Closed The Banner Since The Last Low Alert
-    private bool _batteryLow;
-    private bool _batteryDismissed;
     private readonly TimeProvider _time;
     private readonly Action<Action> _post;
 
@@ -46,6 +42,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
     private ConnectionState _state;
     private bool _phoneSilent;
+
+    // Battery Banner: The Store's State, And Whether The User Closed The Banner Since The Last Low Alert
+    private bool _batteryLow;
+    private bool _batteryDismissed;
 
     // Closed With The Window: Late Callbacks (A Start Chat That Finishes After Closing) Must Not Open Anything
     private bool _disposed;
@@ -78,7 +78,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _connection.ClientEvent  += OnClientEvent;
 
         _batteryLow = store.IsPhoneBatteryLow;
-        _store.PhoneBatteryChanged += OnPhoneBatteryChanged;
+        _store.PhoneBatteryChanged    += OnPhoneBatteryChanged;
+        _store.PhoneBatteryLowAlerted += OnPhoneBatteryLowAlerted;
     }
 
     /// <inheritdoc />
@@ -189,7 +190,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         Changed();
     }
 
-    // Reads The Store's State On The UI Thread; A New Low Alert Brings Back A Closed Banner
+    // Reads The Store's State On The UI Thread
     private void OnPhoneBatteryChanged(object? sender, EventArgs e) => _post(() =>
     {
         if (_disposed)
@@ -197,7 +198,18 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
-        _batteryLow       = _store.IsPhoneBatteryLow;
+        _batteryLow = _store.IsPhoneBatteryLow;
+        Changed();
+    });
+
+    // Every Low Alert, Even A Repeat, Brings Back A Banner The User Closed
+    private void OnPhoneBatteryLowAlerted(object? sender, EventArgs e) => _post(() =>
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
         _batteryDismissed = false;
         Changed();
     });
@@ -312,7 +324,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _disposed = true;
         _connection.StateChanged -= OnStateChanged;
         _connection.ClientEvent  -= OnClientEvent;
-        _store.PhoneBatteryChanged -= OnPhoneBatteryChanged;
+        _store.PhoneBatteryChanged    -= OnPhoneBatteryChanged;
+        _store.PhoneBatteryLowAlerted -= OnPhoneBatteryLowAlerted;
         Inbox.Dispose();
         foreach (ConversationListViewModel list in _folders.Values)
         {

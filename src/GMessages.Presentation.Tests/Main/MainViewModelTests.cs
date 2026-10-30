@@ -502,9 +502,9 @@ public sealed class MainViewModelTests
         Assert.IsTrue(vm.IsPhoneBatteryLow);
     }
 
-    /// <summary>Closing the banner hides it, and the next low alert shows it again even though the store was already low.</summary>
+    /// <summary>Closing the banner hides it; a low alert after a restored one shows it again.</summary>
     [TestMethod]
-    public async Task BatteryLow_ClosedThenNewLow_ShowsAgain()
+    public async Task BatteryLow_ClosedThenRestoredThenLow_ShowsAgain()
     {
         using var rig = new MainRig();
         using MainViewModel vm = await NewMainAsync(rig);
@@ -519,6 +519,21 @@ public sealed class MainViewModelTests
         // Restored Then Low Again
         await rig.Store.HandleEventAsync(Alert(AlertType.MobileBatteryRestored));
         await rig.Store.HandleEventAsync(Alert(AlertType.MobileBatteryLow));
+        Assert.IsTrue(vm.IsPhoneBatteryLow);
+    }
+
+    /// <summary>Closing the banner hides it; a repeat low alert with no restored between shows it again.</summary>
+    [TestMethod]
+    public async Task BatteryLow_ClosedThenRepeatLow_ShowsAgain()
+    {
+        using var rig = new MainRig();
+        using MainViewModel vm = await NewMainAsync(rig);
+        await rig.Store.HandleEventAsync(Alert(AlertType.MobileBatteryLow));
+        vm.DismissPhoneBattery();
+        Assert.IsFalse(vm.IsPhoneBatteryLow);
+
+        await rig.Store.HandleEventAsync(Alert(AlertType.MobileBatteryLow));
+
         Assert.IsTrue(vm.IsPhoneBatteryLow);
     }
 }
