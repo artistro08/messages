@@ -6,7 +6,8 @@ using GMessages.Protocol.Events;
 namespace GMessages.Presentation.Main;
 
 /// <summary>
-/// The main window's state: the two lists, which conversation is open, the narrow layout and the connection banner.
+/// The main window's state: the inbox and folder lists, which conversation is open, the narrow layout, conversation
+/// actions and the banners.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -33,7 +34,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     // Each Conversation's Unsent Draft While The Window Is Open, So Escape Or Another Chat Loses Nothing (Memory Only)
     private readonly Dictionary<string, string> _drafts = new(StringComparer.Ordinal);
 
-    private ConversationListViewModel? _spamBlocked;
+    // The Folder Lists (Spam And Blocked, Archived), Made The First Time Each Opens
+    private readonly Dictionary<ConversationFolder, ConversationListViewModel> _folders = [];
+
+    // Conversations With An Action Waiting On The Phone, So A Double Click Sends One Request
+    private readonly HashSet<string> _running = new(StringComparer.Ordinal);
+
     private ConnectionState _state;
     private bool _phoneSilent;
 
@@ -82,13 +88,22 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     public ConversationListViewModel Inbox { get; }
 
     /// <summary>Gets the spam and blocked list, or null until it is first opened.</summary>
-    public ConversationListViewModel? SpamBlocked => _spamBlocked;
+    public ConversationListViewModel? SpamBlocked => _folders.GetValueOrDefault(ConversationFolder.SpamBlocked);
+
+    /// <summary>Gets the folder whose list shows now.</summary>
+    public ConversationFolder Folder { get; private set; }
 
     /// <summary>Gets whether the spam and blocked list shows instead of the inbox.</summary>
-    public bool IsSpamView { get; private set; }
+    public bool IsSpamView => Folder == ConversationFolder.SpamBlocked;
+
+    /// <summary>Gets whether the archived list shows instead of the inbox.</summary>
+    public bool IsArchivedView => Folder == ConversationFolder.Archived;
+
+    /// <summary>Gets whether a folder list shows instead of the inbox (the Back button shows).</summary>
+    public bool IsFolderView => Folder != ConversationFolder.Inbox;
 
     /// <summary>Gets the list that shows now.</summary>
-    public ConversationListViewModel CurrentList => IsSpamView && _spamBlocked is not null ? _spamBlocked : Inbox;
+    public ConversationListViewModel CurrentList => _folders.GetValueOrDefault(Folder) ?? Inbox;
 
     /// <summary>Gets the open conversation's ID, or null when none is open.</summary>
     public string? SelectedConversationId { get; private set; }
@@ -147,34 +162,44 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _                                                          => null,
     };
 
+    /// <summary>Gets the failure banner text after a conversation action failed, or null.</summary>
+    public string? ActionError { get; private set; }
+
+    /// <summary>Gets whether the failure banner shows (for bindings, which skip their function when an argument is null).</summary>
+    public bool HasActionError => ActionError is not null;
+
     // =========================================================================
     // NAVIGATION
     // =========================================================================
 
-    /// <summary>Shows the spam and blocked list, creating and loading it the first time.</summary>
-    public void OpenSpamBlocked()
+    /// <summary>Shows a folder's list, creating and loading it the first time.</summary>
+    /// <param name="folder">The folder; <see cref="ConversationFolder.Inbox"/> shows the inbox.</param>
+    public void OpenFolder(ConversationFolder folder)
     {
         if (_disposed)
         {
             return;
         }
 
-        if (_spamBlocked is null)
+        if (folder != ConversationFolder.Inbox && !_folders.ContainsKey(folder))
         {
-            _spamBlocked = new ConversationListViewModel(_store, ConversationFolder.SpamBlocked, _time, _post);
-            _ = _spamBlocked.LoadAsync();
+            var list         = new ConversationListViewModel(_store, folder, _time, _post);
+            _folders[folder] = list;
+            _ = list.LoadAsync();
         }
 
-        IsSpamView = true;
+        Folder = folder;
         Changed();
     }
 
+    /// <summary>Shows the spam and blocked list, creating and loading it the first time.</summary>
+    public void OpenSpamBlocked() => OpenFolder(ConversationFolder.SpamBlocked);
+
+    /// <summary>Shows the archived list, creating and loading it the first time.</summary>
+    public void OpenArchived() => OpenFolder(ConversationFolder.Archived);
+
     /// <summary>Shows the inbox again.</summary>
-    public void BackToInbox()
-    {
-        IsSpamView = false;
-        Changed();
-    }
+    public void BackToInbox() => OpenFolder(ConversationFolder.Inbox);
 
     /// <summary>Opens a conversation (closing Start chat).</summary>
     /// <remarks>Does nothing once disposed, so a Start chat that finishes after the window closed opens no chat.</remarks>
@@ -254,7 +279,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _connection.StateChanged -= OnStateChanged;
         _connection.ClientEvent  -= OnClientEvent;
         Inbox.Dispose();
-        _spamBlocked?.Dispose();
+        foreach (ConversationListViewModel list in _folders.Values)
+        {
+            list.Dispose();
+        }
+
         Chat?.Dispose();
     }
 
@@ -324,6 +353,90 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     }
 
     // =========================================================================
+    // CONVERSATION ACTIONS
+    // =========================================================================
+
+    /// <summary>Finds a conversation the store knows, for its menu and Details.</summary>
+    /// <param name="id">The conversation ID.</param>
+    /// <returns>The conversation, or null when the store doesn't know it.</returns>
+    public ConversationInfo? FindConversation(string id) => _store.Find(id);
+
+    /// <summary>
+    /// Archives, unarchives, mutes, unmutes, blocks, unblocks or deletes a conversation on the phone.
+    /// </summary>
+    /// <remarks>
+    /// Call on the UI thread. While a run for the same conversation waits on the phone, another returns false at once
+    /// and sends nothing. Any failure (not connected, refused, not answering, a network error) is logged and shows
+    /// <see cref="ActionError"/>; nothing is thrown at the view. A success clears the banner, and closes the open chat
+    /// when the action moves it out of its folder (every action but mute and unmute).
+    /// </remarks>
+    /// <param name="conversationId">The conversation ID.</param>
+    /// <param name="action">What to do.</param>
+    /// <returns>True when the phone made the change.</returns>
+    public async Task<bool> RunAsync(string conversationId, ConversationAction action)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(conversationId);
+
+        // Closed, Or Already Running For This Conversation
+        if (_disposed || !_running.Add(conversationId))
+        {
+            return false;
+        }
+
+        try
+        {
+            await _store.UpdateConversationAsync(conversationId, action, CancellationToken.None);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // Any Failure Is Shown, Never Thrown At The Click Handler
+            _store.LogFailure("update conversation", ex);
+            ShowActionError(ChatCopy.ActionFailed);
+            return false;
+        }
+        finally
+        {
+            _running.Remove(conversationId);
+        }
+
+        // Closed While The Phone Answered
+        if (_disposed)
+        {
+            return true;
+        }
+
+        ActionError = null;
+
+        // The Open Chat Left Its Folder
+        bool moved = action is not (ConversationAction.Mute or ConversationAction.Unmute);
+        if (moved && conversationId == SelectedConversationId)
+        {
+            ExitConversation();
+        }
+        else
+        {
+            Changed();
+        }
+
+        return true;
+    }
+
+    /// <summary>Hides the failure banner.</summary>
+    public void DismissActionError() => ShowActionError(null);
+
+    // Sets The Failure Banner (Null Hides It); Nothing Once Closed
+    private void ShowActionError(string? error)
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        ActionError = error;
+        Changed();
+    }
+
+    // =========================================================================
     // CONNECTION BANNER
     // =========================================================================
 
@@ -384,7 +497,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     private void ReloadLists()
     {
         _ = Inbox.LoadAsync();
-        _ = _spamBlocked?.LoadAsync();
+        foreach (ConversationListViewModel list in _folders.Values)
+        {
+            _ = list.LoadAsync();
+        }
     }
 
     private void Changed() => PropertyChanged?.Invoke(this, AllChanged);

@@ -102,9 +102,10 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
         _typingTimer = time.CreateTimer(_ => _post(OnTypingTimeout), null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
         _isEncrypted = store.IsEncrypted(conversationId);
 
-        _store.MessageArrived += OnMessageArrived;
-        _store.Resynced       += OnResynced;
-        _store.TypingChanged  += OnTypingChanged;
+        _store.MessageArrived      += OnMessageArrived;
+        _store.Resynced            += OnResynced;
+        _store.TypingChanged       += OnTypingChanged;
+        _store.ConversationChanged += OnConversationChanged;
         ApplyConversation(_store.Find(conversationId));
     }
 
@@ -134,6 +135,12 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
 
     /// <summary>Gets the participant whose photo covers the back circle, or empty.</summary>
     public string SecondPhotoId { get; private set; } = string.Empty;
+
+    /// <summary>Gets the conversation (for its menu and Details), or null until the store knows it.</summary>
+    public ConversationInfo? Conversation { get; private set; }
+
+    /// <summary>Gets whether the conversation is muted on the phone.</summary>
+    public bool IsMuted { get; private set; }
 
     /// <summary>Gets the bubbles, oldest first.</summary>
     public ObservableCollection<MessageBubbleViewModel> Messages { get; } = [];
@@ -558,6 +565,23 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
         }
     });
 
+    // This Conversation Changed (A New Message, Muted, Moved): Keep It Current, Raising Only A Mute Change, Since Every
+    // Message Lands Here Too
+    private void OnConversationChanged(object? sender, ConversationInfo c)
+    {
+        if (c.Id != ConversationId)
+        {
+            return;
+        }
+
+        Conversation = c;
+        if (IsMuted != c.IsMuted)
+        {
+            IsMuted = c.IsMuted;
+            Raise(nameof(IsMuted));
+        }
+    }
+
     // Typing In: A Start Shows The Dots For Up To 15 Seconds, A Stop Hides Them At Once
     private void OnTypingChanged(object? sender, TypingEventArgs e)
     {
@@ -612,9 +636,10 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     public void Dispose()
     {
         _disposed = true;
-        _store.MessageArrived -= OnMessageArrived;
-        _store.Resynced       -= OnResynced;
-        _store.TypingChanged  -= OnTypingChanged;
+        _store.MessageArrived      -= OnMessageArrived;
+        _store.Resynced            -= OnResynced;
+        _store.TypingChanged       -= OnTypingChanged;
+        _store.ConversationChanged -= OnConversationChanged;
         _typingTimer.Dispose();
     }
 
@@ -687,6 +712,8 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
 
         // Avatar: Stacked People For A Group (R12), The Same As The List Row
         AvatarParts avatar = AvatarParts.Of(c);
+        Conversation       = c;
+        IsMuted            = c.IsMuted;
         Title              = c.Name;
         Initial            = avatar.Initial;
         AvatarColor        = avatar.Color;

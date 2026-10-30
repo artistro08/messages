@@ -31,7 +31,10 @@ public static class ShortcutMap
         ("Escape", "Exit current conversation"),
         ("Ctrl + .", "Next conversation"),
         ("Ctrl + ,", "Previous conversation"),
+        ("Ctrl + d", "Delete conversation"),
+        ("Ctrl + Alt + h", "Archive conversation"),
         ("Ctrl + s", "Open Settings"),
+        ("Ctrl + Shift + o", "Show Details"),
         ("Ctrl + Enter", "Reply to message"),
         ("Ctrl + ?", "Open keyboard shortcut help"),
     ];
@@ -41,7 +44,8 @@ public static class ShortcutMap
     /// </summary>
     /// <remarks>
     /// Chords must match their modifiers exactly, so Ctrl + Alt + k is not a shortcut. The bare "r", Shift + + and
-    /// Ctrl + Enter depend on <paramref name="focusInTextBox"/>; they are ignored while typing.
+    /// Ctrl + Enter depend on <paramref name="focusInTextBox"/>; they are ignored while typing. The conversation
+    /// shortcuts (Ctrl + d, Ctrl + Alt + h, Ctrl + Shift + o) work while typing too.
     /// </remarks>
     /// <param name="key">The pressed key.</param>
     /// <param name="ctrl">Whether Ctrl is held.</param>
@@ -51,10 +55,10 @@ public static class ShortcutMap
     /// <returns>The matching command, or null.</returns>
     public static ShortcutCommand? Resolve(VirtualKey key, bool ctrl, bool shift, bool alt, bool focusInTextBox)
     {
-        // Guard Alt, no shortcut uses it
+        // Ctrl + Alt Chords: Only Ctrl + Alt + h
         if (alt)
         {
-            return null;
+            return ctrl && !shift && key == VirtualKey.H ? ShortcutCommand.ArchiveConversation : null;
         }
 
         // Bare Keys
@@ -83,6 +87,7 @@ public static class ShortcutMap
                 VirtualKey.K => ShortcutCommand.StartChat,
                 VirtualKey.J => ShortcutCommand.FocusMessages,
                 VirtualKey.S => ShortcutCommand.OpenSettings,
+                VirtualKey.D => ShortcutCommand.DeleteConversation,
                 Period       => ShortcutCommand.NextConversation,
                 Comma        => ShortcutCommand.PreviousConversation,
                 _ => null,
@@ -96,6 +101,7 @@ public static class ShortcutMap
             {
                 VirtualKey.K => ShortcutCommand.FocusConversationList,
                 VirtualKey.E => ShortcutCommand.ToggleEmoji,
+                VirtualKey.O => ShortcutCommand.ShowDetails,
                 Slash        => ShortcutCommand.ShowHelp,
                 _ => null,
             };

@@ -163,6 +163,27 @@ public sealed class ConversationListViewModelTests
     }
 
     /// <summary>
+    /// Unarchived on the phone: the live update moves the row from Archived into the inbox.
+    /// </summary>
+    [TestMethod]
+    public async Task ArchivedChat_PhoneReactivates_MovesToInbox()
+    {
+        using var rig = new MainRig();
+        rig.Page(MainRig.Conv("a", "Ann"), MainRig.Conv("z", "Zed", minutesAgo: 1, status: ConversationStatus.Archived));
+        using var inbox    = NewList(rig);
+        using var archived = NewList(rig, ConversationFolder.Archived);
+        await inbox.LoadAsync();
+        await archived.LoadAsync();
+        Assert.AreEqual("a", Ids(inbox));
+        Assert.AreEqual("z", Ids(archived));
+
+        await rig.Live(MainRig.Conv("z", "Zed", minutesAgo: 1));
+
+        Assert.AreEqual(string.Empty, Ids(archived));
+        Assert.AreEqual("a,z", Ids(inbox));
+    }
+
+    /// <summary>
     /// A load or load-more that fails with any error (phone asleep, network, server, decode) keeps the rows and never
     /// throws; the next load fills the list.
     /// </summary>

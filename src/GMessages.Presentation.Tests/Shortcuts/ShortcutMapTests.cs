@@ -22,6 +22,8 @@ public sealed class ShortcutMapTests
     [DataRow((VirtualKey)191, true, true, ShortcutCommand.ShowHelp)]
     [DataRow((VirtualKey)187, false, true, ShortcutCommand.OpenReactions)]
     [DataRow(VirtualKey.Enter, true, false, ShortcutCommand.ReplyToMessage)]
+    [DataRow(VirtualKey.D, true, false, ShortcutCommand.DeleteConversation)]
+    [DataRow(VirtualKey.O, true, true, ShortcutCommand.ShowDetails)]
     public void Resolve_MapsKey(VirtualKey key, bool ctrl, bool shift, ShortcutCommand expected)
     {
         Assert.AreEqual(expected, ShortcutMap.Resolve(key, ctrl, shift, false, false));
@@ -44,8 +46,30 @@ public sealed class ShortcutMapTests
     public void Escape_InTextBox_StillExits() =>
         Assert.AreEqual(ShortcutCommand.ExitConversation, ShortcutMap.Resolve(VirtualKey.Escape, false, false, false, true));
 
+    /// <summary>
+    /// The conversation shortcuts work while typing too, and Ctrl + Alt + h is the only Alt chord.
+    /// </summary>
     [TestMethod]
-    public void ExtraModifier_IsNull() => Assert.IsNull(ShortcutMap.Resolve(VirtualKey.K, true, false, true, false));
+    [DataRow(VirtualKey.D, true, false, false, ShortcutCommand.DeleteConversation)]
+    [DataRow(VirtualKey.H, true, false, true, ShortcutCommand.ArchiveConversation)]
+    [DataRow(VirtualKey.O, true, true, false, ShortcutCommand.ShowDetails)]
+    public void ConversationShortcuts_IgnoreTextFocus(VirtualKey key, bool ctrl, bool shift, bool alt, ShortcutCommand expected)
+    {
+        Assert.AreEqual(expected, ShortcutMap.Resolve(key, ctrl, shift, alt, false));
+        Assert.AreEqual(expected, ShortcutMap.Resolve(key, ctrl, shift, alt, true));
+    }
+
+    [TestMethod]
+    public void CtrlAltK_IsNotAShortcut() => Assert.IsNull(ShortcutMap.Resolve(VirtualKey.K, true, false, true, false));
+
+    [TestMethod]
+    [DataRow(false, false)]
+    [DataRow(true, true)]
+    [DataRow(false, true)]
+    public void AltH_WithoutExactlyCtrl_IsNull(bool ctrl, bool shift) => Assert.IsNull(ShortcutMap.Resolve(VirtualKey.H, ctrl, shift, true, false));
+
+    [TestMethod]
+    public void CtrlH_WithoutAlt_IsNull() => Assert.IsNull(ShortcutMap.Resolve(VirtualKey.H, true, false, false, false));
 
     [TestMethod]
     public void Unmapped_IsNull() => Assert.IsNull(ShortcutMap.Resolve(VirtualKey.Z, true, false, false, false));
@@ -64,11 +88,15 @@ public sealed class ShortcutMapTests
             ("Escape", "Exit current conversation"),
             ("Ctrl + .", "Next conversation"),
             ("Ctrl + ,", "Previous conversation"),
+            ("Ctrl + d", "Delete conversation"),
+            ("Ctrl + Alt + h", "Archive conversation"),
             ("Ctrl + s", "Open Settings"),
+            ("Ctrl + Shift + o", "Show Details"),
             ("Ctrl + Enter", "Reply to message"),
             ("Ctrl + ?", "Open keyboard shortcut help"),
         ];
 
+        Assert.HasCount(15, expected);
         CollectionAssert.AreEqual(expected, ShortcutMap.HelpRows.ToArray());
     }
 }

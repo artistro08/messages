@@ -9,6 +9,41 @@ public static class ChatCopy
     public const string StartChat      = "Start chat";
     public const string YouPrefix      = "You: ";
     public const string SpamAndBlocked = "Spam & blocked";
+    public const string Archived       = "Archived";
+
+    // Conversation Menu Items (Controller Copy; Owner Signs Off)
+    public const string Archive            = "Archive";
+    public const string Unarchive          = "Unarchive";
+    public const string Mute               = "Mute";
+    public const string Unmute             = "Unmute";
+    public const string BlockAndReportSpam = "Block & report spam";
+    public const string Unblock            = "Unblock";
+    public const string MoveToTrash        = "Move to trash";
+    public const string Details            = "Details";
+
+    // Hover Buttons And Icons (Controller Copy; Owner Signs Off)
+    public const string MoreOptions = "More options";
+    public const string Muted       = "Muted";
+
+    // Block Dialog; Its Title Is BlockAndReportSpam (Controller Copy; Owner Signs Off)
+    public const string BlockText  = "You won't get messages from this conversation, and it moves to Spam & blocked.";
+    public const string ReportSpam = "Report spam";
+    public const string Block      = "Block";
+    public const string Cancel     = "Cancel";
+
+    // Trash Dialog; Its Button Is MoveToTrash (Controller Copy; Owner Signs Off)
+    public const string MoveToTrashTitle = "Move to trash?";
+    public const string MoveToTrashText  = "It moves to trash on your phone too.";
+
+    // Details Dialog; Its Title Is Details, Its Toggle Mute And Its Button BlockAndReportSpam (Controller Copy; Owner Signs Off)
+    public const string People = "People";
+    public const string Close  = "Close";
+
+    // Conversation Action Failure Banner (Controller Copy; Owner Signs Off)
+    public const string ActionFailed = "Couldn't update this conversation. Try again.";
+
+    // Phone Battery Banner (From The Owner's Screenshot; The Owner Confirms Google's Exact Text)
+    public const string PhoneBatteryLow = "Phone battery low";
 
     // Message Status (Spec Copy)
     public const string Sent      = "Sent";
