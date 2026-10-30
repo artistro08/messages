@@ -824,14 +824,17 @@ public sealed class ChatStoreTests
     /// An unpair or sign-out while the phone is answering applies nothing, even to a new phone's conversation with
     /// the same ID.
     /// </summary>
+    /// <param name="action">A status action, or mute.</param>
     [TestMethod]
-    public async Task Update_ResetDuringRequest_AppliesNothing()
+    [DataRow(ConversationAction.Archive)]
+    [DataRow(ConversationAction.Mute)]
+    public async Task Update_ResetDuringRequest_AppliesNothing(ConversationAction action)
     {
         using var rig = new Rig();
         await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1", "Old Ann")));
         var gate              = new TaskCompletionSource();
         rig.Client.UpdateGate = gate;
-        Task update           = rig.Store.UpdateConversationAsync("c1", ConversationAction.Archive, Ct);
+        Task update           = rig.Store.UpdateConversationAsync("c1", action, Ct);
 
         rig.Store.Reset();
         await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1", "New Ann")));
@@ -841,6 +844,7 @@ public sealed class ChatStoreTests
         await update;
 
         Assert.AreEqual(ConversationStatus.Active, rig.Store.Find("c1")?.Status);
+        Assert.IsFalse(rig.Store.Find("c1")?.IsMuted);
         Assert.AreEqual(0, raised);
     }
 
