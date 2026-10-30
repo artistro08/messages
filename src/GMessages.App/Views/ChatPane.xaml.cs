@@ -225,11 +225,13 @@ public sealed partial class ChatPane : UserControl
         _recordTimer.Interval = RecordTick;
         _recordTimer.Tick    += (_, _) => ShowRecording();
 
-        // Microphone Off: The Copy, With Its Settings Path As The Link
+        // Microphone Off: The Copy, With Its Settings Path As The Link. A Hyperlink's NavigateUri Launches Nothing In This
+        // Desktop App, So Its Click Launches The Page
         string copy  = ChatCopy.MicrophoneOff;
         int link     = copy.IndexOf("Settings", StringComparison.Ordinal);
         int link_end = copy.LastIndexOf('.');
-        var settings = new Hyperlink { NavigateUri = new Uri("ms-settings:privacy-microphone") };
+        var settings = new Hyperlink();
+        settings.Click += (_, _) => OpenMicrophoneSettings();
         settings.Inlines.Add(new Run { Text = copy[link..link_end] });
         AutomationProperties.SetAutomationId(settings, "Chat.MicSettings");
         MicError.Inlines.Add(new Run { Text = copy[..link] });
@@ -837,6 +839,30 @@ public sealed partial class ChatPane : UserControl
 
         // The Mic Is Covered Now: Focus Goes To Stop
         StopRecordingButton.Focus(FocusState.Programmatic);
+    }
+
+    // The Settings Message's Link: Windows' Microphone Privacy Page. A Test Run Only Notes The Address; A Failure Logs Its
+    // Error Type Only
+    private async void OpenMicrophoneSettings()
+    {
+        var page               = new Uri("ms-settings:privacy-microphone");
+        string conversation_id = Chat?.ConversationId ?? string.Empty;
+        if (TestHooks.RecordLaunch(page.OriginalString))
+        {
+            return;
+        }
+
+        try
+        {
+            if (!await Launcher.LaunchUriAsync(page))
+            {
+                AppLog.MediaFailed(App.ShellLog, "settings", conversation_id, "NotLaunched");
+            }
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            AppLog.MediaFailed(App.ShellLog, "settings", conversation_id, ex.GetType().Name);
+        }
     }
 
     // Stop: The File Is Finished, Read Back With Its Waveform, And Waits In The Preview Chip. A Failure Drops It

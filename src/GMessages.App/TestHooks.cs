@@ -48,10 +48,11 @@ internal static class TestHooks
     public static bool BlockLaunches => EndpointBase is not null;
 
     /// <summary>
-    /// When pointed at the fake server, notes a file the app would open in its default app in
-    /// <c>{data folder}\launched.txt</c> (one full path per line) instead of opening it.
+    /// When pointed at the fake server, notes a file the app would open in its default app, or a Windows page it would
+    /// open (such as <c>ms-settings:privacy-microphone</c>), in <c>{data folder}\launched.txt</c> (one full path or
+    /// address per line) instead of opening it.
     /// </summary>
-    /// <param name="path">The file's full path.</param>
+    /// <param name="path">The file's full path, or the page's address.</param>
     /// <returns>True when noted (the caller must not launch it); false on a normal run.</returns>
     public static bool RecordLaunch(string path)
     {
