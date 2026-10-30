@@ -20,7 +20,7 @@ internal sealed class MicrophoneUnavailableException : Exception
     /// <summary>
     /// Creates the exception.
     /// </summary>
-    /// <param name="reason">Why, for the log: <c>AccessDenied</c>, <c>NoDevice</c> or the graph's status.</param>
+    /// <param name="reason">Why, for the log: <c>AccessDenied</c>, <c>NoDevice</c>, the error type or the graph's status.</param>
     public MicrophoneUnavailableException(string reason)
         : base(reason)
     {
@@ -53,6 +53,10 @@ internal sealed class MicrophoneUnavailableException : Exception
 /// whose frames give the level the live waveform shows (<see cref="TakeLevel"/>). Reading a frame copies its samples
 /// with <c>Buffer.CreateCopyFromMemoryBuffer</c>, so no COM interface (<c>IMemoryBufferByteAccess</c>) or unsafe code
 /// is needed under Native AOT.
+/// </para>
+/// <para>
+/// Before the graph, <see cref="MediaCapture"/> opens the microphone once, which is what makes Windows ask the user for
+/// access (an <see cref="AudioGraph"/> alone is only refused).
 /// </para>
 /// <para>
 /// <see cref="StopAsync"/> finishes the file; disposing without it drops the graph (the caller deletes the file). Access
@@ -106,6 +110,10 @@ internal sealed class VoiceRecorder : IDisposable
             return new VoiceRecorder(null, null, null);
         }
 
+        // Ask For The Microphone First: Windows Only Shows Its Consent Prompt When MediaCapture Opens It, Never For An
+        // AudioGraph, Which Is Just Refused
+        await AskForMicrophoneAsync();
+
         AudioGraph? graph = null;
         try
         {
@@ -122,7 +130,7 @@ internal sealed class VoiceRecorder : IDisposable
             CreateAudioDeviceInputNodeResult input = await graph.CreateDeviceInputNodeAsync(MediaCategory.Speech);
             if (input.Status != AudioDeviceNodeCreationStatus.Success)
             {
-                throw new MicrophoneUnavailableException(input.Status == AudioDeviceNodeCreationStatus.AccessDenied ? "AccessDenied" : "NoDevice");
+                throw new MicrophoneUnavailableException(input.Status.ToString());
             }
 
             // The File (M4A, AAC) And The Levels
@@ -150,6 +158,41 @@ internal sealed class VoiceRecorder : IDisposable
         finally
         {
             graph?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Opens the microphone through <see cref="MediaCapture"/> and lets go of it at once, so Windows asks the user for
+    /// access when it hasn't been given yet (and again after a refusal, when Windows allows it).
+    /// </summary>
+    /// <remarks>
+    /// Runs on the UI thread, where the consent prompt can show. Access refused (<c>E_ACCESSDENIED</c>), no capture device
+    /// or any other failure throws <see cref="MicrophoneUnavailableException"/>, so the settings message shows.
+    /// </remarks>
+    /// <returns>A task that completes once access is given.</returns>
+    /// <exception cref="MicrophoneUnavailableException">Access is off, or there is no microphone.</exception>
+    private static async Task AskForMicrophoneAsync()
+    {
+        const int AccessDenied = unchecked((int)0x80070005);
+
+        using var capture = new MediaCapture();
+        var settings      = new MediaCaptureInitializationSettings
+        {
+            StreamingCaptureMode = StreamingCaptureMode.Audio,
+            MediaCategory        = MediaCategory.Speech,
+        };
+
+        try
+        {
+            await capture.InitializeAsync(settings);
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException || ex.HResult == AccessDenied)
+        {
+            throw new MicrophoneUnavailableException("AccessDenied", ex);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            throw new MicrophoneUnavailableException($"{ex.GetType().Name} 0x{ex.HResult:X8}", ex);
         }
     }
 

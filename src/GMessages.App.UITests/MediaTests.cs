@@ -441,6 +441,24 @@ public sealed partial class MediaTests : UiTest
         Assert.IsEmpty(VoiceTempFiles(), "A refused recording left a temp file.");
     }
 
+    /// <summary>
+    /// The settings message's link opens Windows' microphone privacy page (the test hook notes the address instead of
+    /// launching it).
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task MicDenied_SettingsLink_OpensMicrophonePage()
+    {
+        File.WriteAllText(Path.Combine(App.DataDir, "microphone.txt"), "denied");
+        await OpenMediaChatAsync();
+
+        App.Find("Chat.Record").Patterns.Invoke.Pattern.Invoke();
+        App.Find("Chat.MicSettings").Patterns.Invoke.Pattern.Invoke();
+        string launched = Path.Combine(App.DataDir, "launched.txt");
+        Wait.Until(() => File.Exists(launched), AppDriver.DefaultTimeout, () => "The settings link opened nothing.");
+        Assert.AreEqual("ms-settings:privacy-microphone", File.ReadAllLines(launched)[^1], "The settings link opened another page.");
+    }
+
     // =========================================================================
     // HELPERS
     // =========================================================================
