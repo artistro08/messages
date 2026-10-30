@@ -206,8 +206,7 @@ public sealed partial class ChatPane : UserControl
         pane.ShowScrollToBottom(false);
         pane._pinned       = true;
         pane._toNewest     = false;
-        pane._olderFromEnd = null;
-        pane._olderBubble  = null;
+        pane.EndOlderAnchor();
 
         // The Last Chat's Content Height Means Nothing Here: Unset, The First Look Counts As A Content Change, Not As The
         // Person Scrolling (Two Chats Of The Same Height Would Otherwise Unpin On The Offset Reset To The Top)
@@ -342,8 +341,7 @@ public sealed partial class ChatPane : UserControl
         // The Person Is Scrolling: An Older Page's Corrections Would Snap Them Back, So They End
         if (e.IsIntermediate && !content_changed)
         {
-            _olderFromEnd = null;
-            _olderBubble  = null;
+            EndOlderAnchor();
         }
         if (content_changed)
         {
@@ -360,7 +358,10 @@ public sealed partial class ChatPane : UserControl
         }
 
         bool show_arrow = ChatScroll.ShowScrollToBottom(scroller.VerticalOffset, scroller.ScrollableHeight, scroller.ViewportHeight);
-        bool load_older = scroller.ScrollableHeight > 0 && ChatScroll.ShouldLoadOlder(scroller.VerticalOffset, scroller.ScrollableHeight, scroller.ViewportHeight);
+        // Not While An Older Page's Corrections Are Pending: One Passing Near The Top Would Ask For Another Page, And They
+        // Wait While It Loads
+        bool load_older = scroller.ScrollableHeight > 0 && _olderBubble is null
+            && ChatScroll.ShouldLoadOlder(scroller.VerticalOffset, scroller.ScrollableHeight, scroller.ViewportHeight);
 
         ShowScrollToBottom(show_arrow);
         if (load_older)
@@ -602,7 +603,7 @@ public sealed partial class ChatPane : UserControl
     // Shown, So Each Layout After Puts The Noted Bubble Back At Its Top Until It Is There (A Few Tries At Most)
     private void KeepOlderAnchor(ScrollViewer scroller)
     {
-        if (_olderBubble is not { } bubble || Chat is null || Chat.IsLoadingOlder)
+        if (_olderBubble is null || Chat is null || Chat.IsLoadingOlder)
         {
             return;
         }
@@ -610,8 +611,7 @@ public sealed partial class ChatPane : UserControl
         // Pinned Or On The Way To The Newest Message Since: That Wins
         if (_pinned || _toNewest)
         {
-            _olderFromEnd = null;
-            _olderBubble  = null;
+            EndOlderAnchor();
             return;
         }
 
@@ -638,13 +638,32 @@ public sealed partial class ChatPane : UserControl
             }
         }
 
-        if (mark is not { } shown || Math.Abs(shown.Now - shown.Then) < 0.5 || --_olderTries <= 0)
+        // None Shown Yet (The Jump Can Still Be On Its Way When A Layout Runs): Wait For The Next Layout, Within The Tries
+        if (mark is not { } shown)
         {
-            _olderBubble = null;
+            if (--_olderTries <= 0)
+            {
+                EndOlderAnchor();
+            }
+
+            return;
+        }
+
+        if (Math.Abs(shown.Now - shown.Then) < 0.5 || --_olderTries <= 0)
+        {
+            EndOlderAnchor();
             return;
         }
 
         scroller.ChangeView(null, scroller.VerticalOffset + shown.Now - shown.Then, null, true);
+    }
+
+    // An Older Page's Anchoring Is Done, Given Up Or Overruled: No Jump Or Correction Is Left
+    private void EndOlderAnchor()
+    {
+        _olderFromEnd = null;
+        _olderBubble  = null;
+        _olderRows    = [];
     }
 
     // A Bubble's Row Top In The View, Or Null While Its Row Isn't Realized
