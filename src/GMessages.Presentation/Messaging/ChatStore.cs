@@ -964,7 +964,7 @@ public sealed partial class ChatStore : IDisposable
     /// Describes the top-level conversation fields LibGM doesn't name, without any content.
     /// </summary>
     /// <remarks>
-    /// Varints print as <c>n=value</c>, length-delimited fields as <c>n=lenL</c> (plus <c>{k=v ...}</c> when the bytes parse as a message of only varints), fixed-width fields as <c>n=fixed</c>. Strings are never printed.
+    /// Varints print as <c>n=value</c>, length-delimited fields as <c>n=lenL</c> (plus <c>{v ...}</c> when the bytes parse as a message of only varints), fixed-width fields as <c>n=fixed</c>. Strings are never printed.
     /// </remarks>
     /// <param name="conversation">The conversation as the phone sent it.</param>
     /// <returns>The fields joined by spaces in wire order, or an empty string when there are none.</returns>
@@ -994,7 +994,7 @@ public sealed partial class ChatStore : IDisposable
             {
                 case WireFormat.WireType.Varint:
                     ulong value = input.ReadUInt64();
-                    if (!known) { parts.Add($"{number}={value}"); }
+                    if (!known) { parts.Add($"{number}={(value <= 15 ? value.ToString(System.Globalization.CultureInfo.InvariantCulture) : "n")}"); }
                     break;
 
                 case WireFormat.WireType.LengthDelimited:
@@ -1041,7 +1041,7 @@ public sealed partial class ChatStore : IDisposable
 
                 // Small Values Only: Larger Ones Could Be Text Bytes
                 ulong value = nested.ReadUInt64();
-                inner.Add($"{WireFormat.GetTagFieldNumber(tag)}={(value <= 3 ? value.ToString(System.Globalization.CultureInfo.InvariantCulture) : "n")}");
+                inner.Add(value <= 3 ? value.ToString(System.Globalization.CultureInfo.InvariantCulture) : "n");
                 if (inner.Count >= 8)
                 {
                     break;

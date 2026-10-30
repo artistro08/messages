@@ -30,7 +30,7 @@ public sealed class ChatStoreTests
 
         string text = ChatStore.DescribeUnknownFields(conversation);
 
-        Assert.AreEqual("40=1 41=len11 42=len2{1=1}", text);
+        Assert.AreEqual("40=1 41=len11 42=len2{1}", text);
         Assert.IsFalse(text.Contains("secret"));
     }
 
@@ -43,7 +43,25 @@ public sealed class ChatStoreTests
 
         string text = ChatStore.DescribeUnknownFields(conversation);
 
-        Assert.AreEqual("41=len2{15=n} 42=len4{13=n 15=n}", text);
+        Assert.AreEqual("41=len2{n} 42=len4{n n}", text);
+    }
+
+    [TestMethod]
+    public void DescribeUnknownFields_LargeTopLevelVarint_Capped()
+    {
+        // Field 43 = 3195551234
+        byte[] extra = [0xD8, 0x02, .. EncodeVarint(3195551234UL)];
+        string text = ChatStore.DescribeUnknownFields(Conversation.Parser.ParseFrom(extra));
+
+        Assert.AreEqual("43=n", text);
+    }
+
+    private static byte[] EncodeVarint(ulong value)
+    {
+        List<byte> bytes = [];
+        for (; value >= 0x80; value >>= 7) { bytes.Add((byte)(value | 0x80)); }
+        bytes.Add((byte)value);
+        return [.. bytes];
     }
 
     [TestMethod]
