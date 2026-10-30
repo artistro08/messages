@@ -346,6 +346,7 @@
                                 x:Name="VoiceBars"
                                 Grid.Column="1"
                                 VerticalAlignment="Center"
+                                AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Voice.Wave.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
                                 BarBrush="{ThemeResource TextFillColorPrimaryBrush}"
                                 SeekRequested="OnVoiceSeekRequested" />
                             <TextBlock

@@ -1,9 +1,11 @@
 using GMessages.Presentation.Messaging;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
+using Windows.System;
 
 namespace GMessages.App.Views.Controls;
 
@@ -15,6 +17,11 @@ namespace GMessages.App.Views.Controls;
 /// <see cref="Show"/> draws a message's bars (see <see cref="VoiceWave"/>) and <see cref="ShowProgress"/> fills them
 /// as it plays; a click raises <see cref="SeekRequested"/> with where it landed. While recording, <see cref="Push"/>
 /// adds the newest input level on the right and moves the rest left, for a live waveform.
+/// </para>
+/// <para>
+/// Once a message's <see cref="Length"/> is set, the waveform takes keyboard focus: Left and Right seek 5 seconds back
+/// or on, and Home and End jump to the start and the end. Its UI Automation name is its value, how far it has played
+/// over its length (<c>0:01 / 0:03</c>).
 /// </para>
 /// <para>
 /// The bars take <see cref="BarBrush"/>: the primary text brush, or the on-accent text brush on an SMS bubble (so they read on
@@ -36,9 +43,13 @@ public sealed partial class Waveform : UserControl
     // The Part Not Played Yet Shows This Dim
     private const double Unplayed = 0.4;
 
+    // How Far Left And Right Seek
+    private static readonly TimeSpan KeyStep = TimeSpan.FromSeconds(5);
+
     private readonly Rectangle[] _bars = new Rectangle[VoiceWave.BarCount];
     private readonly float[] _peaks    = new float[VoiceWave.BarCount];
     private double _progress;
+    private TimeSpan _length;
 
     /// <summary>
     /// Creates the waveform: flat bars, nothing played.
@@ -53,9 +64,11 @@ public sealed partial class Waveform : UserControl
         }
 
         // Transparent, So A Click Between The Bars Still Seeks
-        Content           = new Grid { Height = WaveHeight, Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent), Children = { row } };
-        IsTabStop         = false;
-        Tapped           += OnTapped;
+        Content               = new Grid { Height = WaveHeight, Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent), Children = { row } };
+        IsTabStop             = false;
+        UseSystemFocusVisuals = true;
+        Tapped               += OnTapped;
+        KeyDown              += OnKeyDown;
         Draw();
     }
 
@@ -69,6 +82,21 @@ public sealed partial class Waveform : UserControl
     {
         get => (Brush?)GetValue(BarBrushProperty);
         set => SetValue(BarBrushProperty, value);
+    }
+
+    /// <summary>
+    /// Gets or sets how long the message plays: zero (the live waveform, or still loading) leaves it out of keyboard
+    /// focus; a length lets the keys seek, and names its value.
+    /// </summary>
+    public TimeSpan Length
+    {
+        get => _length;
+        set
+        {
+            _length   = value;
+            IsTabStop = value > TimeSpan.Zero;
+            Draw();
+        }
     }
 
     /// <summary>
@@ -117,6 +145,37 @@ public sealed partial class Waveform : UserControl
             _bars[i].Fill    = BarBrush;
             _bars[i].Opacity = i < played ? 1 : Unplayed;
         }
+
+        // Its Value For Screen Readers: Played Over Length
+        if (_length > TimeSpan.Zero)
+        {
+            AutomationProperties.SetName(this, VoiceWave.LengthText(_length * _progress) + " / " + VoiceWave.LengthText(_length));
+        }
+    }
+
+    // Left And Right Seek 5 Seconds; Home And End Jump To The Start And The End
+    private void OnKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (_length <= TimeSpan.Zero)
+        {
+            return;
+        }
+
+        double? share = e.Key switch
+        {
+            VirtualKey.Left  => _progress - (KeyStep / _length),
+            VirtualKey.Right => _progress + (KeyStep / _length),
+            VirtualKey.Home  => 0,
+            VirtualKey.End   => 1,
+            _                => null,
+        };
+        if (share is not { } to)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        SeekRequested?.Invoke(this, Math.Clamp(to, 0, 1));
     }
 
     private void OnTapped(object sender, TappedRoutedEventArgs e)
