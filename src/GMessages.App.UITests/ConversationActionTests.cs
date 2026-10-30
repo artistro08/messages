@@ -83,6 +83,67 @@ public sealed partial class ConversationActionTests : UiTest
     }
 
     /// <summary>
+    /// Moving from Ann's name onto blank space beside the time keeps the ⋮ (the name's exit isn't the row's): a click on
+    /// it still opens her menu instead of opening her chat.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task RowHover_NameToBlankSpace_KeepsMoreButton()
+    {
+        await OpenListAsync();
+
+        AutomationElement row   = App.Find("Row.c-ann");
+        AutomationElement more  = App.Find("Row.More.c-ann");
+        AutomationElement? name = null;
+        Wait.Until(() => (name = AppDriver.Search(row, e => e.ControlType == ControlType.Text && AppDriver.SafeName(e) == "Ann Lee")) is not null,
+            AppDriver.DefaultTimeout, () => "Ann's row shows no name.");
+
+        // Name, Then Blank Space Left Of The ⋮ On The Lower Line (Under The Time, Where No Icon Shows)
+        Hover(name!.BoundingRectangle);
+        System.Drawing.Rectangle more_rect = more.BoundingRectangle;
+        System.Drawing.Rectangle row_rect  = row.BoundingRectangle;
+        Hover(new System.Drawing.Rectangle(more_rect.Left - 20, row_rect.Bottom - 16, 2, 2));
+
+        // Settle Wait For Any Fade (167 ms) Before The Click
+        Thread.Sleep(500);
+        more.Click();
+
+        App.Find("Conversation.Mute");
+        Assert.IsNull(App.TryFind("Chat.Draft"), "The click opened Ann's chat: the ⋮ had hidden.");
+        Keyboard.Type(VirtualKeyShort.ESCAPE);
+    }
+
+    /// <summary>
+    /// Leaving the window straight from Ann's row hides the ⋮ (the exit reports a point inside the row, so a bounds check
+    /// would keep it): a click where it was opens her chat, not her menu.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task RowHover_LeaveWindow_HidesMoreButton()
+    {
+        await OpenListAsync();
+
+        System.Drawing.Rectangle row = App.Find("Row.c-ann").BoundingRectangle;
+        System.Drawing.Rectangle win = App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).BoundingRectangle;
+        AutomationElement more       = App.Find("Row.More.c-ann");
+        Hover(row);
+
+        // Straight Out Through The Window's Left Edge, As Real Input
+        Input[] jump = [new() { Type = InputMouse, Mouse = new MouseInput { Dx = win.Left - Mouse.Position.X - 80, Flags = MouseEventMove } }];
+        Assert.AreEqual(1u, SendInput(1, jump, Marshal.SizeOf<Input>()), "Windows refused the mouse move.");
+        if (Mouse.Position.X >= win.Left)
+        {
+            Assert.Inconclusive($"The pointer ({Mouse.Position}) couldn't leave the window ({win}) on the left.");
+        }
+
+        Thread.Sleep(500);
+        more.Click();
+
+        App.Find("Chat.Draft");
+        Assert.IsNull(App.TryFind("Conversation.Mute"), "The ⋮ stayed after the pointer left the window.");
+    }
+
+    /// <summary>
     /// Mute sends the phone a mute, the row shows the muted icon, and the menu then offers Unmute instead.
     /// </summary>
     /// <returns>A task for the test.</returns>
