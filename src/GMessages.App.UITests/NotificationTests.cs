@@ -239,17 +239,15 @@ public sealed class NotificationTests : UiTest
     }
 
     /// <summary>
-    /// A snoozed toast doesn't come back after a sign-out.
+    /// A snoozed toast's banner is removed by a sign-out.
     /// </summary>
     /// <remarks>
-    /// The snooze length is the default (15 minutes): the settings accept only 5, 15, 60 or 240, so a wake inside the
-    /// watched time can't happen either way. This checks that Snooze followed by a sign-out leaves no toast; that the
-    /// clear cancels a waiting snooze is covered by <c>ToastMemoryTests</c>.
+    /// That the clear also cancels the waiting snooze is covered by <c>ToastMemoryTests</c>: the shortest snooze the
+    /// settings accept is 5 minutes, too long to watch for here.
     /// </remarks>
     /// <returns>A task for the test.</returns>
     [TestMethod]
-    [TestCategory("Slow")]
-    public async Task SignOut_SnoozedToastNeverReturns()
+    public async Task SignOut_AfterSnooze_RemovesToast()
     {
         await PairAsync();
         Server.Phone.PushIncoming("c-ann", "snoozed marker");
@@ -259,9 +257,8 @@ public sealed class NotificationTests : UiTest
         AppDriver.Search(toast, e => e.ControlType == ControlType.Button && AppDriver.SafeName(e) == ChatCopy.Snooze)!.Patterns.Invoke.Pattern.Invoke();
         Server.KillLongPoll(401);
 
-        // The Banner Of An Unattended Machine Stays Until The Sign-Out Clears It; After That None May Return
+        // The Banner Of An Unattended Machine Stays Until The Sign-Out Clears It
         Wait.Until(() => _toasts.TryFind("snoozed marker") is null, SignOutTime, () => "The toast stayed after sign-out.");
-        _toasts.AssertNone("snoozed marker", TimeSpan.FromSeconds(70));
     }
 
     // =========================================================================
