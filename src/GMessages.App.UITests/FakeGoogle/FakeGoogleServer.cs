@@ -120,6 +120,7 @@ public sealed class FakeGoogleServer : IAsyncDisposable
     private int _killStatus;
     private volatile bool _rejectCookies;
     private volatile bool _slowStart;
+    private volatile bool _failMediaDownloads;
 
     /// <summary>
     /// Starts the server on a free port of 127.0.0.1.
@@ -190,6 +191,15 @@ public sealed class FakeGoogleServer : IAsyncDisposable
     {
         get => _slowStart;
         set => _slowStart = value;
+    }
+
+    /// <summary>
+    /// Gets or sets whether media downloads are answered with a 500, as a failing download.
+    /// </summary>
+    public bool FailMediaDownloads
+    {
+        get => _failMediaDownloads;
+        set => _failMediaDownloads = value;
     }
 
     /// <summary>
@@ -371,7 +381,9 @@ public sealed class FakeGoogleServer : IAsyncDisposable
                 case "/upload" when request.HttpMethod == "GET":
                     var download  = DownloadAttachmentRequest.Parser.ParseFrom(Convert.FromBase64String(request.Headers["x-goog-download-metadata"] ?? ""));
                     byte[]? media = Phone.Chats.MediaBytes(download.Info?.AttachmentID ?? "");
-                    await (media is null
+                    await (_failMediaDownloads
+                        ? RespondAsync(context.Response, 500, "text/plain", "Download failed"u8.ToArray())
+                        : media is null
                         ? RespondAsync(context.Response, 404, "text/plain", "No such media"u8.ToArray())
                         : RespondAsync(context.Response, 200, "application/octet-stream", media));
                     break;

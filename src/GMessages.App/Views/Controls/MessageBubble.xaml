@@ -116,6 +116,24 @@
                         </MenuFlyoutItem.Icon>
                     </MenuFlyoutItem>
                     <MenuFlyoutItem
+                        AutomationProperties.AutomationId="Bubble.Open"
+                        Click="OnOpenClick"
+                        Text="{x:Bind local:MessageBubble.OpenText}"
+                        Visibility="{x:Bind Bubble.HasMediaFile, Mode=OneWay, FallbackValue=Collapsed}">
+                        <MenuFlyoutItem.Icon>
+                            <FontIcon Glyph="&#xE8E5;" />
+                        </MenuFlyoutItem.Icon>
+                    </MenuFlyoutItem>
+                    <MenuFlyoutItem
+                        AutomationProperties.AutomationId="Bubble.SaveAs"
+                        Click="OnSaveAsClick"
+                        Text="{x:Bind local:MessageBubble.SaveAsText}"
+                        Visibility="{x:Bind Bubble.HasMediaFile, Mode=OneWay, FallbackValue=Collapsed}">
+                        <MenuFlyoutItem.Icon>
+                            <FontIcon Glyph="&#xE792;" />
+                        </MenuFlyoutItem.Icon>
+                    </MenuFlyoutItem>
+                    <MenuFlyoutItem
                         AutomationProperties.AutomationId="Bubble.React"
                         Click="OnReactClick"
                         KeyboardAcceleratorTextOverride="Shift + +"
@@ -172,7 +190,7 @@
                 <Border
                     x:Name="Back"
                     Grid.Column="1"
-                    Padding="12,8"
+                    Padding="{x:Bind local:MessageBubble.BackPadding(Bubble.HasPhoto), Mode=OneWay}"
                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                     BorderThickness="1"
@@ -213,10 +231,50 @@
                             </StackPanel>
                         </Grid>
 
+                        <!-- Photo: edge to edge in the bubble, rounded to its corners. The thumbnail shows first, decoded tiny
+                             and stretched (blurred), then the full image fades in over it. The size is kept from the photo's
+                             dimensions before anything loads (set from code), so nothing moves when it arrives. A click opens it
+                             in the default photo app, or after a failure tries again. Named by its caption, else "Photo" -->
+                        <Button
+                            x:Name="Photo"
+                            Padding="0"
+                            HorizontalContentAlignment="Stretch"
+                            VerticalContentAlignment="Stretch"
+                            AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Bubble.Photo.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                            AutomationProperties.Name="{x:Bind Bubble.PhotoName, Mode=OneWay, FallbackValue=''}"
+                            Click="OnPhotoClick"
+                            CornerRadius="{x:Bind local:MessageBubble.PhotoCorners(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup, Bubble.HasBodyText), Mode=OneWay}"
+                            Style="{StaticResource IconButtonStyle}"
+                            Visibility="{x:Bind Bubble.HasPhoto, Mode=OneWay, FallbackValue=Collapsed}">
+                            <Grid>
+                                <Border x:Name="PhotoBlur" />
+                                <Border x:Name="PhotoFull" Opacity="0" />
+
+                                <!-- Note: waiting for the phone, or the failure (click to try again), on a small plate over the photo -->
+                                <Border
+                                    x:Name="PhotoNoteBack"
+                                    Margin="12"
+                                    Padding="8,4"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}"
+                                    CornerRadius="4"
+                                    Visibility="Collapsed">
+                                    <TextBlock
+                                        x:Name="PhotoNote"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        TextAlignment="Center"
+                                        TextWrapping="Wrap" />
+                                </Border>
+                            </Grid>
+                        </Button>
+                        <!-- /Photo -->
+
                         <!-- Text: while the preview card shows, without the card's link (Bubble.BodyText); a message that was
                              only the link shows the card alone -->
                         <TextBlock
                             x:Name="Body"
+                            Margin="{x:Bind local:MessageBubble.CaptionMargin(Bubble.HasPhoto), Mode=OneWay}"
                             AutomationProperties.AutomationId="{x:Bind local:MessageBubble.AutomationIdOf(Bubble.Id, Bubble.TmpId), Mode=OneWay}"
                             AutomationProperties.ItemType="{x:Bind Bubble.ItemTypeName, Mode=OneWay, FallbackValue=''}"
                             IsTextSelectionEnabled="True"

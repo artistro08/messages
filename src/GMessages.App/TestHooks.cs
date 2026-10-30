@@ -46,6 +46,37 @@ internal static class TestHooks
     /// True when pointed at the fake server: a clicked link is only logged, never opened in a browser.
     /// </summary>
     public static bool BlockLaunches => EndpointBase is not null;
+
+    /// <summary>
+    /// When pointed at the fake server, notes a file the app would open in its default app in
+    /// <c>{data folder}\launched.txt</c> (one full path per line) instead of opening it.
+    /// </summary>
+    /// <param name="path">The file's full path.</param>
+    /// <returns>True when noted (the caller must not launch it); false on a normal run.</returns>
+    public static bool RecordLaunch(string path)
+    {
+        if (!BlockLaunches || DataDir is null)
+        {
+            return false;
+        }
+
+        File.AppendAllText(Path.Combine(DataDir, "launched.txt"), path + Environment.NewLine);
+        return true;
+    }
+
+    /// <summary>
+    /// When pointed at the fake server, puts an element's internal state (such as a photo's "Blurred" or "Full") in its
+    /// UI Automation item status, for the tests to read. Does nothing on a normal run.
+    /// </summary>
+    /// <param name="element">The element.</param>
+    /// <param name="state">The state's name.</param>
+    public static void ShowState(Microsoft.UI.Xaml.DependencyObject element, string state)
+    {
+        if (BlockLaunches)
+        {
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetItemStatus(element, state);
+        }
+    }
 }
 #else
 /// <summary>
@@ -70,5 +101,17 @@ internal static class TestHooks
 
     /// <summary>Always false in Release: a clicked link opens in the default browser.</summary>
     public static bool BlockLaunches => false;
+
+    /// <summary>Always false in Release: the file opens in its default app.</summary>
+    /// <param name="path">The file's full path.</param>
+    /// <returns>False.</returns>
+    public static bool RecordLaunch(string path) => false;
+
+    /// <summary>Does nothing in Release.</summary>
+    /// <param name="element">The element.</param>
+    /// <param name="state">The state's name.</param>
+    public static void ShowState(Microsoft.UI.Xaml.DependencyObject element, string state)
+    {
+    }
 }
 #endif

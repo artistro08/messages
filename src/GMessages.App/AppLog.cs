@@ -71,6 +71,12 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 921, Level = LogLevel.Information, Message = "Link opened ({Scheme}, launched: {Launched})")]
     public static partial void LinkOpened(ILogger logger, string scheme, bool launched);
 
+    [LoggerMessage(EventId = 922, Level = LogLevel.Warning, Message = "Media {Action} failed for {MessageId} ({ErrorType})")]
+    public static partial void MediaFailed(ILogger logger, string action, string messageId, string errorType);
+
+    [LoggerMessage(EventId = 923, Level = LogLevel.Information, Message = "Media opened for {MessageId} (launched: {Launched})")]
+    public static partial void MediaOpened(ILogger logger, string messageId, bool launched);
+
     [LoggerMessage(EventId = 951,Level = LogLevel.Information, Message = "Test endpoint {Endpoint}, data folder {DataFolder}")]
     public static partial void TestEndpoint(ILogger logger, string endpoint, string dataFolder);
 }
