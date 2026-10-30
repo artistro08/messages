@@ -28,8 +28,8 @@ public sealed class ConversationDetailsViewModelTests
         // A Saved Person: Full Name, Formatted Number, Their Letter, Color And Photo
         Assert.AreEqual(new PersonRow("Bo", "(555) 000-0002", "B", 0xFF112233, "p-bo"), details.People[0]);
 
-        // A Number Only: The Raw Number Twice, No Letter (The Person Icon), The Fallback Gray
-        Assert.AreEqual(new PersonRow("+15550000009", "+15550000009", string.Empty, AvatarParts.FallbackColor, "p-x"), details.People[1]);
+        // A Number Only: The Raw Number Once (As The Name, No Second Line), No Letter (The Person Icon), The Fallback Gray
+        Assert.AreEqual(new PersonRow("+15550000009", string.Empty, string.Empty, AvatarParts.FallbackColor, "p-x"), details.People[1]);
     }
 
     [TestMethod]
@@ -46,5 +46,18 @@ public sealed class ConversationDetailsViewModelTests
 
         Assert.AreEqual(expected, details.CanBlock);
         Assert.AreEqual(muted, details.IsMuted);
+    }
+
+    [TestMethod]
+    [DataRow(ConversationStatus.Active, false, true)]
+    [DataRow(ConversationStatus.Archived, true, true)]
+    [DataRow(ConversationStatus.KeepArchived, false, true)]
+    [DataRow(ConversationStatus.SpamFolder, false, false)]
+    [DataRow(ConversationStatus.BlockedFolder, true, false)]
+    public void CanMute_FalseForSpamAndBlocked(ConversationStatus status, bool muted, bool expected)
+    {
+        ConversationInfo c = ConversationInfo.From(MainRig.Conv("a", "Ann", status: status)) with { IsMuted = muted };
+
+        Assert.AreEqual(expected, new ConversationDetailsViewModel(c).CanMute);
     }
 }

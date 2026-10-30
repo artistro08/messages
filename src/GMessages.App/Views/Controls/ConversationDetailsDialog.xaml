@@ -35,7 +35,8 @@
                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                 MaxLines="1"
                                 Text="{x:Bind Number}"
-                                TextTrimming="CharacterEllipsis" />
+                                TextTrimming="CharacterEllipsis"
+                                Visibility="{x:Bind local:MessageBubble.ShownIfText(Number)}" />
                         </StackPanel>
                     </Grid>
                 </DataTemplate>
