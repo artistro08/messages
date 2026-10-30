@@ -619,7 +619,7 @@ public sealed partial class ChatStore : IDisposable
         UpdateConversationResponse response = await client.UpdateConversationAsync(BuildRequest(conversation, action), ct);
         if (!response.Success)
         {
-            LogSendRefused(conversationId, "ConversationUpdateRefused");
+            LogConversationUpdateRefused(conversationId);
             throw new MessageSendException("ConversationUpdateRefused");
         }
 
@@ -1114,6 +1114,9 @@ public sealed partial class ChatStore : IDisposable
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Phone refused a send in {ConversationId} ({Status})")]
     private partial void LogSendRefused(string conversationId, string status);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Phone refused a conversation update ({ConversationId})")]
+    private partial void LogConversationUpdateRefused(string conversationId);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Could not fetch conversation {ConversationId} ({ErrorType})")]
     private partial void LogConversationFetchFailed(string conversationId, string errorType);
