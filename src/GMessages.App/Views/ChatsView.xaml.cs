@@ -476,9 +476,18 @@ public sealed partial class ChatsView : UserControl
     }
 
     // Async Void Like A Click Handler, So A Failure Reaches The App's Unhandled Error Log (The Action's Own Failures Show
-    // The Banner)
-    private async void RunMenuItem(XamlRoot root, ConversationInfo c, ConversationMenuItem item) =>
+    // The Banner). An Action That Closed The Open Chat Takes The Message Box With It, So Focus Goes Back To The List As
+    // Escape Does
+    private async void RunMenuItem(XamlRoot root, ConversationInfo c, ConversationMenuItem item)
+    {
+        bool was_open = ViewModel.SelectedConversationId == c.Id;
         await ConversationMenuFlyout.RunAsync(ViewModel, root, c, item, () => ShowDetailsAsync(root, c.Id));
+
+        if (was_open && !ViewModel.IsChatOpen)
+        {
+            DispatcherQueue.TryEnqueue(() => ConversationList.Focus(FocusState.Programmatic));
+        }
+    }
 
     // Details, Read Fresh From The Store (One Dialog At A Time, As The Menu's). Its Block & Report Spam Closes It, Then
     // Asks As The Menu Does
@@ -502,12 +511,12 @@ public sealed partial class ChatsView : UserControl
         }
     }
 
-    // A Conversation Shortcut On The Open Chat, Read Fresh From The Store; Not Handled With No Chat Open. Archive Only
-    // From The Inbox
+    // A Conversation Shortcut On The Open Chat, Read Fresh From The Store; Not Handled With No Chat Open, Or When The
+    // Header's Menu Doesn't Offer The Item (Such As Archive Outside The Inbox)
     private bool RunOnOpenChat(ConversationMenuItem item)
     {
         if (!ViewModel.IsChatOpen || ViewModel.Chat is not { } chat || ViewModel.FindConversation(chat.ConversationId) is not { } c
-            || XamlRoot is not { } root || (item == ConversationMenuItem.Archive && !c.IsMainView))
+            || XamlRoot is not { } root || !ConversationMenu.For(c, inHeader: true).Contains(item))
         {
             return false;
         }
