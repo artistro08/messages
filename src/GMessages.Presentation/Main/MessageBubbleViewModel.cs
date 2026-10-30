@@ -240,6 +240,19 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     /// </summary>
     public bool HasCopyText { get; private set; }
 
+    /// <summary>
+    /// Tells whether a focused bubble draws its own ring around its back (owner request, 2026-10-30).
+    /// </summary>
+    /// <remarks>
+    /// Only focus from the keyboard (Ctrl + j, the arrow keys, Tab) or from code rings the bubble; a click doesn't. With
+    /// high contrast on, the bubble draws no ring: the list's own system focus visual shows instead.
+    /// </remarks>
+    /// <param name="focused">True while the bubble's row has focus.</param>
+    /// <param name="byPointer">True when the focus came from a click or touch.</param>
+    /// <param name="highContrast">True while Windows' high contrast is on.</param>
+    /// <returns>True when the ring shows.</returns>
+    public static bool ShowsFocusRing(bool focused, bool byPointer, bool highContrast) => focused && !byPointer && !highContrast;
+
     /// <summary>Gets the card's file name: the sender's, or the kind label ("Video", "File") without one.</summary>
     public string FileName => Media is { Name.Length: > 0 } media ? media.Name : ChatFormat.KindLabel(Kind);
 

@@ -259,6 +259,14 @@ public sealed class MessageBubbleViewModelTests
     }
 
     [TestMethod]
+    [DataRow(true, false, false, true)]
+    [DataRow(true, true, false, false)]
+    [DataRow(true, false, true, false)]
+    [DataRow(false, false, false, false)]
+    public void FocusRing_KeyboardOnly_NotInHighContrast(bool focused, bool byPointer, bool highContrast, bool expected) =>
+        Assert.AreEqual(expected, MessageBubbleViewModel.ShowsFocusRing(focused, byPointer, highContrast));
+
+    [TestMethod]
     public void Bubble_PhotoWithCaption_ShowsCaption()
     {
         var bubble = new MessageBubbleViewModel(MediaMessage(MessageKind.Photo, "At the beach"));

@@ -365,6 +365,28 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
+    /// Focus on the newest message (as the keyboard moves it) makes its bubble draw its own ring while the row's system focus
+    /// visual stays off; focus leaving takes the ring away, and a click on the bubble doesn't bring it back (owner request).
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task KeyboardFocus_RingsTheBubble_NotTheRow()
+    {
+        await OpenChatAsync("Row.c-ann");
+        AutomationElement text = App.Find("Bubble." + Find("c-ann", AnnLast).MessageID);
+
+        FocusLastRow();
+        WaitForRing(text, "FocusRing");
+
+        App.Find("Chat.Draft").Focus();
+        WaitForRing(text, "NoRing");
+
+        text.Click();
+        Thread.Sleep(300);
+        Assert.AreNotEqual("FocusRing", text.Properties.ItemStatus.ValueOrDefault, "A click rang the bubble.");
+    }
+
+    /// <summary>
     /// With the mouse over Ann's last bubble, the hover strip's Reply starts a reply to it.
     /// </summary>
     /// <returns>A task for the test.</returns>
@@ -579,6 +601,14 @@ public sealed class RcsTests : UiTest
     // =========================================================================
     // HELPERS
     // =========================================================================
+
+    // Waits For A Bubble's Focus Ring State (Its Text's Item Status In A Test Run; See MessageBubble.ShowFocusRing)
+    private static void WaitForRing(AutomationElement text, string state)
+    {
+        string last = "";
+        Wait.Until(() => (last = text.Properties.ItemStatus.ValueOrDefault ?? "") == state, AppDriver.DefaultTimeout,
+            () => $"The bubble's ring read '{last}', not '{state}'.");
+    }
 
     // Opens The Main Window And A Row's Chat, Waits For Its Bubbles And Brings The Window To The Front (A Real Right-Click
     // Lands On Whatever Window Is On Top), With The Cursor In The Message Box

@@ -93,6 +93,17 @@
                     </VisualState.Setters>
                 </VisualState>
             </VisualStateGroup>
+
+            <!-- Focus Ring: the ring around the back while the bubble's row has keyboard (or programmatic) focus, set by the
+                 chat pane. Named apart from Hover's Hidden and Shown: GoToState finds a state by name across groups -->
+            <VisualStateGroup x:Name="FocusRingStates">
+                <VisualState x:Name="RingHidden" />
+                <VisualState x:Name="RingShown">
+                    <VisualState.Setters>
+                        <Setter Target="FocusRing.Visibility" Value="Visible" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
         </VisualStateManager.VisualStateGroups>
 
         <!-- Bubble: sender name, the quote, text and link preview on its colored back, the reaction pill on its bottom corner, then the
@@ -371,6 +382,25 @@
                             </StackPanel>
                         </Button>
                     </StackPanel>
+                </Border>
+
+                <!-- Focus Ring: hugs the back (photos and cards too) 3 px out, following its corners, grouped ones included:
+                     Fluent's focus stroke, a 2 px outer ring with a 1 px inner one, as Windows' own focus visual. Drawn only
+                     while the row has keyboard focus (see FocusRingStates); never in high contrast, where the row's system
+                     focus visual shows instead. Takes no clicks -->
+                <Border
+                    x:Name="FocusRing"
+                    Grid.Column="1"
+                    Margin="-3"
+                    BorderBrush="{ThemeResource FocusStrokeColorOuterBrush}"
+                    BorderThickness="2"
+                    CornerRadius="{x:Bind local:MessageBubble.RingCorners(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup, 3), Mode=OneWay}"
+                    IsHitTestVisible="False"
+                    Visibility="Collapsed">
+                    <Border
+                        BorderBrush="{ThemeResource FocusStrokeColorInnerBrush}"
+                        BorderThickness="1"
+                        CornerRadius="{x:Bind local:MessageBubble.RingCorners(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup, 1), Mode=OneWay}" />
                 </Border>
 
                 <!-- Hover Strip: react, reply and the ⋮ (see Hover above), right of a received back and left of a sent one (the
