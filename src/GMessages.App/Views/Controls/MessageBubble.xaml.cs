@@ -17,6 +17,7 @@ using Windows.Storage;
 using Windows.Storage.Pickers;
 using Windows.System;
 using Windows.UI.ViewManagement;
+using WinRT;
 
 namespace GMessages.App.Views.Controls;
 
@@ -104,7 +105,8 @@ public sealed partial class MessageBubble : UserControl
 
     // Who Reacted: The List Scrolls Past This Height, And Each Row's Emoji Sits This Far From The Name
     private const double ReactorsMaxHeight = 320;
-    private const double ReactorsSpacing   = 12;
+    private const double ReactorsSpacing   = 8;
+    private const double ReactorsRowHeight = 32;
 
     // Width: A Bubble Grows With Its Content Up To This Share Of The Chat, And Never Past The Cap (Effective Pixels)
     private const double MaxWidthShare  = 0.7;
@@ -1132,7 +1134,8 @@ public sealed partial class MessageBubble : UserControl
     }
 
     // Who Reacted: A List In A Flyout At The Pill, One Row Per Person ("👍 Bo"), Named For Narrator (Reactors.{n}). The
-    // Rows Only Read, So They Show No Hover Or Press Fill. Names Never Reach The Log
+    // Rows Only Read, So They Show No Hover Or Press Fill. Compact Like A Menu: 32 px Rows, 8 px From Emoji To Name, And A
+    // Menu's Thin Edge Around The List. Names Never Reach The Log
     private void ShowReactors(IReadOnlyList<(string Emoji, string Name)> reactors)
     {
         if (reactors.Count == 0)
@@ -1153,13 +1156,13 @@ public sealed partial class MessageBubble : UserControl
             row.Children.Add(new TextBlock { Text = emoji, IsColorFontEnabled = true });
             row.Children.Add(new TextBlock { Text = name });
 
-            var item = new ListViewItem { Content = row };
+            var item = new ListViewItem { Content = row, MinHeight = ReactorsRowHeight };
             AutomationProperties.SetAutomationId(item, "Reactors." + i);
             AutomationProperties.SetName(item, emoji + " " + name);
             list.Items.Add(item);
         }
 
-        new Flyout { Content = list }.ShowAt(Pill);
+        new Flyout { Content = list, FlyoutPresenterStyle = Application.Current.Resources["ReactorsFlyoutPresenterStyle"].As<Style>() }.ShowAt(Pill);
     }
 
     // The Strip's Buttons Act Only While The Bubble Takes Them (A Click Can Race A Change). Its React Opens The Picker

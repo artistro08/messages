@@ -94,6 +94,9 @@ public sealed partial class ChatPane : UserControl
     private MessageBubbleViewModel? _reactTarget;
     private MessageBubble? _reactView;
 
+    // The Picker's Buttons With Their Emoji, So The One Matching My Reaction Can Show Selected
+    private readonly List<(Button Button, string Emoji)> _reactionButtons = [];
+
     // On The Way To The Newest Message (See ScrollToNewest)
     private bool _toNewest;
 
@@ -125,6 +128,7 @@ public sealed partial class ChatPane : UserControl
             AutomationProperties.SetAutomationId(button, "ReactionPicker." + i);
             button.Click += (_, _) => React(emoji);
             ReactionButtons.Children.Add(button);
+            _reactionButtons.Add((button, emoji));
         }
 
         ReactionPicker.Closed += (_, _) =>
@@ -678,6 +682,23 @@ public sealed partial class ChatPane : UserControl
         _reactTarget = bubble;
         _reactView   = view;
         view.KeepShown(true);
+
+        // My Reaction Shows Selected: The Pill's Accent Fill, And Narrator Reads "Selected"
+        Style selected = ReactionButtons.Resources["ReactionButtonSelectedStyle"].As<Style>();
+        foreach ((Button button, string emoji) in _reactionButtons)
+        {
+            if (emoji == bubble.MyReaction)
+            {
+                button.Style = selected;
+                AutomationProperties.SetItemStatus(button, ChatCopy.Selected);
+            }
+            else
+            {
+                button.ClearValue(StyleProperty);
+                button.ClearValue(AutomationProperties.ItemStatusProperty);
+            }
+        }
+
         ReactionPicker.ShowAt(anchor);
         return true;
     }

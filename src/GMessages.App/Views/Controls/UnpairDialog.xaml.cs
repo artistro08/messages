@@ -15,7 +15,11 @@ public sealed partial class UnpairDialog : ContentDialog
     /// <summary>
     /// Creates the dialog.
     /// </summary>
-    public UnpairDialog() => InitializeComponent();
+    public UnpairDialog()
+    {
+        InitializeComponent();
+        Dialogs.UseFluentStyle(this);
+    }
 
     /// <summary>
     /// Asks first, then unpairs through the settings view model when the user confirms.

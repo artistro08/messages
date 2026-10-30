@@ -43,6 +43,7 @@ public sealed partial class ConversationDetailsDialog : ContentDialog
         _viewModel      = viewModel;
         _conversationId = c.Id;
         InitializeComponent();
+        Dialogs.UseFluentStyle(this);
 
         var details = new ConversationDetailsViewModel(c);
 

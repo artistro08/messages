@@ -52,6 +52,7 @@ public static class ChatCopy
 
     // Reactions, Replies, Encryption And Typing (Controller Copy; Owner Signs Off)
     public const string React             = "React";
+    public const string Selected          = "Selected";
     public const string CancelReply       = "Cancel reply";
     public const string EndToEndEncrypted = "End-to-end encrypted";
     public const string Typing            = "Typing";
