@@ -81,6 +81,7 @@ public sealed class LinkPreviewerTests
     [DataRow("")]
     [DataRow("ftp://x.com file:///c:/x javascript:alert(1) ms-settings:display")]
     [DataRow("awww.example.com and https:// alone")]
+    [DataRow("www.bank.com@evil.example/login and https://user:pw@x.com/a")]
     public void FindLinks_None(string text) => Assert.AreEqual(string.Empty, Links(text));
 
     /// <summary>

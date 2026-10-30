@@ -244,28 +244,26 @@
 
                 <!-- Hover And Press: opaque shades of the pill's own fill, so the button's 83 ms brush transition blends
                      smoothly. The default hover fill is a faint see-through white, and blending the opaque fill into it
-                     passes through a bright half-opaque gray for a frame or two (the flash). No outline: the 1 px border is clear
-                     (the fill runs under it, so the pill keeps its size). High contrast keeps an edge and the system
-                     button's own hover and press colors, so the pill and its hover still show -->
+                     passes through a bright half-opaque gray for a frame or two (the flash). No outline: the 1 px border is
+                     clear (ReactionPillBorderBrush in App.xaml; the fill runs under it, so the pill keeps its size). High
+                     contrast keeps an edge and the system button's own hover and press colors, so the pill and its hover
+                     still show -->
                 <Button.Resources>
                     <ResourceDictionary>
                         <ResourceDictionary.ThemeDictionaries>
                             <ResourceDictionary x:Key="Default">
-                                <SolidColorBrush x:Key="ReactionPillBorderBrush" Color="Transparent" />
                                 <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="SolidBackgroundFillColorQuarternaryBrush" />
                                 <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="SolidBackgroundFillColorSecondaryBrush" />
                                 <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="Transparent" />
                                 <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="Transparent" />
                             </ResourceDictionary>
                             <ResourceDictionary x:Key="Light">
-                                <SolidColorBrush x:Key="ReactionPillBorderBrush" Color="Transparent" />
                                 <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="SolidBackgroundFillColorQuarternaryBrush" />
                                 <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="SolidBackgroundFillColorSecondaryBrush" />
                                 <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="Transparent" />
                                 <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="Transparent" />
                             </ResourceDictionary>
                             <ResourceDictionary x:Key="HighContrast">
-                                <SolidColorBrush x:Key="ReactionPillBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
                                 <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="{ThemeResource SystemColorHighlightTextColor}" />
                                 <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="{ThemeResource SystemColorHighlightTextColor}" />
                                 <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="{ThemeResource SystemColorHighlightColor}" />

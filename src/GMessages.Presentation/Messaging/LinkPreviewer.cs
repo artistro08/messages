@@ -155,8 +155,9 @@ public sealed partial class LinkPreviewer : IDisposable
     /// A bare <c>www.</c> host opens over <c>https</c>.
     /// </para>
     /// <para>
-    /// Only <c>http</c> and <c>https</c> addresses come back, so a <c>file:</c>, <c>javascript:</c> or <c>ms-</c> link in
-    /// the text stays plain text. Works on the shown text (<see cref="ChatFormat.WithColorEmoji"/>) as well as the original.
+    /// Only <c>http</c> and <c>https</c> addresses with no user name come back, so a <c>file:</c>, <c>javascript:</c> or
+    /// <c>ms-</c> link, or one that hides its real host behind a user name (<c>www.bank.com@evil.example</c>), stays
+    /// plain text. Works on the shown text (<see cref="ChatFormat.WithColorEmoji"/>) as well as the original.
     /// </para>
     /// </remarks>
     /// <param name="text">The message text.</param>
@@ -171,7 +172,7 @@ public sealed partial class LinkPreviewer : IDisposable
             string shown   = TrimLink(match.Value);
             string address = shown.StartsWith("www.", StringComparison.OrdinalIgnoreCase) ? "https://" + shown : shown;
             if (Uri.TryCreate(address, UriKind.Absolute, out Uri? uri) && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)
-                && uri.Host.Length > 0)
+                && uri.Host.Length > 0 && uri.UserInfo.Length == 0)
             {
                 links.Add(new TextLink(match.Index, shown.Length, uri));
             }

@@ -14,7 +14,10 @@
                  window color, so the border is the text color to keep the bubble's edge.
                  Reply Quote: a tint of the bubble it sits in with an accent bar. On the card color and on the RCS shade it is the
                  accent, faint; on the full accent (SMS) it is the text-on-accent color, faint, with a bar of that color. In
-                 high contrast the quote takes the bubble's own color (window, or highlight on SMS) and a highlight bar -->
+                 high contrast the quote takes the bubble's own color (window, or highlight on SMS) and a highlight bar.
+                 Reaction Pill Edge: none (clear) in Light and Dark; the text color in high contrast, so the pill keeps an edge.
+                 Here, not in the pill's own resources: a ThemeResource on an element can't see keys its own Resources define
+                 after it, and the failed lookup crashed the app as soon as a bubble was made -->
             <ResourceDictionary.ThemeDictionaries>
                 <ResourceDictionary x:Key="Light">
                     <SolidColorBrush x:Key="RcsBubbleBrush" Color="{ThemeResource SystemAccentColorLight2}" />
@@ -22,6 +25,7 @@
                     <SolidColorBrush x:Key="QuoteFillBrush" Opacity="0.14" Color="{ThemeResource SystemAccentColorDark1}" />
                     <SolidColorBrush x:Key="QuoteBarBrush" Color="{ThemeResource SystemAccentColorDark1}" />
                     <SolidColorBrush x:Key="QuoteOnAccentFillBrush" Opacity="0.18" Color="{ThemeResource TextOnAccentFillColorPrimary}" />
+                    <SolidColorBrush x:Key="ReactionPillBorderBrush" Color="Transparent" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
                     <SolidColorBrush x:Key="RcsBubbleBrush" Color="{ThemeResource SystemAccentColorDark1}" />
@@ -29,6 +33,7 @@
                     <SolidColorBrush x:Key="QuoteFillBrush" Opacity="0.18" Color="{ThemeResource SystemAccentColorLight2}" />
                     <SolidColorBrush x:Key="QuoteBarBrush" Color="{ThemeResource SystemAccentColorLight2}" />
                     <SolidColorBrush x:Key="QuoteOnAccentFillBrush" Opacity="0.18" Color="{ThemeResource TextOnAccentFillColorPrimary}" />
+                    <SolidColorBrush x:Key="ReactionPillBorderBrush" Color="Transparent" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="HighContrast">
                     <SolidColorBrush x:Key="RcsBubbleBrush" Color="{ThemeResource SystemColorWindowColor}" />
@@ -36,6 +41,7 @@
                     <SolidColorBrush x:Key="QuoteFillBrush" Color="{ThemeResource SystemColorWindowColor}" />
                     <SolidColorBrush x:Key="QuoteBarBrush" Color="{ThemeResource SystemColorHighlightColor}" />
                     <SolidColorBrush x:Key="QuoteOnAccentFillBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+                    <SolidColorBrush x:Key="ReactionPillBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
         </ResourceDictionary>
