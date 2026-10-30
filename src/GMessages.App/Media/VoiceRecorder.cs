@@ -143,7 +143,8 @@ internal sealed class VoiceRecorder : IDisposable
                 throw new MicrophoneUnavailableException(input.Status.ToString());
             }
 
-            // TODO: Diagnostic (Owner: The Chosen Microphone Isn't Used); Trim Once The Cause Is Known
+            // TODO: Diagnostic (Owner: The Chosen Microphone Isn't Used). Cause Found In 0.5.9: A Pick On A Reopened Settings
+            // Page Was Never Saved, So The Old Microphone Recorded. Trim Once The Owner Confirms The Fix
             LogOpenedDevice(input.DeviceInputNode.Device?.Id, microphoneId);
 
             // The File (M4A, AAC) And The Levels

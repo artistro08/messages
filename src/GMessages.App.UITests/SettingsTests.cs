@@ -78,7 +78,8 @@ public sealed class SettingsTests : UiTest
 
     /// <summary>
     /// A second open of settings, after a microphone was picked, still shows the theme, the snooze length and that
-    /// microphone (the reopened page once threw on the saved microphone and left the dropdowns blank).
+    /// microphone, and saves a new pick (the reopened page once threw on the saved microphone, left the dropdowns blank
+    /// and saved nothing picked on it).
     /// </summary>
     [TestMethod]
     public void Settings_Reopen_AfterPickingMicrophone_ShowsEveryValue()
@@ -104,6 +105,20 @@ public sealed class SettingsTests : UiTest
         Wait.Until(() => ThemeIndex() == 0, AppDriver.DefaultTimeout, () => $"Theme came back as index {ThemeIndex()}, not 'Use system setting'.");
         Wait.Until(() => SnoozeLength() == ChatCopy.Minutes15, AppDriver.DefaultTimeout, () => $"Snooze length came back as '{SnoozeLength()}', not 15 minutes.");
         WaitForToggle("Settings.Notifications", ToggleState.On);
+
+        // A Pick On The Reopened Page Is Saved Too (It Wasn't: The Failed Binding Pass Left Its Write-Backs Off, So The
+        // Recorder Kept The Old Microphone)
+        microphone = App.Find("Settings.Microphone").AsComboBox();
+        microphone.Expand();
+        Wait.Until(() => microphone.Items.Length > 2, AppDriver.DefaultTimeout, () => "This PC has no second microphone to pick.");
+        string repicked = AppDriver.SafeName(microphone.Items[2]);
+        microphone.Select(2);
+        microphone.Collapse();
+        Wait.Until(() => Microphone() == repicked, AppDriver.DefaultTimeout, () => $"Microphone shows '{Microphone()}', not the one picked again.");
+        App.Find("Settings.Back").Patterns.Invoke.Pattern.Invoke();
+        WaitForGone("Settings.Back");
+        OpenSettings();
+        Wait.Until(() => Microphone() == repicked, AppDriver.DefaultTimeout, () => $"The reopened page's pick wasn't saved: Microphone shows '{Microphone()}'.");
     }
 
     /// <summary>
