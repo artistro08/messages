@@ -23,6 +23,7 @@
                 <VisualState x:Name="Sent">
                     <VisualState.Setters>
                         <Setter Target="Root.HorizontalAlignment" Value="Right" />
+                        <Setter Target="BackRow.HorizontalAlignment" Value="Right" />
                         <Setter Target="Back.Background" Value="{ThemeResource RcsBubbleBrush}" />
                         <Setter Target="Back.BorderBrush" Value="{ThemeResource RcsBubbleBorderBrush}" />
                         <Setter Target="Body.Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
@@ -35,6 +36,7 @@
                 <VisualState x:Name="SentSms">
                     <VisualState.Setters>
                         <Setter Target="Root.HorizontalAlignment" Value="Right" />
+                        <Setter Target="BackRow.HorizontalAlignment" Value="Right" />
                         <Setter Target="Back.Background" Value="{ThemeResource AccentFillColorDefaultBrush}" />
                         <Setter Target="Back.BorderThickness" Value="0" />
                         <Setter Target="Body.Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
@@ -187,9 +189,12 @@
 
             <!-- Bubble Back With The Avatar Lane And The Hover Strip: both reach out into the row's padding, so the avatar sits
                  beside the bubble itself, bottoms aligned (not beside the pill, time or caption row below it), and the strip
-                 beside the back, centered on it -->
+                 beside the back, centered on it. Kept to its own width on the bubble's outer side (the Side states), so a
+                 wider time or caption row under a short message never stretches the back past its text -->
             <Grid
+                x:Name="BackRow"
                 Margin="{x:Bind local:MessageBubble.LaneOverhang(Bubble.HasAvatarLane, Bubble.FromMe), Mode=OneWay}"
+                HorizontalAlignment="Left"
                 ColumnDefinitions="Auto,*,Auto">
 
                 <!-- Avatar Lane: the sender's avatar at the group's last bubble, made only where it shows -->
