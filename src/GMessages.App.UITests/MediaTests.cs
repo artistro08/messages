@@ -181,6 +181,51 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
+    /// The menu's Download saves a photo, and a file, to the Downloads folder (the test hook's) with the bytes and the
+    /// mark of the web; a second copy gets "name (1)". "Saved to Downloads" shows, and its Show in folder opens the
+    /// folder (the test hook notes it).
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Download_FromMenu_SavesToDownloads()
+    {
+        await OpenMediaChatAsync();
+        string downloads        = Path.Combine(App.DataDir, "Downloads");
+        byte[] bytes            = Png(64, 64, SplitColors);
+        Message message         = Server.Phone.PushIncomingMedia("c-media", "image/png", bytes, "keep.png");
+        AutomationElement photo = App.Find("Bubble.Photo." + message.MessageID);
+        WaitForStatus(photo, Full);
+
+        // Twice: The Second Copy Gets Its Own Name
+        foreach (string name in (string[])["keep.png", "keep (1).png"])
+        {
+            OpenMenu(photo);
+            App.Find("Bubble.Download").Patterns.Invoke.Pattern.Invoke();
+            string path = Path.Combine(downloads, name);
+            Wait.Until(() => File.Exists(path) && new FileInfo(path).Length == bytes.Length, AppDriver.DefaultTimeout, () => $"Download didn't save '{name}'.");
+            CollectionAssert.AreEqual(bytes, File.ReadAllBytes(path), $"'{name}' doesn't hold the photo.");
+            Assert.IsTrue(File.Exists(path + ":Zone.Identifier"), $"'{name}' has no mark of the web.");
+        }
+
+        // The Confirmation, And Show In Folder
+        AutomationElement bar = App.Find("Main.Downloaded");
+        Assert.IsTrue(HasText(bar, ChatCopy.SavedToDownloads), $"The confirmation doesn't read '{ChatCopy.SavedToDownloads}'.");
+        App.Find("Main.Downloaded.ShowInFolder").Patterns.Invoke.Pattern.Invoke();
+        string launched = Path.Combine(App.DataDir, "launched.txt");
+        Wait.Until(() => File.Exists(launched), AppDriver.DefaultTimeout, () => "Show in folder opened nothing.");
+        Assert.AreEqual(downloads, File.ReadAllLines(launched)[^1], true, "Show in folder opened another folder.");
+
+        // A File's Menu Has It Too
+        byte[] pdf             = System.Text.Encoding.UTF8.GetBytes("%PDF-1.4 notes for the trip");
+        Message file           = Server.Phone.PushIncomingMedia("c-media", "application/pdf", pdf, "notes.pdf");
+        AutomationElement card = App.Find("Bubble.File." + file.MessageID);
+        OpenMenu(card);
+        App.Find("Bubble.Download").Patterns.Invoke.Pattern.Invoke();
+        string pdf_path = Path.Combine(downloads, "notes.pdf");
+        Wait.Until(() => File.Exists(pdf_path) && new FileInfo(pdf_path).Length == pdf.Length, AppDriver.DefaultTimeout, () => "Download didn't save the file.");
+    }
+
+    /// <summary>
     /// A picked photo shows as a chip; Send uploads it, the phone gets it as a media message and then the text as its own
     /// message (Mia's chat is RCS, which refuses captions), the bubble shows the photo in its shape, and the chip is gone.
     /// </summary>
@@ -752,11 +797,11 @@ public sealed partial class MediaTests : UiTest
         File.WriteAllLines(Path.Combine(App.DataDir, "pick.txt"), paths);
     }
 
-    // The Photo's Bubble Menu, From The Keyboard (Shift + F10 On The Focused Photo)
-    private void OpenMenu(AutomationElement photo)
+    // A Photo's Or File Card's Bubble Menu, From The Keyboard (Shift + F10 On It, Focused)
+    private void OpenMenu(AutomationElement part)
     {
         App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).SetForeground();
-        photo.Focus();
+        part.Focus();
         Keyboard.TypeSimultaneously(VirtualKeyShort.SHIFT, VirtualKeyShort.F10);
     }
 

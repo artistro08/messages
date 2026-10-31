@@ -116,6 +116,12 @@ public partial class App : Application, IDisposable
     internal MediaStore? Media => _media;
 
     /// <summary>
+    /// Gets the main window while it is open, so a bubble can show its photo in the viewer or confirm a download. Null
+    /// when the window is closed (the app lives on in the tray).
+    /// </summary>
+    internal MainWindow? MainWindow => _mainWindow;
+
+    /// <summary>
     /// Gets the Windows device ID of the microphone chosen in Settings, or null for Windows' default (and before launch).
     /// </summary>
     internal string? MicrophoneId => _settings?.MicrophoneId;

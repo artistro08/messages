@@ -1,5 +1,6 @@
 using System.Collections.Specialized;
 using System.ComponentModel;
+using GMessages.App.Media;
 using GMessages.App.Views.Controls;
 using GMessages.Presentation;
 using GMessages.Presentation.Main;
@@ -54,6 +55,11 @@ public sealed partial class MainWindow : Window
 
     // The Owner's Photo Is Asked For Once A Load Names The Owner, And Again After An Answer Without One
     private bool _profileAsked;
+
+    // The Last Download's File, For Show In Folder, And The Timer That Closes Its Confirmation
+    private static readonly TimeSpan DownloadedShownFor = TimeSpan.FromSeconds(6);
+    private string? _downloadedPath;
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _downloadedTimer;
 
     /// <summary>
     /// Creates the window with an empty body; the App then calls <see cref="ShowPairing"/> or <see cref="ShowChats"/>.
@@ -125,6 +131,51 @@ public sealed partial class MainWindow : Window
     /// Gets the settings state the profile menu's Unpair binds to.
     /// </summary>
     public SettingsViewModel Settings => _settings;
+
+    /// <summary>Gets the download confirmation's title.</summary>
+    public static string SavedToDownloadsText => ChatCopy.SavedToDownloads;
+
+    /// <summary>Gets the download confirmation's Show in folder text.</summary>
+    public static string ShowInFolderText => ChatCopy.ShowInFolder;
+
+    /// <summary>
+    /// Shows a photo in the in-window viewer, over both panes (see <see cref="PhotoViewer"/>).
+    /// </summary>
+    /// <param name="part">The photo's media part.</param>
+    /// <param name="messageId">The message's ID.</param>
+    /// <param name="name">What Narrator calls the photo: its caption, or "Photo".</param>
+    /// <param name="returnFocus">The photo in the chat, focused again when the viewer closes.</param>
+    public void ShowPhoto(MediaPart part, string messageId, string name, Control returnFocus) =>
+        _ = PhotoViewer.ShowAsync(part, messageId, name, returnFocus);
+
+    /// <summary>
+    /// Shows the "Saved to Downloads" confirmation for a few seconds; its Show in folder opens File Explorer on the file.
+    /// </summary>
+    /// <param name="path">The saved file's full path.</param>
+    public void ShowDownloaded(string path)
+    {
+        _downloadedPath      = path;
+        DownloadedBar.IsOpen = true;
+
+        _downloadedTimer ??= DispatcherQueue.CreateTimer();
+        _downloadedTimer.Interval    = DownloadedShownFor;
+        _downloadedTimer.IsRepeating = false;
+        _downloadedTimer.Tick       -= OnDownloadedTimerTick;
+        _downloadedTimer.Tick       += OnDownloadedTimerTick;
+        _downloadedTimer.Start();
+    }
+
+    // The Confirmation Closes Itself
+    private void OnDownloadedTimerTick(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args) => DownloadedBar.IsOpen = false;
+
+    private void OnShowInFolderClick(object sender, RoutedEventArgs e)
+    {
+        DownloadedBar.IsOpen = false;
+        if (_downloadedPath is { } path)
+        {
+            _ = MediaActions.ShowInFolderAsync(path);
+        }
+    }
 
     /// <summary>
     /// Sets the window's light or dark look from the app theme.
@@ -226,6 +277,9 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        // The Profile Menu Stays Reachable Over The Photo Viewer: Settings Replaces It
+        PhotoViewer.Close();
+
         // Back Puts Keyboard Focus Where It Was
         _focusBeforeSettings = RootGrid.XamlRoot is { } root ? FocusManager.GetFocusedElement(root) as UIElement : null;
 
@@ -262,6 +316,9 @@ public sealed partial class MainWindow : Window
     // Cancels A Running Pairing Or Disposes The Chats' View Model
     private void DropBody()
     {
+        // The Photo Goes With The Chats (Sign-Out, Unpair Or The Close)
+        PhotoViewer.Close();
+
         if (_pairing is { } pairing)
         {
             pairing.CancelRequested -= OnPairingCancel;
@@ -464,12 +521,14 @@ public sealed partial class MainWindow : Window
     // Archived And Spam & Blocked Are Lists, So They Close Settings To Show Them
     private void OnArchivedClick(object sender, RoutedEventArgs e)
     {
+        PhotoViewer.Close();
         CloseSettings();
         ViewModel?.OpenArchived();
     }
 
     private void OnSpamBlockedClick(object sender, RoutedEventArgs e)
     {
+        PhotoViewer.Close();
         CloseSettings();
         ViewModel?.OpenSpamBlocked();
     }
@@ -501,6 +560,18 @@ public sealed partial class MainWindow : Window
     // Not A Type Test (The Native AOT Build Can Hand A Popup's Child Back As A Base Type)
     private void OnRootPreviewKeyDown(object sender, KeyRoutedEventArgs e)
     {
+        // The Photo Viewer Takes Escape (So The Chat Stays Open), And No Shortcut Runs Under It
+        if (PhotoViewer.IsOpen)
+        {
+            if (e.Key == VirtualKey.Escape)
+            {
+                PhotoViewer.Close();
+                e.Handled = true;
+            }
+
+            return;
+        }
+
         if (_chats is not { } chats || _settingsPage is not null
             || VisualTreeHelper.GetOpenPopupsForXamlRoot(RootGrid.XamlRoot).Any(p => p.Child is null
                 || FrameworkElementAutomationPeer.CreatePeerForElement(p.Child)?.GetAutomationControlType() != AutomationControlType.ToolTip))
