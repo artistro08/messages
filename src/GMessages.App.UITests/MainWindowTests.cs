@@ -396,6 +396,21 @@ public sealed class MainWindowTests : UiTest
         AssertBackInTitleBar("Chat.Back");
     }
 
+    /// <summary>
+    /// The list's first row starts level with the chat island's top edge (owner: "the chat list doesn't line up with
+    /// the message window"). The island sits right under the title bar, so its top is the title bar's bottom.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task ConversationList_FirstRow_LinesUpWithChatIsland()
+    {
+        await OpenMainAsync();
+
+        int island_top = App.Find("Main.TitleBar").BoundingRectangle.Bottom;
+        int row_top    = App.Find("Row.c-team").BoundingRectangle.Top;
+        Assert.IsTrue(Math.Abs(row_top - island_top) <= 2, $"The first row starts at y {row_top}, the chat island at y {island_top}.");
+    }
+
     // =========================================================================
     // HELPERS
     // =========================================================================
