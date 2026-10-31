@@ -615,7 +615,6 @@
                         Grid.Column="2"
                         HorizontalAlignment="Left"
                         VerticalAlignment="Center"
-                        AutomationProperties.AutomationId="Chat.RecordWave"
                         BarBrush="{ThemeResource TextFillColorSecondaryBrush}" />
                     <Button
                         Grid.Column="3"
