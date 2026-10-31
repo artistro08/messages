@@ -139,13 +139,14 @@ internal static class TestHooks
     /// <c>{data folder}\paste.txt</c> describes, which it then deletes. Each line is a format and a value:
     /// <c>text &lt;text&gt;</c>, <c>file &lt;path&gt;</c> (the files, as Explorer copies them), <c>bitmap &lt;path&gt;</c>
     /// (a picture, as a screenshot is copied) or <c>format &lt;name&gt; &lt;path&gt;</c> (a file's bytes under a named format,
-    /// such as <c>GIF</c>). No file gives an empty clipboard. The real clipboard is never read in a test.
+    /// such as <c>GIF</c>). No file reads the real clipboard, which the copy tests check by pasting what the app's Copy put
+    /// there.
     /// </summary>
     /// <remarks>
     /// The paste must decide at once whether it takes the paste, so this answers synchronously, waiting for the files
     /// (test runs only).
     /// </remarks>
-    /// <returns>The clipboard's content, or null on a normal run (read the real clipboard).</returns>
+    /// <returns>The clipboard's content, or null to read the real clipboard (a normal run, or no file).</returns>
     public static Windows.ApplicationModel.DataTransfer.DataPackageView? PasteContent()
     {
         if (!BlockLaunches || DataDir is null)
@@ -153,12 +154,13 @@ internal static class TestHooks
             return null;
         }
 
-        var package  = new Windows.ApplicationModel.DataTransfer.DataPackage();
         string paste = Path.Combine(DataDir, "paste.txt");
         if (!File.Exists(paste))
         {
-            return package.GetView();
+            return null;
         }
+
+        var package = new Windows.ApplicationModel.DataTransfer.DataPackage();
 
         var files = new List<Windows.Storage.IStorageItem>();
         foreach (string line in File.ReadAllLines(paste).Where(l => l.Length > 0))

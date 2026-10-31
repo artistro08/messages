@@ -1348,7 +1348,7 @@ public sealed partial class ChatPane : UserControl
     // PASTING
     // =========================================================================
 
-    // The Clipboard (The Test's Under The Test Hooks); Null When Windows Won't Hand It Over (Another App Holds It)
+    // The Clipboard (The Test's Under The Test Hooks, When It Set One); Null When Windows Won't Hand It Over (Another App Holds It)
     private static DataPackageView? ClipboardView()
     {
         if (TestHooks.PasteContent() is { } test)
