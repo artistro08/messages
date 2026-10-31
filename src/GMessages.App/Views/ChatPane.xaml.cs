@@ -80,6 +80,9 @@ public sealed partial class ChatPane : UserControl
     // LibGM's Reactions: EmojiType 1 To 7
     private const int ReactionCount = 7;
 
+    // A Picker Button's Corners, Its Hover Tint's And Its Selected Fill's Alike (ReactionButtonStyle In ChatPane.xaml)
+    private const double ReactionCorner = 8;
+
     // The Message Box's Corners (Windows' Control Corner Radius) And The Compose Area's Padding
     private const double DraftCorner  = 4;
     private const double ComposeInset = 12;
@@ -142,8 +145,8 @@ public sealed partial class ChatPane : UserControl
     private MessageBubbleViewModel? _reactTarget;
     private MessageBubble? _reactView;
 
-    // The Picker's Buttons With Their Emoji, So The One Matching My Reaction Can Show Selected
-    private readonly List<(Button Button, string Emoji)> _reactionButtons = [];
+    // The Picker's Buttons With The Fill Behind Each And Their Emoji, So The One Matching My Reaction Can Show Selected
+    private readonly List<(Button Button, Border Back, string Emoji)> _reactionButtons = [];
 
     // On The Way To The Newest Message (See ScrollToNewest)
     private bool _toNewest;
@@ -181,17 +184,18 @@ public sealed partial class ChatPane : UserControl
     {
         InitializeComponent();
 
-        // Reaction Picker: One Button Per Reaction In Enum Order, Labeled With Its Emoji (Styled By The Panel); Love Shows
-        // Google's Red Heart Instead Of Heart Eyes
+        // Reaction Picker: One Button Per Reaction In Enum Order, Labeled With Its Emoji (Styled By The Panel), Over A Fill
+        // That Shows My Reaction Selected; Love Shows Google's Red Heart Instead Of Heart Eyes
         for (int i = 1; i <= ReactionCount; i++)
         {
             EmojiType type = (EmojiType)i == EmojiType.Love ? EmojiType.RedHeart : (EmojiType)i;
             string emoji   = EmojiTypes.Unicode(type);
-            var button   = new Button { Content = emoji };
+            var button     = new Button { Content = emoji };
+            var back       = new Border { CornerRadius = new CornerRadius(ReactionCorner) };
             AutomationProperties.SetAutomationId(button, "ReactionPicker." + i);
             button.Click += (_, _) => React(emoji);
-            ReactionButtons.Children.Add(button);
-            _reactionButtons.Add((button, emoji));
+            ReactionButtons.Children.Add(new Grid { Children = { back, button } });
+            _reactionButtons.Add((button, back, emoji));
         }
 
         ReactionPicker.Closed += (_, _) =>
@@ -1325,18 +1329,18 @@ public sealed partial class ChatPane : UserControl
         _reactView   = view;
         view.KeepShown(true);
 
-        // My Reaction Shows Selected: The Pill's Accent Fill, And Narrator Reads "Selected"
-        Style selected = ReactionButtons.Resources["ReactionButtonSelectedStyle"].As<Style>();
-        foreach ((Button button, string emoji) in _reactionButtons)
+        // My Reaction Shows Selected: The Pill's Accent Fill Behind Its Button, And Narrator Reads "Selected"
+        Style selected = ReactionButtons.Resources["ReactionSelectedBackStyle"].As<Style>();
+        foreach ((Button button, Border back, string emoji) in _reactionButtons)
         {
             if (emoji == bubble.MyReaction)
             {
-                button.Style = selected;
+                back.Style = selected;
                 AutomationProperties.SetItemStatus(button, ChatCopy.Selected);
             }
             else
             {
-                button.ClearValue(StyleProperty);
+                back.ClearValue(StyleProperty);
                 button.ClearValue(AutomationProperties.ItemStatusProperty);
             }
         }

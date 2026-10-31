@@ -287,6 +287,29 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
+    /// With my reaction on a message, hovering its pill, then my reaction in the picker, changes their color steadily: every
+    /// frame of the hover sits between the color before and the settled hover color (no flash), and the hover keeps my
+    /// reaction's accent (only tints it). The fill under each sat on the button itself, so its hover swapped the accent for
+    /// the hover fill through the brush transition (the owner's flicker).
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task MyReaction_Hover_StaysSteady()
+    {
+        await OpenChatAsync("Row.c-ann");
+        string id = Find("c-ann", AnnLast).MessageID;
+
+        Server.Phone.PushReactions("c-ann", id, (EmojiType.Laugh, FakeChats.MyParticipantId));
+        Wait.Until(() => App.TryFind("Reactions." + id)?.BoundingRectangle.Height > 0, AppDriver.DefaultTimeout, () => "The pill never showed.");
+        AssertSteadyHover("pill", App.Find("Reactions." + id).BoundingRectangle);
+
+        App.Find("Bubble." + id).RightClick();
+        App.Find("Bubble.React").Patterns.Invoke.Pattern.Invoke();
+        AssertSteadyHover("picker", App.Find("ReactionPicker." + (int)EmojiType.Laugh).BoundingRectangle);
+        Keyboard.Type(VirtualKeyShort.ESCAPE);
+    }
+
+    /// <summary>
     /// A reaction pill doesn't push the newest bubble's time down: the gap from the bubble's text to the time under it
     /// is the same (within 2 px) before and after Ann reacts.
     /// </summary>
@@ -696,6 +719,62 @@ public sealed class RcsTests : UiTest
         int right = box.Right - runs.Max(r => r.Right);
         TestContext.WriteLine($"Bubble {messageId}: box {box}, text {string.Join(" ", runs)}, insets {left}/{right}.");
         Assert.IsTrue(Math.Abs(left - right) <= 2, $"Bubble {messageId}'s text sits {left} px from its left and {right} px from its right.");
+    }
+
+    // Reads One Pixel Of A Selected Fill (Near The Left End, Clear Of The Emoji) Before The Pointer Comes, Then About Every
+    // 8 ms For 600 ms From A Real Move Onto It, On A Second Thread So The Readings Keep Their Pace. Every Reading Must Sit
+    // Between The Color Before And The Settled Hover Color (4 Levels Of Slack), And The Hover Must Keep The Accent: At Least
+    // Half The Fill's Color Strength (Its Channels' Spread)
+    private void AssertSteadyHover(string name, System.Drawing.Rectangle box)
+    {
+        System.Drawing.Rectangle spot = new(box.Left + 5, box.Top + (box.Height / 2), 1, 1);
+        FlaUI.Core.Input.Mouse.MoveTo(box.Right + 200, box.Top + (box.Height / 2));
+        Thread.Sleep(500);
+
+        System.Drawing.Color Read()
+        {
+            using FlaUI.Core.Capturing.CaptureImage capture = FlaUI.Core.Capturing.Capture.Rectangle(spot);
+            return capture.Bitmap.GetPixel(0, 0);
+        }
+
+        System.Drawing.Color before = Read();
+        var samples                 = new List<System.Drawing.Color>();
+        var clock                   = System.Diagnostics.Stopwatch.StartNew();
+        Exception? failure          = null;
+        var sampler                 = new Thread(() =>
+        {
+            try
+            {
+                while (clock.ElapsedMilliseconds < 600)
+                {
+                    samples.Add(Read());
+                    Thread.Sleep(1);
+                }
+            }
+            catch (Exception ex)
+            {
+                failure = ex;
+            }
+        });
+        sampler.Start();
+        PointerInput.Hover(box);
+        sampler.Join();
+        if (failure is not null)
+        {
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
+        }
+
+        System.Drawing.Color hovered = Read();
+        string trace                 = string.Join(" ", samples.Select(c => $"{c.R},{c.G},{c.B}"));
+        TestContext.WriteLine($"{name}: before {before}, hovered {hovered}, {samples.Count} readings: {trace}");
+
+        static bool Between(int value, int a, int b) => value >= Math.Min(a, b) - 4 && value <= Math.Max(a, b) + 4;
+        static int Strength(System.Drawing.Color c) => Math.Max(c.R, Math.Max(c.G, c.B)) - Math.Min(c.R, Math.Min(c.G, c.B));
+
+        Assert.IsTrue(samples.Count >= 30, $"Only {samples.Count} readings of the {name} in 600 ms; too slow to catch a one-frame flash.");
+        Assert.IsTrue(samples.All(c => Between(c.R, before.R, hovered.R) && Between(c.G, before.G, hovered.G) && Between(c.B, before.B, hovered.B)),
+            $"The {name}'s fill flashed on hover (before {before}, hovered {hovered}). Readings: {trace}");
+        Assert.IsTrue(Strength(hovered) * 2 >= Strength(before), $"Hovering the {name} lost my reaction's accent (before {before}, hovered {hovered}).");
     }
 
     // The Newest Bubble's Row Takes Keyboard Focus

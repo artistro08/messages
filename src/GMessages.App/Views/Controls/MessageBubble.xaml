@@ -28,8 +28,8 @@
                         <Setter Target="Back.BorderBrush" Value="{ThemeResource RcsBubbleBorderBrush}" />
                         <Setter Target="Body.Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
                         <Setter Target="Under.HorizontalAlignment" Value="Right" />
-                        <Setter Target="Pill.(Grid.Column)" Value="0" />
-                        <Setter Target="Pill.Margin" Value="0,-8,6,0" />
+                        <Setter Target="PillHost.(Grid.Column)" Value="0" />
+                        <Setter Target="PillHost.Margin" Value="0,-8,6,0" />
                         <Setter Target="Captions.(Grid.Column)" Value="2" />
                         <Setter Target="HoverStrip.(Grid.Column)" Value="0" />
                     </VisualState.Setters>
@@ -55,20 +55,21 @@
                         <Setter Target="PreviewTitle.Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
                         <Setter Target="PreviewSite.Foreground" Value="{ThemeResource TextOnAccentFillColorSecondaryBrush}" />
                         <Setter Target="Under.HorizontalAlignment" Value="Right" />
-                        <Setter Target="Pill.(Grid.Column)" Value="0" />
-                        <Setter Target="Pill.Margin" Value="0,-8,6,0" />
+                        <Setter Target="PillHost.(Grid.Column)" Value="0" />
+                        <Setter Target="PillHost.Margin" Value="0,-8,6,0" />
                         <Setter Target="Captions.(Grid.Column)" Value="2" />
                         <Setter Target="HoverStrip.(Grid.Column)" Value="0" />
                     </VisualState.Setters>
                 </VisualState>
             </VisualStateGroup>
 
-            <!-- My Reaction: the pill gets a soft accent fill (ReactionPillMineBrush in App.xaml), no ring -->
+            <!-- My Reaction: the pill gets a soft accent fill (ReactionPillMineBrush in App.xaml), no ring. On the fill under the
+                 button, so the button's hover only tints it -->
             <VisualStateGroup x:Name="Reaction">
                 <VisualState x:Name="NotMine" />
                 <VisualState x:Name="Mine">
                     <VisualState.Setters>
-                        <Setter Target="Pill.Background" Value="{ThemeResource ReactionPillMineBrush}" />
+                        <Setter Target="PillBack.Background" Value="{ThemeResource ReactionPillMineBrush}" />
                     </VisualState.Setters>
                 </VisualState>
             </VisualStateGroup>
@@ -537,57 +538,68 @@
                      (built in code; never the reaction picker). A whole-pixel height (24,
                      more for large text) with corners of half of it, and its fill under the stroke, so the ends draw as smooth half
                      circles at any scale. Its top 8 px overlap the back, and it keeps 6 px from the time -->
-                <Button
-                    x:Name="Pill"
+                <Grid
+                    x:Name="PillHost"
                     Grid.Column="2"
-                    MinHeight="24"
                     Margin="6,-8,0,0"
-                    Padding="8,0"
                     VerticalAlignment="Top"
-                    VerticalContentAlignment="Center"
-                    AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Reactions.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
-                    Background="{ThemeResource SolidBackgroundFillColorTertiaryBrush}"
-                    BackgroundSizing="OuterBorderEdge"
-                    BorderBrush="{ThemeResource ReactionPillBorderBrush}"
-                    BorderThickness="1"
-                    Click="OnPillClick"
-                    Content="{x:Bind Bubble.ReactionsText, Mode=OneWay, FallbackValue=''}"
-                    CornerRadius="12"
-                    FontSize="12"
-                    UseLayoutRounding="True"
                     Visibility="{x:Bind Bubble.HasReactions, Mode=OneWay, FallbackValue=Collapsed}">
 
-                    <!-- Hover And Press: opaque shades of the pill's own fill, so the button's 83 ms brush transition blends
-                         smoothly. The default hover fill is a faint see-through white, and blending the opaque fill into it
-                         passes through a bright half-opaque gray for a frame or two (the flash). No outline: the 1 px border is
-                         clear (ReactionPillBorderBrush in App.xaml; the fill runs under it, so the pill keeps its size). High
-                         contrast keeps an edge and the system button's own hover and press colors, so the pill and its hover
-                         still show -->
-                    <Button.Resources>
-                        <ResourceDictionary>
-                            <ResourceDictionary.ThemeDictionaries>
-                                <ResourceDictionary x:Key="Default">
-                                    <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="SolidBackgroundFillColorQuarternaryBrush" />
-                                    <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="SolidBackgroundFillColorSecondaryBrush" />
-                                    <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="Transparent" />
-                                    <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="Transparent" />
-                                </ResourceDictionary>
-                                <ResourceDictionary x:Key="Light">
-                                    <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="SolidBackgroundFillColorQuarternaryBrush" />
-                                    <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="SolidBackgroundFillColorSecondaryBrush" />
-                                    <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="Transparent" />
-                                    <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="Transparent" />
-                                </ResourceDictionary>
-                                <ResourceDictionary x:Key="HighContrast">
-                                    <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="{ThemeResource SystemColorHighlightTextColor}" />
-                                    <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="{ThemeResource SystemColorHighlightTextColor}" />
-                                    <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="{ThemeResource SystemColorHighlightColor}" />
-                                    <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="{ThemeResource SystemColorHighlightTextColor}" />
-                                </ResourceDictionary>
-                            </ResourceDictionary.ThemeDictionaries>
-                        </ResourceDictionary>
-                    </Button.Resources>
-                </Button>
+                    <!-- Pill Fill: under the button, so the button's hover and press only tint it and my reaction's accent
+                         (the Mine state) stays through them. Set on the button, the fill was swapped for the hover fill on
+                         every hover, through the button's 83 ms brush transition (the flicker) -->
+                    <Border
+                        x:Name="PillBack"
+                        Background="{ThemeResource SolidBackgroundFillColorTertiaryBrush}"
+                        CornerRadius="12"
+                        UseLayoutRounding="True" />
+                    <Button
+                        x:Name="Pill"
+                        MinHeight="24"
+                        Padding="8,0"
+                        VerticalContentAlignment="Center"
+                        AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Reactions.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                        Background="Transparent"
+                        BackgroundSizing="OuterBorderEdge"
+                        BorderBrush="{ThemeResource ReactionPillBorderBrush}"
+                        BorderThickness="1"
+                        Click="OnPillClick"
+                        Content="{x:Bind Bubble.ReactionsText, Mode=OneWay, FallbackValue=''}"
+                        CornerRadius="12"
+                        FontSize="12"
+                        UseLayoutRounding="True">
+
+                        <!-- Hover And Press: see-through tints over the fill, so the brush transition runs from clear to a faint
+                             tint and never through a bright gray. No outline: the 1 px border is clear (ReactionPillBorderBrush
+                             in App.xaml; the fill runs under it, so the pill keeps its size). High contrast keeps an edge and the
+                             system button's own hover and press colors, so the pill and its hover still show -->
+                        <Button.Resources>
+                            <ResourceDictionary>
+                                <ResourceDictionary.ThemeDictionaries>
+                                    <ResourceDictionary x:Key="Default">
+                                        <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="SubtleFillColorSecondaryBrush" />
+                                        <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="SubtleFillColorTertiaryBrush" />
+                                        <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="Transparent" />
+                                        <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="Transparent" />
+                                    </ResourceDictionary>
+                                    <ResourceDictionary x:Key="Light">
+                                        <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="SubtleFillColorSecondaryBrush" />
+                                        <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="SubtleFillColorTertiaryBrush" />
+                                        <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="Transparent" />
+                                        <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="Transparent" />
+                                    </ResourceDictionary>
+                                    <ResourceDictionary x:Key="HighContrast">
+                                        <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="{ThemeResource SystemColorHighlightTextColor}" />
+                                        <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="{ThemeResource SystemColorHighlightTextColor}" />
+                                        <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="{ThemeResource SystemColorHighlightColor}" />
+                                        <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="{ThemeResource SystemColorHighlightTextColor}" />
+                                    </ResourceDictionary>
+                                </ResourceDictionary.ThemeDictionaries>
+                            </ResourceDictionary>
+                        </Button.Resources>
+                    </Button>
+                </Grid>
+                <!-- /Reactions -->
 
                 <!-- Captions: the time or retry link, or the caption row, on the bubble's outer side -->
                 <StackPanel x:Name="Captions" Spacing="2">
