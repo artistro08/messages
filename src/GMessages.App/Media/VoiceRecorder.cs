@@ -357,10 +357,11 @@ internal sealed class VoiceRecorder : IDisposable
     /// Stops recording, finishes the file and lets go of it, so it can be read back at once.
     /// </summary>
     /// <remarks>
-    /// The file output node can keep the file open after <see cref="AudioFileOutputNode.FinalizeAsync"/> until the node
-    /// itself is closed, which otherwise waits for the garbage collector to release it, and the owner's 0.5.10 log shows
-    /// Done failing with an <see cref="IOException"/> (its cause wasn't logged). So the nodes are closed here, then the
-    /// graph, and the finalize result and the file's size in bytes are logged (never its path).
+    /// The owner's 0.5.10 log shows Done failing with an <see cref="IOException"/> whose cause wasn't logged. A finalize
+    /// that fails (<c>Unknown</c>) can leave the file open while the graph lives (a sharing violation on read, seen in a
+    /// scratch graph), so the graph is disposed here before the file is read, and the finalize result and the file's size
+    /// in bytes are logged (never its path). A finalized file output node is already closed: closing it again throws
+    /// <see cref="ObjectDisposedException"/>, so only the graph is disposed.
     /// </remarks>
     /// <returns>A task that completes when the file is complete and closed.</returns>
     /// <exception cref="IOException">The file couldn't be finished.</exception>
@@ -402,8 +403,6 @@ internal sealed class VoiceRecorder : IDisposable
 
         _disposed = true;
         _graph?.Stop();
-        _file?.Dispose();
-        _frames?.Dispose();
         _graph?.Dispose();
     }
 }
