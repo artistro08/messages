@@ -20,6 +20,7 @@ public sealed class ShortcutMapTests
     [DataRow((VirtualKey)188, true, false, ShortcutCommand.PreviousConversation)]
     [DataRow(VirtualKey.S, true, false, ShortcutCommand.OpenSettings)]
     [DataRow((VirtualKey)191, true, true, ShortcutCommand.ShowHelp)]
+    [DataRow((VirtualKey)191, true, false, ShortcutCommand.ShowHelp)]
     [DataRow((VirtualKey)187, false, true, ShortcutCommand.OpenReactions)]
     [DataRow(VirtualKey.Enter, true, false, ShortcutCommand.ReplyToMessage)]
     [DataRow(VirtualKey.D, true, false, ShortcutCommand.DeleteConversation)]
