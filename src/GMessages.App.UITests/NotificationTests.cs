@@ -295,6 +295,16 @@ public sealed class NotificationTests : UiTest
 
         // The Banner Of An Unattended Machine Stays Until The Sign-Out Clears It
         Wait.Until(() => _toasts.TryFind("snoozed marker") is null, SignOutTime, () => "The toast stayed after sign-out.");
+
+        // Pressing Snooze Gave The Toast's Shell Window The Foreground, And It Keeps It Once Empty: No Window Can Take It
+        // Back From Code, So Every Later Test's Window Would Stay Behind. A Real Click On The Pairing Window's Title Bar
+        // Hands The Foreground Back, As A Person's Next Click Would
+        Window pairing                  = WaitForPairing(TimeSpan.FromSeconds(30));
+        System.Drawing.Rectangle bounds = pairing.BoundingRectangle;
+        int app_process                 = pairing.Properties.ProcessId.Value;
+        FlaUI.Core.Input.Mouse.Click(new System.Drawing.Point(bounds.X + (bounds.Width / 2), bounds.Y + 16));
+        Wait.Until(() => App.Automation.FocusedElement()?.Properties.ProcessId.ValueOrDefault == app_process, AppDriver.DefaultTimeout,
+            () => $"The click on the pairing window's title bar ({bounds}) didn't bring it forward.");
     }
 
     /// <summary>
