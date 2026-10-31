@@ -397,18 +397,24 @@ public sealed class MainWindowTests : UiTest
     }
 
     /// <summary>
-    /// The list's first row starts level with the chat island's top edge (owner: "the chat list doesn't line up with
-    /// the message window"). The island sits right under the title bar, so its top is the title bar's bottom.
+    /// The list's first row starts level with the open chat's card, the rounded island around the header and the
+    /// messages (owner: "the chat list doesn't line up with the message window"). The chat pane (<c>Chat.Pane</c>)
+    /// fills the island inside its 1 px border, so its top is the card's top.
     /// </summary>
     /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task ConversationList_FirstRow_LinesUpWithChatIsland()
     {
         await OpenMainAsync();
+        WaitForRows(InboxRows);
 
-        int island_top = App.Find("Main.TitleBar").BoundingRectangle.Bottom;
-        int row_top    = App.Find("Row.c-team").BoundingRectangle.Top;
-        Assert.IsTrue(Math.Abs(row_top - island_top) <= 2, $"The first row starts at y {row_top}, the chat island at y {island_top}.");
+        // Open A Chat: The Card Shows Its Header And Messages
+        App.Find("Row.c-ann").Patterns.SelectionItem.Pattern.Select();
+        App.WaitForText("Chat.Header", "Ann Lee");
+
+        int card_top = App.Find("Chat.Pane").BoundingRectangle.Top;
+        int row_top  = App.Find("Row.c-team").BoundingRectangle.Top;
+        Assert.IsTrue(Math.Abs(row_top - card_top) <= 2, $"The first row starts at y {row_top}, the chat card at y {card_top}.");
     }
 
     // =========================================================================
