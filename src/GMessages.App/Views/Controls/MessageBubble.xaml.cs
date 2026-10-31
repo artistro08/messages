@@ -223,6 +223,9 @@ public sealed partial class MessageBubble : UserControl
         FileCard.AddHandler(TappedEvent, new TappedEventHandler((_, _) => _previewTapped = true), handledEventsToo: true);
         Voice.AddHandler(TappedEvent, new TappedEventHandler((_, _) => _previewTapped = true), handledEventsToo: true);
 
+        // The Row Under The Bubble Is At Least As Wide As The Back (Inside Its Margins), So The Pill Sits On The Back's Corner
+        Back.SizeChanged += (_, _) => Under.MinWidth = Math.Max(0, Back.ActualWidth - Under.Margin.Left - Under.Margin.Right);
+
         // The Text's Own Menu Would Win A Right-Click On It, So It Gets The Bubble Menu Too (Which Has Copy)
         Body.ContextFlyout = Menu;
         Menu.Closed       += (_, _) => KeepShown(false);
