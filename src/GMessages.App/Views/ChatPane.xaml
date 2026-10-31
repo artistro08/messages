@@ -1,5 +1,6 @@
 <UserControl
     x:Class="GMessages.App.Views.ChatPane"
+    AutomationProperties.AutomationId="Chat.Pane"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:GMessages.App.Views.Controls"

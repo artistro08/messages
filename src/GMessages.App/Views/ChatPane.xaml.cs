@@ -13,6 +13,7 @@ using Microsoft.UI.Composition;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
+using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Documents;
 using Microsoft.UI.Xaml.Hosting;
@@ -266,6 +267,16 @@ public sealed partial class ChatPane : UserControl
 
         ShowPreviewPlaying(false, 0);
     }
+
+    /// <summary>
+    /// Exposes the pane to UI Automation as <c>Chat.Pane</c>.
+    /// </summary>
+    /// <remarks>
+    /// A user control has no automation peer of its own, so the pane's bounds (the chat card's, inside its 1 px border)
+    /// couldn't be read; the layout tests line the conversation list up against them.
+    /// </remarks>
+    /// <returns>The pane's peer.</returns>
+    protected override AutomationPeer OnCreateAutomationPeer() => new FrameworkElementAutomationPeer(this);
 
     /// <summary>Gets the lock's tooltip and name.</summary>
     public static string EncryptedText => ChatCopy.EndToEndEncrypted;
