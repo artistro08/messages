@@ -202,7 +202,8 @@ public sealed class NotificationTests : UiTest
     /// <remarks>
     /// A repeat show reuses the toast's tag, so it would replace the toast on screen rather than add one. The app's
     /// "Toast shown" log line is what tells them apart. The live message after the updates arrives behind them, so once
-    /// it toasts, the updates were handled.
+    /// it toasts, the updates were handled. The first banner is dismissed before then: Windows shows the next banner
+    /// only once it leaves, which it never does by itself on an unattended machine.
     /// </remarks>
     /// <returns>A task for the test.</returns>
     [TestMethod]
@@ -211,11 +212,15 @@ public sealed class NotificationTests : UiTest
         await PairAsync();
 
         Message message = Server.Phone.PushIncoming("c-ann", "hey there");
-        _toasts.WaitFor(AppDriver.DefaultTimeout, "Ann Lee", "hey there");
+        AutomationElement toast = _toasts.WaitFor(AppDriver.DefaultTimeout, "Ann Lee", "hey there");
 
         // Updates While It Shows
         Server.Phone.PushStatusUpdate(message, MessageStatusType.IncomingDelivered);
         Server.Phone.PushStatusUpdate(message, MessageStatusType.IncomingComplete);
+
+        // Clear Its Banner: Windows Queues The Live Toast Behind One Still On Screen, And Unattended It Never Leaves
+        ToastDriver.Dismiss(toast);
+        Wait.Until(() => _toasts.TryFind("Ann Lee", "hey there") is null, AppDriver.DefaultTimeout, () => "The toast stayed after Dismiss.");
         AssertLiveStillToasts();
 
         string shown = $"Toast shown for {message.MessageID} ";

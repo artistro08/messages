@@ -136,6 +136,24 @@ public sealed class ToastDriver
     }
 
     /// <summary>
+    /// Presses a toast's Dismiss button, as a person would to clear its banner.
+    /// </summary>
+    /// <remarks>
+    /// Windows shows one banner at a time and queues the next behind it. On an unattended machine a banner never leaves
+    /// by itself (see <c>ManualNotificationTests</c>), so a test that waits for a second toast dismisses the first.
+    /// </remarks>
+    /// <param name="toast">The toast window.</param>
+    public static void Dismiss(AutomationElement toast)
+    {
+        ArgumentNullException.ThrowIfNull(toast);
+
+        AutomationElement dismiss = AppDriver.Search(toast, e => e.ControlType == ControlType.Button && AppDriver.SafeName(e) == "Dismiss")
+            ?? throw new AssertFailedException($"The toast has no Dismiss button. {Describe(toast)}");
+        WaitUntilStill(dismiss);
+        dismiss.Patterns.Invoke.Pattern.Invoke();
+    }
+
+    /// <summary>
     /// Lists a toast's elements (type, AutomationId, name) for a failure message.
     /// </summary>
     /// <param name="toast">The toast window.</param>
