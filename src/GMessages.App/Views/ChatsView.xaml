@@ -115,6 +115,29 @@
                     AutomationProperties.AutomationId="Main.ListLoading"
                     IsActive="{x:Bind ViewModel.CurrentList.IsLoadingFirstPage, Mode=OneWay}" />
 
+                <!-- Undo: after an archive or unarchive, for a few seconds (the view model hides it), above Start chat; Undo puts
+                     the conversation back. It never takes the focus (Tab reaches it), and Narrator announces it -->
+                <InfoBar
+                    Grid.Row="4"
+                    Margin="16,0,16,64"
+                    VerticalAlignment="Bottom"
+                    AutomationProperties.AutomationId="Main.Undo"
+                    AutomationProperties.LiveSetting="Polite"
+                    AutomationProperties.Name="{x:Bind ViewModel.UndoNotice, Mode=OneWay, FallbackValue=''}"
+                    CloseButtonClick="OnUndoClosed"
+                    IsClosable="True"
+                    IsOpen="{x:Bind ViewModel.HasUndo, Mode=OneWay}"
+                    Message="{x:Bind ViewModel.UndoNotice, Mode=OneWay, FallbackValue=''}"
+                    Severity="Informational"
+                    Visibility="{x:Bind ViewModel.HasUndo, Mode=OneWay, FallbackValue=Collapsed}">
+                    <InfoBar.ActionButton>
+                        <Button
+                            AutomationProperties.AutomationId="Main.Undo.Button"
+                            Click="OnUndoClick"
+                            Content="{x:Bind local:ChatsView.UndoText}" />
+                    </InfoBar.ActionButton>
+                </InfoBar>
+
                 <!-- Start Chat: floats at the bottom right over the inbox, the standard accent button's size; scrolling down
                      slides it away, scrolling up brings it back (set from code, animated by its transitions) -->
                 <Button

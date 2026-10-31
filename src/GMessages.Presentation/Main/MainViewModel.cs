@@ -26,6 +26,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     private readonly ConnectionController _connection;
     private readonly ChatStore _store;
     private readonly TimeProvider _time;
+
+    // The Archive Or Unarchive The Undo Bar Offers To Undo, And The Timer That Hides It
+    private (string Id, ConversationAction Action)? _undo;
+    private ITimer? _undoTimer;
     private readonly Action<Action> _post;
 
     // Fetches Link Preview Cards For The Open Chat; Null Means None
@@ -332,6 +336,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     public void Dispose()
     {
         _disposed = true;
+        _undoTimer?.Dispose();
         _connection.StateChanged -= OnStateChanged;
         _connection.ClientEvent  -= OnClientEvent;
         _store.PhoneBatteryChanged    -= OnPhoneBatteryChanged;
@@ -431,7 +436,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// <param name="conversationId">The conversation ID.</param>
     /// <param name="action">What to do.</param>
     /// <returns>True when the phone made the change.</returns>
-    public async Task<bool> RunAsync(string conversationId, ConversationAction action)
+    public Task<bool> RunAsync(string conversationId, ConversationAction action) => RunAsync(conversationId, action, offerUndo: true);
+
+    // Runs The Action; An Archive Or Unarchive Offers Undo Unless It Is The Undo Itself
+    private async Task<bool> RunAsync(string conversationId, ConversationAction action, bool offerUndo)
     {
         ArgumentException.ThrowIfNullOrEmpty(conversationId);
 
@@ -465,6 +473,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
         ActionError = null;
 
+        // Archive And Unarchive Offer Undo For A Few Seconds; Another Action Replaces The Offer
+        if (offerUndo)
+        {
+            ShowUndo(conversationId, action);
+        }
+
         // The Open Chat Left Its Folder
         bool moved = action is not (ConversationAction.Mute or ConversationAction.Unmute);
         if (moved && conversationId == SelectedConversationId)
@@ -481,6 +495,74 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
     /// <summary>Hides the failure banner.</summary>
     public void DismissActionError() => ShowActionError(null);
+
+    /// <summary>How long the Undo bar shows after an archive or unarchive.</summary>
+    public static readonly TimeSpan UndoTime = TimeSpan.FromSeconds(5);
+
+    /// <summary>
+    /// Gets what the Undo bar says ("Conversation archived" or "Conversation unarchived"), or null while it is hidden.
+    /// </summary>
+    public string? UndoNotice { get; private set; }
+
+    /// <summary>Gets whether the Undo bar shows.</summary>
+    public bool HasUndo => UndoNotice is not null;
+
+    /// <summary>
+    /// Undoes the archive or unarchive the Undo bar offers: the opposite action, through <see cref="RunAsync"/>, so the
+    /// row goes back to its place in its folder. The bar hides at once.
+    /// </summary>
+    /// <returns>True when the phone made the change.</returns>
+    public Task<bool> UndoAsync()
+    {
+        if (_undo is not { } undo)
+        {
+            return Task.FromResult(false);
+        }
+
+        HideUndo();
+        return RunAsync(undo.Id, undo.Action == ConversationAction.Archive ? ConversationAction.Unarchive : ConversationAction.Archive, offerUndo: false);
+    }
+
+    /// <summary>Hides the Undo bar.</summary>
+    public void DismissUndo() => HideUndo();
+
+    // Shows The Undo Bar For An Archive Or Unarchive (Replacing One Showing), Hidden Again After UndoTime; Other Actions
+    // Hide It
+    private void ShowUndo(string conversationId, ConversationAction action)
+    {
+        _undoTimer?.Dispose();
+        _undoTimer = null;
+        if (action is not (ConversationAction.Archive or ConversationAction.Unarchive))
+        {
+            HideUndo();
+            return;
+        }
+
+        _undo      = (conversationId, action);
+        UndoNotice = action == ConversationAction.Archive ? ChatCopy.ConversationArchived : ChatCopy.ConversationUnarchived;
+        (string Id, ConversationAction Action) shown = _undo.Value;
+        _undoTimer = _time.CreateTimer(_ => _post(() =>
+        {
+            if (_undo == shown)
+            {
+                HideUndo();
+            }
+        }), null, UndoTime, Timeout.InfiniteTimeSpan);
+    }
+
+    private void HideUndo()
+    {
+        _undoTimer?.Dispose();
+        _undoTimer = null;
+        _undo      = null;
+        if (UndoNotice is null || _disposed)
+        {
+            return;
+        }
+
+        UndoNotice = null;
+        Changed();
+    }
 
     // Sets The Failure Banner (Null Hides It); Nothing Once Closed
     private void ShowActionError(string? error)
