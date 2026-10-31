@@ -38,7 +38,9 @@
                     Text="{x:Bind ViewModel.StatusBanner, Mode=OneWay}"
                     Visibility="{x:Bind ViewModel.HasStatusBanner, Mode=OneWay}" />
 
-                <!-- Action Failure Banner: a conversation action the phone didn't make; closing it dismisses it -->
+                <!-- Action Failure Banner: a conversation action the phone didn't make; closing it dismisses it. Collapsed
+                     while closed: a closed InfoBar still keeps its margin, which pushed the list below the chat island's
+                     top edge -->
                 <InfoBar
                     Grid.Row="2"
                     Margin="16,0,16,8"
@@ -47,9 +49,11 @@
                     IsClosable="True"
                     IsOpen="{x:Bind ViewModel.HasActionError, Mode=OneWay}"
                     Message="{x:Bind ViewModel.ActionError, Mode=OneWay, FallbackValue=''}"
-                    Severity="Error" />
+                    Severity="Error"
+                    Visibility="{x:Bind ViewModel.HasActionError, Mode=OneWay, FallbackValue=Collapsed}" />
 
-                <!-- Phone Battery Banner: only after a live low battery alert; closing it hides it until the next one -->
+                <!-- Phone Battery Banner: only after a live low battery alert; closing it hides it until the next one.
+                     Collapsed while closed, as above -->
                 <InfoBar
                     Grid.Row="3"
                     Margin="16,0,16,8"
@@ -58,7 +62,8 @@
                     IsClosable="True"
                     IsOpen="{x:Bind ViewModel.IsPhoneBatteryLow, Mode=OneWay}"
                     Severity="Warning"
-                    Title="{x:Bind local:ChatsView.BatteryTitle}" />
+                    Title="{x:Bind local:ChatsView.BatteryTitle}"
+                    Visibility="{x:Bind ViewModel.IsPhoneBatteryLow, Mode=OneWay, FallbackValue=Collapsed}" />
 
                 <!-- Conversations: room at the bottom so Start chat never covers the last row, and a lane on the right where
                      the scrollbar sits, between the rows and the chat island -->
