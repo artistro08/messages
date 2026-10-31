@@ -200,7 +200,7 @@ public sealed class MainViewModelTests
 
     /// <summary>
     /// Archiving shows the Undo bar ("Conversation archived"); Undo unarchives it, its row goes back in its place, and no
-    /// second offer shows. A second archive replaces the bar, which hides after five seconds; mute shows none.
+    /// second offer shows. A second archive replaces the bar, which hides after five seconds; mute and unarchive show none.
     /// </summary>
     [TestMethod]
     public async Task Archive_OffersUndo_UndoPutsTheRowBack_BarTimesOut()
@@ -228,6 +228,10 @@ public sealed class MainViewModelTests
         Assert.IsFalse(vm.HasUndo);
 
         Assert.IsTrue(await vm.RunAsync("b", ConversationAction.Mute));
+        Assert.IsFalse(vm.HasUndo);
+
+        // Unarchive Offers No Undo (Owner: One Way Only)
+        Assert.IsTrue(await vm.RunAsync("a", ConversationAction.Unarchive));
         Assert.IsFalse(vm.HasUndo);
     }
 

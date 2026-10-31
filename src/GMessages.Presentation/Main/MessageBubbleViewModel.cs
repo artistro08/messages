@@ -34,8 +34,9 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     // A New Bubble Animates In Only When It Shows This Soon After It Was Added (Not Later, Scrolled Into View)
     private const long NewWindowMs = 1000;
 
-    // The Photo Bubble's Height Cap, In Effective Pixels
+    // The Photo Bubble's Height Cap, And The Size A Speck Of A Photo Grows To, In Effective Pixels
     private const double MaxPhotoHeight = 360;
+    private const double MinPhotoSide   = 48;
 
     // A Photo Without Dimensions Reserves A Square Of This Side
     private const double UnknownPhotoSide = 240;
@@ -315,7 +316,8 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     /// </summary>
     /// <remarks>
     /// The photo's own <c>Dimensions</c>, scaled down to fit the bubble's width and 360 px of height with its aspect
-    /// kept. A photo is never shown bigger than its own pixels. Unknown dimensions reserve a
+    /// kept. A photo is never shown bigger than its own pixels, except a speck (both sides under 48 px), which grows to
+    /// 48 px so it can be seen and clicked. Unknown dimensions reserve a
     /// 240 px square (narrower when the bubble is), which the image then fills, cropped.
     /// </remarks>
     /// <param name="width">The photo's width in pixels, or 0 when unknown.</param>
@@ -331,8 +333,14 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
             return (side, side);
         }
 
-        // Never Bigger Than The Photo's Own Pixels: A Crisp Small Photo Beats A Blurry Big One (Owner)
+        // Never Bigger Than The Photo's Own Pixels: A Crisp Small Photo Beats A Blurry Big One (Owner). Only A Speck (Under
+        // 48 px Both Ways) Grows To 48, So It Can Be Seen And Clicked
         double scale = Math.Min(Math.Min(maxWidth / width, MaxPhotoHeight / height), 1);
+        if (Math.Max(width, height) < MinPhotoSide)
+        {
+            scale = MinPhotoSide / Math.Max(width, height);
+        }
+
         return (Math.Max(1, Math.Floor(width * scale)), Math.Max(1, Math.Floor(height * scale)));
     }
 
