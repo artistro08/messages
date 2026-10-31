@@ -189,7 +189,7 @@ public sealed partial class MessageBubble : UserControl
     private bool _photoFailed;
 
     // Whether The Full Image Is A Moving GIF (An Image, Clipped On Its Composition Visual), Else A Still One (A Brush);
-    // And The Full Layer's Visual, Taken Once While It Is In The Live Tree
+    // And The GIF Image's Visual, Taken Once While It Is In The Live Tree
     private bool _photoAnimated;
     private Visual? _photoFullVisual;
 
@@ -244,14 +244,14 @@ public sealed partial class MessageBubble : UserControl
         ToolTipService.SetToolTip(HoverMore, ChatCopy.MoreOptions);
 
         // The Photo's Layers Take The Photo's Rounded Corners (Bound Once, On The Button). A Still Photo Is The Full
-        // Layer's Brush, Which Its Corners Clip; Only A GIF Needs The Composition Clip (See ClipPhotoFull)
+        // Layer's Brush, Which Its Corners Clip; Only A GIF's Image Needs The Composition Clip (See ClipPhotoFull)
         Photo.RegisterPropertyChangedCallback(Control.CornerRadiusProperty, (_, _) =>
         {
             PhotoBlur.CornerRadius = PhotoFull.CornerRadius = Photo.CornerRadius;
             ClipPhotoFull();
         });
-        PhotoFull.SizeChanged += (_, _) => ClipPhotoFull();
-        PhotoFull.Loaded      += (_, _) => ClipPhotoFull(mayTake: true);
+        PhotoFullImage.SizeChanged += (_, _) => ClipPhotoFull();
+        PhotoFullImage.Loaded      += (_, _) => ClipPhotoFull(mayTake: true);
 
         // Links Follow The Text's Color: Its Side's State And The Theme Set It
         Body.RegisterPropertyChangedCallback(TextBlock.ForegroundProperty, (_, _) => ColorLinks());
@@ -955,28 +955,29 @@ public sealed partial class MessageBubble : UserControl
         }
     }
 
-    // A GIF's Layer Clipped To The Photo's Rounded Corners (An Image Isn't Clipped By Its Border's Corners); A Still
+    // A GIF's Image Clipped To The Photo's Rounded Corners (An Image Isn't Clipped By Its Border's Corners); A Still
     // Photo's Brush Needs No Clip, So Any Left From A GIF This Container Showed Goes.
-    // The Visual Is Taken Once, Only For A GIF, And Only From The Layer's Loaded Or The GIF's Arrival (mayTake), Never
-    // From SizeChanged Or A Binding Callback: Asked For There While The List Recycled Rows, Windows Refused It With
-    // E_ACCESSDENIED, And One Such Throw Escaping Into XAML Crashed The App (0xc000027b) While Scrolling Chats With Photos.
-    // Size And Corner Changes Then Only Reshape The Clip On The Visual Already Held
+    // The Clip Goes On The Image, Never On PhotoFull: PhotoFull Fades In Through OpacityTransition, A XAML Implicit
+    // Transition, And Windows Refuses The Composition Visual Of An Element That Uses One (E_ACCESSDENIED, Reproduced By
+    // ManyPhotos_FastScroll_NoCrash: Every Failure Was A Faded-In GIF's PhotoFull, Loaded And Laid Out). In 0.6.2 That
+    // Throw Escaped SizeChanged And x:Bind Callbacks Into XAML And Crashed The App (0xc000027b). The Visual Is Taken Once,
+    // For A GIF, On Loaded Or When It Arrives; Size And Corner Changes Only Reshape The Clip
     private void ClipPhotoFull(bool mayTake = false)
     {
-        if (_photoFullVisual is null && (!mayTake || !_photoAnimated || !PhotoFull.IsLoaded))
+        if (_photoFullVisual is null && (!mayTake || !_photoAnimated || !PhotoFullImage.IsLoaded))
         {
             return;
         }
 
         try
         {
-            _photoFullVisual ??= ElementCompositionPreview.GetElementVisual(PhotoFull);
+            _photoFullVisual ??= ElementCompositionPreview.GetElementVisual(PhotoFullImage);
             Visual visual      = _photoFullVisual;
 
             // Not Laid Out Yet: Its SizeChanged Clips It Later. A Corner Can't Be Rounder Than Half The Shorter Side, Or
             // The Clip Is Refused (Which Crashed The App On Opening A Chat)
-            float width  = (float)PhotoFull.ActualWidth;
-            float height = (float)PhotoFull.ActualHeight;
+            float width  = (float)PhotoFullImage.ActualWidth;
+            float height = (float)PhotoFullImage.ActualHeight;
             if (!_photoAnimated || width <= 0 || height <= 0)
             {
                 visual.Clip = null;
