@@ -1,5 +1,6 @@
-<!-- Photo Viewer: a clicked photo over the whole window body (both panes) on a dark scrim, zoomable, with Save as, Download, Open in
-     Photos and Close. Dark theme always, so its icons read on the scrim. Hidden until shown (see the code) -->
+<!-- Photo Viewer: a clicked photo over the whole window (the title bar row too, so all of the app is tinted) on a dark scrim,
+     zoomable, with Save as, Download, Open in Photos and Close in the title bar row beside the caption buttons. Dark theme
+     always, so its icons read on the scrim. Hidden until shown (see the code) -->
 <UserControl
     x:Class="GMessages.App.Views.Controls.PhotoViewer"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -26,13 +27,15 @@
     <Grid
         x:Name="Scrim"
         Background="{ThemeResource PhotoViewerScrimBrush}"
-        RowDefinitions="Auto,*"
+        RowDefinitions="48,*"
         TabFocusNavigation="Cycle">
 
-        <!-- Toolbar -->
+        <!-- Toolbar: in the title bar row (48 px, the tall caption buttons' height), just left of the caption buttons; the
+             window keeps their width clear and lets clicks through to these buttons only (set from the window's code) -->
         <StackPanel
-            Margin="8"
+            x:Name="ToolbarPanel"
             HorizontalAlignment="Right"
+            VerticalAlignment="Center"
             Orientation="Horizontal"
             Spacing="4">
             <Button

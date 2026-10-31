@@ -158,6 +158,58 @@ public sealed partial class MediaTests
         Assert.IsNotNull(App.TryFind("PhotoViewer.Photo"), "A toolbar action closed the viewer.");
     }
 
+    /// <summary>
+    /// The toolbar sits in the title bar row, left of the caption buttons, and takes real mouse clicks there; the scrim
+    /// tints the title bar row too (its title and profile picture read dark), and closing puts the row back.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Viewer_ToolbarInTitleBarRow_TintCoversTitleBar()
+    {
+        await OpenMediaChatAsync();
+        AutomationElement photo      = ViewerPhoto(null);
+        System.Drawing.Rectangle bar = App.Find("Main.TitleBar").BoundingRectangle;
+        AutomationElement profile    = App.Find("Main.ProfileButton");
+        double title_before          = Luma(PixelAt(new System.Drawing.Point(bar.Left + 160, bar.Top + (bar.Height / 2))));
+
+        photo.Click();
+        App.Find("PhotoViewer.Photo");
+        System.Drawing.Rectangle window = App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).BoundingRectangle;
+        foreach (string id in (ReadOnlySpan<string>)["PhotoViewer.SaveAs", "PhotoViewer.Download", "PhotoViewer.OpenInPhotos", "PhotoViewer.Close"])
+        {
+            System.Drawing.Rectangle button = App.Find(id).BoundingRectangle;
+            Assert.IsTrue(button.Top >= bar.Top && button.Bottom <= bar.Bottom, $"{id} ({button}) isn't in the title bar row ({bar}).");
+            Assert.IsTrue(button.Right <= window.Right - 100, $"{id} ({button}) overlaps the caption buttons (window {window}).");
+        }
+
+        // The Title Bar Row Is Under The Scrim: Its Title And The Profile Picture Read Near Black
+        Thread.Sleep(300);
+        double title_after   = Luma(PixelAt(new System.Drawing.Point(bar.Left + 160, bar.Top + (bar.Height / 2))));
+        double profile_after = Luma(CenterPixel(profile));
+        Assert.IsTrue(title_after < 40 && title_after <= title_before, $"The title bar row isn't tinted (luma {title_before:F0} before, {title_after:F0} after).");
+        Assert.IsTrue(profile_after < 40, $"The profile picture isn't tinted (luma {profile_after:F0}).");
+
+        // A Real Click On Close (Not UI Automation) Reaches It In The Title Bar Row
+        System.Drawing.Rectangle close = App.Find("PhotoViewer.Close").BoundingRectangle;
+        Mouse.Click(new System.Drawing.Point(close.Left + (close.Width / 2), close.Top + (close.Height / 2)));
+        WaitForGone("PhotoViewer.Photo");
+
+        // The Title Bar's Own Buttons Take Clicks Again: The Profile Menu Opens
+        profile.Click();
+        App.Find("Main.Profile.Settings");
+        Keyboard.Type(VirtualKeyShort.ESCAPE);
+    }
+
+    // The Screen Pixel At A Point
+    private static System.Drawing.Color PixelAt(System.Drawing.Point at)
+    {
+        using FlaUI.Core.Capturing.CaptureImage capture = FlaUI.Core.Capturing.Capture.Rectangle(new System.Drawing.Rectangle(at.X, at.Y, 1, 1));
+        return capture.Bitmap.GetPixel(0, 0);
+    }
+
+    // A Color's Brightness, 0 To 255
+    private static double Luma(System.Drawing.Color c) => (0.2126 * c.R) + (0.7152 * c.G) + (0.0722 * c.B);
+
     // A Loaded 400 x 300 Photo In Mia's Chat, With Or Without A Caption
     private AutomationElement ViewerPhoto(string? caption)
     {
