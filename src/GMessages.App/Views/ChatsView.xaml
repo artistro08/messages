@@ -80,6 +80,12 @@
                     <!-- Rows: a click opens the chat without taking the focus, so the message box keeps it and never shows its
                          unfocused look between chats (the owner saw that as a flash). Tab and the arrow keys still reach the rows -->
 
+                    <!-- No Transitions Here: loads, pages and folder switches never animate. The code turns on Windows' add,
+                         remove and reorder motion only for a live change (a new message lifting a row, see OnRowsChanging) -->
+                    <ListView.ItemContainerTransitions>
+                        <TransitionCollection />
+                    </ListView.ItemContainerTransitions>
+
                     <ListView.ItemContainerStyle>
                         <Style BasedOn="{StaticResource DefaultListViewItemStyle}" TargetType="ListViewItem">
                             <Setter Property="AllowFocusOnInteraction" Value="False" />
@@ -89,7 +95,10 @@
                     </ListView.ItemContainerStyle>
                     <ListView.ItemTemplate>
                         <DataTemplate x:DataType="main:ConversationRowViewModel">
-                            <controls:ConversationRow MoreRequested="OnRowMoreRequested" Row="{x:Bind}" />
+                            <controls:ConversationRow
+                                x:Name="RowView"
+                                MoreRequested="OnRowMoreRequested"
+                                Row="{x:Bind}" />
                         </DataTemplate>
                     </ListView.ItemTemplate>
 

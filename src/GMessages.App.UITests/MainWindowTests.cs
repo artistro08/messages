@@ -362,6 +362,32 @@ public sealed class MainWindowTests : UiTest
     }
 
     /// <summary>
+    /// A new message in the open conversation lifts its row (with the list's motion and the row's flash, animations
+    /// permitting) and the row stays selected, with its chat still open.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task LiveMessage_OpenRowMovesToTop_StaysSelected()
+    {
+        // Dee: Older Than Every Seeded Conversation, So Her Row Starts Last
+        Server.Phone.Chats.Add(FakeChats.NewConversation("c-dee", "Dee", false, ConversationStatus.Active, false, false, FakeChats.Person("p-dee", "Dee", "+15550000004")));
+        await OpenMainAsync();
+        WaitForRows(["Row.c-team", "Row.c-ann", "Row.c-dee"]);
+
+        // Open Dee's Chat
+        App.Find("Row.c-dee").Patterns.SelectionItem.Pattern.Select();
+        App.WaitForText("Chat.Header", "Dee");
+
+        // A New Message: Her Row Lifts Below Pinned Team And Stays Selected
+        Server.Phone.PushIncoming("c-dee", "yo");
+        WaitForRows(["Row.c-team", "Row.c-dee", "Row.c-ann"]);
+        Wait.Until(() => App.TryFind("Row.c-dee") is { } row && row.Patterns.SelectionItem.Pattern.IsSelected.ValueOrDefault,
+            AppDriver.DefaultTimeout, () => "Dee's row lost the selection when it moved.");
+        Assert.IsFalse(App.Find("Row.c-ann").Patterns.SelectionItem.Pattern.IsSelected.ValueOrDefault, "Ann's row took the selection.");
+        App.WaitForText("Chat.Header", "Dee");
+    }
+
+    /// <summary>
     /// A narrow window shows one pane: picking a conversation hides the list and shows the chat.
     /// </summary>
     /// <returns>A task for the test.</returns>
