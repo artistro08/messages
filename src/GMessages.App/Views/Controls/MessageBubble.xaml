@@ -533,8 +533,8 @@
                 HorizontalAlignment="Left"
                 ColumnDefinitions="Auto,*,Auto">
 
-                <!-- Reactions: a pill over the bubble's bottom corner; a click (or Enter or Space) opens the reaction picker, or in a
-                     group chat the list of who reacted (built in code). A whole-pixel height (24,
+                <!-- Reactions: a pill over the bubble's bottom corner; a click (or Enter or Space) lists who reacted, in every chat
+                     (built in code; never the reaction picker). A whole-pixel height (24,
                      more for large text) with corners of half of it, and its fill under the stroke, so the ends draw as smooth half
                      circles at any scale. Its top 8 px overlap the back, and it keeps 6 px from the time -->
                 <Button

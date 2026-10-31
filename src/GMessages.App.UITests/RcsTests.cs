@@ -257,7 +257,8 @@ public sealed class RcsTests : UiTest
         string last = "";
         Wait.Until(() => (last = AppDriver.SafeName(App.TryFind("Reactions." + id))).Contains("\U0001F602", StringComparison.Ordinal), AppDriver.DefaultTimeout,
             () => $"The reaction pill read '{last}', without 😂.");
-        App.Find("Reactions." + id).Click();
+        App.Find("Bubble." + id).RightClick();
+        App.Find("Bubble.React").Patterns.Invoke.Pattern.Invoke();
 
         App.Find("ReactionPicker");
         Assert.AreEqual(ChatCopy.Selected, App.Find("ReactionPicker." + (int)EmojiType.Laugh).Properties.ItemStatus.ValueOrDefault);
@@ -266,11 +267,12 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// In Ann's one-on-one chat the reaction pill still opens the reaction picker, not a list of who reacted.
+    /// In Ann's one-on-one chat the reaction pill lists who reacted too, as in a group, and never opens the reaction
+    /// picker (owner, Plan 7).
     /// </summary>
     /// <returns>A task for the test.</returns>
     [TestMethod]
-    public async Task OneOnOnePill_Click_OpensPickerNotReactors()
+    public async Task OneOnOnePill_Click_ListsWhoReacted()
     {
         await OpenChatAsync("Row.c-ann");
         string id = Find("c-ann", AnnLast).MessageID;
@@ -278,8 +280,9 @@ public sealed class RcsTests : UiTest
         Server.Phone.PushReactions("c-ann", id, (EmojiType.Like, "p-ann"));
         App.Find("Reactions." + id).Click();
 
-        App.Find("ReactionPicker");
-        Assert.IsNull(App.TryFind("Reactors"), "The pill listed who reacted in a one-on-one chat.");
+        App.Find("Reactors");
+        Assert.AreEqual("\U0001F44D Ann Lee", AppDriver.SafeName(App.Find("Reactors.0")));
+        Assert.IsNull(App.TryFind("ReactionPicker"), "The pill opened the reaction picker in a one-on-one chat.");
         Keyboard.Type(VirtualKeyShort.ESCAPE);
     }
 

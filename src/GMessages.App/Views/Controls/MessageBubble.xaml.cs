@@ -50,8 +50,8 @@ namespace GMessages.App.Views.Controls;
 /// title and the link's host, shows under the text once fetched, and the text then leaves out that link's address (a
 /// message that was only the link shows the card alone). Clicking the card opens the link in the default browser; its
 /// own menu (right-click, the Application key or Shift + F10) has Copy link (<c>Preview.CopyLink</c>), which copies the
-/// address as sent. In a group chat the pill opens who reacted (<c>Reactors</c>, rows <c>Reactors.{n}</c>, mine as
-/// "You"). In a one-on-one chat the pill, and everywhere the menu's React, raise
+/// address as sent. In every chat the pill opens who reacted (<c>Reactors</c>, rows <c>Reactors.{n}</c>, mine as
+/// "You"). The menu's React and the hover strip's React raise
 /// <see cref="ReactRequested"/>, and the menu's Reply raises <see cref="ReplyRequested"/>, for the chat to act on.
 /// </para>
 /// <para>
@@ -252,7 +252,7 @@ public sealed partial class MessageBubble : UserControl
     public event EventHandler? RetryRequested;
 
     /// <summary>
-    /// Asks the chat to open the reaction picker on this bubble (the pill, the menu's React or the hover strip's React),
+    /// Asks the chat to open the reaction picker on this bubble (the menu's React or the hover strip's React),
     /// over the element given: the back, or the strip's React button.
     /// </summary>
     public event EventHandler<FrameworkElement>? ReactRequested;
@@ -1369,12 +1369,11 @@ public sealed partial class MessageBubble : UserControl
     // The Menu's React: The Picker Opens Over The Back
     private void OnReactClick(object sender, RoutedEventArgs e) => ReactRequested?.Invoke(this, Back);
 
-    // The Pill: In A Group Chat, Who Reacted; In A One-On-One Chat, The Picker Over The Back As Before
+    // The Pill: Who Reacted, In Every Chat (Never The Picker; The Menu, The Strip And Shift + + Open That)
     private void OnPillClick(object sender, RoutedEventArgs e)
     {
-        if (Bubble is not { IsGroupChat: true } bubble)
+        if (Bubble is not { } bubble)
         {
-            ReactRequested?.Invoke(this, Back);
             return;
         }
 
