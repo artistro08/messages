@@ -462,6 +462,12 @@ public sealed partial class MediaStore
             safe = FallbackName + ExtensionOf(mime);
         }
 
+        // A Name With No Extension (Phones Often Send "image" Or An ID) Gets The Mime Type's, So It Opens And Saves As Its Type
+        else if (Path.GetExtension(safe).Length <= 1)
+        {
+            safe += ExtensionOf(mime);
+        }
+
         // Device Names Are Refused Whatever Follows The First Dot
         int dot     = safe.IndexOf('.', StringComparison.Ordinal);
         string stem = dot < 0 ? safe : safe[..dot];
@@ -585,17 +591,40 @@ public sealed partial class MediaStore
         }
     }
 
-    // ponytail: a short guess from the mime subtype (jpeg as jpg, audio/mp4 as m4a); a full table if other apps choke
-    private static string ExtensionOf(string mime)
+    /// <summary>
+    /// Gives the file extension for a mime type, such as <c>.jpg</c> for <c>image/jpeg</c> or <c>.mp4</c> for
+    /// <c>video/mp4</c>.
+    /// </summary>
+    /// <remarks>
+    /// Types whose subtype isn't their usual extension come from a short table (<c>video/quicktime</c> as <c>.mov</c>,
+    /// <c>audio/mpeg</c> as <c>.mp3</c>, <c>audio/mp4</c> as <c>.m4a</c>...). Any other type uses its subtype when that is
+    /// up to five letters or digits (<c>image/png</c> as <c>.png</c>); otherwise there is none.
+    /// </remarks>
+    /// <param name="mime">The mime type.</param>
+    /// <returns>The extension with its dot, or empty when the type gives none.</returns>
+    public static string ExtensionOf(string mime)
     {
-        string type    = mime ?? string.Empty;
+        // ponytail: a short table plus the subtype; add rows when a type's subtype isn't its extension
+        string type   = (mime ?? string.Empty).Split(';')[0].Trim().ToLowerInvariant();
         string subtype = type[(type.IndexOf('/', StringComparison.Ordinal) + 1)..];
 
         return type switch
         {
-            "image/jpeg" => ".jpg",
-            "audio/mp4"  => ".m4a",
-            _            => subtype.Length is > 0 and <= 5 && subtype.All(char.IsAsciiLetterOrDigit) ? "." + subtype : string.Empty,
+            "image/jpeg" or "image/jpg" or "image/pjpeg"  => ".jpg",
+            "image/svg+xml"                                 => ".svg",
+            "image/x-ms-bmp"                                => ".bmp",
+            "audio/mp4" or "audio/x-m4a"                    => ".m4a",
+            "audio/mpeg" or "audio/mp3"                     => ".mp3",
+            "audio/x-wav" or "audio/wave"                   => ".wav",
+            "video/quicktime"                               => ".mov",
+            "video/3gpp" or "audio/3gpp"                    => ".3gp",
+            "video/3gpp2" or "audio/3gpp2"                  => ".3g2",
+            "video/x-matroska"                              => ".mkv",
+            "video/x-msvideo"                               => ".avi",
+            "text/plain"                                    => ".txt",
+            "text/vcard" or "text/x-vcard"                  => ".vcf",
+            "text/calendar"                                 => ".ics",
+            _                                               => subtype.Length is > 0 and <= 5 && subtype.All(char.IsAsciiLetterOrDigit) ? "." + subtype : string.Empty,
         };
     }
 

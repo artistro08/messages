@@ -92,7 +92,9 @@ internal static class MediaActions
                 SuggestedFileName      = Path.GetFileNameWithoutExtension(name),
                 SuggestedStartLocation = PickerLocationId.Downloads,
             };
-            picker.FileTypeChoices.Add(ChatCopy.File, new List<string> { extension.Length > 1 ? extension : ".bin" });
+            var choices = new List<string> { extension.Length > 1 ? extension : ".bin" };
+            picker.FileTypeChoices.Add(ChatCopy.File, choices);
+            TestHooks.NoteState("save-as", picker.SuggestedFileName + choices[0]);
             WinRT.Interop.InitializeWithWindow.Initialize(picker, Microsoft.UI.Win32Interop.GetWindowFromWindowId(island.AppWindowId));
 
             StorageFile? file = TestHooks.PickSaveFile() is { } picked
