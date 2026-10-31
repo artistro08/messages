@@ -202,7 +202,8 @@ public partial class App : Application, IDisposable
 
         // Started By A Toast Click: Read After Register, As The Windows App SDK Requires. A Reply Waits For Connected; An
         // Open Shows The Main Window At Once (Held Until Start-Up Ends)
-        AppNotificationActivatedEventArgs? launched = AppInstance.GetCurrent().GetActivatedEventArgs() is { Kind: ExtendedActivationKind.AppNotification, Data: AppNotificationActivatedEventArgs toast } ? toast : null;
+        AppActivationArguments activation           = AppInstance.GetCurrent().GetActivatedEventArgs();
+        AppNotificationActivatedEventArgs? launched = activation is { Kind: ExtendedActivationKind.AppNotification, Data: AppNotificationActivatedEventArgs toast } ? toast : null;
         if (launched is not null && NotificationArgs.Parse(launched.Argument) is { Action: "reply" })
         {
             _launchNotification                    = launched;
@@ -215,6 +216,13 @@ public partial class App : Application, IDisposable
         else if (launched is not null)
         {
             _ = _notifications.HandleAsync(launched);
+        }
+
+        // Started By The User: The Main Window Shows (Held Until Start-Up Ends). Windows' Startup Task At Sign-In Keeps
+        // The App In The Tray
+        if (LaunchWindow.ShowsAtLaunch(activation.Kind == ExtendedActivationKind.StartupTask, launched is not null))
+        {
+            OnShowMainWindowRequested("launch");
         }
 
         _ = StartConnectionAsync();
