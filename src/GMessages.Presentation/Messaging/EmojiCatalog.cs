@@ -1,17 +1,17 @@
-using GMessages.Presentation.Messaging;
-
-namespace GMessages.App.Views;
+namespace GMessages.Presentation.Messaging;
 
 /// <summary>
 /// The emoji the reaction picker's More reactions offers: common emoji in Windows' emoji panel categories, each with a few
 /// search words.
 /// </summary>
 /// <remarks>
-/// The search words are English and never shown; they only match what is typed in the picker's search box. Each
-/// category's entries are one string: an emoji, its words, then <c>|</c> before the next.
+/// The search words are English and never shown except the first (the emoji's tooltip); they match what is typed in the
+/// picker's search box (see <see cref="Search"/>). Each category's entries are one string: an emoji, its words, then
+/// <c>|</c> before the next. An emoji whose first character shows as plain text by default carries U+FE0F (the emoji
+/// variation selector) after it.
 /// </remarks>
-// ponytail: about 250 hand-picked emoji with short search words; load Unicode's full CLDR table if people miss ones
-internal static class EmojiCatalog
+// ponytail: about 550 hand-picked emoji with short search words; load Unicode's full CLDR table if people miss ones
+public static class EmojiCatalog
 {
     /// <summary>
     /// Gets the categories in order, each with its name (shown over its emoji) and its emoji with their search words.
@@ -86,6 +86,52 @@ internal static class EmojiCatalog
             + "♊ gemini|♋ cancer|♌ leo|♍ virgo|♎ libra|♏ scorpio|♐ sagittarius|♑ capricorn|♒ aquarius|♓ pisces|🏳️‍🌈 rainbow flag pride|"
             + "🏁 checkered flag|🚩 red flag")),
     ];
+
+    /// <summary>
+    /// Gets the categories with only the emoji that match what was typed, leaving out categories with none.
+    /// </summary>
+    /// <remarks>
+    /// Every typed word must appear in the emoji's search words, ignoring case, anywhere in them ("eye" finds "eyes"); a
+    /// typed plural also matches its singular ("eyes" finds "eye"). Nothing typed returns every category.
+    /// </remarks>
+    /// <param name="query">What was typed in the search box.</param>
+    /// <returns>The matching categories in order, each with its matching emoji in order.</returns>
+    public static IReadOnlyList<(string Name, IReadOnlyList<(string Emoji, string Words)> Emoji)> Search(string? query)
+    {
+        string[] typed = (query ?? string.Empty).Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (typed.Length == 0)
+        {
+            return Categories;
+        }
+
+        var found = new List<(string Name, IReadOnlyList<(string Emoji, string Words)> Emoji)>();
+        foreach ((string name, IReadOnlyList<(string Emoji, string Words)> emoji) in Categories)
+        {
+            List<(string Emoji, string Words)> matches = emoji.Where(e => typed.All(t => Matches(e.Words, t))).ToList();
+            if (matches.Count > 0)
+            {
+                found.Add((name, matches));
+            }
+        }
+
+        return found;
+    }
+
+    // A Typed Word In The Search Words (Ignoring Case), Or Its Singular: "Eyes" Also Finds "Eye", "Peaches" Also "Peach"
+    private static bool Matches(string words, string typed)
+    {
+        if (words.Contains(typed, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (typed.Length > 3 && typed.EndsWith("es", StringComparison.OrdinalIgnoreCase) && words.Contains(typed[..^2], StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return typed.Length > 2 && typed.EndsWith("s", StringComparison.OrdinalIgnoreCase) && words.Contains(typed[..^1], StringComparison.OrdinalIgnoreCase);
+    }
 
     // One Category's String: "Emoji Words|Emoji Words|..."
     private static List<(string Emoji, string Words)> Parse(string entries)

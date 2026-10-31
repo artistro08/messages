@@ -262,11 +262,28 @@ public partial class App : Application, IDisposable
 
     // An error that escaped a UI event handler (an async void click) is logged by type and HRESULT only, never its
     // message (it can hold content). Once launched it is marked handled, so one failed click can't take the tray, and
-    // with it every later notification, down. Before then it still ends the app, so a broken start-up is never hidden
+    // with it every later notification, down. Before then it still ends the app, so a broken start-up is never hidden.
+    // The stack's frames are logged too (code names only, see StackFrames), so the source can be found
     private void OnUnhandledException(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs e)
     {
         e.Handled = _launched && e.Exception is not OutOfMemoryException;
-        AppLog.UnhandledError(_logger, e.Exception?.GetType().Name ?? "Unknown", e.Exception?.HResult ?? 0, e.Handled);
+        AppLog.UnhandledError(_logger, e.Exception?.GetType().Name ?? "Unknown", e.Exception?.HResult ?? 0, e.Handled, StackFrames(e.Exception));
+    }
+
+    // An Error's Stack As "Type.Method(Parameter Types)" Frames Joined By " < ", Innermost First: The Method Names Only,
+    // Never The Message, Source Paths Or Line Numbers. "None" When The Error Came From WinUI Without A Managed Stack
+    private static string StackFrames(Exception? error)
+    {
+        if (string.IsNullOrWhiteSpace(error?.StackTrace))
+        {
+            return "None";
+        }
+
+        IEnumerable<string> frames = error.StackTrace
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(line => line.StartsWith("at ", StringComparison.Ordinal) ? line[3..] : line)
+            .Select(line => line.IndexOf(" in ", StringComparison.Ordinal) is int at and >= 0 ? line[..at] : line);
+        return string.Join(" < ", frames);
     }
 
     // =========================================================================
