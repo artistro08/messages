@@ -13,7 +13,9 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Animation;
 using Windows.System;
+using Windows.UI.ViewManagement;
 using WinRT;
 
 namespace GMessages.App.Views;
@@ -74,8 +76,16 @@ public sealed partial class ChatsView : UserControl
     // The List's Scroller, Found Once The List Has Its Template
     private ScrollViewer? _listScroller;
 
-    // The Rows On Show, Watched So A Moved Open Row Gets Its Highlight Back
+    // Reads The Windows Animation Setting Live (Settings > Accessibility > Visual Effects)
+    private static readonly UISettings Ui = new();
+
+    // The Rows On Show, Watched So A Moved Open Row Gets Its Highlight Back; Their List, Watched For Live Changes And
+    // New Messages (The List Motion And The Row Flash)
     private ObservableCollection<ConversationRowViewModel>? _shownRows;
+    private ConversationListViewModel? _shownList;
+
+    // The List's Add, Remove And Reorder Motion Is On (Only For A Live Change)
+    private bool _animatingRows;
 
     // A Navigation Key In The List Is Moving Its Selection (See OnListPreviewKeyDown)
     private bool _selectingWithKeys;
@@ -127,6 +137,12 @@ public sealed partial class ChatsView : UserControl
         if (_shownRows is not null)
         {
             _shownRows.CollectionChanged -= OnRowsChanged;
+        }
+
+        if (_shownList is not null)
+        {
+            _shownList.RowsChanging -= OnRowsChanging;
+            _shownList.RowFlashed   -= OnRowFlashed;
         }
 
         ViewModel.PropertyChanged -= OnViewModelChanged;
@@ -211,7 +227,15 @@ public sealed partial class ChatsView : UserControl
     // (See BindableList For Why The Rows Aren't Bound Directly)
     private void ShowCurrentList()
     {
-        ObservableCollection<ConversationRowViewModel> rows = ViewModel.CurrentList.Rows;
+        ConversationListViewModel list                      = ViewModel.CurrentList;
+        ObservableCollection<ConversationRowViewModel> rows = list.Rows;
+
+        // A Folder Switch Shows Its Rows Without Motion
+        if (rows != _shownRows)
+        {
+            AnimateRows(false);
+        }
+
         BindableList.Show(ConversationList, rows);
         if (rows == _shownRows)
         {
@@ -223,8 +247,72 @@ public sealed partial class ChatsView : UserControl
             _shownRows.CollectionChanged -= OnRowsChanged;
         }
 
+        if (_shownList is not null)
+        {
+            _shownList.RowsChanging -= OnRowsChanging;
+            _shownList.RowFlashed   -= OnRowFlashed;
+        }
+
         _shownRows                    = rows;
         _shownRows.CollectionChanged += OnRowsChanged;
+        _shownList                    = list;
+        _shownList.RowsChanging      += OnRowsChanging;
+        _shownList.RowFlashed        += OnRowFlashed;
+    }
+
+    // The Rows Are About To Change: Windows' List Motion Only For A Live Change (A New Message Lifts A Row, A
+    // Conversation Arrives Or Leaves), And Only With Animation Effects On; Loads And Pages Land In Place
+    private void OnRowsChanging(object? sender, bool live) => AnimateRows(live && Ui.AnimationsEnabled);
+
+    // Turns The List's Motion On Or Off: The Inserted Row Slides And Fades In Where It Lands (The Lifted Row At The
+    // Top), A Removed One Fades Out, And The Rows Between Slide Aside. The Collection Is Changed In Place (New, Then
+    // Add; Never A Collection Expression: AOT), So The List's Panel Always Sees The Current Set
+    private void AnimateRows(bool animate)
+    {
+        if (animate == _animatingRows)
+        {
+            return;
+        }
+
+        _animatingRows                   = animate;
+        TransitionCollection transitions = ConversationList.ItemContainerTransitions;
+        transitions.Clear();
+        if (animate)
+        {
+            transitions.Add(new AddDeleteThemeTransition());
+            transitions.Add(new ReorderThemeTransition());
+        }
+    }
+
+    // A New Message, Sent Or Received: Flash Its Row. On Top Already, It Flashes At Once; Lifted, Its Row Is Shown Again
+    // At The Next Layout, So It Flashes Then. A Row Out Of View Isn't Shown, So It Doesn't Flash
+    private void OnRowFlashed(object? sender, ConversationRowViewModel row)
+    {
+        if (!Ui.AnimationsEnabled || FlashRowView(row))
+        {
+            return;
+        }
+
+        void OnLayoutUpdated(object? s, object e)
+        {
+            ConversationList.LayoutUpdated -= OnLayoutUpdated;
+            _ = FlashRowView(row);
+        }
+
+        ConversationList.LayoutUpdated += OnLayoutUpdated;
+    }
+
+    // Flashes A Row Shown In The List, Found By Its Name In Its Container (AOT Safe; See FindPart)
+    private bool FlashRowView(ConversationRowViewModel row)
+    {
+        if (ConversationList.ContainerFromItem(row) is not { } container
+            || ChatPane.FindPart<ConversationRow>(container, "RowView") is not { } view)
+        {
+            return false;
+        }
+
+        view.Flash();
+        return true;
     }
 
     // The List Highlights The Open Conversation: Picking A Row Opens It, And This Follows Opens From Elsewhere

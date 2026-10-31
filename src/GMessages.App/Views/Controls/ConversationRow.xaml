@@ -7,6 +7,22 @@
     PointerEntered="OnPointerEntered"
     PointerExited="OnPointerLeft">
 
+    <!-- Flash: a new message lights the row in the accent color for a moment, then it fades out (see Flash) -->
+    <UserControl.Resources>
+        <Storyboard x:Name="FlashStoryboard">
+            <DoubleAnimationUsingKeyFrames Storyboard.TargetName="FlashFill" Storyboard.TargetProperty="Opacity">
+                <SplineDoubleKeyFrame
+                    KeySpline="{StaticResource ControlFastOutSlowInKeySpline}"
+                    KeyTime="0:0:0.15"
+                    Value="0.3" />
+                <SplineDoubleKeyFrame
+                    KeySpline="{StaticResource ControlFastOutSlowInKeySpline}"
+                    KeyTime="0:0:0.95"
+                    Value="0" />
+            </DoubleAnimationUsingKeyFrames>
+        </Storyboard>
+    </UserControl.Resources>
+
     <!-- Row: avatar, name and snippet, the time with the pin and muted icons, then the ⋮ (no space until hovered).
          Transparent, so the whole row takes the pointer (hover) and not just its text -->
     <Grid
@@ -94,6 +110,16 @@
                 </VisualState>
             </VisualStateGroup>
         </VisualStateManager.VisualStateGroups>
+
+        <!-- Flash Fill: behind the whole row, padding included, clear until a new message flashes it -->
+        <Border
+            x:Name="FlashFill"
+            Grid.ColumnSpan="4"
+            Margin="0,-10"
+            Background="{ThemeResource AccentFillColorDefaultBrush}"
+            CornerRadius="{StaticResource ControlCornerRadius}"
+            IsHitTestVisible="False"
+            Opacity="0" />
 
         <!-- Avatar -->
         <local:Avatar

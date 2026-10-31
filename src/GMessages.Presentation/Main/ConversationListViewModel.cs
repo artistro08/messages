@@ -31,6 +31,9 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
     private bool _isLoading;
     private bool _isLoadingMore;
 
+    // The First Load Ended (Shown Or Failed); Live Changes Animate Only After It
+    private bool _hasLoaded;
+
     // A Reload, Or The Next Page, Asked For While A Load Was Running; Runs When That Load Ends
     private bool _reloadPending;
     private bool _morePending;
@@ -63,6 +66,25 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
 
     /// <inheritdoc />
     public event PropertyChangedEventHandler? PropertyChanged;
+
+    /// <summary>
+    /// Raised just before the rows change: true for a live change (a new message lifts a row, a conversation arrives or
+    /// leaves), false for a load or a page.
+    /// </summary>
+    /// <remarks>
+    /// Raised ahead of the change so the view can turn the list's move and add animations on or off before the list
+    /// sees it: only live changes animate, never the first load, a reload or a page.
+    /// </remarks>
+    public event EventHandler<bool>? RowsChanging;
+
+    /// <summary>
+    /// Raised after a live new message (sent or received) lifts a row or adds a newest one; the view flashes the row.
+    /// </summary>
+    /// <remarks>
+    /// Only when the row's last message time moves later: read state, mute, typing and other updates to a row raise
+    /// nothing, nor do loads and pages, nor a conversation arriving below newer ones (such as one unarchived).
+    /// </remarks>
+    public event EventHandler<ConversationRowViewModel>? RowFlashed;
 
     /// <summary>Gets the rows, pinned first, then newest first.</summary>
     public ObservableCollection<ConversationRowViewModel> Rows { get; } = [];
@@ -129,7 +151,7 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
         {
             foreach (ConversationInfo c in _store.CachedConversations())
             {
-                Apply(c);
+                Apply(c, live: false);
             }
         }
 
@@ -144,6 +166,7 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
             {
                 if (!listed.Contains(Rows[i].Id))
                 {
+                    RowsChanging?.Invoke(this, false);
                     Rows.RemoveAt(i);
                 }
             }
@@ -151,7 +174,7 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
             _next = next;
             foreach (ConversationInfo c in page)
             {
-                Apply(c);
+                Apply(c, live: false);
             }
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -161,7 +184,8 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
         }
         finally
         {
-            IsLoading = false;
+            IsLoading  = false;
+            _hasLoaded = true;
         }
 
         await RunPendingReloadAsync();
@@ -202,7 +226,7 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
             _next = page.Any(c => !shown.Contains(c.Id)) ? next : null;
             foreach (ConversationInfo c in page)
             {
-                Apply(c);
+                Apply(c, live: false);
             }
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -247,12 +271,16 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
     // LIVE UPDATES
     // =========================================================================
 
-    private void OnConversationChanged(object? sender, ConversationInfo c) => Apply(c);
+    // A Live Update Before The First Load Ends, Or While A Load Or Page Runs, Is Part Of That Load (Loading A Page
+    // Raises Them): It Doesn't Animate
+    private void OnConversationChanged(object? sender, ConversationInfo c) => Apply(c, live: _hasLoaded && !IsLoading);
 
     private void OnResynced(object? sender, EventArgs e) => _post(() => _ = LoadAsync());
 
-    // Inserts, Moves Or Updates The Row; Removes It When The Conversation Left This Folder
-    private void Apply(ConversationInfo c)
+    // Inserts, Moves Or Updates The Row; Removes It When The Conversation Left This Folder. A Live Change Says So First
+    // (RowsChanging), And A Live New Message Flashes Its Row (RowFlashed): A Later Last Message Time, Or A New Row With
+    // Nothing Newer Above It
+    private void Apply(ConversationInfo c, bool live)
     {
         int index = IndexOf(c.Id);
 
@@ -260,6 +288,7 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
         {
             if (index >= 0)
             {
+                RowsChanging?.Invoke(this, live);
                 Rows.RemoveAt(index);
             }
 
@@ -270,18 +299,33 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
 
         if (index < 0)
         {
-            var row = new ConversationRowViewModel(c, now);
+            var row     = new ConversationRowViewModel(c, now);
+            bool newest = Rows.All(r => r.LastMessageTime <= c.LastMessageTime);
+
+            RowsChanging?.Invoke(this, live);
             Rows.Insert(TargetIndex(row, null), row);
+            if (live && newest)
+            {
+                RowFlashed?.Invoke(this, row);
+            }
+
             return;
         }
 
         ConversationRowViewModel existing = Rows[index];
+        bool newer                        = c.LastMessageTime > existing.LastMessageTime;
         existing.Update(c, now);
 
         int target = TargetIndex(existing, existing);
         if (target != index)
         {
+            RowsChanging?.Invoke(this, live);
             Rows.Move(index, target);
+        }
+
+        if (live && newer)
+        {
+            RowFlashed?.Invoke(this, existing);
         }
     }
 
