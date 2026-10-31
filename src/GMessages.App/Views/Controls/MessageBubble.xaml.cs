@@ -188,6 +188,11 @@ public sealed partial class MessageBubble : UserControl
     private int _photoLoad;
     private bool _photoFailed;
 
+    // Whether The Full Image Is A Moving GIF (An Image, Clipped On Its Composition Visual), Else A Still One (A Brush);
+    // And The Full Layer's Visual, Taken Once While It Is In The Live Tree
+    private bool _photoAnimated;
+    private Visual? _photoFullVisual;
+
     // Cancels A Thumbnail-Only Photo's Wait For Its Full Size When A Newer Load Starts (Null When None Is Waiting)
     private Action? _cancelPhotoWait;
 
@@ -238,13 +243,15 @@ public sealed partial class MessageBubble : UserControl
         AutomationProperties.SetName(HoverMore, ChatCopy.MoreOptions);
         ToolTipService.SetToolTip(HoverMore, ChatCopy.MoreOptions);
 
-        // The Photo's Layers Take The Photo's Rounded Corners (Bound Once, On The Button)
+        // The Photo's Layers Take The Photo's Rounded Corners (Bound Once, On The Button). A Still Photo Is The Full
+        // Layer's Brush, Which Its Corners Clip; Only A GIF Needs The Composition Clip (See ClipPhotoFull)
         Photo.RegisterPropertyChangedCallback(Control.CornerRadiusProperty, (_, _) =>
         {
             PhotoBlur.CornerRadius = PhotoFull.CornerRadius = Photo.CornerRadius;
             ClipPhotoFull();
         });
         PhotoFull.SizeChanged += (_, _) => ClipPhotoFull();
+        PhotoFull.Loaded      += (_, _) => ClipPhotoFull(mayTake: true);
 
         // Links Follow The Text's Color: Its Side's State And The Theme Set It
         Body.RegisterPropertyChangedCallback(TextBlock.ForegroundProperty, (_, _) => ColorLinks());
@@ -609,13 +616,22 @@ public sealed partial class MessageBubble : UserControl
     {
         var view = (MessageBubble)d;
 
-        // No Entrance Left Running From The Container's Last Bubble
-        Visual row = ElementCompositionPreview.GetElementVisual(view.Row);
-        ElementCompositionPreview.SetIsTranslationEnabled(view.Row, true);
-        row.StopAnimation(nameof(Visual.Opacity));
-        row.StopAnimation("Translation");
-        row.Opacity = 1;
-        row.Properties.InsertVector3("Translation", Vector3.Zero);
+        // No Entrance Left Running From The Container's Last Bubble. Guarded: This Runs In x:Bind's ProcessBindings, Where
+        // Windows Can Refuse The Visual (E_ACCESSDENIED, As It Did The Photo's Clip), And A Throw Escaping Into XAML Crashes
+        // The App
+        try
+        {
+            Visual row = ElementCompositionPreview.GetElementVisual(view.Row);
+            ElementCompositionPreview.SetIsTranslationEnabled(view.Row, true);
+            row.StopAnimation(nameof(Visual.Opacity));
+            row.StopAnimation("Translation");
+            row.Opacity = 1;
+            row.Properties.InsertVector3("Translation", Vector3.Zero);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            AppLog.MediaFailed(App.ShellLog, "entrance", view.Bubble?.Id ?? string.Empty, ex.GetType().Name);
+        }
 
         view._pointerOver = false;
         view._keepShown   = false;
@@ -761,9 +777,12 @@ public sealed partial class MessageBubble : UserControl
         if (!same_message)
         {
             PhotoBlur.Background        = null;
+            PhotoFull.Background        = null;
             PhotoFullImage.Source       = null;
             PhotoFull.OpacityTransition = null;
             PhotoFull.Opacity           = 0;
+            _photoAnimated              = false;
+            ClipPhotoFull();
         }
 
         ShowPhotoNote(null, string.Empty);
@@ -894,13 +913,17 @@ public sealed partial class MessageBubble : UserControl
                 return;
             }
 
-            PhotoFullImage.Source       = image;
+            // A Moving GIF Plays In An Image (A Brush Shows Only Its First Frame; Test Runs Note It); A Still Photo Is The
+            // Layer's Brush, Which The Border's Corners Clip With No Composition Clip
+            bool animated               = image.As<BitmapImage>() is { IsAnimatedBitmap: true };
+            _photoAnimated              = animated;
+            PhotoFullImage.Source       = animated ? image : null;
+            PhotoFull.Background        = animated ? null : new ImageBrush { ImageSource = image, Stretch = Stretch.UniformToFill };
             PhotoFull.OpacityTransition = at_once || !Ui.AnimationsEnabled ? null : _photoFade;
             PhotoFull.Opacity           = 1;
+            ClipPhotoFull(mayTake: true);
             TestHooks.ShowState(Photo, "Full");
-
-            // A Moving GIF Plays (Test Runs Note It)
-            if (image.As<BitmapImage>() is { IsAnimatedBitmap: true })
+            if (animated)
             {
                 TestHooks.NoteState("animated-photo", bubble.Id);
             }
@@ -932,24 +955,45 @@ public sealed partial class MessageBubble : UserControl
         }
     }
 
-    // The Full Image's Layer Clipped To The Photo's Rounded Corners (An Image Isn't Clipped By Its Border's Corners)
-    private void ClipPhotoFull()
+    // A GIF's Layer Clipped To The Photo's Rounded Corners (An Image Isn't Clipped By Its Border's Corners); A Still
+    // Photo's Brush Needs No Clip, So Any Left From A GIF This Container Showed Goes.
+    // The Visual Is Taken Once, Only For A GIF, And Only From The Layer's Loaded Or The GIF's Arrival (mayTake), Never
+    // From SizeChanged Or A Binding Callback: Asked For There While The List Recycled Rows, Windows Refused It With
+    // E_ACCESSDENIED, And One Such Throw Escaping Into XAML Crashed The App (0xc000027b) While Scrolling Chats With Photos.
+    // Size And Corner Changes Then Only Reshape The Clip On The Visual Already Held
+    private void ClipPhotoFull(bool mayTake = false)
     {
-        // Not Laid Out Yet (No Photo, Or Before Its First Layout): Its SizeChanged Clips It Later. A Corner Can't Be Rounder
-        // Than Half The Shorter Side, Or The Clip Is Refused (Which Crashed The App On Opening A Chat)
-        float width  = (float)PhotoFull.ActualWidth;
-        float height = (float)PhotoFull.ActualHeight;
-        if (width <= 0 || height <= 0)
+        if (_photoFullVisual is null && (!mayTake || !_photoAnimated || !PhotoFull.IsLoaded))
         {
             return;
         }
 
-        float most     = Math.Min(width, height) / 2;
-        CornerRadius r = Photo.CornerRadius;
-        Visual visual  = ElementCompositionPreview.GetElementVisual(PhotoFull);
-        visual.Clip    = visual.Compositor.CreateRectangleClip(
-            0, 0, width, height,
-            Corner(r.TopLeft, most), Corner(r.TopRight, most), Corner(r.BottomRight, most), Corner(r.BottomLeft, most));
+        try
+        {
+            _photoFullVisual ??= ElementCompositionPreview.GetElementVisual(PhotoFull);
+            Visual visual      = _photoFullVisual;
+
+            // Not Laid Out Yet: Its SizeChanged Clips It Later. A Corner Can't Be Rounder Than Half The Shorter Side, Or
+            // The Clip Is Refused (Which Crashed The App On Opening A Chat)
+            float width  = (float)PhotoFull.ActualWidth;
+            float height = (float)PhotoFull.ActualHeight;
+            if (!_photoAnimated || width <= 0 || height <= 0)
+            {
+                visual.Clip = null;
+                return;
+            }
+
+            float most     = Math.Min(width, height) / 2;
+            CornerRadius r = Photo.CornerRadius;
+            visual.Clip    = visual.Compositor.CreateRectangleClip(
+                0, 0, width, height,
+                Corner(r.TopLeft, most), Corner(r.TopRight, most), Corner(r.BottomRight, most), Corner(r.BottomLeft, most));
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // Square Corners Beat A Crash; The Next Size Change Tries Again
+            AppLog.MediaFailed(App.ShellLog, "clip", Bubble?.Id ?? string.Empty, ex.GetType().Name);
+        }
 
         static Vector2 Corner(double radius, float most) => new(Math.Min((float)radius, most));
     }
