@@ -62,6 +62,21 @@ public static class ChatCopy
     // The Reaction Picker's Any-Emoji Button (Controller Copy, Plan 7; Owner Signs Off)
     public const string MoreReactions = "More reactions";
 
+    // The Emoji Picker More Reactions Opens: Its Name, Search Box, Empty Search And Categories (Controller Copy, Plan 7
+    // Fixes; Owner Signs Off)
+    public const string EmojiPicker      = "Emoji";
+    public const string SearchEmoji      = "Search emoji";
+    public const string NoEmojiFound     = "No emoji found";
+    public const string EmojiSmileys     = "Smileys & emotion";
+    public const string EmojiPeople      = "People & gestures";
+    public const string EmojiHearts      = "Hearts";
+    public const string EmojiAnimals     = "Animals & nature";
+    public const string EmojiFood        = "Food & drink";
+    public const string EmojiActivities  = "Activities";
+    public const string EmojiTravel      = "Travel & places";
+    public const string EmojiObjects     = "Objects";
+    public const string EmojiSymbols     = "Symbols";
+
     // Link Preview Card Menu (Controller Copy; Owner Signs Off)
     public const string CopyLink = "Copy link";
 

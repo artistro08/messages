@@ -85,19 +85,10 @@ public sealed partial class ChatPane : UserControl
     // A Picker Button's Corners, Its Hover Tint's And Its Selected Fill's Alike (ReactionButtonStyle In ChatPane.xaml)
     private const double ReactionCorner = 8;
 
-    // More Reactions: Its Button's Size, And The Fallback Grid's Columns
+    // More Reactions: Its Button's Size, And The Emoji Picker's Columns And Scrolling Height
     private const double MoreReactionsSize = 40;
-    private const int EmojiGridColumns     = 8;
-
-    // The Fallback Grid's Emoji, For When The Windows Emoji Panel Can't Open: 40 Common Ones, Faces First
-    private static readonly string[] CommonEmoji =
-    [
-        "😀", "😂", "🤣", "😊", "😍", "🥰", "😘", "😎",
-        "🤔", "😮", "😢", "😭", "😡", "😅", "😆", "😉",
-        "🤗", "🤩", "😴", "🤯", "😬", "👀", "👍", "👎",
-        "👏", "🙌", "🙏", "💪", "🔥", "✨", "🎉", "💯",
-        "❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "💔",
-    ];
+    private const int EmojiPickerColumns   = 8;
+    private const double EmojiPickerHeight = 280;
 
     // The Message Box's Corners (Windows' Control Corner Radius) And The Compose Area's Padding
     private const double DraftCorner  = 4;
@@ -196,7 +187,12 @@ public sealed partial class ChatPane : UserControl
     private MessageBubble? _reactView;
     private FrameworkElement? _reactAnchor;
 
-    // The Bubble The Windows Emoji Panel Picks A Reaction For, While The Hidden Box Waits For It (Null Otherwise)
+    // The Emoji Picker (Made On First Use), Its Search Box, Its Category Headers With Their Buttons, Its Empty Note, And The
+    // Bubble It Picks A Reaction For
+    private Flyout? _emojiPicker;
+    private TextBox? _emojiSearch;
+    private TextBlock? _emojiEmpty;
+    private readonly List<(TextBlock Header, List<(Button Button, string Emoji, string Words)> Buttons)> _emojiGroups = [];
     private MessageBubbleViewModel? _emojiTarget;
 
     // The Picker's Buttons With The Fill Behind Each And Their Emoji, So The One Matching My Reaction Can Show Selected
@@ -252,7 +248,7 @@ public sealed partial class ChatPane : UserControl
             _reactionButtons.Add((button, back, emoji));
         }
 
-        // More Reactions: Any Emoji, From The Windows Emoji Panel (Or A Grid Of Common Ones When It Can't Open)
+        // More Reactions: Any Emoji, From The App's Emoji Picker
         var more = new Button
         {
             Width   = MoreReactionsSize,
@@ -1729,10 +1725,9 @@ public sealed partial class ChatPane : UserControl
         }
     }
 
-    // The Picker's More Reactions: Closes The Picker, Then (A Turn Later, Once The Closing Picker Has Put Focus Back)
-    // Focuses The Hidden Box And Opens The Windows Emoji Panel On It With Win + Period, Another Turn Later (Sent Before
-    // The Box Has Focus, Windows Ignores It). The First Emoji Typed There Becomes The Reaction (OnReactionEmojiTextChanged).
-    // When The Box Can't Take Focus Or The Shortcut Can't Be Sent, Or In A Test Run, A Grid Of Common Emoji Opens Instead
+    // The Picker's More Reactions: Closes The Picker, Then (A Turn Later, Once It Has Closed) Opens The Emoji Picker Where
+    // It Was. The Windows Emoji Panel Isn't Used: It Types Into A Text Box, And Aimed At A Hidden One It Neither Reacted Nor
+    // Closed (Owner's Report)
     private void OnMoreReactionsClick()
     {
         MessageBubbleViewModel? bubble = _reactTarget;
@@ -1744,99 +1739,129 @@ public sealed partial class ChatPane : UserControl
             return;
         }
 
-        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
-        {
-            ReactionEmojiBox.IsTabStop = true;
-            ReactionEmojiBox.Text      = string.Empty;
-            if (TestHooks.BlockEmojiPanel || !ReactionEmojiBox.Focus(FocusState.Programmatic))
-            {
-                ReactionEmojiBox.IsTabStop = false;
-                ShowEmojiGrid(bubble, view, anchor);
-                return;
-            }
-
-            _emojiTarget = bubble;
-            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
-            {
-                if (!SendEmojiShortcut())
-                {
-                    _emojiTarget = null;
-                    ShowEmojiGrid(bubble, view, anchor);
-                }
-            });
-        });
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => ShowEmojiPicker(bubble, view, anchor));
     }
 
-    // The Fallback Picker: About 40 Common Emoji In A Grid, In A Flyout Where The Picker Was (ReactionGrid.{n}); A Click
-    // Sends That Emoji As The Reaction. The Bubble's Hover Strip Stays Until It Closes
-    private void ShowEmojiGrid(MessageBubbleViewModel bubble, MessageBubble view, FrameworkElement anchor)
+    // The Emoji Picker: A Search Box Over The Catalog's Emoji By Category, Scrolling, In A Flyout Where The Reaction Picker Was
+    // (EmojiPicker; Buttons EmojiPicker.{Code Points In Hex}). A Click Sends That Emoji As The Reaction And Closes It; Escape
+    // Or A Click Outside Closes It. Focus Starts In The Search Box. The Bubble's Hover Strip Stays Until It Closes
+    private void ShowEmojiPicker(MessageBubbleViewModel bubble, MessageBubble view, FrameworkElement anchor)
     {
-        var grid   = new VariableSizedWrapGrid { Orientation = Orientation.Horizontal, MaximumRowsOrColumns = EmojiGridColumns };
-        var flyout = new Flyout { Content = grid, Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.Top };
-        Style style = ReactionButtons.Resources["ReactionButtonStyle"].As<Style>();
-        for (int i = 0; i < CommonEmoji.Length; i++)
-        {
-            string emoji = CommonEmoji[i];
-            var button   = new Button { Content = emoji, Style = style };
-            AutomationProperties.SetAutomationId(button, "ReactionGrid." + i);
-            button.Click += (_, _) =>
-            {
-                flyout.Hide();
-                SendReaction(bubble, emoji);
-            };
-            grid.Children.Add(button);
-        }
+        Flyout picker = _emojiPicker ??= BuildEmojiPicker();
+        _emojiTarget  = bubble;
+        _emojiSearch!.Text = string.Empty;
+        FilterEmoji();
 
         view.KeepShown(true);
-        flyout.Closed += (_, _) => view.KeepShown(false);
-        flyout.ShowAt(anchor);
+        picker.Closed += OnClosed;
+        picker.ShowAt(anchor);
+
+        void OnClosed(object? sender, object e)
+        {
+            picker.Closed -= OnClosed;
+            view.KeepShown(false);
+            _emojiTarget = null;
+        }
     }
 
-    // The Emoji Panel Typed Into The Hidden Box: Its First Emoji Is The Reaction (Sent As Custom When It Isn't One Of The
-    // Seven). Anything Else Typed There Is Dropped. The Box Then Clears, The Panel Closes (Escape) And Focus Goes Back To
-    // The Message Box
-    private void OnReactionEmojiTextChanged(object sender, TextChangedEventArgs e)
+    // Builds The Emoji Picker Once: Its Search Box, A Header And A Wrapping Grid Of Buttons Per Category, And Its Empty Note
+    private Flyout BuildEmojiPicker()
     {
-        string text = ReactionEmojiBox.Text;
-        if (text.Length == 0)
+        Style button_style = ReactionButtons.Resources["ReactionButtonStyle"].As<Style>();
+        Style note_style   = ReactionButtons.Resources["EmojiPickerNoteStyle"].As<Style>();
+        var flyout         = new Flyout { Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.Top };
+
+        // Search Box
+        _emojiSearch = new TextBox { PlaceholderText = ChatCopy.SearchEmoji, Margin = new Thickness(0, 0, 0, 8) };
+        AutomationProperties.SetAutomationId(_emojiSearch, "EmojiPicker.Search");
+        AutomationProperties.SetName(_emojiSearch, ChatCopy.SearchEmoji);
+        _emojiSearch.TextChanged += (_, _) => FilterEmoji();
+
+        // Categories
+        var groups = new StackPanel { Width = EmojiPickerColumns * MoreReactionsSize };
+        foreach ((string name, IReadOnlyList<(string Emoji, string Words)> emoji) in EmojiCatalog.Categories)
         {
-            return;
+            var header = new TextBlock
+            {
+                Text   = name,
+                Margin = new Thickness(4, 8, 0, 4),
+                Style  = note_style,
+            };
+            AutomationProperties.SetHeadingLevel(header, Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel.Level2);
+
+            var grid    = new VariableSizedWrapGrid { Orientation = Orientation.Horizontal, MaximumRowsOrColumns = EmojiPickerColumns };
+            var buttons = new List<(Button Button, string Emoji, string Words)>();
+            foreach ((string e, string words) in emoji)
+            {
+                var button = new Button { Content = e, Style = button_style };
+                AutomationProperties.SetAutomationId(button, "EmojiPicker." + EmojiKey(e));
+                ToolTipService.SetToolTip(button, words.Split(' ')[0]);
+                button.Click += (_, _) => PickEmoji(e);
+                grid.Children.Add(button);
+                buttons.Add((button, e, words));
+            }
+
+            groups.Children.Add(header);
+            groups.Children.Add(grid);
+            _emojiGroups.Add((header, buttons));
         }
 
-        string first                   = text[..System.Globalization.StringInfo.GetNextTextElementLength(text)];
+        // Empty Search
+        _emojiEmpty = new TextBlock { Text = ChatCopy.NoEmojiFound, Margin = new Thickness(4, 8, 0, 8), Style = note_style, Visibility = Visibility.Collapsed };
+        groups.Children.Add(_emojiEmpty);
+
+        var scroller = new ScrollViewer { Content = groups, Height = EmojiPickerHeight, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
+        var root     = new StackPanel { Children = { _emojiSearch, scroller } };
+        AutomationProperties.SetAutomationId(root, "EmojiPicker");
+        AutomationProperties.SetName(root, ChatCopy.EmojiPicker);
+        flyout.Content = root;
+        return flyout;
+    }
+
+    // The Search Box's Words: Only Emoji Whose Search Words Start With Every Typed Word Show, And A Category With None Hides
+    // Its Header; Nothing Typed Shows Them All. No Match At All Shows The Empty Note
+    private void FilterEmoji()
+    {
+        string[] typed = (_emojiSearch?.Text ?? string.Empty).Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        bool any       = false;
+        foreach ((TextBlock header, List<(Button Button, string Emoji, string Words)> buttons) in _emojiGroups)
+        {
+            bool shown = false;
+            foreach ((Button button, string emoji, string words) in buttons)
+            {
+                bool match        = MatchesEmoji(words, typed);
+                button.Visibility = match ? Visibility.Visible : Visibility.Collapsed;
+                shown            |= match;
+            }
+
+            header.Visibility = shown ? Visibility.Visible : Visibility.Collapsed;
+            any              |= shown;
+        }
+
+        if (_emojiEmpty is not null)
+        {
+            _emojiEmpty.Visibility = any ? Visibility.Collapsed : Visibility.Visible;
+        }
+    }
+
+    // True When Every Typed Word Starts One Of The Emoji's Search Words (Ignoring Case)
+    private static bool MatchesEmoji(string words, string[] typed) =>
+        typed.All(t => words.Split(' ').Any(w => w.StartsWith(t, StringComparison.OrdinalIgnoreCase)));
+
+    // An Emoji's AutomationId Part: Its Code Points In Hex, Joined By Dashes (🔥 Is 1F525)
+    private static string EmojiKey(string emoji) =>
+        string.Join("-", emoji.EnumerateRunes().Select(r => r.Value.ToString("X", System.Globalization.CultureInfo.InvariantCulture)));
+
+    // A Picked Emoji: Closes The Picker And Sends It As The Reaction (Custom When It Isn't One Of The Seven)
+    private void PickEmoji(string emoji)
+    {
         MessageBubbleViewModel? bubble = _emojiTarget;
-        ReactionEmojiBox.Text          = string.Empty;
-        if (bubble is null || !IsEmoji(first))
+        _emojiPicker?.Hide();
+        if (bubble is not null)
         {
-            return;
-        }
-
-        _emojiTarget = null;
-        SendReaction(bubble, first);
-        _ = SendKeys([Key(NativeMethods.VK_ESCAPE, 0), Key(NativeMethods.VK_ESCAPE, NativeMethods.KEYEVENTF_KEYUP)]);
-        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => DraftBox.Focus(FocusState.Programmatic));
-    }
-
-    // Escape In The Hidden Box (Closing The Panel, Or Pressed) Goes No Further: The Chat Would Take It As Cancel Reply
-    private void OnReactionEmojiKeyDown(object sender, KeyRoutedEventArgs e)
-    {
-        if (e.Key == VirtualKey.Escape)
-        {
-            e.Handled = true;
+            SendReaction(bubble, emoji);
         }
     }
-
-    // Leaving The Hidden Box Ends The Wait For An Emoji, And It Stops Being Focusable
-    private void OnReactionEmojiLostFocus(object sender, RoutedEventArgs e)
-    {
-        _emojiTarget               = null;
-        ReactionEmojiBox.IsTabStop = false;
-    }
-
-    // An Emoji, Not A Letter, Digit Or Mark Typed From The Keyboard: Its First Code Point Is A Symbol At U+203C (‼) Or Up.
-    // ponytail: a code point heuristic, not Unicode's emoji property; swap in a real emoji table if a symbol slips through
-    private static bool IsEmoji(string element) =>
-        System.Text.Rune.GetRuneAt(element, 0) is var rune && rune.Value >= 0x203C && !System.Text.Rune.IsLetterOrDigit(rune);
 
     // Sends A Reaction For A Bubble (Add, Switch Or Remove; See ChatViewModel.ReactAsync)
     private void SendReaction(MessageBubbleViewModel bubble, string emoji)

@@ -236,12 +236,12 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// The picker's More reactions reacts with any emoji. A test run never opens the Windows emoji panel, so its fallback
-    /// grid opens; 🔥 from it sends the phone an Add of 🔥 as a custom reaction, and the pill shows it.
+    /// The picker's More reactions opens the app's emoji picker (focus in its search box); searching "fire" leaves 🔥,
+    /// whose click closes the picker and sends the phone an Add of 🔥 as a custom reaction, and the pill shows it.
     /// </summary>
     /// <returns>A task for the test.</returns>
     [TestMethod]
-    public async Task MoreReactions_Grid_SendsCustomEmoji()
+    public async Task MoreReactions_Picker_SearchAndPick_SendsCustomEmoji()
     {
         await OpenChatAsync("Row.c-ann");
         string id = Find("c-ann", AnnLast).MessageID;
@@ -251,7 +251,13 @@ public sealed class RcsTests : UiTest
         AutomationElement more = App.Find("ReactionPicker.More");
         Assert.AreEqual(ChatCopy.MoreReactions, more.Name);
         more.Patterns.Invoke.Pattern.Invoke();
-        App.Find("ReactionGrid.28").Patterns.Invoke.Pattern.Invoke();
+
+        AutomationElement search = App.Find("EmojiPicker.Search");
+        Wait.Until(() => search.Properties.HasKeyboardFocus.ValueOrDefault, AppDriver.DefaultTimeout, () => "The search box didn't take focus.");
+        search.Patterns.Value.Pattern.SetValue("fire");
+        Wait.Until(() => App.TryFind("EmojiPicker.1F600") is null, AppDriver.DefaultTimeout, () => "Searching 'fire' still shows 😀.");
+        App.Find("EmojiPicker.1F525").Patterns.Invoke.Pattern.Invoke();
+        Wait.Until(() => App.TryFind("EmojiPicker") is null, AppDriver.DefaultTimeout, () => "Picking an emoji left the picker open.");
 
         Wait.Until(() => Server.Phone.Reactions.Count == 1, AppDriver.DefaultTimeout, () => "The phone never got the reaction.");
         SendReactionRequest reaction = Server.Phone.Reactions[0];
@@ -263,6 +269,26 @@ public sealed class RcsTests : UiTest
         string last = "";
         Wait.Until(() => (last = AppDriver.SafeName(App.TryFind("Reactions." + id))).Contains("\U0001F525", StringComparison.Ordinal), AppDriver.DefaultTimeout,
             () => $"The reaction pill read '{last}', without 🔥.");
+    }
+
+    /// <summary>
+    /// Escape closes the emoji picker without reacting.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task MoreReactions_Picker_Escape_ClosesWithoutReacting()
+    {
+        await OpenChatAsync("Row.c-ann");
+        string id = Find("c-ann", AnnLast).MessageID;
+
+        App.Find("Bubble." + id).RightClick();
+        App.Find("Bubble.React").Patterns.Invoke.Pattern.Invoke();
+        App.Find("ReactionPicker.More").Patterns.Invoke.Pattern.Invoke();
+        App.Find("EmojiPicker.Search");
+        Keyboard.Type(VirtualKeyShort.ESCAPE);
+
+        Wait.Until(() => App.TryFind("EmojiPicker") is null, AppDriver.DefaultTimeout, () => "Escape left the picker open.");
+        Assert.IsEmpty(Server.Phone.Reactions, "Escape sent a reaction.");
     }
 
     /// <summary>
