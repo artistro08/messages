@@ -598,16 +598,24 @@
                         Height="8"
                         VerticalAlignment="Center"
                         Fill="{ThemeResource SystemFillColorCriticalBrush}" />
-                    <TextBlock
-                        x:Name="RecordTimer"
-                        Grid.Column="1"
-                        VerticalAlignment="Center"
-                        AutomationProperties.AutomationId="Chat.RecordTimer" />
+                    <!-- Timer: tabular digits, at least as wide as an unseen 00:00, so counting never nudges the waveform or the buttons -->
+                    <Grid Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock
+                            AutomationProperties.AccessibilityView="Raw"
+                            Opacity="0"
+                            Text="00:00"
+                            Typography.NumeralAlignment="Tabular" />
+                        <TextBlock
+                            x:Name="RecordTimer"
+                            AutomationProperties.AutomationId="Chat.RecordTimer"
+                            Typography.NumeralAlignment="Tabular" />
+                    </Grid>
                     <controls:Waveform
                         x:Name="RecordBars"
                         Grid.Column="2"
                         HorizontalAlignment="Left"
                         VerticalAlignment="Center"
+                        AutomationProperties.AutomationId="Chat.RecordWave"
                         BarBrush="{ThemeResource TextFillColorSecondaryBrush}" />
                     <Button
                         Grid.Column="3"
