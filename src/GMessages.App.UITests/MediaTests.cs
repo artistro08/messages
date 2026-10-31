@@ -23,6 +23,9 @@ public sealed partial class MediaTests : UiTest
     private const string Full    = "Full";
     private const string Failed  = "Failed";
 
+    // A Whole 1 x 1 GIF89a, For A Pasted GIF
+    private static readonly byte[] OnePixelGif = Convert.FromHexString("4749463839610100010080000000FFFFFF00000021F90400000000002C00000000010001000002024401003B");
+
     /// <summary>
     /// The seeded photo in Mia's chat shows: its bubble loads to the full image, and the image is on screen (blue).
     /// </summary>
@@ -405,6 +408,88 @@ public sealed partial class MediaTests : UiTest
         System.Drawing.Rectangle cancel = App.Find("Chat.CancelReply").BoundingRectangle;
         System.Drawing.Rectangle strip  = App.Find("Chat.AttachStrip").BoundingRectangle;
         Assert.IsLessThanOrEqualTo(strip.Top, cancel.Bottom, $"The reply chip ({cancel}) isn't above the chips ({strip}).");
+    }
+
+    /// <summary>
+    /// A GIF pasted into the message box (as a copied file, the way the emoji panel's GIFs and Explorer hand them over)
+    /// becomes one chip, and sends as <c>image/gif</c> with its own bytes, so it still moves on the phone.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Paste_Gif_OneChip_SendsAsGif()
+    {
+        await OpenMediaChatAsync();
+
+        PasteIntoDraft("file " + WriteFile("party.gif", OnePixelGif));
+        App.Find("Chat.Attachment.1");
+        Assert.IsNull(App.TryFind("Chat.Attachment.2"), "One GIF made more than one chip.");
+
+        App.Find("Chat.Send").Patterns.Invoke.Pattern.Invoke();
+        Wait.Until(() => Server.Phone.Sent.Count == 1, AppDriver.DefaultTimeout, () => $"The phone got {Server.Phone.Sent.Count} sends, not the GIF.");
+        MediaContent media = Server.Phone.Sent[0].MessagePayload.MessageInfo.Single().MediaContent;
+        Assert.AreEqual("image/gif", media.MimeType, "The GIF went with another type.");
+        Assert.AreEqual(OnePixelGif.LongLength, media.Size, "The GIF wasn't sent byte for byte.");
+    }
+
+    /// <summary>
+    /// A GIF on the clipboard in its own format (as a browser copies an image, beside the plain bitmap) pastes as that
+    /// GIF, not the flattened bitmap.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Paste_GifFormat_BeatsBitmap()
+    {
+        await OpenMediaChatAsync();
+
+        string gif = WriteFile("party.gif", OnePixelGif);
+        PasteIntoDraft("format GIF " + gif, "bitmap " + gif);
+        App.Find("Chat.Attachment.1");
+
+        App.Find("Chat.Send").Patterns.Invoke.Pattern.Invoke();
+        Wait.Until(() => Server.Phone.Sent.Count == 1, AppDriver.DefaultTimeout, () => $"The phone got {Server.Phone.Sent.Count} sends, not the GIF.");
+        MediaContent media = Server.Phone.Sent[0].MessagePayload.MessageInfo.Single().MediaContent;
+        Assert.AreEqual("image/gif", media.MimeType, "The pasted GIF went as another type.");
+        Assert.AreEqual(OnePixelGif.LongLength, media.Size, "The pasted GIF wasn't sent byte for byte.");
+    }
+
+    /// <summary>
+    /// Pasting text into the message box pastes the text, with no chip.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Paste_Text_InsertsText()
+    {
+        await OpenMediaChatAsync();
+
+        PasteIntoDraft("text see you there");
+
+        AutomationElement draft = App.Find("Chat.Draft");
+        Wait.Until(() => draft.Patterns.Value.Pattern.Value.Value == "see you there", AppDriver.DefaultTimeout,
+            () => $"The message box holds '{draft.Patterns.Value.Pattern.Value.Value}'.");
+        Assert.IsNull(App.TryFind("Chat.Attachment.1"), "Pasted text made a chip.");
+    }
+
+    /// <summary>
+    /// A screenshot (a bitmap on the clipboard) pastes as a PNG photo chip, and a copied video file as a video chip that
+    /// sends as a video (<c>video/mp4</c>), not as a generic file.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Paste_ScreenshotAndVideo_SendAsPhotoAndVideo()
+    {
+        await OpenMediaChatAsync();
+
+        PasteIntoDraft("bitmap " + WriteFile("shot.png", Png(30, 20, (_, _, _) => (200, 40, 40))));
+        App.Find("Chat.Attachment.1");
+        PasteIntoDraft("file " + WriteFile("clip.mp4", System.Text.Encoding.UTF8.GetBytes("not really a video")));
+        Assert.AreEqual("clip.mp4", AppDriver.SafeName(App.Find("Chat.Attachment.2")), "The video chip isn't named by the file name.");
+
+        App.Find("Chat.Send").Patterns.Invoke.Pattern.Invoke();
+        string[] mimes = [];
+        Wait.Until(() => (mimes = Server.Phone.Sent.SelectMany(s => s.MessagePayload.MessageInfo).Select(i => i.MediaContent?.MimeType ?? string.Empty).Where(m => m.Length > 0).ToArray()).Length == 2,
+            AppDriver.DefaultTimeout, () => $"The phone got {mimes.Length} attachments, not 2.");
+        Array.Sort(mimes, StringComparer.Ordinal);
+        Assert.AreEqual("image/png, video/mp4", string.Join(", ", mimes), "The screenshot and the video went with other types.");
     }
 
     /// <summary>
@@ -912,6 +997,25 @@ public sealed partial class MediaTests : UiTest
     private static partial bool UnregisterHotKey(IntPtr window, int id);
 
     // Writes Files For The App's Next Pick (The Test Hook Answers The Picker With Them)
+    // The Test Hook's Clipboard (See TestHooks.PasteContent), Then Ctrl + V In The Message Box
+    private void PasteIntoDraft(params string[] clipboard)
+    {
+        File.WriteAllLines(Path.Combine(App.DataDir, "paste.txt"), clipboard);
+        App.Find("Chat.Draft").Focus();
+        Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_V);
+        Wait.Until(() => !File.Exists(Path.Combine(App.DataDir, "paste.txt")), AppDriver.DefaultTimeout, () => "The paste never read the clipboard.");
+    }
+
+    // A File In Its Own Folder Under The Data Folder, For A Paste
+    private string WriteFile(string name, byte[] bytes)
+    {
+        string folder = Path.Combine(App.DataDir, "pastes", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        string path = Path.Combine(folder, name);
+        File.WriteAllBytes(path, bytes);
+        return path;
+    }
+
     private void Pick(params (string Name, byte[] Bytes)[] files)
     {
         string folder = Path.Combine(App.DataDir, "picks", Guid.NewGuid().ToString("N"));

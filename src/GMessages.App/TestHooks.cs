@@ -135,6 +135,68 @@ internal static class TestHooks
     }
 
     /// <summary>
+    /// When pointed at the fake server, stands in for the clipboard on a paste into the message box: builds what
+    /// <c>{data folder}\paste.txt</c> describes, which it then deletes. Each line is a format and a value:
+    /// <c>text &lt;text&gt;</c>, <c>file &lt;path&gt;</c> (the files, as Explorer copies them), <c>bitmap &lt;path&gt;</c>
+    /// (a picture, as a screenshot is copied) or <c>format &lt;name&gt; &lt;path&gt;</c> (a file's bytes under a named format,
+    /// such as <c>GIF</c>). No file gives an empty clipboard. The real clipboard is never read in a test.
+    /// </summary>
+    /// <remarks>
+    /// The paste must decide at once whether it takes the paste, so this answers synchronously, waiting for the files
+    /// (test runs only).
+    /// </remarks>
+    /// <returns>The clipboard's content, or null on a normal run (read the real clipboard).</returns>
+    public static Windows.ApplicationModel.DataTransfer.DataPackageView? PasteContent()
+    {
+        if (!BlockLaunches || DataDir is null)
+        {
+            return null;
+        }
+
+        var package  = new Windows.ApplicationModel.DataTransfer.DataPackage();
+        string paste = Path.Combine(DataDir, "paste.txt");
+        if (!File.Exists(paste))
+        {
+            return package.GetView();
+        }
+
+        var files = new List<Windows.Storage.IStorageItem>();
+        foreach (string line in File.ReadAllLines(paste).Where(l => l.Length > 0))
+        {
+            string[] parts = line.Split(' ', 3);
+            switch (parts[0])
+            {
+                case "text":
+                    package.SetText(line[5..]);
+                    break;
+                case "file":
+                    files.Add(Windows.Storage.StorageFile.GetFileFromPathAsync(line[5..]).AsTask().GetAwaiter().GetResult());
+                    break;
+                case "bitmap":
+                    package.SetBitmap(Windows.Storage.Streams.RandomAccessStreamReference.CreateFromFile(
+                        Windows.Storage.StorageFile.GetFileFromPathAsync(line[7..]).AsTask().GetAwaiter().GetResult()));
+                    break;
+                case "format":
+                    var stream    = new Windows.Storage.Streams.InMemoryRandomAccessStream();
+                    Stream writer = stream.AsStreamForWrite();
+                    writer.Write(File.ReadAllBytes(parts[2]));
+                    writer.Flush();
+                    stream.Seek(0);
+                    package.SetData(parts[1], stream);
+                    break;
+            }
+        }
+
+        if (files.Count > 0)
+        {
+            package.SetStorageItems(files);
+        }
+
+        File.Delete(paste);
+        return package.GetView();
+    }
+
+    /// <summary>
     /// When pointed at the fake server, stands in for the Save as dialog's pick (the dialog is still made and set up, so
     /// that code runs): notes "save" in <c>{data folder}\picker.txt</c>, and answers with the full path in
     /// <c>{data folder}\save-pick.txt</c>, which it then deletes.
@@ -261,6 +323,10 @@ internal static class TestHooks
     /// <param name="photos">True for the photo picker.</param>
     /// <returns>Null.</returns>
     public static IReadOnlyList<string>? PickFiles(bool photos) => null;
+
+    /// <summary>Always null in Release: a paste reads the real clipboard.</summary>
+    /// <returns>Null.</returns>
+    public static Windows.ApplicationModel.DataTransfer.DataPackageView? PasteContent() => null;
 
     /// <summary>Always null in Release: the real Save as dialog opens.</summary>
     /// <returns>Null.</returns>

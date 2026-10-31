@@ -92,6 +92,9 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 928, Level = LogLevel.Information, Message = "Microphone {Step}: {Result} (thread {ThreadId}, {Apartment})")]
     public static partial void MicrophoneStep(ILogger logger, string step, string result, int threadId, string apartment);
 
+    [LoggerMessage(EventId = 929, Level = LogLevel.Information, Message = "Paste in {ConversationId}: formats {Formats}; as attachments: {AsMedia}")]
+    public static partial void PasteFormats(ILogger logger, string conversationId, IEnumerable<string> formats, bool asMedia);
+
     [LoggerMessage(EventId = 951,Level = LogLevel.Information, Message = "Test endpoint {Endpoint}, data folder {DataFolder}")]
     public static partial void TestEndpoint(ILogger logger, string endpoint, string dataFolder);
 }

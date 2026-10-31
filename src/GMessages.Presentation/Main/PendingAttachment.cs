@@ -5,7 +5,7 @@ using GMessages.Protocol.Proto;
 namespace GMessages.Presentation.Main;
 
 /// <summary>
-/// A photo or file picked to send, shown as a chip above the message box until Send.
+/// A photo or file picked or pasted to send, shown as a chip above the message box until Send.
 /// </summary>
 /// <remarks>
 /// The chip holds no file bytes: <paramref name="Open"/> opens the picked file, and <see cref="ReadAsync"/> reads it
@@ -18,13 +18,17 @@ namespace GMessages.Presentation.Main;
 /// <param name="Width">A photo's width in pixels, or 0 when unknown.</param>
 /// <param name="Height">A photo's height in pixels, or 0 when unknown.</param>
 /// <param name="Open">Opens the file for reading (the chip's picture and Send read it from here).</param>
-public sealed record PendingAttachment(int Id, string Name, string Mime, long Size, int Width, int Height, Func<Task<Stream>> Open)
+/// <param name="Thumbnail">Opens a small picture Windows made of the file (a video's frame), or null when it has none.</param>
+public sealed record PendingAttachment(int Id, string Name, string Mime, long Size, int Width, int Height, Func<Task<Stream>> Open, Func<Task<Stream>>? Thumbnail = null)
 {
     /// <summary>Gets what the attachment sends as (Photo, Video, Audio or File), from its mime type.</summary>
     public MessageKind Kind => MediaPart.KindOf(MediaFormatsMap.FromMime(Mime));
 
     /// <summary>Gets whether the chip shows the photo itself rather than the name.</summary>
     public bool IsPhoto => Kind == MessageKind.Photo;
+
+    /// <summary>Gets whether the chip shows a picture (the photo, or the file's thumbnail) rather than its icon and name.</summary>
+    public bool ShowsPicture => IsPhoto || Thumbnail is not null;
 
     /// <summary>
     /// Reads the whole file, straight into one array of its length.
