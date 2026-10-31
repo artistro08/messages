@@ -431,7 +431,7 @@ public sealed partial class MediaTests : UiTest
         App.Find("Chat.Record").Patterns.Invoke.Pattern.Invoke();
         Wait.Until(() => VoiceTempFiles().Length == 1, AppDriver.DefaultTimeout, () => "Recording wrote no temp file.");
         Assert.AreEqual(ChatCopy.CancelRecording, AppDriver.SafeName(App.Find("Chat.CancelRecording")), "Cancel recording has another name.");
-        Assert.AreEqual(ChatCopy.Stop, AppDriver.SafeName(App.Find("Chat.StopRecording")), "Stop has another name.");
+        Assert.AreEqual(ChatCopy.Done, AppDriver.SafeName(App.Find("Chat.StopRecording")), "Done has another name.");
 
         App.Find("Chat.CancelRecording").Patterns.Invoke.Pattern.Invoke();
         Wait.Until(() => VoiceTempFiles().Length == 0, AppDriver.DefaultTimeout, () => "Cancel recording kept the temp file.");
