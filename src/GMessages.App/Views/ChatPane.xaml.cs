@@ -165,10 +165,12 @@ public sealed partial class ChatPane : UserControl
     // Plays The Chat's Voice Messages, One At A Time; Made On The First Play, Let Go On A Chat Switch Or Unload
     private VoicePlayer? _voice;
 
-    // Recording: The Recorder And Its File While One Runs, And The Timer That Shows Its Time And Level
+    // Recording: The Recorder And Its File While One Runs, And The Timer That Shows Its Time And Level. The Time Is
+    // What Was Recorded Before The Last Pause, Plus The Run Since It Started Or Resumed
     private VoiceRecorder? _recorder;
     private string _recordPath = string.Empty;
     private long _recordStart;
+    private long _recordedBefore;
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _recordTimer;
 
     /// <summary>
@@ -811,16 +813,18 @@ public sealed partial class ChatPane : UserControl
         }
 
         // Cancelled Or Switched Away While Starting
-        if (!ReferenceEquals(chat, Chat) || !chat.Voice.IsRecording || chat.Voice.FilePath != path)
+        if (!ReferenceEquals(chat, Chat) || !chat.Voice.IsCapturing || chat.Voice.FilePath != path)
         {
             recorder.Dispose();
             VoiceDraft.DeleteFile(path);
             return;
         }
 
-        _recorder    = recorder;
-        _recordPath  = path;
-        _recordStart = Environment.TickCount64;
+        _recorder       = recorder;
+        _recordPath     = path;
+        _recordStart    = Environment.TickCount64;
+        _recordedBefore = 0;
+        ShowPaused(false);
         RecordBars.Show(null);
         ShowRecording();
         _recordTimer.Start();
@@ -913,6 +917,44 @@ public sealed partial class ChatPane : UserControl
         }
     }
 
+    // Pause Or Resume: The Recorder Stops Or Restarts Into The Same File, And The Time And Waveform Hold Still Meanwhile,
+    // So The Time Counts Recorded Time Only
+    private void OnPauseRecordingClick(object sender, RoutedEventArgs e)
+    {
+        if (_recorder is not { } recorder || Chat is not { } chat)
+        {
+            return;
+        }
+
+        // Pause
+        if (chat.Voice.Pause())
+        {
+            recorder.Pause();
+            _recordTimer.Stop();
+            _recordedBefore += Environment.TickCount64 - _recordStart;
+            ShowPaused(true);
+            return;
+        }
+
+        // Resume
+        if (chat.Voice.Resume())
+        {
+            recorder.Resume();
+            _recordStart = Environment.TickCount64;
+            _recordTimer.Start();
+            ShowPaused(false);
+        }
+    }
+
+    // Pause Becomes Resume (The Mic, To Record More) While Paused, And Back
+    private void ShowPaused(bool paused)
+    {
+        string name                = paused ? ChatCopy.Resume : ChatCopy.Pause;
+        PauseRecordingGlyph.Glyph  = paused ? "" : "";
+        AutomationProperties.SetName(PauseRecordingButton, name);
+        ToolTipService.SetToolTip(PauseRecordingButton, name);
+    }
+
     // Cancel Recording: The Recorder Lets Go Of The File, Which Is Deleted
     private void OnCancelRecordingClick(object sender, RoutedEventArgs e)
     {
@@ -931,7 +973,7 @@ public sealed partial class ChatPane : UserControl
         _recordPath = string.Empty;
     }
 
-    // The Running Time (Whole Seconds) And The Newest Input Level
+    // The Recorded Time (Whole Seconds, Pauses Left Out) And The Newest Input Level
     private void ShowRecording()
     {
         if (_recorder is not { } recorder)
@@ -939,7 +981,7 @@ public sealed partial class ChatPane : UserControl
             return;
         }
 
-        long seconds     = (Environment.TickCount64 - _recordStart) / 1000;
+        long seconds     = (_recordedBefore + Environment.TickCount64 - _recordStart) / 1000;
         float level      = recorder.TakeLevel();
         RecordTimer.Text = VoiceWave.LengthText(TimeSpan.FromSeconds(seconds));
         RecordBars.Push(level);

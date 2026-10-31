@@ -11,15 +11,19 @@ public enum VoiceDraftState
     /// <summary>No voice message: the mic button shows.</summary>
     Idle,
 
-    /// <summary>Recording: the compose area shows the timer, the live waveform, Stop and Cancel recording.</summary>
+    /// <summary>Recording: the compose area shows the timer, the live waveform, Cancel recording, Pause and Done.</summary>
     Recording,
+
+    /// <summary>Paused: the recording bar stays, with its timer and waveform still, and Pause becomes Resume.</summary>
+    Paused,
 
     /// <summary>Recorded: the preview chip shows over the message box, to play, send or remove.</summary>
     Preview,
 }
 
 /// <summary>
-/// The chat's voice message being made: Idle, then Recording, then Preview, then Idle again once sent or removed.
+/// The chat's voice message being made: Idle, then Recording (paused and resumed any number of times), then Preview,
+/// then Idle again once sent or removed.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -54,6 +58,12 @@ public sealed class VoiceDraft : INotifyPropertyChanged
 
     /// <summary>Gets whether recording is under way.</summary>
     public bool IsRecording => State == VoiceDraftState.Recording;
+
+    /// <summary>Gets whether recording is paused.</summary>
+    public bool IsPaused => State == VoiceDraftState.Paused;
+
+    /// <summary>Gets whether a recording is under way or paused (the recording bar shows).</summary>
+    public bool IsCapturing => IsRecording || IsPaused;
 
     /// <summary>Gets whether a recording waits to be sent (the preview chip shows).</summary>
     public bool IsPreview => State == VoiceDraftState.Preview;
@@ -113,17 +123,47 @@ public sealed class VoiceDraft : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Ends recording with what was recorded: Recording to Preview.
+    /// Pauses recording: Recording to Paused. The file keeps what was recorded, and resuming adds to it.
+    /// </summary>
+    /// <returns>False (nothing changes) unless Recording.</returns>
+    public bool Pause()
+    {
+        if (!IsRecording)
+        {
+            return false;
+        }
+
+        Move(VoiceDraftState.Paused);
+        return true;
+    }
+
+    /// <summary>
+    /// Resumes a paused recording: Paused to Recording.
+    /// </summary>
+    /// <returns>False (nothing changes) unless Paused.</returns>
+    public bool Resume()
+    {
+        if (!IsPaused)
+        {
+            return false;
+        }
+
+        Move(VoiceDraftState.Recording);
+        return true;
+    }
+
+    /// <summary>
+    /// Ends recording with what was recorded: Recording or Paused to Preview.
     /// </summary>
     /// <param name="audio">The recorded file's bytes.</param>
     /// <param name="wave">Its waveform and length.</param>
-    /// <returns>False (nothing changes) unless Recording.</returns>
+    /// <returns>False (nothing changes) unless Recording or Paused.</returns>
     public bool Stop(byte[] audio, VoiceWave wave)
     {
         ArgumentNullException.ThrowIfNull(audio);
         ArgumentNullException.ThrowIfNull(wave);
 
-        if (!IsRecording)
+        if (!IsCapturing)
         {
             return false;
         }

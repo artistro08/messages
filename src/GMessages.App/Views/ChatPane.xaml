@@ -579,18 +579,18 @@
             </Button>
 
             <!-- Recording: over the message box while the mic records, a red dot, the running time, the live waveform of the
-                 input level, then Cancel recording (deletes it) and Done (a check mark; keeps it for the preview chip). On a solid base, since
+                 input level, then Cancel recording (deletes it), Pause or Resume (glyph and name set in code) and Done (a check mark; keeps it for the preview chip). On a solid base, since
                  the box's fill lets what is under it show -->
             <Border
                 Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
                 CornerRadius="{x:Bind local:ChatPane.DraftCorners(Chat.IsReplying), Mode=OneWay}"
-                Visibility="{x:Bind Chat.Voice.IsRecording, Mode=OneWay, FallbackValue=Collapsed}">
+                Visibility="{x:Bind Chat.Voice.IsCapturing, Mode=OneWay, FallbackValue=Collapsed}">
                 <Grid
                     Padding="12,0,6,0"
                     Background="{ThemeResource ControlFillColorInputActiveBrush}"
                     BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
                     BorderThickness="1"
-                    ColumnDefinitions="Auto,Auto,*,Auto,Auto"
+                    ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto"
                     ColumnSpacing="8"
                     CornerRadius="{x:Bind local:ChatPane.DraftCorners(Chat.IsReplying), Mode=OneWay}">
                     <Ellipse
@@ -625,8 +625,22 @@
                             Glyph="&#xE74D;" />
                     </Button>
                     <Button
-                        x:Name="StopRecordingButton"
+                        x:Name="PauseRecordingButton"
                         Grid.Column="4"
+                        Width="32"
+                        Height="32"
+                        VerticalAlignment="Center"
+                        AutomationProperties.AutomationId="Chat.RecordPause"
+                        Click="OnPauseRecordingClick"
+                        Style="{StaticResource IconButtonStyle}">
+                        <FontIcon
+                            x:Name="PauseRecordingGlyph"
+                            FontSize="16"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </Button>
+                    <Button
+                        x:Name="StopRecordingButton"
+                        Grid.Column="5"
                         Width="32"
                         Height="32"
                         VerticalAlignment="Center"

@@ -134,6 +134,7 @@ public static class ChatCopy
     public const string CancelRecording    = "Cancel recording";
     public const string Play               = "Play";
     public const string Pause              = "Pause";
+    public const string Resume             = "Resume";
 
     // Microphone Dialog (Controller Copy, The Owner Signs Off)
     public const string MicrophoneTitle = "Use your microphone?";

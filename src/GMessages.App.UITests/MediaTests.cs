@@ -419,6 +419,49 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
+    /// Pause (reached from Done with Shift + Tab, pressed with Space) holds the timer and the live waveform still and
+    /// becomes Resume; Resume counts on from there; Done from the resumed recording still lands in the preview chip.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Record_PauseResume_TimerHoldsThenCountsOn()
+    {
+        await FakeMicrophoneAsync();
+        await OpenMediaChatAsync();
+
+        App.Find("Chat.Record").Patterns.Invoke.Pattern.Invoke();
+        AutomationElement timer = App.Find("Chat.RecordTimer");
+        AutomationElement pause = App.Find("Chat.RecordPause");
+        Wait.Until(() => AppDriver.SafeName(timer) == "0:01", AppDriver.DefaultTimeout, () => $"The timer stayed '{AppDriver.SafeName(timer)}'.");
+        Assert.AreEqual(ChatCopy.Pause, AppDriver.SafeName(pause), "The pause button has another name.");
+
+        // Pause From The Keyboard: Focus Starts On Done, Pause Is Just Before It
+        Wait.Until(() => App.Find("Chat.StopRecording").Properties.HasKeyboardFocus.ValueOrDefault, AppDriver.DefaultTimeout, () => "Done didn't get focus.");
+        Keyboard.TypeSimultaneously(VirtualKeyShort.SHIFT, VirtualKeyShort.TAB);
+        Wait.Until(() => pause.Properties.HasKeyboardFocus.ValueOrDefault, AppDriver.DefaultTimeout, () => "Shift + Tab from Done didn't reach Pause.");
+        Keyboard.Type(VirtualKeyShort.SPACE);
+        Wait.Until(() => AppDriver.SafeName(pause) == ChatCopy.Resume, AppDriver.DefaultTimeout, () => $"Pause didn't become Resume: '{AppDriver.SafeName(pause)}'.");
+
+        // Paused: The Time And The Waveform Hold Still
+        string level_file = Path.Combine(App.DataDir, "record-level.txt");
+        string held_time  = AppDriver.SafeName(timer);
+        string held_level = ReadShared(level_file);
+        Thread.Sleep(2500);
+        Assert.AreEqual(held_time, AppDriver.SafeName(timer), "The timer ran while paused.");
+        Assert.AreEqual(held_level, ReadShared(level_file), "The live waveform moved while paused.");
+
+        // Resume: The Time Counts On From Where It Held
+        pause.Patterns.Invoke.Pattern.Invoke();
+        Wait.Until(() => AppDriver.SafeName(pause) == ChatCopy.Pause, AppDriver.DefaultTimeout, () => "Resume didn't become Pause.");
+        string next = held_time == "0:01" ? "0:02" : "0:03";
+        Wait.Until(() => AppDriver.SafeName(timer) == next, AppDriver.DefaultTimeout, () => $"The timer didn't count on to {next}: '{AppDriver.SafeName(timer)}'.");
+
+        App.Find("Chat.StopRecording").Patterns.Invoke.Pattern.Invoke();
+        AutomationElement length = App.Find("Chat.VoiceLength");
+        Wait.Until(() => AppDriver.SafeName(length) == "0:03", AppDriver.DefaultTimeout, () => $"The preview chip shows '{AppDriver.SafeName(length)}', not 0:03.");
+    }
+
+    /// <summary>
     /// Cancel recording drops the recording: its temp file is deleted, nothing is sent and the mic is back.
     /// </summary>
     /// <returns>A task for the test.</returns>
