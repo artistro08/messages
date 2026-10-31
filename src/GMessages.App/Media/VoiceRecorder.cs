@@ -80,16 +80,22 @@ internal sealed class VoiceRecorder : IDisposable
     private readonly AudioFileOutputNode? _file;
     private readonly AudioFrameOutputNode? _frames;
 
-    // A Test Run's Fake Level Follows The Clock
+    // The File, For Its Size In The Log (Never Its Path)
+    private readonly string _path;
+
+    // A Test Run's Fake Level Follows The Clock; Its "unfinished" Microphone Fails To Finish The File
     private readonly long _fakeStart = Environment.TickCount64;
+    private readonly bool _fakeUnfinished;
 
     private bool _disposed;
 
-    private VoiceRecorder(AudioGraph? graph, AudioFileOutputNode? file, AudioFrameOutputNode? frames)
+    private VoiceRecorder(string path, AudioGraph? graph, AudioFileOutputNode? file, AudioFrameOutputNode? frames, bool fakeUnfinished = false)
     {
-        _graph  = graph;
-        _file   = file;
-        _frames = frames;
+        _path           = path;
+        _graph          = graph;
+        _file           = file;
+        _frames         = frames;
+        _fakeUnfinished = fakeUnfinished;
     }
 
     /// <summary>
@@ -116,8 +122,15 @@ internal sealed class VoiceRecorder : IDisposable
                 throw new MicrophoneUnavailableException(fake == "denied" ? "AccessDenied" : "NoDevice");
             }
 
+            // A File That Never Finishes, For The Failure Note
+            if (fake == "unfinished")
+            {
+                await File.WriteAllBytesAsync(path, []);
+                return new VoiceRecorder(path, null, null, null, fakeUnfinished: true);
+            }
+
             File.Copy(fake, path, overwrite: true);
-            return new VoiceRecorder(null, null, null);
+            return new VoiceRecorder(path, null, null, null);
         }
 
         // Access Must Be On First: Ask Windows (Its Prompt) If Undecided, Since An AudioGraph Alone Is Only Refused
@@ -161,7 +174,7 @@ internal sealed class VoiceRecorder : IDisposable
             input.DeviceInputNode.AddOutgoingConnection(frames);
             graph.Start();
 
-            var recorder = new VoiceRecorder(graph, out_file.FileOutputNode, frames);
+            var recorder = new VoiceRecorder(path, graph, out_file.FileOutputNode, frames);
             graph = null;
             return recorder;
         }
@@ -341,19 +354,36 @@ internal sealed class VoiceRecorder : IDisposable
     public void Resume() => _graph?.Start();
 
     /// <summary>
-    /// Stops recording and finishes the file.
+    /// Stops recording, finishes the file and lets go of it, so it can be read back at once.
     /// </summary>
-    /// <returns>A task that completes when the file is complete.</returns>
+    /// <remarks>
+    /// The file output node can keep the file open after <see cref="AudioFileOutputNode.FinalizeAsync"/> until the node
+    /// itself is closed, which otherwise waits for the garbage collector to release it, and the owner's 0.5.10 log shows
+    /// Done failing with an <see cref="IOException"/> (its cause wasn't logged). So the nodes are closed here, then the
+    /// graph, and the finalize result and the file's size in bytes are logged (never its path).
+    /// </remarks>
+    /// <returns>A task that completes when the file is complete and closed.</returns>
     /// <exception cref="IOException">The file couldn't be finished.</exception>
     public async Task StopAsync()
     {
+        // Test Run: The Fixture Is Already Complete, Or Never Finishes
         if (_graph is null || _file is null)
         {
+            if (_fakeUnfinished)
+            {
+                MicrophoneConsent.Log("finalize", "Unknown (test)");
+                throw new IOException("Unknown");
+            }
+
             return;
         }
 
         _graph.Stop();
         TranscodeFailureReason result = await _file.FinalizeAsync();
+        Dispose();
+
+        long bytes = File.Exists(_path) ? new FileInfo(_path).Length : -1;
+        MicrophoneConsent.Log("finalize", $"{result}; {bytes} bytes");
         if (result != TranscodeFailureReason.None)
         {
             throw new IOException(result.ToString());
@@ -372,6 +402,8 @@ internal sealed class VoiceRecorder : IDisposable
 
         _disposed = true;
         _graph?.Stop();
+        _file?.Dispose();
+        _frames?.Dispose();
         _graph?.Dispose();
     }
 }

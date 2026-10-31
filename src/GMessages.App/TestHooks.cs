@@ -130,10 +130,11 @@ internal static class TestHooks
 
     /// <summary>
     /// When pointed at the fake server, stands in for the microphone, so no test ever records from a real one:
-    /// <c>{data folder}\microphone.txt</c> reads <c>denied</c> (access off), or holds the path of an audio file the fake
-    /// recording copies. Without the file there is no microphone.
+    /// <c>{data folder}\microphone.txt</c> reads <c>denied</c> (access off), <c>unfinished</c> (a recording whose file
+    /// can't be finished), or holds the path of an audio file the fake recording copies. Without the file there is no
+    /// microphone.
     /// </summary>
-    /// <returns><c>denied</c>, <c>none</c> or a file path; null on a normal run (use the real microphone).</returns>
+    /// <returns><c>denied</c>, <c>none</c>, <c>unfinished</c> or a file path; null on a normal run (use the real microphone).</returns>
     public static string? FakeMicrophone()
     {
         if (!BlockLaunches || DataDir is null)

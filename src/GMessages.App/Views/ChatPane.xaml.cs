@@ -168,6 +168,7 @@ public sealed partial class ChatPane : UserControl
     // Recording: The Recorder And Its File While One Runs, And The Timer That Shows Its Time And Level. The Time Is
     // What Was Recorded Before The Last Pause, Plus The Run Since It Started Or Resumed
     private VoiceRecorder? _recorder;
+    private ChatViewModel? _recordChat;
     private string _recordPath = string.Empty;
     private long _recordStart;
     private long _recordedBefore;
@@ -792,6 +793,8 @@ public sealed partial class ChatPane : UserControl
 
         string path = System.IO.Path.Combine(media.TempFolder, "voice-" + Guid.NewGuid().ToString("N") + ".m4a");
         chat.Voice.Start(path);
+        chat.ClearAttachError();
+        _recordChat = chat;
 
         VoiceRecorder recorder;
         try
@@ -879,7 +882,8 @@ public sealed partial class ChatPane : UserControl
         }
     }
 
-    // Done: The File Is Finished, Read Back With Its Waveform, And Waits In The Preview Chip. A Failure Drops It
+    // Done: The File Is Finished, Read Back With Its Waveform, And Waits In The Preview Chip. From Here The Recording Is
+    // This Handler's, So Hiding The Window Meanwhile Doesn't Drop It. A Failure Says So Over The Chips, Never Silently
     private async void OnStopRecordingClick(object sender, RoutedEventArgs e)
     {
         if (_recorder is not { } recorder || Chat is not { } chat)
@@ -889,6 +893,7 @@ public sealed partial class ChatPane : UserControl
 
         string path = _recordPath;
         _recorder   = null;
+        _recordChat = null;
         _recordPath = string.Empty;
         _recordTimer.Stop();
 
@@ -896,7 +901,15 @@ public sealed partial class ChatPane : UserControl
         {
             await recorder.StopAsync();
             recorder.Dispose();
-            byte[] audio   = await File.ReadAllBytesAsync(path);
+
+            // Read Sharing Whatever Handle Windows Still Holds On The Finished File
+            byte[] audio;
+            using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, 4096, useAsync: true))
+            {
+                audio = new byte[stream.Length];
+                await stream.ReadExactlyAsync(audio);
+            }
+
             VoiceWave wave = await WaveformReader.ReadAsync(audio);
 
             // Dropped Meanwhile (A Chat Switch): The File Goes
@@ -910,10 +923,12 @@ public sealed partial class ChatPane : UserControl
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            AppLog.MediaFailed(App.ShellLog, "record", chat.ConversationId, ex.GetType().Name);
+            // The Error Type And Code Only (A File Error's Message Names The Path)
+            AppLog.MediaFailed(App.ShellLog, "record", chat.ConversationId, $"{ex.GetType().Name} 0x{ex.HResult:X8}");
             recorder.Dispose();
             chat.Voice.Cancel();
             VoiceDraft.DeleteFile(path);
+            chat.NoteRecordingFailed();
         }
     }
 
@@ -963,9 +978,17 @@ public sealed partial class ChatPane : UserControl
         DraftBox.Focus(FocusState.Programmatic);
     }
 
-    // Stops A Running Recorder And Deletes Its File (A Cancel, A Chat Switch Or The Pane Unloading)
+    // Stops A Running Recorder And Deletes Its File (A Cancel, A Chat Switch Or The Pane Unloading). Its Chat Goes Back
+    // To Idle Too: A Chat Kept Over A Closed Window Was Left Recording With No Recorder, So Its Bar Came Back In The Next
+    // Window With A Done That Did Nothing
     private void DropRecorder()
     {
+        if (_recordChat is { Voice.IsCapturing: true } recording)
+        {
+            recording.Voice.Cancel();
+        }
+
+        _recordChat = null;
         _recordTimer.Stop();
         _recorder?.Dispose();
         _recorder = null;

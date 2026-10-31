@@ -462,6 +462,51 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
+    /// A recording whose file can't be finished (the test hook's "unfinished" microphone) isn't lost silently: Done says
+    /// "Couldn't save this recording. Try again." over the chips, the mic is back and the temp file is gone.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Record_DoneFails_SaysSo()
+    {
+        await File.WriteAllTextAsync(Path.Combine(App.DataDir, "microphone.txt"), "unfinished");
+        await OpenMediaChatAsync();
+
+        App.Find("Chat.Record").Patterns.Invoke.Pattern.Invoke();
+        Wait.Until(() => VoiceTempFiles().Length == 1, AppDriver.DefaultTimeout, () => "Recording wrote no temp file.");
+        App.Find("Chat.StopRecording").Patterns.Invoke.Pattern.Invoke();
+
+        AutomationElement note = App.Find("Chat.AttachError");
+        Wait.Until(() => AppDriver.SafeName(note) == ChatCopy.RecordingFailed, AppDriver.DefaultTimeout, () => $"The failed recording said '{AppDriver.SafeName(note)}'.");
+        Wait.Until(() => App.TryFind("Chat.StopRecording") is null, AppDriver.DefaultTimeout, () => "The recording bar stayed after the failure.");
+        Assert.IsNull(App.TryFind("Chat.VoiceLength"), "A failed recording left a preview chip.");
+        Assert.IsEmpty(VoiceTempFiles(), "A failed recording left its temp file.");
+        Assert.IsTrue(App.Find("Chat.Record").IsEnabled, "The mic isn't back after the failure.");
+    }
+
+    /// <summary>
+    /// Closing the window while recording drops the recording with its file, and the reopened window's chat is back at
+    /// the mic: before, the kept chat stayed recording with no recorder, so its bar came back with a Done that did nothing.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Record_CloseWindow_ReopensAtMic()
+    {
+        await FakeMicrophoneAsync();
+        await OpenMediaChatAsync();
+
+        App.Find("Chat.Record").Patterns.Invoke.Pattern.Invoke();
+        Wait.Until(() => VoiceTempFiles().Length == 1, AppDriver.DefaultTimeout, () => "Recording wrote no temp file.");
+        App.Find("Chat.RecordTimer");
+
+        CloseMainWindow();
+        Tray.LeftClick();
+        App.Find("Chat.Record");
+        Wait.Until(() => App.TryFind("Chat.StopRecording") is null, AppDriver.DefaultTimeout, () => "The reopened chat still shows the recording bar.");
+        Assert.IsEmpty(VoiceTempFiles(), "Closing the window kept the recording's temp file.");
+    }
+
+    /// <summary>
     /// Cancel recording drops the recording: its temp file is deleted, nothing is sent and the mic is back.
     /// </summary>
     /// <returns>A task for the test.</returns>
