@@ -54,6 +54,36 @@ public sealed class MainViewModelTests
     }
 
     [TestMethod]
+    [DataRow(ConversationFolder.Archived)]
+    [DataRow(ConversationFolder.SpamBlocked)]
+    public async Task Narrow_OpenFolder_ClosesChat_ShowsFolderList(ConversationFolder folder)
+    {
+        using var rig = new MainRig();
+        using MainViewModel vm = await NewMainAsync(rig);
+        vm.IsNarrow = true;
+        vm.Select("a");
+        Assert.IsTrue(vm.ShowChatPane);
+
+        vm.OpenFolder(folder);
+
+        Assert.IsFalse(vm.ShowChatPane);
+        Assert.IsNull(vm.SelectedConversationId);
+        Assert.AreEqual(folder, vm.Folder);
+    }
+
+    [TestMethod]
+    public async Task Wide_OpenFolder_KeepsChat()
+    {
+        using var rig = new MainRig();
+        using MainViewModel vm = await NewMainAsync(rig);
+        vm.Select("a");
+
+        vm.OpenArchived();
+
+        Assert.AreEqual("a", vm.SelectedConversationId);
+    }
+
+    [TestMethod]
     public async Task NextPrevious_MoveThroughRows_StopAtEnds()
     {
         using var rig = new MainRig();

@@ -219,12 +219,22 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     // =========================================================================
 
     /// <summary>Shows a folder's list, creating and loading it the first time.</summary>
+    /// <remarks>
+    /// A narrow window shows one pane, so an open chat (or Start chat) closes first, as Escape does, and the folder's
+    /// list shows. A wide window keeps the open chat beside the list.
+    /// </remarks>
     /// <param name="folder">The folder; <see cref="ConversationFolder.Inbox"/> shows the inbox.</param>
     public void OpenFolder(ConversationFolder folder)
     {
         if (_disposed)
         {
             return;
+        }
+
+        // Narrow: The Folder's List Takes The Chat's Place
+        if (ShowChatPane)
+        {
+            ExitConversation();
         }
 
         if (folder != ConversationFolder.Inbox && !_folders.ContainsKey(folder))
