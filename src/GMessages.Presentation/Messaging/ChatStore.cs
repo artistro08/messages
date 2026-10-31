@@ -269,6 +269,9 @@ public sealed partial class ChatStore : IDisposable
             return ([], null);
         }
 
+        // Counts Only, So The Log Shows Where Paging Stalls
+        LogConversationPage(folder, PageSize, cursor is not null, response.Conversations.Count, response.Cursor is not null);
+
         // No ConfigureAwait(false) Here: ConversationChanged Must Be Raised On The Caller Thread
         List<ConversationInfo> result = [];
         foreach (Conversation c in response.Conversations)
@@ -1318,4 +1321,7 @@ public sealed partial class ChatStore : IDisposable
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Could not {Action} ({ErrorType})")]
     private partial void LogActionFailed(string action, string errorType);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Conversation page ({Folder}): asked {Asked} with a cursor: {CursorSent}; got {Got}, cursor back: {CursorBack}")]
+    private partial void LogConversationPage(ConversationFolder folder, int asked, bool cursorSent, int got, bool cursorBack);
 }
