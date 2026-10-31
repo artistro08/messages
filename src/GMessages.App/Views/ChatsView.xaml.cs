@@ -333,6 +333,22 @@ public sealed partial class ChatsView : UserControl
 
     private void OnUndoClosed(InfoBar sender, object args) => ViewModel.DismissUndo();
 
+    // The Bar Never Takes The Focus: When The Archived Row Had It, Windows Hands It On To The Next Tab Stop, Undo, As A
+    // Move From The Last Input Device (The Mouse After The Row's Menu). Any Move That Isn't The Keyboard's (Tab, Arrows) Or
+    // A Gamepad's Goes To The Selected Row, Or The First, Instead; A Click On Undo Still Runs It
+    private void OnUndoGettingFocus(UIElement sender, GettingFocusEventArgs args)
+    {
+        if (args.InputDevice is FocusInputDeviceKind.Keyboard or FocusInputDeviceKind.GameController)
+        {
+            return;
+        }
+
+        if (ConversationList.ContainerFromIndex(Math.Max(0, ConversationList.SelectedIndex)) is not { } row || !args.TrySetNewFocusedElement(row))
+        {
+            args.TryCancel();
+        }
+    }
+
     // The Battery Banner's Own Close Button Dismisses It; The View Model Closing It On Recovery Doesn't
     private void OnBatteryLowClosed(InfoBar sender, InfoBarClosedEventArgs args)
     {

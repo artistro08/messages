@@ -73,7 +73,9 @@ public sealed class ConversationActionTests : UiTest
         WaitForGone("Row.c-ann");
         AutomationElement bar = App.Find("Main.Undo");
         Assert.AreEqual(ChatCopy.ConversationArchived, bar.Name);
-        Assert.IsFalse(App.Find("Main.Undo.Button").Properties.HasKeyboardFocus.ValueOrDefault, "The Undo bar took the focus.");
+        App.Find("Main.Undo.Button");
+        string focused = App.Automation.FocusedElement()?.Properties.AutomationId.ValueOrDefault ?? string.Empty;
+        Assert.AreNotEqual("Main.Undo.Button", focused, "The Undo bar took the focus.");
 
         Invoke("Main.Undo.Button");
         WaitForUpdates(2);
