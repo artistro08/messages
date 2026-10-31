@@ -47,8 +47,10 @@ public sealed partial class Waveform : UserControl
     // How Far Left And Right Seek
     private static readonly TimeSpan KeyStep = TimeSpan.FromSeconds(5);
 
-    private readonly Rectangle[] _bars = new Rectangle[VoiceWave.BarCount];
-    private readonly float[] _peaks    = new float[VoiceWave.BarCount];
+    // Bars: The Row Is Always The Full Height, So The Tallest Bar Never Moves It
+    private readonly StackPanel _row = new() { Orientation = Orientation.Horizontal, Spacing = BarGap, Height = WaveHeight };
+    private Rectangle[] _bars = [];
+    private float[] _peaks    = [];
     private double _progress;
     private TimeSpan _length;
 
@@ -57,30 +59,23 @@ public sealed partial class Waveform : UserControl
     /// </summary>
     public Waveform()
     {
-        // Bars: The Row Is Always The Full Height, So The Tallest Bar Never Moves It, And Each Bar Is Centered Unrounded, So
-        // Every Bar Grows Up And Down From The Same Center Line (Snapping To Whole Pixels Nudged Each By Up To One)
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = BarGap, Height = WaveHeight };
-        for (int i = 0; i < _bars.Length; i++)
-        {
-            _bars[i] = new Rectangle
-            {
-                Width             = BarWidth,
-                RadiusX           = BarWidth / 2,
-                RadiusY           = BarWidth / 2,
-                VerticalAlignment = VerticalAlignment.Center,
-                UseLayoutRounding = false,
-            };
-            row.Children.Add(_bars[i]);
-        }
+        SetBarCount(VoiceWave.BarCount);
 
         // Transparent, So A Click Between The Bars Still Seeks
-        Content               = new Grid { Height = WaveHeight, Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent), Children = { row } };
+        Content               = new Grid { Height = WaveHeight, Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent), Children = { _row } };
         IsTabStop             = false;
         UseSystemFocusVisuals = true;
         Tapped               += OnTapped;
         KeyDown              += OnKeyDown;
-        Draw();
+        SizeChanged          += OnSizeChanged;
     }
+
+    /// <summary>
+    /// Gets or sets whether the bars fill the waveform's width (the live waveform while recording): as many bars as fit,
+    /// added or dropped on the left as the width changes, the newest kept on the right. Off, it draws a message's
+    /// <see cref="VoiceWave.BarCount"/> bars at their own width.
+    /// </summary>
+    public bool FillsWidth { get; set; }
 
     /// <summary>
     /// Raised by a click on the waveform, with where it landed: from 0 (the start) to 1 (the end).
@@ -166,7 +161,62 @@ public sealed partial class Waveform : UserControl
     /// <inheritdoc />
     protected override AutomationPeer OnCreateAutomationPeer() => new FrameworkElementAutomationPeer(this);
 
+    /// <summary>
+    /// Asks for the bars' height only when <see cref="FillsWidth"/> is on, so the slot's width decides how many bars fit
+    /// (asking for the bars' own width would keep a shrinking window from ever dropping one).
+    /// </summary>
+    /// <param name="availableSize">The space on offer.</param>
+    /// <returns>The size wanted.</returns>
+    protected override Windows.Foundation.Size MeasureOverride(Windows.Foundation.Size availableSize)
+    {
+        Windows.Foundation.Size wanted = base.MeasureOverride(availableSize);
+        return FillsWidth ? new Windows.Foundation.Size(0, wanted.Height) : wanted;
+    }
+
     private static void OnBarBrushChanged(DependencyObject d, DependencyPropertyChangedEventArgs e) => ((Waveform)d).Draw();
+
+    // Filling The Width: As Many Bars As Fit Once The Width Changes
+    private void OnSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (!FillsWidth)
+        {
+            return;
+        }
+
+        SetBarCount(Math.Max(1, (int)((e.NewSize.Width + BarGap) / (BarWidth + BarGap))));
+    }
+
+    // Rebuilds The Row With This Many Bars, Keeping The Newest Peaks On The Right. Each Bar Is Centered Unrounded, So Every
+    // Bar Grows Up And Down From The Same Center Line (Snapping To Whole Pixels Nudged Each By Up To One)
+    private void SetBarCount(int count)
+    {
+        if (count == _bars.Length)
+        {
+            return;
+        }
+
+        var peaks = new float[count];
+        int kept  = Math.Min(count, _peaks.Length);
+        Array.Copy(_peaks, _peaks.Length - kept, peaks, count - kept, kept);
+        _peaks = peaks;
+
+        _bars = new Rectangle[count];
+        _row.Children.Clear();
+        for (int i = 0; i < count; i++)
+        {
+            _bars[i] = new Rectangle
+            {
+                Width             = BarWidth,
+                RadiusX           = BarWidth / 2,
+                RadiusY           = BarWidth / 2,
+                VerticalAlignment = VerticalAlignment.Center,
+                UseLayoutRounding = false,
+            };
+            _row.Children.Add(_bars[i]);
+        }
+
+        Draw();
+    }
 
     // Each Bar's Height From Its Peak (Never Below The Floor), Bright Up To The Played Share
     private void Draw()

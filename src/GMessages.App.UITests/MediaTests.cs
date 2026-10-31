@@ -535,6 +535,63 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
+    /// The live waveform fills the free space between the timer and the recording's buttons, so a wider window gives it
+    /// more room (owner: "the waveform should expand to that").
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Record_Waveform_GrowsWithWindow()
+    {
+        await FakeMicrophoneAsync();
+        await OpenMediaChatAsync();
+
+        App.Find("Chat.Record").Patterns.Invoke.Pattern.Invoke();
+        AutomationElement wave   = App.Find("Chat.RecordWave");
+        AutomationElement cancel = App.Find("Chat.CancelRecording");
+        Assert.IsGreaterThanOrEqualTo(0, cancel.BoundingRectangle.Left - wave.BoundingRectangle.Right, "The waveform runs under Cancel recording.");
+        int before = wave.BoundingRectangle.Width;
+
+        // Widen The Window
+        Window window                = App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout);
+        System.Drawing.Rectangle box = window.BoundingRectangle;
+        window.Patterns.Transform.Pattern.Resize(box.Width + 300, box.Height);
+
+        Wait.Until(() => wave.BoundingRectangle.Width >= before + 200, AppDriver.DefaultTimeout,
+            () => $"The waveform stayed {wave.BoundingRectangle.Width} px wide (was {before}) in a window 300 px wider.");
+    }
+
+    /// <summary>
+    /// The recording bar's buttons keep the message box's spacing (owner: "the buttons do not match the spacing of the
+    /// composer bar"): Cancel recording, Pause and Done sit side by side as the mic and Send do, and Done is as far in
+    /// from the box's right edge as Send.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Record_Buttons_MatchComposerSpacing()
+    {
+        await FakeMicrophoneAsync();
+        await OpenMediaChatAsync();
+
+        // The Message Box's Own Buttons
+        System.Drawing.Rectangle box  = App.Find("Chat.Draft").BoundingRectangle;
+        System.Drawing.Rectangle mic  = App.Find("Chat.Record").BoundingRectangle;
+        System.Drawing.Rectangle send = App.Find("Chat.Send").BoundingRectangle;
+        int composer_gap              = send.Left - mic.Right;
+        int composer_edge             = box.Right - send.Right;
+
+        // The Recording Bar's
+        App.Find("Chat.Record").Patterns.Invoke.Pattern.Invoke();
+        System.Drawing.Rectangle cancel = App.Find("Chat.CancelRecording").BoundingRectangle;
+        System.Drawing.Rectangle pause  = App.Find("Chat.RecordPause").BoundingRectangle;
+        System.Drawing.Rectangle done   = App.Find("Chat.StopRecording").BoundingRectangle;
+
+        Assert.IsLessThanOrEqualTo(1, Math.Abs((pause.Left - cancel.Right) - composer_gap), $"Cancel to Pause is {pause.Left - cancel.Right} px, the mic to Send {composer_gap} px.");
+        Assert.IsLessThanOrEqualTo(1, Math.Abs((done.Left - pause.Right) - composer_gap), $"Pause to Done is {done.Left - pause.Right} px, the mic to Send {composer_gap} px.");
+        Assert.IsLessThanOrEqualTo(1, Math.Abs((box.Right - done.Right) - composer_edge), $"Done is {box.Right - done.Right} px from the edge, Send {composer_edge} px.");
+        Assert.AreEqual(send.Size, done.Size, "Done isn't the size of Send.");
+    }
+
+    /// <summary>
     /// Pause (reached from Done with Shift + Tab, pressed with Space) holds the timer and the live waveform still and
     /// becomes Resume; Resume counts on from there; Done from the resumed recording still lands in the preview chip.
     /// </summary>

@@ -260,7 +260,8 @@ public sealed partial class ChatPane : UserControl
         // A Recycled Row Starts Below Its Neighbors Again (A Focused Row Was Raised For Its Ring)
         MessageList.ContainerContentChanging += (_, args) => Canvas.SetZIndex(args.ItemContainer, 0);
 
-        // Recording: The Time And The Input Level, 20 Times A Second
+        // Recording: The Time And The Input Level, 20 Times A Second, Over A Live Waveform As Wide As The Bar Allows
+        RecordBars.FillsWidth = true;
         _recordTimer          = DispatcherQueue.CreateTimer();
         _recordTimer.Interval = RecordTick;
         _recordTimer.Tick    += (_, _) => ShowRecording();
