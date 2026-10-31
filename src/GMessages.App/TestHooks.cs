@@ -135,6 +135,46 @@ internal static class TestHooks
     }
 
     /// <summary>
+    /// When pointed at the fake server, stands in for the Save as dialog's pick (the dialog is still made and set up, so
+    /// that code runs): notes "save" in <c>{data folder}\picker.txt</c>, and answers with the full path in
+    /// <c>{data folder}\save-pick.txt</c>, which it then deletes.
+    /// </summary>
+    /// <returns>The picked path (empty when nothing waits, as a cancel), or null on a normal run (show the real dialog).</returns>
+    public static string? PickSaveFile()
+    {
+        if (!BlockLaunches || DataDir is null)
+        {
+            return null;
+        }
+
+        File.AppendAllText(Path.Combine(DataDir, "picker.txt"), "save" + Environment.NewLine);
+        string pick = Path.Combine(DataDir, "save-pick.txt");
+        if (!File.Exists(pick))
+        {
+            return string.Empty;
+        }
+
+        string path = File.ReadAllText(pick).Trim();
+        File.Delete(pick);
+        return path;
+    }
+
+    /// <summary>
+    /// When pointed at the fake server, the folder Download saves to: <c>{data folder}\Downloads</c> (made when missing),
+    /// so no test writes to the real Downloads folder.
+    /// </summary>
+    /// <returns>The folder, or null on a normal run (use the user's Downloads folder).</returns>
+    public static string? DownloadsFolder()
+    {
+        if (!BlockLaunches || DataDir is null)
+        {
+            return null;
+        }
+
+        return Directory.CreateDirectory(Path.Combine(DataDir, "Downloads")).FullName;
+    }
+
+    /// <summary>
     /// When pointed at the fake server, stands in for the microphone, so no test ever records from a real one:
     /// <c>{data folder}\microphone.txt</c> reads <c>denied</c> (access off), <c>unfinished</c> (a recording whose file
     /// can't be finished), or holds the path of an audio file the fake recording copies. Without the file there is no
@@ -221,6 +261,14 @@ internal static class TestHooks
     /// <param name="photos">True for the photo picker.</param>
     /// <returns>Null.</returns>
     public static IReadOnlyList<string>? PickFiles(bool photos) => null;
+
+    /// <summary>Always null in Release: the real Save as dialog opens.</summary>
+    /// <returns>Null.</returns>
+    public static string? PickSaveFile() => null;
+
+    /// <summary>Always null in Release: Download saves to the user's Downloads folder.</summary>
+    /// <returns>Null.</returns>
+    public static string? DownloadsFolder() => null;
 
     /// <summary>Always null in Release: the real microphone records.</summary>
     /// <returns>Null.</returns>

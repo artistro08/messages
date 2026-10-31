@@ -155,6 +155,31 @@ public sealed partial class MediaTests : UiTest
         Wait.Until(() => card.Properties.ItemStatus.ValueOrDefault == "Ready" && HasText(card, "27 bytes"), AppDriver.DefaultTimeout,
             () => $"The card stayed '{card.Properties.ItemStatus.ValueOrDefault}' after opening.");
     }
+
+    /// <summary>
+    /// The photo menu's Save as writes the photo's bytes to the picked file (the test hook picks the path; the dialog is
+    /// still made and set up) and marks it as downloaded from the internet.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task SaveAs_WritesPickedFile()
+    {
+        await OpenMediaChatAsync();
+        byte[] bytes            = Png(64, 64, SplitColors);
+        Message message         = Server.Phone.PushIncomingMedia("c-media", "image/png", bytes, "keep.png");
+        AutomationElement photo = App.Find("Bubble.Photo." + message.MessageID);
+        WaitForStatus(photo, Full);
+
+        string target = Path.Combine(App.DataDir, "saved-" + Guid.NewGuid().ToString("N") + ".png");
+        File.WriteAllText(Path.Combine(App.DataDir, "save-pick.txt"), target);
+        OpenMenu(photo);
+        App.Find("Bubble.SaveAs").Patterns.Invoke.Pattern.Invoke();
+
+        Wait.Until(() => File.Exists(target) && new FileInfo(target).Length == bytes.Length, AppDriver.DefaultTimeout, () => "Save as wrote nothing to the picked file.");
+        CollectionAssert.AreEqual(bytes, File.ReadAllBytes(target), "The saved file doesn't hold the photo.");
+        Assert.IsTrue(File.Exists(target + ":Zone.Identifier"), "The saved file has no mark of the web.");
+    }
+
     /// <summary>
     /// A picked photo shows as a chip; Send uploads it, the phone gets it as a media message and then the text as its own
     /// message (Mia's chat is RCS, which refuses captions), the bubble shows the photo in its shape, and the chip is gone.
@@ -725,6 +750,14 @@ public sealed partial class MediaTests : UiTest
         }
 
         File.WriteAllLines(Path.Combine(App.DataDir, "pick.txt"), paths);
+    }
+
+    // The Photo's Bubble Menu, From The Keyboard (Shift + F10 On The Focused Photo)
+    private void OpenMenu(AutomationElement photo)
+    {
+        App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).SetForeground();
+        photo.Focus();
+        Keyboard.TypeSimultaneously(VirtualKeyShort.SHIFT, VirtualKeyShort.F10);
     }
 
     // Two Halves: Red Left, Blue Right

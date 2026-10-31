@@ -1164,25 +1164,31 @@ public sealed partial class MessageBubble : UserControl
     // The Windows Save Dialog Over This Window, Named As The Sender Named It (Made Safe)
     private async Task SaveAsAsync(MediaPart part)
     {
+        string message_id = Bubble?.Id ?? string.Empty;
         if ((Application.Current as App)?.Media is not { } media || XamlRoot?.ContentIslandEnvironment is not { } island)
         {
+            AppLog.MediaFailed(App.ShellLog, "save", message_id, "NoWindow");
             return;
         }
 
-        string name      = MediaStore.SanitizeName(part.Name, part.Mime);
-        string extension = Path.GetExtension(name);
-        var picker       = new FileSavePicker
-        {
-            SuggestedFileName      = Path.GetFileNameWithoutExtension(name),
-            SuggestedStartLocation = PickerLocationId.Downloads,
-        };
-        picker.FileTypeChoices.Add(ChatCopy.File, [extension.Length > 1 ? extension : ".bin"]);
-        WinRT.Interop.InitializeWithWindow.Initialize(picker, Microsoft.UI.Win32Interop.GetWindowFromWindowId(island.AppWindowId));
-
-        string message_id = Bubble?.Id ?? string.Empty;
         try
         {
-            if (await picker.PickSaveFileAsync() is not { } file)
+            string name      = MediaStore.SanitizeName(part.Name, part.Mime);
+            string extension = Path.GetExtension(name);
+            var picker       = new FileSavePicker
+            {
+                SuggestedFileName      = Path.GetFileNameWithoutExtension(name),
+                SuggestedStartLocation = PickerLocationId.Downloads,
+            };
+            // A Named List: The Native AOT Build Only Makes WinRT Wrappers For Conversions It Can See, And A Collection
+            // Expression Hides This One (InvalidCastException, Before The Dialog Ever Showed)
+            picker.FileTypeChoices.Add(ChatCopy.File, new List<string> { extension.Length > 1 ? extension : ".bin" });
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, Microsoft.UI.Win32Interop.GetWindowFromWindowId(island.AppWindowId));
+
+            StorageFile? file = TestHooks.PickSaveFile() is { } picked
+                ? (picked.Length > 0 ? await TestSaveFileAsync(picked) : null)
+                : await picker.PickSaveFileAsync();
+            if (file is null)
             {
                 return;
             }
@@ -1198,6 +1204,13 @@ public sealed partial class MessageBubble : UserControl
         {
             AppLog.MediaFailed(App.ShellLog, "save", message_id, ex.GetType().Name);
         }
+    }
+
+    // The Test's Picked Path As The Dialog Hands It Back: An Empty File, Made
+    private static async Task<StorageFile> TestSaveFileAsync(string path)
+    {
+        await File.WriteAllBytesAsync(path, []);
+        return await StorageFile.GetFileFromPathAsync(path);
     }
 
     private void ShowStates()
