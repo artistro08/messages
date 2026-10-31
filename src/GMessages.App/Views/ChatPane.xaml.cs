@@ -34,8 +34,8 @@ namespace GMessages.App.Views;
 
 /// <summary>
 /// The open conversation: the header with the lock, the message bubbles, the typing dots, and the compose area: the
-/// chips (the voice preview, then the attachments), the reply chip, and the message box with its emoji, attach and mic
-/// buttons, the recording bar over it, and Send.
+/// reply chip, the chips (the voice preview, then the attachments), and the message box with its emoji, attach and mic
+/// buttons, the recording bar over it, and Send. The reply chip and the chips are joined to the box's top.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -444,20 +444,42 @@ public sealed partial class ChatPane : UserControl
     public static Visibility Not(bool value) => value ? Visibility.Collapsed : Visibility.Visible;
 
     /// <summary>
-    /// Gives the compose area's padding: none on top while replying, so the message box meets the reply chip.
+    /// Gives the compose area's padding: none on top while the reply chip or the attachment chips sit over the message
+    /// box, so the box meets them.
     /// </summary>
     /// <param name="isReplying">True while a reply is being written.</param>
+    /// <param name="hasAttachments">True while attachments wait.</param>
+    /// <param name="isPreview">True while a recording waits.</param>
     /// <returns>The padding.</returns>
-    public static Thickness ComposePadding(bool isReplying) =>
-        new(ComposeInset, isReplying ? 0 : ComposeTop, ComposeInset, ComposeInset);
+    public static Thickness ComposePadding(bool isReplying, bool hasAttachments, bool isPreview) =>
+        new(ComposeInset, isReplying || hasAttachments || isPreview ? 0 : ComposeTop, ComposeInset, ComposeInset);
 
     /// <summary>
-    /// Gives the message box's corners: square on top while replying, so it and the reply chip read as one control.
+    /// Gives the message box's corners: square on top while the reply chip or the attachment chips sit over it, so they
+    /// and the box read as one control.
+    /// </summary>
+    /// <param name="isReplying">True while a reply is being written.</param>
+    /// <param name="hasAttachments">True while attachments wait.</param>
+    /// <param name="isPreview">True while a recording waits.</param>
+    /// <returns>The corners.</returns>
+    public static CornerRadius DraftCorners(bool isReplying, bool hasAttachments, bool isPreview) =>
+        isReplying || hasAttachments || isPreview ? new CornerRadius(0, 0, DraftCorner, DraftCorner) : new CornerRadius(DraftCorner);
+
+    /// <summary>
+    /// Gives the attachment chips' strip its margin: joined under the reply chip while replying, else with the compose
+    /// area's gap above it.
+    /// </summary>
+    /// <param name="isReplying">True while a reply is being written.</param>
+    /// <returns>The margin.</returns>
+    public static Thickness StripMargin(bool isReplying) => new(ComposeInset, isReplying ? 0 : ComposeTop, ComposeInset, 0);
+
+    /// <summary>
+    /// Gives the attachment chips' strip its corners: square under the reply chip, else rounded on top like the reply chip.
     /// </summary>
     /// <param name="isReplying">True while a reply is being written.</param>
     /// <returns>The corners.</returns>
-    public static CornerRadius DraftCorners(bool isReplying) =>
-        isReplying ? new CornerRadius(0, 0, DraftCorner, DraftCorner) : new CornerRadius(DraftCorner);
+    public static CornerRadius StripCorners(bool isReplying) =>
+        isReplying ? new CornerRadius(0) : new CornerRadius(DraftCorner, DraftCorner, 0, 0);
 
     /// <summary>
     /// Dims an icon that keeps its own color (send's accent) while its button is disabled, as the icon buttons did before

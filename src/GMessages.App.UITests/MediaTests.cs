@@ -382,6 +382,32 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
+    /// The attachment chips sit right on the message box, like the reply chip (owner: "any attachment should do that"),
+    /// and with a reply as well they stack: the reply on top, then the chips, then the box.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Attach_ChipsJoinDraftBox_UnderReply()
+    {
+        await OpenMediaChatAsync();
+        Pick(("blue.png", Png(20, 20, (_, _, _) => (40, 60, 220))));
+
+        App.Find("Chat.Attach").Patterns.Invoke.Pattern.Invoke();
+        App.Find("Chat.Attachment.1");
+        AssertJoinedToDraft("Chat.AttachStrip");
+
+        // A Reply As Well: Above The Chips
+        Message message = Server.Phone.PushIncoming("c-media", "joined up");
+        App.Find("Bubble." + message.MessageID).RightClick();
+        App.Find("Bubble.Reply").Patterns.Invoke.Pattern.Invoke();
+        App.WaitForText("Chat.ReplyingTo", "joined up");
+        AssertJoinedToDraft("Chat.AttachStrip");
+        System.Drawing.Rectangle cancel = App.Find("Chat.CancelReply").BoundingRectangle;
+        System.Drawing.Rectangle strip  = App.Find("Chat.AttachStrip").BoundingRectangle;
+        Assert.IsLessThanOrEqualTo(strip.Top, cancel.Bottom, $"The reply chip ({cancel}) isn't above the chips ({strip}).");
+    }
+
+    /// <summary>
     /// Ctrl + Shift + a opens the picker for any files, and Ctrl + Shift + p the photo picker, whose pick becomes a chip.
     /// </summary>
     /// <returns>A task for the test.</returns>
@@ -443,7 +469,7 @@ public sealed partial class MediaTests : UiTest
 
     /// <summary>
     /// The mic records (the test hook's microphone copies the fixture), Stop puts the recording in the preview chip with
-    /// its length, and Send sends it as "Voice message.m4a" (audio/mp4); the temp file is gone after.
+    /// its length, joined to the top of the message box, and Send sends it as "Voice message.m4a" (audio/mp4); the temp file is gone after.
     /// </summary>
     /// <returns>A task for the test.</returns>
     [TestMethod]
@@ -475,6 +501,7 @@ public sealed partial class MediaTests : UiTest
 
         AutomationElement length = App.Find("Chat.VoiceLength");
         Wait.Until(() => AppDriver.SafeName(length) == "0:03", AppDriver.DefaultTimeout, () => $"The preview chip shows '{AppDriver.SafeName(length)}', not 0:03.");
+        AssertJoinedToDraft("Chat.AttachStrip");
         Assert.AreEqual(ChatCopy.Play, AppDriver.SafeName(App.Find("Chat.VoicePlay")), "The preview's play button has another name.");
         App.Find("Chat.VoicePlay").Patterns.Invoke.Pattern.Invoke();
         WaitForPlayback();
@@ -919,6 +946,15 @@ public sealed partial class MediaTests : UiTest
         App.Find("Row.c-media").Patterns.SelectionItem.Pattern.Select();
         App.Find("Chat.Draft");
         App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).SetForeground();
+    }
+
+    // A Strip Over The Message Box Meets It: Its Bottom Is The Box's Top
+    private void AssertJoinedToDraft(string automationId)
+    {
+        AutomationElement part  = App.Find(automationId);
+        AutomationElement draft = App.Find("Chat.Draft");
+        Wait.Until(() => Math.Abs(part.BoundingRectangle.Bottom - draft.BoundingRectangle.Top) <= 1, AppDriver.DefaultTimeout,
+            () => $"{automationId} ends at y {part.BoundingRectangle.Bottom}, the message box starts at y {draft.BoundingRectangle.Top}.");
     }
 
     // The Chat's First Photo, Or Null
