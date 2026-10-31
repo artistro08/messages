@@ -121,6 +121,22 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
+    /// Pointing at a link preview card shows the hand cursor, as a link does.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task PreviewCard_Hover_ShowsHandCursor()
+    {
+        await OpenChatAsync("Row.c-ann");
+
+        Message link = Server.Phone.PushIncoming("c-ann", $"look {PreviewLink()}");
+        App.WaitForText("Preview." + link.MessageID, FakeGoogleServer.PreviewPageTitle + ", 127.0.0.1");
+        Thread.Sleep(300);
+        PointerInput.Hover(App.Find("Preview." + link.MessageID).BoundingRectangle);
+        Wait.Until(PointerInput.IsHandCursor, AppDriver.DefaultTimeout, () => "The pointer over the preview card isn't the hand cursor.");
+    }
+
+    /// <summary>
     /// A message that is only a link shows its preview card alone, with no empty text line above it.
     /// </summary>
     /// <returns>A task for the test.</returns>

@@ -49,12 +49,43 @@ public static partial class PointerInput
         }
     }
 
+    /// <summary>
+    /// Tells whether the pointer shows Windows' hand cursor, as over a link.
+    /// </summary>
+    /// <returns>True for the hand cursor.</returns>
+    public static bool IsHandCursor()
+    {
+        var info = new CursorInfo { Size = Marshal.SizeOf<CursorInfo>() };
+        return GetCursorInfo(ref info) && info.Cursor == LoadCursorW(IntPtr.Zero, IdcHand);
+    }
+
     // =========================================================================
     // NATIVE MOUSE INPUT
     // =========================================================================
 
+    // The System Hand Cursor's Resource ID
+    private const int IdcHand = 32649;
+
     [LibraryImport("user32.dll")]
     private static partial uint SendInput(uint count, [In] Input[] inputs, int size);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool GetCursorInfo(ref CursorInfo info);
+
+    [LibraryImport("user32.dll")]
+    private static partial IntPtr LoadCursorW(IntPtr instance, int cursorName);
+
+    // CURSORINFO
+    [StructLayout(LayoutKind.Sequential)]
+    private struct CursorInfo
+    {
+        public int Size;
+        public int Flags;
+        public IntPtr Cursor;
+        public int X;
+        public int Y;
+    }
 
     // INPUT With Its MOUSEINPUT (The Union's Other Members Are Smaller)
     [StructLayout(LayoutKind.Sequential)]

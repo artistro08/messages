@@ -395,8 +395,9 @@
                              Enter or Space opens the link in the default browser. Named by its title and the link's host.
                              Right-click, the Application key or Shift + F10 opens its own menu, with Copy link. The card's
                              look lives on PreviewCard; the button itself has no hover or press fill (IconButtonStyle), so
-                             pointing at it never flashes a different color (owner report) -->
-                        <Button
+                             pointing at it never flashes a different color (owner report). The hand cursor shows over it, as
+                             over a link (LinkCardButton) -->
+                        <local:LinkCardButton
                             x:Name="Preview"
                             Margin="{x:Bind local:MessageBubble.PreviewMargin(Bubble.HasBodyText), Mode=OneWay}"
                             Padding="0"
@@ -408,7 +409,7 @@
                             CornerRadius="8"
                             Style="{StaticResource IconButtonStyle}"
                             Visibility="{x:Bind Bubble.HasPreview, Mode=OneWay, FallbackValue=Collapsed}">
-                            <Button.ContextFlyout>
+                            <local:LinkCardButton.ContextFlyout>
                                 <MenuFlyout>
                                     <MenuFlyoutItem
                                         AutomationProperties.AutomationId="Preview.CopyLink"
@@ -419,7 +420,7 @@
                                         </MenuFlyoutItem.Icon>
                                     </MenuFlyoutItem>
                                 </MenuFlyout>
-                            </Button.ContextFlyout>
+                            </local:LinkCardButton.ContextFlyout>
                             <Border
                                 x:Name="PreviewCard"
                                 Background="{ThemeResource ControlFillColorDefaultBrush}"
@@ -450,7 +451,7 @@
                                     </StackPanel>
                                 </StackPanel>
                             </Border>
-                        </Button>
+                        </local:LinkCardButton>
                     </StackPanel>
                 </Border>
 
