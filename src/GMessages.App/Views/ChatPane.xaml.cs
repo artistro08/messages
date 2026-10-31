@@ -1058,6 +1058,12 @@ public sealed partial class ChatPane : UserControl
 
         // Test Run: The Newest Bar, So A Test Sees The Waveform Move
         TestHooks.NoteState("record-level", level.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture));
+
+        // Test Run: How Far The Bars Strayed From The Center Line (Measured Only Then: It Walks Every Bar)
+        if (TestHooks.BlockLaunches)
+        {
+            TestHooks.NoteState("record-drift", RecordBars.CenterDrift().ToString("0.000", System.Globalization.CultureInfo.InvariantCulture));
+        }
     }
 
     // The Preview Chip: Play Or Pause, And A Click On Its Waveform Seeks

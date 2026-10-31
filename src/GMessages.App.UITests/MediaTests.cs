@@ -489,6 +489,52 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
+    /// The live waveform grows up and down from one fixed center line (owner: "the middle line shifts when recording
+    /// gets loud"): its bounds stay put between a quiet and a loud level, and no bar strays from the center line.
+    /// </summary>
+    /// <remarks>
+    /// The fake microphone's level follows a wave, so both a quiet and a loud level come by. The bars' drift comes from
+    /// the app's test hook (<c>record-drift.txt</c>), measured on every tick from the last layout.
+    /// </remarks>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Record_Waveform_KeepsCenterLine()
+    {
+        await FakeMicrophoneAsync();
+        await OpenMediaChatAsync();
+
+        App.Find("Chat.Record").Patterns.Invoke.Pattern.Invoke();
+        AutomationElement wave = App.Find("Chat.RecordWave");
+
+        // Watch The Levels Go By: The Wave's Bounds At A Quiet And A Loud One, And The Worst Drift Seen
+        string level_file               = Path.Combine(App.DataDir, "record-level.txt");
+        string drift_file               = Path.Combine(App.DataDir, "record-drift.txt");
+        System.Drawing.Rectangle? quiet = null;
+        System.Drawing.Rectangle? loud  = null;
+        double worst                    = 0;
+        Wait.Until(() =>
+        {
+            if (File.Exists(drift_file) && double.TryParse(ReadShared(drift_file), System.Globalization.CultureInfo.InvariantCulture, out double drift))
+            {
+                worst = Math.Max(worst, drift);
+            }
+
+            if (!File.Exists(level_file) || !double.TryParse(ReadShared(level_file), System.Globalization.CultureInfo.InvariantCulture, out double level))
+            {
+                return false;
+            }
+
+            quiet ??= level < 0.2 ? wave.BoundingRectangle : null;
+            loud  ??= level > 0.7 ? wave.BoundingRectangle : null;
+            return quiet is not null && loud is not null;
+        }, AppDriver.DefaultTimeout, () => $"The levels never went both quiet and loud (quiet {quiet}, loud {loud}).");
+
+        Assert.IsLessThanOrEqualTo(1, Math.Abs(quiet!.Value.Top - loud!.Value.Top), $"The waveform moved: quiet {quiet}, loud {loud}.");
+        Assert.IsLessThanOrEqualTo(1, Math.Abs(quiet.Value.Height - loud.Value.Height), $"The waveform changed height: quiet {quiet}, loud {loud}.");
+        Assert.IsLessThan(0.05, worst, $"A bar strayed {worst} px from the center line.");
+    }
+
+    /// <summary>
     /// Pause (reached from Done with Shift + Tab, pressed with Space) holds the timer and the live waveform still and
     /// becomes Resume; Resume counts on from there; Done from the resumed recording still lands in the preview chip.
     /// </summary>
