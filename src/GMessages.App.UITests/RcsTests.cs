@@ -306,6 +306,40 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
+    /// The emoji picker's first open doesn't freeze the app (it drew every emoji at once): opened twice, the log's timings
+    /// (milliseconds only) show no frame gap over 300 ms in either open, and only the rows in view are made.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task MoreReactions_Picker_FirstOpen_IsQuick()
+    {
+        await OpenChatAsync("Row.c-ann");
+        string id = Find("c-ann", AnnLast).MessageID;
+
+        for (int open = 1; open <= 2; open++)
+        {
+            App.Find("Bubble." + id).RightClick();
+            App.Find("Bubble.React").Patterns.Invoke.Pattern.Invoke();
+            App.Find("ReactionPicker.More").Patterns.Invoke.Pattern.Invoke();
+
+            // No UI Automation Queries While It Opens: Each Find Walks The App's Tree On Its UI Thread, Which Would Be Timed Too
+            string line = $"Emoji picker open {open}:";
+            Wait.Until(() => ReadLog().Contains(line, StringComparison.Ordinal), AppDriver.DefaultTimeout, () => $"No '{line}' timing in the log.");
+            App.Find("EmojiPicker.Search");
+            Keyboard.Type(VirtualKeyShort.ESCAPE);
+            Wait.Until(() => App.TryFind("EmojiPicker") is null, AppDriver.DefaultTimeout, () => "Escape left the picker open.");
+        }
+
+        // "Emoji picker open N: built in B ms, longest stall S ms, R rows made"
+        foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(ReadLog(), @"Emoji picker open (\d+): built in \d+ ms, longest stall (\d+) ms, (\d+) rows made"))
+        {
+            Console.WriteLine(m.Value);
+            Assert.IsLessThan(300, int.Parse(m.Groups[2].Value, System.Globalization.CultureInfo.InvariantCulture), $"Open {m.Groups[1].Value} stood the app still: {m.Value}");
+            Assert.IsLessThan(40, int.Parse(m.Groups[3].Value, System.Globalization.CultureInfo.InvariantCulture), $"Open {m.Groups[1].Value} made too many rows: {m.Value}");
+        }
+    }
+
+    /// <summary>
     /// In Team (a group), clicking a message's reaction pill lists who reacted, in the pill's order: 👍 from Bo and me
     /// (shown as "You"), then 😂 from Cy.
     /// </summary>

@@ -1826,7 +1826,7 @@ public sealed partial class ChatPane : UserControl
     // Or A Click Outside Closes It. Focus Starts In The Search Box. The Bubble's Hover Strip Stays Until It Closes
     private void ShowEmojiPicker(MessageBubbleViewModel bubble, MessageBubble view, FrameworkElement anchor)
     {
-        // Timed (Milliseconds Only): The First Open Froze The App When It Made Every Emoji's Button At Once
+        // Timed (Milliseconds Only): The First Open Froze The App When It Drew Every Emoji At Once (See EmojiRowFactory)
         long start     = System.Diagnostics.Stopwatch.GetTimestamp();
         Flyout picker  = _emojiPicker ??= BuildEmojiPicker();
         long built     = System.Diagnostics.Stopwatch.GetTimestamp();
@@ -1836,22 +1836,28 @@ public sealed partial class ChatPane : UserControl
         FilterEmoji();
 
         view.KeepShown(true);
-        picker.Opened += OnOpened;
         picker.Closed += OnClosed;
         picker.ShowAt(anchor);
 
-        void OnOpened(object? sender, object e)
-        {
-            picker.Opened -= OnOpened;
+        // Timed For Two Seconds From The Open: The Longest Gap Between Frames Is How Long The App Stood Still
+        long last  = System.Diagnostics.Stopwatch.GetTimestamp();
+        long stall = 0;
+        Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += OnRendering;
 
-            // Logged Once The Opened Picker Has Been Laid Out (Low Runs After Layout)
-            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+        void OnRendering(object? sender, object e)
+        {
+            long now = System.Diagnostics.Stopwatch.GetTimestamp();
+            stall    = Math.Max(stall, (long)System.Diagnostics.Stopwatch.GetElapsedTime(last, now).TotalMilliseconds);
+            last     = now;
+            if (System.Diagnostics.Stopwatch.GetElapsedTime(start, now).TotalSeconds < 2)
             {
-                long build_ms = (long)System.Diagnostics.Stopwatch.GetElapsedTime(start, built).TotalMilliseconds;
-                long show_ms  = (long)System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds;
-                int rows      = _emojiFactory?.Made ?? 0;
-                AppLog.EmojiPickerShown(App.ShellLog, open, build_ms, show_ms, rows);
-            });
+                return;
+            }
+
+            Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnRendering;
+            long build_ms = (long)System.Diagnostics.Stopwatch.GetElapsedTime(start, built).TotalMilliseconds;
+            int rows      = _emojiFactory?.Made ?? 0;
+            AppLog.EmojiPickerShown(App.ShellLog, open, build_ms, stall, rows);
         }
 
         void OnClosed(object? sender, object e)
