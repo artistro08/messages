@@ -263,7 +263,13 @@ public sealed class MediaStoreTests
     [DataRow("photo.jpg", "image/jpeg", "photo.jpg")]
     [DataRow("a/b\\c:d*e?f\"g<h>i|j.png", "image/png", "a_b_c_d_e_f_g_h_i_j.png")]
     [DataRow("..\\up.txt", "text/plain", "___up.txt")]
-    [DataRow("CON", "text/plain", "_CON")]
+    [DataRow("CON", "text/plain", "_CON.txt")]
+    [DataRow("CON", "application/x-unknown-thing", "_CON")]
+    [DataRow("image", "image/jpeg", "image.jpg")]
+    [DataRow("IMG_0042", "video/quicktime", "IMG_0042.mov")]
+    [DataRow("voice", "audio/mpeg", "voice.mp3")]
+    [DataRow("party", "image/gif", "party.gif")]
+    [DataRow("photo.jpg", "image/png", "photo.jpg")]
     [DataRow("nul.txt", "text/plain", "_nul.txt")]
     [DataRow("com1.tar.gz", "application/gzip", "_com1.tar.gz")]
     [DataRow("console.txt", "text/plain", "console.txt")]
@@ -304,6 +310,33 @@ public sealed class MediaStoreTests
     [DataRow("", "image/jpeg", true)]
     public void CanOpen_NeverPrograms(string name, string mime, bool expected) =>
         Assert.AreEqual(expected, MediaStore.CanOpen(name, mime));
+
+    /// <summary>
+    /// A mime type's extension, as Save as offers it: the usual one for each common photo, video and audio type, and none
+    /// for a type with no short one.
+    /// </summary>
+    /// <param name="mime">The mime type.</param>
+    /// <param name="expected">The extension.</param>
+    [TestMethod]
+    [DataRow("image/jpeg", ".jpg")]
+    [DataRow("image/png", ".png")]
+    [DataRow("image/gif", ".gif")]
+    [DataRow("image/webp", ".webp")]
+    [DataRow("image/heic", ".heic")]
+    [DataRow("video/mp4", ".mp4")]
+    [DataRow("video/quicktime", ".mov")]
+    [DataRow("video/3gpp", ".3gp")]
+    [DataRow("audio/mp4", ".m4a")]
+    [DataRow("audio/mpeg", ".mp3")]
+    [DataRow("audio/amr", ".amr")]
+    [DataRow("audio/ogg", ".ogg")]
+    [DataRow("application/pdf", ".pdf")]
+    [DataRow("text/x-vcard", ".vcf")]
+    [DataRow("IMAGE/JPEG; charset=binary", ".jpg")]
+    [DataRow("application/vnd.ms-excel", "")]
+    [DataRow("", "")]
+    public void ExtensionOf_CommonTypes(string mime, string expected) =>
+        Assert.AreEqual(expected, MediaStore.ExtensionOf(mime));
 
     /// <summary>
     /// A long name is cut to the limit and keeps its extension.

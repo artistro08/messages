@@ -184,6 +184,29 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
+    /// A photo the phone named without an extension (as phones often do) is offered by Save as under its type's
+    /// extension, from its mime type, not as a <c>.bin</c> file.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task SaveAs_NameWithoutExtension_OffersMimeExtension()
+    {
+        await OpenMediaChatAsync();
+        Message message         = Server.Phone.PushIncomingMedia("c-media", "image/png", Png(64, 64, SplitColors), "IMG_0042");
+        AutomationElement photo = App.Find("Bubble.Photo." + message.MessageID);
+        WaitForStatus(photo, Full);
+
+        string target = Path.Combine(App.DataDir, "saved-" + Guid.NewGuid().ToString("N") + ".png");
+        File.WriteAllText(Path.Combine(App.DataDir, "save-pick.txt"), target);
+        OpenMenu(photo);
+        App.Find("Bubble.SaveAs").Patterns.Invoke.Pattern.Invoke();
+
+        string offered = Path.Combine(App.DataDir, "save-as.txt");
+        Wait.Until(() => File.Exists(offered), AppDriver.DefaultTimeout, () => "Save as never set up its dialog.");
+        Assert.AreEqual("IMG_0042.png", File.ReadAllText(offered), "Save as didn't offer the photo's own type.");
+    }
+
+    /// <summary>
     /// The menu's Download saves a photo, and a file, to the Downloads folder (the test hook's) with the bytes and the
     /// mark of the web; a second copy gets "name (1)". "Saved to Downloads" shows, and its Show in folder opens the
     /// folder (the test hook notes it).
