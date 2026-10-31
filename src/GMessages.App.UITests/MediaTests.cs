@@ -434,7 +434,7 @@ public sealed partial class MediaTests : UiTest
         AutomationElement pause = App.Find("Chat.RecordPause");
         Wait.Until(() => AppDriver.SafeName(timer) == "0:01", AppDriver.DefaultTimeout, () => $"The timer stayed '{AppDriver.SafeName(timer)}'.");
         Assert.AreEqual(ChatCopy.Pause, AppDriver.SafeName(pause), "The pause button has another name.");
-        int wave_left = App.Find("Chat.RecordWave").BoundingRectangle.Left;
+        System.Drawing.Rectangle timer_box = timer.BoundingRectangle;
 
         // Pause From The Keyboard: Focus Starts On Done, Pause Is Just Before It
         Wait.Until(() => App.Find("Chat.StopRecording").Properties.HasKeyboardFocus.ValueOrDefault, AppDriver.DefaultTimeout, () => "Done didn't get focus.");
@@ -456,7 +456,7 @@ public sealed partial class MediaTests : UiTest
         Wait.Until(() => AppDriver.SafeName(pause) == ChatCopy.Pause, AppDriver.DefaultTimeout, () => "Resume didn't become Pause.");
         string next = held_time == "0:01" ? "0:02" : "0:03";
         Wait.Until(() => AppDriver.SafeName(timer) == next, AppDriver.DefaultTimeout, () => $"The timer didn't count on to {next}: '{AppDriver.SafeName(timer)}'.");
-        Assert.AreEqual(wave_left, App.Find("Chat.RecordWave").BoundingRectangle.Left, "The live waveform moved as the timer counted.");
+        Assert.AreEqual(timer_box, timer.BoundingRectangle, "The timer changed size as it counted, which moves the live waveform.");
 
         App.Find("Chat.StopRecording").Patterns.Invoke.Pattern.Invoke();
         AutomationElement length = App.Find("Chat.VoiceLength");
