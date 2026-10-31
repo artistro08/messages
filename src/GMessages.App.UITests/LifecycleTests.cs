@@ -52,6 +52,21 @@ public sealed class LifecycleTests : UiTest
     }
 
     /// <summary>
+    /// The user starting the app (here, paired) shows the main window without a tray click; only Windows' startup task
+    /// at sign-in keeps it in the tray (LaunchWindow's unit tests).
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task UserLaunch_Paired_ShowsMainWindow()
+    {
+        await PairAsync();
+
+        await App.RestartAsync();
+
+        App.Find("Main.ConversationList");
+    }
+
+    /// <summary>
     /// A tray click while start-up still waits on the server is kept and opens the main window once start-up ends.
     /// </summary>
     /// <returns>A task for the test.</returns>
