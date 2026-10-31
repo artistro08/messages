@@ -59,6 +59,9 @@ public static class ChatCopy
     public const string OriginalMessage   = "Original message";
     public const string Copy              = "Copy";
 
+    // The Reaction Picker's Any-Emoji Button (Controller Copy, Plan 7; Owner Signs Off)
+    public const string MoreReactions = "More reactions";
+
     // Link Preview Card Menu (Controller Copy; Owner Signs Off)
     public const string CopyLink = "Copy link";
 

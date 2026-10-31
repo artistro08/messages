@@ -83,6 +83,7 @@ internal static class NativeMethods
     public const ushort VK_OEM_PERIOD = 0xBE;
     public const ushort VK_SHIFT      = 0x10;
     public const ushort VK_CONTROL    = 0x11;
+    public const ushort VK_ESCAPE     = 0x1B;
 
     // =========================================================================
     // STRUCTS AND CALLBACKS
