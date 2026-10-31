@@ -1,6 +1,7 @@
 using GMessages.Presentation.Messaging;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
+using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
@@ -56,10 +57,19 @@ public sealed partial class Waveform : UserControl
     /// </summary>
     public Waveform()
     {
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = BarGap, VerticalAlignment = VerticalAlignment.Center };
+        // Bars: The Row Is Always The Full Height, So The Tallest Bar Never Moves It, And Each Bar Is Centered Unrounded, So
+        // Every Bar Grows Up And Down From The Same Center Line (Snapping To Whole Pixels Nudged Each By Up To One)
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = BarGap, Height = WaveHeight };
         for (int i = 0; i < _bars.Length; i++)
         {
-            _bars[i] = new Rectangle { Width = BarWidth, RadiusX = BarWidth / 2, RadiusY = BarWidth / 2, VerticalAlignment = VerticalAlignment.Center };
+            _bars[i] = new Rectangle
+            {
+                Width             = BarWidth,
+                RadiusX           = BarWidth / 2,
+                RadiusY           = BarWidth / 2,
+                VerticalAlignment = VerticalAlignment.Center,
+                UseLayoutRounding = false,
+            };
             row.Children.Add(_bars[i]);
         }
 
@@ -132,6 +142,29 @@ public sealed partial class Waveform : UserControl
         _progress  = 1;
         Draw();
     }
+
+    /// <summary>
+    /// Measures how far the bars' centers sit from the waveform's center line, as last laid out.
+    /// </summary>
+    /// <remarks>
+    /// Every bar grows up and down from one fixed line, so this stays at zero however loud it gets. The UI tests read it
+    /// (through a test hook) while recording; the bars themselves aren't in the UI Automation tree.
+    /// </remarks>
+    /// <returns>The largest distance, in effective pixels.</returns>
+    internal double CenterDrift()
+    {
+        double drift = 0;
+        foreach (Rectangle bar in _bars)
+        {
+            double center = bar.TransformToVisual(this).TransformPoint(default).Y + (bar.ActualHeight / 2);
+            drift         = Math.Max(drift, Math.Abs(center - (WaveHeight / 2)));
+        }
+
+        return drift;
+    }
+
+    /// <inheritdoc />
+    protected override AutomationPeer OnCreateAutomationPeer() => new FrameworkElementAutomationPeer(this);
 
     private static void OnBarBrushChanged(DependencyObject d, DependencyPropertyChangedEventArgs e) => ((Waveform)d).Draw();
 

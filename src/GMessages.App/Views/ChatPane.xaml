@@ -633,6 +633,7 @@
                     <controls:Waveform
                         x:Name="RecordBars"
                         Grid.Column="2"
+                        AutomationProperties.AutomationId="Chat.RecordWave"
                         HorizontalAlignment="Left"
                         VerticalAlignment="Center"
                         BarBrush="{ThemeResource TextFillColorSecondaryBrush}" />
