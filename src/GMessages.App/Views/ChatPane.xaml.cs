@@ -57,7 +57,7 @@ namespace GMessages.App.Views;
 /// </para>
 /// <para>
 /// One reaction picker (<c>ReactionPicker</c>, buttons <c>ReactionPicker.1</c> to <c>.7</c>) serves every bubble: a
-/// bubble's pill or menu, or Shift + + on its row, opens it over that bubble (its hover strip's React, over that
+/// bubble's menu, or Shift + + on its row, opens it over that bubble (its hover strip's React, over that
 /// button). A bubble's Reply, or Ctrl + Enter on its row, starts the reply and moves to the message box. The
 /// Application key or Shift + F10 on a row opens its menu.
 /// </para>
@@ -1046,7 +1046,7 @@ public sealed partial class ChatPane : UserControl
         TestHooks.ShowState(PreviewPlay, playing ? "Playing" : "Paused");
     }
 
-    // A Bubble's Pill, Its Menu's React Or Its Hover Strip's React: The Picker Opens Over The Element Given
+    // A Bubble's Menu's React Or Its Hover Strip's React: The Picker Opens Over The Element Given
     private void OnReactRequested(object? sender, FrameworkElement anchor)
     {
         if (sender is MessageBubble view)
