@@ -199,6 +199,39 @@ public sealed class MainViewModelTests
     }
 
     /// <summary>
+    /// Archiving shows the Undo bar ("Conversation archived"); Undo unarchives it, its row goes back in its place, and no
+    /// second offer shows. A second archive replaces the bar, which hides after five seconds; mute shows none.
+    /// </summary>
+    [TestMethod]
+    public async Task Archive_OffersUndo_UndoPutsTheRowBack_BarTimesOut()
+    {
+        using var rig = new MainRig();
+        var time      = new Microsoft.Extensions.Time.Testing.FakeTimeProvider(MainRig.Now);
+        rig.Page(MainRig.Conv("a", "Ann", 1), MainRig.Conv("b", "Bo", 2), MainRig.Conv("c", "Cy", 3));
+        using var vm = new MainViewModel(rig.Controller, rig.Store, time, a => a());
+        await vm.Inbox.LoadAsync();
+
+        Assert.IsTrue(await vm.RunAsync("b", ConversationAction.Archive));
+        Assert.AreEqual(ChatCopy.ConversationArchived, vm.UndoNotice);
+        Assert.AreEqual("a,c", string.Join(",", vm.Inbox.Rows.Select(r => r.Id)));
+
+        Assert.IsTrue(await vm.UndoAsync());
+        Assert.IsFalse(vm.HasUndo);
+        Assert.AreEqual("a,b,c", string.Join(",", vm.Inbox.Rows.Select(r => r.Id)));
+
+        // A Second Archive Replaces The Bar, Which Times Out
+        Assert.IsTrue(await vm.RunAsync("a", ConversationAction.Archive));
+        Assert.IsTrue(await vm.RunAsync("c", ConversationAction.Archive));
+        time.Advance(MainViewModel.UndoTime - TimeSpan.FromSeconds(1));
+        Assert.IsTrue(vm.HasUndo);
+        time.Advance(TimeSpan.FromSeconds(1));
+        Assert.IsFalse(vm.HasUndo);
+
+        Assert.IsTrue(await vm.RunAsync("b", ConversationAction.Mute));
+        Assert.IsFalse(vm.HasUndo);
+    }
+
+    /// <summary>
     /// Mute and unmute keep the open chat, whose mute state follows.
     /// </summary>
     [TestMethod]

@@ -60,6 +60,29 @@ public sealed class ConversationActionTests : UiTest
     }
 
     /// <summary>
+    /// Archiving Ann shows "Conversation archived" with Undo (the focus stays where it was); Undo unarchives her on the
+    /// phone, her row is back in the inbox, and the bar goes.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Archive_Undo_PutsTheRowBack()
+    {
+        await OpenListAsync();
+
+        PickFromRowMenu("Row.c-ann", "Conversation.Archive");
+        WaitForGone("Row.c-ann");
+        AutomationElement bar = App.Find("Main.Undo");
+        Assert.AreEqual(ChatCopy.ConversationArchived, bar.Name);
+        Assert.IsFalse(App.Find("Main.Undo.Button").Properties.HasKeyboardFocus.ValueOrDefault, "The Undo bar took the focus.");
+
+        Invoke("Main.Undo.Button");
+        WaitForUpdates(2);
+        Assert.AreEqual(ConversationStatus.Active, Server.Phone.ConversationUpdates[1].UpdateData.Status);
+        App.Find("Row.c-ann");
+        WaitForGone("Main.Undo");
+    }
+
+    /// <summary>
     /// With the mouse over Ann's row, its ⋮ opens her menu.
     /// </summary>
     /// <returns>A task for the test.</returns>

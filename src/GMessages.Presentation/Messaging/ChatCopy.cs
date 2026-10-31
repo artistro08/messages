@@ -62,6 +62,11 @@ public static class ChatCopy
     // The Reaction Picker's Any-Emoji Button (Controller Copy, Plan 7; Owner Signs Off)
     public const string MoreReactions = "More reactions";
 
+    // The Undo Bar After Archiving Or Unarchiving A Conversation (Controller Copy, Plan 7 Fixes; Owner Signs Off)
+    public const string ConversationArchived   = "Conversation archived";
+    public const string ConversationUnarchived = "Conversation unarchived";
+    public const string Undo                   = "Undo";
+
     // The Emoji Picker More Reactions Opens: Its Name, Search Box, Empty Search And Categories (Controller Copy, Plan 7
     // Fixes; Owner Signs Off)
     public const string EmojiPicker      = "Emoji";

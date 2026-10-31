@@ -194,6 +194,9 @@ public sealed partial class ChatsView : UserControl
     /// <summary>Gets the battery banner's title (for bindings).</summary>
     public static string BatteryTitle => ChatCopy.PhoneBatteryLow;
 
+    /// <summary>Gets the Undo bar's button text (for bindings).</summary>
+    public static string UndoText => ChatCopy.Undo;
+
     // =========================================================================
     // EVENT HANDLERS
     // =========================================================================
@@ -324,6 +327,11 @@ public sealed partial class ChatsView : UserControl
     private void OnChatStarted(object? sender, string conversationId) => ViewModel.Select(conversationId);
 
     private void OnActionErrorClosed(InfoBar sender, object args) => ViewModel.DismissActionError();
+
+    // The Undo Bar: Undo Puts The Conversation Back; Its Close Button Hides It
+    private void OnUndoClick(object sender, RoutedEventArgs e) => _ = ViewModel.UndoAsync();
+
+    private void OnUndoClosed(InfoBar sender, object args) => ViewModel.DismissUndo();
 
     // The Battery Banner's Own Close Button Dismisses It; The View Model Closing It On Recovery Doesn't
     private void OnBatteryLowClosed(InfoBar sender, InfoBarClosedEventArgs args)
