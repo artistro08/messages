@@ -605,12 +605,15 @@
                 Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
                 CornerRadius="{x:Bind local:ChatPane.DraftCorners(Chat.IsReplying), Mode=OneWay}"
                 Visibility="{x:Bind Chat.Voice.IsCapturing, Mode=OneWay, FallbackValue=Collapsed}">
+                <!-- Spacing: the buttons sit like the message box's own (emoji, paperclip, mic, Send): 32 px each, side by
+                     side with no gap, 6 px in from the box's right edge (5 px padding inside the 1 px border). The waveform
+                     fills everything between the timer and Cancel recording -->
                 <Grid
-                    Padding="12,0,6,0"
+                    Padding="12,0,5,0"
                     Background="{ThemeResource ControlFillColorInputActiveBrush}"
                     BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
                     BorderThickness="1"
-                    ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto"
+                    ColumnDefinitions="Auto,Auto,*,Auto"
                     ColumnSpacing="8"
                     CornerRadius="{x:Bind local:ChatPane.DraftCorners(Chat.IsReplying), Mode=OneWay}">
                     <Ellipse
@@ -634,54 +637,54 @@
                         x:Name="RecordBars"
                         Grid.Column="2"
                         AutomationProperties.AutomationId="Chat.RecordWave"
-                        HorizontalAlignment="Left"
                         VerticalAlignment="Center"
                         BarBrush="{ThemeResource TextFillColorSecondaryBrush}" />
-                    <Button
+                    <!-- Recording Buttons: side by side like the message box's, so no column spacing between them -->
+                    <StackPanel
                         Grid.Column="3"
-                        Width="32"
-                        Height="32"
                         VerticalAlignment="Center"
-                        AutomationProperties.AutomationId="Chat.CancelRecording"
-                        AutomationProperties.Name="{x:Bind local:ChatPane.CancelRecordingText}"
-                        Click="OnCancelRecordingClick"
-                        Style="{StaticResource IconButtonStyle}"
-                        ToolTipService.ToolTip="{x:Bind local:ChatPane.CancelRecordingText}">
-                        <FontIcon
-                            FontSize="16"
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            Glyph="&#xE74D;" />
-                    </Button>
-                    <Button
-                        x:Name="PauseRecordingButton"
-                        Grid.Column="4"
-                        Width="32"
-                        Height="32"
-                        VerticalAlignment="Center"
-                        AutomationProperties.AutomationId="Chat.RecordPause"
-                        Click="OnPauseRecordingClick"
-                        Style="{StaticResource IconButtonStyle}">
-                        <FontIcon
-                            x:Name="PauseRecordingGlyph"
-                            FontSize="16"
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                    </Button>
-                    <Button
-                        x:Name="StopRecordingButton"
-                        Grid.Column="5"
-                        Width="32"
-                        Height="32"
-                        VerticalAlignment="Center"
-                        AutomationProperties.AutomationId="Chat.StopRecording"
-                        AutomationProperties.Name="{x:Bind local:ChatPane.DoneText}"
-                        Click="OnStopRecordingClick"
-                        Style="{StaticResource IconButtonStyle}"
-                        ToolTipService.ToolTip="{x:Bind local:ChatPane.DoneText}">
-                        <FontIcon
-                            FontSize="16"
-                            Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
-                            Glyph="&#xE73E;" />
-                    </Button>
+                        Orientation="Horizontal">
+                        <Button
+                            Width="32"
+                            Height="32"
+                            AutomationProperties.AutomationId="Chat.CancelRecording"
+                            AutomationProperties.Name="{x:Bind local:ChatPane.CancelRecordingText}"
+                            Click="OnCancelRecordingClick"
+                            Style="{StaticResource IconButtonStyle}"
+                            ToolTipService.ToolTip="{x:Bind local:ChatPane.CancelRecordingText}">
+                            <FontIcon
+                                FontSize="16"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Glyph="&#xE74D;" />
+                        </Button>
+                        <Button
+                            x:Name="PauseRecordingButton"
+                            Width="32"
+                            Height="32"
+                            AutomationProperties.AutomationId="Chat.RecordPause"
+                            Click="OnPauseRecordingClick"
+                            Style="{StaticResource IconButtonStyle}">
+                            <FontIcon
+                                x:Name="PauseRecordingGlyph"
+                                FontSize="16"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </Button>
+                        <Button
+                            x:Name="StopRecordingButton"
+                            Width="32"
+                            Height="32"
+                            AutomationProperties.AutomationId="Chat.StopRecording"
+                            AutomationProperties.Name="{x:Bind local:ChatPane.DoneText}"
+                            Click="OnStopRecordingClick"
+                            Style="{StaticResource IconButtonStyle}"
+                            ToolTipService.ToolTip="{x:Bind local:ChatPane.DoneText}">
+                            <FontIcon
+                                FontSize="16"
+                                Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                Glyph="&#xE73E;" />
+                        </Button>
+                    </StackPanel>
+                    <!-- /Recording Buttons -->
                 </Grid>
             </Border>
             <!-- /Recording -->
