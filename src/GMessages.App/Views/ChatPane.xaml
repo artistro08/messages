@@ -112,16 +112,15 @@
                                 <Setter Property="Background" Value="{ThemeResource SubtleFillColorTransparentBrush}" />
                                 <Setter Property="BorderBrush" Value="{ThemeResource SubtleFillColorTransparentBrush}" />
                                 <Setter Property="FontSize" Value="20" />
+                                <Setter Property="CornerRadius" Value="8" />
                             </Style>
                             <Style BasedOn="{StaticResource ReactionButtonStyle}" TargetType="Button" />
-                            <!-- My Reaction: the same soft accent fill as my reaction pill, set from code when the picker opens -->
-                            <Style
-                                x:Key="ReactionButtonSelectedStyle"
-                                BasedOn="{StaticResource ReactionButtonStyle}"
-                                TargetType="Button">
+
+                            <!-- My Reaction: the same soft accent fill as my reaction pill, on the fill behind the button, set from
+                                 code when the picker opens. Behind it, the button's hover only tints it; on the button itself the
+                                 hover swapped it for the hover fill through the 83 ms brush transition (the flicker) -->
+                            <Style x:Key="ReactionSelectedBackStyle" TargetType="Border">
                                 <Setter Property="Background" Value="{ThemeResource ReactionPillMineBrush}" />
-                                <Setter Property="BorderBrush" Value="{ThemeResource ReactionPillMineBrush}" />
-                                <Setter Property="CornerRadius" Value="8" />
                             </Style>
                         </StackPanel.Resources>
                     </StackPanel>
