@@ -31,8 +31,9 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
     private bool _isLoading;
     private bool _isLoadingMore;
 
-    // A Reload Asked For While A Load Was Running; Runs When That Load Ends
+    // A Reload, Or The Next Page, Asked For While A Load Was Running; Runs When That Load Ends
     private bool _reloadPending;
+    private bool _morePending;
 
     /// <summary>
     /// Creates an empty list and starts listening to the store.
@@ -170,14 +171,21 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
     /// Loads the next page below the rows.
     /// </summary>
     /// <remarks>
-    /// Call on the UI thread. Does nothing while a page is loading or when there are no more pages. A page with no
-    /// conversation the list doesn't already show (empty, or the phone ignored the cursor) is the end, so scrolling
-    /// never asks for the same page forever.
+    /// Call on the UI thread. Does nothing when there are no more pages. Asked while a page is loading, it runs once that
+    /// load ends: the list asks when its last row shows, and a row that showed mid-load won't show again until it is
+    /// scrolled away and back (the paging that stalled now and then). A page with no conversation the list doesn't
+    /// already show (empty, or the phone ignored the cursor) is the end, so scrolling never asks for the same page forever.
     /// </remarks>
     /// <returns>A task that completes when the page is shown.</returns>
     public async Task LoadMoreAsync()
     {
-        if (IsLoading || _next is null)
+        if (IsLoading)
+        {
+            _morePending = true;
+            return;
+        }
+
+        if (_next is null)
         {
             return;
         }
@@ -211,13 +219,20 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
         await RunPendingReloadAsync();
     }
 
-    // A Resync Or Reload Arrived Mid-Load: The Page May Be Stale, So Load Again
+    // A Resync Or Reload Arrived Mid-Load: The Page May Be Stale, So Load Again. Then The Next Page, If It Was Asked For
     private async Task RunPendingReloadAsync()
     {
         if (_reloadPending)
         {
             _reloadPending = false;
             await LoadAsync();
+            return;
+        }
+
+        if (_morePending)
+        {
+            _morePending = false;
+            await LoadMoreAsync();
         }
     }
 
