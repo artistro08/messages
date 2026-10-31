@@ -25,6 +25,10 @@ internal sealed partial record EmojiRow(string? Header, IReadOnlyList<(string Em
 /// and draws in Segoe UI Emoji, so emoji that default to plain text (☝️, ✍️) still show in color.
 /// </para>
 /// <para>
+/// An emoji not yet drawn in this run appears a few frames later (a few new emoji per frame), so a first open never
+/// stands the app still; one drawn before shows at once. Its button is there, named and clickable, from the start.
+/// </para>
+/// <para>
 /// Made rows are kept, so a reused row is found again by reference (it was made here, so it comes back as the same
 /// object; no type test on the element is needed).
 /// </para>
@@ -40,6 +44,15 @@ internal sealed partial class EmojiRowFactory : IElementFactory
     private readonly Style _buttonStyle;
     private readonly Style _noteStyle;
     private readonly Action<string> _pick;
+    private readonly FontFamily _emojiFont = new("Segoe UI Emoji");
+
+    // How Many New Emoji One Turn Draws (About 50 ms Of Work)
+    private const int DrawnPerTurn = 4;
+
+    // Emoji Drawn In This Run (Windows Keeps Their Glyphs), Those Still Waiting To Be Drawn, And Whether Frames Draw Them
+    private static readonly HashSet<string> Drawn = new(StringComparer.Ordinal);
+    private readonly Queue<(RowParts Parts, int Column, string Emoji)> _pending = new();
+    private bool _drawing;
 
     /// <summary>
     /// Creates the factory.
@@ -93,13 +106,56 @@ internal sealed partial class EmojiRowFactory : IElementFactory
 
             (string emoji, string words) = row.Emoji[i];
             parts.Emoji[i]               = emoji;
-            button.Content               = emoji;
             button.Visibility            = Visibility.Visible;
             AutomationProperties.SetAutomationId(button, "EmojiPicker." + Key(emoji));
+            AutomationProperties.SetName(button, emoji);
             ToolTipService.SetToolTip(button, words.Split(' ')[0]);
+
+            // An Emoji Already Drawn In This Run Shows At Once; A New One Waits Its Turn (See DrawPending)
+            if (Drawn.Contains(emoji))
+            {
+                parts.Glyphs[i].Text = emoji;
+                continue;
+            }
+
+            parts.Glyphs[i].Text = string.Empty;
+            _pending.Enqueue((parts, i, emoji));
+        }
+
+        if (_pending.Count > 0 && !_drawing)
+        {
+            _drawing = true;
+            CompositionTarget.Rendering += DrawPending;
         }
 
         return element;
+    }
+
+    // Draws The Waiting Emoji A Few Per Frame, Until None Wait. The First Time Windows Draws An Emoji Costs About 12 ms
+    // (Measured, Plan 7), So The 80 Of A First Open Drawn In One Frame Stood The App Still For A Second (And The Old
+    // Picker's 550 Froze It); This Way The Picker Opens At Once, Its Emoji Appear Over About A Second, And The App Keeps
+    // Answering Between Frames. Runs Just Before Each Frame, So Each Frame Draws Only Its Few. An Emoji Whose Button Was
+    // Reused Since It Was Queued Is Skipped
+    private void DrawPending(object? sender, object e)
+    {
+        int drawn = 0;
+        while (drawn < DrawnPerTurn && _pending.TryDequeue(out (RowParts Parts, int Column, string Emoji) next))
+        {
+            if (next.Parts.Emoji[next.Column] != next.Emoji)
+            {
+                continue;
+            }
+
+            next.Parts.Glyphs[next.Column].Text = next.Emoji;
+            Drawn.Add(next.Emoji);
+            drawn++;
+        }
+
+        if (_pending.Count == 0)
+        {
+            CompositionTarget.Rendering -= DrawPending;
+            _drawing = false;
+        }
     }
 
     /// <summary>
@@ -133,12 +189,14 @@ internal sealed partial class EmojiRowFactory : IElementFactory
         Grid.SetColumnSpan(header, _columns);
         grid.Children.Add(header);
 
-        var parts = new RowParts(header, new Button[_columns], new string[_columns]);
+        var parts = new RowParts(header, new Button[_columns], new TextBlock[_columns], new string[_columns]);
         for (int i = 0; i < _columns; i++)
         {
             int column = i;
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
+            var glyph = new TextBlock { FontFamily = _emojiFont };
+            AutomationProperties.SetAccessibilityView(glyph, AccessibilityView.Raw);
             var button = new Button
             {
                 Style               = _buttonStyle,
@@ -146,8 +204,9 @@ internal sealed partial class EmojiRowFactory : IElementFactory
                 Height              = _cell,
                 Padding             = new Thickness(0),
                 HorizontalAlignment = HorizontalAlignment.Stretch,
-                FontFamily          = new FontFamily("Segoe UI Emoji"),
+                Content             = glyph,
             };
+            parts.Glyphs[column] = glyph;
             button.Click += (_, _) =>
             {
                 if (parts.Emoji[column].Length > 0)
@@ -165,5 +224,5 @@ internal sealed partial class EmojiRowFactory : IElementFactory
     }
 
     // A Row's Name Line, Its Buttons, And The Emoji Each Button Shows Now (Empty When Hidden)
-    private sealed record RowParts(TextBlock Header, Button[] Buttons, string[] Emoji);
+    private sealed record RowParts(TextBlock Header, Button[] Buttons, TextBlock[] Glyphs, string[] Emoji);
 }
