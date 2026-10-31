@@ -87,6 +87,19 @@
                             <controls:ConversationRow MoreRequested="OnRowMoreRequested" Row="{x:Bind}" />
                         </DataTemplate>
                     </ListView.ItemTemplate>
+
+                    <!-- Loading More: a small ring below the last row while the next page loads (scrolling near the
+                         bottom asks for it, see the code) -->
+                    <ListView.Footer>
+                        <ProgressRing
+                            Width="20"
+                            Height="20"
+                            Margin="0,8"
+                            HorizontalAlignment="Center"
+                            AutomationProperties.AutomationId="Main.ListLoadingMore"
+                            IsActive="{x:Bind ViewModel.CurrentList.IsLoadingMore, Mode=OneWay, FallbackValue=False}"
+                            Visibility="{x:Bind ViewModel.CurrentList.IsLoadingMore, Mode=OneWay, FallbackValue=Collapsed}" />
+                    </ListView.Footer>
                 </ListView>
 
                 <!-- Loading: while an empty list (the inbox, Archived or Spam & blocked) loads -->

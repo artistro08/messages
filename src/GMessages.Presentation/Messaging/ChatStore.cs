@@ -276,7 +276,11 @@ public sealed partial class ChatStore : IDisposable
             result.Add(CacheConversation(c, generation));
         }
 
-        return (result, response.Cursor);
+        // No Cursor Back: The Next Page Starts At This Page's Last (Oldest) Conversation, Its Time In Milliseconds, As
+        // Message Pages Do. An Empty Page Means There Are No More
+        Conversation? last = response.Conversations.LastOrDefault();
+        Cursor? next       = response.Cursor ?? (last is not null ? new Cursor { LastItemID = last.ConversationID, LastItemTimestamp = last.LastMessageTimestamp / 1000 } : null);
+        return (result, next);
     }
 
     /// <summary>

@@ -311,6 +311,37 @@ public sealed class MainWindowTests : UiTest
     }
 
     /// <summary>
+    /// The list loads a page at a time: with 60 more conversations the oldest isn't there at first, and scrolling to
+    /// the bottom loads the next pages until it shows.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task ConversationList_ScrollToBottom_LoadsMorePages()
+    {
+        // 60 Conversations Older Than The Seeded Ones, Newest First By Number
+        const int Count = 60;
+        for (int i = 0; i < Count; i++)
+        {
+            string id                         = "c-page-" + i.ToString("D2", System.Globalization.CultureInfo.InvariantCulture);
+            Conversation chat                 = FakeChats.NewConversation(id, "Page " + i, false, ConversationStatus.Active, false, false, FakeChats.Person("p-" + id, "Page " + i, "+1555200" + i.ToString("D4", System.Globalization.CultureInfo.InvariantCulture)));
+            chat.LastMessageTimestamp         = (Count - i) * 1_000_000L;
+            Server.Phone.Chats.Add(chat);
+        }
+
+        await OpenMainAsync();
+        AutomationElement list = App.Find("Main.ConversationList");
+        App.Find("Row.c-page-00");
+        Assert.IsNull(App.TryFind("Row.c-page-59"), "The oldest conversation showed before scrolling, so the list didn't page.");
+
+        // Each Scroll To The Bottom Realizes The Last Row, Which Asks For The Next Page
+        Wait.Until(() =>
+        {
+            list.Patterns.Scroll.Pattern.SetScrollPercent(-1, 100);
+            return App.TryFind("Row.c-page-59") is not null;
+        }, AppDriver.DefaultTimeout, () => "Scrolling to the bottom never loaded the oldest conversation.");
+    }
+
+    /// <summary>
     /// A live message for an older conversation updates its row's snippet and moves it above Ann, right below
     /// pinned Team.
     /// </summary>

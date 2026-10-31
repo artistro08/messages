@@ -29,6 +29,7 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
     // Where The Last Page Ended; Null Means No More Pages
     private Cursor? _next;
     private bool _isLoading;
+    private bool _isLoadingMore;
 
     // A Reload Asked For While A Load Was Running; Runs When That Load Ends
     private bool _reloadPending;
@@ -87,6 +88,22 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
     /// loading ring. A list with rows keeps them on screen while it reloads or loads more.
     /// </summary>
     public bool IsLoadingFirstPage => _isLoading && Rows.Count == 0;
+
+    /// <summary>Gets whether the next page is loading below the rows: the small ring at the list's bottom.</summary>
+    public bool IsLoadingMore
+    {
+        get => _isLoadingMore;
+        private set
+        {
+            if (_isLoadingMore == value)
+            {
+                return;
+            }
+
+            _isLoadingMore = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsLoadingMore)));
+        }
+    }
 
     /// <summary>
     /// Loads the newest page, replacing the rows.
@@ -152,7 +169,11 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
     /// <summary>
     /// Loads the next page below the rows.
     /// </summary>
-    /// <remarks>Call on the UI thread. Does nothing while a page is loading or when there are no more pages.</remarks>
+    /// <remarks>
+    /// Call on the UI thread. Does nothing while a page is loading or when there are no more pages. A page with no
+    /// conversation the list doesn't already show (empty, or the phone ignored the cursor) is the end, so scrolling
+    /// never asks for the same page forever.
+    /// </remarks>
     /// <returns>A task that completes when the page is shown.</returns>
     public async Task LoadMoreAsync()
     {
@@ -161,12 +182,16 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
             return;
         }
 
-        IsLoading = true;
+        // The Rows Before The Page: Loading It Raises Live Updates That Add Its Rows Before It Returns
+        HashSet<string> shown = [.. Rows.Select(r => r.Id)];
+
+        IsLoading     = true;
+        IsLoadingMore = true;
         try
         {
             (IReadOnlyList<ConversationInfo> page, Cursor? next) = await _store.LoadFolderAsync(_folder, _next, CancellationToken.None);
 
-            _next = next;
+            _next = page.Any(c => !shown.Contains(c.Id)) ? next : null;
             foreach (ConversationInfo c in page)
             {
                 Apply(c);
@@ -179,7 +204,8 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
         }
         finally
         {
-            IsLoading = false;
+            IsLoading     = false;
+            IsLoadingMore = false;
         }
 
         await RunPendingReloadAsync();
