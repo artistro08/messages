@@ -47,7 +47,8 @@ public static class ShortcutMap
     /// <remarks>
     /// Chords must match their modifiers exactly, so Ctrl + Alt + k is not a shortcut. The bare "r", Shift + + and
     /// Ctrl + Enter depend on <paramref name="focusInTextBox"/>; they are ignored while typing. The conversation
-    /// shortcuts (Ctrl + d, Ctrl + Alt + h, Ctrl + Shift + o) work while typing too. Ctrl + Alt + h is not a shortcut
+    /// shortcuts (Ctrl + d, Ctrl + Alt + h, Ctrl + Shift + o) work while typing too. Ctrl + / opens the help like
+    /// Ctrl + ? (Ctrl + Shift + /) and has no help row of its own. Ctrl + Alt + h is not a shortcut
     /// while Right Alt is down: Windows reports AltGr as Left Ctrl + Right Alt, and AltGr + h types on some layouts.
     /// </remarks>
     /// <param name="key">The pressed key.</param>
@@ -94,6 +95,7 @@ public static class ShortcutMap
                 VirtualKey.D => ShortcutCommand.DeleteConversation,
                 Period       => ShortcutCommand.NextConversation,
                 Comma        => ShortcutCommand.PreviousConversation,
+                Slash        => ShortcutCommand.ShowHelp,
                 _ => null,
             };
         }
