@@ -151,8 +151,14 @@ public sealed partial class ChatPane : UserControl
         ("image/png", "image/png", "image.png"),
     ];
 
-    // A Pasted Bitmap (A Screenshot, A Browser's Copy Image) Is Sent As A PNG Under This Name
+    // A Pasted Bitmap (A Screenshot, A Browser's Copy Image) Is Sent As A PNG Under This Name, A Web GIF (The Emoji Panel's)
+    // As A GIF Under This One
     private const string PastedBitmapName = "image.png";
+    private const string PastedGifName    = "image.gif";
+
+    // Fetches A Pasted Web Picture (See PastedWebGifAsync) As The Link Previewer Does: Vetted Public Hosts, No Cookies
+    private static readonly Lazy<HttpClient> WebPictures = new(() =>
+        new HttpClient(LinkPreviewer.CreateHandler(TestHooks.AllowLoopbackPreviews)) { Timeout = TimeSpan.FromSeconds(15) });
 
     // Typing Dots: Each Rises This Far And Back Within Its Beat (See TypingCycle)
     private const float TypingRise = 4;
@@ -1429,7 +1435,7 @@ public sealed partial class ChatPane : UserControl
                 IReadOnlyList<IStorageItem> items = await view.GetStorageItemsAsync();
                 await AttachFilesAsync(chat, items.Where(i => i.IsOfType(StorageItemTypes.File)).Select(i => i.As<StorageFile>()).ToList());
             }
-            else if (await PastedPictureAsync(view) is { } picture)
+            else if ((await PastedPictureAsync(view) ?? await PastedWebGifAsync(view)) is { } picture)
             {
                 (int width, int height) = await PictureSizeAsync(picture.Bytes);
                 chat.Attach(picture.Name, picture.Mime, picture.Bytes, width, height);
@@ -1466,6 +1472,63 @@ public sealed partial class ChatPane : UserControl
 
         return null;
     }
+
+    // The GIF A Pasted Web Picture Links To, Or Null. The Emoji Panel's GIFs Come As HTML (An <img> Of The GIF On Tenor) Beside
+    // A Bitmap Of Its First Frame, With No GIF Or File Format, So Pasting The Bitmap Sent A Still PNG. The Picture Is Fetched As
+    // A Link Preview Is (Public Hosts Only, No Cookies, No Redirects) And Kept Only When It Is A GIF Within The Attachment Limit
+    private static async Task<(string Name, string Mime, byte[] Bytes)?> PastedWebGifAsync(DataPackageView view)
+    {
+        if (!view.Contains(StandardDataFormats.Html))
+        {
+            return null;
+        }
+
+        string html = HtmlFormatHelper.GetStaticFragment(await view.GetHtmlFormatAsync());
+        if (ImageSource().Match(html) is not { Success: true } match
+            || !Uri.TryCreate(System.Net.WebUtility.HtmlDecode(match.Groups[1].Value), UriKind.Absolute, out Uri? url)
+            || !LinkPreviewer.IsAllowed(url, TestHooks.AllowLoopbackPreviews))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            using HttpResponseMessage response = await WebPictures.Value.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+            if (!response.IsSuccessStatusCode
+                || response.Content.Headers.ContentType?.MediaType is not "image/gif"
+                || response.Content.Headers.ContentLength > ChatStore.MaxAttachmentBytes)
+            {
+                return null;
+            }
+
+            await using Stream body = await response.Content.ReadAsStreamAsync();
+            using var copy          = new MemoryStream();
+            byte[] buffer           = new byte[81920];
+            int read;
+            while ((read = await body.ReadAsync(buffer)) > 0)
+            {
+                copy.Write(buffer, 0, read);
+                if (copy.Length > ChatStore.MaxAttachmentBytes)
+                {
+                    return null;
+                }
+            }
+
+            // A GIF By Its Bytes Too ("GIF8"), Whatever The Server Said
+            byte[] bytes = copy.ToArray();
+            return bytes is [0x47, 0x49, 0x46, 0x38, ..] ? (PastedGifName, "image/gif", bytes) : null;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or IOException)
+        {
+            AppLog.MediaFailed(App.ShellLog, "paste-gif", string.Empty, ex.GetType().Name);
+            return null;
+        }
+    }
+
+    // An <img>'s src In Pasted HTML
+    [System.Text.RegularExpressions.GeneratedRegex("""<img\b[^>]*?\bsrc\s*=\s*["']([^"']+)["']""", System.Text.RegularExpressions.RegexOptions.IgnoreCase)]
+    private static partial System.Text.RegularExpressions.Regex ImageSource();
 
     // A Pasted Bitmap, Encoded As A PNG, With Its Size
     private static async Task<(byte[] Png, int Width, int Height)> BitmapToPngAsync(RandomAccessStreamReference bitmap)

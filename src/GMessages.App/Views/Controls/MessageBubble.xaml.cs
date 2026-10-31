@@ -13,6 +13,7 @@ using Microsoft.UI.Xaml.Documents;
 using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.System;
 using Windows.UI.ViewManagement;
@@ -238,7 +239,12 @@ public sealed partial class MessageBubble : UserControl
         ToolTipService.SetToolTip(HoverMore, ChatCopy.MoreOptions);
 
         // The Photo's Layers Take The Photo's Rounded Corners (Bound Once, On The Button)
-        Photo.RegisterPropertyChangedCallback(Control.CornerRadiusProperty, (_, _) => PhotoBlur.CornerRadius = PhotoFull.CornerRadius = Photo.CornerRadius);
+        Photo.RegisterPropertyChangedCallback(Control.CornerRadiusProperty, (_, _) =>
+        {
+            PhotoBlur.CornerRadius = PhotoFull.CornerRadius = Photo.CornerRadius;
+            ClipPhotoFull();
+        });
+        PhotoFull.SizeChanged += (_, _) => ClipPhotoFull();
 
         // Links Follow The Text's Color: Its Side's State And The Theme Set It
         Body.RegisterPropertyChangedCallback(TextBlock.ForegroundProperty, (_, _) => ColorLinks());
@@ -742,7 +748,7 @@ public sealed partial class MessageBubble : UserControl
         if (!same_message)
         {
             PhotoBlur.Background        = null;
-            PhotoFull.Background        = null;
+            PhotoFullImage.Source       = null;
             PhotoFull.OpacityTransition = null;
             PhotoFull.Opacity           = 0;
         }
@@ -871,10 +877,16 @@ public sealed partial class MessageBubble : UserControl
                 return;
             }
 
-            PhotoFull.Background        = new ImageBrush { ImageSource = image, Stretch = Stretch.UniformToFill };
+            PhotoFullImage.Source       = image;
             PhotoFull.OpacityTransition = at_once || !Ui.AnimationsEnabled ? null : _photoFade;
             PhotoFull.Opacity           = 1;
             TestHooks.ShowState(Photo, "Full");
+
+            // A Moving GIF Plays (Test Runs Note It)
+            if (image.As<BitmapImage>() is { IsAnimatedBitmap: true })
+            {
+                TestHooks.NoteState("animated-photo", bubble.Id);
+            }
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -886,6 +898,16 @@ public sealed partial class MessageBubble : UserControl
             AppLog.MediaFailed(App.ShellLog, "photo", bubble.Id, ex.GetType().Name);
             ShowPhotoFailed();
         }
+    }
+
+    // The Full Image's Layer Clipped To The Photo's Rounded Corners (An Image Isn't Clipped By Its Border's Corners)
+    private void ClipPhotoFull()
+    {
+        Visual visual = ElementCompositionPreview.GetElementVisual(PhotoFull);
+        CornerRadius r = Photo.CornerRadius;
+        visual.Clip    = visual.Compositor.CreateRectangleClip(
+            0, 0, (float)PhotoFull.ActualWidth, (float)PhotoFull.ActualHeight,
+            new Vector2((float)r.TopLeft), new Vector2((float)r.TopRight), new Vector2((float)r.BottomRight), new Vector2((float)r.BottomLeft));
     }
 
     private void ShowPhotoFailed()

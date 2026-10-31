@@ -84,6 +84,11 @@ public sealed class FakeGoogleServer : IAsyncDisposable
         </html>
         """;
 
+    /// <summary>
+    /// Gets or sets the GIF served at <c>/web-gif.gif</c>, as Tenor serves the emoji panel's GIFs (a 1 x 1 GIF until set).
+    /// </summary>
+    public byte[] WebGif { get; set; } = Convert.FromHexString("4749463839610100010080000000FFFFFF00000021F90400000000002C00000000010001000002024401003B");
+
     /// <summary>The <c>og:title</c> of the page at <c>/preview-page</c>, which a link preview card shows.</summary>
     public const string PreviewPageTitle = "Fake Preview Page";
 
@@ -337,6 +342,10 @@ public sealed class FakeGoogleServer : IAsyncDisposable
 
                 case "/preview-page" when request.HttpMethod == "GET":
                     await RespondAsync(context.Response, 200, "text/html; charset=utf-8", Encoding.UTF8.GetBytes(PreviewPage));
+                    break;
+
+                case "/web-gif.gif" when request.HttpMethod == "GET":
+                    await RespondAsync(context.Response, 200, "image/gif", WebGif);
                     break;
 
                 case "/web/config":

@@ -26,6 +26,14 @@ public sealed partial class MediaTests : UiTest
     // A Whole 1 x 1 GIF89a, For A Pasted GIF
     private static readonly byte[] OnePixelGif = Convert.FromHexString("4749463839610100010080000000FFFFFF00000021F90400000000002C00000000010001000002024401003B");
 
+    // A 1 x 1 GIF89a That Moves: Two Frames (Black, Then White), 100 ms Each, Looping
+    private static readonly byte[] TwoFrameGif = Convert.FromHexString(
+        "47494638396101000100800000000000FFFFFF"
+        + "21FF0B4E45545343415045322E30030100000"
+        + "021F904040A0000002C000000000100010000020244010"
+        + "021F904040A0000002C00000000010001000002024C0100"
+        + "3B");
+
     /// <summary>
     /// The seeded photo in Mia's chat shows: its bubble loads to the full image, and the image is on screen (blue).
     /// </summary>
@@ -452,6 +460,48 @@ public sealed partial class MediaTests : UiTest
         MediaContent media = Server.Phone.Sent[0].MessagePayload.MessageInfo.Single().MediaContent;
         Assert.AreEqual("image/gif", media.MimeType, "The GIF went with another type.");
         Assert.AreEqual(OnePixelGif.LongLength, media.Size, "The GIF wasn't sent byte for byte.");
+    }
+
+    /// <summary>
+    /// A GIF from the Windows emoji panel's GIF tab: the panel hands over HTML (an <c>img</c> of the GIF on Tenor) and a
+    /// bitmap of its first frame, with no GIF or file format (the owner's log). It pastes as the linked GIF, fetched, and
+    /// sends as <c>image/gif</c> byte for byte, not as a still PNG of the bitmap.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Paste_EmojiPanelGif_SendsTheLinkedGif()
+    {
+        await OpenMediaChatAsync();
+        Server.WebGif = TwoFrameGif;
+
+        string url = new Uri(Server.BaseUrl, "web-gif.gif").AbsoluteUri;
+        PasteIntoDraft($"html <img src=\"{url}\" alt=\"GIF\">", "bitmap " + WriteFile("frame.png", Png(8, 8, (_, _, _) => (200, 40, 40))));
+        App.Find("Chat.Attachment.1");
+        Assert.IsNull(App.TryFind("Chat.Attachment.2"), "One GIF made more than one chip.");
+
+        App.Find("Chat.Send").Patterns.Invoke.Pattern.Invoke();
+        Wait.Until(() => Server.Phone.Sent.Count == 1, AppDriver.DefaultTimeout, () => $"The phone got {Server.Phone.Sent.Count} sends, not the GIF.");
+        MediaContent media = Server.Phone.Sent[0].MessagePayload.MessageInfo.Single().MediaContent;
+        Assert.AreEqual("image/gif", media.MimeType, "The emoji panel's GIF went as another type.");
+        Assert.AreEqual(TwoFrameGif.LongLength, media.Size, "The emoji panel's GIF wasn't sent byte for byte.");
+    }
+
+    /// <summary>
+    /// A GIF in a bubble moves: its full image is an Image (an ImageBrush shows only the first frame), and the decoded
+    /// picture is animated.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task GifBubble_Animates()
+    {
+        await OpenMediaChatAsync();
+        Message message         = Server.Phone.PushIncomingMedia("c-media", "image/gif", TwoFrameGif, "party.gif");
+        AutomationElement photo = App.Find("Bubble.Photo." + message.MessageID);
+        WaitForStatus(photo, Full);
+
+        string animated = Path.Combine(App.DataDir, "animated-photo.txt");
+        Wait.Until(() => File.Exists(animated), AppDriver.DefaultTimeout, () => "The GIF's bubble shows a still picture.");
+        Assert.AreEqual(message.MessageID, File.ReadAllText(animated));
     }
 
     /// <summary>
