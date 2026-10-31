@@ -53,6 +53,9 @@ public sealed partial class MainWindow : Window
     private Button? _backButton;
     private bool _isActive;
 
+    // The Caption Buttons' Theme For The App Theme (Dark Instead While The Photo Viewer Is Open)
+    private TitleBarTheme _captionTheme = TitleBarTheme.UseDefaultAppMode;
+
     // The Owner's Photo Is Asked For Once A Load Names The Owner, And Again After An Answer Without One
     private bool _profileAsked;
 
@@ -89,7 +92,22 @@ public sealed partial class MainWindow : Window
         ProfileSpamBlocked.Text = ChatCopy.SpamAndBlocked;
 
         // Behavior
-        RootGrid.Loaded += (_, _) => RootGrid.XamlRoot.Changed += (_, _) => PlaceProfilePicture();
+        RootGrid.Loaded += (_, _) => RootGrid.XamlRoot.Changed += (_, _) =>
+        {
+            PlaceProfilePicture();
+            PunchViewerToolbar();
+        };
+
+        // The Photo Viewer Takes The Title Bar Row While Open. The TitleBar Control Recomputes Its Own Click-Through Holes
+        // When It Resizes, So The Toolbar's Hole Is Punched Again After That (Low Runs After Layout)
+        PhotoViewer.IsOpenChanged += (_, _) => ShowViewerTitleBar();
+        AppTitleBar.SizeChanged   += (_, _) =>
+        {
+            if (PhotoViewer.IsOpen)
+            {
+                DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, PunchViewerToolbar);
+            }
+        };
         Activated       += (_, e) =>
         {
             _isActive = e.WindowActivationState != WindowActivationState.Deactivated;
@@ -191,13 +209,70 @@ public sealed partial class MainWindow : Window
             _              => ElementTheme.Default,
         };
 
-        // Caption Buttons: Drawn By The System, So Tell Them The App Theme (Or They Follow Windows' Instead)
-        AppWindow.TitleBar.PreferredTheme = theme switch
+        // Caption Buttons: Drawn By The System, So Tell Them The App Theme (Or They Follow Windows' Instead); Dark While The
+        // Photo Viewer's Scrim Is Under Them
+        _captionTheme = theme switch
         {
             AppTheme.Light => TitleBarTheme.Light,
             AppTheme.Dark  => TitleBarTheme.Dark,
             _              => TitleBarTheme.UseDefaultAppMode,
         };
+        AppWindow.TitleBar.PreferredTheme = PhotoViewer.IsOpen ? TitleBarTheme.Dark : _captionTheme;
+    }
+
+    // =========================================================================
+    // PHOTO VIEWER TITLE BAR
+    // =========================================================================
+
+    // The Photo Viewer Opened Or Closed. Open: Its Scrim Tints The Title Bar Row Too, The Caption Buttons Turn Dark To Read
+    // On It, And Clicks Go Through Only Where Its Toolbar Is (The Rest Of The Row Still Drags The Window). Closed: The
+    // Caption Buttons Follow The App Theme Again, And The Title Bar Gets Its Own Click-Through Holes Back
+    private void ShowViewerTitleBar()
+    {
+        AppWindow.TitleBar.PreferredTheme = PhotoViewer.IsOpen ? TitleBarTheme.Dark : _captionTheme;
+        if (!PhotoViewer.IsOpen)
+        {
+            AppTitleBar.RecomputeDragRegions();
+            return;
+        }
+
+        PunchViewerToolbar();
+    }
+
+    // The Title Bar's Click-Through Holes: Its Own Buttons', Then (While The Photo Viewer Is Open) Only Its Toolbar's
+    private void RecomputeTitleBarRegions()
+    {
+        AppTitleBar.RecomputeDragRegions();
+        PunchViewerToolbar();
+    }
+
+    // While The Photo Viewer Is Open: Its Toolbar Moves Just Left Of The Caption Buttons, And Its Bounds (Physical Pixels,
+    // From The Window's Top Left) Become The Title Bar's Only Click-Through Hole. Its Own SetRegionRects Replaces The
+    // TitleBar Control's Holes For ☰, Back And The Profile, Which The Scrim Covers
+    private void PunchViewerToolbar()
+    {
+        if (!PhotoViewer.IsOpen || RootGrid.XamlRoot is not { } root)
+        {
+            return;
+        }
+
+        double scale = root.RasterizationScale;
+        PhotoViewer.FitToolbar(AppWindow.TitleBar.RightInset / scale);
+        PhotoViewer.UpdateLayout();
+
+        FrameworkElement toolbar = PhotoViewer.Toolbar;
+        if (toolbar.ActualWidth <= 0)
+        {
+            return;
+        }
+
+        Windows.Foundation.Rect bounds = toolbar.TransformToVisual(null).TransformBounds(new Windows.Foundation.Rect(0, 0, toolbar.ActualWidth, toolbar.ActualHeight));
+        var hole                       = new Windows.Graphics.RectInt32(
+            (int)Math.Round(bounds.X * scale),
+            (int)Math.Round(bounds.Y * scale),
+            (int)Math.Round(bounds.Width * scale),
+            (int)Math.Round(bounds.Height * scale));
+        InputNonClientPointerSource.GetForWindowId(AppWindow.Id).SetRegionRects(NonClientRegionKind.Passthrough, new[] { hole });
     }
 
     // =========================================================================
@@ -277,7 +352,7 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        // The Profile Menu Stays Reachable Over The Photo Viewer: Settings Replaces It
+        // Settings (From The Tray) Replaces The Photo Viewer
         PhotoViewer.Close();
 
         // Back Puts Keyboard Focus Where It Was
@@ -351,7 +426,7 @@ public sealed partial class MainWindow : Window
         ProfileButton.Visibility        = _chats is not null ? Visibility.Visible : Visibility.Collapsed;
 
         // The Title Bar Only Lets Clicks Through Where Its Buttons Are When It Computes Its Regions
-        AppTitleBar.RecomputeDragRegions();
+        RecomputeTitleBarRegions();
         if (!show_back)
         {
             return null;
@@ -443,7 +518,7 @@ public sealed partial class MainWindow : Window
         if (ProfileButton.Margin.Right != overhang)
         {
             ProfileButton.Margin = new Thickness(0, 0, overhang, 0);
-            AppTitleBar.RecomputeDragRegions();
+            RecomputeTitleBarRegions();
         }
     }
 

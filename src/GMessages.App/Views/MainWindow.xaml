@@ -139,8 +139,8 @@
             </Border.ChildTransitions>
         </Border>
 
-        <!-- Photo Viewer: a clicked photo over the whole body (both panes) -->
-        <controls:PhotoViewer x:Name="PhotoViewer" Grid.Row="1" />
+        <!-- Photo Viewer: a clicked photo over the whole window, the title bar row too, with its toolbar in that row -->
+        <controls:PhotoViewer x:Name="PhotoViewer" Grid.RowSpan="2" />
 
         <!-- Download Confirm: "Saved to Downloads" with Show in folder, at the bottom over everything; closes itself after a few
              seconds -->

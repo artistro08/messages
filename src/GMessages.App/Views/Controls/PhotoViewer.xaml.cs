@@ -11,10 +11,15 @@ using Windows.Storage.Streams;
 namespace GMessages.App.Views.Controls;
 
 /// <summary>
-/// The in-app photo viewer: a clicked photo over the whole window body, on a dark scrim (ruling R7-3: an in-window
-/// overlay, not a separate window).
+/// The in-app photo viewer: a clicked photo over the whole window, title bar row included, on a dark scrim (ruling R7-3:
+/// an in-window overlay, not a separate window).
 /// </summary>
 /// <remarks>
+/// <para>
+/// The toolbar sits in the title bar row, beside the caption buttons (owner, Plan 7). The window lets clicks through to
+/// it there, keeps the rest of the row dragging the window, and turns the caption buttons dark to read on the scrim, all
+/// while <see cref="IsOpenChanged"/> says the viewer is open (see <c>MainWindow</c>).
+/// </para>
 /// <para>
 /// The photo is fitted and centered at 1x in a zoomable <see cref="ScrollViewer"/> (<c>PhotoViewer.Photo</c>, named by
 /// the photo's caption or "Photo"): Ctrl + mouse wheel and pinch zoom it up to 8x, and a double-click zooms in to 2x at
@@ -71,6 +76,29 @@ public sealed partial class PhotoViewer : UserControl
     public bool IsOpen => Visibility == Visibility.Visible;
 
     /// <summary>
+    /// Gets the toolbar, which sits in the window's title bar row; the window lets clicks through to it there.
+    /// </summary>
+    public FrameworkElement Toolbar => ToolbarPanel;
+
+    /// <summary>
+    /// Raised when the viewer opens or closes, so the window can give the title bar row to the toolbar and back.
+    /// </summary>
+    public event EventHandler? IsOpenChanged;
+
+    /// <summary>
+    /// Keeps the toolbar just left of the window's caption buttons, with the toolbar's own spacing between them.
+    /// </summary>
+    /// <param name="captionWidth">The caption buttons' width, in effective pixels.</param>
+    public void FitToolbar(double captionWidth)
+    {
+        var margin = new Thickness(0, 0, captionWidth + ToolbarPanel.Spacing, 0);
+        if (ToolbarPanel.Margin != margin)
+        {
+            ToolbarPanel.Margin = margin;
+        }
+    }
+
+    /// <summary>
     /// Shows a photo, fitted at 1x, and moves focus to it.
     /// </summary>
     /// <remarks>
@@ -93,7 +121,11 @@ public sealed partial class PhotoViewer : UserControl
         AutomationProperties.SetName(Zoomer, name);
         PhotoImage.Source = null;
         Zoomer.ChangeView(0, 0, 1, disableAnimation: true);
-        Visibility = Visibility.Visible;
+        if (!IsOpen)
+        {
+            Visibility = Visibility.Visible;
+            IsOpenChanged?.Invoke(this, EventArgs.Empty);
+        }
 
         // Focus Moves In Once The Viewer Is Laid Out (Before That It Can't Take It), After The Click Has Finished With
         // The Photo In The Chat
@@ -144,6 +176,7 @@ public sealed partial class PhotoViewer : UserControl
         _part             = null;
         _returnFocus?.Focus(_returnState);
         _returnFocus = null;
+        IsOpenChanged?.Invoke(this, EventArgs.Empty);
     }
 
     // =========================================================================
