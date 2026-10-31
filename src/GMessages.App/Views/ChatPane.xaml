@@ -366,8 +366,8 @@
             <!-- /Replying To -->
 
             <!-- Attachments: joined like the reply chip (under it when both show, its top border the line between them): the
-                 voice preview first, then a chip per picked photo (the photo itself) or file (its icon and name), in send
-                 order, each with a button to drop it -->
+                 voice preview first, then a chip per picked or pasted photo (the photo itself), video (its frame, when Windows
+                 has one) or file (its icon and name), in send order, each with a button to drop it -->
             <Border
                 Margin="{x:Bind local:ChatPane.StripMargin(Chat.IsReplying), Mode=OneWay}"
                 Background="{ThemeResource ControlFillColorDefaultBrush}"
@@ -459,16 +459,16 @@
                                         <Image
                                             Width="64"
                                             Height="64"
-                                            Source="{x:Bind local:ChatPane.ChipImage(Open, IsPhoto)}"
+                                            Source="{x:Bind local:ChatPane.ChipImage(Open, Thumbnail, IsPhoto)}"
                                             Stretch="UniformToFill"
-                                            Visibility="{x:Bind IsPhoto}" />
+                                            Visibility="{x:Bind ShowsPicture}" />
                                         <StackPanel
                                             Padding="12,0,36,0"
                                             VerticalAlignment="Center"
                                             Orientation="Horizontal"
                                             Spacing="8"
-                                            Visibility="{x:Bind local:ChatPane.Not(IsPhoto)}">
-                                            <FontIcon FontSize="20" Glyph="&#xE8A5;" />
+                                            Visibility="{x:Bind local:ChatPane.Not(ShowsPicture)}">
+                                            <FontIcon FontSize="20" Glyph="{x:Bind local:ChatPane.ChipGlyph(Kind)}" />
                                             <TextBlock
                                                 MaxWidth="160"
                                                 VerticalAlignment="Center"
@@ -515,6 +515,7 @@
                 AutomationProperties.AutomationId="Chat.Draft"
                 AutomationProperties.Name="Message"
                 CornerRadius="{x:Bind local:ChatPane.DraftCorners(Chat.IsReplying, Chat.HasAttachments, Chat.Voice.IsPreview), Mode=OneWay}"
+                Paste="OnDraftPaste"
                 PreviewKeyDown="OnDraftKeyDown"
                 Text="{x:Bind Chat.Draft, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, FallbackValue=''}"
                 TextWrapping="Wrap">

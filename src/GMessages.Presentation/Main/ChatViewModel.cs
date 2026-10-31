@@ -531,7 +531,7 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
-    /// Adds a picked photo or file as a chip, unless <see cref="CanAttach"/> refuses its size.
+    /// Adds a picked or pasted photo or file as a chip, unless <see cref="CanAttach"/> refuses its size.
     /// </summary>
     /// <remarks>
     /// The file is not read now: <paramref name="open"/> opens it for the chip's picture, and Send reads it. A refused
@@ -543,8 +543,9 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     /// <param name="open">Opens the file for reading.</param>
     /// <param name="width">A photo's width in pixels, or 0 when unknown.</param>
     /// <param name="height">A photo's height in pixels, or 0 when unknown.</param>
+    /// <param name="thumbnail">Opens the file's thumbnail (a video's frame) for the chip, or null for none.</param>
     /// <returns>True when the chip was added.</returns>
-    public bool Attach(string name, string mime, long size, Func<Task<Stream>> open, int width = 0, int height = 0)
+    public bool Attach(string name, string mime, long size, Func<Task<Stream>> open, int width = 0, int height = 0, Func<Task<Stream>>? thumbnail = null)
     {
         ArgumentNullException.ThrowIfNull(name);
         ArgumentNullException.ThrowIfNull(mime);
@@ -555,7 +556,7 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
             return false;
         }
 
-        Attachments.Add(new PendingAttachment(++_nextAttachmentId, name, mime, size, width, height, open));
+        Attachments.Add(new PendingAttachment(++_nextAttachmentId, name, mime, size, width, height, open, thumbnail));
         return true;
     }
 

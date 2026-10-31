@@ -21,6 +21,7 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.UI.Xaml.Shapes;
+using Windows.ApplicationModel.DataTransfer;
 using Windows.Graphics.Imaging;
 using Windows.Storage;
 using Windows.Storage.Pickers;
@@ -128,6 +129,39 @@ public sealed partial class ChatPane : UserControl
         [".heic"] = "image/heic",
     };
     private static readonly string[] AnyType = ["*"];
+
+    // Videos And Audio By Their Type, For A PC Whose Registry Has No Content Type For Them: The Phone Then Shows A Video As A
+    // Video (MediaFormatsMap Falls Back On The Part Before The Slash)
+    private static readonly Dictionary<string, string> MediaMimes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        [".mp4"]  = "video/mp4",
+        [".m4v"]  = "video/mp4",
+        [".mov"]  = "video/quicktime",
+        [".webm"] = "video/webm",
+        [".3gp"]  = "video/3gpp",
+        [".3g2"]  = "video/3gpp2",
+        [".mkv"]  = "video/x-matroska",
+        [".avi"]  = "video/x-msvideo",
+        [".mp3"]  = "audio/mpeg",
+        [".m4a"]  = "audio/mp4",
+        [".aac"]  = "audio/aac",
+        [".amr"]  = "audio/amr",
+        [".ogg"]  = "audio/ogg",
+        [".wav"]  = "audio/wav",
+    };
+
+    // A Picture Pasted In Its Own Clipboard Format (Before The Plain Bitmap), With The Mime Type And Name It Sends As: A GIF
+    // Keeps Its Frames, A PNG Its Transparency
+    private static readonly (string Format, string Mime, string Name)[] PastedPictures =
+    [
+        ("GIF", "image/gif", "image.gif"),
+        ("image/gif", "image/gif", "image.gif"),
+        ("PNG", "image/png", "image.png"),
+        ("image/png", "image/png", "image.png"),
+    ];
+
+    // A Pasted Bitmap (A Screenshot, A Browser's Copy Image) Is Sent As A PNG Under This Name
+    private const string PastedBitmapName = "image.png";
 
     // Typing Dots: Each Rises This Far And Back Within Its Beat (See TypingCycle)
     private const float TypingRise = 4;
@@ -248,11 +282,23 @@ public sealed partial class ChatPane : UserControl
             Ui.ColorValuesChanged       -= OnColorValuesChanged;
             Ui.AnimationsEnabledChanged += OnAnimationsEnabledChanged;
             Ui.ColorValuesChanged       += OnColorValuesChanged;
+
+            // The Message Box's Menu Is Windows' Shared Text Menu, So It Too Holds The Pane Only While Loaded
+            if (DraftBox.ContextFlyout is { } menu)
+            {
+                menu.Opening -= OnDraftMenuOpening;
+                menu.Opening += OnDraftMenuOpening;
+            }
         };
         Unloaded += (_, _) =>
         {
             Ui.AnimationsEnabledChanged -= OnAnimationsEnabledChanged;
             Ui.ColorValuesChanged       -= OnColorValuesChanged;
+            if (DraftBox.ContextFlyout is { } menu)
+            {
+                menu.Opening -= OnDraftMenuOpening;
+            }
+
             StopVoice();
             DropRecorder();
         };
@@ -409,23 +455,37 @@ public sealed partial class ChatPane : UserControl
     public static string ChipIdOf(string prefix, int id) => prefix + id.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
     /// <summary>
-    /// Gives a photo chip its picture, decoded small straight from the file (never read whole); the image fills in once
-    /// decoded. A file chip gets none.
+    /// Gives a photo chip its picture, decoded small straight from the file (never read whole), and a video chip its
+    /// thumbnail when Windows had one; the image fills in once decoded. A file chip gets none.
     /// </summary>
     /// <param name="open">Opens the picked file (<see cref="PendingAttachment.Open"/>).</param>
+    /// <param name="thumbnail">Opens the file's thumbnail (<see cref="PendingAttachment.Thumbnail"/>), or null.</param>
     /// <param name="isPhoto">True for a photo.</param>
-    /// <returns>The image, or null for a file.</returns>
-    public static ImageSource? ChipImage(Func<Task<Stream>> open, bool isPhoto)
+    /// <returns>The image, or null for a file without a thumbnail.</returns>
+    public static ImageSource? ChipImage(Func<Task<Stream>> open, Func<Task<Stream>>? thumbnail, bool isPhoto)
     {
-        if (!isPhoto || open is null)
+        Func<Task<Stream>>? picture = isPhoto ? open : thumbnail;
+        if (picture is null)
         {
             return null;
         }
 
         var image = new BitmapImage { DecodePixelHeight = ChipSide, DecodePixelType = DecodePixelType.Logical };
-        _ = LoadChipImageAsync(image, open);
+        _ = LoadChipImageAsync(image, picture);
         return image;
     }
+
+    /// <summary>
+    /// Gives a chip without a picture its icon: a video's, an audio file's, or a document's.
+    /// </summary>
+    /// <param name="kind">What the attachment sends as.</param>
+    /// <returns>The Segoe Fluent Icons glyph.</returns>
+    public static string ChipGlyph(MessageKind kind) => kind switch
+    {
+        MessageKind.Video => "",
+        MessageKind.Audio => "",
+        _                 => "",
+    };
 
     /// <summary>
     /// Shows the chip strip while a recording waits in the preview chip or any attachment does.
@@ -814,9 +874,17 @@ public sealed partial class ChatPane : UserControl
 
     private void OnSendClick(object sender, RoutedEventArgs e) => _ = Chat?.SendAsync();
 
-    // Enter Sends; Shift + Enter Is Left To The Box, Which Adds A Line
+    // Enter Sends; Shift + Enter Is Left To The Box, Which Adds A Line. Ctrl + V Or Shift + Insert With Media On The
+    // Clipboard Pastes It As Chips (The Box Would Ignore A Picture)
     private void OnDraftKeyDown(object sender, KeyRoutedEventArgs e)
     {
+        if (IsPasteKey(e.Key) && ClipboardView() is { } view && OwnsPaste(view))
+        {
+            e.Handled = true;
+            Paste(view, owned: true);
+            return;
+        }
+
         if (e.Key != VirtualKey.Enter || IsShiftDown() || Chat is null)
         {
             return;
@@ -1180,20 +1248,7 @@ public sealed partial class ChatPane : UserControl
             }
 
             chat.ClearAttachError();
-            foreach (StorageFile file in files)
-            {
-                Windows.Storage.FileProperties.BasicProperties properties = await file.GetBasicPropertiesAsync();
-                if (!chat.CanAttach((long)properties.Size))
-                {
-                    continue;
-                }
-
-                string mime             = PhotoMimes.GetValueOrDefault(file.FileType) ?? (file.ContentType.Length > 0 ? file.ContentType : "application/octet-stream");
-                (int width, int height) = mime.StartsWith("image/", StringComparison.Ordinal) ? await PhotoSizeAsync(file) : (0, 0);
-                chat.Attach(file.Name, mime, (long)properties.Size, () => file.OpenStreamForReadAsync(), width, height);
-            }
-
-            AppLog.AttachmentsPicked(App.ShellLog, chat.ConversationId, files.Count, chat.Attachments.Count);
+            await AttachFilesAsync(chat, files);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -1230,6 +1285,49 @@ public sealed partial class ChatPane : UserControl
         return await picker.PickMultipleFilesAsync();
     }
 
+    // Files Picked Or Pasted, Each Checked For Size, Then Added As Chips In Order. Only A Photo's Header Is Read Now (For
+    // Its Shape), And A Video's Thumbnail When Windows Has One; Send Reads The Files
+    private static async Task AttachFilesAsync(ChatViewModel chat, IReadOnlyList<StorageFile> files)
+    {
+        foreach (StorageFile file in files)
+        {
+            Windows.Storage.FileProperties.BasicProperties properties = await file.GetBasicPropertiesAsync();
+            if (!chat.CanAttach((long)properties.Size))
+            {
+                continue;
+            }
+
+            string mime                   = PhotoMimes.GetValueOrDefault(file.FileType) ?? MediaMimes.GetValueOrDefault(file.FileType) ?? (file.ContentType.Length > 0 ? file.ContentType : "application/octet-stream");
+            (int width, int height)       = mime.StartsWith("image/", StringComparison.Ordinal) ? await PhotoSizeAsync(file) : (0, 0);
+            Func<Task<Stream>>? thumbnail = mime.StartsWith("video/", StringComparison.Ordinal) ? await VideoThumbnailAsync(file) : null;
+            chat.Attach(file.Name, mime, (long)properties.Size, () => file.OpenStreamForReadAsync(), width, height, thumbnail);
+        }
+
+        AppLog.AttachmentsPicked(App.ShellLog, chat.ConversationId, files.Count, chat.Attachments.Count);
+    }
+
+    // A Video's Frame As Windows Shows It In Explorer, For Its Chip; Null When Windows Only Has An Icon For It (Or None)
+    private static async Task<Func<Task<Stream>>?> VideoThumbnailAsync(StorageFile file)
+    {
+        try
+        {
+            using Windows.Storage.FileProperties.StorageItemThumbnail? thumbnail = await file.GetThumbnailAsync(Windows.Storage.FileProperties.ThumbnailMode.VideosView, ChipSide);
+            if (thumbnail is null || thumbnail.Type != Windows.Storage.FileProperties.ThumbnailType.Image)
+            {
+                return null;
+            }
+
+            using var copy = new MemoryStream();
+            await thumbnail.AsStreamForRead().CopyToAsync(copy);
+            byte[] bytes = copy.ToArray();
+            return () => Task.FromResult<Stream>(new MemoryStream(bytes, writable: false));
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            return null;
+        }
+    }
+
     // A Photo's Size As Shown (Turned By Its EXIF Orientation), So Its Bubble Keeps Its Shape, Read From The File's
     // Header Without Decoding It; 0 x 0 When It Won't Decode
     private static async Task<(int Width, int Height)> PhotoSizeAsync(StorageFile file)
@@ -1243,6 +1341,198 @@ public sealed partial class ChatPane : UserControl
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             return (0, 0);
+        }
+    }
+
+    // =========================================================================
+    // PASTING
+    // =========================================================================
+
+    // The Clipboard (The Test's Under The Test Hooks); Null When Windows Won't Hand It Over (Another App Holds It)
+    private static DataPackageView? ClipboardView()
+    {
+        if (TestHooks.PasteContent() is { } test)
+        {
+            return test;
+        }
+
+        try
+        {
+            return Clipboard.GetContent();
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            return null;
+        }
+    }
+
+    // Media On The Clipboard: Files (Explorer, The Emoji Panel's GIFs), Or A Picture With No Text Beside It (A Screenshot,
+    // A Browser's Copy Image). Text With Pictures (A Copied Web Page Or Spreadsheet) Pastes As Text
+    private static bool CarriesMedia(DataPackageView view) =>
+        view.Contains(StandardDataFormats.StorageItems)
+        || (!view.Contains(StandardDataFormats.Text) && (view.Contains(StandardDataFormats.Bitmap) || PastedPictures.Any(p => view.Contains(p.Format))));
+
+    // The Paste Is Ours When It Carries Media; Under The Test Hooks Every Paste Is (The Box Would Read The Real Clipboard)
+    private static bool OwnsPaste(DataPackageView view) => CarriesMedia(view) || TestHooks.BlockLaunches;
+
+    // Ctrl + V And Shift + Insert
+    private static bool IsPasteKey(VirtualKey key) =>
+        (key == VirtualKey.V && IsDown(VirtualKey.Control)) || (key == VirtualKey.Insert && IsShiftDown());
+
+    // The Box's Own Paste (Its Menu's Paste, Or Any Paste The Keys Above Didn't Take): Media Becomes Chips, Text Is Left To It
+    private void OnDraftPaste(object sender, TextControlPasteEventArgs e)
+    {
+        if (ClipboardView() is not { } view)
+        {
+            return;
+        }
+
+        e.Handled = OwnsPaste(view);
+        Paste(view, e.Handled);
+    }
+
+    // Pastes What The Clipboard Holds, Logging Its Formats Only (Never Its Content): Media Becomes Chips; Under The Test
+    // Hooks Text Goes Into The Box As The Box Would Paste It
+    private void Paste(DataPackageView view, bool owned)
+    {
+        if (Chat is not { } chat)
+        {
+            return;
+        }
+
+        bool media = CarriesMedia(view);
+        AppLog.PasteFormats(App.ShellLog, chat.ConversationId, view.AvailableFormats, media);
+        if (!owned)
+        {
+            return;
+        }
+
+        _ = media ? AttachPastedAsync(chat, view) : PasteTextAsync(view);
+    }
+
+    // Test Run: The Hook's Text, Typed Over The Selection
+    private async Task PasteTextAsync(DataPackageView view)
+    {
+        if (view.Contains(StandardDataFormats.Text))
+        {
+            DraftBox.SelectedText = await view.GetTextAsync();
+            DraftBox.Select(DraftBox.SelectionStart + DraftBox.SelectionLength, 0);
+        }
+    }
+
+    // Pasted Media As Chips, Under The Same Limits As Picked Files: The Files Each As Picked; Else A Picture In Its Own
+    // Format (Kept Byte For Byte, So A GIF Still Moves On The Phone); Else The Bitmap, Saved As A PNG. A Failure Is Logged
+    // By Its Error Type Only
+    private async Task AttachPastedAsync(ChatViewModel chat, DataPackageView view)
+    {
+        try
+        {
+            chat.ClearAttachError();
+            if (view.Contains(StandardDataFormats.StorageItems))
+            {
+                IReadOnlyList<IStorageItem> items = await view.GetStorageItemsAsync();
+                await AttachFilesAsync(chat, items.Where(i => i.IsOfType(StorageItemTypes.File)).Select(i => i.As<StorageFile>()).ToList());
+            }
+            else if (await PastedPictureAsync(view) is { } picture)
+            {
+                (int width, int height) = await PictureSizeAsync(picture.Bytes);
+                chat.Attach(picture.Name, picture.Mime, picture.Bytes, width, height);
+            }
+            else if (view.Contains(StandardDataFormats.Bitmap))
+            {
+                (byte[] png, int width, int height) = await BitmapToPngAsync(await view.GetBitmapAsync());
+                chat.Attach(PastedBitmapName, "image/png", png, width, height);
+            }
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            AppLog.MediaFailed(App.ShellLog, "paste", chat.ConversationId, ex.GetType().Name);
+        }
+
+        DraftBox.Focus(FocusState.Programmatic);
+    }
+
+    // The First Picture On The Clipboard In Its Own Format (See PastedPictures), Or Null
+    private static async Task<(string Name, string Mime, byte[] Bytes)?> PastedPictureAsync(DataPackageView view)
+    {
+        foreach ((string format, string mime, string name) in PastedPictures)
+        {
+            if (!view.Contains(format))
+            {
+                continue;
+            }
+
+            using IRandomAccessStream stream = (await view.GetDataAsync(format)).As<IRandomAccessStream>();
+            using var copy                   = new MemoryStream();
+            await stream.AsStreamForRead().CopyToAsync(copy);
+            return (name, mime, copy.ToArray());
+        }
+
+        return null;
+    }
+
+    // A Pasted Bitmap, Encoded As A PNG, With Its Size
+    private static async Task<(byte[] Png, int Width, int Height)> BitmapToPngAsync(RandomAccessStreamReference bitmap)
+    {
+        using IRandomAccessStreamWithContentType source = await bitmap.OpenReadAsync();
+        BitmapDecoder decoder                           = await BitmapDecoder.CreateAsync(source);
+        using SoftwareBitmap pixels                     = await decoder.GetSoftwareBitmapAsync(BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied);
+
+        using var output      = new InMemoryRandomAccessStream();
+        BitmapEncoder encoder = await BitmapEncoder.CreateAsync(BitmapEncoder.PngEncoderId, output);
+        encoder.SetSoftwareBitmap(pixels);
+        await encoder.FlushAsync();
+
+        using var copy = new MemoryStream();
+        output.Seek(0);
+        await output.AsStreamForRead().CopyToAsync(copy);
+        return (copy.ToArray(), pixels.PixelWidth, pixels.PixelHeight);
+    }
+
+    // A Pasted Picture's Size, Read From Its Header; 0 x 0 When It Won't Decode
+    private static async Task<(int Width, int Height)> PictureSizeAsync(byte[] bytes)
+    {
+        try
+        {
+            using IRandomAccessStream stream = new MemoryStream(bytes, writable: false).AsRandomAccessStream();
+            BitmapDecoder decoder            = await BitmapDecoder.CreateAsync(stream);
+            return ((int)decoder.OrientedPixelWidth, (int)decoder.OrientedPixelHeight);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            return (0, 0);
+        }
+    }
+
+    // The Box's Menu: Windows Shows Its Paste Only For Text, So With Media On The Clipboard Windows' Own Paste Command Is
+    // Added (Its Name And Icon Come From Windows), And Taken Away Again When The Menu Closes
+    private void OnDraftMenuOpening(object? sender, object e)
+    {
+        // The Menu Is Windows' Shared Text Menu: Only When It Opens On The Message Box
+        if (DraftBox.ContextFlyout is not { } menu || menu.Target != DraftBox || DraftBox.CanPasteClipboardContent || ClipboardView() is not { } view || !CarriesMedia(view))
+        {
+            return;
+        }
+
+        var command = new StandardUICommand(StandardUICommandKind.Paste);
+        command.ExecuteRequested += (_, _) =>
+        {
+            if (ClipboardView() is { } now)
+            {
+                Paste(now, owned: CarriesMedia(now));
+            }
+        };
+
+        var paste = new AppBarButton { Command = command };
+        AutomationProperties.SetAutomationId(paste, "Chat.PasteMedia");
+        CommandBarFlyout bar = menu.As<CommandBarFlyout>();
+        bar.PrimaryCommands.Add(paste);
+        menu.Closed += OnClosed;
+
+        void OnClosed(object? s, object a)
+        {
+            menu.Closed -= OnClosed;
+            bar.PrimaryCommands.Remove(paste);
         }
     }
 
