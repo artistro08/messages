@@ -258,7 +258,7 @@ public sealed class FakePhone
 
             case ActionType.ListConversations when RequestCrypto is not null:
                 var list = Open(data, ListConversationsRequest.Parser);
-                Reply(data.RequestID, data.Action, new ListConversationsResponse { Conversations = { Chats.List(list.Folder) } }, encrypt: true);
+                Reply(data.RequestID, data.Action, new ListConversationsResponse { Conversations = { Chats.List(list.Folder, list.Count, list.Cursor) } }, encrypt: true);
                 break;
 
             case ActionType.ListMessages when RequestCrypto is not null:

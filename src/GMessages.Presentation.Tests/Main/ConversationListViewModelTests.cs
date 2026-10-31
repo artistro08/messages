@@ -228,7 +228,7 @@ public sealed class ConversationListViewModelTests
     }
 
     [TestMethod]
-    public async Task LoadMore_UsesNextCursor_AndStopsWhenNone()
+    public async Task LoadMore_UsesTheCursorSentBack_StopsWhenNothingNew()
     {
         using var rig = new MainRig();
         rig.Page(MainRig.Conv("a", "Ann"));
@@ -239,9 +239,84 @@ public sealed class ConversationListViewModelTests
         rig.Page(MainRig.Conv("b", "Bo", minutesAgo: 30));
         await list.LoadMoreAsync();
         await list.LoadMoreAsync();
+        await list.LoadMoreAsync();
 
         Assert.AreEqual("a,b", Ids(list));
+        Assert.AreEqual(3, rig.Client.ListCalls.Count);
+        Assert.AreEqual("next", rig.Client.ListCursors[1]?.LastItemID);
+    }
+
+    /// <summary>
+    /// Google sends no cursor back, so the next page starts at the last conversation shown (its time in milliseconds),
+    /// and an empty page ends the paging.
+    /// </summary>
+    [TestMethod]
+    public async Task LoadMore_NoCursorBack_PagesFromLastConversation_StopsAtEmptyPage()
+    {
+        using var rig = new MainRig();
+        Conversation ann = MainRig.Conv("a", "Ann");
+        rig.Page(ann);
+        using var list = NewList(rig);
+        await list.LoadAsync();
+
+        rig.Page(MainRig.Conv("b", "Bo", minutesAgo: 30));
+        await list.LoadMoreAsync();
+        rig.Page();
+        await list.LoadMoreAsync();
+        await list.LoadMoreAsync();
+
+        Assert.AreEqual("a,b", Ids(list));
+        Assert.AreEqual(3, rig.Client.ListCalls.Count);
+        Assert.IsNull(rig.Client.ListCursors[0]);
+        Assert.AreEqual("a", rig.Client.ListCursors[1]?.LastItemID);
+        Assert.AreEqual(ann.LastMessageTimestamp / 1000, rig.Client.ListCursors[1]?.LastItemTimestamp);
+        Assert.AreEqual("b", rig.Client.ListCursors[2]?.LastItemID);
+    }
+
+    /// <summary>
+    /// A page with nothing new (the phone ignored the cursor) ends the paging, so the list never asks for it forever.
+    /// </summary>
+    [TestMethod]
+    public async Task LoadMore_PageWithNothingNew_Stops()
+    {
+        using var rig = new MainRig();
+        rig.Page(MainRig.Conv("a", "Ann"));
+        using var list = NewList(rig);
+        await list.LoadAsync();
+
+        await list.LoadMoreAsync();
+        await list.LoadMoreAsync();
+
+        Assert.AreEqual("a", Ids(list));
         Assert.AreEqual(2, rig.Client.ListCalls.Count);
+    }
+
+    /// <summary>
+    /// The bottom ring shows only while the next page loads, not while the list reloads.
+    /// </summary>
+    [TestMethod]
+    public async Task IsLoadingMore_OnlyWhileTheNextPageLoads()
+    {
+        using var rig = new MainRig();
+        rig.Page(MainRig.Conv("a", "Ann"));
+        using var list = NewList(rig);
+        await list.LoadAsync();
+
+        var reload          = new TaskCompletionSource();
+        rig.Client.ListGate = reload;
+        Task again          = list.LoadAsync();
+        Assert.IsFalse(list.IsLoadingMore);
+        reload.SetResult();
+        await again;
+
+        rig.Page(MainRig.Conv("b", "Bo", minutesAgo: 30));
+        var gate            = new TaskCompletionSource();
+        rig.Client.ListGate = gate;
+        Task more           = list.LoadMoreAsync();
+        Assert.IsTrue(list.IsLoadingMore);
+        gate.SetResult();
+        await more;
+        Assert.IsFalse(list.IsLoadingMore);
     }
 
     [TestMethod]

@@ -164,12 +164,14 @@ public sealed class FakeChats
     // ANSWERS
     // =========================================================================
 
-    // The Conversations Of A Folder, Newest First; Inbox = Active, Archive = Archived Or Keep Archived, Spam And Blocked = Spam Or Blocked Folder
-    internal List<Conversation> List(ListConversationsRequest.Types.Folder folder)
+    // One Page Of A Folder's Conversations, Newest First, After The Cursor's Conversation (All Of Them With No Count);
+    // Inbox = Active, Archive = Archived Or Keep Archived, Spam And Blocked = Spam Or Blocked Folder. Like Its Message
+    // Pages It Sends No Cursor Back: The App Pages On From The Last Conversation It Got, And An Empty Page Is The End
+    internal List<Conversation> List(ListConversationsRequest.Types.Folder folder, long count = 0, Cursor? cursor = null)
     {
         lock (_lock)
         {
-            return [.. _conversations
+            IEnumerable<Conversation> newest_first = _conversations
                 .Where(c => folder switch
                 {
                     ListConversationsRequest.Types.Folder.Inbox       => c.Status == ConversationStatus.Active,
@@ -177,8 +179,15 @@ public sealed class FakeChats
                     ListConversationsRequest.Types.Folder.SpamBlocked => c.Status is ConversationStatus.SpamFolder or ConversationStatus.BlockedFolder,
                     _                                                 => false,
                 })
-                .OrderByDescending(c => c.LastMessageTimestamp)
-                .Select(c => c.Clone())];
+                .OrderByDescending(c => c.LastMessageTimestamp);
+            if (cursor is { LastItemID.Length: > 0 })
+            {
+                newest_first = newest_first.SkipWhile(c => c.ConversationID != cursor.LastItemID).Skip(1);
+            }
+
+            List<Conversation> rest = [.. newest_first];
+            List<Conversation> page = count > 0 ? [.. rest.Take((int)count)] : rest;
+            return [.. page.Select(c => c.Clone())];
         }
     }
 

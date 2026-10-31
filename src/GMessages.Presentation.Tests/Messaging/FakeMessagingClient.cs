@@ -31,6 +31,9 @@ internal sealed class FakeMessagingClient : IMessagingClient
 
     public List<(ListConversationsRequest.Types.Folder Folder, long Count)> ListCalls { get; } = [];
 
+    /// <summary>The cursor each list call sent (null for the newest page), in call order.</summary>
+    public List<Cursor?> ListCursors { get; } = [];
+
     /// <summary>When set, the next list call returns the page it had when called, but only after this completes.</summary>
     public TaskCompletionSource? ListGate { get; set; }
 
@@ -40,6 +43,7 @@ internal sealed class FakeMessagingClient : IMessagingClient
     public async Task<ListConversationsResponse> ListConversationsAsync(ListConversationsRequest.Types.Folder folder, long count, Cursor? cursor, CancellationToken ct)
     {
         ListCalls.Add((folder, count));
+        ListCursors.Add(cursor);
         if (ListThrows is { } ex)
         {
             throw ex;
