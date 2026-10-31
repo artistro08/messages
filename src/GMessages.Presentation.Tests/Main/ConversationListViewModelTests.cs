@@ -118,6 +118,52 @@ public sealed class ConversationListViewModelTests
         Assert.AreEqual("c,a,d,b", Ids(list));
     }
 
+    /// <summary>
+    /// A live message (sent or received) newer than its conversation's last moves the row to the top at once, without
+    /// Google's conversation update: with the first page only, and on a row a later page added. A status update to an
+    /// older message, or a catch-up message, moves nothing.
+    /// </summary>
+    [TestMethod]
+    public async Task LiveMessage_MovesRowToTop_WithAndWithoutPaging()
+    {
+        using var rig = new MainRig();
+        rig.Page(MainRig.Conv("a", "Ann", minutesAgo: 5), MainRig.Conv("b", "Bo", minutesAgo: 10), MainRig.Conv("c", "Cy", minutesAgo: 20));
+        rig.Client.ConversationsPage.Cursor = new Cursor { LastItemID = "next" };
+        using var list = NewList(rig);
+        await list.LoadAsync();
+
+        // The Page Untouched: A Message In The Lowest Row
+        await rig.LiveMessage(LiveMsg("m1", "c", minutesAgo: 1));
+        Assert.AreEqual("c,a,b", Ids(list));
+
+        // After Paging: A Message In A Row The Second Page Added, Sent From Here
+        rig.Page(MainRig.Conv("d", "Di", minutesAgo: 60));
+        await list.LoadMoreAsync();
+        Assert.AreEqual("c,a,b,d", Ids(list));
+        await rig.LiveMessage(LiveMsg("m2", "d", minutesAgo: 0, from: "me"));
+        Assert.AreEqual("d,c,a,b", Ids(list));
+
+        // An Update To An Older Message, And A Catch-Up Message, Move Nothing
+        await rig.LiveMessage(LiveMsg("m3", "b", minutesAgo: 30));
+        await rig.Store.HandleEventAsync(new MessageReceived(LiveMsg("m4", "a", minutesAgo: 0), true));
+        Assert.AreEqual("d,c,a,b", Ids(list));
+    }
+
+    // A Live Message In A Conversation, Sent The Given Minutes Before MainRig.Now
+    private static Message LiveMsg(string id, string conversation, long minutesAgo, string from = "p-x")
+    {
+        var m = new Message
+        {
+            MessageID      = id,
+            ConversationID = conversation,
+            ParticipantID  = from,
+            Timestamp      = MainRig.Now.AddMinutes(-minutesAgo).ToUnixTimeMilliseconds() * 1000,
+            MessageStatus  = new MessageStatus { Status = MessageStatusType.IncomingDelivered },
+        };
+        m.MessageInfo.Add(new MessageInfo { MessageContent = new MessageContent { Content = "x" } });
+        return m;
+    }
+
     [TestMethod]
     public async Task StatusChangedToSpam_RemovesFromInbox()
     {

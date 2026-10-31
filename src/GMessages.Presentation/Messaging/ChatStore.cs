@@ -1024,6 +1024,19 @@ public sealed partial class ChatStore : IDisposable
         NoteEncryption(message.ConversationId, [message], generation);
 
         ConversationInfo? conversation = Find(message.ConversationId);
+
+        // A Live Message Newer Than The Cached Conversation's Last Moves It To The Top At Once (The List Sorts By This
+        // Time), Sent Or Received, Without Waiting For Google's Conversation Update, Which Doesn't Always Come. That Update,
+        // When It Comes, Brings The Snippet. A Conversation Fetched Below Is Already Current
+        if (!received.IsOld && conversation is not null && message.Time > conversation.LastMessageTime)
+        {
+            conversation = conversation with { LastMessageTime = message.Time };
+            if (Upsert(conversation))
+            {
+                ConversationChanged?.Invoke(this, conversation);
+            }
+        }
+
         if (conversation is null && _client() is { } client)
         {
             try
