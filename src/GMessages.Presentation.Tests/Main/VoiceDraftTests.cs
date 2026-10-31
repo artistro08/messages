@@ -65,6 +65,54 @@ public sealed class VoiceDraftTests
     }
 
     /// <summary>
+    /// Recording, then Paused, then Recording again, then Done from either: the recording keeps its file until Preview.
+    /// </summary>
+    [TestMethod]
+    public void PauseResume_RecordingPausedRecording_ThenPreview()
+    {
+        var voice = new VoiceDraft();
+        voice.Start(_path);
+
+        Assert.IsTrue(voice.Pause());
+        Assert.IsTrue(voice.IsPaused);
+        Assert.IsTrue(voice.IsCapturing, "A paused recording hides the recording bar.");
+        Assert.IsFalse(voice.IsRecording);
+        Assert.AreEqual(_path, voice.FilePath);
+
+        Assert.IsTrue(voice.Resume());
+        Assert.IsTrue(voice.IsRecording);
+        Assert.IsTrue(voice.Stop([7], Wave));
+        Assert.IsTrue(voice.IsPreview);
+
+        // Done Straight From Paused
+        var paused = new VoiceDraft();
+        paused.Start(_path);
+        paused.Pause();
+        Assert.IsTrue(paused.Stop([7], Wave), "Done from Paused didn't keep the recording.");
+        Assert.IsTrue(paused.IsPreview);
+    }
+
+    /// <summary>
+    /// Cancel from Paused goes back to Idle and deletes the temp file; Pause and Resume from the wrong state do nothing.
+    /// </summary>
+    [TestMethod]
+    public void Paused_CancelDeletesFile_WrongStepsChangeNothing()
+    {
+        var voice = new VoiceDraft();
+        Assert.IsFalse(voice.Pause(), "Paused without recording.");
+        Assert.IsFalse(voice.Resume(), "Resumed without recording.");
+
+        voice.Start(_path);
+        Assert.IsFalse(voice.Resume(), "Resumed while recording.");
+        voice.Pause();
+        Assert.IsFalse(voice.Pause(), "Paused twice.");
+
+        voice.Cancel();
+        Assert.IsTrue(voice.IsIdle);
+        Assert.IsFalse(File.Exists(_path), "Cancel while paused kept the temp file.");
+    }
+
+    /// <summary>
     /// Steps from the wrong state change nothing: a second start, a stop that comes after Cancel, a take with nothing recorded.
     /// </summary>
     [TestMethod]

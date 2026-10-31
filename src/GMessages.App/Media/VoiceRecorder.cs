@@ -327,6 +327,20 @@ internal sealed class VoiceRecorder : IDisposable
     }
 
     /// <summary>
+    /// Pauses recording: the graph stops, so no audio reaches the file or the levels until <see cref="Resume"/>.
+    /// </summary>
+    /// <remarks>
+    /// A stopped graph processes no quanta, and the file output node isn't finalized, so resuming adds to the same file
+    /// and the paused time is never in it.
+    /// </remarks>
+    public void Pause() => _graph?.Stop();
+
+    /// <summary>
+    /// Resumes a paused recording into the same file.
+    /// </summary>
+    public void Resume() => _graph?.Start();
+
+    /// <summary>
     /// Stops recording and finishes the file.
     /// </summary>
     /// <returns>A task that completes when the file is complete.</returns>
