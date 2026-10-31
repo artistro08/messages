@@ -287,7 +287,11 @@
                             Visibility="{x:Bind Bubble.HasPhoto, Mode=OneWay, FallbackValue=Collapsed}">
                             <Grid>
                                 <Border x:Name="PhotoBlur" />
-                                <Border x:Name="PhotoFull" Opacity="0" />
+                                <!-- The full image is an Image, not an ImageBrush: a brush shows only a GIF's first frame, an
+                                     Image plays it. Clipped to the photo's corners from code -->
+                                <Border x:Name="PhotoFull" Opacity="0">
+                                    <Image x:Name="PhotoFullImage" Stretch="UniformToFill" />
+                                </Border>
 
                                 <!-- Note: waiting for the phone, or the failure (click to try again), on a small plate over the photo -->
                                 <Border

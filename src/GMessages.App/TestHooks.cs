@@ -131,7 +131,8 @@ internal static class TestHooks
     /// <summary>
     /// When pointed at the fake server, stands in for the clipboard on a paste into the message box: builds what
     /// <c>{data folder}\paste.txt</c> describes, which it then deletes. Each line is a format and a value:
-    /// <c>text &lt;text&gt;</c>, <c>file &lt;path&gt;</c> (the files, as Explorer copies them), <c>bitmap &lt;path&gt;</c>
+    /// <c>text &lt;text&gt;</c>, <c>html &lt;fragment&gt;</c> (as the emoji panel hands over a GIF: an <c>img</c> of it),
+    /// <c>file &lt;path&gt;</c> (the files, as Explorer copies them), <c>bitmap &lt;path&gt;</c>
     /// (a picture, as a screenshot is copied) or <c>format &lt;name&gt; &lt;path&gt;</c> (a file's bytes under a named format,
     /// such as <c>GIF</c>). No file reads the real clipboard, which the copy tests check by pasting what the app's Copy put
     /// there.
@@ -167,6 +168,9 @@ internal static class TestHooks
                     break;
                 case "file":
                     files.Add(Windows.Storage.StorageFile.GetFileFromPathAsync(line[5..]).AsTask().GetAwaiter().GetResult());
+                    break;
+                case "html":
+                    package.SetHtmlFormat(Windows.ApplicationModel.DataTransfer.HtmlFormatHelper.CreateHtmlFormat(line[5..]));
                     break;
                 case "bitmap":
                     package.SetBitmap(Windows.Storage.Streams.RandomAccessStreamReference.CreateFromFile(
