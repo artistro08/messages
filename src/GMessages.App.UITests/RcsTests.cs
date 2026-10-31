@@ -284,6 +284,30 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
+    /// A short bubble fits its text, sent and received, and one ending in an emoji too: the text's left and right insets
+    /// inside the bubble are equal (within 2 px), though the time and status row under the newest bubble are wider.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task ShortBubbles_FitTheirText()
+    {
+        await OpenChatAsync("Row.c-ann");
+
+        Message ok = Server.Phone.PushIncoming("c-ann", "ok");
+        App.Find("Caption." + ok.MessageID);
+        AssertTextFits(ok.MessageID);
+
+        AutomationElement draft = App.Find("Chat.Draft");
+        draft.Patterns.Value.Pattern.SetValue("okay \U0001F497");
+        draft.Focus();
+        Keyboard.Type(VirtualKeyShort.RETURN);
+        Wait.Until(() => Server.Phone.Sent.Count == 1, AppDriver.DefaultTimeout, () => "The phone never got the message.");
+        string id = Newest("c-ann").MessageID;
+        App.WaitForText("Status." + id, ChatCopy.Sent);
+        AssertTextFits(id);
+    }
+
+    /// <summary>
     /// Shift + F10 on a focused bubble opens its menu, and Copy puts the bubble's text on the clipboard (pasted into the
     /// message box to check).
     /// </summary>
@@ -633,6 +657,22 @@ public sealed class RcsTests : UiTest
         PointerInput.Hover(button.BoundingRectangle);
         Thread.Sleep(500);
         return button;
+    }
+
+    // A Bubble's Text Fills Its Box Edge To Edge: The Back's Padding Is The Same Either Side, So The Text's Insets In The
+    // Bubble Are Equal Only When The Text Box (Stretched Across The Back) Is As Wide As The Text Drawn In It
+    private void AssertTextFits(string messageId)
+    {
+        Thread.Sleep(300);
+        AutomationElement body          = App.Find("Bubble." + messageId);
+        System.Drawing.Rectangle box    = body.BoundingRectangle;
+        System.Drawing.Rectangle[] runs = body.Patterns.Text.Pattern.DocumentRange.GetBoundingRectangles();
+        Assert.IsTrue(runs.Length > 0, $"Bubble {messageId}'s text has no drawn lines.");
+
+        int left  = runs.Min(r => r.Left) - box.Left;
+        int right = box.Right - runs.Max(r => r.Right);
+        TestContext.WriteLine($"Bubble {messageId}: box {box}, text {string.Join(" ", runs)}, insets {left}/{right}.");
+        Assert.IsTrue(Math.Abs(left - right) <= 2, $"Bubble {messageId}'s text sits {left} px from its left and {right} px from its right.");
     }
 
     // The Newest Bubble's Row Takes Keyboard Focus
