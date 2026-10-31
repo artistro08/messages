@@ -67,7 +67,10 @@ public sealed class SettingsTests : UiTest
         Wait.Until(() => SnoozeLength() == ChatCopy.Hour1, AppDriver.DefaultTimeout, () => $"Snooze length shows '{SnoozeLength()}', not 1 hour.");
 
         // Restart: Everything Comes Back
+        // The Restart Opens The Main Window On Pairing And Brings It Forward (A User Launch); The Tray Menu Waits For
+        // That, So The Window Coming Forward Can't Close The Menu
         await App.RestartAsync();
+        WaitForPairing();
         OpenSettings();
         Wait.Until(() => ThemeIndex() == DarkIndex, AppDriver.DefaultTimeout, () => $"Theme came back as index {ThemeIndex()}, not Dark.");
         WaitForToggle("Settings.Notifications", ToggleState.Off);
