@@ -48,6 +48,12 @@ internal static class TestHooks
     public static bool BlockLaunches => EndpointBase is not null;
 
     /// <summary>
+    /// True when pointed at the fake server: the reaction picker's More reactions never opens the Windows emoji panel
+    /// (system UI the tests can't drive) and shows its fallback grid of emoji instead.
+    /// </summary>
+    public static bool BlockEmojiPanel => EndpointBase is not null;
+
+    /// <summary>
     /// When pointed at the fake server, notes a file the app would open in its default app, or a Windows page it would
     /// open (such as <c>ms-settings:privacy-microphone</c>), in <c>{data folder}\launched.txt</c> (one full path or
     /// address per line) instead of opening it.
@@ -188,6 +194,9 @@ internal static class TestHooks
 
     /// <summary>Always false in Release: a clicked link opens in the default browser.</summary>
     public static bool BlockLaunches => false;
+
+    /// <summary>Always false in Release: More reactions opens the Windows emoji panel.</summary>
+    public static bool BlockEmojiPanel => false;
 
     /// <summary>Always false in Release: the file opens in its default app.</summary>
     /// <param name="path">The file's full path.</param>

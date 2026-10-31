@@ -83,6 +83,20 @@ public sealed partial class ChatPane : UserControl
     // A Picker Button's Corners, Its Hover Tint's And Its Selected Fill's Alike (ReactionButtonStyle In ChatPane.xaml)
     private const double ReactionCorner = 8;
 
+    // More Reactions: Its Button's Size, And The Fallback Grid's Columns
+    private const double MoreReactionsSize = 40;
+    private const int EmojiGridColumns     = 8;
+
+    // The Fallback Grid's Emoji, For When The Windows Emoji Panel Can't Open: 40 Common Ones, Faces First
+    private static readonly string[] CommonEmoji =
+    [
+        "😀", "😂", "🤣", "😊", "😍", "🥰", "😘", "😎",
+        "🤔", "😮", "😢", "😭", "😡", "😅", "😆", "😉",
+        "🤗", "🤩", "😴", "🤯", "😬", "👀", "👍", "👎",
+        "👏", "🙌", "🙏", "💪", "🔥", "✨", "🎉", "💯",
+        "❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "💔",
+    ];
+
     // The Message Box's Corners (Windows' Control Corner Radius) And The Compose Area's Padding
     private const double DraftCorner  = 4;
     private const double ComposeInset = 12;
@@ -141,9 +155,14 @@ public sealed partial class ChatPane : UserControl
     private double _lastExtent;
     private double _lastViewport;
 
-    // The Bubble The Reaction Picker Is Open For, And Its View, Whose Hover Strip Stays While The Picker Is Open
+    // The Bubble The Reaction Picker Is Open For, Its View (Whose Hover Strip Stays While The Picker Is Open), And What
+    // The Picker Opened Over
     private MessageBubbleViewModel? _reactTarget;
     private MessageBubble? _reactView;
+    private FrameworkElement? _reactAnchor;
+
+    // The Bubble The Windows Emoji Panel Picks A Reaction For, While The Hidden Box Waits For It (Null Otherwise)
+    private MessageBubbleViewModel? _emojiTarget;
 
     // The Picker's Buttons With The Fill Behind Each And Their Emoji, So The One Matching My Reaction Can Show Selected
     private readonly List<(Button Button, Border Back, string Emoji)> _reactionButtons = [];
@@ -197,6 +216,19 @@ public sealed partial class ChatPane : UserControl
             ReactionButtons.Children.Add(new Grid { Children = { back, button } });
             _reactionButtons.Add((button, back, emoji));
         }
+
+        // More Reactions: Any Emoji, From The Windows Emoji Panel (Or A Grid Of Common Ones When It Can't Open)
+        var more = new Button
+        {
+            Width   = MoreReactionsSize,
+            Content = new FontIcon { Glyph = "", FontSize = 16 },
+            Style   = Application.Current.Resources["IconButtonStyle"].As<Style>(),
+        };
+        AutomationProperties.SetAutomationId(more, "ReactionPicker.More");
+        AutomationProperties.SetName(more, ChatCopy.MoreReactions);
+        ToolTipService.SetToolTip(more, ChatCopy.MoreReactions);
+        more.Click += (_, _) => OnMoreReactionsClick();
+        ReactionButtons.Children.Add(more);
 
         ReactionPicker.Closed += (_, _) =>
         {
@@ -326,7 +358,7 @@ public sealed partial class ChatPane : UserControl
             return false;
         }
 
-        return DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, SendEmojiShortcut);
+        return DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => SendEmojiShortcut());
     }
 
     /// <summary>
@@ -1215,8 +1247,8 @@ public sealed partial class ChatPane : UserControl
     private void OnEmojiClick(object sender, RoutedEventArgs e) => ToggleEmojiPanel();
 
     // Win + Period, Pressed And Released. Ctrl And Shift Still Held From The Ctrl + Shift + e Shortcut Are Let Go First:
-    // Windows Opens Nothing For Win + Ctrl + Shift + Period
-    private static void SendEmojiShortcut()
+    // Windows Opens Nothing For Win + Ctrl + Shift + Period. True When Windows Took Every Key
+    private static bool SendEmojiShortcut()
     {
         List<NativeMethods.KEYBOARD_INPUT> keys = [];
         if (IsDown(VirtualKey.Control))
@@ -1233,9 +1265,14 @@ public sealed partial class ChatPane : UserControl
         keys.Add(Key(NativeMethods.VK_OEM_PERIOD, 0));
         keys.Add(Key(NativeMethods.VK_OEM_PERIOD, NativeMethods.KEYEVENTF_KEYUP));
         keys.Add(Key(NativeMethods.VK_LWIN, NativeMethods.KEYEVENTF_KEYUP));
+        return SendKeys(keys);
+    }
 
-        // A Refused Shortcut (Another App Holds The Input) Just Opens Nothing. Cut Short, Any Key It Pressed But Didn't
-        // Release (Win Above All) Is Released, So No Key Is Left Held Down
+    // Presses And Releases Keys In One Go. A Refused Send (Another App Holds The Input) Just Does Nothing. Cut Short, Any
+    // Key It Pressed But Didn't Release (Win Above All) Is Released, So No Key Is Left Held Down. True When Windows Took
+    // Every Key
+    private static bool SendKeys(List<NativeMethods.KEYBOARD_INPUT> keys)
+    {
         int size = Marshal.SizeOf<NativeMethods.KEYBOARD_INPUT>();
         int sent = (int)NativeMethods.SendInput((uint)keys.Count, [.. keys], size);
         if (sent < keys.Count)
@@ -1251,9 +1288,11 @@ public sealed partial class ChatPane : UserControl
             }
         }
 
-        static NativeMethods.KEYBOARD_INPUT Key(ushort virtualKey, uint flags) =>
-            new() { type = NativeMethods.INPUT_KEYBOARD, wVk = virtualKey, dwFlags = flags };
+        return sent == keys.Count;
     }
+
+    private static NativeMethods.KEYBOARD_INPUT Key(ushort virtualKey, uint flags) =>
+        new() { type = NativeMethods.INPUT_KEYBOARD, wVk = virtualKey, dwFlags = flags };
 
     // =========================================================================
     // HELPERS
@@ -1327,6 +1366,7 @@ public sealed partial class ChatPane : UserControl
         _reactView?.KeepShown(false);
         _reactTarget = bubble;
         _reactView   = view;
+        _reactAnchor = anchor;
         view.KeepShown(true);
 
         // My Reaction Shows Selected: The Pill's Accent Fill Behind Its Button, And Narrator Reads "Selected"
@@ -1354,6 +1394,124 @@ public sealed partial class ChatPane : UserControl
     {
         ReactionPicker.Hide();
         if (_reactTarget is { } bubble && Chat is { } chat)
+        {
+            _ = chat.ReactAsync(bubble, emoji);
+        }
+    }
+
+    // The Picker's More Reactions: Closes The Picker, Then (A Turn Later, Once The Closing Picker Has Put Focus Back)
+    // Focuses The Hidden Box And Opens The Windows Emoji Panel On It With Win + Period, Another Turn Later (Sent Before
+    // The Box Has Focus, Windows Ignores It). The First Emoji Typed There Becomes The Reaction (OnReactionEmojiTextChanged).
+    // When The Box Can't Take Focus Or The Shortcut Can't Be Sent, Or In A Test Run, A Grid Of Common Emoji Opens Instead
+    private void OnMoreReactionsClick()
+    {
+        MessageBubbleViewModel? bubble = _reactTarget;
+        MessageBubble? view            = _reactView;
+        FrameworkElement? anchor       = _reactAnchor;
+        ReactionPicker.Hide();
+        if (bubble is null || view is null || anchor is null)
+        {
+            return;
+        }
+
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+        {
+            ReactionEmojiBox.IsTabStop = true;
+            ReactionEmojiBox.Text      = string.Empty;
+            if (TestHooks.BlockEmojiPanel || !ReactionEmojiBox.Focus(FocusState.Programmatic))
+            {
+                ReactionEmojiBox.IsTabStop = false;
+                ShowEmojiGrid(bubble, view, anchor);
+                return;
+            }
+
+            _emojiTarget = bubble;
+            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+            {
+                if (!SendEmojiShortcut())
+                {
+                    _emojiTarget = null;
+                    ShowEmojiGrid(bubble, view, anchor);
+                }
+            });
+        });
+    }
+
+    // The Fallback Picker: About 40 Common Emoji In A Grid, In A Flyout Where The Picker Was (ReactionGrid.{n}); A Click
+    // Sends That Emoji As The Reaction. The Bubble's Hover Strip Stays Until It Closes
+    private void ShowEmojiGrid(MessageBubbleViewModel bubble, MessageBubble view, FrameworkElement anchor)
+    {
+        var grid   = new VariableSizedWrapGrid { Orientation = Orientation.Horizontal, MaximumRowsOrColumns = EmojiGridColumns };
+        var flyout = new Flyout { Content = grid, Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.Top };
+        Style style = ReactionButtons.Resources["ReactionButtonStyle"].As<Style>();
+        for (int i = 0; i < CommonEmoji.Length; i++)
+        {
+            string emoji = CommonEmoji[i];
+            var button   = new Button { Content = emoji, Style = style };
+            AutomationProperties.SetAutomationId(button, "ReactionGrid." + i);
+            button.Click += (_, _) =>
+            {
+                flyout.Hide();
+                SendReaction(bubble, emoji);
+            };
+            grid.Children.Add(button);
+        }
+
+        view.KeepShown(true);
+        flyout.Closed += (_, _) => view.KeepShown(false);
+        flyout.ShowAt(anchor);
+    }
+
+    // The Emoji Panel Typed Into The Hidden Box: Its First Emoji Is The Reaction (Sent As Custom When It Isn't One Of The
+    // Seven). Anything Else Typed There Is Dropped. The Box Then Clears, The Panel Closes (Escape) And Focus Goes Back To
+    // The Message Box
+    private void OnReactionEmojiTextChanged(object sender, TextChangedEventArgs e)
+    {
+        string text = ReactionEmojiBox.Text;
+        if (text.Length == 0)
+        {
+            return;
+        }
+
+        string first                   = text[..System.Globalization.StringInfo.GetNextTextElementLength(text)];
+        MessageBubbleViewModel? bubble = _emojiTarget;
+        ReactionEmojiBox.Text          = string.Empty;
+        if (bubble is null || !IsEmoji(first))
+        {
+            return;
+        }
+
+        _emojiTarget = null;
+        SendReaction(bubble, first);
+        _ = SendKeys([Key(NativeMethods.VK_ESCAPE, 0), Key(NativeMethods.VK_ESCAPE, NativeMethods.KEYEVENTF_KEYUP)]);
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => DraftBox.Focus(FocusState.Programmatic));
+    }
+
+    // Escape In The Hidden Box (Closing The Panel, Or Pressed) Goes No Further: The Chat Would Take It As Cancel Reply
+    private void OnReactionEmojiKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.Key == VirtualKey.Escape)
+        {
+            e.Handled = true;
+        }
+    }
+
+    // Leaving The Hidden Box Ends The Wait For An Emoji, And It Stops Being Focusable
+    private void OnReactionEmojiLostFocus(object sender, RoutedEventArgs e)
+    {
+        _emojiTarget               = null;
+        ReactionEmojiBox.IsTabStop = false;
+    }
+
+    // An Emoji, Not A Letter, Digit Or Mark Typed From The Keyboard: Its First Code Point Is A Symbol At U+203C (‼) Or Up.
+    // ponytail: a code point heuristic, not Unicode's emoji property; swap in a real emoji table if a symbol slips through
+    private static bool IsEmoji(string element) =>
+        System.Text.Rune.GetRuneAt(element, 0) is var rune && rune.Value >= 0x203C && !System.Text.Rune.IsLetterOrDigit(rune);
+
+    // Sends A Reaction For A Bubble (Add, Switch Or Remove; See ChatViewModel.ReactAsync)
+    private void SendReaction(MessageBubbleViewModel bubble, string emoji)
+    {
+        if (Chat is { } chat)
         {
             _ = chat.ReactAsync(bubble, emoji);
         }

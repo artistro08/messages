@@ -69,6 +69,26 @@
         </Grid>
         <!-- /Header -->
 
+        <!-- Reaction Emoji Box: the picker's More reactions focuses it and opens the Windows emoji panel, which types here; the
+             first emoji typed becomes the reaction (see OnMoreReactionsClick). Hidden: 1 × 1, clear, no clicks, not a tab stop -->
+        <TextBox
+            x:Name="ReactionEmojiBox"
+            Width="1"
+            Height="1"
+            MinWidth="0"
+            MinHeight="0"
+            Padding="0"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Top"
+            AutomationProperties.AutomationId="Chat.ReactionEmoji"
+            BorderThickness="0"
+            IsHitTestVisible="False"
+            IsTabStop="False"
+            KeyDown="OnReactionEmojiKeyDown"
+            LostFocus="OnReactionEmojiLostFocus"
+            Opacity="0"
+            TextChanged="OnReactionEmojiTextChanged" />
+
         <!-- Messages: oldest at the top, kept scrolled to the newest; reaching the top loads older ones -->
         <ListView
             x:Name="MessageList"
@@ -87,8 +107,8 @@
             <!-- KeepItemsInView, not KeepLastItemInView: that one puts the last bubble at the bottom edge without the list's
                  bottom padding, scrolling a just-opened chat 8 px short of its end. Staying on
                  the newest message is ChatPane's pin -->
-            <!-- Reaction Picker: LibGM's seven reactions in enum order (the buttons are added from code and styled by the
-                 panel), opened over a bubble by its pill, its menu's React or Shift + + -->
+            <!-- Reaction Picker: LibGM's seven reactions in enum order, then More reactions (the buttons are added from code
+                 and styled by the panel), opened over a bubble by its menu's React, its hover strip's React or Shift + + -->
             <FlyoutBase.AttachedFlyout>
                 <Flyout x:Name="ReactionPicker" Placement="Top">
                     <Flyout.FlyoutPresenterStyle>
