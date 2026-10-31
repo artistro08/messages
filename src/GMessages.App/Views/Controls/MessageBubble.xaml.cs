@@ -734,7 +734,9 @@ public sealed partial class MessageBubble : UserControl
         bool same_message = part is not null && Bubble is not null && ReferenceEquals(Bubble, _photoBubble);
         if (same_message && KeepSentMedia(_photoPart, part))
         {
-            _photoPart = part;
+            // An Echo With Only A Thumbnail (An MMS Photo's) Keeps The Sent Bytes On Show: Loading It Showed The Tiny
+            // Thumbnail Blurred, Waiting For A Full Size That May Never Come
+            _photoPart = part!.MediaId.Length > 0 ? part : _photoPart;
             SizePhoto();
             return;
         }
@@ -769,10 +771,11 @@ public sealed partial class MessageBubble : UserControl
               && (ReferenceEquals(a.InlineData, b.InlineData) || (a.InlineData.Length == 0 && b.InlineData.Length == 0));
 
     // The Echo Of An Attachment Sent From Here: The Shown Part Held Its Bytes, And The New One Has The Media ID They
-    // Uploaded As. The Bytes Go In The Cache Under That ID, So Nothing Downloads Again; True When So
+    // Uploaded As (The Bytes Go In The Cache Under That ID, So Nothing Downloads Again), Or Only A Thumbnail (The Bytes
+    // Keep Showing); True When So
     private static bool KeepSentMedia(MediaPart? shown, MediaPart? echo)
     {
-        if (shown is not { InlineData.Length: > 0 } local || echo is not { MediaId.Length: > 0, InlineData.Length: 0 })
+        if (shown is not { InlineData.Length: > 0 } local || echo is not { InlineData.Length: 0 } || echo is { MediaId.Length: 0, ThumbnailId.Length: 0 })
         {
             return false;
         }
@@ -871,7 +874,10 @@ public sealed partial class MessageBubble : UserControl
             Task<byte[]> full_task = media.GetAsync(part, thumbnail: false, CancellationToken.None);
             bool at_once           = full_task.IsCompleted;
             byte[] full            = await full_task;
-            ImageSource image      = await Avatar.ToImageAsync(full, (int)Math.Ceiling(Photo.Width)) ?? throw new InvalidDataException();
+            (int pixel_width, int pixel_height) = await PixelSizeAsync(full);
+            int decode_width                    = MessageBubbleViewModel.FillDecodeWidth(pixel_width, pixel_height, Photo.Width, Photo.Height);
+            ImageSource image                   = await Avatar.ToImageAsync(full, decode_width) ?? throw new InvalidDataException();
+            AppLog.PhotoDecoded(App.ShellLog, bubble.Id, full.Length, part.Size, pixel_width, pixel_height, decode_width);
             if (load != _photoLoad)
             {
                 return;
@@ -897,6 +903,21 @@ public sealed partial class MessageBubble : UserControl
 
             AppLog.MediaFailed(App.ShellLog, "photo", bubble.Id, ex.GetType().Name);
             ShowPhotoFailed();
+        }
+    }
+
+    // A Picture's Own Size As Shown (After Its Orientation), From Its Header; 0 x 0 When It Won't Decode
+    private static async Task<(int Width, int Height)> PixelSizeAsync(byte[] bytes)
+    {
+        try
+        {
+            using Windows.Storage.Streams.IRandomAccessStream stream = new MemoryStream(bytes, writable: false).AsRandomAccessStream();
+            Windows.Graphics.Imaging.BitmapDecoder decoder           = await Windows.Graphics.Imaging.BitmapDecoder.CreateAsync(stream);
+            return ((int)decoder.OrientedPixelWidth, (int)decoder.OrientedPixelHeight);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            return (0, 0);
         }
     }
 

@@ -293,7 +293,8 @@ public sealed class MessageBubbleViewModelTests
     [DataRow(400, 300, 560, 400, 300)]
     [DataRow(1200, 900, 560, 480, 360)]
     [DataRow(2000, 500, 560, 560, 140)]
-    [DataRow(1, 1, 560, 120, 120)]
+    [DataRow(1, 1, 560, 1, 1)]
+    [DataRow(64, 48, 560, 64, 48)]
     [DataRow(0, 0, 560, 240, 240)]
     [DataRow(0, 0, 200, 200, 200)]
     public void PhotoSize_FitsTheBubble(int width, int height, double maxWidth, double expectedWidth, double expectedHeight)
@@ -303,4 +304,23 @@ public sealed class MessageBubbleViewModelTests
         Assert.AreEqual(expectedWidth, w);
         Assert.AreEqual(expectedHeight, h);
     }
+
+    /// <summary>
+    /// The full image decodes wide enough to fill its box once cropped, never wider than its own pixels: a landscape
+    /// photo in the square box of unknown dimensions (the blur: decoded only 240 wide, then stretched 1.33x to the box's
+    /// height), a photo whose reported sides were swapped, a photo matching its box, a small photo, and an unknown size.
+    /// </summary>
+    /// <param name="pixelWidth">The image's own width.</param>
+    /// <param name="pixelHeight">The image's own height.</param>
+    /// <param name="boxWidth">The box's width.</param>
+    /// <param name="boxHeight">The box's height.</param>
+    /// <param name="expected">The decode width.</param>
+    [TestMethod]
+    [DataRow(4000, 3000, 240, 240, 320)]
+    [DataRow(4000, 3000, 270, 360, 480)]
+    [DataRow(1200, 900, 480, 360, 480)]
+    [DataRow(200, 100, 240, 240, 200)]
+    [DataRow(0, 0, 240, 240, 240)]
+    public void FillDecodeWidth_CoversTheBox_NeverUpscales(int pixelWidth, int pixelHeight, double boxWidth, double boxHeight, int expected) =>
+        Assert.AreEqual(expected, MessageBubbleViewModel.FillDecodeWidth(pixelWidth, pixelHeight, boxWidth, boxHeight));
 }
