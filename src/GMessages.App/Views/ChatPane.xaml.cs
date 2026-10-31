@@ -52,7 +52,7 @@ namespace GMessages.App.Views;
 /// The paperclip inside the box's right edge (<c>Chat.Attach</c>, or Ctrl + Shift + a; Ctrl + Shift + p for photos)
 /// opens the file picker; each picked file becomes a chip above the box, read only at Send. The mic beside it
 /// (<c>Chat.Record</c>) records a voice message: the recording bar covers the box with the time, the live waveform,
-/// Cancel recording and Stop. A stopped recording waits as the first chip (the voice preview, which plays and seeks)
+/// Cancel recording and Done (a check mark). A finished recording waits as the first chip (the voice preview, which plays and seeks)
 /// and sends first.
 /// </para>
 /// <para>
@@ -249,8 +249,8 @@ public sealed partial class ChatPane : UserControl
     /// <summary>Gets the mic button's tooltip and name.</summary>
     public static string RecordText => ChatCopy.RecordVoiceMessage;
 
-    /// <summary>Gets the recording's Stop tooltip and name.</summary>
-    public static string StopText => ChatCopy.Stop;
+    /// <summary>Gets the recording's Done tooltip and name.</summary>
+    public static string DoneText => ChatCopy.Done;
 
     /// <summary>Gets the recording's Cancel recording tooltip and name.</summary>
     public static string CancelRecordingText => ChatCopy.CancelRecording;
@@ -825,7 +825,7 @@ public sealed partial class ChatPane : UserControl
         ShowRecording();
         _recordTimer.Start();
 
-        // The Mic Is Covered Now: Focus Goes To Stop
+        // The Mic Is Covered Now: Focus Goes To Done
         StopRecordingButton.Focus(FocusState.Programmatic);
     }
 
@@ -875,7 +875,7 @@ public sealed partial class ChatPane : UserControl
         }
     }
 
-    // Stop: The File Is Finished, Read Back With Its Waveform, And Waits In The Preview Chip. A Failure Drops It
+    // Done: The File Is Finished, Read Back With Its Waveform, And Waits In The Preview Chip. A Failure Drops It
     private async void OnStopRecordingClick(object sender, RoutedEventArgs e)
     {
         if (_recorder is not { } recorder || Chat is not { } chat)

@@ -579,7 +579,7 @@
             </Button>
 
             <!-- Recording: over the message box while the mic records, a red dot, the running time, the live waveform of the
-                 input level, then Cancel recording (deletes it) and Stop (keeps it for the preview chip). On a solid base, since
+                 input level, then Cancel recording (deletes it) and Done (a check mark; keeps it for the preview chip). On a solid base, since
                  the box's fill lets what is under it show -->
             <Border
                 Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
@@ -631,14 +631,14 @@
                         Height="32"
                         VerticalAlignment="Center"
                         AutomationProperties.AutomationId="Chat.StopRecording"
-                        AutomationProperties.Name="{x:Bind local:ChatPane.StopText}"
+                        AutomationProperties.Name="{x:Bind local:ChatPane.DoneText}"
                         Click="OnStopRecordingClick"
                         Style="{StaticResource IconButtonStyle}"
-                        ToolTipService.ToolTip="{x:Bind local:ChatPane.StopText}">
+                        ToolTipService.ToolTip="{x:Bind local:ChatPane.DoneText}">
                         <FontIcon
                             FontSize="16"
                             Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
-                            Glyph="&#xE71A;" />
+                            Glyph="&#xE73E;" />
                     </Button>
                 </Grid>
             </Border>

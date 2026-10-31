@@ -130,7 +130,7 @@ public static class ChatCopy
 
     // Voice Messages (Plan 6; Controller Copy, The Owner Signs Off At The Gate)
     public const string RecordVoiceMessage = "Record voice message";
-    public const string Stop               = "Stop";
+    public const string Done               = "Done";
     public const string CancelRecording    = "Cancel recording";
     public const string Play               = "Play";
     public const string Pause              = "Pause";
