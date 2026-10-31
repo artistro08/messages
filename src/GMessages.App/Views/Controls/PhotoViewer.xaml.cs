@@ -41,6 +41,10 @@ public sealed partial class PhotoViewer : UserControl
     private string _messageId = string.Empty;
     private Control? _returnFocus;
 
+    // How The Photo In The Chat Had Focus When The Viewer Opened (Pointer For A Click), So Closing Gives It Back The Same
+    // Way: A Clicked Photo Gets No Focus Ring Back, Even When Escape Closes The Viewer
+    private FocusState _returnState = FocusState.Programmatic;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="PhotoViewer"/> class, hidden.
     /// </summary>
@@ -85,6 +89,7 @@ public sealed partial class PhotoViewer : UserControl
         _part        = part;
         _messageId   = messageId;
         _returnFocus = returnFocus;
+        _returnState = returnFocus.FocusState == FocusState.Unfocused ? FocusState.Programmatic : returnFocus.FocusState;
         AutomationProperties.SetName(Zoomer, name);
         PhotoImage.Source = null;
         Zoomer.ChangeView(0, 0, 1, disableAnimation: true);
@@ -137,7 +142,7 @@ public sealed partial class PhotoViewer : UserControl
         Visibility        = Visibility.Collapsed;
         PhotoImage.Source = null;
         _part             = null;
-        _returnFocus?.Focus(FocusState.Programmatic);
+        _returnFocus?.Focus(_returnState);
         _returnFocus = null;
     }
 
