@@ -135,6 +135,7 @@ public static class ChatCopy
     public const string Play               = "Play";
     public const string Pause              = "Pause";
     public const string Resume             = "Resume";
+    public const string RecordingFailed    = "Couldn't save this recording. Try again.";
 
     // Microphone Dialog (Controller Copy, The Owner Signs Off)
     public const string MicrophoneTitle = "Use your microphone?";

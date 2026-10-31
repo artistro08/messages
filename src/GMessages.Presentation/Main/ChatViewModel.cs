@@ -606,6 +606,12 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     public void ClearAttachError() => AttachError = string.Empty;
 
     /// <summary>
+    /// Says over the chips that a recording ended with Done couldn't be finished (<see cref="ChatCopy.RecordingFailed"/>),
+    /// so it is never lost without a word; the note goes like the too-big note, or when the next recording starts.
+    /// </summary>
+    public void NoteRecordingFailed() => AttachError = ChatCopy.RecordingFailed;
+
+    /// <summary>
     /// Drops a chip (its remove button).
     /// </summary>
     /// <param name="attachment">The attachment.</param>
