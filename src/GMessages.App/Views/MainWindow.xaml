@@ -122,6 +122,29 @@
             </Border.ChildTransitions>
         </Border>
 
+        <!-- Photo Viewer: a clicked photo over the whole body (both panes) -->
+        <controls:PhotoViewer x:Name="PhotoViewer" Grid.Row="1" />
+
+        <!-- Download Confirm: "Saved to Downloads" with Show in folder, at the bottom over everything; closes itself after a few
+             seconds -->
+        <InfoBar
+            x:Name="DownloadedBar"
+            Grid.Row="1"
+            Margin="16,0,16,24"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Bottom"
+            AutomationProperties.AutomationId="Main.Downloaded"
+            IsOpen="False"
+            Severity="Success"
+            Title="{x:Bind local:MainWindow.SavedToDownloadsText}">
+            <InfoBar.ActionButton>
+                <Button
+                    AutomationProperties.AutomationId="Main.Downloaded.ShowInFolder"
+                    Click="OnShowInFolderClick"
+                    Content="{x:Bind local:MainWindow.ShowInFolderText}" />
+            </InfoBar.ActionButton>
+        </InfoBar>
+
         <!-- Unpair Confirm -->
         <controls:UnpairDialog x:Name="UnpairDialog" Grid.Row="1" />
 

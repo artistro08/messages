@@ -1,0 +1,110 @@
+<!-- Photo Viewer: a clicked photo over the whole window body (both panes) on a dark scrim, zoomable, with Save as, Download, Open in
+     Photos and Close. Dark theme always, so its icons read on the scrim. Hidden until shown (see the code) -->
+<UserControl
+    x:Class="GMessages.App.Views.Controls.PhotoViewer"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:GMessages.App.Views.Controls"
+    RequestedTheme="Dark"
+    Visibility="Collapsed">
+
+    <!-- Scrim Color: near black, so the chat under it doesn't compete with the photo; the window color in high contrast -->
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Default">
+                    <SolidColorBrush x:Key="PhotoViewerScrimBrush" Color="#E6000000" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="HighContrast">
+                    <SolidColorBrush x:Key="PhotoViewerScrimBrush" Color="{ThemeResource SystemColorWindowColor}" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <!-- Scrim: Tab and Shift + Tab cycle inside, so focus never leaves the viewer -->
+    <Grid
+        x:Name="Scrim"
+        Background="{ThemeResource PhotoViewerScrimBrush}"
+        RowDefinitions="Auto,*"
+        TabFocusNavigation="Cycle">
+
+        <!-- Toolbar -->
+        <StackPanel
+            Margin="8"
+            HorizontalAlignment="Right"
+            Orientation="Horizontal"
+            Spacing="4">
+            <Button
+                x:Name="SaveAsButton"
+                Width="40"
+                Height="40"
+                AutomationProperties.AutomationId="PhotoViewer.SaveAs"
+                AutomationProperties.Name="{x:Bind local:PhotoViewer.SaveAsText}"
+                Click="OnSaveAsClick"
+                Style="{StaticResource IconButtonStyle}"
+                ToolTipService.ToolTip="{x:Bind local:PhotoViewer.SaveAsText}">
+                <FontIcon FontSize="16" Glyph="&#xE792;" />
+            </Button>
+            <Button
+                x:Name="DownloadButton"
+                Width="40"
+                Height="40"
+                AutomationProperties.AutomationId="PhotoViewer.Download"
+                AutomationProperties.Name="{x:Bind local:PhotoViewer.DownloadText}"
+                Click="OnDownloadClick"
+                Style="{StaticResource IconButtonStyle}"
+                ToolTipService.ToolTip="{x:Bind local:PhotoViewer.DownloadText}">
+                <FontIcon FontSize="16" Glyph="&#xE896;" />
+            </Button>
+            <Button
+                x:Name="OpenInPhotosButton"
+                Width="40"
+                Height="40"
+                AutomationProperties.AutomationId="PhotoViewer.OpenInPhotos"
+                AutomationProperties.Name="{x:Bind local:PhotoViewer.OpenInPhotosText}"
+                Click="OnOpenInPhotosClick"
+                Style="{StaticResource IconButtonStyle}"
+                ToolTipService.ToolTip="{x:Bind local:PhotoViewer.OpenInPhotosText}">
+                <FontIcon FontSize="16" Glyph="&#xE8A7;" />
+            </Button>
+            <Button
+                x:Name="CloseButton"
+                Width="40"
+                Height="40"
+                AutomationProperties.AutomationId="PhotoViewer.Close"
+                AutomationProperties.Name="{x:Bind local:PhotoViewer.CloseText}"
+                Click="OnCloseClick"
+                Style="{StaticResource IconButtonStyle}"
+                ToolTipService.ToolTip="{x:Bind local:PhotoViewer.CloseText}">
+                <FontIcon FontSize="16" Glyph="&#xE711;" />
+            </Button>
+        </StackPanel>
+
+        <!-- Photo: centered and fitted at 1x (a smaller photo at its own size), Ctrl + mouse wheel and pinch zoom up to 8x, a double-click zooms in or back out.
+             Named for Narrator by the photo's caption (or "Photo"); a click beside the photo closes the viewer -->
+        <ScrollViewer
+            x:Name="Zoomer"
+            Grid.Row="1"
+            AutomationProperties.AutomationId="PhotoViewer.Photo"
+            Background="Transparent"
+            HorizontalScrollBarVisibility="Auto"
+            HorizontalScrollMode="Auto"
+            IsTabStop="True"
+            MaxZoomFactor="8"
+            MinZoomFactor="1"
+            SizeChanged="OnZoomerSizeChanged"
+            Tapped="OnZoomerTapped"
+            VerticalScrollBarVisibility="Auto"
+            VerticalScrollMode="Auto"
+            ViewChanged="OnZoomerViewChanged"
+            ZoomMode="Enabled">
+            <Image
+                x:Name="PhotoImage"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                DoubleTapped="OnPhotoDoubleTapped"
+                Stretch="Uniform" />
+        </ScrollViewer>
+    </Grid>
+</UserControl>

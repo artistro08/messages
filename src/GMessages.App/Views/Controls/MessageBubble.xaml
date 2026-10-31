@@ -161,6 +161,15 @@
                         </MenuFlyoutItem.Icon>
                     </MenuFlyoutItem>
                     <MenuFlyoutItem
+                        AutomationProperties.AutomationId="Bubble.Download"
+                        Click="OnDownloadClick"
+                        Text="{x:Bind local:MessageBubble.DownloadText}"
+                        Visibility="{x:Bind Bubble.HasMediaFile, Mode=OneWay, FallbackValue=Collapsed}">
+                        <MenuFlyoutItem.Icon>
+                            <FontIcon Glyph="&#xE896;" />
+                        </MenuFlyoutItem.Icon>
+                    </MenuFlyoutItem>
+                    <MenuFlyoutItem
                         AutomationProperties.AutomationId="Bubble.React"
                         Click="OnReactClick"
                         KeyboardAcceleratorTextOverride="Shift + +"

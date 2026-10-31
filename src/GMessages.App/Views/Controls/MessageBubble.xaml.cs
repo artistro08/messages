@@ -14,8 +14,6 @@ using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Windows.ApplicationModel.DataTransfer;
-using Windows.Storage;
-using Windows.Storage.Pickers;
 using Windows.System;
 using Windows.UI.ViewManagement;
 using WinRT;
@@ -76,8 +74,9 @@ namespace GMessages.App.Views.Controls;
 /// carry), then the full image fades in over it. A thumbnail-only photo asks the phone for the full size, which arrives
 /// as an edit of the message. While the phone hasn't sent the photo it reads "Waiting for the photo from your phone…";
 /// a failure (or a full size that never comes) reads "Couldn't load this photo." and a click tries again. Otherwise a
-/// click opens it in the default photo app, as does the menu's Open (<c>Bubble.Open</c>); Save as (<c>Bubble.SaveAs</c>)
-/// saves a copy where the person picks.
+/// click shows it in the window's photo viewer (see <see cref="PhotoViewer"/>), as does the menu's Open
+/// (<c>Bubble.Open</c>); Save as (<c>Bubble.SaveAs</c>) saves a copy where the person picks, and Download
+/// (<c>Bubble.Download</c>, also on a file's menu) saves it to the Downloads folder.
 /// </para>
 /// <para>
 /// A video or file shows as a card (<c>Bubble.File.{id}</c>, named by the file name): its thumbnail when one came, else
@@ -284,6 +283,9 @@ public sealed partial class MessageBubble : UserControl
 
     /// <summary>Gets the menu's Save as text.</summary>
     public static string SaveAsText => ChatCopy.SaveAs;
+
+    /// <summary>Gets the menu's Download text.</summary>
+    public static string DownloadText => ChatCopy.Download;
 
     /// <summary>Gets the caption row lock's tooltip and name.</summary>
     public static string EncryptedText => ChatCopy.EndToEndEncrypted;
@@ -901,7 +903,7 @@ public sealed partial class MessageBubble : UserControl
     }
 
     // After A Failure, Try Again (Asking The Phone Again For A Full Size That Never Came); While Waiting For The Phone,
-    // Nothing; Otherwise Open It In The Default Photo App
+    // Nothing; Otherwise Show It In The Window's Photo Viewer
     private void OnPhotoClick(object sender, RoutedEventArgs e)
     {
         if (_photoPart is not { IsPending: false } part)
@@ -917,8 +919,12 @@ public sealed partial class MessageBubble : UserControl
             return;
         }
 
-        _ = OpenMediaAsync(part);
+        ShowInViewer(part);
     }
+
+    // The Photo Over The Whole Window, Named As The Bubble's Photo Is
+    private void ShowInViewer(MediaPart part) =>
+        (Application.Current as App)?.MainWindow?.ShowPhoto(part, Bubble?.Id ?? string.Empty, Bubble?.PhotoName ?? ChatCopy.Photo, Photo);
 
     // =========================================================================
     // FILE CARD
@@ -1101,45 +1107,10 @@ public sealed partial class MessageBubble : UserControl
     // OPEN AND SAVE
     // =========================================================================
 
-    // Writes The File To The Private Temp Folder And Opens It In Its Default App (A Test Run Only Notes The Path). A
-    // Program, Script Or Installer Is Never Opened (See MediaStore.CanOpen): The Save Dialog Shows Instead, So The Person
-    // Decides. Never Logs The Name Or Path: Only The Message ID. True When Opened Or Offered For Saving
-    private async Task<bool> OpenMediaAsync(MediaPart part)
-    {
-        if ((Application.Current as App)?.Media is not { } media)
-        {
-            return false;
-        }
+    // Opens The File In Its Default App (See MediaActions.OpenAsync). True When Opened Or Offered For Saving
+    private Task<bool> OpenMediaAsync(MediaPart part) => MediaActions.OpenAsync(XamlRoot, part, Bubble?.Id ?? string.Empty);
 
-        string message_id = Bubble?.Id ?? string.Empty;
-        if (!MediaStore.CanOpen(part.Name, part.Mime))
-        {
-            AppLog.MediaFailed(App.ShellLog, "open", message_id, "Blocked");
-            await SaveAsAsync(part);
-            return true;
-        }
-
-        try
-        {
-            string path = await media.SaveToTempAsync(part, CancellationToken.None);
-            bool launch = !TestHooks.RecordLaunch(path);
-            if (launch && !await Launcher.LaunchFileAsync(await StorageFile.GetFileFromPathAsync(path)))
-            {
-                AppLog.MediaFailed(App.ShellLog, "open", message_id, "NoApp");
-                return false;
-            }
-
-            AppLog.MediaOpened(App.ShellLog, message_id, launch);
-            return true;
-        }
-        catch (Exception ex) when (ex is not OutOfMemoryException)
-        {
-            AppLog.MediaFailed(App.ShellLog, "open", message_id, ex.GetType().Name);
-            return false;
-        }
-    }
-
-    // The Menu's Open: As A Click On The Photo Or The Card
+    // The Menu's Open: As A Click On The Photo (The Viewer) Or The Card
     private void OnOpenClick(object sender, RoutedEventArgs e)
     {
         if (Bubble?.HasFileCard == true)
@@ -1148,7 +1119,7 @@ public sealed partial class MessageBubble : UserControl
         }
         else if (Bubble?.Media is { IsPending: false } part)
         {
-            _ = OpenMediaAsync(part);
+            ShowInViewer(part);
         }
     }
 
@@ -1157,60 +1128,17 @@ public sealed partial class MessageBubble : UserControl
     {
         if (Bubble?.Media is { IsPending: false } part)
         {
-            _ = SaveAsAsync(part);
+            _ = MediaActions.SaveAsAsync(XamlRoot, part, Bubble.Id);
         }
     }
 
-    // The Windows Save Dialog Over This Window, Named As The Sender Named It (Made Safe)
-    private async Task SaveAsAsync(MediaPart part)
+    // The Menu's Download: Into The Downloads Folder, With The Window's Confirmation
+    private void OnDownloadClick(object sender, RoutedEventArgs e)
     {
-        string message_id = Bubble?.Id ?? string.Empty;
-        if ((Application.Current as App)?.Media is not { } media || XamlRoot?.ContentIslandEnvironment is not { } island)
+        if (Bubble?.Media is { IsPending: false } part)
         {
-            AppLog.MediaFailed(App.ShellLog, "save", message_id, "NoWindow");
-            return;
+            _ = MediaActions.DownloadAsync(part, Bubble.Id);
         }
-
-        try
-        {
-            string name      = MediaStore.SanitizeName(part.Name, part.Mime);
-            string extension = Path.GetExtension(name);
-            var picker       = new FileSavePicker
-            {
-                SuggestedFileName      = Path.GetFileNameWithoutExtension(name),
-                SuggestedStartLocation = PickerLocationId.Downloads,
-            };
-            // A Named List: The Native AOT Build Only Makes WinRT Wrappers For Conversions It Can See, And A Collection
-            // Expression Hides This One (InvalidCastException, Before The Dialog Ever Showed)
-            picker.FileTypeChoices.Add(ChatCopy.File, new List<string> { extension.Length > 1 ? extension : ".bin" });
-            WinRT.Interop.InitializeWithWindow.Initialize(picker, Microsoft.UI.Win32Interop.GetWindowFromWindowId(island.AppWindowId));
-
-            StorageFile? file = TestHooks.PickSaveFile() is { } picked
-                ? (picked.Length > 0 ? await TestSaveFileAsync(picked) : null)
-                : await picker.PickSaveFileAsync();
-            if (file is null)
-            {
-                return;
-            }
-
-            byte[] bytes = await media.GetAsync(part, thumbnail: false, CancellationToken.None);
-            await FileIO.WriteBytesAsync(file, bytes);
-            if (file.Path.Length > 0)
-            {
-                media.MarkFromInternet(file.Path);
-            }
-        }
-        catch (Exception ex) when (ex is not OutOfMemoryException)
-        {
-            AppLog.MediaFailed(App.ShellLog, "save", message_id, ex.GetType().Name);
-        }
-    }
-
-    // The Test's Picked Path As The Dialog Hands It Back: An Empty File, Made
-    private static async Task<StorageFile> TestSaveFileAsync(string path)
-    {
-        await File.WriteAllBytesAsync(path, []);
-        return await StorageFile.GetFileFromPathAsync(path);
     }
 
     private void ShowStates()
