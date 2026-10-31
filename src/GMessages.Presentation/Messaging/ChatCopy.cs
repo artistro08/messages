@@ -121,6 +121,12 @@ public static class ChatCopy
     public const string FileOpenFailed  = "Couldn't open this file.";
     public const string PhotoPending    = "Waiting for the photo from your phone…";
 
+    // Photo Viewer And Download (Plan 7; Controller Copy, The Owner Signs Off At The Gate)
+    public const string Download         = "Download";
+    public const string SavedToDownloads = "Saved to Downloads";
+    public const string ShowInFolder     = "Show in folder";
+    public const string OpenInPhotos     = "Open in Photos";
+
     // Attaching (Plan 6; Controller Copy, The Owner Signs Off At The Gate)
     public const string Attach           = "Attach";
     public const string AttachPhoto      = "Attach photo";
