@@ -31,16 +31,33 @@
                 <ImageIconSource ImageSource="ms-appx:///Assets/AppIcon.ico" />
             </TitleBar.IconSource>
 
-            <!-- Menu Button: collapses and expands the list -->
+            <!-- Menu Button: collapses and expands the list. Fluent's subtle button with Windows' default hover and press
+                 fill (owner, Plan 7), so its own resources put back the subtle brushes App.xaml clears for icon buttons; no
+                 press animation. High contrast keeps the system's colors -->
             <TitleBar.LeftHeader>
                 <Button
                     x:Name="MenuButton"
                     Width="48"
                     Height="48"
+                    Padding="0"
                     AutomationProperties.AutomationId="Main.MenuButton"
                     AutomationProperties.Name="Show or hide conversations"
                     Click="OnMenuClick"
-                    Style="{StaticResource IconButtonStyle}">
+                    Style="{StaticResource SubtleButtonStyle}">
+                    <Button.Resources>
+                        <ResourceDictionary>
+                            <ResourceDictionary.ThemeDictionaries>
+                                <ResourceDictionary x:Key="Default">
+                                    <StaticResource x:Key="SubtleButtonBackgroundPointerOver" ResourceKey="SubtleFillColorSecondaryBrush" />
+                                    <StaticResource x:Key="SubtleButtonBackgroundPressed" ResourceKey="SubtleFillColorTertiaryBrush" />
+                                </ResourceDictionary>
+                                <ResourceDictionary x:Key="Light">
+                                    <StaticResource x:Key="SubtleButtonBackgroundPointerOver" ResourceKey="SubtleFillColorSecondaryBrush" />
+                                    <StaticResource x:Key="SubtleButtonBackgroundPressed" ResourceKey="SubtleFillColorTertiaryBrush" />
+                                </ResourceDictionary>
+                            </ResourceDictionary.ThemeDictionaries>
+                        </ResourceDictionary>
+                    </Button.Resources>
                     <FontIcon FontSize="16" Glyph="&#xE700;" />
                 </Button>
             </TitleBar.LeftHeader>
