@@ -6,6 +6,7 @@ using GMessages.Presentation;
 using GMessages.Presentation.Messaging;
 using GMessages.Protocol.Proto;
 using Keyboard = FlaUI.Core.Input.Keyboard;
+using Mouse = FlaUI.Core.Input.Mouse;
 
 namespace GMessages.App.UITests;
 
@@ -502,6 +503,58 @@ public sealed partial class MediaTests : UiTest
         string animated = Path.Combine(App.DataDir, "animated-photo.txt");
         Wait.Until(() => File.Exists(animated), AppDriver.DefaultTimeout, () => "The GIF's bubble shows a still picture.");
         Assert.AreEqual(message.MessageID, File.ReadAllText(animated));
+    }
+
+    /// <summary>
+    /// Scrolling a chat full of photos and GIFs fast up and down (rows recycle, photos resize) neither crashes the app
+    /// nor logs an unhandled error: 0.6.2 crashed here (0xc000027b) after Windows refused the photo clip's visual
+    /// (E_ACCESSDENIED) inside SizeChanged and x:Bind callbacks on recycled rows.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task ManyPhotos_FastScroll_NoCrash()
+    {
+        await OpenMediaChatAsync();
+
+        // Thirty Photos Of Mixed Shapes, Every Fifth One A GIF
+        Message last = null!;
+        for (int i = 0; i < 30; i++)
+        {
+            last = i % 5 == 4
+                ? Server.Phone.PushIncomingMedia("c-media", "image/gif", TwoFrameGif, $"party-{i}.gif")
+                : Server.Phone.PushIncomingMedia("c-media", "image/png", Png(60 + (i * 9), 200 - (i * 4), SplitColors), $"photo-{i}.png");
+        }
+
+        WaitForStatus(App.Find("Bubble.Photo." + last.MessageID), Full);
+
+        // Fast Up And Down, By Jumps And By The Wheel
+        AutomationElement list = App.Find("Chat.Messages");
+        var scroll             = list.Patterns.Scroll.Pattern;
+        for (int round = 0; round < 8; round++)
+        {
+            scroll.SetScrollPercent(-1, 0);
+            Thread.Sleep(60);
+            scroll.SetScrollPercent(-1, 50);
+            Thread.Sleep(60);
+            scroll.SetScrollPercent(-1, 100);
+            Thread.Sleep(60);
+        }
+
+        System.Drawing.Rectangle box = list.BoundingRectangle;
+        Mouse.Position               = new System.Drawing.Point(box.Left + (box.Width / 2), box.Top + (box.Height / 2));
+        for (int round = 0; round < 6; round++)
+        {
+            Mouse.Scroll(15);
+            Thread.Sleep(40);
+            Mouse.Scroll(-15);
+            Thread.Sleep(40);
+        }
+
+        Thread.Sleep(1000);
+        Assert.IsNotNull(App.TryFind("Chat.Draft"), "The app closed while scrolling the photos.");
+        string log = ReadLog();
+        Assert.IsFalse(log.Contains("Unhandled error", StringComparison.Ordinal), "Scrolling the photos logged an unhandled error.");
+        Assert.IsFalse(log.Contains("Media clip failed", StringComparison.Ordinal), "A photo's clip failed while scrolling.");
     }
 
     /// <summary>

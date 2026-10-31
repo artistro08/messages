@@ -297,8 +297,9 @@
                             Visibility="{x:Bind Bubble.HasPhoto, Mode=OneWay, FallbackValue=Collapsed}">
                             <Grid>
                                 <Border x:Name="PhotoBlur" />
-                                <!-- The full image is an Image, not an ImageBrush: a brush shows only a GIF's first frame, an
-                                     Image plays it. Clipped to the photo's corners from code -->
+                                <!-- The full image: a still photo is this layer's ImageBrush, which its corners clip; a GIF is
+                                     the Image (a brush shows only a GIF's first frame, an Image plays it), clipped to the
+                                     photo's corners from code -->
                                 <Border x:Name="PhotoFull" Opacity="0">
                                     <Image x:Name="PhotoFullImage" Stretch="UniformToFill" />
                                 </Border>
