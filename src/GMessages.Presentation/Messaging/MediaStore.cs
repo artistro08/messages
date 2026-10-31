@@ -239,6 +239,63 @@ public sealed partial class MediaStore
     }
 
     /// <summary>
+    /// Writes a part's decrypted file into a folder the person keeps (their Downloads), under a name no other file there has.
+    /// </summary>
+    /// <remarks>
+    /// The name is the sender's, made safe by <see cref="SanitizeName"/>; when it is taken, <c>name (1).ext</c>, then
+    /// <c>name (2).ext</c> and so on, as Windows names a second copy. The file is made with <see cref="FileMode.CreateNew"/>,
+    /// so it never replaces one that appears meanwhile. It carries the mark of the web (<see cref="MarkFromInternet"/>).
+    /// </remarks>
+    /// <param name="part">The media part.</param>
+    /// <param name="folder">The folder's full path; it must exist.</param>
+    /// <param name="ct">Cancels the wait and the write.</param>
+    /// <returns>The full path of the written file.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="part"/> or <paramref name="folder"/> is null.</exception>
+    /// <exception cref="MediaPendingException">The part has no media ID, thumbnail or inline data yet.</exception>
+    /// <exception cref="MessagingUnavailableException">Not connected.</exception>
+    /// <exception cref="IOException">The file could not be written.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="ct"/> was canceled.</exception>
+    public async Task<string> SaveToFolderAsync(MediaPart part, string folder, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(part);
+        ArgumentNullException.ThrowIfNull(folder);
+
+        byte[] bytes     = await GetAsync(part, thumbnail: false, ct).ConfigureAwait(false);
+        string name      = SanitizeName(part.Name, part.Mime);
+        string stem      = Path.GetFileNameWithoutExtension(name);
+        string extension = Path.GetExtension(name);
+
+        // The First Free Name: A Taken One Throws IOException On CreateNew, And The Next Number Is Tried
+        for (int copy = 0; ; copy++)
+        {
+            string path = Path.Combine(folder, copy == 0 ? name : FormattableString.Invariant($"{stem} ({copy}){extension}"));
+            if (File.Exists(path))
+            {
+                continue;
+            }
+
+            FileStream stream;
+            try
+            {
+                stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+            }
+            catch (IOException) when (File.Exists(path))
+            {
+                // Taken Between The Check And The Create: Try The Next Number
+                continue;
+            }
+
+            await using (stream.ConfigureAwait(false))
+            {
+                await stream.WriteAsync(bytes, ct).ConfigureAwait(false);
+            }
+
+            MarkFromInternet(path);
+            return path;
+        }
+    }
+
+    /// <summary>
     /// Marks a written file as downloaded from the internet (the mark of the web), as a browser download is.
     /// </summary>
     /// <remarks>

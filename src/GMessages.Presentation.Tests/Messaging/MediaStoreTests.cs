@@ -123,6 +123,32 @@ public sealed class MediaStoreTests
     }
 
     /// <summary>
+    /// Download writes the file into the folder under its own name, then "name (1)" and "name (2)" when taken, each
+    /// with the bytes and the mark of the web.
+    /// </summary>
+    [TestMethod]
+    public async Task SaveToFolder_UniqueNamesAndMark()
+    {
+        using var rig           = new Rig();
+        rig.Client.Media["m-1"] = [1, 2, 3];
+        string folder           = Path.Combine(rig.Folder, "Downloads");
+        Directory.CreateDirectory(folder);
+
+        string first  = await rig.Store.SaveToFolderAsync(Part("m-1", name: "beach.jpg"), folder, Ct);
+        string second = await rig.Store.SaveToFolderAsync(Part("m-1", name: "beach.jpg"), folder, Ct);
+        string third  = await rig.Store.SaveToFolderAsync(Part("m-1", name: "beach.jpg"), folder, Ct);
+
+        Assert.AreEqual(Path.Combine(folder, "beach.jpg"), first);
+        Assert.AreEqual(Path.Combine(folder, "beach (1).jpg"), second);
+        Assert.AreEqual(Path.Combine(folder, "beach (2).jpg"), third);
+        foreach (string path in (string[])[first, second, third])
+        {
+            CollectionAssert.AreEqual(new byte[] { 1, 2, 3 }, File.ReadAllBytes(path));
+            Assert.AreEqual("[ZoneTransfer]\r\nZoneId=3\r\n", File.ReadAllText(path + ":Zone.Identifier"));
+        }
+    }
+
+    /// <summary>
     /// Clear empties memory (the next ask downloads again) and the temp folder.
     /// </summary>
     [TestMethod]
