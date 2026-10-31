@@ -236,7 +236,8 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// The picker's More reactions opens the app's emoji picker (focus in its search box); searching "fire" leaves 🔥,
+    /// The picker's More reactions opens the app's emoji picker (focus in its search box, its emoji filling its width);
+    /// typing "eyes" shows 👀; searching "fire" leaves 🔥,
     /// whose click closes the picker and sends the phone an Add of 🔥 as a custom reaction, and the pill shows it.
     /// </summary>
     /// <returns>A task for the test.</returns>
@@ -254,6 +255,19 @@ public sealed class RcsTests : UiTest
 
         AutomationElement search = App.Find("EmojiPicker.Search");
         Wait.Until(() => search.Properties.HasKeyboardFocus.ValueOrDefault, AppDriver.DefaultTimeout, () => "The search box didn't take focus.");
+
+        // The First Row Fills The Picker Edge To Edge, Lined Up With The Search Box (😀 First, 😂 Eighth)
+        System.Drawing.Rectangle box    = search.BoundingRectangle;
+        System.Drawing.Rectangle first  = App.Find("EmojiPicker.1F600").BoundingRectangle;
+        System.Drawing.Rectangle eighth = App.Find("EmojiPicker.1F602").BoundingRectangle;
+        Assert.IsTrue(Math.Abs(first.Left - box.Left) <= 2 && Math.Abs(eighth.Right - box.Right) <= 2,
+            $"The emoji ({first.Left} to {eighth.Right}) don't fill the search box's width ({box.Left} to {box.Right}).");
+
+        // Typed Like The Owner Did: "eyes" Shows 👀 (And 😍, Whose Words Have It)
+        Keyboard.Type("eyes");
+        Wait.Until(() => App.TryFind("EmojiPicker.1F440") is not null, AppDriver.DefaultTimeout, () => "Typing 'eyes' doesn't show 👀.");
+        Assert.IsNotNull(App.TryFind("EmojiPicker.1F60D"), "Typing 'eyes' doesn't show 😍.");
+
         search.Patterns.Value.Pattern.SetValue("fire");
         Wait.Until(() => App.TryFind("EmojiPicker.1F600") is null, AppDriver.DefaultTimeout, () => "Searching 'fire' still shows 😀.");
         App.Find("EmojiPicker.1F525").Patterns.Invoke.Pattern.Invoke();

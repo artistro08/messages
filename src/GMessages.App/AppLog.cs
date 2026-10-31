@@ -59,8 +59,8 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 918, Level = LogLevel.Information, Message = "Toast shown for {MessageId} in {ConversationId}")]
     public static partial void ToastShown(ILogger logger, string messageId, string conversationId);
 
-    [LoggerMessage(EventId = 917, Level = LogLevel.Error, Message = "Unhandled error ({ErrorType} 0x{HResult:X8}, handled: {Handled})")]
-    public static partial void UnhandledError(ILogger logger, string errorType, int hResult, bool handled);
+    [LoggerMessage(EventId = 917, Level = LogLevel.Error, Message = "Unhandled error ({ErrorType} 0x{HResult:X8}, handled: {Handled}) at {Frames}")]
+    public static partial void UnhandledError(ILogger logger, string errorType, int hResult, bool handled, string frames);
 
     [LoggerMessage(EventId = 919, Level = LogLevel.Information, Message = "Sign-in device-bound session headers: {Headers}")]
     public static partial void BoundSessionHeaders(ILogger logger, string headers);
@@ -97,6 +97,9 @@ internal static partial class AppLog
 
     [LoggerMessage(EventId = 930, Level = LogLevel.Information, Message = "Photo {MessageId} decoded: {Bytes} of {Expected} bytes, {Width} x {Height} px, at {DecodeWidth} wide")]
     public static partial void PhotoDecoded(ILogger logger, string messageId, int bytes, long expected, int width, int height, int decodeWidth);
+
+    [LoggerMessage(EventId = 931, Level = LogLevel.Information, Message = "Emoji picker open {Open}: built in {BuildMs} ms, shown in {ShowMs} ms, {Rows} rows made")]
+    public static partial void EmojiPickerShown(ILogger logger, int open, long buildMs, long showMs, int rows);
 
     [LoggerMessage(EventId = 951,Level = LogLevel.Information, Message = "Test endpoint {Endpoint}, data folder {DataFolder}")]
     public static partial void TestEndpoint(ILogger logger, string endpoint, string dataFolder);

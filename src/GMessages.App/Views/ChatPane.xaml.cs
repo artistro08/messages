@@ -89,6 +89,7 @@ public sealed partial class ChatPane : UserControl
     private const double MoreReactionsSize = 40;
     private const int EmojiPickerColumns   = 8;
     private const double EmojiPickerHeight = 280;
+    private const double EmojiCellSize     = 44;
 
     // The Message Box's Corners (Windows' Control Corner Radius) And The Compose Area's Padding
     private const double DraftCorner  = 4;
@@ -193,13 +194,16 @@ public sealed partial class ChatPane : UserControl
     private MessageBubble? _reactView;
     private FrameworkElement? _reactAnchor;
 
-    // The Emoji Picker (Made On First Use), Its Search Box, Its Category Headers With Their Buttons, Its Empty Note, And The
-    // Bubble It Picks A Reaction For
+    // The Emoji Picker (Made On First Use), Its Search Box, Its Rows (Virtualized: Only Those In View Are Made), Its Empty
+    // Note, The Bubble It Picks A Reaction For, And How Many Times It Has Opened (For The Timing Log)
     private Flyout? _emojiPicker;
     private TextBox? _emojiSearch;
+    private ItemsRepeater? _emojiRows;
+    private ScrollViewer? _emojiScroller;
+    private EmojiRowFactory? _emojiFactory;
     private TextBlock? _emojiEmpty;
-    private readonly List<(TextBlock Header, List<(Button Button, string Emoji, string Words)> Buttons)> _emojiGroups = [];
     private MessageBubbleViewModel? _emojiTarget;
+    private int _emojiOpens;
 
     // More Reactions Picked: What The Emoji Picker Opens For Once The Reaction Picker Has Closed
     private (MessageBubbleViewModel Bubble, MessageBubble View, FrameworkElement Anchor)? _emojiPending;
@@ -1822,14 +1826,33 @@ public sealed partial class ChatPane : UserControl
     // Or A Click Outside Closes It. Focus Starts In The Search Box. The Bubble's Hover Strip Stays Until It Closes
     private void ShowEmojiPicker(MessageBubbleViewModel bubble, MessageBubble view, FrameworkElement anchor)
     {
-        Flyout picker = _emojiPicker ??= BuildEmojiPicker();
-        _emojiTarget  = bubble;
+        // Timed (Milliseconds Only): The First Open Froze The App When It Made Every Emoji's Button At Once
+        long start     = System.Diagnostics.Stopwatch.GetTimestamp();
+        Flyout picker  = _emojiPicker ??= BuildEmojiPicker();
+        long built     = System.Diagnostics.Stopwatch.GetTimestamp();
+        int open       = ++_emojiOpens;
+        _emojiTarget   = bubble;
         _emojiSearch!.Text = string.Empty;
         FilterEmoji();
 
         view.KeepShown(true);
+        picker.Opened += OnOpened;
         picker.Closed += OnClosed;
         picker.ShowAt(anchor);
+
+        void OnOpened(object? sender, object e)
+        {
+            picker.Opened -= OnOpened;
+
+            // Logged Once The Opened Picker Has Been Laid Out (Low Runs After Layout)
+            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+            {
+                long build_ms = (long)System.Diagnostics.Stopwatch.GetElapsedTime(start, built).TotalMilliseconds;
+                long show_ms  = (long)System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds;
+                int rows      = _emojiFactory?.Made ?? 0;
+                AppLog.EmojiPickerShown(App.ShellLog, open, build_ms, show_ms, rows);
+            });
+        }
 
         void OnClosed(object? sender, object e)
         {
@@ -1839,7 +1862,9 @@ public sealed partial class ChatPane : UserControl
         }
     }
 
-    // Builds The Emoji Picker Once: Its Search Box, A Header And A Wrapping Grid Of Buttons Per Category, And Its Empty Note
+    // Builds The Emoji Picker Once: Its Search Box, Its Empty Note, And Its Rows In A Scroller. The Rows Are Virtualized
+    // (An ItemsRepeater), So Only Those In View Are Made, Then Reused As They Scroll Out. The Rows Fill The Picker's Width,
+    // Edge To Edge With The Search Box; The Scroll Bar Overlays Them The Windows Way
     private Flyout BuildEmojiPicker()
     {
         Style button_style = ReactionButtons.Resources["ReactionButtonStyle"].As<Style>();
@@ -1852,80 +1877,44 @@ public sealed partial class ChatPane : UserControl
         AutomationProperties.SetName(_emojiSearch, ChatCopy.SearchEmoji);
         _emojiSearch.TextChanged += (_, _) => FilterEmoji();
 
-        // Categories
-        var groups = new StackPanel { Width = EmojiPickerColumns * MoreReactionsSize };
-        foreach ((string name, IReadOnlyList<(string Emoji, string Words)> emoji) in EmojiCatalog.Categories)
-        {
-            var header = new TextBlock
-            {
-                Text   = name,
-                Margin = new Thickness(4, 8, 0, 4),
-                Style  = note_style,
-            };
-            AutomationProperties.SetHeadingLevel(header, Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel.Level2);
-
-            var grid    = new VariableSizedWrapGrid { Orientation = Orientation.Horizontal, MaximumRowsOrColumns = EmojiPickerColumns };
-            var buttons = new List<(Button Button, string Emoji, string Words)>();
-            foreach ((string e, string words) in emoji)
-            {
-                var button = new Button { Content = e, Style = button_style };
-                AutomationProperties.SetAutomationId(button, "EmojiPicker." + EmojiKey(e));
-                ToolTipService.SetToolTip(button, words.Split(' ')[0]);
-                button.Click += (_, _) => PickEmoji(e);
-                grid.Children.Add(button);
-                buttons.Add((button, e, words));
-            }
-
-            groups.Children.Add(header);
-            groups.Children.Add(grid);
-            _emojiGroups.Add((header, buttons));
-        }
-
         // Empty Search
         _emojiEmpty = new TextBlock { Text = ChatCopy.NoEmojiFound, Margin = new Thickness(4, 8, 0, 8), Style = note_style, Visibility = Visibility.Collapsed };
-        groups.Children.Add(_emojiEmpty);
 
-        var scroller = new ScrollViewer { Content = groups, Height = EmojiPickerHeight, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
-        var root     = new StackPanel { Children = { _emojiSearch, scroller } };
+        // Rows: About Half A Screen Above And Below The View Is Made Ahead
+        _emojiFactory = new EmojiRowFactory(EmojiPickerColumns, EmojiCellSize, button_style, note_style, PickEmoji);
+        _emojiRows    = new ItemsRepeater { ItemTemplate = _emojiFactory, VerticalCacheLength = 1 };
+        _emojiScroller = new ScrollViewer { Content = _emojiRows, Height = EmojiPickerHeight, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
+
+        var root = new StackPanel { Width = EmojiPickerColumns * EmojiCellSize, Children = { _emojiSearch, _emojiEmpty, _emojiScroller } };
         AutomationProperties.SetAutomationId(root, "EmojiPicker");
         AutomationProperties.SetName(root, ChatCopy.EmojiPicker);
         flyout.Content = root;
         return flyout;
     }
 
-    // The Search Box's Words: Only Emoji Whose Search Words Start With Every Typed Word Show, And A Category With None Hides
-    // Its Header; Nothing Typed Shows Them All. No Match At All Shows The Empty Note
+    // The Search Box's Words (See EmojiCatalog.Search): The Matching Categories, Each A Name Row Over Rows Of Up To Eight
+    // Emoji, From The Top. Nothing Typed Shows Them All; No Match At All Shows The Empty Note
     private void FilterEmoji()
     {
-        string[] typed = (_emojiSearch?.Text ?? string.Empty).Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        bool any       = false;
-        foreach ((TextBlock header, List<(Button Button, string Emoji, string Words)> buttons) in _emojiGroups)
+        if (_emojiRows is null || _emojiEmpty is null)
         {
-            bool shown = false;
-            foreach ((Button button, string emoji, string words) in buttons)
+            return;
+        }
+
+        var rows = new List<EmojiRow>();
+        foreach ((string name, IReadOnlyList<(string Emoji, string Words)> emoji) in EmojiCatalog.Search(_emojiSearch?.Text))
+        {
+            rows.Add(new EmojiRow(name, []));
+            for (int i = 0; i < emoji.Count; i += EmojiPickerColumns)
             {
-                bool match        = MatchesEmoji(words, typed);
-                button.Visibility = match ? Visibility.Visible : Visibility.Collapsed;
-                shown            |= match;
+                rows.Add(new EmojiRow(null, emoji.Skip(i).Take(EmojiPickerColumns).ToList()));
             }
-
-            header.Visibility = shown ? Visibility.Visible : Visibility.Collapsed;
-            any              |= shown;
         }
 
-        if (_emojiEmpty is not null)
-        {
-            _emojiEmpty.Visibility = any ? Visibility.Collapsed : Visibility.Visible;
-        }
+        _emojiRows.ItemsSource = rows;
+        _emojiEmpty.Visibility = rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        _emojiScroller?.ChangeView(null, 0, null, disableAnimation: true);
     }
-
-    // True When Every Typed Word Starts One Of The Emoji's Search Words (Ignoring Case)
-    private static bool MatchesEmoji(string words, string[] typed) =>
-        typed.All(t => words.Split(' ').Any(w => w.StartsWith(t, StringComparison.OrdinalIgnoreCase)));
-
-    // An Emoji's AutomationId Part: Its Code Points In Hex, Joined By Dashes (🔥 Is 1F525)
-    private static string EmojiKey(string emoji) =>
-        string.Join("-", emoji.EnumerateRunes().Select(r => r.Value.ToString("X", System.Globalization.CultureInfo.InvariantCulture)));
 
     // A Picked Emoji: Closes The Picker And Sends It As The Reaction (Custom When It Isn't One Of The Seven)
     private void PickEmoji(string emoji)
