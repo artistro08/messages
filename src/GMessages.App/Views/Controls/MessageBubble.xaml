@@ -24,8 +24,8 @@
                     <VisualState.Setters>
                         <Setter Target="Root.HorizontalAlignment" Value="Right" />
                         <Setter Target="BackRow.HorizontalAlignment" Value="Right" />
-                        <Setter Target="Back.Background" Value="{ThemeResource RcsBubbleBrush}" />
-                        <Setter Target="Back.BorderBrush" Value="{ThemeResource RcsBubbleBorderBrush}" />
+                        <Setter Target="BackFill.Background" Value="{ThemeResource RcsBubbleBrush}" />
+                        <Setter Target="BackFill.BorderBrush" Value="{ThemeResource RcsBubbleBorderBrush}" />
                         <Setter Target="Body.Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
                         <Setter Target="Under.HorizontalAlignment" Value="Right" />
                         <Setter Target="PillHost.(Grid.Column)" Value="0" />
@@ -38,8 +38,8 @@
                     <VisualState.Setters>
                         <Setter Target="Root.HorizontalAlignment" Value="Right" />
                         <Setter Target="BackRow.HorizontalAlignment" Value="Right" />
-                        <Setter Target="Back.Background" Value="{ThemeResource AccentFillColorDefaultBrush}" />
-                        <Setter Target="Back.BorderThickness" Value="0" />
+                        <Setter Target="BackFill.Background" Value="{ThemeResource AccentFillColorDefaultBrush}" />
+                        <Setter Target="BackFill.BorderThickness" Value="0" />
                         <Setter Target="Body.Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
                         <Setter Target="Quote.Background" Value="{ThemeResource QuoteOnAccentFillBrush}" />
                         <Setter Target="QuoteBar.Background" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
@@ -225,14 +225,23 @@
                     </Viewbox>
                 </Grid>
 
+                <!-- Fill: the bubble's color and edge, behind its content. A photo with nothing else in its bubble hides it, so the
+                     photo's own edge is the bubble's edge and no fill or stroke shows around it -->
+                <Border
+                    x:Name="BackFill"
+                    Grid.Column="1"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="{x:Bind local:MessageBubble.CornersOf(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup), Mode=OneWay}"
+                    Visibility="{x:Bind local:MessageBubble.FillShown(Bubble.HasPhoto, Bubble.HasBodyText, Bubble.HasQuote), Mode=OneWay, FallbackValue=Collapsed}" />
+
                 <!-- Text: a click shows or hides the time -->
                 <Border
                     x:Name="Back"
                     Grid.Column="1"
                     Padding="{x:Bind local:MessageBubble.BackPadding(Bubble.HasPhoto), Mode=OneWay}"
-                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                    BorderThickness="1"
+                    Background="Transparent"
                     CornerRadius="{x:Bind local:MessageBubble.CornersOf(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup), Mode=OneWay}">
                     <StackPanel>
 
@@ -277,6 +286,7 @@
                         <Button
                             x:Name="Photo"
                             Padding="0"
+                            BorderThickness="0"
                             HorizontalContentAlignment="Stretch"
                             VerticalContentAlignment="Stretch"
                             AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Bubble.Photo.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"

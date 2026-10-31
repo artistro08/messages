@@ -191,8 +191,8 @@ public sealed partial class MessageBubble : UserControl
     // Cancels A Thumbnail-Only Photo's Wait For Its Full Size When A Newer Load Starts (Null When None Is Waiting)
     private Action? _cancelPhotoWait;
 
-    // The Widest A Photo May Be: The Bubble's Width Cap Inside Its Border (Set At Measure)
-    private double _photoMaxWidth = MaxBubbleWidth - 2;
+    // The Widest A Photo May Be: The Bubble's Width Cap (Set At Measure; The Photo Covers The Bubble's Edge)
+    private double _photoMaxWidth = MaxBubbleWidth;
 
     // The File The Card Shows, Its Message, And Whether It Is Opening Or Its Last Open Failed
     private MediaPart? _filePart;
@@ -513,7 +513,18 @@ public sealed partial class MessageBubble : UserControl
     public static Thickness CaptionMargin(bool hasPhoto) => hasPhoto ? CaptionInset : default;
 
     /// <summary>
-    /// Rounds a photo to the inside of its bubble's corners (one pixel in, for the border), square at the bottom when its
+    /// Shows the bubble's fill and edge, except behind a photo with nothing else in its bubble (no caption, no quote):
+    /// then the photo's own edge is the bubble's, with no fill or stroke around it.
+    /// </summary>
+    /// <param name="hasPhoto">True when the bubble shows a photo.</param>
+    /// <param name="hasCaption">True when a caption shows under the photo.</param>
+    /// <param name="hasQuote">True when the bubble quotes the message it replies to.</param>
+    /// <returns>Collapsed for a photo alone.</returns>
+    public static Visibility FillShown(bool hasPhoto, bool hasCaption, bool hasQuote) =>
+        hasPhoto && !hasCaption && !hasQuote ? Visibility.Collapsed : Visibility.Visible;
+
+    /// <summary>
+    /// Rounds a photo to its bubble's corners exactly (the photo covers the bubble's edge), square at the bottom when its
     /// caption follows.
     /// </summary>
     /// <param name="fromMe">True for a sent bubble.</param>
@@ -525,10 +536,10 @@ public sealed partial class MessageBubble : UserControl
     {
         CornerRadius outer = CornersOf(fromMe, isFirst, isLast);
         return new CornerRadius(
-            outer.TopLeft - 1,
-            outer.TopRight - 1,
-            hasCaption ? 0 : outer.BottomRight - 1,
-            hasCaption ? 0 : outer.BottomLeft - 1);
+            outer.TopLeft,
+            outer.TopRight,
+            hasCaption ? 0 : outer.BottomRight,
+            hasCaption ? 0 : outer.BottomLeft);
     }
 
     /// <summary>
@@ -580,8 +591,8 @@ public sealed partial class MessageBubble : UserControl
                 Root.MaxWidth = max_width;
             }
 
-            // The Photo Fits Inside The Back's Border, Beside The Avatar Lane
-            _photoMaxWidth = cap - LaneWidth(Bubble?.HasAvatarLane == true) - 2;
+            // The Photo Fills The Bubble Edge To Edge, Beside The Avatar Lane
+            _photoMaxWidth = cap - LaneWidth(Bubble?.HasAvatarLane == true);
             SizePhoto();
         }
 
