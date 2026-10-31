@@ -284,6 +284,26 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
+    /// A reaction pill doesn't push the newest bubble's time down: the gap from the bubble's text to the time under it
+    /// is the same (within 2 px) before and after Ann reacts.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task ReactionPill_KeepsTheTimeUnderTheBubble()
+    {
+        await OpenChatAsync("Row.c-ann");
+        string id  = Find("c-ann", AnnLast).MessageID;
+        int before = App.Find("Caption." + id).BoundingRectangle.Top - App.Find("Bubble." + id).BoundingRectangle.Bottom;
+
+        Server.Phone.PushReactions("c-ann", id, (EmojiType.Like, "p-ann"));
+        Wait.Until(() => App.TryFind("Reactions." + id)?.BoundingRectangle.Height > 0, AppDriver.DefaultTimeout, () => "The pill never showed.");
+        Thread.Sleep(300);
+        int after = App.Find("Caption." + id).BoundingRectangle.Top - App.Find("Bubble." + id).BoundingRectangle.Bottom;
+
+        Assert.IsTrue(Math.Abs(after - before) <= 2, $"The time sat {before} px under the text without a reaction and {after} px with one.");
+    }
+
+    /// <summary>
     /// A short bubble fits its text, sent and received, and one ending in an emoji too: the text's left and right insets
     /// inside the bubble are equal (within 2 px), though the time and status row under the newest bubble are wider.
     /// </summary>

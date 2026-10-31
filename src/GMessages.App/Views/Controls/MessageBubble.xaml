@@ -27,9 +27,10 @@
                         <Setter Target="Back.Background" Value="{ThemeResource RcsBubbleBrush}" />
                         <Setter Target="Back.BorderBrush" Value="{ThemeResource RcsBubbleBorderBrush}" />
                         <Setter Target="Body.Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
-                        <Setter Target="Pill.HorizontalAlignment" Value="Left" />
-                        <Setter Target="Footer.HorizontalAlignment" Value="Right" />
-                        <Setter Target="StatusRow.HorizontalAlignment" Value="Right" />
+                        <Setter Target="Under.HorizontalAlignment" Value="Right" />
+                        <Setter Target="Pill.(Grid.Column)" Value="0" />
+                        <Setter Target="Pill.Margin" Value="0,-8,6,0" />
+                        <Setter Target="Captions.(Grid.Column)" Value="2" />
                         <Setter Target="HoverStrip.(Grid.Column)" Value="0" />
                     </VisualState.Setters>
                 </VisualState>
@@ -53,9 +54,10 @@
                         <Setter Target="PreviewCard.BorderThickness" Value="0" />
                         <Setter Target="PreviewTitle.Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
                         <Setter Target="PreviewSite.Foreground" Value="{ThemeResource TextOnAccentFillColorSecondaryBrush}" />
-                        <Setter Target="Pill.HorizontalAlignment" Value="Left" />
-                        <Setter Target="Footer.HorizontalAlignment" Value="Right" />
-                        <Setter Target="StatusRow.HorizontalAlignment" Value="Right" />
+                        <Setter Target="Under.HorizontalAlignment" Value="Right" />
+                        <Setter Target="Pill.(Grid.Column)" Value="0" />
+                        <Setter Target="Pill.Margin" Value="0,-8,6,0" />
+                        <Setter Target="Captions.(Grid.Column)" Value="2" />
                         <Setter Target="HoverStrip.(Grid.Column)" Value="0" />
                     </VisualState.Setters>
                 </VisualState>
@@ -521,206 +523,223 @@
                 <!-- /Hover Strip -->
             </Grid>
 
-            <!-- Reactions: a pill over the bubble's bottom corner; a click (or Enter or Space) opens the reaction picker, or in a
-                 group chat the list of who reacted (built in code). A whole-pixel height (24,
-                 more for large text) with corners of half of it, and its fill under the stroke, so the ends draw as smooth half
-                 circles at any scale -->
-            <Button
-                x:Name="Pill"
-                MinHeight="24"
-                Margin="12,-8,12,0"
-                Padding="8,0"
-                HorizontalAlignment="Right"
-                VerticalContentAlignment="Center"
-                AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Reactions.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
-                Background="{ThemeResource SolidBackgroundFillColorTertiaryBrush}"
-                BackgroundSizing="OuterBorderEdge"
-                BorderBrush="{ThemeResource ReactionPillBorderBrush}"
-                BorderThickness="1"
-                Click="OnPillClick"
-                Content="{x:Bind Bubble.ReactionsText, Mode=OneWay, FallbackValue=''}"
-                CornerRadius="12"
-                FontSize="12"
-                UseLayoutRounding="True"
-                Visibility="{x:Bind Bubble.HasReactions, Mode=OneWay, FallbackValue=Collapsed}">
-
-                <!-- Hover And Press: opaque shades of the pill's own fill, so the button's 83 ms brush transition blends
-                     smoothly. The default hover fill is a faint see-through white, and blending the opaque fill into it
-                     passes through a bright half-opaque gray for a frame or two (the flash). No outline: the 1 px border is
-                     clear (ReactionPillBorderBrush in App.xaml; the fill runs under it, so the pill keeps its size). High
-                     contrast keeps an edge and the system button's own hover and press colors, so the pill and its hover
-                     still show -->
-                <Button.Resources>
-                    <ResourceDictionary>
-                        <ResourceDictionary.ThemeDictionaries>
-                            <ResourceDictionary x:Key="Default">
-                                <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="SolidBackgroundFillColorQuarternaryBrush" />
-                                <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="SolidBackgroundFillColorSecondaryBrush" />
-                                <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="Transparent" />
-                                <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="Transparent" />
-                            </ResourceDictionary>
-                            <ResourceDictionary x:Key="Light">
-                                <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="SolidBackgroundFillColorQuarternaryBrush" />
-                                <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="SolidBackgroundFillColorSecondaryBrush" />
-                                <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="Transparent" />
-                                <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="Transparent" />
-                            </ResourceDictionary>
-                            <ResourceDictionary x:Key="HighContrast">
-                                <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="{ThemeResource SystemColorHighlightTextColor}" />
-                                <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="{ThemeResource SystemColorHighlightTextColor}" />
-                                <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="{ThemeResource SystemColorHighlightColor}" />
-                                <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="{ThemeResource SystemColorHighlightTextColor}" />
-                            </ResourceDictionary>
-                        </ResourceDictionary.ThemeDictionaries>
-                    </ResourceDictionary>
-                </Button.Resources>
-            </Button>
-
-            <!-- Time (Hidden Until The Bubble Is Clicked), Or The Retry Link When The Send Failed -->
-            <Grid x:Name="Footer" Margin="12,0">
-                <TextBlock
-                    AutomationProperties.AutomationId="{x:Bind local:MessageBubble.TimeIdOf(Bubble.Id, Bubble.TmpId), Mode=OneWay}"
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                    Style="{StaticResource CaptionTextBlockStyle}"
-                    Text="{x:Bind Bubble.Time, Mode=OneWay}"
-                    Visibility="{x:Bind local:MessageBubble.TimeVisibility(Bubble.IsTimeShown, Bubble.IsFailed, Bubble.ShowsStatusRow), Mode=OneWay}" />
-
-                <!-- Not Sent: a red error mark before the retry link -->
-                <StackPanel
-                    Orientation="Horizontal"
-                    Spacing="4"
-                    Visibility="{x:Bind Bubble.IsFailed, Mode=OneWay}">
-                    <FontIcon
-                        VerticalAlignment="Center"
-                        FontSize="12"
-                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                        Glyph="&#xE783;" />
-                    <HyperlinkButton
-                        Padding="0"
-                        AutomationProperties.AutomationId="{x:Bind local:MessageBubble.RetryIdOf(Bubble.Id, Bubble.TmpId), Mode=OneWay}"
-                        Click="OnRetryClick"
-                        Content="{x:Bind Bubble.NotSentText, Mode=OneWay, FallbackValue=''}"
-                        FontSize="12"
-                        Foreground="{ThemeResource SystemFillColorCriticalBrush}" />
-                </StackPanel>
-            </Grid>
-
-            <!-- Caption Row: only under the chat's newest bubble, until it is clicked. The time (Caption.{id}), then on my bubble
-                 the delivery icon (a stopwatch while sending, a check in a ring when sent, two when delivered, two filled when
-                 read), and the lock in an encrypted chat. The icon is drawn, not text; its name (Status.{id}) is "Sent",
-                 "Delivered" or "Read" for screen readers -->
-            <StackPanel
-                x:Name="StatusRow"
+            <!-- Under The Bubble: the reaction pill on the bubble's inner corner, and the time or caption row on its outer side,
+                 side by side, so a reaction never pushes the time down. At least as wide as the back (set from code), so the
+                 pill sits on the back's corner; under a short bubble the row grows past it on the inner side instead, and the
+                 pill moves over just enough to clear the time -->
+            <Grid
+                x:Name="Under"
                 Margin="12,0"
                 HorizontalAlignment="Left"
-                Orientation="Horizontal"
-                Spacing="4"
-                Visibility="{x:Bind Bubble.ShowsStatusRow, Mode=OneWay, FallbackValue=Collapsed}">
-                <TextBlock
-                    VerticalAlignment="Center"
-                    AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Caption.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                    Style="{StaticResource CaptionTextBlockStyle}"
-                    Text="{x:Bind Bubble.Time, Mode=OneWay}" />
-                <TextBlock
-                    VerticalAlignment="Center"
-                    AutomationProperties.AccessibilityView="Raw"
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                    Style="{StaticResource CaptionTextBlockStyle}"
-                    Text="&#x00B7;"
-                    Visibility="{x:Bind Bubble.ShowsCaptionDot, Mode=OneWay, FallbackValue=Collapsed}" />
+                ColumnDefinitions="Auto,*,Auto">
 
-                <!-- Delivery Icon: the owner's icons (Assets/Status/*.svg), 12 px tall. Each path is the SVG's own, placed
-                     by the SVG's own transforms (its two groups' matrices, folded into one scale and offset) on a canvas
-                     of the SVG's view box -->
-                <Grid VerticalAlignment="Center">
-
-                    <!-- Sending: a stopwatch -->
-                    <Viewbox
-                        Height="12"
-                        Visibility="{x:Bind local:MessageBubble.ShownFor(Bubble.StatusIcon, '1'), Mode=OneWay, FallbackValue=Collapsed}">
-                        <Canvas Width="20" Height="24">
-                            <Path Data="M210.356,281.588C211.001,282.376 211.388,283.383 211.388,284.48C211.388,287.002 209.339,289.051 206.817,289.051C204.294,289.051 202.245,287.002 202.245,284.48C202.245,281.957 204.294,279.908 206.817,279.908C207.872,279.908 208.845,280.267 209.619,280.869L210.268,280.093C210.45,279.875 210.774,279.846 210.991,280.028C211.208,280.209 211.237,280.533 211.056,280.751L210.356,281.588ZM206.817,280.935C204.86,280.935 203.272,282.523 203.272,284.48C203.272,286.436 204.86,288.024 206.817,288.024C208.773,288.024 210.361,286.436 210.361,284.48C210.361,282.523 208.773,280.935 206.817,280.935ZM206.303,282.053C206.303,281.77 206.533,281.54 206.817,281.54C207.1,281.54 207.33,281.77 207.33,282.053L207.33,284.48C207.33,284.763 207.1,284.993 206.817,284.993C206.533,284.993 206.303,284.763 206.303,284.48L206.303,282.053ZM205.132,279.027C204.849,279.027 204.619,278.797 204.619,278.514C204.619,278.231 204.849,278.001 205.132,278.001L208.34,278.001C208.623,278.001 208.853,278.231 208.853,278.514C208.853,278.797 208.623,279.027 208.34,279.027L205.132,279.027Z" Fill="{ThemeResource TextFillColorSecondaryBrush}">
-                                <Path.RenderTransform>
-                                    <CompositeTransform
-                                        ScaleX="2.085664"
-                                        ScaleY="2.085664"
-                                        TranslateX="-421.569297"
-                                        TranslateY="-579.115477" />
-                                </Path.RenderTransform>
-                            </Path>
-                        </Canvas>
-                    </Viewbox>
-
-                    <!-- Sent: a check in a ring -->
-                    <Viewbox
-                        Height="12"
-                        Visibility="{x:Bind local:MessageBubble.ShownFor(Bubble.StatusIcon, '2'), Mode=OneWay, FallbackValue=Collapsed}">
-                        <Canvas Width="24" Height="24">
-                            <Path Data="M360.495,229.539C367.791,229.539 373.715,235.462 373.715,242.759C373.715,250.055 367.791,255.979 360.495,255.979C353.198,255.979 347.275,250.055 347.275,242.759C347.275,235.462 353.198,229.539 360.495,229.539ZM360.495,231.737C354.412,231.737 349.473,236.676 349.473,242.759C349.473,248.841 354.412,253.78 360.495,253.78C366.577,253.78 371.516,248.841 371.516,242.759C371.516,236.676 366.577,231.737 360.495,231.737ZM353.232,244.628C352.799,244.203 352.792,243.506 353.217,243.073C353.642,242.64 354.339,242.634 354.772,243.059L357.87,246.1L365.591,238.052C366.011,237.614 366.708,237.6 367.146,238.02C367.583,238.44 367.598,239.136 367.178,239.574L358.687,248.424C358.483,248.636 358.204,248.758 357.91,248.762C357.616,248.767 357.333,248.653 357.123,248.447L353.232,244.628Z" Fill="{ThemeResource TextFillColorSecondaryBrush}">
-                                <Path.RenderTransform>
-                                    <CompositeTransform
-                                        ScaleX="0.87531"
-                                        ScaleY="0.87531"
-                                        TranslateX="-303.749258"
-                                        TranslateY="-200.216764" />
-                                </Path.RenderTransform>
-                            </Path>
-                        </Canvas>
-                    </Viewbox>
-
-                    <!-- Delivered: two checks in rings -->
-                    <Viewbox
-                        Height="12"
-                        Visibility="{x:Bind local:MessageBubble.ShownFor(Bubble.StatusIcon, '3'), Mode=OneWay, FallbackValue=Collapsed}">
-                        <Canvas Width="38" Height="24">
-                            <Path Data="M360.495,229.539C367.791,229.539 373.715,235.462 373.715,242.759C373.715,250.055 367.791,255.979 360.495,255.979C353.198,255.979 347.275,250.055 347.275,242.759C347.275,235.462 353.198,229.539 360.495,229.539ZM360.495,231.737C354.412,231.737 349.473,236.676 349.473,242.759C349.473,248.841 354.412,253.78 360.495,253.78C366.577,253.78 371.516,248.841 371.516,242.759C371.516,236.676 366.577,231.737 360.495,231.737ZM353.232,244.628C352.799,244.203 352.792,243.506 353.217,243.073C353.642,242.64 354.339,242.634 354.772,243.059L357.87,246.1L365.591,238.052C366.011,237.614 366.708,237.6 367.146,238.02C367.583,238.44 367.598,239.136 367.178,239.574L358.687,248.424C358.483,248.636 358.204,248.758 357.91,248.762C357.616,248.767 357.333,248.653 357.123,248.447L353.232,244.628ZM350.093,254.38C348.219,255.399 346.072,255.979 343.79,255.979C336.494,255.979 330.571,250.055 330.571,242.759C330.571,235.462 336.494,229.539 343.79,229.539C346.072,229.539 348.219,230.118 350.093,231.137C349.521,231.649 348.988,232.202 348.497,232.792C347.07,232.116 345.474,231.737 343.79,231.737C337.708,231.737 332.769,236.676 332.769,242.759C332.769,248.841 337.708,253.78 343.79,253.78C345.474,253.78 347.07,253.402 348.497,252.726C348.988,253.316 349.521,253.869 350.093,254.38ZM345.084,245.192L341.982,248.424C341.779,248.636 341.499,248.758 341.206,248.762C340.912,248.767 340.629,248.653 340.419,248.447L336.528,244.628C336.095,244.203 336.088,243.506 336.513,243.073C336.938,242.64 337.635,242.634 338.068,243.059L341.166,246.1L344.904,242.203C344.898,242.387 344.895,242.573 344.895,242.759C344.895,243.586 344.959,244.399 345.084,245.192Z" Fill="{ThemeResource TextFillColorSecondaryBrush}">
-                                <Path.RenderTransform>
-                                    <CompositeTransform
-                                        ScaleX="0.87531"
-                                        ScaleY="0.87531"
-                                        TranslateX="-289.151299"
-                                        TranslateY="-200.730342" />
-                                </Path.RenderTransform>
-                            </Path>
-                        </Canvas>
-                    </Viewbox>
-
-                    <!-- Read: two filled circles with the checks cut out -->
-                    <Viewbox
-                        Height="12"
-                        Visibility="{x:Bind local:MessageBubble.ShownFor(Bubble.StatusIcon, '4'), Mode=OneWay, FallbackValue=Collapsed}">
-                        <Canvas Width="39" Height="24">
-                            <Path Data="M360.495,229.539C367.791,229.539 373.715,235.462 373.715,242.759C373.715,250.055 367.791,255.979 360.495,255.979C353.198,255.979 347.275,250.055 347.275,242.759C347.275,235.462 353.198,229.539 360.495,229.539ZM353.232,244.628L357.123,248.447C357.333,248.653 357.616,248.767 357.91,248.762C358.204,248.758 358.483,248.636 358.687,248.424L367.178,239.574C367.598,239.136 367.583,238.44 367.146,238.02C366.708,237.6 366.011,237.614 365.591,238.052L357.87,246.1L354.772,243.059C354.339,242.634 353.642,242.64 353.217,243.073C352.792,243.506 352.799,244.203 353.232,244.628ZM345.1,245.291C345.689,248.898 347.518,252.091 350.134,254.418C348.277,255.414 346.155,255.979 343.902,255.979C336.605,255.979 330.682,250.055 330.682,242.759C330.682,235.462 336.605,229.539 343.902,229.539C346.155,229.539 348.277,230.104 350.134,231.099C347.022,233.868 345.023,237.863 344.901,242.323L341.277,246.1L338.179,243.059C337.746,242.634 337.049,242.64 336.624,243.073C336.199,243.506 336.206,244.203 336.639,244.628L340.53,248.447C340.74,248.653 341.023,248.767 341.317,248.762C341.61,248.758 341.89,248.636 342.094,248.424L345.1,245.291Z" Fill="{ThemeResource AccentTextFillColorPrimaryBrush}">
-                                <Path.RenderTransform>
-                                    <CompositeTransform
-                                        ScaleX="0.87531"
-                                        ScaleY="0.87531"
-                                        TranslateX="-288.575044"
-                                        TranslateY="-200.730342" />
-                                </Path.RenderTransform>
-                            </Path>
-                        </Canvas>
-                    </Viewbox>
-
-                    <!-- Name: the status words for screen readers and the tests; draws nothing -->
-                    <TextBlock
-                        AutomationProperties.AccessibilityView="Content"
-                        AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Status.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
-                        AutomationProperties.LiveSetting="Polite"
-                        AutomationProperties.Name="{x:Bind Bubble.StatusText, Mode=OneWay, FallbackValue=''}" />
-                </Grid>
-
-                <!-- Lock: end-to-end encrypted -->
-                <FontIcon
-                    VerticalAlignment="Center"
-                    AutomationProperties.Name="{x:Bind local:MessageBubble.EncryptedText}"
+                <!-- Reactions: a pill over the bubble's bottom corner; a click (or Enter or Space) opens the reaction picker, or in a
+                     group chat the list of who reacted (built in code). A whole-pixel height (24,
+                     more for large text) with corners of half of it, and its fill under the stroke, so the ends draw as smooth half
+                     circles at any scale. Its top 8 px overlap the back, and it keeps 6 px from the time -->
+                <Button
+                    x:Name="Pill"
+                    Grid.Column="2"
+                    MinHeight="24"
+                    Margin="6,-8,0,0"
+                    Padding="8,0"
+                    VerticalAlignment="Top"
+                    VerticalContentAlignment="Center"
+                    AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Reactions.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                    Background="{ThemeResource SolidBackgroundFillColorTertiaryBrush}"
+                    BackgroundSizing="OuterBorderEdge"
+                    BorderBrush="{ThemeResource ReactionPillBorderBrush}"
+                    BorderThickness="1"
+                    Click="OnPillClick"
+                    Content="{x:Bind Bubble.ReactionsText, Mode=OneWay, FallbackValue=''}"
+                    CornerRadius="12"
                     FontSize="12"
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                    Glyph="&#xE72E;"
-                    ToolTipService.ToolTip="{x:Bind local:MessageBubble.EncryptedText}"
-                    Visibility="{x:Bind Bubble.ShowsLock, Mode=OneWay, FallbackValue=Collapsed}" />
-            </StackPanel>
+                    UseLayoutRounding="True"
+                    Visibility="{x:Bind Bubble.HasReactions, Mode=OneWay, FallbackValue=Collapsed}">
+
+                    <!-- Hover And Press: opaque shades of the pill's own fill, so the button's 83 ms brush transition blends
+                         smoothly. The default hover fill is a faint see-through white, and blending the opaque fill into it
+                         passes through a bright half-opaque gray for a frame or two (the flash). No outline: the 1 px border is
+                         clear (ReactionPillBorderBrush in App.xaml; the fill runs under it, so the pill keeps its size). High
+                         contrast keeps an edge and the system button's own hover and press colors, so the pill and its hover
+                         still show -->
+                    <Button.Resources>
+                        <ResourceDictionary>
+                            <ResourceDictionary.ThemeDictionaries>
+                                <ResourceDictionary x:Key="Default">
+                                    <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="SolidBackgroundFillColorQuarternaryBrush" />
+                                    <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="SolidBackgroundFillColorSecondaryBrush" />
+                                    <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="Transparent" />
+                                    <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="Transparent" />
+                                </ResourceDictionary>
+                                <ResourceDictionary x:Key="Light">
+                                    <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="SolidBackgroundFillColorQuarternaryBrush" />
+                                    <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="SolidBackgroundFillColorSecondaryBrush" />
+                                    <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="Transparent" />
+                                    <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="Transparent" />
+                                </ResourceDictionary>
+                                <ResourceDictionary x:Key="HighContrast">
+                                    <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="{ThemeResource SystemColorHighlightTextColor}" />
+                                    <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="{ThemeResource SystemColorHighlightTextColor}" />
+                                    <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="{ThemeResource SystemColorHighlightColor}" />
+                                    <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="{ThemeResource SystemColorHighlightTextColor}" />
+                                </ResourceDictionary>
+                            </ResourceDictionary.ThemeDictionaries>
+                        </ResourceDictionary>
+                    </Button.Resources>
+                </Button>
+
+                <!-- Captions: the time or retry link, or the caption row, on the bubble's outer side -->
+                <StackPanel x:Name="Captions" Spacing="2">
+
+                    <!-- Time (Hidden Until The Bubble Is Clicked), Or The Retry Link When The Send Failed -->
+                    <Grid x:Name="Footer">
+                        <TextBlock
+                            AutomationProperties.AutomationId="{x:Bind local:MessageBubble.TimeIdOf(Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            Text="{x:Bind Bubble.Time, Mode=OneWay}"
+                            Visibility="{x:Bind local:MessageBubble.TimeVisibility(Bubble.IsTimeShown, Bubble.IsFailed, Bubble.ShowsStatusRow), Mode=OneWay}" />
+
+                        <!-- Not Sent: a red error mark before the retry link -->
+                        <StackPanel
+                            Orientation="Horizontal"
+                            Spacing="4"
+                            Visibility="{x:Bind Bubble.IsFailed, Mode=OneWay}">
+                            <FontIcon
+                                VerticalAlignment="Center"
+                                FontSize="12"
+                                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                Glyph="&#xE783;" />
+                            <HyperlinkButton
+                                Padding="0"
+                                AutomationProperties.AutomationId="{x:Bind local:MessageBubble.RetryIdOf(Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                                Click="OnRetryClick"
+                                Content="{x:Bind Bubble.NotSentText, Mode=OneWay, FallbackValue=''}"
+                                FontSize="12"
+                                Foreground="{ThemeResource SystemFillColorCriticalBrush}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Caption Row: only under the chat's newest bubble, until it is clicked. The time (Caption.{id}), then on my bubble
+                         the delivery icon (a stopwatch while sending, a check in a ring when sent, two when delivered, two filled when
+                         read), and the lock in an encrypted chat. The icon is drawn, not text; its name (Status.{id}) is "Sent",
+                         "Delivered" or "Read" for screen readers -->
+                    <StackPanel
+                        x:Name="StatusRow"
+                        Orientation="Horizontal"
+                        Spacing="4"
+                        Visibility="{x:Bind Bubble.ShowsStatusRow, Mode=OneWay, FallbackValue=Collapsed}">
+                        <TextBlock
+                            VerticalAlignment="Center"
+                            AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Caption.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            Text="{x:Bind Bubble.Time, Mode=OneWay}" />
+                        <TextBlock
+                            VerticalAlignment="Center"
+                            AutomationProperties.AccessibilityView="Raw"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            Text="&#x00B7;"
+                            Visibility="{x:Bind Bubble.ShowsCaptionDot, Mode=OneWay, FallbackValue=Collapsed}" />
+
+                        <!-- Delivery Icon: the owner's icons (Assets/Status/*.svg), 12 px tall. Each path is the SVG's own, placed
+                             by the SVG's own transforms (its two groups' matrices, folded into one scale and offset) on a canvas
+                             of the SVG's view box -->
+                        <Grid VerticalAlignment="Center">
+
+                            <!-- Sending: a stopwatch -->
+                            <Viewbox
+                                Height="12"
+                                Visibility="{x:Bind local:MessageBubble.ShownFor(Bubble.StatusIcon, '1'), Mode=OneWay, FallbackValue=Collapsed}">
+                                <Canvas Width="20" Height="24">
+                                    <Path Data="M210.356,281.588C211.001,282.376 211.388,283.383 211.388,284.48C211.388,287.002 209.339,289.051 206.817,289.051C204.294,289.051 202.245,287.002 202.245,284.48C202.245,281.957 204.294,279.908 206.817,279.908C207.872,279.908 208.845,280.267 209.619,280.869L210.268,280.093C210.45,279.875 210.774,279.846 210.991,280.028C211.208,280.209 211.237,280.533 211.056,280.751L210.356,281.588ZM206.817,280.935C204.86,280.935 203.272,282.523 203.272,284.48C203.272,286.436 204.86,288.024 206.817,288.024C208.773,288.024 210.361,286.436 210.361,284.48C210.361,282.523 208.773,280.935 206.817,280.935ZM206.303,282.053C206.303,281.77 206.533,281.54 206.817,281.54C207.1,281.54 207.33,281.77 207.33,282.053L207.33,284.48C207.33,284.763 207.1,284.993 206.817,284.993C206.533,284.993 206.303,284.763 206.303,284.48L206.303,282.053ZM205.132,279.027C204.849,279.027 204.619,278.797 204.619,278.514C204.619,278.231 204.849,278.001 205.132,278.001L208.34,278.001C208.623,278.001 208.853,278.231 208.853,278.514C208.853,278.797 208.623,279.027 208.34,279.027L205.132,279.027Z" Fill="{ThemeResource TextFillColorSecondaryBrush}">
+                                        <Path.RenderTransform>
+                                            <CompositeTransform
+                                                ScaleX="2.085664"
+                                                ScaleY="2.085664"
+                                                TranslateX="-421.569297"
+                                                TranslateY="-579.115477" />
+                                        </Path.RenderTransform>
+                                    </Path>
+                                </Canvas>
+                            </Viewbox>
+
+                            <!-- Sent: a check in a ring -->
+                            <Viewbox
+                                Height="12"
+                                Visibility="{x:Bind local:MessageBubble.ShownFor(Bubble.StatusIcon, '2'), Mode=OneWay, FallbackValue=Collapsed}">
+                                <Canvas Width="24" Height="24">
+                                    <Path Data="M360.495,229.539C367.791,229.539 373.715,235.462 373.715,242.759C373.715,250.055 367.791,255.979 360.495,255.979C353.198,255.979 347.275,250.055 347.275,242.759C347.275,235.462 353.198,229.539 360.495,229.539ZM360.495,231.737C354.412,231.737 349.473,236.676 349.473,242.759C349.473,248.841 354.412,253.78 360.495,253.78C366.577,253.78 371.516,248.841 371.516,242.759C371.516,236.676 366.577,231.737 360.495,231.737ZM353.232,244.628C352.799,244.203 352.792,243.506 353.217,243.073C353.642,242.64 354.339,242.634 354.772,243.059L357.87,246.1L365.591,238.052C366.011,237.614 366.708,237.6 367.146,238.02C367.583,238.44 367.598,239.136 367.178,239.574L358.687,248.424C358.483,248.636 358.204,248.758 357.91,248.762C357.616,248.767 357.333,248.653 357.123,248.447L353.232,244.628Z" Fill="{ThemeResource TextFillColorSecondaryBrush}">
+                                        <Path.RenderTransform>
+                                            <CompositeTransform
+                                                ScaleX="0.87531"
+                                                ScaleY="0.87531"
+                                                TranslateX="-303.749258"
+                                                TranslateY="-200.216764" />
+                                        </Path.RenderTransform>
+                                    </Path>
+                                </Canvas>
+                            </Viewbox>
+
+                            <!-- Delivered: two checks in rings -->
+                            <Viewbox
+                                Height="12"
+                                Visibility="{x:Bind local:MessageBubble.ShownFor(Bubble.StatusIcon, '3'), Mode=OneWay, FallbackValue=Collapsed}">
+                                <Canvas Width="38" Height="24">
+                                    <Path Data="M360.495,229.539C367.791,229.539 373.715,235.462 373.715,242.759C373.715,250.055 367.791,255.979 360.495,255.979C353.198,255.979 347.275,250.055 347.275,242.759C347.275,235.462 353.198,229.539 360.495,229.539ZM360.495,231.737C354.412,231.737 349.473,236.676 349.473,242.759C349.473,248.841 354.412,253.78 360.495,253.78C366.577,253.78 371.516,248.841 371.516,242.759C371.516,236.676 366.577,231.737 360.495,231.737ZM353.232,244.628C352.799,244.203 352.792,243.506 353.217,243.073C353.642,242.64 354.339,242.634 354.772,243.059L357.87,246.1L365.591,238.052C366.011,237.614 366.708,237.6 367.146,238.02C367.583,238.44 367.598,239.136 367.178,239.574L358.687,248.424C358.483,248.636 358.204,248.758 357.91,248.762C357.616,248.767 357.333,248.653 357.123,248.447L353.232,244.628ZM350.093,254.38C348.219,255.399 346.072,255.979 343.79,255.979C336.494,255.979 330.571,250.055 330.571,242.759C330.571,235.462 336.494,229.539 343.79,229.539C346.072,229.539 348.219,230.118 350.093,231.137C349.521,231.649 348.988,232.202 348.497,232.792C347.07,232.116 345.474,231.737 343.79,231.737C337.708,231.737 332.769,236.676 332.769,242.759C332.769,248.841 337.708,253.78 343.79,253.78C345.474,253.78 347.07,253.402 348.497,252.726C348.988,253.316 349.521,253.869 350.093,254.38ZM345.084,245.192L341.982,248.424C341.779,248.636 341.499,248.758 341.206,248.762C340.912,248.767 340.629,248.653 340.419,248.447L336.528,244.628C336.095,244.203 336.088,243.506 336.513,243.073C336.938,242.64 337.635,242.634 338.068,243.059L341.166,246.1L344.904,242.203C344.898,242.387 344.895,242.573 344.895,242.759C344.895,243.586 344.959,244.399 345.084,245.192Z" Fill="{ThemeResource TextFillColorSecondaryBrush}">
+                                        <Path.RenderTransform>
+                                            <CompositeTransform
+                                                ScaleX="0.87531"
+                                                ScaleY="0.87531"
+                                                TranslateX="-289.151299"
+                                                TranslateY="-200.730342" />
+                                        </Path.RenderTransform>
+                                    </Path>
+                                </Canvas>
+                            </Viewbox>
+
+                            <!-- Read: two filled circles with the checks cut out -->
+                            <Viewbox
+                                Height="12"
+                                Visibility="{x:Bind local:MessageBubble.ShownFor(Bubble.StatusIcon, '4'), Mode=OneWay, FallbackValue=Collapsed}">
+                                <Canvas Width="39" Height="24">
+                                    <Path Data="M360.495,229.539C367.791,229.539 373.715,235.462 373.715,242.759C373.715,250.055 367.791,255.979 360.495,255.979C353.198,255.979 347.275,250.055 347.275,242.759C347.275,235.462 353.198,229.539 360.495,229.539ZM353.232,244.628L357.123,248.447C357.333,248.653 357.616,248.767 357.91,248.762C358.204,248.758 358.483,248.636 358.687,248.424L367.178,239.574C367.598,239.136 367.583,238.44 367.146,238.02C366.708,237.6 366.011,237.614 365.591,238.052L357.87,246.1L354.772,243.059C354.339,242.634 353.642,242.64 353.217,243.073C352.792,243.506 352.799,244.203 353.232,244.628ZM345.1,245.291C345.689,248.898 347.518,252.091 350.134,254.418C348.277,255.414 346.155,255.979 343.902,255.979C336.605,255.979 330.682,250.055 330.682,242.759C330.682,235.462 336.605,229.539 343.902,229.539C346.155,229.539 348.277,230.104 350.134,231.099C347.022,233.868 345.023,237.863 344.901,242.323L341.277,246.1L338.179,243.059C337.746,242.634 337.049,242.64 336.624,243.073C336.199,243.506 336.206,244.203 336.639,244.628L340.53,248.447C340.74,248.653 341.023,248.767 341.317,248.762C341.61,248.758 341.89,248.636 342.094,248.424L345.1,245.291Z" Fill="{ThemeResource AccentTextFillColorPrimaryBrush}">
+                                        <Path.RenderTransform>
+                                            <CompositeTransform
+                                                ScaleX="0.87531"
+                                                ScaleY="0.87531"
+                                                TranslateX="-288.575044"
+                                                TranslateY="-200.730342" />
+                                        </Path.RenderTransform>
+                                    </Path>
+                                </Canvas>
+                            </Viewbox>
+
+                            <!-- Name: the status words for screen readers and the tests; draws nothing -->
+                            <TextBlock
+                                AutomationProperties.AccessibilityView="Content"
+                                AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Status.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                                AutomationProperties.LiveSetting="Polite"
+                                AutomationProperties.Name="{x:Bind Bubble.StatusText, Mode=OneWay, FallbackValue=''}" />
+                        </Grid>
+
+                        <!-- Lock: end-to-end encrypted -->
+                        <FontIcon
+                            VerticalAlignment="Center"
+                            AutomationProperties.Name="{x:Bind local:MessageBubble.EncryptedText}"
+                            FontSize="12"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Glyph="&#xE72E;"
+                            ToolTipService.ToolTip="{x:Bind local:MessageBubble.EncryptedText}"
+                            Visibility="{x:Bind Bubble.ShowsLock, Mode=OneWay, FallbackValue=Collapsed}" />
+                    </StackPanel>
+                    <!-- /Caption Row -->
+                </StackPanel>
+                <!-- /Captions -->
+            </Grid>
+            <!-- /Under The Bubble -->
         </StackPanel>
         <!-- /Bubble -->
     </Grid>
