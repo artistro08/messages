@@ -21,6 +21,7 @@ public sealed class TrayDriver
     private const string OverflowClass  = "TopLevelWindowForOverflowXamlIsland";
     private const string IconId         = "NotifyItemIcon";
     private const string ChevronName    = "Show Hidden Icons";
+    private const string ChevronId      = "SystemTrayIcon";
 
     private readonly UIA3Automation _automation;
 
@@ -191,8 +192,21 @@ public sealed class TrayDriver
         return overflow;
     }
 
-    private AutomationElement? Chevron() =>
-        FindTopLevel(TaskbarClass)?.FindFirstDescendant(cf => cf.ByName(ChevronName));
+    // The Chevron's Name Carries Its State On Newer Windows Builds ("Show Hidden Icons Hide" While The Overflow Is Open),
+    // So It Matches By Prefix Among The Taskbar's Own Tray Buttons
+    private AutomationElement? Chevron()
+    {
+        try
+        {
+            return FindTopLevel(TaskbarClass)?
+                .FindAllDescendants(cf => cf.ByAutomationId(ChevronId))
+                .FirstOrDefault(e => AppDriver.SafeName(e).StartsWith(ChevronName, StringComparison.Ordinal));
+        }
+        catch (System.Runtime.InteropServices.COMException)
+        {
+            return null;
+        }
+    }
 
     private AutomationElement? FindTopLevel(string className)
     {
