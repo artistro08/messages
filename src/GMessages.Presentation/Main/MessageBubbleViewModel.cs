@@ -34,9 +34,8 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     // A New Bubble Animates In Only When It Shows This Soon After It Was Added (Not Later, Scrolled Into View)
     private const long NewWindowMs = 1000;
 
-    // The Photo Bubble's Height Cap, And The Size A Tiny Photo Grows To, In Effective Pixels
+    // The Photo Bubble's Height Cap, In Effective Pixels
     private const double MaxPhotoHeight = 360;
-    private const double MinPhotoSide   = 120;
 
     // A Photo Without Dimensions Reserves A Square Of This Side
     private const double UnknownPhotoSide = 240;
@@ -316,7 +315,7 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     /// </summary>
     /// <remarks>
     /// The photo's own <c>Dimensions</c>, scaled down to fit the bubble's width and 360 px of height with its aspect
-    /// kept. A tiny photo (both sides under 120 px) grows until its longer side is 120 px. Unknown dimensions reserve a
+    /// kept. A photo is never shown bigger than its own pixels. Unknown dimensions reserve a
     /// 240 px square (narrower when the bubble is), which the image then fills, cropped.
     /// </remarks>
     /// <param name="width">The photo's width in pixels, or 0 when unknown.</param>
@@ -332,17 +331,35 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
             return (side, side);
         }
 
-        double scale = Math.Min(maxWidth / width, MaxPhotoHeight / height);
-        if (Math.Max(width, height) < MinPhotoSide)
+        // Never Bigger Than The Photo's Own Pixels: A Crisp Small Photo Beats A Blurry Big One (Owner)
+        double scale = Math.Min(Math.Min(maxWidth / width, MaxPhotoHeight / height), 1);
+        return (Math.Max(1, Math.Floor(width * scale)), Math.Max(1, Math.Floor(height * scale)));
+    }
+
+    /// <summary>
+    /// Gives the width to decode a photo's full image at, so it fills its bubble sharply.
+    /// </summary>
+    /// <remarks>
+    /// The bubble crops the image to fill its box (UniformToFill). Decoded only to the box's width, an image wider in
+    /// shape than the box (unknown dimensions reserve a square; a phone may report a rotated photo's sides swapped) was
+    /// then stretched up to the box's height: the blur. So it decodes wide enough to cover the box's height too, and
+    /// never wider than its own pixels (decoding up only blurs).
+    /// </remarks>
+    /// <param name="pixelWidth">The image's own width in pixels (as shown, after its orientation), or 0 when unknown.</param>
+    /// <param name="pixelHeight">The image's own height in pixels, or 0 when unknown.</param>
+    /// <param name="boxWidth">The photo's box width, in effective pixels.</param>
+    /// <param name="boxHeight">The photo's box height, in effective pixels.</param>
+    /// <returns>The decode width in effective pixels; the box's width when the image's size is unknown.</returns>
+    public static int FillDecodeWidth(int pixelWidth, int pixelHeight, double boxWidth, double boxHeight)
+    {
+        int box = (int)Math.Ceiling(Math.Max(1, boxWidth));
+        if (pixelWidth <= 0 || pixelHeight <= 0)
         {
-            scale = Math.Min(scale, MinPhotoSide / Math.Max(width, height));
-        }
-        else
-        {
-            scale = Math.Min(scale, 1);
+            return box;
         }
 
-        return (Math.Max(1, Math.Floor(width * scale)), Math.Max(1, Math.Floor(height * scale)));
+        double cover = Math.Max(boxWidth, boxHeight * pixelWidth / pixelHeight);
+        return (int)Math.Max(1, Math.Min(pixelWidth, Math.Ceiling(cover)));
     }
 
     /// <summary>
