@@ -365,6 +365,46 @@ public sealed class ConversationListViewModelTests
         Assert.IsFalse(list.IsLoadingMore);
     }
 
+    /// <summary>
+    /// The next page asked for while the first is still loading (its last row showed mid-load, and won't show again
+    /// until scrolled away and back) runs once that load ends, from the cursor it sent back, instead of being dropped.
+    /// After a failed page, the next ask loads again.
+    /// </summary>
+    [TestMethod]
+    public async Task LoadMore_AskedMidLoad_RunsAfter_AndAfterAFailure()
+    {
+        using var rig = new MainRig();
+        rig.Page(MainRig.Conv("a", "Ann"));
+        rig.Client.ConversationsPage.Cursor = new Cursor { LastItemID = "next" };
+        var gate            = new TaskCompletionSource();
+        rig.Client.ListGate = gate;
+        using var list      = NewList(rig);
+
+        Task first = list.LoadAsync();
+        await list.LoadMoreAsync();
+        Assert.HasCount(1, rig.Client.ListCalls);
+        gate.SetResult();
+        await first;
+
+        Assert.HasCount(2, rig.Client.ListCalls);
+        Assert.AreEqual("next", rig.Client.ListCursors[1]?.LastItemID);
+        Assert.IsFalse(list.IsLoading);
+        Assert.IsFalse(list.IsLoadingMore);
+
+        // A Failed Page Keeps The Cursor And Resets The Flags; The Next Ask Tries Again
+        rig.Page(MainRig.Conv("a", "Ann"), MainRig.Conv("b", "Bo", minutesAgo: 30));
+        rig.Client.ConversationsPage.Cursor = new Cursor { LastItemID = "next" };
+        await list.LoadAsync();
+        rig.Client.ListThrows = new TimeoutException();
+        await list.LoadMoreAsync();
+        Assert.IsFalse(list.IsLoading);
+        Assert.IsFalse(list.IsLoadingMore);
+        rig.Client.ListThrows = null;
+        int calls = rig.Client.ListCalls.Count;
+        await list.LoadMoreAsync();
+        Assert.HasCount(calls + 1, rig.Client.ListCalls);
+    }
+
     [TestMethod]
     public async Task Resynced_DuringLoad_RunsASecondLoad()
     {
