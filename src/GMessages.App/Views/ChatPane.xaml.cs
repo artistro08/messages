@@ -201,6 +201,9 @@ public sealed partial class ChatPane : UserControl
     private readonly List<(TextBlock Header, List<(Button Button, string Emoji, string Words)> Buttons)> _emojiGroups = [];
     private MessageBubbleViewModel? _emojiTarget;
 
+    // More Reactions Picked: What The Emoji Picker Opens For Once The Reaction Picker Has Closed
+    private (MessageBubbleViewModel Bubble, MessageBubble View, FrameworkElement Anchor)? _emojiPending;
+
     // The Picker's Buttons With The Fill Behind Each And Their Emoji, So The One Matching My Reaction Can Show Selected
     private readonly List<(Button Button, Border Back, string Emoji)> _reactionButtons = [];
 
@@ -271,6 +274,13 @@ public sealed partial class ChatPane : UserControl
         {
             _reactView?.KeepShown(false);
             _reactView = null;
+
+            // More Reactions Was Picked: The Emoji Picker Opens Now (See OnMoreReactionsClick)
+            if (_emojiPending is { } pending)
+            {
+                _emojiPending = null;
+                ShowEmojiPicker(pending.Bubble, pending.View, pending.Anchor);
+            }
         };
 
         // Typing Dots Bounce Only While Their Bubble Shows, And Follow Windows' Animation Setting As It Changes (Raised Off The
@@ -1802,7 +1812,9 @@ public sealed partial class ChatPane : UserControl
             return;
         }
 
-        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => ShowEmojiPicker(bubble, view, anchor));
+        // Opened Once The Reaction Picker's Closed Has Run: Before That, Its Close Hides The Hover Strip The Picker Opens Over,
+        // And The Emoji Picker Didn't Show (Seen On A Cold First Run)
+        _emojiPending = (bubble, view, anchor);
     }
 
     // The Emoji Picker: A Search Box Over The Catalog's Emoji By Category, Scrolling, In A Flyout Where The Reaction Picker Was

@@ -924,11 +924,23 @@ public sealed partial class MessageBubble : UserControl
     // The Full Image's Layer Clipped To The Photo's Rounded Corners (An Image Isn't Clipped By Its Border's Corners)
     private void ClipPhotoFull()
     {
-        Visual visual = ElementCompositionPreview.GetElementVisual(PhotoFull);
+        // Not Laid Out Yet (No Photo, Or Before Its First Layout): Its SizeChanged Clips It Later. A Corner Can't Be Rounder
+        // Than Half The Shorter Side, Or The Clip Is Refused (Which Crashed The App On Opening A Chat)
+        float width  = (float)PhotoFull.ActualWidth;
+        float height = (float)PhotoFull.ActualHeight;
+        if (width <= 0 || height <= 0)
+        {
+            return;
+        }
+
+        float most     = Math.Min(width, height) / 2;
         CornerRadius r = Photo.CornerRadius;
+        Visual visual  = ElementCompositionPreview.GetElementVisual(PhotoFull);
         visual.Clip    = visual.Compositor.CreateRectangleClip(
-            0, 0, (float)PhotoFull.ActualWidth, (float)PhotoFull.ActualHeight,
-            new Vector2((float)r.TopLeft), new Vector2((float)r.TopRight), new Vector2((float)r.BottomRight), new Vector2((float)r.BottomLeft));
+            0, 0, width, height,
+            Corner(r.TopLeft, most), Corner(r.TopRight, most), Corner(r.BottomRight, most), Corner(r.BottomLeft, most));
+
+        static Vector2 Corner(double radius, float most) => new(Math.Min((float)radius, most));
     }
 
     private void ShowPhotoFailed()
