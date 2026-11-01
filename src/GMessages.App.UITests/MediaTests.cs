@@ -432,6 +432,30 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
+    /// A chip's remove × keeps its round fill while hovered (the icon style's clear hover doesn't wipe it).
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Attach_RemoveButton_KeepsItsFillOnHover()
+    {
+        await OpenMediaChatAsync();
+        Pick(("notes.pdf", System.Text.Encoding.UTF8.GetBytes("%PDF-1.4 notes")));
+        App.Find("Chat.Attach").Patterns.Invoke.Pattern.Invoke();
+        System.Drawing.Rectangle remove = App.Find("Chat.RemoveAttachment.1").BoundingRectangle;
+
+        // Inside The Circle, Clear Of The ×: Its Fill
+        var at = new System.Drawing.Point(remove.Left + (remove.Width / 2), remove.Top + 4);
+        Thread.Sleep(300);
+        System.Drawing.Color resting = PixelAt(at);
+        PointerInput.Hover(remove);
+        Thread.Sleep(400);
+        System.Drawing.Color hovered = PixelAt(at);
+
+        int change = Math.Abs(resting.R - hovered.R) + Math.Abs(resting.G - hovered.G) + Math.Abs(resting.B - hovered.B);
+        Assert.IsTrue(change < 30, $"The × circle's fill went from {resting} to {hovered} on hover.");
+    }
+
+    /// <summary>
     /// The attachment chips sit right on the message box, like the reply chip (owner: "any attachment should do that"),
     /// and with a reply as well they stack: the reply on top, then the chips, then the box.
     /// </summary>
