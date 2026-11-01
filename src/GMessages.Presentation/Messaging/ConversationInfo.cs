@@ -46,6 +46,13 @@ public sealed record ConversationInfo(
     public bool IsMuted { get; init; }
 
     /// <summary>
+    /// Gets the label of the newest message's media ("Image", "Video", "GIF", "Voice message" or the file name), shown
+    /// when the phone sent no snippet text; empty when unknown or not media.
+    /// </summary>
+    /// <remarks>The phone's snippet is empty for media with no caption; the store fills this from the saved message.</remarks>
+    public string SnippetMedia { get; init; } = string.Empty;
+
+    /// <summary>
     /// Copies the fields the app needs out of a protocol conversation.
     /// </summary>
     /// <remarks>The phone's timestamps are in microseconds (<c>time.UnixMicro</c> in the Go connector).</remarks>

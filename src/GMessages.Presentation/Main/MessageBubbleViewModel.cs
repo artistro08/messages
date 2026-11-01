@@ -557,19 +557,7 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     /// </summary>
     /// <param name="media">The media.</param>
     /// <returns>The label.</returns>
-    public static string MediaLabel(MediaPart media)
-    {
-        ArgumentNullException.ThrowIfNull(media);
-
-        return media.Kind switch
-        {
-            MessageKind.Photo when media.Mime == "image/gif" => ChatCopy.QuoteGif,
-            MessageKind.Photo                                => ChatCopy.QuoteImage,
-            MessageKind.Video                                => ChatCopy.QuoteVideo,
-            MessageKind.File when media.Name.Length > 0      => media.Name,
-            _                                                => ChatFormat.KindLabel(media.Kind),
-        };
-    }
+    public static string MediaLabel(MediaPart media) => ChatFormat.MediaLabel(media);
 
     // A Label (Italic), Not The Sender's File Name
     private static bool IsLabel(MediaPart media) => media is not { Kind: MessageKind.File, Name.Length: > 0 };

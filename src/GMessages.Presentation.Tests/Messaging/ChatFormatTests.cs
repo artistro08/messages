@@ -26,6 +26,25 @@ public sealed class ChatFormatTests
     }
 
     [TestMethod]
+    [DataRow(false, 1L, "", "You: Image")]
+    [DataRow(false, 0L, "", "Image")]
+    [DataRow(true, 0L, "Rachel Green", "Rachel: Image")]
+    public void Snippet_NoText_ShowsTheMediaLabel(bool isGroup, long fromMe, string displayName, string expected)
+    {
+        var c = new Conversation { ConversationID = "c1", IsGroupChat = isGroup, LatestMessage = new LatestMessage { FromMe = fromMe, DisplayName = displayName } };
+
+        Assert.AreEqual(expected, ChatFormat.Snippet(ConversationInfo.From(c) with { SnippetMedia = "Image" }));
+    }
+
+    [TestMethod]
+    public void Snippet_Caption_WinsOverTheMediaLabel()
+    {
+        var c = new Conversation { ConversationID = "c1", LatestMessage = new LatestMessage { DisplayContent = "look", FromMe = 1 } };
+
+        Assert.AreEqual("You: look", ChatFormat.Snippet(ConversationInfo.From(c) with { SnippetMedia = "Image" }));
+    }
+
+    [TestMethod]
     [DataRow("2026-10-29T15:04:00-04:00", "2026-10-29T18:00:00-04:00", "3:04 PM")]   // today: time
     [DataRow("2026-10-27T15:04:00-04:00", "2026-10-29T18:00:00-04:00", "Tue")]       // within 7 days: weekday
     [DataRow("2026-03-02T15:04:00-05:00", "2026-10-29T18:00:00-04:00", "Mar 2")]     // same year: month day

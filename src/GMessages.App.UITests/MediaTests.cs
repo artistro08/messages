@@ -54,6 +54,21 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
+    /// A photo with no caption names itself in its chat list row ("Image"), though the phone sends no snippet text for it.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task ReceivedPhoto_RowSnippetSaysImage()
+    {
+        await OpenMediaChatAsync();
+
+        Server.Phone.PushIncomingMedia("c-media", "image/png", Png(300, 200, SplitColors), "row.png");
+
+        Wait.Until(() => App.TryFind("Row.c-media") is { } row && AppDriver.Search(row, e => AppDriver.SafeName(e) == ChatCopy.QuoteImage) is not null,
+            AppDriver.DefaultTimeout, () => "Mia's row never named the photo Image.");
+    }
+
+    /// <summary>
     /// A thumbnail-only photo shows blurred first, asks the phone for its full size, and turns sharp when the phone sends
     /// it (the message edit swaps its media). The bubble keeps the photo's shape from its dimensions throughout.
     /// </summary>
