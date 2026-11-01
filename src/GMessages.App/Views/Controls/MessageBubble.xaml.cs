@@ -188,11 +188,8 @@ public sealed partial class MessageBubble : UserControl
     // The Image Bytes The Card Shows (Or Is Decoding), So A Change Decodes Once
     private byte[]? _previewImage;
 
-    // A Click On The Preview Card, The Photo Or The File Card Also Reaches The Bubble's Back, Which Must Not Toggle The
-    // Time For It
-    private bool _previewTapped;
-
-    // Same For A Link In The Text: Its Click And The Back's Tap Come In Either Order, So The Tap Waits A Turn
+    // A Click On A Link In The Text Also Reaches The Bubble's Back, Which Must Not Toggle The Time For It. Its Click And
+    // The Back's Tap Come In Either Order, So The Tap Waits A Turn
     private bool _linkClicked;
 
     // The Text And ID The Text's Runs Were Built For: Rebuilt Only When They Change (A Rebuild Drops A Selection)
@@ -252,11 +249,9 @@ public sealed partial class MessageBubble : UserControl
     // The Video's Still Frame Once It Shows, Which The Viewer Grows Out Of The Bubble Before Its Player Takes Over
     private ImageSource? _videoFrameImage;
 
-    // Moves The Pill Back Onto A Short Bubble's Corner When The Time Under It Is Too Wide To Sit Beside It (See LayPill)
-    private readonly TranslateTransform _pillShift = new();
-
     // The Reactions The Pill Shows, So A Change On The Same Bubble Pops It In; Set When A Pill Just Shown Waits For Its
-    // Size To Pop; And The Pill Host's Visual (No Implicit Transitions On It, So Windows Hands It Out), Taken Once
+    // Size To Pop; And The Pill Host's Visual (No Implicit Transitions On It, So Windows Hands It Out), Taken Once Per
+    // Pill (The Pill Unloads With The Last Reaction, And A New One Loads With The Next)
     private string _reactionsShown = string.Empty;
     private bool _popPill;
     private Visual? _pillVisual;
@@ -268,18 +263,12 @@ public sealed partial class MessageBubble : UserControl
     {
         InitializeComponent();
 
-        // Behavior
+        // Behavior. The Parts A Message Doesn't Use (Quote, Photo, Video, File Card, Voice, Upload Bar, Preview Card, Pill,
+        // Retry Footer, Caption Row) Aren't Made (x:Load), So Their Own Wiring Sits On Them In The XAML, Made With Them
         Back.AddHandler(TappedEvent, new TappedEventHandler(OnBackTapped), handledEventsToo: true);
-        Preview.AddHandler(TappedEvent, new TappedEventHandler((_, _) => _previewTapped = true), handledEventsToo: true);
-        Photo.AddHandler(TappedEvent, new TappedEventHandler((_, _) => _previewTapped = true), handledEventsToo: true);
-        FileCard.AddHandler(TappedEvent, new TappedEventHandler((_, _) => _previewTapped = true), handledEventsToo: true);
-        Voice.AddHandler(TappedEvent, new TappedEventHandler((_, _) => _previewTapped = true), handledEventsToo: true);
-        Video.AddHandler(TappedEvent, new TappedEventHandler((_, _) => _previewTapped = true), handledEventsToo: true);
-        QuoteButton.AddHandler(TappedEvent, new TappedEventHandler((_, _) => _previewTapped = true), handledEventsToo: true);
 
-        // A Playing Video Stops When The Bubble Leaves The Tree, And Its Player Keeps The Bubble's Corners
-        Unloaded               += (_, _) => ReleaseVideo();
-        VideoHost.SizeChanged  += (_, _) => ClipVideoHost();
+        // A Playing Video Stops When The Bubble Leaves The Tree
+        Unloaded += (_, _) => ReleaseVideo();
 
         // The Row Under The Bubble Is At Least As Wide As The Back (Inside Its Margins), So The Pill Sits On The Back's Corner
         Back.SizeChanged += (_, _) =>
@@ -289,44 +278,13 @@ public sealed partial class MessageBubble : UserControl
         };
         Under.SizeChanged    += (_, _) => LayPill();
         Captions.SizeChanged += (_, _) => LayPill();
-        PillHost.RenderTransform = _pillShift;
-
-        // A Pill That Just Appeared Pops In Once It Has Its Size (Its Middle Is Where It Grows From)
-        PillHost.SizeChanged += (_, _) =>
-        {
-            LayPill();
-            if (_popPill)
-            {
-                _popPill = false;
-                PopPill();
-            }
-        };
 
         // The Text's Own Menu Would Win A Right-Click On It, So It Gets The Bubble Menu Too (Which Has Copy)
         Body.ContextFlyout = Menu;
         Menu.Closed       += (_, _) => KeepShown(false);
 
-        // Copy
-        AutomationProperties.SetName(HoverReact, ChatCopy.React);
-        ToolTipService.SetToolTip(HoverReact, ChatCopy.React);
-        AutomationProperties.SetName(HoverReply, ChatCopy.Reply);
-        ToolTipService.SetToolTip(HoverReply, ChatCopy.Reply);
-        AutomationProperties.SetName(HoverMore, ChatCopy.MoreOptions);
-        ToolTipService.SetToolTip(HoverMore, ChatCopy.MoreOptions);
-
-        // The Photo's Layers Take The Photo's Rounded Corners (Bound Once, On The Button). A Still Photo Is The Full
-        // Layer's Brush, Which Its Corners Clip; Only A GIF's Image Needs The Composition Clip (See ClipPhotoFull)
-        Photo.RegisterPropertyChangedCallback(Control.CornerRadiusProperty, (_, _) =>
-        {
-            PhotoBlur.CornerRadius = PhotoFull.CornerRadius = Photo.CornerRadius;
-            ClipPhotoFull();
-        });
-        PhotoFullImage.SizeChanged += (_, _) => ClipPhotoFull();
-        PhotoFullImage.Loaded      += (_, _) => ClipPhotoFull(mayTake: true);
-
         // Links Follow The Text's Color: Its Side's State And The Theme Set It
         Body.RegisterPropertyChangedCallback(TextBlock.ForegroundProperty, (_, _) => ColorLinks());
-        ShowVoicePlaying(false, 0);
     }
 
     /// <summary>
@@ -366,6 +324,9 @@ public sealed partial class MessageBubble : UserControl
 
     /// <summary>Gets the menu's Reply text.</summary>
     public static string ReplyText => ChatCopy.Reply;
+
+    /// <summary>Gets the hover strip ⋮'s name and tooltip.</summary>
+    public static string MoreOptionsText => ChatCopy.MoreOptions;
 
     /// <summary>Gets the preview card menu's Copy link text.</summary>
     public static string CopyLinkText => ChatCopy.CopyLink;
@@ -426,6 +387,12 @@ public sealed partial class MessageBubble : UserControl
     /// <param name="systemVisual">True when the row's system focus visual draws (high contrast).</param>
     internal void ShowFocusRing(bool shown, bool systemVisual)
     {
+        // Keyboard Focus Loads The Hover Strip, As The Pointer Does
+        if (shown)
+        {
+            LoadHoverStrip();
+        }
+
         VisualStateManager.GoToState(this, shown ? "RingShown" : "RingHidden", false);
         TestHooks.ShowState(Body, (shown ? "FocusRing" : "NoRing") + (systemVisual ? "+SystemFocus" : string.Empty));
     }
@@ -441,8 +408,28 @@ public sealed partial class MessageBubble : UserControl
         _keepShown = keep;
         if (!keep && !_pointerOver)
         {
-            VisualStateManager.GoToState(this, "Hidden", Ui.AnimationsEnabled);
+            ShowHover(false, Ui.AnimationsEnabled);
         }
+    }
+
+    // Loads The Hover Strip Once (It Then Stays): Most Bubbles Are Never Hovered
+    private void LoadHoverStrip()
+    {
+        if (HoverStrip is null)
+        {
+            FindName(nameof(HoverStrip));
+        }
+    }
+
+    // Shows Or Hides The Hover Strip. Shown Loads It First: Shown's Storyboard And Setters Target It
+    private void ShowHover(bool shown, bool animate)
+    {
+        if (shown)
+        {
+            LoadHoverStrip();
+        }
+
+        VisualStateManager.GoToState(this, shown ? "Shown" : "Hidden", animate);
     }
 
     // =========================================================================
@@ -569,6 +556,15 @@ public sealed partial class MessageBubble : UserControl
     /// <returns>The pill's margin.</returns>
     public static Thickness PillMargin(bool fromMe) =>
         fromMe ? new(0, -PillOverlap, PillGap, 0) : new(PillGap, -PillOverlap, 0, 0);
+
+    /// <summary>
+    /// Puts the hover strip's slot beside the back on the bubble's inner side: the right column (2) beside a received
+    /// back, the left one (0) beside a sent one.
+    /// </summary>
+    /// <remarks>Bound with <c>x:Bind</c>, not a Side state setter, so the setter never forces the deferred strip to load.</remarks>
+    /// <param name="fromMe">True for a sent bubble.</param>
+    /// <returns>The slot's column.</returns>
+    public static int StripColumn(bool fromMe) => fromMe ? 0 : 2;
 
     /// <summary>
     /// Gives the avatar lane's width: received bubbles in a group chat keep it, so their avatar lines up.
@@ -725,6 +721,77 @@ public sealed partial class MessageBubble : UserControl
     }
 
     // =========================================================================
+    // DEFERRED PARTS
+    // =========================================================================
+
+    // A Part Loaded (Or Back In The Tree): Its States Again, Since One Made Afresh Has None Of Its Group's Setters
+    private void OnPartLoaded(object sender, RoutedEventArgs e) => ShowPartStates(refresh: true);
+
+    // The Parts' Own States: The On-Accent Brushes On A Sent SMS Bubble's Parts, And My Reaction's Fill On The Pill. Only
+    // On A Loaded Part: A State's Setter Would Load Its Part. With Refresh, A State Is Gone To Again Through The Plain One,
+    // For A Part Made Afresh While Its Group Already Sat In The State (Going To The Same State Again Does Nothing)
+    private void ShowPartStates(bool refresh)
+    {
+        bool sms = Bubble is { FromMe: true, IsRcs: false };
+        GoToPartState(QuoteButton, sms ? "QuoteOnAccent" : "QuotePlain", "QuotePlain", refresh);
+        GoToPartState(FileCard, sms ? "FileOnAccent" : "FilePlain", "FilePlain", refresh);
+        GoToPartState(Voice, sms ? "VoiceOnAccent" : "VoicePlain", "VoicePlain", refresh);
+        GoToPartState(Preview, sms ? "PreviewOnAccent" : "PreviewPlain", "PreviewPlain", refresh);
+        GoToPartState(PillHost, Bubble?.HasMyReaction == true ? "Mine" : "NotMine", "NotMine", refresh);
+    }
+
+    private void GoToPartState(FrameworkElement? part, string state, string plain, bool refresh)
+    {
+        if (part is null)
+        {
+            return;
+        }
+
+        if (refresh && state != plain)
+        {
+            VisualStateManager.GoToState(this, plain, false);
+        }
+
+        VisualStateManager.GoToState(this, state, false);
+    }
+
+    // True When The Element Sits In The Quote, Photo, Video, File Card, Voice Or Preview Card, Whose Taps Are Their Own
+    private bool InPart(DependencyObject? element)
+    {
+        for (DependencyObject? at = element; at is not null && !ReferenceEquals(at, Back); at = VisualTreeHelper.GetParent(at))
+        {
+            if (ReferenceEquals(at, QuoteButton) || ReferenceEquals(at, Photo) || ReferenceEquals(at, Video)
+                || ReferenceEquals(at, FileCard) || ReferenceEquals(at, Voice) || ReferenceEquals(at, Preview))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // The Photo's Full Image: Clipped Once Laid Out, Reshaped With Its Size
+    private void OnPhotoFullLoaded(object sender, RoutedEventArgs e) => ClipPhotoFull(mayTake: true);
+
+    private void OnPhotoFullSizeChanged(object sender, SizeChangedEventArgs e) => ClipPhotoFull();
+
+    // The Playing Video Keeps The Bubble's Corners
+    private void OnVideoHostSizeChanged(object sender, SizeChangedEventArgs e) => ClipVideoHost();
+
+    // A Pill That Just Appeared Pops In Once It Is In The Tree With Its Size (Its Middle Is Where It Grows From)
+    private void OnPillHostLoaded(object sender, RoutedEventArgs e)
+    {
+        ShowPartStates(refresh: true);
+        TryPopPill();
+    }
+
+    private void OnPillHostSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        LayPill();
+        TryPopPill();
+    }
+
+    // =========================================================================
     // EVENT HANDLERS
     // =========================================================================
 
@@ -754,7 +821,7 @@ public sealed partial class MessageBubble : UserControl
         view._pointerOver = false;
         view._keepShown   = false;
         view._canAct      = view.Bubble?.CanAct == true;
-        VisualStateManager.GoToState(view, "Hidden", false);
+        view.ShowHover(false, false);
         view.ShowFocusRing(false, false);
 
         if (e.OldValue is MessageBubbleViewModel old_bubble)
@@ -775,10 +842,15 @@ public sealed partial class MessageBubble : UserControl
         view.ShowVoice();
         view.ShowVideo();
 
-        // Another Message's Reactions Show As They Are, With No Pop (A Recycled Row's Half-Run Pop Is Put Back)
+        // Another Message's Reactions Show As They Are, With No Pop (A Recycled Row's Half-Run Pop Is Put Back). With None,
+        // The Pill Unloads, Its Visual With It
         view._reactionsShown = view.Bubble?.ReactionsText ?? string.Empty;
         view._popPill        = false;
         view.RestPill();
+        if (view._reactionsShown.Length == 0)
+        {
+            view._pillVisual = null;
+        }
 
         // A Bubble Added Live Animates In, Once (The Flag Clears, So A Recycled Row Never Replays It)
         if (view.Bubble?.TakeNew() == true && Ui.AnimationsEnabled)
@@ -825,14 +897,18 @@ public sealed partial class MessageBubble : UserControl
         ShowVideo();
         ShowHoverStrip();
         ShowReactionChange();
+
+        // The Photo's Corners Follow The Group (A Bubble Added Below), And A GIF's Clip With Them
+        ClipPhotoFull();
     }
 
     // =========================================================================
     // REACTION PILL
     // =========================================================================
 
-    // The Same Bubble's Reactions Changed: The Pill Pops In, At Once When It Already Shows, Else Once It Has Its Size
-    // (Hidden Until Then, So It Never Shows A Frame At Full Size First). Only With Windows' Animation Effects On
+    // The Same Bubble's Reactions Changed: The Pill Pops In, At Once When It Already Shows, Else Once It Is In The Tree
+    // With Its Size (Hidden Until Then, So It Never Shows A Frame At Full Size First). Only With Windows' Animation
+    // Effects On. The Last Reaction Gone, The Pill Unloads With Its Visual
     private void ShowReactionChange()
     {
         string text = Bubble?.ReactionsText ?? string.Empty;
@@ -842,18 +918,38 @@ public sealed partial class MessageBubble : UserControl
         }
 
         _reactionsShown = text;
-        if (text.Length == 0 || !Ui.AnimationsEnabled || TakePillVisual() is not { } visual)
+        if (text.Length == 0)
+        {
+            _popPill    = false;
+            _pillVisual = null;
+            return;
+        }
+
+        if (!Ui.AnimationsEnabled)
         {
             return;
         }
 
-        if (PillHost.ActualWidth > 0)
+        FindName(nameof(PillHost));
+        _popPill = true;
+        TryPopPill();
+    }
+
+    // Pops A Waiting Pill Once Windows Hands Out Its Visual (In The Live Tree) And It Has Its Size; Until Then It Is Hidden
+    private void TryPopPill()
+    {
+        if (!_popPill || TakePillVisual() is not { } visual)
         {
+            return;
+        }
+
+        if (PillHost!.ActualWidth > 0)
+        {
+            _popPill = false;
             PopPill();
             return;
         }
 
-        _popPill       = true;
         visual.Opacity = 0;
     }
 
@@ -861,7 +957,7 @@ public sealed partial class MessageBubble : UserControl
     // WinUI's Fast-Out-Slow-In Curve. Layout Never Moves
     private void PopPill()
     {
-        if (TakePillVisual() is not { } visual)
+        if (PillHost is null || TakePillVisual() is not { } visual)
         {
             return;
         }
@@ -906,12 +1002,23 @@ public sealed partial class MessageBubble : UserControl
     // It Is Centered 4 px In From The Back's Edge Instead, Over The Corner (Owner, Plan 10). The Pill Sits At Its Column's
     // End (The Row's Right On Received, Its Left On Sent), So It Is Moved There From Wherever The Row's Width Put It. The
     // Time (On The Received Row's Left, The Sent Row's Right) Drops Below The Pill When The Two Would Meet; Only Its Top
-    // Margin Changes, Never Its Width, So The Layout Can't Loop
+    // Margin Changes, Never Its Width, So The Layout Can't Loop. No Pill (Not Loaded, Or Its Last Reaction Just Went):
+    // The Time Sits Back In Its Place
     private void LayPill()
     {
+        if (PillHost is null || PillShift is null || Bubble?.HasReactions != true)
+        {
+            if (Captions.Margin != default)
+            {
+                Captions.Margin = default;
+            }
+
+            return;
+        }
+
         double pill_width = PillHost.ActualWidth;
-        bool shown        = PillHost.Visibility == Visibility.Visible && pill_width > 0;
-        bool sent         = Bubble?.FromMe == true;
+        bool shown        = pill_width > 0;
+        bool sent         = Bubble.FromMe;
         bool short_back   = Under.MinWidth < pill_width * 2;
 
         // Received: The Row Starts 12 px In From The Back's Left; Its MinWidth Point Is 12 px In From The Back's Right
@@ -928,9 +1035,9 @@ public sealed partial class MessageBubble : UserControl
             : left < Captions.ActualWidth + PillGap);
 
         var margin = new Thickness(0, drop ? Math.Max(0, PillHost.ActualHeight - PillOverlap) : 0, 0, 0);
-        if (_pillShift.X != shift_x)
+        if (PillShift.X != shift_x)
         {
-            _pillShift.X = shift_x;
+            PillShift.X = shift_x;
         }
 
         if (Captions.Margin != margin)
@@ -943,7 +1050,7 @@ public sealed partial class MessageBubble : UserControl
     // A Crash)
     private Visual? TakePillVisual()
     {
-        if (_pillVisual is not null || !PillHost.IsLoaded)
+        if (_pillVisual is not null || PillHost is not { IsLoaded: true })
         {
             return _pillVisual;
         }
@@ -971,10 +1078,11 @@ public sealed partial class MessageBubble : UserControl
         }
 
         _canAct = can_act;
-        VisualStateManager.GoToState(this, can_act && (_pointerOver || _keepShown) ? "Shown" : "Hidden", Ui.AnimationsEnabled);
+        ShowHover(can_act && (_pointerOver || _keepShown), Ui.AnimationsEnabled);
     }
 
-    // Decodes The Card's Image From Its Bytes; Bytes Windows Can't Read Leave The Card Without One
+    // Decodes The Card's Image From Its Bytes; Bytes Windows Can't Read Leave The Card Without One. No Card: It Unloads,
+    // Its Image With It
     private async void ShowPreviewImage()
     {
         byte[]? bytes = Bubble?.Preview?.Image;
@@ -983,7 +1091,13 @@ public sealed partial class MessageBubble : UserControl
             return;
         }
 
-        _previewImage           = bytes;
+        _previewImage = bytes;
+        if (Bubble?.Preview is null)
+        {
+            return;
+        }
+
+        FindName(nameof(Preview));
         PreviewImage.Source     = null;
         PreviewImage.Visibility = Visibility.Collapsed;
         if (bytes is null)
@@ -1017,12 +1131,25 @@ public sealed partial class MessageBubble : UserControl
             return;
         }
 
-        bool same_message = part is not null && Bubble is not null && ReferenceEquals(Bubble, _photoBubble);
+        // No Photo: The Part Unloads With Its Images (x:Load), And A GIF's Clip Visual With It; A Load Still Running Stops
+        if (part is null)
+        {
+            _photoPart       = null;
+            _photoBubble     = Bubble;
+            _photoFailed     = false;
+            _photoAnimated   = false;
+            _photoFullVisual = null;
+            NextPhotoLoad();
+            return;
+        }
+
+        FindName(nameof(Photo));
+        bool same_message = Bubble is not null && ReferenceEquals(Bubble, _photoBubble);
         if (same_message && KeepSentMedia(_photoPart, part))
         {
             // An Echo With Only A Thumbnail (An MMS Photo's) Keeps The Sent Bytes On Show: Loading It Showed The Tiny
             // Thumbnail Blurred, Waiting For A Full Size That May Never Come
-            _photoPart = part!.MediaId.Length > 0 ? part : _photoPart;
+            _photoPart = part.MediaId.Length > 0 ? part : _photoPart;
             SizePhoto();
             return;
         }
@@ -1046,10 +1173,7 @@ public sealed partial class MessageBubble : UserControl
 
         ShowPhotoNote(null, string.Empty);
         SizePhoto();
-        if (part is not null)
-        {
-            _ = LoadPhotoAsync(part, load, again: false);
-        }
+        _ = LoadPhotoAsync(part, load, again: false);
     }
 
     // The Same Media Though The Bubble's Update Built A New Part (A Status Or Reaction Change): Nothing To Load Again.
@@ -1090,7 +1214,12 @@ public sealed partial class MessageBubble : UserControl
         }
 
         (double width, double height) = MessageBubbleViewModel.PhotoSize(media.Width, media.Height, _photoMaxWidth);
-        FrameworkElement shown        = bubble.HasVideo ? Video : Photo;
+        FrameworkElement? shown       = bubble.HasVideo ? Video : Photo;
+        if (shown is null)
+        {
+            return;
+        }
+
         if (shown.Width != width || shown.Height != height)
         {
             shown.Width  = width;
@@ -1166,6 +1295,11 @@ public sealed partial class MessageBubble : UserControl
             byte[] full            = await full_task;
             long decode_start      = System.Diagnostics.Stopwatch.GetTimestamp();
             (int pixel_width, int pixel_height) = await PixelSizeAsync(full);
+            if (load != _photoLoad)
+            {
+                return;
+            }
+
             int decode_width                    = MessageBubbleViewModel.FillDecodeWidth(pixel_width, pixel_height, Photo.Width, Photo.Height);
             ImageSource image                   = await Avatar.ToImageAsync(full, decode_width) ?? throw new InvalidDataException();
             long decode_ms                      = (long)System.Diagnostics.Stopwatch.GetElapsedTime(decode_start).TotalMilliseconds;
@@ -1226,7 +1360,7 @@ public sealed partial class MessageBubble : UserControl
     // For A GIF, On Loaded Or When It Arrives; Size And Corner Changes Only Reshape The Clip
     private void ClipPhotoFull(bool mayTake = false)
     {
-        if (_photoFullVisual is null && (!mayTake || !_photoAnimated || !PhotoFullImage.IsLoaded))
+        if (PhotoFullImage is null || Bubble is not { } bubble || (_photoFullVisual is null && (!mayTake || !_photoAnimated || !PhotoFullImage.IsLoaded)))
         {
             return;
         }
@@ -1246,8 +1380,9 @@ public sealed partial class MessageBubble : UserControl
                 return;
             }
 
+            // The Photo's Corners From The Bubble Itself, Not The Bound Ones, Which May Not Have Caught Up With A Change Yet
             float most     = Math.Min(width, height) / 2;
-            CornerRadius r = Photo.CornerRadius;
+            CornerRadius r = PhotoCorners(bubble.FromMe, bubble.IsFirstInGroup, bubble.IsLastInGroup, bubble.HasBodyText);
             visual.Clip    = visual.Compositor.CreateRectangleClip(
                 0, 0, width, height,
                 Corner(r.TopLeft, most), Corner(r.TopRight, most), Corner(r.BottomRight, most), Corner(r.BottomLeft, most));
@@ -1292,12 +1427,12 @@ public sealed partial class MessageBubble : UserControl
             return;
         }
 
-        ShowInViewer(part);
+        ShowInViewer(part, Photo!);
     }
 
-    // The Photo Over The Whole Window, Named As The Bubble's Photo Is
-    private void ShowInViewer(MediaPart part) =>
-        (Application.Current as App)?.MainWindow?.ShowPhoto(part, Bubble?.Id ?? string.Empty, Bubble?.PhotoName ?? ChatCopy.Photo, Photo);
+    // The Photo Over The Whole Window, Named As The Bubble's Photo Is; Focus Goes Back To The Part It Opened From
+    private void ShowInViewer(MediaPart part, Control from) =>
+        (Application.Current as App)?.MainWindow?.ShowPhoto(part, Bubble?.Id ?? string.Empty, Bubble?.PhotoName ?? ChatCopy.Photo, from);
 
     // =========================================================================
     // FILE CARD
@@ -1319,10 +1454,18 @@ public sealed partial class MessageBubble : UserControl
             return;
         }
 
-        _filePart            = part;
-        _fileBubble          = Bubble;
-        _fileOpening         = false;
-        _fileFailed          = false;
+        _filePart    = part;
+        _fileBubble  = Bubble;
+        _fileOpening = false;
+        _fileFailed  = false;
+
+        // No File: The Card Unloads (x:Load)
+        if (part is null)
+        {
+            return;
+        }
+
+        FindName(nameof(FileCard));
         FileThumb.Background = null;
         ShowFileDetail();
         if (part is not { ThumbnailId.Length: > 0 } || (Application.Current as App)?.Media is not { } media)
@@ -1402,24 +1545,32 @@ public sealed partial class MessageBubble : UserControl
             return;
         }
 
-        _voicePart        = part;
-        _voiceBubble      = Bubble;
-        _voiceKey         = Bubble is { } shown ? (shown.TmpId.Length > 0 ? shown.TmpId : shown.Id) : string.Empty;
+        _voicePart   = part;
+        _voiceBubble = Bubble;
+        _voiceKey    = Bubble is { } shown ? (shown.TmpId.Length > 0 ? shown.TmpId : shown.Id) : string.Empty;
         _voiceLoad++;
-        _voiceAudio       = null;
-        _voiceWave        = null;
-        VoiceLength.Text  = string.Empty;
-        VoiceBars.Show(null);
-        VoiceBars.Length  = TimeSpan.Zero;
-        ShowVoicePlaying(false, 0);
-        if (part is not { IsPending: false } || (Application.Current as App)?.Media is not { } media)
+        _voiceAudio  = null;
+        _voiceWave   = null;
+
+        // No Voice Message: Its Part Unloads (x:Load)
+        if (part is null)
         {
             return;
         }
 
+        FindName(nameof(Voice));
+        VoiceLength.Text = string.Empty;
+        VoiceBars.Show(null);
+        VoiceBars.Length = TimeSpan.Zero;
+        ShowVoicePlaying(false, 0);
+        if (part.IsPending || (Application.Current as App)?.Media is not { } media)
+        {
+            return;
+        }
+
+        int load = _voiceLoad;
         try
         {
-            int load       = _voiceLoad;
             byte[] audio   = await media.GetAsync(part, thumbnail: false, CancellationToken.None);
             VoiceWave wave = await WaveformReader.ReadAsync(audio);
             if (load != _voiceLoad)
@@ -1436,6 +1587,12 @@ public sealed partial class MessageBubble : UserControl
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
+            // Another Message Since: Its Part May Be Gone
+            if (load != _voiceLoad)
+            {
+                return;
+            }
+
             AppLog.MediaFailed(App.ShellLog, "voice", Bubble?.Id ?? string.Empty, ex.GetType().Name);
             TestHooks.ShowState(VoiceLength, "Failed");
         }
@@ -1468,11 +1625,16 @@ public sealed partial class MessageBubble : UserControl
     // The Play Button Becomes Pause While It Plays, And The Waveform Fills Up To How Much Has Played
     private void ShowVoicePlaying(bool playing, double share)
     {
+        if (Voice is null)
+        {
+            return;
+        }
+
         string name      = playing ? ChatCopy.Pause : ChatCopy.Play;
         VoiceGlyph.Glyph = playing ? "" : "";
         AutomationProperties.SetName(VoicePlay, name);
         ToolTipService.SetToolTip(VoicePlay, name);
-        VoiceBars.ShowProgress(share);
+        VoiceBars.ShowProgress(share, playing);
         TestHooks.ShowState(VoicePlay, playing ? "Playing" : "Paused");
     }
 
@@ -1499,6 +1661,7 @@ public sealed partial class MessageBubble : UserControl
         if (part is not null && Bubble is not null && ReferenceEquals(Bubble, _videoBubble) && KeepSentMedia(_videoPart, part))
         {
             _videoPart = part;
+            FindName(nameof(Video));
             if (VideoThumb.Background is null)
             {
                 LoadVideoFrame(part);
@@ -1508,16 +1671,22 @@ public sealed partial class MessageBubble : UserControl
         }
 
         ReleaseVideo();
-        _videoPart            = part;
-        _videoBubble          = Bubble;
+        _videoPart       = part;
+        _videoBubble     = Bubble;
+        _videoFrameImage = null;
+
+        // No Video: Its Part Unloads (x:Load), The Player Host's Visual With It
+        if (part is null)
+        {
+            _videoHostVisual = null;
+            return;
+        }
+
+        FindName(nameof(Video));
         VideoThumb.Background = null;
-        _videoFrameImage      = null;
         ShowVideoNote(null, string.Empty);
         SizePhoto();
-        if (part is not null)
-        {
-            LoadVideoFrame(part);
-        }
+        LoadVideoFrame(part);
     }
 
     // The Video's Frame, In The Background; One That Won't Load Leaves The Plain Fill. The Play Button's Item Status Says
@@ -1676,8 +1845,15 @@ public sealed partial class MessageBubble : UserControl
         _video                    = null;
         EffectiveViewportChanged -= OnVideoViewportChanged;
         video.Failed              -= OnVideoFailed;
-        VideoHost.Children.Clear();
         video.Dispose();
+
+        // The Bubble Moved On To A Message Without A Video: Its Part Is Already Gone (x:Load)
+        if (Video is null)
+        {
+            return;
+        }
+
+        VideoHost.Children.Clear();
         VideoPlay.Visibility   = Visibility.Visible;
         VideoExpand.Visibility = Visibility.Collapsed;
         TestHooks.ShowState(VideoFrame, "Stopped");
@@ -1695,7 +1871,7 @@ public sealed partial class MessageBubble : UserControl
     // Host Uses No Implicit Transitions, So Windows Hands Out Its Visual; It Is Taken Once, When A Video Starts
     private void ClipVideoHost(bool mayTake = false)
     {
-        if (_videoHostVisual is null && (!mayTake || !VideoHost.IsLoaded))
+        if (VideoHost is null || (_videoHostVisual is null && (!mayTake || !VideoHost.IsLoaded)))
         {
             return;
         }
@@ -1742,9 +1918,10 @@ public sealed partial class MessageBubble : UserControl
         {
             OpenVideoInViewer(VideoFrame);
         }
-        else if (Bubble?.Media is { IsPending: false } part)
+        else if (Bubble?.Media is { IsPending: false } part && ((Control?)Photo ?? VoicePlay) is { } from)
         {
-            ShowInViewer(part);
+            // A Photo, Or A Voice Message (Whose Bubble Has No Photo Part, So Focus Goes Back To Its Play Button)
+            ShowInViewer(part, from);
         }
     }
 
@@ -1776,7 +1953,7 @@ public sealed partial class MessageBubble : UserControl
         };
 
         VisualStateManager.GoToState(this, side, false);
-        VisualStateManager.GoToState(this, Bubble?.HasMyReaction == true ? "Mine" : "NotMine", false);
+        ShowPartStates(refresh: false);
 
         // Re-Lay The Pill, So A Recycled Bubble That Switched Sides Doesn't Keep The Old Side's Shift
         LayPill();
@@ -1966,9 +2143,9 @@ public sealed partial class MessageBubble : UserControl
     // The Time Toggles A Turn Later, Once A Link's Click (Which Can Come After The Tap) Has Had Its Say
     private void OnBackTapped(object sender, TappedRoutedEventArgs e)
     {
-        if (_previewTapped)
+        // A Tap On The Quote, A Photo, Video, File Card, Voice Message Or Preview Card Is That Part's Own
+        if (InPart(e.OriginalSource as DependencyObject))
         {
-            _previewTapped = false;
             return;
         }
 
@@ -2110,9 +2287,10 @@ public sealed partial class MessageBubble : UserControl
     private void OnPointerEntered(object sender, PointerRoutedEventArgs e)
     {
         _pointerOver = true;
+        LoadHoverStrip();
         if (Bubble?.CanAct == true)
         {
-            VisualStateManager.GoToState(this, "Shown", Ui.AnimationsEnabled);
+            ShowHover(true, Ui.AnimationsEnabled);
         }
     }
 
@@ -2124,7 +2302,7 @@ public sealed partial class MessageBubble : UserControl
         _pointerOver = false;
         if (!_keepShown)
         {
-            VisualStateManager.GoToState(this, "Hidden", Ui.AnimationsEnabled);
+            ShowHover(false, Ui.AnimationsEnabled);
         }
     }
 

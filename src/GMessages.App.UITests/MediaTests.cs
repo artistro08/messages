@@ -620,6 +620,85 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
+    /// Bubbles load only the parts their message uses, and rows recycle between messages: in a chat of a photo, a voice
+    /// message and forty texts, scrolled away and back, the photo and the voice message still show their parts, and no
+    /// text bubble shows any part.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Bubble_Recycled_ShowsRightParts()
+    {
+        await OpenMediaChatAsync();
+
+        Message photo = Server.Phone.PushIncomingMedia("c-media", "image/png", Png(300, 200, SplitColors), "recycle.png");
+        Message voice = Server.Phone.PushIncomingMedia("c-media", "audio/mp4", await VoiceFixtureAsync(), "Voice message.m4a");
+        WaitForStatus(App.Find("Bubble.Photo." + photo.MessageID), Full);
+        WaitForStatus(App.Find("Bubble.Voice." + voice.MessageID), "Ready");
+
+        var texts = new List<string>();
+        for (int i = 0; i < 40; i++)
+        {
+            texts.Add(Server.Phone.PushIncoming("c-media", "line " + i.ToString(System.Globalization.CultureInfo.InvariantCulture)).MessageID);
+        }
+
+        App.Find("Bubble." + texts[^1]);
+
+        // Away And Back, Twice: The Rows Recycle Between The Media And The Texts
+        AutomationElement list = App.Find("Chat.Messages");
+        var scroll             = list.Patterns.Scroll.Pattern;
+        for (int round = 0; round < 2; round++)
+        {
+            scroll.SetScrollPercent(-1, 0);
+            Thread.Sleep(500);
+            AssertParts(list, photo.MessageID, voice.MessageID, texts);
+            scroll.SetScrollPercent(-1, 100);
+            Thread.Sleep(500);
+            AssertParts(list, photo.MessageID, voice.MessageID, texts);
+        }
+
+        // Back At The Top: The Photo Sharp And The Voice Message's Length Read, From Their Recycled Rows
+        scroll.SetScrollPercent(-1, 0);
+        WaitForStatus(App.Find("Bubble.Photo." + photo.MessageID), Full);
+        AutomationElement length = App.Find("Bubble.Voice." + voice.MessageID);
+        WaitForStatus(length, "Ready");
+        Assert.AreEqual("0:03", AppDriver.SafeName(length), "The voice message lost its length.");
+        App.Find("Voice.Play." + voice.MessageID);
+        Assert.IsFalse(ReadLog().Contains("Unhandled error", StringComparison.Ordinal), "Recycling the rows logged an unhandled error.");
+
+        // No Text Bubble Shows A Part, The Photo Shows Only Its Photo, And The Voice Message Only Its Voice Parts (The Chat's
+        // Seeded Messages Aside)
+        static void AssertParts(AutomationElement list, string photoId, string voiceId, List<string> texts)
+        {
+            var ids = new List<string>();
+            AppDriver.Search(list, e =>
+            {
+                if (e.Properties.AutomationId.ValueOrDefault is { Length: > 0 } id)
+                {
+                    ids.Add(id);
+                }
+
+                return false;
+            });
+
+            string[] parts = ["Bubble.Photo.", "Bubble.Video.", "Bubble.File.", "Bubble.Voice.", "Voice.Play.", "Voice.Wave.", "Preview.", "QuoteJump.", "Reactions.", "Upload."];
+            foreach (string id in ids)
+            {
+                string? part = parts.FirstOrDefault(p => id.StartsWith(p, StringComparison.Ordinal));
+                if (part is null)
+                {
+                    continue;
+                }
+
+                string owner = id[part.Length..];
+                bool wrong   = texts.Contains(owner)
+                    || (owner == photoId && part != "Bubble.Photo.")
+                    || (owner == voiceId && !part.Contains("Voice", StringComparison.Ordinal));
+                Assert.IsFalse(wrong, $"{id} showed on a bubble whose message doesn't use it.");
+            }
+        }
+    }
+
+    /// <summary>
     /// A GIF on the clipboard in its own format (as a browser copies an image, beside the plain bitmap) pastes as that
     /// GIF, not the flattened bitmap.
     /// </summary>

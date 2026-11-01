@@ -1278,7 +1278,7 @@ public sealed partial class ChatPane : UserControl
         PreviewGlyph.Glyph = playing ? "\uE769" : "\uE768";
         AutomationProperties.SetName(PreviewPlay, name);
         ToolTipService.SetToolTip(PreviewPlay, name);
-        PreviewBars.ShowProgress(share);
+        PreviewBars.ShowProgress(share, playing);
         TestHooks.ShowState(PreviewPlay, playing ? "Playing" : "Paused");
     }
 

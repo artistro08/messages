@@ -5,7 +5,7 @@ using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml.Shapes;
+using Path = Microsoft.UI.Xaml.Shapes.Path;
 using Windows.System;
 
 namespace GMessages.App.Views.Controls;
@@ -22,11 +22,16 @@ namespace GMessages.App.Views.Controls;
 /// <para>
 /// Once a message's <see cref="Length"/> is set, the waveform takes keyboard focus: Left and Right seek 5 seconds back
 /// or on, and Home and End jump to the start and the end. Its UI Automation name is its value, how far it has played
-/// over its length (<c>0:01 / 0:03</c>).
+/// over its length (<c>0:01 / 0:03</c>), named when shown, paused or sought (not on every tick while it plays).
 /// </para>
 /// <para>
 /// The bars take <see cref="BarBrush"/>: the primary text brush, or the on-accent text brush on an SMS bubble (so they read on
 /// every bubble color and in high contrast).
+/// </para>
+/// <para>
+/// The bars are drawn, not made of elements: each is a line with round ends in one of two paths, the played one bright and
+/// the rest dim, so a waveform is two elements however many bars it has. Playing moves only the bars it passes from the
+/// dim path to the bright one. Each path has its own geometry (Windows can't share one between paths).
 /// </para>
 /// </remarks>
 public sealed partial class Waveform : UserControl
@@ -44,25 +49,38 @@ public sealed partial class Waveform : UserControl
     // The Part Not Played Yet Shows This Dim
     private const double Unplayed = 0.4;
 
+    // The Shortest Line A Bar Draws: Its Round Ends Make Up The Rest. Never Quite Zero, So No Line Is Empty
+    private const double MinLine = 0.01;
+
     // How Far Left And Right Seek
     private static readonly TimeSpan KeyStep = TimeSpan.FromSeconds(5);
 
-    // Bars: The Row Is Always The Full Height, So The Tallest Bar Never Moves It
-    private readonly StackPanel _row = new() { Orientation = Orientation.Horizontal, Spacing = BarGap, Height = WaveHeight };
-    private Rectangle[] _bars = [];
-    private float[] _peaks    = [];
+    // Bars: Two Paths The Full Height (So The Tallest Bar Never Moves Them), The Played Bars In The Bright One. Every Bar Is
+    // Centered Unrounded, So It Grows Up And Down From The Same Center Line (Snapping To Whole Pixels Nudged Each By Up To One)
+    private readonly GeometryGroup _playedBars   = new();
+    private readonly GeometryGroup _unplayedBars = new();
+    private readonly Path _played;
+    private readonly Path _unplayed;
+    private LineGeometry[] _bars = [];
+    private float[] _peaks       = [];
+    private int _playedCount;
     private double _progress;
     private TimeSpan _length;
+
+    // A Click Or Key Asked For A Seek: The Next Progress Names The Waveform's New Value
+    private bool _seeking;
 
     /// <summary>
     /// Creates the waveform: flat bars, nothing played.
     /// </summary>
     public Waveform()
     {
+        _played   = NewPath(_playedBars, 1);
+        _unplayed = NewPath(_unplayedBars, Unplayed);
         SetBarCount(VoiceWave.BarCount);
 
         // Transparent, So A Click Between The Bars Still Seeks
-        Content               = new Grid { Height = WaveHeight, Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent), Children = { _row } };
+        Content               = new Grid { Height = WaveHeight, Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent), Children = { _unplayed, _played } };
         IsTabStop             = false;
         UseSystemFocusVisuals = true;
         Tapped               += OnTapped;
@@ -100,7 +118,7 @@ public sealed partial class Waveform : UserControl
         {
             _length   = value;
             IsTabStop = value > TimeSpan.Zero;
-            Draw();
+            ShowName();
         }
     }
 
@@ -114,16 +132,27 @@ public sealed partial class Waveform : UserControl
         peaks?.AsSpan(0, Math.Min(peaks.Length, _peaks.Length)).CopyTo(_peaks);
         _progress = 0;
         Draw();
+        ShowName();
     }
 
     /// <summary>
     /// Fills the bars up to how much has played.
     /// </summary>
+    /// <remarks>
+    /// The waveform's name (its value) follows only while it isn't playing, or right after a seek: a name changed every
+    /// tick would have a screen reader read it on and on.
+    /// </remarks>
     /// <param name="share">How much has played, from 0 to 1.</param>
-    public void ShowProgress(double share)
+    /// <param name="playing">True while it plays.</param>
+    public void ShowProgress(double share, bool playing)
     {
         _progress = Math.Clamp(share, 0, 1);
-        Draw();
+        DrawPlayed();
+        if (!playing || _seeking)
+        {
+            _seeking = false;
+            ShowName();
+        }
     }
 
     /// <summary>
@@ -148,10 +177,11 @@ public sealed partial class Waveform : UserControl
     /// <returns>The largest distance, in effective pixels.</returns>
     internal double CenterDrift()
     {
+        double top   = _played.TransformToVisual(this).TransformPoint(default).Y;
         double drift = 0;
-        foreach (Rectangle bar in _bars)
+        foreach (LineGeometry bar in _bars)
         {
-            double center = bar.TransformToVisual(this).TransformPoint(default).Y + (bar.ActualHeight / 2);
+            double center = top + ((bar.StartPoint.Y + bar.EndPoint.Y) / 2);
             drift         = Math.Max(drift, Math.Abs(center - (WaveHeight / 2)));
         }
 
@@ -173,7 +203,25 @@ public sealed partial class Waveform : UserControl
         return FillsWidth ? new Windows.Foundation.Size(0, wanted.Height) : wanted;
     }
 
-    private static void OnBarBrushChanged(DependencyObject d, DependencyPropertyChangedEventArgs e) => ((Waveform)d).Draw();
+    private static void OnBarBrushChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        var wave              = (Waveform)d;
+        wave._played.Stroke   = wave.BarBrush;
+        wave._unplayed.Stroke = wave.BarBrush;
+    }
+
+    // A Path Of Bars: Lines As Thick As A Bar, With Round Ends, Left-Aligned In The Row At Its Full Height
+    private static Path NewPath(GeometryGroup bars, double opacity) => new()
+    {
+        Data                = bars,
+        Height              = WaveHeight,
+        HorizontalAlignment = HorizontalAlignment.Left,
+        Opacity             = opacity,
+        StrokeThickness     = BarWidth,
+        StrokeStartLineCap  = PenLineCap.Round,
+        StrokeEndLineCap    = PenLineCap.Round,
+        UseLayoutRounding   = false,
+    };
 
     // Filling The Width: As Many Bars As Fit Once The Width Changes
     private void OnSizeChanged(object sender, SizeChangedEventArgs e)
@@ -186,8 +234,8 @@ public sealed partial class Waveform : UserControl
         SetBarCount(Math.Max(1, (int)((e.NewSize.Width + BarGap) / (BarWidth + BarGap))));
     }
 
-    // Rebuilds The Row With This Many Bars, Keeping The Newest Peaks On The Right. Each Bar Is Centered Unrounded, So Every
-    // Bar Grows Up And Down From The Same Center Line (Snapping To Whole Pixels Nudged Each By Up To One)
+    // Rebuilds The Bars With This Many, Keeping The Newest Peaks On The Right, All Dim Until Drawn. The Paths Are As Wide
+    // As The Bars With Their Gaps
     private void SetBarCount(int count)
     {
         if (count == _bars.Length)
@@ -200,36 +248,58 @@ public sealed partial class Waveform : UserControl
         Array.Copy(_peaks, _peaks.Length - kept, peaks, count - kept, kept);
         _peaks = peaks;
 
-        _bars = new Rectangle[count];
-        _row.Children.Clear();
+        _playedBars.Children.Clear();
+        _unplayedBars.Children.Clear();
+        _playedCount = 0;
+        _bars        = new LineGeometry[count];
         for (int i = 0; i < count; i++)
         {
-            _bars[i] = new Rectangle
-            {
-                Width             = BarWidth,
-                RadiusX           = BarWidth / 2,
-                RadiusY           = BarWidth / 2,
-                VerticalAlignment = VerticalAlignment.Center,
-                UseLayoutRounding = false,
-            };
-            _row.Children.Add(_bars[i]);
+            _bars[i] = new LineGeometry();
+            _unplayedBars.Children.Add(_bars[i]);
         }
 
+        _played.Width = _unplayed.Width = (count * (BarWidth + BarGap)) - BarGap;
         Draw();
     }
 
-    // Each Bar's Height From Its Peak (Never Below The Floor), Bright Up To The Played Share
+    // Each Bar's Height From Its Peak (Never Below The Floor), Grown Up And Down From The Center Line: A Line Through Its
+    // Middle, Short Of Its Height By The Round Ends (Half A Bar's Width Each). Then The Played Ones Bright
     private void Draw()
     {
-        int played = (int)Math.Round(_progress * _bars.Length);
         for (int i = 0; i < _bars.Length; i++)
         {
-            _bars[i].Height  = Math.Max(MinBar, _peaks[i]) * WaveHeight;
-            _bars[i].Fill    = BarBrush;
-            _bars[i].Opacity = i < played ? 1 : Unplayed;
+            double height       = Math.Max(MinBar, _peaks[i]) * WaveHeight;
+            double reach        = Math.Max(MinLine, height - BarWidth) / 2;
+            double x            = (i * (BarWidth + BarGap)) + (BarWidth / 2);
+            _bars[i].StartPoint = new Windows.Foundation.Point(x, (WaveHeight / 2) - reach);
+            _bars[i].EndPoint   = new Windows.Foundation.Point(x, (WaveHeight / 2) + reach);
         }
 
-        // Its Value For Screen Readers: Played Over Length
+        DrawPlayed();
+    }
+
+    // Moves Only The Bars Whose Played State Changed Between The Dim Path And The Bright One
+    private void DrawPlayed()
+    {
+        int played = (int)Math.Round(_progress * _bars.Length);
+        while (_playedCount < played)
+        {
+            LineGeometry bar = _bars[_playedCount++];
+            _unplayedBars.Children.Remove(bar);
+            _playedBars.Children.Add(bar);
+        }
+
+        while (_playedCount > played)
+        {
+            LineGeometry bar = _bars[--_playedCount];
+            _playedBars.Children.Remove(bar);
+            _unplayedBars.Children.Add(bar);
+        }
+    }
+
+    // Its Value For Screen Readers: Played Over Length
+    private void ShowName()
+    {
         if (_length > TimeSpan.Zero)
         {
             AutomationProperties.SetName(this, VoiceWave.LengthText(_length * _progress) + " / " + VoiceWave.LengthText(_length));
@@ -258,6 +328,7 @@ public sealed partial class Waveform : UserControl
         }
 
         e.Handled = true;
+        _seeking  = true;
         SeekRequested?.Invoke(this, Math.Clamp(to, 0, 1));
     }
 
@@ -269,6 +340,7 @@ public sealed partial class Waveform : UserControl
         }
 
         e.Handled = true;
+        _seeking  = true;
         SeekRequested?.Invoke(this, Math.Clamp(e.GetPosition(this).X / ActualWidth, 0, 1));
     }
 }

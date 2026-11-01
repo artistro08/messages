@@ -32,7 +32,6 @@
                         <Setter Target="Under.HorizontalAlignment" Value="Right" />
                         <Setter Target="Captions.(Grid.Column)" Value="1" />
                         <Setter Target="Captions.HorizontalAlignment" Value="Right" />
-                        <Setter Target="HoverStrip.(Grid.Column)" Value="0" />
                     </VisualState.Setters>
                 </VisualState>
                 <VisualState x:Name="SentSms">
@@ -42,29 +41,60 @@
                         <Setter Target="BackFill.Background" Value="{ThemeResource AccentFillColorDefaultBrush}" />
                         <Setter Target="BackFill.BorderThickness" Value="0" />
                         <Setter Target="Body.Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                        <Setter Target="Under.HorizontalAlignment" Value="Right" />
+                        <Setter Target="Captions.(Grid.Column)" Value="1" />
+                        <Setter Target="Captions.HorizontalAlignment" Value="Right" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+
+            <!-- On The Accent: the parts of a sent SMS bubble take the on-accent brushes. The parts load only when the message
+                 uses them (x:Load), and a setter would load its part, so each part has its own group, gone to only while
+                 the part is loaded (ShowPartStates). The hover strip's column is bound (StripColumn), for the same reason -->
+            <VisualStateGroup x:Name="QuoteSide">
+                <VisualState x:Name="QuotePlain" />
+                <VisualState x:Name="QuoteOnAccent">
+                    <VisualState.Setters>
                         <Setter Target="Quote.Background" Value="{ThemeResource QuoteOnAccentFillBrush}" />
                         <Setter Target="QuoteBar.Background" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
                         <Setter Target="QuoteSender.Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
                         <Setter Target="QuoteText.Foreground" Value="{ThemeResource TextOnAccentFillColorSecondaryBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+            <VisualStateGroup x:Name="FileSide">
+                <VisualState x:Name="FilePlain" />
+                <VisualState x:Name="FileOnAccent">
+                    <VisualState.Setters>
                         <Setter Target="FileCard.Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
                         <Setter Target="FileDetail.Foreground" Value="{ThemeResource TextOnAccentFillColorSecondaryBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+            <VisualStateGroup x:Name="VoiceSide">
+                <VisualState x:Name="VoicePlain" />
+                <VisualState x:Name="VoiceOnAccent">
+                    <VisualState.Setters>
                         <Setter Target="VoicePlay.Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
                         <Setter Target="VoiceLength.Foreground" Value="{ThemeResource TextOnAccentFillColorSecondaryBrush}" />
                         <Setter Target="VoiceBars.BarBrush" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+            <VisualStateGroup x:Name="PreviewSide">
+                <VisualState x:Name="PreviewPlain" />
+                <VisualState x:Name="PreviewOnAccent">
+                    <VisualState.Setters>
                         <Setter Target="PreviewCard.Background" Value="{ThemeResource QuoteOnAccentFillBrush}" />
                         <Setter Target="PreviewCard.BorderThickness" Value="0" />
                         <Setter Target="PreviewTitle.Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
                         <Setter Target="PreviewSite.Foreground" Value="{ThemeResource TextOnAccentFillColorSecondaryBrush}" />
-                        <Setter Target="Under.HorizontalAlignment" Value="Right" />
-                        <Setter Target="Captions.(Grid.Column)" Value="1" />
-                        <Setter Target="Captions.HorizontalAlignment" Value="Right" />
-                        <Setter Target="HoverStrip.(Grid.Column)" Value="0" />
                     </VisualState.Setters>
                 </VisualState>
             </VisualStateGroup>
 
             <!-- My Reaction: the pill gets a soft accent fill (ReactionPillMineBrush in App.xaml), no ring. On the fill under the
-                 button, so the button's hover only tints it -->
+                 button, so the button's hover only tints it. Gone to only while the pill is loaded (ShowPartStates) -->
             <VisualStateGroup x:Name="Reaction">
                 <VisualState x:Name="NotMine" />
                 <VisualState x:Name="Mine">
@@ -75,7 +105,7 @@
             </VisualStateGroup>
 
             <!-- Hover: react, reply and the ⋮ fade in while the pointer is over a bubble that takes them (CanAct), as the
-                 conversation row's ⋮ does -->
+                 conversation row's ⋮ does. Shown is gone to only once the strip is loaded (ShowHover) -->
             <VisualStateGroup x:Name="Hover">
                 <VisualStateGroup.Transitions>
                     <VisualTransition To="Shown">
@@ -257,10 +287,11 @@
                             HorizontalContentAlignment="Stretch"
                             AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('QuoteJump.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
                             AutomationProperties.Name="{x:Bind local:MessageBubble.QuoteJumpText}"
+                            x:Load="{x:Bind Bubble.HasQuote, Mode=OneWay, FallbackValue=False}"
                             Click="OnQuoteClick"
                             CornerRadius="8"
-                            Style="{StaticResource IconButtonStyle}"
-                            Visibility="{x:Bind Bubble.HasQuote, Mode=OneWay, FallbackValue=Collapsed}">
+                            Loaded="OnPartLoaded"
+                            Style="{StaticResource IconButtonStyle}">
                             <Grid
                                 x:Name="Quote"
                                 Padding="0,0,8,0"
@@ -320,18 +351,25 @@
                             HorizontalContentAlignment="Stretch"
                             VerticalContentAlignment="Stretch"
                             AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Bubble.Photo.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                            x:Load="{x:Bind Bubble.HasPhoto, Mode=OneWay, FallbackValue=False}"
                             AutomationProperties.Name="{x:Bind Bubble.PhotoName, Mode=OneWay, FallbackValue=''}"
                             Click="OnPhotoClick"
                             CornerRadius="{x:Bind local:MessageBubble.PhotoCorners(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup, Bubble.HasBodyText), Mode=OneWay}"
-                            Style="{StaticResource IconButtonStyle}"
-                            Visibility="{x:Bind Bubble.HasPhoto, Mode=OneWay, FallbackValue=Collapsed}">
+                            Style="{StaticResource IconButtonStyle}">
                             <Grid>
-                                <Border x:Name="PhotoBlur" />
+                                <Border x:Name="PhotoBlur" CornerRadius="{x:Bind local:MessageBubble.PhotoCorners(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup, Bubble.HasBodyText), Mode=OneWay}" />
                                 <!-- The full image: a still photo is this layer's ImageBrush, which its corners clip; a GIF is
                                      the Image (a brush shows only a GIF's first frame, an Image plays it), clipped to the
                                      photo's corners from code -->
-                                <Border x:Name="PhotoFull" Opacity="0">
-                                    <Image x:Name="PhotoFullImage" Stretch="UniformToFill" />
+                                <Border
+                                    x:Name="PhotoFull"
+                                    CornerRadius="{x:Bind local:MessageBubble.PhotoCorners(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup, Bubble.HasBodyText), Mode=OneWay}"
+                                    Opacity="0">
+                                    <Image
+                                        x:Name="PhotoFullImage"
+                                        Loaded="OnPhotoFullLoaded"
+                                        SizeChanged="OnPhotoFullSizeChanged"
+                                        Stretch="UniformToFill" />
                                 </Border>
 
                                 <!-- Note: waiting for the phone, or the failure (click to try again), on a small plate over the photo -->
@@ -362,9 +400,9 @@
                              named by the caption, else "Video", and shows the hand cursor (LinkCardButton) -->
                         <Grid
                             x:Name="Video"
+                            x:Load="{x:Bind Bubble.HasVideo, Mode=OneWay, FallbackValue=False}"
                             Background="{ThemeResource SolidBackgroundFillColorTertiaryBrush}"
-                            CornerRadius="{x:Bind local:MessageBubble.PhotoCorners(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup, Bubble.HasBodyText), Mode=OneWay}"
-                            Visibility="{x:Bind Bubble.HasVideo, Mode=OneWay, FallbackValue=Collapsed}">
+                            CornerRadius="{x:Bind local:MessageBubble.PhotoCorners(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup, Bubble.HasBodyText), Mode=OneWay}">
                             <local:LinkCardButton
                                 x:Name="VideoFrame"
                                 Padding="0"
@@ -407,7 +445,7 @@
                             </Button>
 
                             <!-- Player: the playing video and its compact controls, added and removed from code -->
-                            <Grid x:Name="VideoHost" />
+                            <Grid x:Name="VideoHost" SizeChanged="OnVideoHostSizeChanged" />
 
                             <!-- Expand: while it plays, opens it in the viewer where it got to -->
                             <Button
@@ -462,10 +500,11 @@
                             HorizontalAlignment="Stretch"
                             HorizontalContentAlignment="Stretch"
                             AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Bubble.File.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                            x:Load="{x:Bind Bubble.HasFileCard, Mode=OneWay, FallbackValue=False}"
                             AutomationProperties.Name="{x:Bind Bubble.FileName, Mode=OneWay, FallbackValue=''}"
                             Click="OnFileClick"
-                            Style="{StaticResource IconButtonStyle}"
-                            Visibility="{x:Bind Bubble.HasFileCard, Mode=OneWay, FallbackValue=Collapsed}">
+                            Loaded="OnPartLoaded"
+                            Style="{StaticResource IconButtonStyle}">
                             <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
                                 <Grid
                                     Width="40"
@@ -494,9 +533,10 @@
                              audio once it downloads. The length is named Bubble.Voice.{id} -->
                         <Grid
                             x:Name="Voice"
+                            x:Load="{x:Bind Bubble.HasVoice, Mode=OneWay, FallbackValue=False}"
                             ColumnDefinitions="Auto,*,Auto"
                             ColumnSpacing="8"
-                            Visibility="{x:Bind Bubble.HasVoice, Mode=OneWay, FallbackValue=Collapsed}">
+                            Loaded="OnPartLoaded">
                             <Button
                                 x:Name="VoicePlay"
                                 Width="32"
@@ -526,11 +566,12 @@
 
                         <!-- Upload: how much of my photo or file has gone up, while it sends from here -->
                         <ProgressBar
+                            x:Name="UploadBar"
                             Margin="10,6"
+                            x:Load="{x:Bind Bubble.IsUploading, Mode=OneWay, FallbackValue=False}"
                             AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Upload.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
                             Maximum="100"
-                            Value="{x:Bind Bubble.UploadPercent, Mode=OneWay, FallbackValue=0}"
-                            Visibility="{x:Bind Bubble.IsUploading, Mode=OneWay, FallbackValue=Collapsed}" />
+                            Value="{x:Bind Bubble.UploadPercent, Mode=OneWay, FallbackValue=0}" />
 
                         <!-- Text: while the preview card shows, without the card's link (Bubble.BodyText); a message that was
                              only the link shows the card alone -->
@@ -564,12 +605,13 @@
                             Padding="0"
                             HorizontalAlignment="Stretch"
                             HorizontalContentAlignment="Stretch"
+                            x:Load="{x:Bind Bubble.HasPreview, Mode=OneWay, FallbackValue=False}"
                             AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Preview.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
                             AutomationProperties.Name="{x:Bind Bubble.PreviewName, Mode=OneWay, FallbackValue=''}"
                             Click="OnPreviewClick"
                             CornerRadius="8"
-                            Style="{StaticResource IconButtonStyle}"
-                            Visibility="{x:Bind Bubble.HasPreview, Mode=OneWay, FallbackValue=Collapsed}">
+                            Loaded="OnPartLoaded"
+                            Style="{StaticResource IconButtonStyle}">
                             <local:LinkCardButton.ContextFlyout>
                                 <MenuFlyout>
                                     <MenuFlyoutItem
@@ -631,54 +673,66 @@
                     IsHitTestVisible="False"
                     Visibility="Collapsed" />
 
-                <!-- Hover Strip: react, reply and the ⋮ (see Hover above), right of a received back and left of a sent one (the
-                     Side states move it). Always there and always the same width, so no bubble moves when it shows; as tall
-                     as the back and transparent, so the pointer stays on the bubble on its way to the buttons. Not tab stops:
-                     the keyboard has the bubble menu, Shift + + and Ctrl + Enter -->
-                <StackPanel
-                    x:Name="HoverStrip"
-                    Grid.Column="2"
-                    Padding="4,0"
-                    Background="Transparent"
-                    Opacity="0"
-                    Orientation="Horizontal">
-                    <Button
-                        x:Name="HoverReact"
-                        Width="32"
-                        Height="32"
-                        VerticalAlignment="Center"
-                        AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('HoverReact.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
-                        Click="OnHoverReactClick"
-                        IsHitTestVisible="False"
-                        IsTabStop="False"
-                        Style="{StaticResource IconButtonStyle}">
-                        <FontIcon FontSize="16" Glyph="&#xE76E;" />
-                    </Button>
-                    <Button
-                        x:Name="HoverReply"
-                        Width="32"
-                        Height="32"
-                        VerticalAlignment="Center"
-                        AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('HoverReply.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
-                        Click="OnHoverReplyClick"
-                        IsHitTestVisible="False"
-                        IsTabStop="False"
-                        Style="{StaticResource IconButtonStyle}">
-                        <FontIcon FontSize="16" Glyph="&#xE97A;" />
-                    </Button>
-                    <Button
-                        x:Name="HoverMore"
-                        Width="32"
-                        Height="32"
-                        VerticalAlignment="Center"
-                        AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('HoverMore.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
-                        Click="OnHoverMoreClick"
-                        IsHitTestVisible="False"
-                        IsTabStop="False"
-                        Style="{StaticResource IconButtonStyle}">
-                        <FontIcon FontSize="16" Glyph="&#xE712;" />
-                    </Button>
-                </StackPanel>
+                <!-- Hover Strip: react, reply and the ⋮ (see Hover above), right of a received back and left of a sent one. Its
+                     slot is always there and always the strip's width (104 px, HoverStripWidth), so no bubble moves when it
+                     shows; as tall as the back and transparent, so the pointer stays on the bubble on its way to the buttons.
+                     The strip itself loads on the bubble's first hover or keyboard focus (LoadHoverStrip). Not tab stops: the
+                     keyboard has the bubble menu, Shift + + and Ctrl + Enter -->
+                <Grid
+                    Grid.Column="{x:Bind local:MessageBubble.StripColumn(Bubble.FromMe), Mode=OneWay, FallbackValue=2}"
+                    Width="104"
+                    Background="Transparent">
+                    <StackPanel
+                        x:Name="HoverStrip"
+                        Padding="4,0"
+                        x:Load="False"
+                        Background="Transparent"
+                        Opacity="0"
+                        Orientation="Horizontal">
+                        <Button
+                            x:Name="HoverReact"
+                            Width="32"
+                            Height="32"
+                            VerticalAlignment="Center"
+                            AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('HoverReact.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                            AutomationProperties.Name="{x:Bind local:MessageBubble.ReactText}"
+                            Click="OnHoverReactClick"
+                            IsHitTestVisible="False"
+                            IsTabStop="False"
+                            Style="{StaticResource IconButtonStyle}"
+                            ToolTipService.ToolTip="{x:Bind local:MessageBubble.ReactText}">
+                            <FontIcon FontSize="16" Glyph="&#xE76E;" />
+                        </Button>
+                        <Button
+                            x:Name="HoverReply"
+                            Width="32"
+                            Height="32"
+                            VerticalAlignment="Center"
+                            AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('HoverReply.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                            AutomationProperties.Name="{x:Bind local:MessageBubble.ReplyText}"
+                            Click="OnHoverReplyClick"
+                            IsHitTestVisible="False"
+                            IsTabStop="False"
+                            Style="{StaticResource IconButtonStyle}"
+                            ToolTipService.ToolTip="{x:Bind local:MessageBubble.ReplyText}">
+                            <FontIcon FontSize="16" Glyph="&#xE97A;" />
+                        </Button>
+                        <Button
+                            x:Name="HoverMore"
+                            Width="32"
+                            Height="32"
+                            VerticalAlignment="Center"
+                            AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('HoverMore.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                            AutomationProperties.Name="{x:Bind local:MessageBubble.MoreOptionsText}"
+                            Click="OnHoverMoreClick"
+                            IsHitTestVisible="False"
+                            IsTabStop="False"
+                            Style="{StaticResource IconButtonStyle}"
+                            ToolTipService.ToolTip="{x:Bind local:MessageBubble.MoreOptionsText}">
+                            <FontIcon FontSize="16" Glyph="&#xE712;" />
+                        </Button>
+                    </StackPanel>
+                </Grid>
                 <!-- /Hover Strip -->
             </Grid>
 
@@ -702,7 +756,14 @@
                     Grid.Column="{x:Bind local:MessageBubble.PillColumn(Bubble.FromMe), Mode=OneWay}"
                     Margin="{x:Bind local:MessageBubble.PillMargin(Bubble.FromMe), Mode=OneWay}"
                     VerticalAlignment="Top"
-                    Visibility="{x:Bind Bubble.HasReactions, Mode=OneWay, FallbackValue=Collapsed}">
+                    x:Load="{x:Bind Bubble.HasReactions, Mode=OneWay, FallbackValue=False}"
+                    Loaded="OnPillHostLoaded"
+                    SizeChanged="OnPillHostSizeChanged">
+
+                    <!-- Shift: moves the pill onto a short bubble's corner (see LayPill) -->
+                    <Grid.RenderTransform>
+                        <TranslateTransform x:Name="PillShift" />
+                    </Grid.RenderTransform>
 
                     <!-- Pill Fill: under the button, so the button's hover and press only tint it and my reaction's accent
                          (the Mine state) stays through them. Set on the button, the fill was swapped for the hover fill on
@@ -774,9 +835,10 @@
 
                         <!-- Not Sent: a red error mark before the retry link -->
                         <StackPanel
+                            x:Name="FailedFooter"
+                            x:Load="{x:Bind Bubble.IsFailed, Mode=OneWay, FallbackValue=False}"
                             Orientation="Horizontal"
-                            Spacing="4"
-                            Visibility="{x:Bind Bubble.IsFailed, Mode=OneWay}">
+                            Spacing="4">
                             <FontIcon
                                 VerticalAlignment="Center"
                                 FontSize="12"
@@ -798,9 +860,9 @@
                          "Delivered" or "Read" for screen readers -->
                     <StackPanel
                         x:Name="StatusRow"
+                        x:Load="{x:Bind Bubble.ShowsStatusRow, Mode=OneWay, FallbackValue=False}"
                         Orientation="Horizontal"
-                        Spacing="4"
-                        Visibility="{x:Bind Bubble.ShowsStatusRow, Mode=OneWay, FallbackValue=Collapsed}">
+                        Spacing="4">
                         <TextBlock
                             VerticalAlignment="Center"
                             AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Caption.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"

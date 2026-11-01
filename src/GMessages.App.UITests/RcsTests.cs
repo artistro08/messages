@@ -984,8 +984,8 @@ public sealed class RcsTests : UiTest
         await OpenChatAsync("Row.c-ann");
         string id                    = Find("c-ann", AnnLast).MessageID;
         System.Drawing.Rectangle win = App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).BoundingRectangle;
-        AutomationElement more       = App.Find("HoverMore." + id);
         PointerInput.Hover(App.Find("Bubble." + id).BoundingRectangle);
+        AutomationElement more = App.Find("HoverMore." + id);
 
         PointerInput.LeaveLeft(win);
 
@@ -1101,6 +1101,101 @@ public sealed class RcsTests : UiTest
             $"Typing went to [{string.Join(", ", Server.Phone.Typing.Select(t => t.Data.ConversationID))}], not only c-ann.");
     }
 
+    /// <summary>
+    /// A plain text bubble has no preview card; a link message's card loads into its bubble once the preview arrives,
+    /// named by the page's title and the link's host, and the text drops the link.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Bubble_TextThenLinkPreview_ShowsCard()
+    {
+        await OpenChatAsync("Row.c-ann");
+
+        Message text = Server.Phone.PushIncoming("c-ann", "No link here");
+        App.WaitForText("Bubble." + text.MessageID, "No link here");
+        Assert.IsNull(App.TryFind("Preview." + text.MessageID), "A plain text bubble showed a preview card.");
+
+        Message link = Server.Phone.PushIncoming("c-ann", $"look {PreviewLink()}");
+        App.Find("Bubble." + link.MessageID);
+        App.WaitForText("Preview." + link.MessageID, FakeGoogleServer.PreviewPageTitle + ", 127.0.0.1");
+        App.WaitForText("Bubble." + link.MessageID, "look");
+        Assert.IsNull(App.TryFind("Preview." + text.MessageID), "The plain text bubble showed a preview card.");
+    }
+
+    /// <summary>
+    /// A bubble with no reactions has no pill; Ann's 👍 brings one in on the bubble's bottom edge. On another bubble my
+    /// own 👍 brings one in, taking it back takes the pill away, and reacting again brings it back.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Bubble_ReceivesReaction_ShowsPill()
+    {
+        await OpenChatAsync("Row.c-ann");
+        string id = Find("c-ann", AnnLast).MessageID;
+        Assert.IsNull(App.TryFind("Reactions." + id), "A bubble without reactions showed a pill.");
+
+        // Ann's: The Pill On The Bubble's Bottom Edge
+        AutomationElement pill        = ReactAndWait("c-ann", id, "p-ann");
+        System.Drawing.Rectangle text = App.Find("Bubble." + id).BoundingRectangle;
+        System.Drawing.Rectangle on   = pill.BoundingRectangle;
+        StringAssert.Contains(AppDriver.SafeName(pill), "\U0001F44D");
+        Assert.IsTrue(on.Top < text.Bottom + 12 && on.Bottom > text.Bottom + 12, $"The pill {on} doesn't cross the bubble's bottom edge (text {text}).");
+
+        // Mine On Another Bubble: In, Taken Back (The Same Emoji Again), Then In Again
+        string mine_id = Find("c-ann", AnnFirst).MessageID;
+        for (int round = 0; round < 3; round++)
+        {
+            // Settle Wait For The Last Picker To Close And The Pill To Settle
+            Thread.Sleep(500);
+            App.Find("Bubble." + mine_id).RightClick();
+            App.Find("Bubble.React").Patterns.Invoke.Pattern.Invoke();
+            App.Find("ReactionPicker.1").Patterns.Invoke.Pattern.Invoke();
+            WaitForGone("ReactionPicker.1");
+            Wait.Until(() => Server.Phone.Reactions.Count == round + 1, AppDriver.DefaultTimeout, () => $"The phone got {Server.Phone.Reactions.Count} reactions, not {round + 1}.");
+            if (round == 1)
+            {
+                WaitForGone("Reactions." + mine_id);
+                continue;
+            }
+
+            Wait.Until(() => App.TryFind("Reactions." + mine_id)?.BoundingRectangle.Height > 0, AppDriver.DefaultTimeout, () => $"My pill never showed (round {round}).");
+        }
+
+        Assert.AreEqual(SendReactionRequest.Types.Action.Remove, Server.Phone.Reactions[1].Action, "The second pick didn't take my reaction back.");
+    }
+
+    /// <summary>
+    /// A send the phone refuses in Team (SMS) shows the retry footer; retried, the footer goes, and the sent SMS bubble
+    /// (whose parts take the on-accent brushes) shows no part its message doesn't use.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Bubble_SendFails_ShowsRetryFooter()
+    {
+        await OpenChatAsync("Row.c-team");
+        Server.Phone.FailSends = true;
+
+        App.Find("Chat.Draft").Focus();
+        Keyboard.Type("Running late");
+        Keyboard.Type(VirtualKeyShort.RETURN);
+        Wait.Until(() => Server.Phone.Sent.Count == 1, AppDriver.DefaultTimeout, () => "The phone never got the send.");
+        AutomationElement retry = App.Find("Bubble." + Server.Phone.Sent[0].TmpID + ".Retry");
+        Assert.AreEqual(ChatCopy.NotSentRetry, AppDriver.SafeName(retry));
+
+        Server.Phone.FailSends = false;
+        retry.Patterns.Invoke.Pattern.Invoke();
+        Wait.Until(() => Server.Phone.Sent.Count == 2, AppDriver.DefaultTimeout, () => $"The phone got {Server.Phone.Sent.Count} sends, not 2.");
+        string id = Newest("c-team").MessageID;
+        App.WaitForText("Status." + id, ChatCopy.Sent);
+        WaitForGone("Bubble." + Server.Phone.Sent[0].TmpID + ".Retry");
+        Assert.IsNull(App.TryFind("Bubble." + id + ".Retry"), "The sent bubble kept the retry footer.");
+
+        foreach (string part in new[] { "QuoteJump.", "Preview.", "Bubble.Photo.", "Bubble.Video.", "Bubble.File.", "Bubble.Voice.", "Upload.", "Reactions." })
+        {
+            Assert.IsNull(App.TryFind(part + id), $"The sent SMS bubble showed {part}{id}.");
+        }
+    }
+
     // =========================================================================
     // HELPERS
     // =========================================================================
@@ -1127,12 +1222,12 @@ public sealed class RcsTests : UiTest
         WaitForFocus("Chat.Draft");
     }
 
-    // Moves The Pointer Onto A Bubble, Then Onto One Of Its Hover Strip's Buttons (Hidden Until Then, So It Takes No
-    // Clicks), And Waits For The Strip's Fade In (167 ms), Which Turns On Its Clicks
+    // Moves The Pointer Onto A Bubble (Its First Hover Loads The Strip), Then Onto One Of Its Hover Strip's Buttons (Hidden
+    // Until Then, So It Takes No Clicks), And Waits For The Strip's Fade In (167 ms), Which Turns On Its Clicks
     private AutomationElement HoverStripButton(string messageId, string prefix)
     {
-        AutomationElement button = App.Find(prefix + messageId);
         PointerInput.Hover(App.Find("Bubble." + messageId).BoundingRectangle);
+        AutomationElement button = App.Find(prefix + messageId);
         PointerInput.Hover(button.BoundingRectangle);
         Thread.Sleep(500);
         return button;
