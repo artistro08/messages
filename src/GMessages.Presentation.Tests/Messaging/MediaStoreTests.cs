@@ -328,6 +328,102 @@ public sealed class MediaStoreTests
         Assert.AreEqual(expected, MediaStore.CanOpen(name, mime));
 
     /// <summary>
+    /// Every extension the mime table can give, except SVG, opens.
+    /// </summary>
+    [TestMethod]
+    [DataRow("image/jpeg")]
+    [DataRow("image/x-ms-bmp")]
+    [DataRow("audio/mp4")]
+    [DataRow("audio/mpeg")]
+    [DataRow("audio/x-wav")]
+    [DataRow("video/quicktime")]
+    [DataRow("video/3gpp")]
+    [DataRow("video/3gpp2")]
+    [DataRow("video/x-matroska")]
+    [DataRow("video/x-msvideo")]
+    [DataRow("text/plain")]
+    [DataRow("text/vcard")]
+    [DataRow("text/calendar")]
+    [DataRow("image/png")]
+    [DataRow("image/heic")]
+    [DataRow("application/pdf")]
+    public void CanOpen_EveryExtensionOfType_ExceptSvg_True(string mime) =>
+        Assert.IsTrue(MediaStore.CanOpen("file" + MediaStore.ExtensionOf(mime), mime));
+
+    /// <summary>
+    /// Photo, video, audio, document and contact types open.
+    /// </summary>
+    [TestMethod]
+    [DataRow(".jpg")]
+    [DataRow(".jpeg")]
+    [DataRow(".png")]
+    [DataRow(".gif")]
+    [DataRow(".webp")]
+    [DataRow(".bmp")]
+    [DataRow(".tif")]
+    [DataRow(".tiff")]
+    [DataRow(".heic")]
+    [DataRow(".heif")]
+    [DataRow(".avif")]
+    [DataRow(".mp4")]
+    [DataRow(".mov")]
+    [DataRow(".m4v")]
+    [DataRow(".3gp")]
+    [DataRow(".3g2")]
+    [DataRow(".mkv")]
+    [DataRow(".avi")]
+    [DataRow(".webm")]
+    [DataRow(".mp3")]
+    [DataRow(".m4a")]
+    [DataRow(".ogg")]
+    [DataRow(".wav")]
+    [DataRow(".aac")]
+    [DataRow(".amr")]
+    [DataRow(".pdf")]
+    [DataRow(".txt")]
+    [DataRow(".csv")]
+    [DataRow(".rtf")]
+    [DataRow(".vcf")]
+    [DataRow(".ics")]
+    [DataRow(".doc")]
+    [DataRow(".docx")]
+    [DataRow(".xls")]
+    [DataRow(".xlsx")]
+    [DataRow(".ppt")]
+    [DataRow(".pptx")]
+    [DataRow(".odt")]
+    public void CanOpen_Allowlisted_True(string extension) =>
+        Assert.IsTrue(MediaStore.CanOpen("file" + extension, "application/octet-stream"));
+
+    /// <summary>
+    /// Web pages, SVG, themes, packages, certificates, shortcuts and programs never open.
+    /// </summary>
+    [TestMethod]
+    [DataRow(".html")]
+    [DataRow(".htm")]
+    [DataRow(".mht")]
+    [DataRow(".svg")]
+    [DataRow(".theme")]
+    [DataRow(".themepack")]
+    [DataRow(".ppkg")]
+    [DataRow(".wsb")]
+    [DataRow(".cer")]
+    [DataRow(".crt")]
+    [DataRow(".lnk")]
+    [DataRow(".exe")]
+    [DataRow(".udl")]
+    [DataRow(".contact")]
+    public void CanOpen_Risky_False(string extension) =>
+        Assert.IsFalse(MediaStore.CanOpen("file" + extension, "application/octet-stream"));
+
+    /// <summary>
+    /// A right-to-left override can't disguise an extension: the control character is gone from the name.
+    /// </summary>
+    [TestMethod]
+    public void SanitizeName_StripsBidiOverride() =>
+        Assert.DoesNotContain("‮", MediaStore.SanitizeName("photo‮gpj.exe", "image/jpeg"));
+
+    /// <summary>
     /// A mime type's extension, as Save as offers it: the usual one for each common photo, video and audio type, and none
     /// for a type with no short one.
     /// </summary>

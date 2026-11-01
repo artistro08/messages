@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using Microsoft.Extensions.Logging;
 
@@ -51,18 +52,14 @@ public sealed partial class MediaStore
         "LPT0", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
     };
 
-    // Programs, Scripts, Installers And Shortcuts: A Received One Is Never Opened, Only Saved Where The Person Picks
-    private static readonly HashSet<string> ProgramExtensions = new(StringComparer.OrdinalIgnoreCase)
+    // Only These Types Open In Their Default App; Anything Else Is Saved Where The Person Picks
+    private static readonly HashSet<string> OpenableExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
-        ".exe", ".com", ".scr", ".pif", ".cpl", ".msc", ".dll", ".ocx", ".sys", ".drv",
-        ".bat", ".cmd", ".ps1", ".psm1", ".psd1", ".ps1xml", ".ps2", ".ps2xml", ".psc1", ".psc2", ".vb", ".vbs", ".vbe",
-        ".vbscript", ".js", ".jse", ".ws", ".wsf", ".wsc", ".wsh", ".hta", ".jar", ".jnlp", ".py", ".pyw", ".pyc", ".pl",
-        ".rb", ".shs", ".sct", ".msh", ".msh1", ".msh2", ".mshxml",
-        ".msi", ".msp", ".mst", ".msu", ".msix", ".msixbundle", ".appx", ".appxbundle", ".appinstaller", ".application",
-        ".appref-ms", ".xbap", ".gadget", ".vsto",
-        ".lnk", ".url", ".website", ".scf", ".inf", ".ins", ".isp", ".its", ".job", ".mmc", ".reg", ".rdp", ".chm", ".hlp",
-        ".settingcontent-ms", ".library-ms", ".search-ms", ".searchconnector-ms", ".diagcab", ".xll", ".ade", ".adp",
-        ".mde", ".iso", ".img", ".vhd", ".vhdx", ".cab",
+        ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tif", ".tiff", ".heic", ".heif", ".avif",
+        ".mp4", ".mov", ".m4v", ".3gp", ".3g2", ".mkv", ".avi", ".webm",
+        ".mp3", ".m4a", ".ogg", ".wav", ".aac", ".amr",
+        ".pdf", ".txt", ".csv", ".rtf", ".vcf", ".ics",
+        ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".odt",
     };
 
     private readonly Func<IMessagingClient?> _client;
@@ -514,7 +511,8 @@ public sealed partial class MediaStore
     /// Makes a sender's file name safe to write.
     /// </summary>
     /// <remarks>
-    /// Path separators, characters Windows refuses and control characters become <c>_</c>, as does any <c>..</c>.
+    /// Path separators, characters Windows refuses, control characters and invisible format characters (such as the
+    /// right-to-left override that disguises an extension) become <c>_</c>, as does any <c>..</c>.
     /// Leading and trailing dots and spaces go. A Windows device name (<c>CON</c>, <c>NUL</c>, <c>COM1</c>...), with or
     /// without an extension, gets a <c>_</c> in front. The name is cut to <see cref="MaxNameLength"/>, keeping its
     /// extension. An empty name becomes <c>attachment</c> with an extension from the mime type.
@@ -529,7 +527,8 @@ public sealed partial class MediaStore
         var built      = new StringBuilder(name ?? string.Empty);
         for (int i = 0; i < built.Length; i++)
         {
-            if (char.IsControl(built[i]) || built[i] is '/' or '\\' || Array.IndexOf(invalid, built[i]) >= 0)
+            if (char.IsControl(built[i]) || built[i] is '/' or '\\' || Array.IndexOf(invalid, built[i]) >= 0
+                || CharUnicodeInfo.GetUnicodeCategory(built[i]) == UnicodeCategory.Format)
             {
                 built[i] = '_';
             }
@@ -570,16 +569,16 @@ public sealed partial class MediaStore
     /// Tells whether a received file may open in its default app.
     /// </summary>
     /// <remarks>
-    /// Programs, scripts, installers and shortcuts (<c>.exe</c>, <c>.bat</c>, <c>.ps1</c>, <c>.js</c>, <c>.msi</c>,
-    /// <c>.lnk</c>...) never open: the person can only save them, and decides what to do with them. The check is made on
-    /// the name the file is written under (see <see cref="SanitizeName"/>), so trailing dots or spaces can't hide the
-    /// extension.
+    /// Only an allowlist of photo, video, audio, document and contact types opens. Anything else (programs, scripts,
+    /// web pages, SVG, themes, shortcuts, certificates...) can only be saved or sent to "Open with", and the person
+    /// decides what to do with it. The check is made on the name the file is written under (see
+    /// <see cref="SanitizeName"/>), so trailing dots or spaces can't hide the extension.
     /// </remarks>
     /// <param name="name">The sender's file name.</param>
     /// <param name="mime">The mime type, for the extension of an empty name.</param>
-    /// <returns>False for a program or script; true otherwise.</returns>
+    /// <returns>True for an allowlisted type; false otherwise.</returns>
     public static bool CanOpen(string name, string mime) =>
-        !ProgramExtensions.Contains(Path.GetExtension(SanitizeName(name, mime)));
+        OpenableExtensions.Contains(Path.GetExtension(SanitizeName(name, mime)));
 
     // =========================================================================
     // HELPERS
