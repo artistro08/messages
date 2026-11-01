@@ -1340,7 +1340,8 @@ public sealed partial class MessageBubble : UserControl
 
             string id = PartIdOf("Video.Player.", Bubble?.Id ?? string.Empty, Bubble?.TmpId ?? string.Empty);
             _video    = new VideoPlayback(DispatcherQueue, bytes, part.Mime, TimeSpan.Zero, compact: true, id, Bubble?.VideoName ?? ChatCopy.Video);
-            _video.Failed += OnVideoFailed;
+            _video.Failed              += OnVideoFailed;
+            _video.FullWindowRequested += OnVideoFullWindowRequested;
             VideoHost.Children.Add(_video.Element);
             VideoPlay.Visibility   = Visibility.Collapsed;
             VideoExpand.Visibility = Visibility.Visible;
@@ -1375,6 +1376,10 @@ public sealed partial class MessageBubble : UserControl
 
     // Expand: The Viewer Carries On Where The Inline Player Got To
     private void OnVideoExpandClick(object sender, RoutedEventArgs e) => OpenVideoInViewer(VideoExpand);
+
+    // Windows' Full Window Button Does What Expand Does (After Its Click Has Finished With The Controls)
+    private void OnVideoFullWindowRequested(object? sender, EventArgs e) =>
+        DispatcherQueue.TryEnqueue(() => OpenVideoInViewer(VideoExpand));
 
     // Stops The Inline Player (Keeping Its Position) And Shows The Video Over The Whole Window. Focus Comes Back To The
     // Frame On Close, The Way The Clicked Button Had It (A Click Brings No Focus Ring Back)
@@ -1418,7 +1423,8 @@ public sealed partial class MessageBubble : UserControl
 
         _video                    = null;
         EffectiveViewportChanged -= OnVideoViewportChanged;
-        video.Failed             -= OnVideoFailed;
+        video.Failed              -= OnVideoFailed;
+        video.FullWindowRequested -= OnVideoFullWindowRequested;
         VideoHost.Children.Clear();
         video.Dispose();
         VideoPlay.Visibility   = Visibility.Visible;

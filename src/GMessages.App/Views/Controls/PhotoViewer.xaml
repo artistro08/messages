@@ -61,15 +61,15 @@
                 ToolTipService.ToolTip="{x:Bind local:PhotoViewer.DownloadText}">
                 <FontIcon FontSize="16" Glyph="&#xE896;" />
             </Button>
+            <!-- Open In Photos, Or Open In Default App For A Video: Named From Code On Each Open (A Bound Name Was Set Back
+                 Once The Viewer First Loaded) -->
             <Button
                 x:Name="OpenInPhotosButton"
                 Width="40"
                 Height="40"
                 AutomationProperties.AutomationId="PhotoViewer.OpenInPhotos"
-                AutomationProperties.Name="{x:Bind local:PhotoViewer.OpenInPhotosText}"
                 Click="OnOpenInPhotosClick"
-                Style="{StaticResource IconButtonStyle}"
-                ToolTipService.ToolTip="{x:Bind local:PhotoViewer.OpenInPhotosText}">
+                Style="{StaticResource IconButtonStyle}">
                 <FontIcon FontSize="16" Glyph="&#xE8A7;" />
             </Button>
             <Button

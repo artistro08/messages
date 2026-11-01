@@ -17,8 +17,9 @@ namespace GMessages.App.Media;
 /// Made the way <see cref="VoicePlayer"/> makes its player: the bytes play from memory (never from disk), as media (a
 /// communications stream goes to the default communications device, often not the speakers), off the system media
 /// controls, and muted in a test run. A bubble plays one in place with compact controls (play or pause, seek, volume);
-/// the viewer plays one with the full controls. Windows' own full window and zoom buttons stay hidden: the bubble's
-/// expand button and the viewer stand in for them.
+/// the viewer plays one with the full controls. Windows' zoom button stays hidden; its full window button can't be hidden
+/// in WinUI 3, so its press is turned back and raises <see cref="FullWindowRequested"/>: the bubble's expand and the
+/// viewer stand in for it.
 /// </para>
 /// <para>
 /// The owner puts <see cref="Element"/> in a panel, and on <see cref="Dispose"/> takes it out first, then disposes:
@@ -75,12 +76,28 @@ internal sealed class VideoPlayback : IDisposable
         AutomationProperties.SetAutomationId(Element, automationId);
         AutomationProperties.SetName(Element, name);
         Element.SetMediaPlayer(Player);
+
+        // Windows' Full Window Button: WinUI 3's Controls Have No Property To Hide It (Only IsFullWindow Exists), So Its
+        // Press Is Turned Back At Once And Handed To The Owner, Whose Viewer Is The Only Full-Size View
+        Element.RegisterPropertyChangedCallback(MediaPlayerElement.IsFullWindowProperty, (_, _) =>
+        {
+            if (Element.IsFullWindow)
+            {
+                Element.IsFullWindow = false;
+                FullWindowRequested?.Invoke(this, EventArgs.Empty);
+            }
+        });
     }
 
     /// <summary>
     /// Raised on the UI thread when the video can't play.
     /// </summary>
     public event EventHandler? Failed;
+
+    /// <summary>
+    /// Raised when Windows' full window button is pressed; the bubble opens its viewer instead.
+    /// </summary>
+    public event EventHandler? FullWindowRequested;
 
     /// <summary>Gets the player.</summary>
     public MediaPlayer Player { get; }
