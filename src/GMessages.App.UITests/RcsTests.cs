@@ -264,6 +264,37 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
+    /// On a short message with its time shown (the time wider than the bubble), the reaction pill still overlaps the
+    /// bubble's bottom edge, on its corner, not beside the time.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task ReactionPill_ShortMessage_OverlapsTheBubble()
+    {
+        await OpenChatAsync("Row.c-ann");
+        string id = Server.Phone.PushIncoming("c-ann", "Hi").MessageID;
+        App.Find("Bubble." + id);
+        App.Find("Bubble." + Server.Phone.PushIncoming("c-ann", "A longer message after it").MessageID);
+
+        AutomationElement bubble = App.Find("Bubble." + id);
+        bubble.RightClick();
+        App.Find("Bubble.React").Patterns.Invoke.Pattern.Invoke();
+        App.Find("ReactionPicker.1").Patterns.Invoke.Pattern.Invoke();
+        AutomationElement pill = App.Find("Reactions." + id);
+        WaitForGone("ReactionPicker.1");
+        Thread.Sleep(500);
+        bubble.Click();
+        App.Find("Bubble." + id + ".Time");
+        Thread.Sleep(500);
+
+        // The Text Sits 12 px Inside The Back, Which The Pill's Top Overlaps
+        System.Drawing.Rectangle text = bubble.BoundingRectangle;
+        System.Drawing.Rectangle on   = pill.BoundingRectangle;
+        Assert.IsTrue(on.Top < text.Bottom + 12 && on.Bottom > text.Bottom + 12, $"The pill {on} doesn't cross the bubble's bottom edge (text {text}).");
+        Assert.IsTrue(on.Left < text.Right + 12, $"The pill {on} sits beside the bubble (text {text}), not on its corner.");
+    }
+
+    /// <summary>
     /// A reaction added to a shown bubble pops its pill in (animation effects on, as on the test machine).
     /// </summary>
     /// <returns>A task for the test.</returns>

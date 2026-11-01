@@ -114,6 +114,9 @@ public sealed partial class MessageBubble : UserControl
     // A Bubble Still Being Sent Shows Faded
     private const double SendingFade = 0.6;
 
+    // How Far The Reaction Pill's Top Overlaps The Back (PillHost's -8 Top Margin)
+    private const double PillOverlap = 8;
+
     // The Preview Card's Image Width, And Its Gap Below The Text, In Effective Pixels
     private const int PreviewImageWidth = 240;
     private const double PreviewGap     = 8;
@@ -243,6 +246,9 @@ public sealed partial class MessageBubble : UserControl
     // The Video's Still Frame Once It Shows, Which The Viewer Grows Out Of The Bubble Before Its Player Takes Over
     private ImageSource? _videoFrameImage;
 
+    // Moves The Pill Back Onto A Short Bubble's Corner When The Time Under It Is Too Wide To Sit Beside It (See LayPill)
+    private readonly TranslateTransform _pillShift = new();
+
     // The Reactions The Pill Shows, So A Change On The Same Bubble Pops It In; Set When A Pill Just Shown Waits For Its
     // Size To Pop; And The Pill Host's Visual (No Implicit Transitions On It, So Windows Hands It Out), Taken Once
     private string _reactionsShown = string.Empty;
@@ -270,11 +276,19 @@ public sealed partial class MessageBubble : UserControl
         VideoHost.SizeChanged  += (_, _) => ClipVideoHost();
 
         // The Row Under The Bubble Is At Least As Wide As The Back (Inside Its Margins), So The Pill Sits On The Back's Corner
-        Back.SizeChanged += (_, _) => Under.MinWidth = Math.Max(0, Back.ActualWidth - Under.Margin.Left - Under.Margin.Right);
+        Back.SizeChanged += (_, _) =>
+        {
+            Under.MinWidth = Math.Max(0, Back.ActualWidth - Under.Margin.Left - Under.Margin.Right);
+            LayPill();
+        };
+        Under.SizeChanged    += (_, _) => LayPill();
+        Captions.SizeChanged += (_, _) => LayPill();
+        PillHost.RenderTransform = _pillShift;
 
         // A Pill That Just Appeared Pops In Once It Has Its Size (Its Middle Is Where It Grows From)
         PillHost.SizeChanged += (_, _) =>
         {
+            LayPill();
             if (_popPill)
             {
                 _popPill = false;
@@ -876,6 +890,27 @@ public sealed partial class MessageBubble : UserControl
         visual.StopAnimation(nameof(Visual.Opacity));
         visual.Scale   = Vector3.One;
         visual.Opacity = 1;
+    }
+
+    // The Pill On The Back's Inner Corner, Its Top 8 px Over The Back. Beside A Long Bubble The Time Fits Next To It; Under
+    // A Short One (The Time Wider Than The Room Beside The Pill) The Row Grows Past The Back, So The Pill Is Moved Back Onto
+    // The Corner And The Time Drops Below It (Owner, Plan 9: A Pill Beside The Time Looked Detached)
+    private void LayPill()
+    {
+        bool shown     = PillHost.Visibility == Visibility.Visible && PillHost.ActualWidth > 0;
+        double shift   = shown ? Math.Max(0, Under.ActualWidth - Under.MinWidth) : 0;
+        bool narrow    = shift >= 1;
+        double shift_x = narrow ? (Bubble?.FromMe == true ? shift : -shift) : 0;
+        var margin     = new Thickness(0, narrow ? Math.Max(0, PillHost.ActualHeight - PillOverlap) : 0, 0, 0);
+        if (_pillShift.X != shift_x)
+        {
+            _pillShift.X = shift_x;
+        }
+
+        if (Captions.Margin != margin)
+        {
+            Captions.Margin = margin;
+        }
     }
 
     // The Pill Host's Visual, Taken Once While The Bubble Is In The Live Tree; Null When Windows Refuses It (No Pop Beats
