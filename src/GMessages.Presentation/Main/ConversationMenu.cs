@@ -55,7 +55,7 @@ public static class ConversationMenu
     {
         ArgumentNullException.ThrowIfNull(c);
 
-        bool spam_or_blocked             = c.Status is ConversationStatus.SpamFolder or ConversationStatus.BlockedFolder;
+        bool spamOrBlocked               = c.Status is ConversationStatus.SpamFolder or ConversationStatus.BlockedFolder;
         List<ConversationMenuItem> items = [];
 
         // Details
@@ -75,13 +75,13 @@ public static class ConversationMenu
         }
 
         // Mute
-        if (!spam_or_blocked)
+        if (!spamOrBlocked)
         {
             items.Add(c.IsMuted ? ConversationMenuItem.Unmute : ConversationMenuItem.Mute);
         }
 
         // Block
-        if (!c.IsGroup && !spam_or_blocked)
+        if (!c.IsGroup && !spamOrBlocked)
         {
             items.Add(ConversationMenuItem.BlockAndReport);
         }

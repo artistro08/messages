@@ -234,14 +234,14 @@ public sealed class StartChatViewModel : INotifyPropertyChanged
     // Contacts) Isn't Swapped Out Under The Click
     private void Refresh()
     {
-        string query   = _query.Trim();
-        string digits  = ContactRowViewModel.DigitsOf(query);
-        var top_ids    = _top.Select(c => c.Number).ToHashSet();
-        var picked_ids = Selected.Select(c => c.Number).ToHashSet();
+        string query  = _query.Trim();
+        string digits = ContactRowViewModel.DigitsOf(query);
+        var topIds    = _top.Select(c => c.Number).ToHashSet();
+        var pickedIds = Selected.Select(c => c.Number).ToHashSet();
 
         IEnumerable<ContactRowViewModel> matches = _top
-            .Concat(_all.Where(c => !top_ids.Contains(c.Number)))
-            .Where(c => !picked_ids.Contains(c.Number))
+            .Concat(_all.Where(c => !topIds.Contains(c.Number)))
+            .Where(c => !pickedIds.Contains(c.Number))
             .Where(c => query.Length == 0
                 || c.Name.Contains(query, StringComparison.OrdinalIgnoreCase)
                 || (digits.Length > 0 && c.Digits.Contains(digits, StringComparison.Ordinal)));

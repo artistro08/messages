@@ -178,8 +178,8 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     /// <param name="step">The step, such as "first bubbles drawn".</param>
     public void LogOpenStep(string step)
     {
-        long elapsed_ms = (long)Stopwatch.GetElapsedTime(OpenedAt).TotalMilliseconds;
-        _store.LogChatOpenStep(step, elapsed_ms, Messages.Count);
+        long elapsedMs = (long)Stopwatch.GetElapsedTime(OpenedAt).TotalMilliseconds;
+        _store.LogChatOpenStep(step, elapsedMs, Messages.Count);
     }
 
     /// <summary>Gets the conversation ID.</summary>
@@ -577,8 +577,8 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
 
         string text                         = string.IsNullOrWhiteSpace(Draft) ? string.Empty : Draft;
         List<PendingAttachment> attachments = [.. Attachments];
-        bool is_rcs                         = _store.Find(ConversationId)?.IsRcs == true;
-        string? reply_to                    = ReplyingTo is { IsRcs: true, Id.Length: > 0 } quoted ? quoted.Id : null;
+        bool isRcs                          = _store.Find(ConversationId)?.IsRcs == true;
+        string? replyTo                     = ReplyingTo is { IsRcs: true, Id.Length: > 0 } quoted ? quoted.Id : null;
 
         // Cleared Before Reading, So A Second Send Can't Send The Same Files Again
         Draft = string.Empty;
@@ -608,28 +608,28 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
             ready.Insert(0, (VoiceDraft.FileName, VoiceDraft.Mime, voice, 0, 0));
         }
 
-        bool caption_on_media = ready.Count > 0 && !is_rcs && text.Length > 0;
-        bool text_apart       = text.Length > 0 && !caption_on_media;
+        bool captionOnMedia = ready.Count > 0 && !isRcs && text.Length > 0;
+        bool textApart      = text.Length > 0 && !captionOnMedia;
 
         // Optimistic Bubbles: The Attachments (Showing Their Own Bytes), Then The Text. A Reply With No Text Message
         // Rides On The First Attachment
         List<MessageBubbleViewModel> bubbles = [];
         for (int i = 0; i < ready.Count; i++)
         {
-            var a                               = ready[i];
-            string caption                      = caption_on_media && i == ready.Count - 1 ? text : string.Empty;
-            string? media_reply                 = i == 0 && !text_apart ? reply_to : null;
-            MessageBubbleViewModel media_bubble = AddPending(MediaMessage(a.Name, a.Mime, a.Bytes, a.Width, a.Height, caption, media_reply, is_rcs));
-            _outgoing[media_bubble]             = new OutgoingMedia(a.Bytes, a.Name, a.Mime);
-            bubbles.Add(media_bubble);
+            var a                              = ready[i];
+            string caption                     = captionOnMedia && i == ready.Count - 1 ? text : string.Empty;
+            string? mediaReply                 = i == 0 && !textApart ? replyTo : null;
+            MessageBubbleViewModel mediaBubble = AddPending(MediaMessage(a.Name, a.Mime, a.Bytes, a.Width, a.Height, caption, mediaReply, isRcs));
+            _outgoing[mediaBubble]             = new OutgoingMedia(a.Bytes, a.Name, a.Mime);
+            bubbles.Add(mediaBubble);
         }
 
-        if (text_apart)
+        if (textApart)
         {
             bubbles.Add(AddPending(ChatMessage.Pending(GmClient.NewTmpId(), ConversationId, string.Empty, _time.GetUtcNow(), MessageKind.Text, text) with
             {
-                ReplyToId = reply_to ?? string.Empty,
-                IsRcs     = is_rcs,
+                ReplyToId = replyTo ?? string.Empty,
+                IsRcs     = isRcs,
             }));
         }
 
@@ -828,13 +828,13 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
                 }
 
                 string caption      = bubble.Caption;
-                string? media_reply = bubble.ReplyToId.Length > 0 ? bubble.ReplyToId : null;
-                await _store.SendUploadedMediaAsync(ConversationId, outgoing.Uploaded, caption.Length > 0 ? caption : null, bubble.TmpId, media_reply, CancellationToken.None);
+                string? mediaReply  = bubble.ReplyToId.Length > 0 ? bubble.ReplyToId : null;
+                await _store.SendUploadedMediaAsync(ConversationId, outgoing.Uploaded, caption.Length > 0 ? caption : null, bubble.TmpId, mediaReply, CancellationToken.None);
                 return;
             }
 
-            string? reply_to = bubble.ReplyToId.Length > 0 ? bubble.ReplyToId : null;
-            await _store.SendTextAsync(ConversationId, bubble.Text, bubble.TmpId, reply_to, CancellationToken.None);
+            string? replyTo = bubble.ReplyToId.Length > 0 ? bubble.ReplyToId : null;
+            await _store.SendTextAsync(ConversationId, bubble.Text, bubble.TmpId, replyTo, CancellationToken.None);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -1125,12 +1125,12 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
 
         foreach (MessageBubbleViewModel b in e.OldItems ?? Array.Empty<MessageBubbleViewModel>())
         {
-            if (_byId.TryGetValue(b.Id, out MessageBubbleViewModel? by_id) && by_id == b)
+            if (_byId.TryGetValue(b.Id, out MessageBubbleViewModel? byId) && byId == b)
             {
                 _byId.Remove(b.Id);
             }
 
-            if (_byTmpId.TryGetValue(b.TmpId, out MessageBubbleViewModel? by_tmp) && by_tmp == b)
+            if (_byTmpId.TryGetValue(b.TmpId, out MessageBubbleViewModel? byTmp) && byTmp == b)
             {
                 _byTmpId.Remove(b.TmpId);
             }
@@ -1338,7 +1338,7 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     // The Bubbles From One Index To Another (Clamped To The List)
     private void RefreshGroups(ConversationInfo? c, int from, int to)
     {
-        bool is_group = c is { IsGroup: true };
+        bool isGroup  = c is { IsGroup: true };
         int end       = Math.Min(to, Messages.Count - 1);
 
         for (int i = Math.Max(0, from); i <= end; i++)
@@ -1348,7 +1348,7 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
             bool last                = i == Messages.Count - 1 || !SameGroup(b, Messages[i + 1]);
             ParticipantInfo? sender  = c?.FindParticipant(b.ParticipantId);
             string name              = ChatFormat.SenderName(sender);
-            bool lane                = is_group && !b.FromMe;
+            bool lane                = isGroup && !b.FromMe;
 
             // The Name Takes The Color Of The Sender's Letter Circle; The Conversation Says Which Reaction Is Mine
             b.SetGroup(first, last, lane, lane && first && name.Length > 0 ? name : null, AvatarParts.ColorOf(sender), ChatFormat.Initial(name), b.ParticipantId);
@@ -1405,8 +1405,8 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
         for (int i = Math.Max(0, from); i < Messages.Count; i++)
         {
             MessageBubbleViewModel b = Messages[i];
-            bool is_newest           = b == newest;
-            b.SetStatus(is_newest, is_newest && b.FromMe ? ChatFormat.StatusText(b.Status) : string.Empty, is_newest && encrypted);
+            bool isNewest            = b == newest;
+            b.SetStatus(isNewest, isNewest && b.FromMe ? ChatFormat.StatusText(b.Status) : string.Empty, isNewest && encrypted);
         }
     }
 

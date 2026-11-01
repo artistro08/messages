@@ -89,14 +89,14 @@ public sealed record ChatMessage(
         string text              = string.Empty;
 
         // Media Decides The Kind; Text Is The Message, Or The Media's Caption
-        MessageInfo? text_part  = m.MessageInfo.FirstOrDefault(i => i.DataCase == MessageInfo.DataOneofCase.MessageContent);
-        MessageInfo? media_part = m.MessageInfo.FirstOrDefault(i => i.DataCase == MessageInfo.DataOneofCase.MediaContent);
-        MediaPart? media        = media_part is null ? null : MediaPart.From(media_part.MediaContent) with { ActionMessageId = media_part.ActionMessageID };
+        MessageInfo? textPart  = m.MessageInfo.FirstOrDefault(i => i.DataCase == MessageInfo.DataOneofCase.MessageContent);
+        MessageInfo? mediaPart = m.MessageInfo.FirstOrDefault(i => i.DataCase == MessageInfo.DataOneofCase.MediaContent);
+        MediaPart? media       = mediaPart is null ? null : MediaPart.From(mediaPart.MediaContent) with { ActionMessageId = mediaPart.ActionMessageID };
 
-        if (text_part is not null)
+        if (textPart is not null)
         {
             kind = MessageKind.Text;
-            text = text_part.MessageContent.Content;
+            text = textPart.MessageContent.Content;
         }
 
         if (media is not null)

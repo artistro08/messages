@@ -42,7 +42,7 @@ public sealed record VoiceWave(float[] Peaks, TimeSpan Length)
         }
 
         int channels    = 0;
-        int sample_rate = 0;
+        int sampleRate  = 0;
         int at          = 12;
         while (at + 8 <= wav.Length)
         {
@@ -55,9 +55,9 @@ public sealed record VoiceWave(float[] Peaks, TimeSpan Length)
             {
                 ushort format = BinaryPrimitives.ReadUInt16LittleEndian(wav.Slice(body, 2));
                 channels      = BinaryPrimitives.ReadUInt16LittleEndian(wav.Slice(body + 2, 2));
-                sample_rate   = (int)BinaryPrimitives.ReadUInt32LittleEndian(wav.Slice(body + 4, 4));
+                sampleRate    = (int)BinaryPrimitives.ReadUInt32LittleEndian(wav.Slice(body + 4, 4));
                 int bits      = BinaryPrimitives.ReadUInt16LittleEndian(wav.Slice(body + 14, 2));
-                if (format is not (PcmFormat or ExtensibleFormat) || bits != 16 || channels == 0 || sample_rate == 0)
+                if (format is not (PcmFormat or ExtensibleFormat) || bits != 16 || channels == 0 || sampleRate == 0)
                 {
                     throw new InvalidDataException("Not 16-bit PCM.");
                 }
@@ -74,7 +74,7 @@ public sealed record VoiceWave(float[] Peaks, TimeSpan Length)
                 int length                = size == 0 || size > (uint)(wav.Length - body) ? wav.Length - body : (int)size;
                 ReadOnlySpan<byte> pcm    = wav.Slice(body, length - (length % (2 * channels)));
                 long frames               = pcm.Length / (2 * channels);
-                return new VoiceWave(PeaksOf(pcm, channels, bars), TimeSpan.FromSeconds((double)frames / sample_rate));
+                return new VoiceWave(PeaksOf(pcm, channels, bars), TimeSpan.FromSeconds((double)frames / sampleRate));
             }
 
             // Chunks Are Padded To An Even Size

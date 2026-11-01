@@ -360,8 +360,8 @@ public sealed partial class LinkPreviewer : IDisposable
         string head = end >= 0 ? html[..end] : html;
 
         // Open Graph Tags: The First Of Each Wins
-        string? og_title = null;
-        string? og_image = null;
+        string? ogTitle = null;
+        string? ogImage = null;
         foreach (Match tag in MetaTag().Matches(head))
         {
             string? key     = null;
@@ -387,19 +387,19 @@ public sealed partial class LinkPreviewer : IDisposable
 
             if (key.Equals("og:title", StringComparison.OrdinalIgnoreCase))
             {
-                og_title ??= content;
+                ogTitle ??= content;
             }
             else if (key.Equals("og:image", StringComparison.OrdinalIgnoreCase))
             {
-                og_image ??= content;
+                ogImage ??= content;
             }
         }
 
         // Title: og:title, Else <title>
-        string title = PlainText(og_title);
-        if (title.Length == 0 && TitleTag().Match(head) is { Success: true } title_tag)
+        string title = PlainText(ogTitle);
+        if (title.Length == 0 && TitleTag().Match(head) is { Success: true } titleTag)
         {
-            title = PlainText(title_tag.Groups["text"].Value);
+            title = PlainText(titleTag.Groups["text"].Value);
         }
 
         if (title.Length == 0)
@@ -412,8 +412,8 @@ public sealed partial class LinkPreviewer : IDisposable
         string site = Cap(host.StartsWith("www.", StringComparison.OrdinalIgnoreCase) ? host[4..] : host);
 
         // Image: Resolved Against The Page, Then Held To The Same Rules As A Link
-        Uri? image = og_image is not null
-            && Uri.TryCreate(page, WebUtility.HtmlDecode(og_image).Trim(), out Uri? resolved)
+        Uri? image = ogImage is not null
+            && Uri.TryCreate(page, WebUtility.HtmlDecode(ogImage).Trim(), out Uri? resolved)
             && IsAllowed(resolved, allowLoopback)
                 ? resolved
                 : null;
@@ -522,7 +522,7 @@ public sealed partial class LinkPreviewer : IDisposable
                 return null;
             }
 
-            byte[]? image = head.Image is { } image_url ? (await GetBodyAsync(image_url, "image/*", MaxImageBytes, RequestTimeout).ConfigureAwait(false))?.Body : null;
+            byte[]? image = head.Image is { } imageUrl ? (await GetBodyAsync(imageUrl, "image/*", MaxImageBytes, RequestTimeout).ConfigureAwait(false))?.Body : null;
             return new LinkPreview(url, head.Title, head.Site, image is null ? null : await ShrinkAsync(image).ConfigureAwait(false));
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -790,33 +790,33 @@ public sealed partial class LinkPreviewer : IDisposable
     private static string TrimLink(string link)
     {
         // Count The Brackets Once, Then Keep The Counts In Step As Characters Come Off (A Long Run Of ")" Stays Linear)
-        int round_open   = link.AsSpan().Count('(');
-        int round_close  = link.AsSpan().Count(')');
-        int square_open  = link.AsSpan().Count('[');
-        int square_close = link.AsSpan().Count(']');
-        int curly_open   = link.AsSpan().Count('{');
-        int curly_close  = link.AsSpan().Count('}');
+        int roundOpen   = link.AsSpan().Count('(');
+        int roundClose  = link.AsSpan().Count(')');
+        int squareOpen  = link.AsSpan().Count('[');
+        int squareClose = link.AsSpan().Count(']');
+        int curlyOpen   = link.AsSpan().Count('{');
+        int curlyClose  = link.AsSpan().Count('}');
 
         int end = link.Length;
         while (end > 0 && TrailingPunctuation.Contains(link[end - 1], StringComparison.Ordinal))
         {
             switch (link[end - 1])
             {
-                case ')' when round_open >= round_close:
-                case ']' when square_open >= square_close:
-                case '}' when curly_open >= curly_close:
+                case ')' when roundOpen >= roundClose:
+                case ']' when squareOpen >= squareClose:
+                case '}' when curlyOpen >= curlyClose:
                     return link[..end];
 
                 case ')':
-                    round_close--;
+                    roundClose--;
                     break;
 
                 case ']':
-                    square_close--;
+                    squareClose--;
                     break;
 
                 case '}':
-                    curly_close--;
+                    curlyClose--;
                     break;
             }
 

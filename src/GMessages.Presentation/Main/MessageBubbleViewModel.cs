@@ -285,7 +285,7 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
 
     /// <summary>
     /// Gets the quoted message's photo, video, voice message or file, or null; set by the chat. The quote then shows its
-    /// thumbnail (or a file icon) and its <see cref="MediaLabel"/> in <see cref="QuoteText"/>.
+    /// thumbnail (or a file icon) and its <see cref="ChatFormat.MediaLabel"/> in <see cref="QuoteText"/>.
     /// </summary>
     public MediaPart? QuoteMedia { get; private set; }
 
@@ -484,9 +484,9 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     /// <returns>True the first time a new bubble shows.</returns>
     public bool TakeNew()
     {
-        bool is_new = _newAt != 0 && Environment.TickCount64 - _newAt <= NewWindowMs;
+        bool isNew  = _newAt != 0 && Environment.TickCount64 - _newAt <= NewWindowMs;
         _newAt      = 0;
-        return is_new;
+        return isNew;
     }
 
     /// <summary>
@@ -545,9 +545,9 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         List<(string Emoji, string Name)> rows = [];
         foreach (string emoji in ChatFormat.RankedEmoji(_reactions))
         {
-            foreach (string participant_id in _reactions.Where(r => r.Emoji == emoji).SelectMany(r => r.ParticipantIds))
+            foreach (string participantId in _reactions.Where(r => r.Emoji == emoji).SelectMany(r => r.ParticipantIds))
             {
-                string name = IsMine(participant_id) ? ChatCopy.You : NameOf(_conversation?.FindParticipant(participant_id));
+                string name = IsMine(participantId) ? ChatCopy.You : NameOf(_conversation?.FindParticipant(participantId));
                 if (name.Length > 0)
                 {
                     rows.Add((emoji, name));
@@ -585,8 +585,8 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     internal void SetStatus(bool isNewest, string text, bool showsLock)
     {
         bool hidden     = isNewest && IsCaptionHidden;
-        bool time_shown = !isNewest && IsTimeShown;
-        if (IsNewest == isNewest && StatusText == text && ShowsLock == showsLock && IsCaptionHidden == hidden && IsTimeShown == time_shown)
+        bool timeShown  = !isNewest && IsTimeShown;
+        if (IsNewest == isNewest && StatusText == text && ShowsLock == showsLock && IsCaptionHidden == hidden && IsTimeShown == timeShown)
         {
             return;
         }
@@ -594,7 +594,7 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         object?[]? before = Snapshot();
         IsNewest          = isNewest;
         IsCaptionHidden   = hidden;
-        IsTimeShown       = time_shown;
+        IsTimeShown       = timeShown;
         StatusText        = text;
         ShowsLock         = showsLock;
         RaiseChanges(before);
@@ -603,11 +603,11 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     // Where The Bubble Sits In Its Group, Its Name Over The First And Its Avatar Beside The Last (Group Chats Only)
     internal void SetGroup(bool first, bool last, bool avatarLane, string? senderName, uint senderColor, string avatarInitial, string avatarPhotoId)
     {
-        bool shows_avatar = avatarLane && last;
-        string initial    = shows_avatar ? avatarInitial : string.Empty;
-        string photo_id   = shows_avatar ? avatarPhotoId : string.Empty;
+        bool showsAvatar = avatarLane && last;
+        string initial   = showsAvatar ? avatarInitial : string.Empty;
+        string photoId   = showsAvatar ? avatarPhotoId : string.Empty;
         if (IsFirstInGroup == first && IsLastInGroup == last && HasAvatarLane == avatarLane && SenderName == senderName && SenderColor == senderColor
-            && AvatarInitial == initial && AvatarPhotoId == photo_id)
+            && AvatarInitial == initial && AvatarPhotoId == photoId)
         {
             return;
         }
@@ -616,11 +616,11 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         IsFirstInGroup    = first;
         IsLastInGroup     = last;
         HasAvatarLane     = avatarLane;
-        ShowsAvatar       = shows_avatar;
+        ShowsAvatar       = showsAvatar;
         SenderName        = senderName;
         SenderColor       = senderColor;
         AvatarInitial     = initial;
-        AvatarPhotoId     = photo_id;
+        AvatarPhotoId     = photoId;
         RaiseChanges(before);
     }
 
@@ -781,16 +781,16 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
 
         string before = text[..l.Start].TrimEnd(' ', '\t');
         string after  = text[(l.Start + l.Length)..].TrimStart(' ', '\t');
-        bool line_end = before.EndsWith('\n');
-        bool line_new = after.StartsWith('\n') || after.StartsWith("\r\n", StringComparison.Ordinal);
+        bool lineEnd  = before.EndsWith('\n');
+        bool lineNew  = after.StartsWith('\n') || after.StartsWith("\r\n", StringComparison.Ordinal);
 
         // A Line That Was Only The Link Goes With Its Line Break
-        if (line_end && line_new)
+        if (lineEnd && lineNew)
         {
             after = after[(after[0] == '\r' ? 2 : 1)..];
         }
 
-        string joint = before.Length == 0 || after.Length == 0 || line_end || line_new || char.IsPunctuation(after[0]) ? string.Empty : " ";
+        string joint = before.Length == 0 || after.Length == 0 || lineEnd || lineNew || char.IsPunctuation(after[0]) ? string.Empty : " ";
         return ChatFormat.WithColorEmoji((before + joint + after).Trim());
     }
 

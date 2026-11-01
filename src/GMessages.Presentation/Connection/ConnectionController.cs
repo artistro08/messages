@@ -266,23 +266,23 @@ public sealed partial class ConnectionController : IAsyncDisposable
             SetCurrent(client);
 
             // Cancel Source Dispose And Unpair Can Reach Without The Gate (Canceled At Once If Dispose Already Asked)
-            using var pair_cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            using var pairCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             bool closing;
             lock (_stateLock)
             {
-                _pairCts = pair_cts;
+                _pairCts = pairCts;
                 closing  = _closing;
             }
 
             if (closing)
             {
-                await pair_cts.CancelAsync().ConfigureAwait(false);
+                await pairCts.CancelAsync().ConfigureAwait(false);
             }
 
             // Pair; On Failure Drop This Client And Keep The State
             try
             {
-                await client.PairAsync(showEmoji, pair_cts.Token).ConfigureAwait(false);
+                await client.PairAsync(showEmoji, pairCts.Token).ConfigureAwait(false);
             }
             catch
             {

@@ -107,7 +107,7 @@ public static class EmojiCatalog
         var found = new List<(string Name, IReadOnlyList<(string Emoji, string Words)> Emoji)>();
         foreach ((string name, IReadOnlyList<(string Emoji, string Words)> emoji) in Categories)
         {
-            List<(string Emoji, string Words)> matches = emoji.Where(e => typed.All(t => Matches(e.Words, t))).ToList();
+            List<(string Emoji, string Words)> matches = [.. emoji.Where(e => typed.All(t => Matches(e.Words, t)))];
             if (matches.Count > 0)
             {
                 found.Add((name, matches));

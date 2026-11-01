@@ -267,7 +267,7 @@ public sealed partial class ChatStore : IDisposable
     {
         IMessagingClient client = RequireClient();
 
-        ListConversationsRequest.Types.Folder protocol_folder = folder switch
+        ListConversationsRequest.Types.Folder protocolFolder = folder switch
         {
             ConversationFolder.SpamBlocked => ListConversationsRequest.Types.Folder.SpamBlocked,
             ConversationFolder.Archived    => ListConversationsRequest.Types.Folder.Archive,
@@ -276,7 +276,7 @@ public sealed partial class ChatStore : IDisposable
         };
 
         int generation                     = Generation;
-        ListConversationsResponse response = await client.ListConversationsAsync(protocol_folder, PageSize, cursor, ct);
+        ListConversationsResponse response = await client.ListConversationsAsync(protocolFolder, PageSize, cursor, ct);
 
         // Unpaired Or Signed Out Meanwhile: The Old Account's Page Is Dropped
         if (generation != Generation)
@@ -316,8 +316,8 @@ public sealed partial class ChatStore : IDisposable
         int generation                = Generation;
         long asked                    = Stopwatch.GetTimestamp();
         ListMessagesResponse response = await client.FetchMessagesAsync(conversationId, PageSize, cursor, ct).ConfigureAwait(false);
-        long page_ms                  = (long)Stopwatch.GetElapsedTime(asked).TotalMilliseconds;
-        LogPhonePage(page_ms, response.Messages.Count);
+        long pageMs                   = (long)Stopwatch.GetElapsedTime(asked).TotalMilliseconds;
+        LogPhonePage(pageMs, response.Messages.Count);
 
         // Unpaired Or Signed Out Meanwhile: The Old Account's Page Is Dropped
         if (generation != Generation)
@@ -380,9 +380,9 @@ public sealed partial class ChatStore : IDisposable
                 saved = database.LoadMessages(conversationId, PageSize);
             }
         }).ConfigureAwait(false);
-        long wait_ms = (long)Stopwatch.GetElapsedTime(asked, started).TotalMilliseconds;
-        long read_ms = (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds;
-        LogSavedPageRead(wait_ms, read_ms, saved.Count);
+        long waitMs = (long)Stopwatch.GetElapsedTime(asked, started).TotalMilliseconds;
+        long readMs = (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+        LogSavedPageRead(waitMs, readMs, saved.Count);
 
         if (saved.Count == 0 || generation != Generation)
         {
@@ -390,9 +390,9 @@ public sealed partial class ChatStore : IDisposable
         }
 
         // A Page The Phone Sent Meanwhile Wins Over The Saved One
-        List<ChatMessage> saved_page = [.. saved.Select(ChatMessage.From)];
-        CachePage(conversationId, saved_page, onlyIfAbsent: true, generation);
-        NoteEncryption(conversationId, saved_page, generation);
+        List<ChatMessage> savedPage = [.. saved.Select(ChatMessage.From)];
+        CachePage(conversationId, savedPage, onlyIfAbsent: true, generation);
+        NoteEncryption(conversationId, savedPage, generation);
         return CachedMessages(conversationId);
     }
 
@@ -484,7 +484,7 @@ public sealed partial class ChatStore : IDisposable
 
         int generation                = Generation;
         ConversationInfo conversation = await RequireConversationAsync(client, conversationId, generation, ct);
-        string outgoing_id            = conversation.DefaultOutgoingId;
+        string outgoingId             = conversation.DefaultOutgoingId;
 
         SendMessageRequest request = NewSendRequest(conversationId, conversation, tmpId);
         request.MessagePayload.MessageInfo.Add(new MessageInfo { MessageContent = new MessageContent { Content = text } });
@@ -497,7 +497,7 @@ public sealed partial class ChatStore : IDisposable
 
         await SendCheckedAsync(client, request, ct).ConfigureAwait(false);
 
-        var pending = ChatMessage.Pending(tmpId, conversationId, outgoing_id, _time.GetUtcNow(), MessageKind.Text, text) with
+        var pending = ChatMessage.Pending(tmpId, conversationId, outgoingId, _time.GetUtcNow(), MessageKind.Text, text) with
         {
             ReplyToId = replyToId ?? string.Empty,
         };
@@ -597,12 +597,12 @@ public sealed partial class ChatStore : IDisposable
         int generation                = Generation;
         ConversationInfo conversation = await RequireConversationAsync(client, conversationId, generation, ct);
         string text                   = caption ?? string.Empty;
-        bool caption_apart            = conversation.IsRcs && text.Length > 0;
+        bool captionApart             = conversation.IsRcs && text.Length > 0;
 
         // Send The Media With Its Caption (RCS: Without)
         SendMessageRequest request = NewSendRequest(conversationId, conversation, tmpId);
         request.MessagePayload.MessageInfo.Add(new MessageInfo { MediaContent = media });
-        if (text.Length > 0 && !caption_apart)
+        if (text.Length > 0 && !captionApart)
         {
             request.MessagePayload.MessageInfo.Add(new MessageInfo { MessageContent = new MessageContent { Content = text } });
         }
@@ -616,7 +616,7 @@ public sealed partial class ChatStore : IDisposable
         await SendCheckedAsync(client, request, ct).ConfigureAwait(false);
         LogMediaSent(conversationId, media.Size);
 
-        var pending = ChatMessage.Pending(tmpId, conversationId, conversation.DefaultOutgoingId, _time.GetUtcNow(), MediaPart.KindOf(media.Format), caption_apart ? string.Empty : text) with
+        var pending = ChatMessage.Pending(tmpId, conversationId, conversation.DefaultOutgoingId, _time.GetUtcNow(), MediaPart.KindOf(media.Format), captionApart ? string.Empty : text) with
         {
             Media = MediaPart.From(media),
             IsRcs     = conversation.IsRcs,
@@ -628,7 +628,7 @@ public sealed partial class ChatStore : IDisposable
         }
 
         // RCS: The Caption Follows As Its Own Message; Its Failure Leaves The Media Sent
-        if (caption_apart)
+        if (captionApart)
         {
             try
             {
@@ -853,11 +853,11 @@ public sealed partial class ChatStore : IDisposable
         }
 
         // Delete, Block And Unblock
-        var delete_data = new DeleteConversationData { ConversationID = id };
+        var deleteData  = new DeleteConversationData { ConversationID = id };
         string? phone   = conversation.IsGroup ? null : conversation.Participants.FirstOrDefault(p => p.IsVisible && !p.IsMe && p.Number.Length > 0)?.Number;
         if (phone is not null)
         {
-            delete_data.Phone = phone;
+            deleteData.Phone = phone;
         }
 
         var request = new UpdateConversationRequest
@@ -871,7 +871,7 @@ public sealed partial class ChatStore : IDisposable
                 _                                 => throw new ArgumentOutOfRangeException(nameof(action)),
             },
             ConversationID = id,
-            DeleteData     = delete_data,
+            DeleteData     = deleteData,
         };
 
         if (action is ConversationAction.Block or ConversationAction.BlockAndReport)
@@ -1044,15 +1044,15 @@ public sealed partial class ChatStore : IDisposable
         // Is A Message Already In Its Cached Page, Or One Carrying My Own Reaction: Both Are The Phone Echoing An Update
         // (A Reaction Made Here Or On The Phone), Which The Notified Ring Misses After A Restart. Others' Reactions Don't Count
         int generation = Generation;
-        bool is_new    = MarkNotified(message.Id)
+        bool isNew     = MarkNotified(message.Id)
                          && !HasMyReaction(message)
                          && !IsCached(message)
                          && message.Time >= _time.GetUtcNow() - NewMessageAge;
         CacheMessage(message);
         SaveMessages(message.ConversationId, [received.Message], generation);
-        if (message is { Media: { } live_media, Id.Length: > 0 })
+        if (message is { Media: { } liveMedia, Id.Length: > 0 })
         {
-            _liveMedia[message.ConversationId] = (message.Id, ChatFormat.MediaLabel(live_media));
+            _liveMedia[message.ConversationId] = (message.Id, ChatFormat.MediaLabel(liveMedia));
         }
 
         NoteEncryption(message.ConversationId, [message], generation);
@@ -1102,7 +1102,7 @@ public sealed partial class ChatStore : IDisposable
             ConversationChanged?.Invoke(this, conversation);
         }
 
-        MessageArrived?.Invoke(this, new MessageArrivedEventArgs(message, conversation, received.IsOld, is_new));
+        MessageArrived?.Invoke(this, new MessageArrivedEventArgs(message, conversation, received.IsOld, isNew));
     }
 
     // =========================================================================

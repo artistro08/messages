@@ -181,14 +181,14 @@ public static class ChatFormat
         ArgumentNullException.ThrowIfNull(culture);
 
         DateTime local = time.ToOffset(now.Offset).DateTime;
-        int days_ago   = (now.Date - local.Date).Days;
+        int daysAgo    = (now.Date - local.Date).Days;
 
-        if (days_ago <= 0)
+        if (daysAgo <= 0)
         {
             return local.ToString("t", culture);
         }
 
-        if (days_ago < 7)
+        if (daysAgo < 7)
         {
             return local.ToString("ddd", culture);
         }
