@@ -49,8 +49,7 @@ internal sealed partial class EmojiRowFactory : IElementFactory
     // How Many New Emoji One Turn Draws (About 50 ms Of Work)
     private const int DrawnPerTurn = 4;
 
-    // Emoji Drawn In This Run (Windows Keeps Their Glyphs), Those Still Waiting To Be Drawn, And Whether Frames Draw Them
-    private static readonly HashSet<string> Drawn = new(StringComparer.Ordinal);
+    // Those Still Waiting To Be Drawn, And Whether Frames Draw Them
     private readonly Queue<(RowParts Parts, int Column, string Emoji)> _pending = new();
     private bool _drawing;
 
@@ -70,6 +69,12 @@ internal sealed partial class EmojiRowFactory : IElementFactory
         _noteStyle   = noteStyle;
         _pick        = pick;
     }
+
+    /// <summary>
+    /// Gets the emoji drawn in this run (Windows keeps their glyphs), by the picker or the background warm-up
+    /// (<see cref="EmojiWarmUp"/>): the picker shows these at once.
+    /// </summary>
+    internal static HashSet<string> Drawn { get; } = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Gets how many rows have been made (not reused), for the timing log.

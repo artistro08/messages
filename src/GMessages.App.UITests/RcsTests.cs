@@ -400,6 +400,31 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
+    /// The emoji are drawn once in the background after the chats show (the log's warm-up line, milliseconds and counts
+    /// only), so the picker's first open after it stands the app still for even less.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task EmojiWarmUp_DrawsInBackground_ThenPickerOpensQuick()
+    {
+        await OpenChatAsync("Row.c-ann");
+        string id = Find("c-ann", AnnLast).MessageID;
+
+        // Two Emoji Every 100 ms After A 3 s Wait: Done Within A Minute
+        Wait.Until(() => ReadLog().Contains("Emoji warm-up done:", StringComparison.Ordinal), TimeSpan.FromSeconds(90), () => "The emoji warm-up never finished.");
+
+        App.Find("Bubble." + id).RightClick();
+        App.Find("Bubble.React").Patterns.Invoke.Pattern.Invoke();
+        App.Find("ReactionPicker.More").Patterns.Invoke.Pattern.Invoke();
+        Wait.Until(() => ReadLog().Contains("Emoji picker open 1:", StringComparison.Ordinal), AppDriver.DefaultTimeout, () => "No picker timing in the log.");
+
+        System.Text.RegularExpressions.Match open = System.Text.RegularExpressions.Regex.Match(ReadLog(), @"Emoji picker open 1: built in \d+ ms, longest stall (\d+) ms");
+        Assert.IsTrue(open.Success, "The picker's timing line didn't parse.");
+        Assert.IsLessThan(150, int.Parse(open.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture), $"The warmed picker stood the app still: {open.Value}");
+        Keyboard.Type(VirtualKeyShort.ESCAPE);
+    }
+
+    /// <summary>
     /// In Team (a group), clicking a message's reaction pill lists who reacted, in the pill's order: 👍 from Bo and me
     /// (shown as "You"), then 😂 from Cy.
     /// </summary>
