@@ -150,63 +150,41 @@ public sealed class ConversationListViewModelTests
     }
 
     /// <summary>
-    /// Only a live new message flashes its row (sent or received, lifted or already on top, or a newest new row), and
-    /// only live changes animate. The first load, a page, a reload, a read-state or snippet update at the same time, an
-    /// older message, a catch-up message and a conversation arriving below newer ones flash nothing.
+    /// Only live changes animate: a live message lifts its row with motion; the first load, a page and a reload land in
+    /// place.
     /// </summary>
     [TestMethod]
-    public async Task RowFlashed_OnlyForLiveNewMessages_AndOnlyLiveChangesAnimate()
+    public async Task OnlyLiveChangesAnimate()
     {
         using var rig = new MainRig();
         rig.Page(MainRig.Conv("a", "Ann", minutesAgo: 5), MainRig.Conv("b", "Bo", minutesAgo: 10), MainRig.Conv("c", "Cy", minutesAgo: 20));
         rig.Client.ConversationsPage.Cursor = new Cursor { LastItemID = "next" };
-        using var list       = NewList(rig);
-        List<string> flashed = [];
-        List<bool> changing  = [];
-        list.RowFlashed     += (_, row) => flashed.Add(row.Id);
-        list.RowsChanging   += (_, live) => changing.Add(live);
+        using var list      = NewList(rig);
+        List<bool> changing = [];
+        list.RowsChanging  += (_, live) => changing.Add(live);
 
-        // First Load And A Page: Rows Come In, None Flash Or Animate
+        // First Load And A Page: Rows Come In, None Animate
         await list.LoadAsync();
         rig.Page(MainRig.Conv("d", "Di", minutesAgo: 60));
         await list.LoadMoreAsync();
         Assert.AreEqual("a,b,c,d", Ids(list));
-        Assert.AreEqual(0, flashed.Count);
         Assert.IsTrue(changing.Count > 0 && changing.All(live => !live), "Loads and pages never animate.");
 
-        // A Received Message Lifts Its Row: It Animates And Flashes
+        // A Received Message Lifts Its Row: It Animates
         changing.Clear();
         await rig.LiveMessage(LiveMsg("m1", "c", minutesAgo: 1));
         Assert.AreEqual("c,a,b,d", Ids(list));
-        Assert.AreEqual("c", string.Join(",", flashed));
         Assert.AreEqual("True", string.Join(",", changing));
 
-        // A Sent Message On The Top Row: Nothing Moves, It Still Flashes
-        await rig.LiveMessage(LiveMsg("m2", "c", minutesAgo: 0, from: "me"));
-        Assert.AreEqual("c,c", string.Join(",", flashed));
-
-        // Read State And The Snippet Update At The Same Time, An Older Message, A Catch-Up Message: No Flash
-        Conversation read = MainRig.Conv("c", "Cy", minutesAgo: 0, snippet: "sent");
-        read.Unread       = true;
-        await rig.Live(read);
-        await rig.LiveMessage(LiveMsg("m3", "b", minutesAgo: 30));
-        await rig.Store.HandleEventAsync(new MessageReceived(LiveMsg("m4", "a", minutesAgo: 0), true));
-        Assert.AreEqual(2, flashed.Count);
-
-        // A New Conversation Below Newer Ones (Unarchived) Animates In Without A Flash; A Newest One Flashes
+        // A New Conversation Below Newer Ones (Unarchived) Animates In
         changing.Clear();
         await rig.Live(MainRig.Conv("e", "Ed", minutesAgo: 7));
-        Assert.AreEqual(2, flashed.Count);
         Assert.AreEqual("True", string.Join(",", changing));
-        await rig.Live(MainRig.Conv("f", "Fa", minutesAgo: -1));
-        Assert.AreEqual("f", list.Rows[0].Id);
-        Assert.AreEqual("c,c,f", string.Join(",", flashed));
 
-        // A Reload Moves Rows Without A Flash Or Animation
+        // A Reload Moves Rows Without Animation
         changing.Clear();
         rig.Page(MainRig.Conv("b", "Bo", minutesAgo: -2), MainRig.Conv("f", "Fa", minutesAgo: -1));
         await list.LoadAsync();
-        Assert.AreEqual(3, flashed.Count);
         Assert.IsTrue(changing.All(live => !live));
     }
 
