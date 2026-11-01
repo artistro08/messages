@@ -257,10 +257,33 @@ public sealed class StartChatViewModel : INotifyPropertyChanged
             return;
         }
 
-        Results.Clear();
-        foreach (ContactRowViewModel c in rows)
+        // Changed In Place, Not Cleared And Refilled: The List Then Animates Only What Changed (A Picked Row Fades Out And
+        // The Rows Below Slide Up) And Keeps Its Scroll, Where A Refill Made It Jump (Owner, Plan 9)
+        var kept = new HashSet<ContactRowViewModel>(rows, ReferenceEqualityComparer.Instance);
+        for (int i = Results.Count - 1; i >= 0; i--)
         {
-            Results.Add(c);
+            if (!kept.Contains(Results[i]))
+            {
+                Results.RemoveAt(i);
+            }
+        }
+
+        for (int i = 0; i < rows.Count; i++)
+        {
+            if (i < Results.Count && ReferenceEquals(Results[i], rows[i]))
+            {
+                continue;
+            }
+
+            int at = Results.IndexOf(rows[i]);
+            if (at >= 0)
+            {
+                Results.Move(at, i);
+            }
+            else
+            {
+                Results.Insert(i, rows[i]);
+            }
         }
     }
 }

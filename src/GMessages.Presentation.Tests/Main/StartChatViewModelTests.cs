@@ -145,13 +145,18 @@ public sealed class StartChatViewModelTests
         StartChatViewModel vm = await NewPaneAsync(rig);
         string before = string.Join(",", vm.Results.Select(r => r.Number));
         ContactRowViewModel first = vm.Results[0];
+        var changes               = new List<System.Collections.Specialized.NotifyCollectionChangedAction>();
+        vm.Results.CollectionChanged += (_, e) => changes.Add(e.Action);
 
         vm.Toggle(first);
         Assert.IsFalse(vm.Results.Any(r => r.Number == first.Number), "the picked person still shows in the list");
         Assert.AreEqual(first.Number, vm.Selected.Single().Number);
+        CollectionAssert.AreEqual(new[] { System.Collections.Specialized.NotifyCollectionChangedAction.Remove }, changes, "picking didn't just remove the row (a refill makes the list jump)");
 
+        changes.Clear();
         vm.Toggle(vm.Selected[0]);
         Assert.AreEqual(before, string.Join(",", vm.Results.Select(r => r.Number)));
+        CollectionAssert.AreEqual(new[] { System.Collections.Specialized.NotifyCollectionChangedAction.Add }, changes, "removing the chip didn't just put the row back");
     }
 
     [TestMethod]
