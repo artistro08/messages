@@ -264,8 +264,8 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// On a short message with its time shown (the time wider than the bubble), the reaction pill still overlaps the
-    /// bubble's bottom edge, on its corner, not beside the time.
+    /// On a short message with its time shown (the time wider than the bubble), received or sent, the reaction pill still
+    /// overlaps the bubble's bottom edge on its bottom-right corner, not beside the time.
     /// </summary>
     /// <returns>A task for the test.</returns>
     [TestMethod]
@@ -287,11 +287,35 @@ public sealed class RcsTests : UiTest
         App.Find("Bubble." + id + ".Time");
         Thread.Sleep(500);
 
-        // The Text Sits 12 px Inside The Back, Which The Pill's Top Overlaps
+        AssertPillOnCorner(bubble, pill);
+
+        // Sent: Hi, Then Something After It So Its Time Isn't The Status Row
+        App.Find("Chat.Draft").Focus();
+        Keyboard.Type("Hi");
+        Keyboard.Type(VirtualKeyShort.RETURN);
+        Wait.Until(() => Server.Phone.Sent.Count == 1, AppDriver.DefaultTimeout, () => "The phone never got the message.");
+        string sent_id = Newest("c-ann").MessageID;
+        App.Find("Bubble." + Server.Phone.PushIncoming("c-ann", "Another longer message after it").MessageID);
+        AutomationElement sent = App.Find("Bubble." + sent_id);
+        sent.RightClick();
+        App.Find("Bubble.React").Patterns.Invoke.Pattern.Invoke();
+        App.Find("ReactionPicker.1").Patterns.Invoke.Pattern.Invoke();
+        AutomationElement sent_pill = App.Find("Reactions." + sent_id);
+        WaitForGone("ReactionPicker.1");
+        Thread.Sleep(500);
+        sent.Click();
+        App.Find("Bubble." + sent_id + ".Time");
+        Thread.Sleep(500);
+        AssertPillOnCorner(sent, sent_pill);
+    }
+
+    // The Pill Crosses The Bubble's Bottom Edge At Its Bottom-Right Corner. The Text Sits 12 px Inside The Back
+    private static void AssertPillOnCorner(AutomationElement bubble, AutomationElement pill)
+    {
         System.Drawing.Rectangle text = bubble.BoundingRectangle;
         System.Drawing.Rectangle on   = pill.BoundingRectangle;
         Assert.IsTrue(on.Top < text.Bottom + 12 && on.Bottom > text.Bottom + 12, $"The pill {on} doesn't cross the bubble's bottom edge (text {text}).");
-        Assert.IsTrue(on.Left < text.Right + 12, $"The pill {on} sits beside the bubble (text {text}), not on its corner.");
+        Assert.IsTrue(on.Left < text.Right + 12 && on.Right > text.Right - 4, $"The pill {on} isn't on the bubble's bottom-right corner (text {text}).");
     }
 
     /// <summary>

@@ -45,7 +45,8 @@
         Margin="{x:Bind local:MessageBubble.GroupMargin(Bubble.IsFirstInGroup, Bubble.IsLastInGroup), Mode=OneWay}">
 
         <!-- Sent Or Received: sent RCS sits right on a lighter shade of the accent, sent SMS right on the accent color,
-             received left on the card color; the reaction pill takes the bubble's inner corner. The quote is tinted to suit
+             received left on the card color; the reaction pill takes the bubble's bottom-right corner on both sides (owner),
+             and a sent bubble's time sits just left of it. The quote is tinted to suit
              the bubble it sits in. The groups must stay on the control's root element: GoToState only looks there, and
              on any element below it every state silently fails to apply -->
         <VisualStateManager.VisualStateGroups>
@@ -59,9 +60,8 @@
                         <Setter Target="BackFill.BorderBrush" Value="{ThemeResource RcsBubbleBorderBrush}" />
                         <Setter Target="Body.Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
                         <Setter Target="Under.HorizontalAlignment" Value="Right" />
-                        <Setter Target="PillHost.(Grid.Column)" Value="0" />
-                        <Setter Target="PillHost.Margin" Value="0,-8,6,0" />
-                        <Setter Target="Captions.(Grid.Column)" Value="2" />
+                        <Setter Target="Captions.(Grid.Column)" Value="1" />
+                        <Setter Target="Captions.HorizontalAlignment" Value="Right" />
                         <Setter Target="HoverStrip.(Grid.Column)" Value="0" />
                     </VisualState.Setters>
                 </VisualState>
@@ -86,9 +86,8 @@
                         <Setter Target="PreviewTitle.Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
                         <Setter Target="PreviewSite.Foreground" Value="{ThemeResource TextOnAccentFillColorSecondaryBrush}" />
                         <Setter Target="Under.HorizontalAlignment" Value="Right" />
-                        <Setter Target="PillHost.(Grid.Column)" Value="0" />
-                        <Setter Target="PillHost.Margin" Value="0,-8,6,0" />
-                        <Setter Target="Captions.(Grid.Column)" Value="2" />
+                        <Setter Target="Captions.(Grid.Column)" Value="1" />
+                        <Setter Target="Captions.HorizontalAlignment" Value="Right" />
                         <Setter Target="HoverStrip.(Grid.Column)" Value="0" />
                     </VisualState.Setters>
                 </VisualState>
@@ -723,10 +722,10 @@
                 <!-- /Hover Strip -->
             </Grid>
 
-            <!-- Under The Bubble: the reaction pill on the bubble's inner corner, and the time or caption row on its outer side,
-                 side by side, so a reaction never pushes the time down. At least as wide as the back (set from code), so the
-                 pill sits on the back's corner; under a short bubble the row grows past it on the inner side instead, and the
-                 pill moves over just enough to clear the time -->
+            <!-- Under The Bubble: the reaction pill on the bubble's bottom-right corner, and the time or caption row beside it
+                 (on the left of a received bubble, just left of the pill on a sent one). At least as wide as the back (set
+                 from code), so the pill sits on the back's corner. Under a short received bubble the time is wider than the
+                 room beside the pill: the pill is moved back onto the corner and the time drops below it (see LayPill) -->
             <Grid
                 x:Name="Under"
                 Margin="12,0"

@@ -892,15 +892,16 @@ public sealed partial class MessageBubble : UserControl
         visual.Opacity = 1;
     }
 
-    // The Pill On The Back's Inner Corner, Its Top 8 px Over The Back. Beside A Long Bubble The Time Fits Next To It; Under
-    // A Short One (The Time Wider Than The Room Beside The Pill) The Row Grows Past The Back, So The Pill Is Moved Back Onto
-    // The Corner And The Time Drops Below It (Owner, Plan 9: A Pill Beside The Time Looked Detached)
+    // The Pill On The Back's Bottom-Right Corner, Its Top 8 px Over The Back. Beside A Long Bubble The Time Fits Next To
+    // It. Under A Short Received One (The Time Wider Than The Room Beside The Pill) The Row Grows Past The Back's Right,
+    // So The Pill Is Moved Back Onto The Corner And The Time Drops Below It (Owner, Plan 9: A Pill Beside The Time Looked
+    // Detached). A Sent Row Is Right-Aligned, So Its Pill Is Always On The Corner And Its Row Grows Leftward Instead
     private void LayPill()
     {
-        bool shown     = PillHost.Visibility == Visibility.Visible && PillHost.ActualWidth > 0;
+        bool shown     = Bubble?.FromMe != true && PillHost.Visibility == Visibility.Visible && PillHost.ActualWidth > 0;
         double shift   = shown ? Math.Max(0, Under.ActualWidth - Under.MinWidth) : 0;
         bool narrow    = shift >= 1;
-        double shift_x = narrow ? (Bubble?.FromMe == true ? shift : -shift) : 0;
+        double shift_x = narrow ? -shift : 0;
         var margin     = new Thickness(0, narrow ? Math.Max(0, PillHost.ActualHeight - PillOverlap) : 0, 0, 0);
         if (_pillShift.X != shift_x)
         {
