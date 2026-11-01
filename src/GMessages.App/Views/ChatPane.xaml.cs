@@ -1273,16 +1273,23 @@ public sealed partial class ChatPane : UserControl
         // Off The Newest Messages: Nothing Pins The View Back Down, And No Older Page's Anchoring Pulls It
         _pinned = false;
         EndOlderAnchor();
+
+        // Where It Sits Centered In The View (Where It Fits): Found By Bringing Its Row In, Then The View Goes Back Where
+        // The Person Was Before Anything Draws, And Scrolls There Smoothly
+        double from = scroller.VerticalOffset;
         MessageList.ScrollIntoView(target);
         MessageList.UpdateLayout();
-
-        // Centered In The View Where It Fits
         if (RowTop(scroller, target) is { } top && MessageList.ContainerFromItem(target) is { } container)
         {
             double height = container.As<FrameworkElement>().ActualHeight;
             double offset = scroller.VerticalOffset + top - Math.Max(0, (scroller.ViewportHeight - height) / 2);
-            scroller.ChangeView(null, Math.Clamp(offset, 0, scroller.ScrollableHeight), null, true);
+            scroller.ChangeView(null, from, null, true);
             MessageList.UpdateLayout();
+            await ScrollSmoothlyAsync(scroller, offset);
+            if (Chat != chat)
+            {
+                return;
+            }
         }
 
         if (MessageList.ContainerFromItem(target) is { } shown && FindPart<MessageBubble>(shown, "BubbleView") is { } view)
@@ -2135,7 +2142,42 @@ public sealed partial class ChatPane : UserControl
     private void ScrollToNewest(ScrollViewer scroller)
     {
         _toNewest = true;
-        scroller.ChangeView(null, scroller.ScrollableHeight, null);
+        _         = ScrollSmoothlyAsync(scroller, scroller.ScrollableHeight);
+    }
+
+    // Every Jump The Chat Makes On Its Own (To The Newest Message, To A Reply's Original) Goes Through Here: A Smooth
+    // Scroll, Like CSS's scroll-behavior: smooth, Or At Once With Windows' Animation Effects Off. The Task Ends When The
+    // View Comes To Rest (At Most 1.5 s). Not For The Chat's First Place At The Bottom Or The Quiet Corrections That Keep
+    // The View Still (KeepPinned, KeepOlderAnchor), Which Stay Instant
+    private static async Task ScrollSmoothlyAsync(ScrollViewer scroller, double offset)
+    {
+        offset = Math.Clamp(offset, 0, scroller.ScrollableHeight);
+        if (Math.Abs(offset - scroller.VerticalOffset) < 1)
+        {
+            return;
+        }
+
+        bool smooth = Ui.AnimationsEnabled;
+        TestHooks.NoteState("chat-scroll", smooth ? "Smooth" : "Instant");
+        if (!smooth)
+        {
+            scroller.ChangeView(null, offset, null, disableAnimation: true);
+            return;
+        }
+
+        var rested = new TaskCompletionSource();
+        void OnViewChanged(object? sender, ScrollViewerViewChangedEventArgs e)
+        {
+            if (!e.IsIntermediate)
+            {
+                rested.TrySetResult();
+            }
+        }
+
+        scroller.ViewChanged += OnViewChanged;
+        scroller.ChangeView(null, offset, null, disableAnimation: false);
+        await Task.WhenAny(rested.Task, Task.Delay(TimeSpan.FromSeconds(1.5)));
+        scroller.ViewChanged -= OnViewChanged;
     }
 
     // Fades The Scroll-To-Bottom Button In Or Out (Its OpacityTransition Animates It); Hidden, It Takes No Clicks Or Focus

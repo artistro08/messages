@@ -965,12 +965,16 @@ public sealed class RcsTests : UiTest
         Message reply = Server.Phone.PushIncoming("c-ann", "Sure", replyToId: original);
         App.WaitForText("Quote." + reply.MessageID, AnnFirst);
 
-        string pulse = Path.Combine(App.DataDir, "pulse.txt");
+        string pulse  = Path.Combine(App.DataDir, "pulse.txt");
+        string scroll = Path.Combine(App.DataDir, "chat-scroll.txt");
+        Thread.Sleep(2000);
+        File.Delete(scroll);
         App.Find("QuoteJump." + reply.MessageID).Click();
         Wait.Until(() => File.Exists(pulse) && ReadPulse(pulse) == original, AppDriver.DefaultTimeout, () => "The quote's click never pulsed the original.");
         System.Drawing.Rectangle list = App.Find("Chat.Messages").BoundingRectangle;
         System.Drawing.Rectangle shown = App.Find("Bubble." + original).BoundingRectangle;
         Assert.IsTrue(shown.Top >= list.Top && shown.Bottom <= list.Bottom, $"The original ({shown}) isn't in view ({list}).");
+        Assert.AreEqual("Smooth", File.Exists(scroll) ? ReadPulse(scroll) : string.Empty, "The jump to the original wasn't a smooth scroll.");
 
         // Enter On The Focused Quote
         File.Delete(pulse);
