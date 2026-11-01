@@ -1,6 +1,7 @@
 using FlaUI.Core.AutomationElements;
 using FlaUI.Core.WindowsAPI;
 using GMessages.App.UITests.Driver;
+using GMessages.Presentation;
 using GMessages.Presentation.Messaging;
 using GMessages.Protocol.Proto;
 using Keyboard = FlaUI.Core.Input.Keyboard;
@@ -35,6 +36,40 @@ public sealed partial class MediaTests
         WaitForVideoPlayer("Playing Media");
         Assert.AreEqual(ChatCopy.OpenVideo, AppDriver.SafeName(App.Find("Video.Expand." + message.MessageID)), "The expand button has another name.");
         Assert.IsFalse(File.Exists(Path.Combine(App.DataDir, "launched.txt")), "Playing the video opened it outside the app.");
+    }
+
+    /// <summary>
+    /// Windows' play and pause button works on a video playing in its bubble: a click while the 20 s clip plays pauses it
+    /// where it is, and another click plays it on. There's no cast button.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Video_InlinePlayPauseButton_PausesAndPlays()
+    {
+        await OpenMediaChatAsync();
+        Message message = PushVideo("clip-long.mp4");
+
+        App.Find("Video.Play." + message.MessageID).Patterns.Invoke.Pattern.Invoke();
+        AutomationElement player = App.Find("Video.Player." + message.MessageID);
+        WaitForStatus(player, "Playing");
+        AssertPlayPauseWorks(player);
+    }
+
+    /// <summary>
+    /// Windows' play and pause button works in the viewer too: it pauses the 20 s clip where it is and plays it on.
+    /// There's no cast button.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Video_ViewerPlayPauseButton_PausesAndPlays()
+    {
+        await OpenMediaChatAsync();
+        Message message = PushVideo("clip-long.mp4");
+
+        App.Find("Bubble.Video." + message.MessageID).Patterns.Invoke.Pattern.Invoke();
+        AutomationElement player = App.Find("PhotoViewer.Video");
+        WaitForStatus(player, "Playing");
+        AssertPlayPauseWorks(player);
     }
 
     /// <summary>
@@ -126,9 +161,40 @@ public sealed partial class MediaTests
         WaitForStatus(App.Find("Chat.ReplyingToThumb"), "Thumb");
     }
 
-    // Mia Sends The 2 s Test Clip
-    private Message PushVideo() =>
-        Server.Phone.PushIncomingMedia("c-media", "video/mp4", File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Fixtures", "clip.mp4")), "clip.mp4");
+    // Mia Sends A Test Clip (The 2 s One Unless Named)
+    private Message PushVideo(string file = "clip.mp4") =>
+        Server.Phone.PushIncomingMedia("c-media", "video/mp4", File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Fixtures", file)), file);
+
+    // Pause Holds The Position, Play Moves It On Again, And No Cast Button Shows
+    private void AssertPlayPauseWorks(AutomationElement player)
+    {
+        PressPlayPause(player, "Paused");
+        AutomationElement slider = AppDriver.Search(player, e => e.Properties.AutomationId.ValueOrDefault == "ProgressSlider")
+            ?? throw new AssertFailedException("The player has no seek bar.");
+        double paused_at = slider.Patterns.RangeValue.Pattern.Value.Value;
+        Thread.Sleep(1500);
+        Assert.AreEqual(paused_at, slider.Patterns.RangeValue.Pattern.Value.Value, "The video played on after the pause button.");
+
+        PressPlayPause(player, "Playing");
+        Wait.Until(() => slider.Patterns.RangeValue.Pattern.Value.Value > paused_at, AppDriver.DefaultTimeout,
+            () => "The video didn't move on after the play button.");
+        Assert.IsNull(AppDriver.Search(player, e => e.Properties.AutomationId.ValueOrDefault == "CastButton"), "The player offers a cast button.");
+    }
+
+    // Windows' Play And Pause Button, Clicked With The Mouse As A Person Would (The Pointer Over The Player Shows Its
+    // Controls First), Then The Player's State It Should Bring
+    private void PressPlayPause(AutomationElement player, string expected)
+    {
+        App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).SetForeground();
+        System.Drawing.Rectangle box = player.BoundingRectangle;
+        FlaUI.Core.Input.Mouse.MoveTo(box.X + (box.Width / 2), box.Y + (box.Height / 2));
+        AutomationElement? button = null;
+        Wait.Until(() => (button = AppDriver.Search(player, e => e.Properties.AutomationId.ValueOrDefault is "PlayPauseButton" or "PlayPauseButtonOnLeft")) is { IsOffscreen: false },
+            AppDriver.DefaultTimeout, () => "The player's play and pause button didn't show.");
+        Thread.Sleep(400);
+        button!.Click();
+        WaitForStatus(player, expected);
+    }
 
     // The Video Player's Own State And Audio Category, As The App Noted It
     private void WaitForVideoPlayer(string expected)

@@ -22,5 +22,7 @@
   <ItemGroup>
     <!-- Media Fixtures: A 2 s, 160 x 120 H.264 + AAC Clip (ffmpeg testsrc And A 440 Hz Tone) -->
     <None Include="Fixtures\clip.mp4" CopyToOutputDirectory="PreserveNewest" />
+    <!-- A 20 s, 160 x 120 Clip Made The Same Way, Long Enough To Pause Mid-Play -->
+    <None Include="Fixtures\clip-long.mp4" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
