@@ -1786,23 +1786,22 @@ public sealed partial class MessageBubble : UserControl
 
         foreach (Hyperlink link in _links)
         {
-            // Each Line The Link's Letters Sit On: Its Top, Height And Rightmost Edge
+            // Each Line The Link's Letters Sit On: Its Top, Height And Rightmost Edge. GetCharacterRect Gives The Caret (No
+            // Width), So Each Letter's Right Edge Is The Caret Just After It, Taken Backward (At A Wrap That Caret Stays At
+            // The End Of The Line It Leaves)
             List<Rect> lines = [];
-            TextPointer? at  = link.ContentStart;
-            while (at is not null && at.Offset < link.ContentEnd.Offset)
+            TextPointer? at  = link.ContentStart.GetPositionAtOffset(1, LogicalDirection.Forward);
+            while (at is not null && at.Offset <= link.ContentEnd.Offset)
             {
-                Rect letter = at.GetCharacterRect(LogicalDirection.Forward);
-                if (letter.Width > 0)
+                Rect caret = at.GetCharacterRect(LogicalDirection.Backward);
+                int last   = lines.Count - 1;
+                if (last >= 0 && Math.Abs(lines[last].Y - caret.Y) < 1)
                 {
-                    int last = lines.Count - 1;
-                    if (last >= 0 && Math.Abs(lines[last].Y - letter.Y) < 1)
-                    {
-                        lines[last] = new Rect(lines[last].X, lines[last].Y, Math.Max(lines[last].Width, letter.Right - lines[last].X), Math.Max(lines[last].Height, letter.Height));
-                    }
-                    else
-                    {
-                        lines.Add(letter);
-                    }
+                    lines[last] = new Rect(0, lines[last].Y, Math.Max(lines[last].Width, caret.X), Math.Max(lines[last].Height, caret.Height));
+                }
+                else if (caret.Height > 0)
+                {
+                    lines.Add(new Rect(0, caret.Y, caret.X, caret.Height));
                 }
 
                 at = at.GetPositionAtOffset(1, LogicalDirection.Forward);
@@ -1825,16 +1824,18 @@ public sealed partial class MessageBubble : UserControl
     // True When A Letter After The Link (Past The Next Run's Start) Sits On The Link's Last Line
     private static bool FollowedOnLine(Hyperlink link, Rect line)
     {
+        // The Caret Just After The Next Letter: The First Past The Link's End That Moved (Element Edges Don't Move It);
+        // None When The Text Ends With The Link
+        Rect end           = link.ContentEnd.GetCharacterRect(LogicalDirection.Backward);
         TextPointer? after = link.ElementEnd;
         for (int step = 0; step < 4 && after is not null; step++)
         {
-            Rect letter = after.GetCharacterRect(LogicalDirection.Forward);
-            if (letter.Width > 0)
-            {
-                return Math.Abs(letter.Y - line.Y) < 1;
-            }
-
             after = after.GetPositionAtOffset(1, LogicalDirection.Forward);
+            if (after is not null && after.GetCharacterRect(LogicalDirection.Backward) is { Height: > 0 } caret
+                && (Math.Abs(caret.X - end.X) >= 0.5 || Math.Abs(caret.Y - end.Y) >= 0.5))
+            {
+                return Math.Abs(caret.Y - line.Y) < 1;
+            }
         }
 
         return false;
