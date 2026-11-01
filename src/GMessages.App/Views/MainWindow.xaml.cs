@@ -17,6 +17,7 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Windows.System;
 using Windows.UI.Core;
+using WinRT;
 
 namespace GMessages.App.Views;
 
@@ -59,6 +60,10 @@ public sealed partial class MainWindow : Window
     // The Owner's Photo Is Asked For Once A Load Names The Owner, And Again After An Answer Without One
     private bool _profileAsked;
 
+    // The Least Window Size, In Effective Pixels: The Chat List's Least Width; The Title Bar, A Few Rows And The Message Box
+    private const double MinWindowWidth  = ChatsView.MinListPaneWidth;
+    private const double MinWindowHeight = 500;
+
     // The Last Download's File, For Show In Folder, And The Timer That Closes Its Confirmation
     private static readonly TimeSpan DownloadedShownFor = TimeSpan.FromSeconds(6);
     private string? _downloadedPath;
@@ -92,10 +97,15 @@ public sealed partial class MainWindow : Window
         ProfileSpamBlocked.Text = ChatCopy.SpamAndBlocked;
 
         // Behavior
-        RootGrid.Loaded += (_, _) => RootGrid.XamlRoot.Changed += (_, _) =>
+        RootGrid.Loaded += (_, _) =>
         {
-            PlaceProfilePicture();
-            PunchViewerToolbar();
+            ApplyMinimumSize();
+            RootGrid.XamlRoot.Changed += (_, _) =>
+            {
+                ApplyMinimumSize();
+                PlaceProfilePicture();
+                PunchViewerToolbar();
+            };
         };
 
         // The Photo Viewer Takes The Title Bar Row While Open. The TitleBar Control Recomputes Its Own Click-Through Holes
@@ -513,6 +523,24 @@ public sealed partial class MainWindow : Window
     // =========================================================================
 
     private void OnTitleBarContentSizeChanged(object sender, SizeChangedEventArgs e) => PlaceProfilePicture();
+
+    // The Window Never Shrinks Below The Chat List's Narrowest Layout (Its Least Width, Shown Alone In A Narrow Window)
+    // Or Below Room For The Title Bar, A Few Rows And The Message Box. The Presenter Takes Physical Pixels Of The Whole
+    // Window, So The Minimum Is Scaled By The Display's Scale (Again When It Changes) And The Frame's Width Is Added
+    private void ApplyMinimumSize()
+    {
+        if (RootGrid.XamlRoot is not { } root || AppWindow.Presenter.Kind != AppWindowPresenterKind.Overlapped)
+        {
+            return;
+        }
+
+        double scale                     = root.RasterizationScale;
+        Windows.Graphics.SizeInt32 outer = AppWindow.Size;
+        Windows.Graphics.SizeInt32 inner = AppWindow.ClientSize;
+        OverlappedPresenter presenter    = AppWindow.Presenter.As<OverlappedPresenter>();
+        presenter.PreferredMinimumWidth  = (int)Math.Ceiling(MinWindowWidth * scale) + Math.Max(0, outer.Width - inner.Width);
+        presenter.PreferredMinimumHeight = (int)Math.Ceiling(MinWindowHeight * scale) + Math.Max(0, outer.Height - inner.Height);
+    }
 
     // Leaf Calendar's Way (UpdateTitleBarLayout): The Profile Picture Rides The Right End Of The Title Bar's Content,
     // Which Stretches With The Window In The Same Layout Pass, So It Never Trails The Edge. The TitleBar Control Reserves
