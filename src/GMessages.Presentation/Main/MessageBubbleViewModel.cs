@@ -200,6 +200,27 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     /// <summary>Gets whether the message replies to another one.</summary>
     public bool HasQuote => ReplyToId.Length > 0;
 
+    /// <summary>
+    /// Gets the quoted message's photo, video, voice message or file, or null; set by the chat. The quote then shows its
+    /// thumbnail (or a file icon) and its <see cref="MediaLabel"/> in <see cref="QuoteText"/>.
+    /// </summary>
+    public MediaPart? QuoteMedia { get; private set; }
+
+    /// <summary>Gets whether the quote shows the quoted media's thumbnail or icon.</summary>
+    public bool HasQuoteMedia => QuoteMedia is not null;
+
+    /// <summary>Gets whether the quote's text is a label ("Image", "Video", "GIF"), shown in italic, not a file name.</summary>
+    public bool QuoteIsLabel => QuoteMedia is not null && IsLabel(QuoteMedia);
+
+    /// <summary>Gets the label the reply chip shows for this message's media ("Image", "GIF", "Video", or the file name), or empty.</summary>
+    public string MediaLabelText => Media is { } media ? MediaLabel(media) : string.Empty;
+
+    /// <summary>Gets whether this message's media label is a label (italic), not a file name.</summary>
+    public bool MediaLabelIsLabel => Media is { } media && IsLabel(media);
+
+    /// <summary>Gets the reply chip's text: the media label for a photo, video or file, else the text.</summary>
+    public string ReplyChipText => Media is { } media ? MediaLabel(media) : DisplayText;
+
     /// <summary>Gets the first web link in the text, or null.</summary>
     public Uri? LinkUrl { get; private set; }
 
@@ -530,17 +551,44 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         PropertyChanged?.Invoke(this, AllChanged);
     }
 
-    // The Quote Shows Text-Style Emoji In Color, Like The Bubble
-    internal void SetQuote(string sender, string text)
+    /// <summary>
+    /// Names a quoted or replied-to message's media: "GIF" for a GIF, "Image" for any other picture, "Video", the file's
+    /// name for a file, else its kind ("Voice message", "File").
+    /// </summary>
+    /// <param name="media">The media.</param>
+    /// <returns>The label.</returns>
+    public static string MediaLabel(MediaPart media)
     {
-        string shown = ChatFormat.WithColorEmoji(text);
-        if (QuoteSender == sender && QuoteText == shown)
+        ArgumentNullException.ThrowIfNull(media);
+
+        return media.Kind switch
+        {
+            MessageKind.Photo when media.Mime == "image/gif" => ChatCopy.QuoteGif,
+            MessageKind.Photo                                => ChatCopy.QuoteImage,
+            MessageKind.Video                                => ChatCopy.QuoteVideo,
+            MessageKind.File when media.Name.Length > 0      => media.Name,
+            _                                                => ChatFormat.KindLabel(media.Kind),
+        };
+    }
+
+    // A Label (Italic), Not The Sender's File Name
+    private static bool IsLabel(MediaPart media) => media is not { Kind: MessageKind.File, Name.Length: > 0 };
+
+    // The Quote Shows Text-Style Emoji In Color, Like The Bubble. Quoted Media Shows Its Label In Place Of The Text, With
+    // Its Thumbnail; The Same Media Again (A New Part From An Update) Changes Nothing
+    internal void SetQuote(string sender, string text, MediaPart? media = null)
+    {
+        string shown = media is null ? ChatFormat.WithColorEmoji(text) : MediaLabel(media);
+        bool same    = media is null ? QuoteMedia is null
+            : QuoteMedia is { } q && q.MediaId == media.MediaId && q.ThumbnailId == media.ThumbnailId && q.Kind == media.Kind && q.Name == media.Name;
+        if (QuoteSender == sender && QuoteText == shown && same)
         {
             return;
         }
 
         QuoteSender = sender;
         QuoteText   = shown;
+        QuoteMedia  = media;
         PropertyChanged?.Invoke(this, AllChanged);
     }
 

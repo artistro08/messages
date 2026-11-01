@@ -1136,7 +1136,7 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
         {
             if (Messages.FirstOrDefault(q => q.Id == b.ReplyToId) is { } shown)
             {
-                b.SetQuote(ChatFormat.SenderName(c?.FindParticipant(shown.ParticipantId)), shown.Text);
+                b.SetQuote(ChatFormat.SenderName(c?.FindParticipant(shown.ParticipantId)), shown.Text, shown.Media);
             }
             else if (b.QuoteText.Length == 0)
             {
@@ -1159,7 +1159,7 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
         {
             if (!_disposed && bubble.ReplyToId == replyToId)
             {
-                bubble.SetQuote(ChatFormat.SenderName(_store.Find(ConversationId)?.FindParticipant(quoted.ParticipantId)), text);
+                bubble.SetQuote(ChatFormat.SenderName(_store.Find(ConversationId)?.FindParticipant(quoted.ParticipantId)), text, quoted.Media);
             }
         });
     }

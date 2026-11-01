@@ -506,6 +506,29 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
+    /// A reply to a photo quotes it with its thumbnail and "Image" (not its text), and replying to a photo from here shows
+    /// the same in the reply chip over the message box.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task ReplyToPhoto_QuoteShowsThumbnailAndImage()
+    {
+        await OpenMediaChatAsync();
+        Message photo = Server.Phone.PushIncomingMedia("c-media", "image/png", Png(64, 48, SplitColors), "beach.png");
+        WaitForStatus(App.Find("Bubble.Photo." + photo.MessageID), Full);
+
+        Message reply = Server.Phone.PushIncoming("c-media", "Nice", replyToId: photo.MessageID);
+        App.WaitForText("Quote." + reply.MessageID, ChatCopy.QuoteImage);
+        WaitForStatus(App.Find("QuoteThumb." + reply.MessageID), "Thumb");
+
+        // The Reply Chip
+        OpenMenu(App.Find("Bubble.Photo." + photo.MessageID));
+        App.Find("Bubble.Reply").Patterns.Invoke.Pattern.Invoke();
+        App.WaitForText("Chat.ReplyingTo", ChatCopy.QuoteImage);
+        WaitForStatus(App.Find("Chat.ReplyingToThumb"), "Thumb");
+    }
+
+    /// <summary>
     /// Scrolling a chat full of photos and GIFs fast up and down (rows recycle, photos resize) neither crashes the app
     /// nor logs an unhandled error: 0.6.2 crashed here (0xc000027b) after Windows refused the photo clip's visual
     /// (E_ACCESSDENIED) inside SizeChanged and x:Bind callbacks on recycled rows.
