@@ -372,12 +372,26 @@ public sealed class MainWindowTests : UiTest
         App.Find("Row.c-page-00");
         Assert.IsNull(App.TryFind("Row.c-page-59"), "The oldest conversation showed before scrolling, so the list didn't page.");
 
-        // Each Scroll To The Bottom Realizes The Last Row, Which Asks For The Next Page
+        // Each Scroll To The Bottom Realizes The Last Row, Which Asks For The Next Page. The Footer Ring, When Caught, Is
+        // Noted For Its Size
+        System.Drawing.Rectangle? ring = null;
         Wait.Until(() =>
         {
             list.Patterns.Scroll.Pattern.SetScrollPercent(-1, 100);
+            if (App.TryFind("Main.ListLoadingMore") is { } shown && shown.BoundingRectangle is { Width: > 0 } box)
+            {
+                ring = box;
+            }
+
             return App.TryFind("Row.c-page-59") is not null;
         }, AppDriver.DefaultTimeout, () => "Scrolling to the bottom never loaded the oldest conversation.");
+
+        // A Standard 24 px Ring (A Whole 3 px Stroke) At A Standard Display Scale, Never The Old 20 px (A 2.5 px Stroke)
+        if (ring is { } seen)
+        {
+            double scale = seen.Width / 24.0;
+            Assert.IsTrue(Math.Abs((scale * 4) - Math.Round(scale * 4)) < 0.12, $"The loading ring is {seen.Width} px, not 24 px at a standard scale.");
+        }
     }
 
     /// <summary>

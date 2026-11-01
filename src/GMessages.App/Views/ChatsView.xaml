@@ -103,11 +103,13 @@
                     </ListView.ItemTemplate>
 
                     <!-- Loading More: a small ring below the last row while the next page loads (scrolling near the
-                         bottom asks for it, see the code) -->
+                         bottom asks for it, see the code). 24 px, not 20: the ring's animation is drawn for 32 px with a
+                         4 px stroke and stretched, so 20 px gave a 2.5 px stroke whose edges never land on whole pixels
+                         and look jagged as it turns; 24 px gives a whole 3 px -->
                     <ListView.Footer>
                         <ProgressRing
-                            Width="20"
-                            Height="20"
+                            Width="24"
+                            Height="24"
                             Margin="0,8"
                             HorizontalAlignment="Center"
                             AutomationProperties.AutomationId="Main.ListLoadingMore"
@@ -116,9 +118,12 @@
                     </ListView.Footer>
                 </ListView>
 
-                <!-- Loading: while an empty list (the inbox, Archived or Spam & blocked) loads -->
+                <!-- Loading: while an empty list (the inbox, Archived or Spam & blocked) loads; the standard 32 px (a whole
+                     4 px stroke), stated so a style change can't make it fractional -->
                 <ProgressRing
                     Grid.Row="4"
+                    Width="32"
+                    Height="32"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center"
                     AutomationProperties.AutomationId="Main.ListLoading"
