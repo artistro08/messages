@@ -1,5 +1,6 @@
 using GMessages.Presentation.Messaging;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 
@@ -38,6 +39,13 @@ public sealed partial class MediaThumb : UserControl
     {
         InitializeComponent();
     }
+
+    /// <summary>
+    /// Gives the square an automation peer, so its AutomationId and state reach UI Automation (a UserControl has none of
+    /// its own, which left it out of the tree).
+    /// </summary>
+    /// <returns>The peer.</returns>
+    protected override AutomationPeer OnCreateAutomationPeer() => new FrameworkElementAutomationPeer(this);
 
     /// <summary>
     /// Gets or sets the media the square stands for, or null.
