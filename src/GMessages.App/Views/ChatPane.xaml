@@ -491,6 +491,24 @@
                                             CornerRadius="12"
                                             Style="{StaticResource IconButtonStyle}"
                                             ToolTipService.ToolTip="{x:Bind local:ChatPane.RemoveAttachmentText}">
+
+                                            <!-- Hover And Press: the round fill stays (the icon style clears it); pressing shrinks
+                                                 the circle and releasing springs it back (IconPress, with animation effects on).
+                                                 High contrast keeps the system's own colors -->
+                                            <Button.Resources>
+                                                <ResourceDictionary>
+                                                    <ResourceDictionary.ThemeDictionaries>
+                                                        <ResourceDictionary x:Key="Light">
+                                                            <StaticResource x:Key="SubtleButtonBackgroundPointerOver" ResourceKey="AcrylicInAppFillColorDefaultBrush" />
+                                                            <StaticResource x:Key="SubtleButtonBackgroundPressed" ResourceKey="AcrylicInAppFillColorDefaultBrush" />
+                                                        </ResourceDictionary>
+                                                        <ResourceDictionary x:Key="Dark">
+                                                            <StaticResource x:Key="SubtleButtonBackgroundPointerOver" ResourceKey="AcrylicInAppFillColorDefaultBrush" />
+                                                            <StaticResource x:Key="SubtleButtonBackgroundPressed" ResourceKey="AcrylicInAppFillColorDefaultBrush" />
+                                                        </ResourceDictionary>
+                                                    </ResourceDictionary.ThemeDictionaries>
+                                                </ResourceDictionary>
+                                            </Button.Resources>
                                             <FontIcon FontSize="10" Glyph="&#xE711;" />
                                         </Button>
                                     </Grid>
