@@ -15,7 +15,7 @@
         <ResourceDictionary>
             <ResourceDictionary.ThemeDictionaries>
                 <ResourceDictionary x:Key="Default">
-                    <SolidColorBrush x:Key="PhotoViewerScrimBrush" Color="#E6000000" />
+                    <SolidColorBrush x:Key="PhotoViewerScrimBrush" Color="#D9000000" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="HighContrast">
                     <SolidColorBrush x:Key="PhotoViewerScrimBrush" Color="{ThemeResource SystemColorWindowColor}" />
