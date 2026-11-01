@@ -441,6 +441,28 @@ public sealed class MainWindowTests : UiTest
     }
 
     /// <summary>
+    /// The window stops shrinking at its least size: the chat list's narrowest width (300 px) by 500 px, at the display's
+    /// scale, plus the frame.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Window_ResizeBelowMinimum_StopsAtMinimum()
+    {
+        await OpenMainAsync();
+        WaitForRows(InboxRows);
+        Window window = App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout);
+        double scale  = App.Find("Main.TitleBar").BoundingRectangle.Height / 48.0;
+
+        window.Patterns.Transform.Pattern.Resize(100, 100);
+        Thread.Sleep(500);
+
+        System.Drawing.Rectangle box = window.BoundingRectangle;
+        Assert.IsTrue(box.Width >= (300 * scale) - 1 && box.Width <= (300 * scale) + (40 * scale), $"The window shrank to {box.Width} px wide, not about {300 * scale:F0} px (scale {scale:F2}).");
+        Assert.IsTrue(box.Height >= (500 * scale) - 1 && box.Height <= (500 * scale) + (40 * scale), $"The window shrank to {box.Height} px tall, not about {500 * scale:F0} px (scale {scale:F2}).");
+        App.Find("Main.ConversationList");
+    }
+
+    /// <summary>
     /// A narrow window shows one pane: picking a conversation hides the list and shows the chat.
     /// </summary>
     /// <returns>A task for the test.</returns>

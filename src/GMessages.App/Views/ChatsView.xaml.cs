@@ -63,12 +63,12 @@ public sealed partial class ChatsView : UserControl
     // Layout: Below This Width (Effective Pixels) One Pane Shows At A Time; The List Pane's Default Width Beside The
     // Chat And The Narrowest It Can Be Dragged; How Far Start Chat Slides Down To Hide, And Its Shadow's Lift; How Far
     // The List Must Scroll Against The Current Direction To Hide Or Show Start Chat
-    private const double NarrowBelow      = 720;
-    private const double ListPaneWidth    = 360;
-    private const double MinListPaneWidth = 300;
-    private const float StartChatDrop     = 96;
-    private const float StartChatLift     = 16;
-    private const double StartChatNudge   = 24;
+    private const double NarrowBelow       = 720;
+    private const double ListPaneWidth     = 360;
+    internal const double MinListPaneWidth = 300;
+    private const float StartChatDrop      = 96;
+    private const float StartChatLift      = 16;
+    private const double StartChatNudge    = 24;
 
     private readonly SettingsViewModel _settings;
     private readonly ScrollHider _startChatHider = new(StartChatNudge);
