@@ -117,6 +117,9 @@ public static class ChatCopy
     public const string SnoozeLength            = "Snooze length";
     public const string SnoozeLengthDescription = "How long Snooze on a notification waits before showing it again.";
 
+    // Link Previews (Settings Card; Owner Approved)
+    public const string ShowReceivedLinkPreviews = "Show previews for links you receive";
+
     // Microphone (Settings Card; Owner Signs Off)
     public const string Microphone            = "Microphone";
     public const string MicrophoneDescription = "Which microphone records voice messages.";

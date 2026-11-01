@@ -522,7 +522,7 @@ public partial class App : Application, IDisposable
         {
             // The List And The Last Open Chat Show At Once From What The Store Already Has, Then Refresh Quietly. Only An
             // Inbox Chat Comes Back: One From Spam & Blocked, Or Moved Out Of The Inbox Meanwhile, Stays Closed
-            window.ShowChats(new MainViewModel(connection, store, TimeProvider.System, a => dispatcher.TryEnqueue(() => a()), _linkPreviewer));
+            window.ShowChats(new MainViewModel(connection, store, TimeProvider.System, a => dispatcher.TryEnqueue(() => a()), _linkPreviewer, () => _settings?.ShowReceivedLinkPreviews ?? true));
             if (_lastConversationId is { } last && store.Find(last) is { IsMainView: true })
             {
                 window.SelectConversation(last);

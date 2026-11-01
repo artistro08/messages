@@ -40,6 +40,7 @@ public sealed class SettingsTests : UiTest
         Assert.AreEqual(0, ThemeIndex(), "Theme should start at 'Use system setting'.");
         WaitForToggle("Settings.Notifications", ToggleState.On);
         WaitForToggle("Settings.NotifyViewedChat", ToggleState.Off);
+        WaitForToggle("Settings.ReceivedLinkPreviews", ToggleState.On);
         WaitForToggle("Settings.StartWithWindows", ToggleState.Off);
         Assert.AreEqual(ChatCopy.Minutes15, SnoozeLength(), "Snooze length should start at 15 minutes.");
         // "Windows Default" Can Name Today's Default Microphone After It: "Windows default (…)"
@@ -57,6 +58,7 @@ public sealed class SettingsTests : UiTest
         // Switches; Start With Windows Writes The Test Marker
         Toggle("Settings.Notifications", ToggleState.Off);
         Toggle("Settings.NotifyViewedChat", ToggleState.On);
+        Toggle("Settings.ReceivedLinkPreviews", ToggleState.Off);
         Toggle("Settings.StartWithWindows", ToggleState.On);
         Wait.Until(() => File.Exists(marker), AppDriver.DefaultTimeout, () => "Start with Windows didn't write the startup-enabled marker.");
 
@@ -75,6 +77,7 @@ public sealed class SettingsTests : UiTest
         Wait.Until(() => ThemeIndex() == DarkIndex, AppDriver.DefaultTimeout, () => $"Theme came back as index {ThemeIndex()}, not Dark.");
         WaitForToggle("Settings.Notifications", ToggleState.Off);
         WaitForToggle("Settings.NotifyViewedChat", ToggleState.On);
+        WaitForToggle("Settings.ReceivedLinkPreviews", ToggleState.Off);
         WaitForToggle("Settings.StartWithWindows", ToggleState.On);
         Wait.Until(() => SnoozeLength() == ChatCopy.Hour1, AppDriver.DefaultTimeout, () => $"Snooze length came back as '{SnoozeLength()}', not 1 hour.");
     }

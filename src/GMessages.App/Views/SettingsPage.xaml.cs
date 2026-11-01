@@ -39,6 +39,8 @@ public sealed partial class SettingsPage : UserControl
         SnoozeHeader.Text      = ChatCopy.SnoozeLength;
         SnoozeDescription.Text = ChatCopy.SnoozeLengthDescription;
         AutomationProperties.SetName(SnoozeBox, ChatCopy.SnoozeLength);
+        ReceivedPreviewsHeader.Text = ChatCopy.ShowReceivedLinkPreviews;
+        AutomationProperties.SetName(ReceivedPreviewsSwitch, ChatCopy.ShowReceivedLinkPreviews);
         MicrophoneHeader.Text      = ChatCopy.Microphone;
         MicrophoneDescription.Text = ChatCopy.MicrophoneDescription;
         AutomationProperties.SetName(MicrophoneBox, ChatCopy.Microphone);

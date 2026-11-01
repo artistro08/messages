@@ -175,6 +175,25 @@
                     </Grid>
                 </Border>
 
+                <!-- Link Previews -->
+                <TextBlock Style="{StaticResource GroupHeaderStyle}" Text="Privacy" />
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
+                        <FontIcon Glyph="&#xE71B;" Style="{StaticResource CardIconStyle}" />
+                        <TextBlock
+                            x:Name="ReceivedPreviewsHeader"
+                            Grid.Column="1"
+                            VerticalAlignment="Center"
+                            TextWrapping="Wrap" />
+                        <ToggleSwitch
+                            x:Name="ReceivedPreviewsSwitch"
+                            Grid.Column="2"
+                            AutomationProperties.AutomationId="Settings.ReceivedLinkPreviews"
+                            IsOn="{x:Bind ViewModel.ShowReceivedLinkPreviews, Mode=TwoWay}"
+                            Style="{StaticResource CardToggleSwitchStyle}" />
+                    </Grid>
+                </Border>
+
                 <!-- Voice Messages -->
                 <TextBlock Style="{StaticResource GroupHeaderStyle}" Text="Voice messages" />
 

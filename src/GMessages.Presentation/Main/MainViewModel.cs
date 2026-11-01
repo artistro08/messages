@@ -35,6 +35,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     // Fetches Link Preview Cards For The Open Chat; Null Means None
     private readonly LinkPreviewer? _previews;
 
+    // Whether Received Messages' Links Get Previews (Settings); Null Means Always
+    private readonly Func<bool>? _showReceivedPreviews;
+
     // Each Conversation's Unsent Draft While The Window Is Open, So Escape Or Another Chat Loses Nothing (Memory Only)
     private readonly Dictionary<string, string> _drafts = new(StringComparer.Ordinal);
 
@@ -62,21 +65,23 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// <param name="time">Gives the current time for the list times.</param>
     /// <param name="post">Runs an action on the UI thread.</param>
     /// <param name="previews">Fetches link preview cards for the open chat; null for none. The caller owns it.</param>
-    /// <exception cref="ArgumentNullException">An argument other than <paramref name="previews"/> is null.</exception>
-    public MainViewModel(ConnectionController connection, ChatStore store, TimeProvider time, Action<Action> post, LinkPreviewer? previews = null)
+    /// <param name="showReceivedPreviews">Says whether received messages' links get previews; null for always.</param>
+    /// <exception cref="ArgumentNullException">An argument other than <paramref name="previews"/> or <paramref name="showReceivedPreviews"/> is null.</exception>
+    public MainViewModel(ConnectionController connection, ChatStore store, TimeProvider time, Action<Action> post, LinkPreviewer? previews = null, Func<bool>? showReceivedPreviews = null)
     {
         ArgumentNullException.ThrowIfNull(connection);
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(time);
         ArgumentNullException.ThrowIfNull(post);
 
-        _connection = connection;
-        _store      = store;
-        _time       = time;
-        _post       = post;
-        _previews   = previews;
-        _state      = connection.State;
-        Inbox       = new ConversationListViewModel(store, ConversationFolder.Inbox, time, post);
+        _connection           = connection;
+        _store                = store;
+        _time                 = time;
+        _post                 = post;
+        _previews             = previews;
+        _showReceivedPreviews = showReceivedPreviews;
+        _state                = connection.State;
+        Inbox                 = new ConversationListViewModel(store, ConversationFolder.Inbox, time, post);
 
         _connection.StateChanged += OnStateChanged;
         _connection.ClientEvent  += OnClientEvent;
@@ -372,7 +377,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
         if (conversationId is not null)
         {
-            Chat = new ChatViewModel(_store, conversationId, _time, _post, _previews);
+            Chat = new ChatViewModel(_store, conversationId, _time, _post, _previews, _showReceivedPreviews);
             if (_drafts.TryGetValue(conversationId, out string? draft))
             {
                 Chat.RestoreDraft(draft);

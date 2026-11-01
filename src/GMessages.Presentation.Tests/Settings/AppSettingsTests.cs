@@ -22,6 +22,7 @@ public sealed class AppSettingsTests
         Assert.AreEqual(AppTheme.System, settings.Theme);
         Assert.IsTrue(settings.NotificationsEnabled);
         Assert.IsFalse(settings.NotifyForViewedChat);
+        Assert.IsTrue(settings.ShowReceivedLinkPreviews);
         Assert.AreEqual(LogLevel.Information, settings.LogLevel);
         Assert.AreEqual(15, settings.SnoozeMinutes);
         Assert.IsNull(settings.ListWidth);
@@ -43,13 +44,14 @@ public sealed class AppSettingsTests
         var path = Path.Combine(_folder, "settings.json");
         _ = new AppSettings(new JsonFileSettingsStore(path))
         {
-            Theme                = AppTheme.Dark,
-            NotificationsEnabled = false,
-            NotifyForViewedChat  = true,
-            LogLevel             = LogLevel.Debug,
-            SnoozeMinutes        = 60,
-            ListWidth            = 412.5,
-            MicrophoneId         = @"\\?\SWD#MMDEVAPI#{0.0.1.00000000}.{mic}",
+            Theme                    = AppTheme.Dark,
+            NotificationsEnabled     = false,
+            NotifyForViewedChat      = true,
+            ShowReceivedLinkPreviews = false,
+            LogLevel                 = LogLevel.Debug,
+            SnoozeMinutes            = 60,
+            ListWidth                = 412.5,
+            MicrophoneId             = @"\\?\SWD#MMDEVAPI#{0.0.1.00000000}.{mic}",
         };
 
         var reloaded = new AppSettings(new JsonFileSettingsStore(path));
@@ -57,6 +59,7 @@ public sealed class AppSettingsTests
         Assert.AreEqual(AppTheme.Dark, reloaded.Theme);
         Assert.IsFalse(reloaded.NotificationsEnabled);
         Assert.IsTrue(reloaded.NotifyForViewedChat);
+        Assert.IsFalse(reloaded.ShowReceivedLinkPreviews);
         Assert.AreEqual(LogLevel.Debug, reloaded.LogLevel);
         Assert.AreEqual(60, reloaded.SnoozeMinutes);
         Assert.AreEqual(412.5, reloaded.ListWidth);

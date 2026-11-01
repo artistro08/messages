@@ -166,6 +166,21 @@ public sealed class SettingsViewModelTests
         Assert.IsFalse(vm.NotifyForViewedChat);
     }
 
+    /// <summary>
+    /// Received-link previews are on for a fresh install, and turning them off lands in the store.
+    /// </summary>
+    [TestMethod]
+    public void ShowReceivedLinkPreviews_DefaultsOn_AndPersists()
+    {
+        var store = new InMemorySettingsStore();
+        var vm    = Create(store);
+        Assert.IsTrue(vm.ShowReceivedLinkPreviews);
+
+        vm.ShowReceivedLinkPreviews = false;
+
+        Assert.IsFalse(new AppSettings(store).ShowReceivedLinkPreviews);
+    }
+
     // =========================================================================
     // START WITH WINDOWS
     // =========================================================================

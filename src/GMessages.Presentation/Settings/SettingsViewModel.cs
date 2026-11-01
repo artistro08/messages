@@ -154,6 +154,29 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged, IDisposa
         }
     }
 
+    // =========================================================================
+    // LINK PREVIEWS
+    // =========================================================================
+
+    /// <summary>
+    /// Gets or sets whether links in received messages get preview cards. On by default; turning it off stops this PC
+    /// fetching pages that senders chose.
+    /// </summary>
+    public bool ShowReceivedLinkPreviews
+    {
+        get => _settings.ShowReceivedLinkPreviews;
+        set
+        {
+            if (value == _settings.ShowReceivedLinkPreviews)
+            {
+                return;
+            }
+
+            _settings.ShowReceivedLinkPreviews = value;
+            Raise();
+        }
+    }
+
     /// <summary>
     /// Gets the snooze length dropdown's items, in <see cref="AppSettings.SnoozeChoices"/> order.
     /// </summary>

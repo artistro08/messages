@@ -1,6 +1,7 @@
 using System.Net;
 using GMessages.Presentation.Main;
 using GMessages.Presentation.Messaging;
+using GMessages.Presentation.Settings;
 using GMessages.Presentation.Tests.Messaging;
 using GMessages.Protocol.Events;
 using GMessages.Protocol.Proto;
@@ -1602,7 +1603,7 @@ public sealed class ChatViewModelTests
         rig.Client.Conversations["a"] = MainRig.Conv("a", "Ann");
         rig.Client.MessagesPage       = new ListMessagesResponse();
         rig.Client.MessagesPage.Messages.Add(Msg("m1", "look https://www.example.com/a."));
-        using var chat = new ChatViewModel(rig.Store, "a", TimeProvider.System, a => a(), previews);
+        using var chat = new ChatViewModel(rig.Store, "a", TimeProvider.System, a => a(), previews, () => true);
 
         await chat.LoadAsync();
 
@@ -1616,6 +1617,79 @@ public sealed class ChatViewModelTests
         Assert.AreEqual("Page Title", bubble.Preview!.Title);
         Assert.AreEqual(1, handler.Requests.Count);
         Assert.AreEqual("https://www.example.com/a", handler.Requests[0].Url);
+    }
+
+    /// <summary>
+    /// Owner decision D2: with the setting turned off, a received message's link is never fetched.
+    /// </summary>
+    [TestMethod]
+    public async Task ReceivedLink_SettingOff_NoFetch()
+    {
+        using var rig      = new MainRig();
+        var handler        = PreviewPage();
+        using var previews = new LinkPreviewer(handler, false, NullLogger.Instance, TestProxy.Direct);
+        rig.Client.Conversations["a"] = MainRig.Conv("a", "Ann");
+        rig.Client.MessagesPage       = new ListMessagesResponse();
+        rig.Client.MessagesPage.Messages.Add(Msg("m1", "look https://www.example.com/a"));
+        using var chat = new ChatViewModel(rig.Store, "a", TimeProvider.System, a => a(), previews, () => false);
+
+        await chat.LoadAsync();
+        await rig.LiveMessage(Msg("m2", "and https://www.example.com/b"));
+        await Task.Delay(100);
+
+        Assert.AreEqual(2, chat.Messages.Count);
+        Assert.AreEqual(0, handler.Requests.Count);
+        Assert.IsFalse(chat.Messages.Any(b => b.HasPreview));
+    }
+
+    /// <summary>
+    /// Owner decision D2: a fresh settings store (the default is on) lets a received message's link fetch.
+    /// </summary>
+    [TestMethod]
+    public async Task ReceivedLink_Default_Fetches()
+    {
+        using var rig      = new MainRig();
+        var handler        = PreviewPage();
+        var settings       = new AppSettings(new InMemorySettingsStore());
+        using var previews = new LinkPreviewer(handler, false, NullLogger.Instance, TestProxy.Direct);
+        rig.Client.Conversations["a"] = MainRig.Conv("a", "Ann");
+        rig.Client.MessagesPage       = new ListMessagesResponse();
+        rig.Client.MessagesPage.Messages.Add(Msg("m1", "look https://www.example.com/a"));
+        using var chat = new ChatViewModel(rig.Store, "a", TimeProvider.System, a => a(), previews, () => settings.ShowReceivedLinkPreviews);
+
+        await chat.LoadAsync();
+        for (int i = 0; i < 100 && handler.Requests.Count == 0; i++)
+        {
+            await Task.Delay(20);
+        }
+
+        Assert.AreEqual(1, handler.Requests.Count);
+    }
+
+    /// <summary>
+    /// Owner decision D2: the user's own links keep their previews with the setting off.
+    /// </summary>
+    [TestMethod]
+    public async Task OwnLink_SettingOff_Fetches()
+    {
+        using var rig      = new MainRig();
+        var handler        = PreviewPage();
+        using var previews = new LinkPreviewer(handler, false, NullLogger.Instance, TestProxy.Direct);
+        Conversation conv  = MainRig.Conv("a", "Ann");
+        conv.DefaultOutgoingID = "me";
+        rig.Client.Conversations["a"] = conv;
+        rig.Client.MessagesPage       = new ListMessagesResponse();
+        rig.Client.MessagesPage.Messages.Add(Msg("m1", "look https://www.example.com/a", "t1", "me", MessageStatusType.OutgoingComplete));
+        using var chat = new ChatViewModel(rig.Store, "a", TimeProvider.System, a => a(), previews, () => false);
+
+        await chat.LoadAsync();
+        for (int i = 0; i < 100 && handler.Requests.Count == 0; i++)
+        {
+            await Task.Delay(20);
+        }
+
+        Assert.IsTrue(chat.Messages.Single().FromMe);
+        Assert.AreEqual(1, handler.Requests.Count);
     }
 
     /// <summary>

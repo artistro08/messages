@@ -52,6 +52,9 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     // Fetches Link Preview Cards; Null Means None
     private readonly LinkPreviewer? _previews;
 
+    // Whether A Received Message's Link May Be Fetched For A Preview (Settings; Read On Each Refresh); Null Means Always
+    private readonly Func<bool>? _showReceivedPreviews;
+
     // Clears The Typing Dots When No Stop Arrives In Time
     private readonly ITimer _typingTimer;
 
@@ -116,8 +119,12 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     /// <param name="time">Gives the current time.</param>
     /// <param name="post">Runs an action on the UI thread.</param>
     /// <param name="previews">Fetches link preview cards for an inbox chat's bubbles; null for none.</param>
-    /// <exception cref="ArgumentNullException">An argument other than <paramref name="previews"/> is null.</exception>
-    public ChatViewModel(ChatStore store, string conversationId, TimeProvider time, Action<Action> post, LinkPreviewer? previews = null)
+    /// <param name="showReceivedPreviews">
+    /// Says whether links in received messages get a preview (a stranger's link is then fetched); null for always. Links
+    /// in the user's own messages always do.
+    /// </param>
+    /// <exception cref="ArgumentNullException">An argument other than <paramref name="previews"/> or <paramref name="showReceivedPreviews"/> is null.</exception>
+    public ChatViewModel(ChatStore store, string conversationId, TimeProvider time, Action<Action> post, LinkPreviewer? previews = null, Func<bool>? showReceivedPreviews = null)
     {
         ArgumentNullException.ThrowIfNull(store);
         ArgumentException.ThrowIfNullOrEmpty(conversationId);
@@ -129,6 +136,8 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
         _time          = time;
         _post          = post;
         _previews      = previews;
+
+        _showReceivedPreviews = showReceivedPreviews;
 
         _typingTimer = time.CreateTimer(_ => _post(OnTypingTimeout), null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
         _isEncrypted = store.IsEncrypted(conversationId);
@@ -1285,7 +1294,7 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
         || (a is not null && b is not null && a.IsGroup == b.IsGroup && a.DefaultOutgoingId == b.DefaultOutgoingId && a.Participants.SequenceEqual(b.Participants));
 
     // Asks Once Per Link For Each Bubble's Preview Card, Only In An Inbox Chat: Never For Spam, Blocked Or Archived
-    // Chats, Or One Not Known Yet, So A Stranger's Link Is Never Fetched
+    // Chats, Or One Not Known Yet, So A Stranger's Link Is Never Fetched. A Received Message's Link Waits For The Setting
     private void RefreshPreviews(ConversationInfo? c)
     {
         if (_previews is null || c is not { IsMainView: true })
@@ -1293,9 +1302,10 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
+        bool received = _showReceivedPreviews?.Invoke() ?? true;
         foreach (MessageBubbleViewModel b in Messages)
         {
-            if (b.LinkUrl is { } url && b.PreviewAskedFor != url)
+            if ((b.FromMe || received) && b.LinkUrl is { } url && b.PreviewAskedFor != url)
             {
                 b.PreviewAskedFor = url;
                 _ = LoadPreviewAsync(_previews, b, url);

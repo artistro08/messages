@@ -14,13 +14,14 @@ namespace GMessages.Presentation.Settings;
 /// </remarks>
 public sealed class AppSettings : INotifyPropertyChanged
 {
-    private const string ThemeKey                = "Theme";
-    private const string NotificationsEnabledKey = "NotificationsEnabled";
-    private const string NotifyForViewedChatKey  = "NotifyForViewedChat";
-    private const string LogLevelKey             = "LogLevel";
-    private const string SnoozeMinutesKey        = "SnoozeMinutes";
-    private const string ListWidthKey            = "ListWidth";
-    private const string MicrophoneIdKey         = "MicrophoneId";
+    private const string ThemeKey                    = "Theme";
+    private const string NotificationsEnabledKey     = "NotificationsEnabled";
+    private const string NotifyForViewedChatKey      = "NotifyForViewedChat";
+    private const string LogLevelKey                 = "LogLevel";
+    private const string SnoozeMinutesKey            = "SnoozeMinutes";
+    private const string ListWidthKey                = "ListWidth";
+    private const string MicrophoneIdKey             = "MicrophoneId";
+    private const string ShowReceivedLinkPreviewsKey = "ShowReceivedLinkPreviews";
 
     // Snooze Lengths, In Minutes (The Choices Settings Offers), And The Default
     private const int DefaultSnoozeMinutes = 15;
@@ -64,6 +65,16 @@ public sealed class AppSettings : INotifyPropertyChanged
     {
         get => GetBool(NotifyForViewedChatKey, false);
         set => Set(NotifyForViewedChatKey, value.ToString(CultureInfo.InvariantCulture));
+    }
+
+    /// <summary>
+    /// Whether a link in a received message gets a preview card, which means this PC fetches the page the sender chose.
+    /// Defaults to true; links in the user's own messages always get one.
+    /// </summary>
+    public bool ShowReceivedLinkPreviews
+    {
+        get => GetBool(ShowReceivedLinkPreviewsKey, true);
+        set => Set(ShowReceivedLinkPreviewsKey, value.ToString(CultureInfo.InvariantCulture));
     }
 
     /// <summary>
