@@ -43,6 +43,11 @@ public sealed partial class LinkPreviewer : IDisposable
     /// <summary>The widest a card image is kept, in pixels; a wider one is scaled down when fetched.</summary>
     public const int MaxImageWidth = 480;
 
+    // The Largest Card Image Decoded: Either Side, And Pixels In All. Shrinking Only Scales Down, So The Kept Height Stays
+    // Within The Side Limit Too
+    private const int MaxImageSide = 8192;
+    private const long MaxImagePixels = 16_000_000;
+
     // How Many Links' Results Are Kept In Memory, And Their Images' Byte Budget
     private const int CacheSize = 50;
     private const int CacheImageBytes = 4 * 1024 * 1024;
@@ -493,7 +498,8 @@ public sealed partial class LinkPreviewer : IDisposable
     /// </summary>
     /// <remarks>
     /// One that is narrow enough keeps its own bytes, so a small GIF still moves. Bytes Windows can't read give no image,
-    /// as the card couldn't show them anyway.
+    /// as the card couldn't show them anyway, and so does an image over 8192 pixels on a side or 16 million in all
+    /// (a few bytes can claim a huge size, and a remote sender picks the link).
     /// </remarks>
     /// <param name="bytes">The image as fetched.</param>
     /// <returns>The image to keep, or null for none.</returns>
@@ -503,6 +509,14 @@ public sealed partial class LinkPreviewer : IDisposable
         {
             using IRandomAccessStream input = new MemoryStream(bytes, writable: false).AsRandomAccessStream();
             BitmapDecoder decoder           = await BitmapDecoder.CreateAsync(input);
+
+            // Too Many Pixels To Decode Safely (The Bytes Don't Bound Them): No Image, Here Or In The Bubble Later
+            if (decoder.PixelWidth > MaxImageSide || decoder.PixelHeight > MaxImageSide
+                || (long)decoder.PixelWidth * decoder.PixelHeight > MaxImagePixels)
+            {
+                return null;
+            }
+
             if (decoder.OrientedPixelWidth <= MaxImageWidth)
             {
                 return bytes;

@@ -310,6 +310,39 @@ public sealed class LinkPreviewerTests
     }
 
     /// <summary>
+    /// A card image over 16 million pixels (each side within 8192) is dropped; the card keeps its text.
+    /// </summary>
+    [TestMethod]
+    public async Task Preview_HugePixelCount_Rejected()
+    {
+        byte[] png = await MakePngAsync(4001, 4000, 255);
+        Assert.IsLessThan(LinkPreviewer.MaxImageBytes, png.Length, "Must be refused for its pixels, not its bytes");
+        using var previewer = new LinkPreviewer(ImagePage(png), false, new CollectingLogger(), TestProxy.Direct);
+
+        LinkPreview? preview = await previewer.GetAsync(Page, CancellationToken.None);
+
+        Assert.IsNotNull(preview);
+        Assert.AreEqual("Example Title", preview.Title);
+        Assert.IsNull(preview.Image);
+    }
+
+    /// <summary>
+    /// A narrow card image taller than 8192 pixels is dropped, though it is narrow enough to keep as sent.
+    /// </summary>
+    [TestMethod]
+    public async Task Preview_TallNarrow_Rejected()
+    {
+        byte[] png = await MakePngAsync(100, 8193, 255);
+        Assert.IsLessThan(LinkPreviewer.MaxImageBytes, png.Length, "Must be refused for its pixels, not its bytes");
+        using var previewer = new LinkPreviewer(ImagePage(png), false, new CollectingLogger(), TestProxy.Direct);
+
+        LinkPreview? preview = await previewer.GetAsync(Page, CancellationToken.None);
+
+        Assert.IsNotNull(preview);
+        Assert.IsNull(preview.Image);
+    }
+
+    /// <summary>
     /// A wide card image with transparency is scaled down but stays PNG.
     /// </summary>
     [TestMethod]

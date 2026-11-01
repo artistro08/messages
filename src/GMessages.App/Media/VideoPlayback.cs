@@ -6,6 +6,7 @@ using Microsoft.UI.Xaml.Media;
 using Windows.Media.Core;
 using Windows.Media.Playback;
 using Windows.Storage.Streams;
+using Windows.Foundation;
 using WinRT;
 
 namespace GMessages.App.Media;
@@ -37,6 +38,9 @@ internal sealed class VideoPlayback : IDisposable
 
     // Hides Cast And Full Window Once The Controls Make Them; Held, So Dispose Can Take It Off If They Never Did
     private readonly EventHandler<object> _hideExtras;
+
+    // Seeks To The Start Position Once Opened; Held, So Dispose Can Take It Off
+    private readonly TypedEventHandler<MediaPlayer, object>? _seekToStart;
     private bool _disposed;
 
     /// <summary>
@@ -67,7 +71,8 @@ internal sealed class VideoPlayback : IDisposable
         // The Start Position Once Opened (The Item's Own Start Time Alone Left The Player At The Beginning)
         if (start > TimeSpan.Zero)
         {
-            Player.MediaOpened += (sender, _) => sender.PlaybackSession.Position = start;
+            _seekToStart        = (sender, _) => sender.PlaybackSession.Position = start;
+            Player.MediaOpened += _seekToStart;
         }
 
         Player.PlaybackSession.PlaybackStateChanged += OnPlaybackStateChanged;
@@ -132,6 +137,11 @@ internal sealed class VideoPlayback : IDisposable
         Element.TransportControls.LayoutUpdated     -= _hideExtras;
         Player.MediaFailed                          -= OnMediaFailed;
         Player.PlaybackSession.PlaybackStateChanged -= OnPlaybackStateChanged;
+        if (_seekToStart is not null)
+        {
+            Player.MediaOpened -= _seekToStart;
+        }
+
         Player.Pause();
 
         // The Element Lets Go Of The Player, Then The Player, Its Item (Not Closable: Dropped As Its Source), Source And

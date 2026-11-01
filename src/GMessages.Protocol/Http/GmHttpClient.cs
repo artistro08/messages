@@ -302,7 +302,7 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
             buffer.Write(chunk, 0, read);
         }
 
-        // The Buffer Itself When It Is Exactly Full, Else A Trimmed Copy
+        // Unknown Length Still Copies Once (ToArray) Unless The Buffer Is Exactly Full, When It Is Returned Itself
         return buffer.TryGetBuffer(out ArraySegment<byte> filled) && filled.Array is { } all && all.Length == filled.Count ? all : buffer.ToArray();
     }
 
