@@ -56,6 +56,34 @@ public sealed class MainWindowTests : UiTest
         }
     }
 
+    /// <summary>
+    /// The window's text dims while the window is inactive (the tray menu takes activation), like the title bar, and comes
+    /// back when it is active again; the tray menu's own text stays bright.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Inactive_TextDims_ActiveBrightAgain()
+    {
+        await OpenMainAsync();
+        WaitForRows(InboxRows);
+        System.Drawing.Rectangle time = App.Find("Row.Time.c-ann").BoundingRectangle;
+        Thread.Sleep(300);
+        double active = Contrast(time);
+
+        Tray.RightClick();
+        AutomationElement open = App.Find("TrayMenu.Open");
+        Thread.Sleep(500);
+        double inactive = Contrast(time);
+        double menu     = Contrast(open.BoundingRectangle);
+        Assert.IsTrue(inactive < active * 0.8, $"The text didn't dim while inactive (contrast {active:F0} active, {inactive:F0} inactive).");
+        Assert.IsTrue(menu > inactive, $"The tray menu's text ({menu:F0}) dimmed with the window's ({inactive:F0}).");
+
+        FlaUI.Core.Input.Keyboard.Type(FlaUI.Core.WindowsAPI.VirtualKeyShort.ESCAPE);
+        Tray.CloseOverflow();
+        App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).SetForeground();
+        Wait.Until(() => Contrast(time) > active * 0.9, AppDriver.DefaultTimeout, () => $"The text stayed dim once active again (contrast {Contrast(time):F0}, was {active:F0}).");
+    }
+
     // How Far A Text's Strongest Pixel Stands From The Background (Its Corner Pixel), 0 To 255
     private static double Contrast(System.Drawing.Rectangle area)
     {
