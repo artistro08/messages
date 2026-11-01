@@ -1522,7 +1522,11 @@ public sealed partial class MessageBubble : UserControl
     }
 
     // Play: Downloads (Or Reads From Memory) The Video And Plays It Here, With Sound, Stopping Any Other One First
-    private async void OnVideoPlayClick(object sender, RoutedEventArgs e)
+    private void OnVideoPlayClick(object sender, RoutedEventArgs e) => PlayInline(TimeSpan.Zero, play: true);
+
+    // The Inline Player From A Position, Playing Or Paused There (The Viewer Hands Back Where It Got To On Close). Async
+    // Void Like A Click Handler, So A Failure Reaches The App's Unhandled Error Log
+    private async void PlayInline(TimeSpan start, bool play)
     {
         if (_videoPart is not { IsPending: false } part || _video is not null || (Application.Current as App)?.Media is not { } media)
         {
@@ -1546,16 +1550,18 @@ public sealed partial class MessageBubble : UserControl
             }
 
             string id = PartIdOf("Video.Player.", Bubble?.Id ?? string.Empty, Bubble?.TmpId ?? string.Empty);
-            _video    = new VideoPlayback(DispatcherQueue, bytes, part.Mime, TimeSpan.Zero, compact: true, id, Bubble?.VideoName ?? ChatCopy.Video);
-            _video.Failed              += OnVideoFailed;
-            _video.FullWindowRequested += OnVideoFullWindowRequested;
+            _video         = new VideoPlayback(DispatcherQueue, bytes, part.Mime, start, id, Bubble?.VideoName ?? ChatCopy.Video);
+            _video.Failed += OnVideoFailed;
             VideoHost.Children.Add(_video.Element);
             VideoPlay.Visibility   = Visibility.Collapsed;
             VideoExpand.Visibility = Visibility.Visible;
             ShowVideoNote(null, "Playing");
             EffectiveViewportChanged += OnVideoViewportChanged;
             ClipVideoHost(mayTake: true);
-            _video.Player.Play();
+            if (play)
+            {
+                _video.Player.Play();
+            }
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -1584,12 +1590,10 @@ public sealed partial class MessageBubble : UserControl
     // Expand: The Viewer Carries On Where The Inline Player Got To
     private void OnVideoExpandClick(object sender, RoutedEventArgs e) => OpenVideoInViewer(VideoExpand);
 
-    // Windows' Full Window Button Does What Expand Does (After Its Click Has Finished With The Controls)
-    private void OnVideoFullWindowRequested(object? sender, EventArgs e) =>
-        DispatcherQueue.TryEnqueue(() => OpenVideoInViewer(VideoExpand));
-
-    // Stops The Inline Player (Keeping Its Position) And Shows The Video Over The Whole Window. Focus Comes Back To The
-    // Frame On Close, The Way The Clicked Button Had It (A Click Brings No Focus Ring Back)
+    // Stops The Inline Player And Shows The Video Over The Whole Window, Where It Got To And Playing Or Paused As It Was
+    // (From The Frame: From The Start, Playing). Opened From The Inline Player, The Viewer Hands Back Its Own Position And
+    // State On Close, And The Inline Player Carries On From There (Owner, Plan 10). Focus Comes Back To The Frame On
+    // Close, The Way The Clicked Button Had It (A Click Brings No Focus Ring Back)
     private void OpenVideoInViewer(Control from)
     {
         if (_videoPart is not { IsPending: false } part)
@@ -1597,11 +1601,22 @@ public sealed partial class MessageBubble : UserControl
             return;
         }
 
-        TimeSpan start  = _video?.Position ?? TimeSpan.Zero;
-        FocusState how  = from.FocusState;
+        VideoPlayback? inline              = _video;
+        TimeSpan start                     = inline?.Position ?? TimeSpan.Zero;
+        bool play                          = inline?.IsPlaying ?? true;
+        FocusState how                     = from.FocusState;
+        MessageBubbleViewModel? bubble     = Bubble;
+        Action<TimeSpan, bool>? hand_back  = inline is null ? null : (position, playing) =>
+        {
+            if (ReferenceEquals(Bubble, bubble) && ReferenceEquals(_videoPart, part) && IsLoaded)
+            {
+                PlayInline(position, playing);
+            }
+        };
+
         ReleaseVideo();
         ShowVideoNote(null, string.Empty);
-        (Application.Current as App)?.MainWindow?.ShowVideo(part, Bubble?.Id ?? string.Empty, Bubble?.VideoName ?? ChatCopy.Video, VideoFrame, how, start, _videoFrameImage);
+        (Application.Current as App)?.MainWindow?.ShowVideo(part, Bubble?.Id ?? string.Empty, Bubble?.VideoName ?? ChatCopy.Video, VideoFrame, how, start, play, _videoFrameImage, hand_back);
     }
 
     // Scrolled Out Of Sight: The Video Stops (A Realized Row Off Screen Isn't Recycled At Once)
@@ -1631,7 +1646,6 @@ public sealed partial class MessageBubble : UserControl
         _video                    = null;
         EffectiveViewportChanged -= OnVideoViewportChanged;
         video.Failed              -= OnVideoFailed;
-        video.FullWindowRequested -= OnVideoFullWindowRequested;
         VideoHost.Children.Clear();
         video.Dispose();
         VideoPlay.Visibility   = Visibility.Visible;

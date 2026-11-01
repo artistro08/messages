@@ -165,10 +165,67 @@ public sealed partial class MediaTests
     private Message PushVideo(string file = "clip.mp4") =>
         Server.Phone.PushIncomingMedia("c-media", "video/mp4", File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Fixtures", file)), file);
 
+    /// <summary>
+    /// Expanding a video playing in its bubble carries on in the viewer from where it got to, and closing the viewer
+    /// carries on in the bubble from where the viewer got to, still playing.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Video_ExpandAndClose_KeepThePosition()
+    {
+        await OpenMediaChatAsync();
+        Message message = PushVideo("clip-long.mp4");
+
+        App.Find("Video.Play." + message.MessageID).Patterns.Invoke.Pattern.Invoke();
+        AutomationElement inline = App.Find("Video.Player." + message.MessageID);
+        WaitForStatus(inline, "Playing");
+        Thread.Sleep(3000);
+
+        App.Find("Video.Expand." + message.MessageID).Patterns.Invoke.Pattern.Invoke();
+        AutomationElement viewer = App.Find("PhotoViewer.Video");
+        WaitForStatus(viewer, "Playing");
+        Wait.Until(() => SeekValue(viewer) >= 10, AppDriver.DefaultTimeout, () => $"The viewer is at {SeekValue(viewer):0}%, not where the bubble got to.");
+        Thread.Sleep(2000);
+        double viewer_end = SeekValue(viewer);
+
+        App.Find("PhotoViewer.Close").Patterns.Invoke.Pattern.Invoke();
+        WaitForGone("PhotoViewer.Video");
+        inline = App.Find("Video.Player." + message.MessageID);
+        WaitForStatus(inline, "Playing");
+        double back = SeekValue(inline);
+        Assert.IsTrue(back >= viewer_end - 1, $"The bubble carried on at {back:0}%, not where the viewer got to ({viewer_end:0}%).");
+    }
+
+    // The Seek Bar's Value (Percent Of The Clip)
+    private static double SeekValue(AutomationElement player)
+    {
+        AutomationElement slider = AppDriver.Search(player, e => e.Properties.AutomationId.ValueOrDefault == "ProgressSlider")
+            ?? throw new AssertFailedException("The player has no seek bar.");
+        return slider.Patterns.RangeValue.Pattern.Value.Value;
+    }
+
+    // The Bar Is The Same In The Bubble And The Viewer: Play Or Pause On The Left, The Seek Bar, Volume On The Right,
+    // Nothing Else (No Cast Or Full Window)
+    private static void AssertCompactBar(AutomationElement player)
+    {
+        AutomationElement? Part(string id) => AppDriver.Search(player, e => e.Properties.AutomationId.ValueOrDefault == id);
+
+        AutomationElement play   = Part("PlayPauseButtonOnLeft") ?? throw new AssertFailedException("The bar has no play button on its left.");
+        AutomationElement seek   = Part("ProgressSlider") ?? throw new AssertFailedException("The bar has no seek bar.");
+        AutomationElement volume = Part("VolumeMuteButton") ?? throw new AssertFailedException("The bar has no volume button.");
+        // A Narrow Bubble's Bar Drops Volume (Windows' Controls Do That Below Their Width)
+        bool volume_shown = volume.BoundingRectangle.Width > 0;
+        Assert.IsTrue(play.BoundingRectangle.Right <= seek.BoundingRectangle.Left && (!volume_shown || seek.BoundingRectangle.Right <= volume.BoundingRectangle.Left),
+            $"The bar isn't play, seek, volume: {play.BoundingRectangle} {seek.BoundingRectangle} {volume.BoundingRectangle}.");
+        Assert.IsNull(Part("CastButton"), "The bar offers a cast button.");
+        Assert.IsNull(Part("FullWindowButton"), "The bar offers a full window button.");
+    }
+
     // Pause Holds The Position, Play Moves It On Again, And No Cast Button Shows
     private void AssertPlayPauseWorks(AutomationElement player)
     {
         PressPlayPause(player, "Paused");
+        AssertCompactBar(player);
         AutomationElement slider = AppDriver.Search(player, e => e.Properties.AutomationId.ValueOrDefault == "ProgressSlider")
             ?? throw new AssertFailedException("The player has no seek bar.");
         double paused_at = slider.Patterns.RangeValue.Pattern.Value.Value;

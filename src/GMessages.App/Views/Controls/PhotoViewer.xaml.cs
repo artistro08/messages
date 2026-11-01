@@ -90,6 +90,11 @@ public sealed partial class PhotoViewer : UserControl
     private VideoPlayback? _video;
     private ImageSource? _poster;
 
+    // Who Carries The Video On After Close (The Bubble's Player), And Where It Got To And Whether It Played, Noted As The
+    // Close Starts
+    private Action<TimeSpan, bool>? _videoClosed;
+    private (TimeSpan Position, bool Playing)? _closedAt;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="PhotoViewer"/> class, hidden.
     /// </summary>
@@ -220,15 +225,19 @@ public sealed partial class PhotoViewer : UserControl
     /// <param name="returnFocus">The video's frame in the chat, focused again on close.</param>
     /// <param name="returnState">How the clicked button had focus, so closing gives it back the same way.</param>
     /// <param name="start">Where to start playing.</param>
+    /// <param name="play">True to play from <paramref name="start"/>, false to stay paused there.</param>
     /// <param name="frame">The bubble's still frame, which grows out of the bubble while the video loads (the player
     /// shows once it plays); null when none showed, and the player itself then grows once it is in.</param>
+    /// <param name="closed">Given the viewer's position and whether it was playing when it closes, so the bubble's
+    /// player carries on from there; null when nothing carries on.</param>
     /// <returns>A task that ends once the video plays, or failed.</returns>
-    public async Task ShowVideoAsync(MediaPart part, string messageId, string name, Control returnFocus, FocusState returnState, TimeSpan start, ImageSource? frame)
+    public async Task ShowVideoAsync(MediaPart part, string messageId, string name, Control returnFocus, FocusState returnState, TimeSpan start, bool play, ImageSource? frame, Action<TimeSpan, bool>? closed)
     {
         ArgumentNullException.ThrowIfNull(part);
         ArgumentNullException.ThrowIfNull(returnFocus);
 
         Open(part, messageId, returnFocus, returnState, isVideo: true);
+        _videoClosed = closed;
 
         // The Still Grows At Once, Over The Player, Which Stays Clear Until It Plays
         bool poster = frame is not null && Ui.AnimationsEnabled;
@@ -248,7 +257,7 @@ public sealed partial class PhotoViewer : UserControl
                 return;
             }
 
-            VideoPlayback video = new(DispatcherQueue, bytes, part.Mime, start, compact: false, "PhotoViewer.Video", name);
+            VideoPlayback video = new(DispatcherQueue, bytes, part.Mime, start, "PhotoViewer.Video", name);
             _video              = video;
             VideoHost.Children.Add(video.Element);
             if (!poster)
@@ -277,7 +286,17 @@ public sealed partial class PhotoViewer : UserControl
                     });
                 }
             };
-            video.Player.Play();
+
+            // Paused In The Bubble: Paused Here Too, The Player Showing Where It Stopped
+            if (play)
+            {
+                video.Player.Play();
+            }
+            else
+            {
+                ShowPoster(null);
+            }
+
             DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => _video?.Element.Focus(FocusState.Programmatic));
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -306,6 +325,8 @@ public sealed partial class PhotoViewer : UserControl
             return;
         }
 
+        // Where The Video Got To And Whether It Played, Before The Shrink Pauses It: Handed Back Once Closed
+        _closedAt = _video is { } video ? (video.Position, video.IsPlaying) : null;
         if (animate && Shrink())
         {
             return;
@@ -328,6 +349,16 @@ public sealed partial class PhotoViewer : UserControl
         _returnFocus?.Focus(_returnState);
         _returnFocus = null;
         IsOpenChanged?.Invoke(this, EventArgs.Empty);
+
+        // The Bubble's Player Carries On From Where This One Got To
+        Action<TimeSpan, bool>? closed = _videoClosed;
+        _videoClosed                   = null;
+        if (closed is not null && _closedAt is { } at)
+        {
+            closed(at.Position, at.Playing);
+        }
+
+        _closedAt = null;
     }
 
     // Shows The Viewer For A Photo Or A Video: Any Video Playing (Here Or In A Bubble) Stops, The Right Layer Shows, And
@@ -336,6 +367,7 @@ public sealed partial class PhotoViewer : UserControl
     {
         StopVideo();
         MessageBubble.StopInlineVideo();
+        _videoClosed = null;
         _part        = part;
         _messageId   = messageId;
         _returnFocus = returnFocus;
