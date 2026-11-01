@@ -15,6 +15,7 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.ApplicationModel.DataTransfer;
+using Windows.Foundation;
 using Windows.System;
 using Windows.UI.ViewManagement;
 using WinRT;
@@ -1682,6 +1683,7 @@ public sealed partial class MessageBubble : UserControl
 
         _shownText = key;
         _links.Clear();
+        LinkBlockers.Children.Clear();
 
         IReadOnlyList<TextLink> links = LinkPreviewer.FindLinks(text);
         if (links.Count == 0)
@@ -1689,6 +1691,15 @@ public sealed partial class MessageBubble : UserControl
             Body.Text = text;
             return;
         }
+
+        // The Line Ends Are Known Once The New Text Is Laid Out
+        void OnLaidOut(object? sender, object e)
+        {
+            Body.LayoutUpdated -= OnLaidOut;
+            BlockLinkEnds();
+        }
+
+        Body.LayoutUpdated += OnLaidOut;
 
         // Plain Runs Between The Links
         Body.Inlines.Clear();
@@ -1725,6 +1736,91 @@ public sealed partial class MessageBubble : UserControl
 
         _links.Add(link);
         return link;
+    }
+
+    // A New Width Moves The Line Ends
+    private void OnBodySizeChanged(object sender, SizeChangedEventArgs e) => BlockLinkEnds();
+
+    // The Text Maps The Empty Space At The End Of A Line To The Line's Last Letter, So Past A Link That Ends A Line (Or
+    // Wraps) The Pointer Still Hovers The Link And Shows The Hand. A Clear Strip Covers That Space From The Line's Last
+    // Letter To The Text's Right Edge, Over Every Line Where A Link's Letters End; Only The Letters Themselves Count
+    private void BlockLinkEnds()
+    {
+        LinkBlockers.Children.Clear();
+        double width = Body.ActualWidth;
+        if (_links.Count == 0 || width <= 0)
+        {
+            return;
+        }
+
+        foreach (Hyperlink link in _links)
+        {
+            // Each Line The Link's Letters Sit On: Its Top, Height And Rightmost Edge
+            List<Rect> lines = [];
+            TextPointer? at  = link.ContentStart;
+            while (at is not null && at.Offset < link.ContentEnd.Offset)
+            {
+                Rect letter = at.GetCharacterRect(LogicalDirection.Forward);
+                if (letter.Width > 0)
+                {
+                    int last = lines.Count - 1;
+                    if (last >= 0 && Math.Abs(lines[last].Y - letter.Y) < 1)
+                    {
+                        lines[last] = new Rect(lines[last].X, lines[last].Y, Math.Max(lines[last].Width, letter.Right - lines[last].X), Math.Max(lines[last].Height, letter.Height));
+                    }
+                    else
+                    {
+                        lines.Add(letter);
+                    }
+                }
+
+                at = at.GetPositionAtOffset(1, LogicalDirection.Forward);
+            }
+
+            // Every Line But The Last Ends With The Link; The Last Does Too Unless Text Follows On The Same Line
+            for (int i = 0; i < lines.Count; i++)
+            {
+                Rect line = lines[i];
+                if (i == lines.Count - 1 && FollowedOnLine(link, line))
+                {
+                    continue;
+                }
+
+                AddBlocker(line.Right, line.Y, width - line.Right, line.Height);
+            }
+        }
+    }
+
+    // True When A Letter After The Link (Past The Next Run's Start) Sits On The Link's Last Line
+    private static bool FollowedOnLine(Hyperlink link, Rect line)
+    {
+        TextPointer? after = link.ElementEnd;
+        for (int step = 0; step < 4 && after is not null; step++)
+        {
+            Rect letter = after.GetCharacterRect(LogicalDirection.Forward);
+            if (letter.Width > 0)
+            {
+                return Math.Abs(letter.Y - line.Y) < 1;
+            }
+
+            after = after.GetPositionAtOffset(1, LogicalDirection.Forward);
+        }
+
+        return false;
+    }
+
+    // A Clear Strip That Takes The Pointer (A Transparent Fill), With The Bubble's Menu Like The Text
+    private void AddBlocker(double left, double top, double width, double height)
+    {
+        if (width < 1 || height < 1)
+        {
+            return;
+        }
+
+        var blocker = new Border { Width = width, Height = height, Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent), ContextFlyout = Menu };
+        Canvas.SetLeft(blocker, left);
+        Canvas.SetTop(blocker, top);
+        LinkBlockers.Children.Add(blocker);
     }
 
     private void ColorLinks()

@@ -517,15 +517,23 @@
 
                         <!-- Text: while the preview card shows, without the card's link (Bubble.BodyText); a message that was
                              only the link shows the card alone -->
-                        <TextBlock
-                            x:Name="Body"
+                        <Grid
                             Margin="{x:Bind local:MessageBubble.CaptionMargin(Bubble.FillsBubble), Mode=OneWay}"
-                            AutomationProperties.AutomationId="{x:Bind local:MessageBubble.AutomationIdOf(Bubble.Id, Bubble.TmpId), Mode=OneWay}"
-                            AutomationProperties.ItemType="{x:Bind Bubble.ItemTypeName, Mode=OneWay, FallbackValue=''}"
-                            IsTextSelectionEnabled="True"
-                            IsColorFontEnabled="True"
-                            TextWrapping="Wrap"
-                            Visibility="{x:Bind Bubble.HasBodyText, Mode=OneWay, FallbackValue=Collapsed}" />
+                            Visibility="{x:Bind Bubble.HasBodyText, Mode=OneWay, FallbackValue=Collapsed}">
+                            <TextBlock
+                                x:Name="Body"
+                                AutomationProperties.AutomationId="{x:Bind local:MessageBubble.AutomationIdOf(Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                                AutomationProperties.ItemType="{x:Bind Bubble.ItemTypeName, Mode=OneWay, FallbackValue=''}"
+                                IsTextSelectionEnabled="True"
+                                IsColorFontEnabled="True"
+                                SizeChanged="OnBodySizeChanged"
+                                TextWrapping="Wrap" />
+
+                            <!-- Link Blockers: clear strips over the empty space at the end of each line a link ends, so the
+                                 pointer there is never over the link (the text maps the empty end of a line to its last
+                                 letter). Set from code (see BlockLinkEnds); a tap on one still reaches the bubble -->
+                            <Canvas x:Name="LinkBlockers" />
+                        </Grid>
 
                         <!-- Link Preview: the page's image, its title (two lines at most) and its site in caption style; a click,
                              Enter or Space opens the link in the default browser. Named by its title and the link's host.

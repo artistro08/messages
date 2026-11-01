@@ -105,6 +105,34 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
+    /// A link that wraps counts only its letters: a click in the empty space at the end of its first line opens nothing,
+    /// while a click on its first letter opens it.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task WrappedLink_EmptyLineEnd_IsNotTheLink()
+    {
+        await OpenChatAsync("Row.c-ann");
+
+        // Hyphens Let The Address Wrap Partway, Leaving Space At The First Line's End
+        Message message = Server.Phone.PushIncoming("c-ann", "read http://example.invalid/" + string.Join("-", Enumerable.Repeat("word", 30)) + " today");
+        AutomationElement link   = App.Find($"Link.{message.MessageID}.0");
+        AutomationElement body   = App.Find("Bubble." + message.MessageID);
+        System.Drawing.Rectangle text  = body.BoundingRectangle;
+        System.Drawing.Rectangle where = link.BoundingRectangle;
+        Assert.IsTrue(where.Height > 30, $"The link ({where}) didn't wrap.");
+
+        // The Empty End Of The Link's First Line, Just Inside The Text's Right Edge
+        FlaUI.Core.Input.Mouse.Click(new System.Drawing.Point(text.Right - 2, where.Top + 6));
+        Thread.Sleep(600);
+        Assert.IsFalse(ReadLog().Contains("Link opened", StringComparison.Ordinal), "A click past the link's letters opened it.");
+
+        link.Click();
+        Wait.Until(() => ReadLog().Contains("Link opened (http, launched: False)", StringComparison.Ordinal), AppDriver.DefaultTimeout,
+            () => "A click on the link never opened it.");
+    }
+
+    /// <summary>
     /// A link in an inbox chat gets a preview card named by the linked page's <c>og:title</c> and the link's host. Once it
     /// shows, the card takes the link's place: the text reads without the address.
     /// </summary>
