@@ -71,8 +71,7 @@ internal sealed partial class EmojiRowFactory : IElementFactory
     }
 
     /// <summary>
-    /// Gets the emoji drawn in this run (Windows keeps their glyphs), by the picker or the background warm-up
-    /// (<see cref="EmojiWarmUp"/>): the picker shows these at once.
+    /// Gets the emoji the picker has drawn in this run (Windows keeps their glyphs): it shows these at once.
     /// </summary>
     internal static HashSet<string> Drawn { get; } = new(StringComparer.Ordinal);
 
