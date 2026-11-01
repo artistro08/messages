@@ -236,6 +236,38 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
+    /// A reaction added to a shown bubble pops its pill in (animation effects on, as on the test machine).
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task ReactionPill_PopsIn()
+    {
+        await OpenChatAsync("Row.c-ann");
+        string id  = Find("c-ann", AnnLast).MessageID;
+        string pop = Path.Combine(App.DataDir, "reaction-pop.txt");
+
+        App.Find("Bubble." + id).RightClick();
+        App.Find("Bubble.React").Patterns.Invoke.Pattern.Invoke();
+        App.Find("ReactionPicker.1").Patterns.Invoke.Pattern.Invoke();
+
+        string last = string.Empty;
+        Wait.Until(() =>
+        {
+            try
+            {
+                last = File.Exists(pop) ? File.ReadAllText(pop) : string.Empty;
+            }
+            catch (IOException)
+            {
+                // The App Is Writing It: Read Again
+            }
+
+            return last == id;
+        }, AppDriver.DefaultTimeout, () => $"The pill never popped in (last pop '{last}').");
+        App.Find("Reactions." + id);
+    }
+
+    /// <summary>
     /// The picker's More reactions opens the app's emoji picker (focus in its search box, its emoji filling its width);
     /// typing "eyes" shows 👀; searching "fire" leaves 🔥,
     /// whose click closes the picker and sends the phone an Add of 🔥 as a custom reaction, and the pill shows it.

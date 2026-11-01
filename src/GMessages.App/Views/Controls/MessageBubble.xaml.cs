@@ -159,6 +159,11 @@ public sealed partial class MessageBubble : UserControl
     // A New Bubble's Entrance: A Fade And A Rise (EntranceRise), Over WinUI's Normal Control Animation Time
     private static readonly TimeSpan EntranceTime = TimeSpan.FromMilliseconds(250);
 
+    // A Reaction Pill's Pop: From Half Size, A Touch Over Full Size, Then Settling
+    private const float PillPopFrom = 0.5f;
+    private const float PillPopOver = 1.08f;
+    private static readonly TimeSpan PillPopTime = TimeSpan.FromMilliseconds(180);
+
     // Reads The Windows Animation Setting Live (Settings > Accessibility > Visual Effects)
     private static readonly UISettings Ui = new();
 
@@ -234,6 +239,12 @@ public sealed partial class MessageBubble : UserControl
     private VideoPlayback? _video;
     private Visual? _videoHostVisual;
 
+    // The Reactions The Pill Shows, So A Change On The Same Bubble Pops It In; Set When A Pill Just Shown Waits For Its
+    // Size To Pop; And The Pill Host's Visual (No Implicit Transitions On It, So Windows Hands It Out), Taken Once
+    private string _reactionsShown = string.Empty;
+    private bool _popPill;
+    private Visual? _pillVisual;
+
     /// <summary>
     /// Creates the bubble.
     /// </summary>
@@ -255,6 +266,16 @@ public sealed partial class MessageBubble : UserControl
 
         // The Row Under The Bubble Is At Least As Wide As The Back (Inside Its Margins), So The Pill Sits On The Back's Corner
         Back.SizeChanged += (_, _) => Under.MinWidth = Math.Max(0, Back.ActualWidth - Under.Margin.Left - Under.Margin.Right);
+
+        // A Pill That Just Appeared Pops In Once It Has Its Size (Its Middle Is Where It Grows From)
+        PillHost.SizeChanged += (_, _) =>
+        {
+            if (_popPill)
+            {
+                _popPill = false;
+                PopPill();
+            }
+        };
 
         // The Text's Own Menu Would Win A Right-Click On It, So It Gets The Bubble Menu Too (Which Has Copy)
         Body.ContextFlyout = Menu;
@@ -702,6 +723,11 @@ public sealed partial class MessageBubble : UserControl
         view.ShowVoice();
         view.ShowVideo();
 
+        // Another Message's Reactions Show As They Are, With No Pop (A Recycled Row's Half-Run Pop Is Put Back)
+        view._reactionsShown = view.Bubble?.ReactionsText ?? string.Empty;
+        view._popPill        = false;
+        view.RestPill();
+
         // A Bubble Added Live Animates In, Once (The Flag Clears, So A Recycled Row Never Replays It)
         if (view.Bubble?.TakeNew() == true && Ui.AnimationsEnabled)
         {
@@ -746,6 +772,101 @@ public sealed partial class MessageBubble : UserControl
         ShowVoice();
         ShowVideo();
         ShowHoverStrip();
+        ShowReactionChange();
+    }
+
+    // =========================================================================
+    // REACTION PILL
+    // =========================================================================
+
+    // The Same Bubble's Reactions Changed: The Pill Pops In, At Once When It Already Shows, Else Once It Has Its Size
+    // (Hidden Until Then, So It Never Shows A Frame At Full Size First). Only With Windows' Animation Effects On
+    private void ShowReactionChange()
+    {
+        string text = Bubble?.ReactionsText ?? string.Empty;
+        if (text == _reactionsShown)
+        {
+            return;
+        }
+
+        _reactionsShown = text;
+        if (text.Length == 0 || !Ui.AnimationsEnabled || TakePillVisual() is not { } visual)
+        {
+            return;
+        }
+
+        if (PillHost.ActualWidth > 0)
+        {
+            PopPill();
+            return;
+        }
+
+        _popPill       = true;
+        visual.Opacity = 0;
+    }
+
+    // Pops The Pill In From Its Middle: From Half Size And Clear To A Touch Over Full Size, Then Settling, In 180 ms On
+    // WinUI's Fast-Out-Slow-In Curve. Layout Never Moves
+    private void PopPill()
+    {
+        if (TakePillVisual() is not { } visual)
+        {
+            return;
+        }
+
+        Compositor compositor          = visual.Compositor;
+        CubicBezierEasingFunction ease = compositor.CreateCubicBezierEasingFunction(new Vector2(0, 0), new Vector2(0, 1));
+        visual.CenterPoint             = new Vector3(PillHost.ActualSize / 2, 0);
+
+        Vector3KeyFrameAnimation scale = compositor.CreateVector3KeyFrameAnimation();
+        scale.InsertKeyFrame(0, new Vector3(PillPopFrom, PillPopFrom, 1));
+        scale.InsertKeyFrame(0.6f, new Vector3(PillPopOver, PillPopOver, 1), ease);
+        scale.InsertKeyFrame(1, Vector3.One, ease);
+        scale.Duration = PillPopTime;
+
+        ScalarKeyFrameAnimation fade = compositor.CreateScalarKeyFrameAnimation();
+        fade.InsertKeyFrame(0, 0);
+        fade.InsertKeyFrame(0.5f, 1, ease);
+        fade.Duration = PillPopTime;
+
+        visual.StartAnimation(nameof(Visual.Scale), scale);
+        visual.StartAnimation(nameof(Visual.Opacity), fade);
+        TestHooks.NoteState("reaction-pop", PartIdOf(string.Empty, Bubble?.Id ?? string.Empty, Bubble?.TmpId ?? string.Empty));
+    }
+
+    // Puts The Pill Back At Rest (Full Size, Shown), Stopping A Pop
+    private void RestPill()
+    {
+        if (_pillVisual is not { } visual)
+        {
+            return;
+        }
+
+        visual.StopAnimation(nameof(Visual.Scale));
+        visual.StopAnimation(nameof(Visual.Opacity));
+        visual.Scale   = Vector3.One;
+        visual.Opacity = 1;
+    }
+
+    // The Pill Host's Visual, Taken Once While The Bubble Is In The Live Tree; Null When Windows Refuses It (No Pop Beats
+    // A Crash)
+    private Visual? TakePillVisual()
+    {
+        if (_pillVisual is not null || !PillHost.IsLoaded)
+        {
+            return _pillVisual;
+        }
+
+        try
+        {
+            _pillVisual = ElementCompositionPreview.GetElementVisual(PillHost);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            AppLog.MediaFailed(App.ShellLog, "pill", Bubble?.Id ?? string.Empty, ex.GetType().Name);
+        }
+
+        return _pillVisual;
     }
 
     // A Bubble Under The Pointer That Starts Or Stops Taking The Strip (An Echo Turns Sending Into Sent) Shows Or Hides
