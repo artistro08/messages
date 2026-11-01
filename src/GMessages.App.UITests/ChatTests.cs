@@ -363,6 +363,11 @@ public sealed class ChatTests : UiTest
         AutomationElement down = App.Find("Chat.ScrollToBottom");
         Wait.Until(() => down.Properties.IsKeyboardFocusable.ValueOrDefault, AppDriver.DefaultTimeout, () => "Scroll to bottom didn't show far up the chat.");
 
+        // Pointing At It Shows The Hand, As Over A Link
+        Thread.Sleep(300);
+        PointerInput.Hover(down.BoundingRectangle);
+        Wait.Until(PointerInput.IsHandCursor, AppDriver.DefaultTimeout, () => "The pointer over Scroll to bottom isn't the hand cursor.");
+
         // The Button: Back At The Newest, And It Hides Again
         down.Patterns.Invoke.Pattern.Invoke();
         Wait.Until(() => scroll.VerticalScrollPercent.ValueOrDefault >= 99, AppDriver.DefaultTimeout, () => $"Scroll to bottom left the list at {scroll.VerticalScrollPercent.ValueOrDefault:0}%.");

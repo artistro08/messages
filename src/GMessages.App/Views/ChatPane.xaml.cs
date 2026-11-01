@@ -247,6 +247,9 @@ public sealed partial class ChatPane : UserControl
     {
         InitializeComponent();
 
+        // Scroll To Bottom Floats Over The Bubbles With Its Shadow. Set Here: XAML Can't Set Translation On A Custom Button
+        ScrollToBottomButton.Translation = new System.Numerics.Vector3(0, 0, 16);
+
         // Reaction Picker: One Button Per Reaction In Enum Order, Labeled With Its Emoji (Styled By The Panel), Over A Fill
         // That Shows My Reaction Selected; Love Shows Google's Red Heart Instead Of Heart Eyes
         for (int i = 1; i <= ReactionCount; i++)

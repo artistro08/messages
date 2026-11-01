@@ -205,8 +205,8 @@
         </Border>
 
         <!-- Scroll To Bottom: floats just above the message box, fading in once the newest messages are a screen or more
-             below (set from code) -->
-        <Button
+             below (set from code). The hand shows over it, as over a link (LinkCardButton) -->
+        <controls:LinkCardButton
             x:Name="ScrollToBottomButton"
             Grid.Row="1"
             Width="40"
@@ -224,12 +224,11 @@
             CornerRadius="20"
             IsHitTestVisible="False"
             IsTabStop="False"
-            Opacity="0"
-            Translation="0,0,16">
+            Opacity="0">
 
             <!-- No Hover Or Press Background (Task 22): the circle keeps its own fill and edge; high contrast keeps the
                  system's own hover and press colors -->
-            <Button.Resources>
+            <controls:LinkCardButton.Resources>
                 <ResourceDictionary>
                     <ResourceDictionary.ThemeDictionaries>
                         <ResourceDictionary x:Key="Default">
@@ -246,15 +245,15 @@
                         </ResourceDictionary>
                     </ResourceDictionary.ThemeDictionaries>
                 </ResourceDictionary>
-            </Button.Resources>
-            <Button.Shadow>
+            </controls:LinkCardButton.Resources>
+            <controls:LinkCardButton.Shadow>
                 <ThemeShadow />
-            </Button.Shadow>
-            <Button.OpacityTransition>
+            </controls:LinkCardButton.Shadow>
+            <controls:LinkCardButton.OpacityTransition>
                 <ScalarTransition />
-            </Button.OpacityTransition>
+            </controls:LinkCardButton.OpacityTransition>
             <FontIcon FontSize="16" Glyph="&#xE74B;" />
-        </Button>
+        </controls:LinkCardButton>
 
         <!-- Typing: a received-style bubble with three dots while the other person types; outside the list, so it never
              moves the scroll. The dots bounce in turn while it shows (started from code) -->
