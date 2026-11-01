@@ -138,9 +138,14 @@ public sealed class StartChatViewModel : INotifyPropertyChanged
 
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CanStart)));
 
+        // A Picked Person Leaves The List (Their Chip Shows Them); Removed, They Come Back
         if (c.IsSendTo)
         {
             Query = string.Empty;
+        }
+        else
+        {
+            Refresh();
         }
     }
 
@@ -223,16 +228,19 @@ public sealed class StartChatViewModel : INotifyPropertyChanged
     // FILTERING
     // =========================================================================
 
-    // Rebuilds Results: Send-To Row, Then Top Contacts, Then The Rest, Filtered By The Query. The Same Rows Leave The
-    // List Alone, So A Row Being Clicked (The Full List Arriving After The Top Contacts) Isn't Swapped Out Under The Click
+    // Rebuilds Results: Send-To Row, Then Top Contacts, Then The Rest, Filtered By The Query, Without Anyone Picked (Their
+    // Chips Show Them). The Same Rows Leave The List Alone, So A Row Being Clicked (The Full List Arriving After The Top
+    // Contacts) Isn't Swapped Out Under The Click
     private void Refresh()
     {
         string query   = _query.Trim();
         string digits  = ContactRowViewModel.DigitsOf(query);
         var top_ids    = _top.Select(c => c.Number).ToHashSet();
+        var picked_ids = Selected.Select(c => c.Number).ToHashSet();
 
         IEnumerable<ContactRowViewModel> matches = _top
             .Concat(_all.Where(c => !top_ids.Contains(c.Number)))
+            .Where(c => !picked_ids.Contains(c.Number))
             .Where(c => query.Length == 0
                 || c.Name.Contains(query, StringComparison.OrdinalIgnoreCase)
                 || (digits.Length > 0 && c.Digits.Contains(digits, StringComparison.Ordinal)));

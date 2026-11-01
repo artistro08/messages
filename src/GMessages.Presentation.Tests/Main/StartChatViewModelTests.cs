@@ -125,12 +125,33 @@ public sealed class StartChatViewModelTests
         using var rig = new MainRig();
         StartChatViewModel vm = await NewPaneAsync(rig);
 
-        vm.Toggle(vm.Results[0]);
+        ContactRowViewModel first = vm.Results[0];
+        vm.Toggle(first);
         Assert.IsTrue(vm.CanStart);
 
-        vm.Toggle(vm.Results[0]);
+        // The Chip Removes Them
+        vm.Toggle(vm.Selected[0]);
         Assert.IsFalse(vm.CanStart);
         await Assert.ThrowsExactlyAsync<InvalidOperationException>(vm.StartAsync);
+    }
+
+    /// <summary>
+    /// A picked person leaves the suggestions (their chip shows them), and removing the chip puts them back in place.
+    /// </summary>
+    [TestMethod]
+    public async Task Toggle_HidesPickedFromResults_RemovingPutsThemBack()
+    {
+        using var rig = new MainRig();
+        StartChatViewModel vm = await NewPaneAsync(rig);
+        string before = string.Join(",", vm.Results.Select(r => r.Number));
+        ContactRowViewModel first = vm.Results[0];
+
+        vm.Toggle(first);
+        Assert.IsFalse(vm.Results.Any(r => r.Number == first.Number), "the picked person still shows in the list");
+        Assert.AreEqual(first.Number, vm.Selected.Single().Number);
+
+        vm.Toggle(vm.Selected[0]);
+        Assert.AreEqual(before, string.Join(",", vm.Results.Select(r => r.Number)));
     }
 
     [TestMethod]
