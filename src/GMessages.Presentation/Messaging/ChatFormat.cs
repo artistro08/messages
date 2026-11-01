@@ -40,7 +40,10 @@ public static class ChatFormat
     /// The snippet line of a conversation: "You: " in front of the owner's own messages, and in a group the sender's
     /// first name in front of anyone else's ("Rachel: "), as Google Messages shows it.
     /// </summary>
-    /// <remarks>Text-style emoji are shown in color (see <see cref="WithColorEmoji"/>).</remarks>
+    /// <remarks>
+    /// Text-style emoji are shown in color (see <see cref="WithColorEmoji"/>). The phone sends no text for a photo, video,
+    /// voice message or file with no caption, so the media's label (<see cref="ConversationInfo.SnippetMedia"/>) stands in.
+    /// </remarks>
     /// <param name="c">The conversation.</param>
     /// <returns>The text to show.</returns>
     public static string Snippet(ConversationInfo c)
@@ -49,7 +52,8 @@ public static class ChatFormat
 
         string sender = c.IsGroup && !c.SnippetFromMe ? FirstName(c.SnippetSender) : string.Empty;
         string prefix = c.SnippetFromMe ? ChatCopy.YouPrefix : sender.Length > 0 ? sender + ": " : string.Empty;
-        return WithColorEmoji(prefix + c.Snippet);
+        string body   = c.Snippet.Length > 0 ? c.Snippet : c.SnippetMedia;
+        return WithColorEmoji(prefix + body);
     }
 
     /// <summary>
@@ -247,6 +251,27 @@ public static class ChatFormat
         MessageKind.File  => ChatCopy.File,
         _                 => ChatCopy.UnsupportedMessage,
     };
+
+    /// <summary>
+    /// Names a message's media: "GIF" for a GIF, "Image" for any other picture, "Video", the file's name for a file, else
+    /// its kind ("Voice message", "File").
+    /// </summary>
+    /// <remarks>Shared by the reply quotes and the chat list's snippet, so both name media the same way.</remarks>
+    /// <param name="media">The media.</param>
+    /// <returns>The label.</returns>
+    public static string MediaLabel(MediaPart media)
+    {
+        ArgumentNullException.ThrowIfNull(media);
+
+        return media.Kind switch
+        {
+            MessageKind.Photo when media.Mime == "image/gif" => ChatCopy.QuoteGif,
+            MessageKind.Photo                                => ChatCopy.QuoteImage,
+            MessageKind.Video                                => ChatCopy.QuoteVideo,
+            MessageKind.File when media.Name.Length > 0      => media.Name,
+            _                                                => KindLabel(media.Kind),
+        };
+    }
 
     /// <summary>
     /// The text that stands for a message wherever text is shown (bubble, notification, reply quote).

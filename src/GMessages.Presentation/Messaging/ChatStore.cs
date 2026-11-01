@@ -188,7 +188,7 @@ public sealed partial class ChatStore : IDisposable
         int generation        = Generation;
         Conversation? fetched = await RequireClient().GetConversationAsync(conversationId, ct);
 
-        return fetched is null || generation != Generation ? null : CacheConversation(fetched, generation);
+        return fetched is null || generation != Generation ? null : await CacheConversationAsync(fetched, generation);
     }
 
     /// <summary>
@@ -224,7 +224,14 @@ public sealed partial class ChatStore : IDisposable
 
                 foreach (Conversation c in saved)
                 {
+                    // No Snippet Text: Name The Saved Newest Message's Media, If It Is Saved
                     ConversationInfo info = ConversationInfo.From(c);
+                    if (info.Snippet.Length == 0 && info.LatestMessageId.Length > 0 && database.LoadMessage(info.Id, info.LatestMessageId) is { } latest
+                        && ChatMessage.From(latest).Media is { } media)
+                    {
+                        info = info with { SnippetMedia = ChatFormat.MediaLabel(media) };
+                    }
+
                     if (_cache.TryAdd(info.Id, info))
                     {
                         _me ??= info.Participants.FirstOrDefault(p => p.IsMe);
@@ -276,7 +283,7 @@ public sealed partial class ChatStore : IDisposable
         List<ConversationInfo> result = [];
         foreach (Conversation c in response.Conversations)
         {
-            result.Add(CacheConversation(c, generation));
+            result.Add(await CacheConversationAsync(c, generation));
         }
 
         // No Cursor Back: The Next Page Starts At This Page's Last (Oldest) Conversation, Its Time In Milliseconds, As
@@ -689,7 +696,7 @@ public sealed partial class ChatStore : IDisposable
             throw new MessageSendException("ConversationNotFound");
         }
 
-        return CacheConversation(fetched, generation);
+        return await CacheConversationAsync(fetched, generation);
     }
 
     // The SIM Card Of The Participant The Conversation Sends As (From The Last Settings Event), Or Null
@@ -943,7 +950,7 @@ public sealed partial class ChatStore : IDisposable
         switch (e)
         {
             case ConversationUpdated updated:
-                ConversationInfo info = ConversationInfo.From(updated.Conversation);
+                ConversationInfo info = await WithSnippetMediaAsync(ConversationInfo.From(updated.Conversation));
                 Upsert(info);
                 SaveConversation(updated.Conversation, Generation);
                 ConversationChanged?.Invoke(this, info);
@@ -1040,6 +1047,14 @@ public sealed partial class ChatStore : IDisposable
             }
         }
 
+        // The Conversation Update Came First, With No Snippet Text For This Media: Name It Now The Message Is Here
+        if (conversation is { Snippet.Length: 0, SnippetMedia.Length: 0 } && conversation.LatestMessageId == message.Id && message.Media is { } media)
+        {
+            conversation = conversation with { SnippetMedia = ChatFormat.MediaLabel(media) };
+            Upsert(conversation);
+            ConversationChanged?.Invoke(this, conversation);
+        }
+
         if (conversation is null && _client() is { } client)
         {
             try
@@ -1047,7 +1062,7 @@ public sealed partial class ChatStore : IDisposable
                 Conversation? fetched = await client.GetConversationAsync(message.ConversationId, CancellationToken.None);
                 if (fetched is not null && generation == Generation)
                 {
-                    conversation = CacheConversation(fetched, generation);
+                    conversation = await CacheConversationAsync(fetched, generation);
                 }
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -1070,9 +1085,9 @@ public sealed partial class ChatStore : IDisposable
     // =========================================================================
 
     // Caches And Saves A Protocol Conversation, Raising ConversationChanged When The Cache Changed
-    private ConversationInfo CacheConversation(Conversation c, int generation)
+    private async Task<ConversationInfo> CacheConversationAsync(Conversation c, int generation)
     {
-        ConversationInfo info = ConversationInfo.From(c);
+        ConversationInfo info = await WithSnippetMediaAsync(ConversationInfo.From(c));
         SaveConversation(c, generation);
         if (Upsert(info))
         {
@@ -1080,6 +1095,25 @@ public sealed partial class ChatStore : IDisposable
         }
 
         return info;
+    }
+
+    // Names The Newest Message's Media When The Phone Sent No Snippet Text (A Photo, Video, Voice Message Or File With
+    // No Caption): Kept From The Cached Copy Of The Same Message, Else Read From Memory Or The Database. A Memory Hit
+    // Or No Database Completes At Once. No ConfigureAwait(false): Callers Raise Events On Their Own Thread
+    private async Task<ConversationInfo> WithSnippetMediaAsync(ConversationInfo info)
+    {
+        if (info.Snippet.Length > 0 || info.SnippetMedia.Length > 0 || info.LatestMessageId.Length == 0)
+        {
+            return info;
+        }
+
+        if (_cache.GetValueOrDefault(info.Id) is { SnippetMedia.Length: > 0 } old && old.LatestMessageId == info.LatestMessageId)
+        {
+            return info with { SnippetMedia = old.SnippetMedia };
+        }
+
+        ChatMessage? latest = await FindMessageAsync(info.Id, info.LatestMessageId);
+        return latest?.Media is { } media ? info with { SnippetMedia = ChatFormat.MediaLabel(media) } : info;
     }
 
     // Stores A Conversation; True When It Differs From What Was Cached (Participants Compared By Value)

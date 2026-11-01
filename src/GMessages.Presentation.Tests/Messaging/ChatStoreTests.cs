@@ -325,6 +325,53 @@ public sealed class ChatStoreTests
         }
     }
 
+    [TestMethod]
+    [DataRow(MediaFormats.ImageJpeg, "Image")]
+    [DataRow(MediaFormats.ImageGif, "GIF")]
+    [DataRow(MediaFormats.VideoMp4, "Video")]
+    public async Task ConversationUpdate_AfterMedia_NamesTheMedia(MediaFormats format, string expected)
+    {
+        using var rig = new Rig();
+        await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1")));
+        rig.Client.MessagesPage = PageOf(Msg("m1", "c1", ts: 1_000));
+        await rig.Store.LoadMessagesAsync("c1", null, Ct);
+        await rig.Store.HandleEventAsync(new MessageReceived(MediaMsg("m2", format), false));
+
+        // The Phone's Snippet For Media With No Caption Is Empty
+        Conversation update = Conv("c1");
+        update.LatestMessageID = "m2";
+        update.LatestMessage   = new LatestMessage { FromMe = 1 };
+        await rig.Store.HandleEventAsync(new ConversationUpdated(update));
+
+        Assert.AreEqual(expected, rig.Store.Find("c1")?.SnippetMedia);
+        Assert.AreEqual("You: " + expected, ChatFormat.Snippet(rig.Store.Find("c1")!));
+    }
+
+    [TestMethod]
+    public async Task MediaMessage_AfterItsConversationUpdate_NamesTheMedia()
+    {
+        using var rig = new Rig();
+        Conversation update = Conv("c1");
+        update.LatestMessageID = "m2";
+        update.LatestMessage   = new LatestMessage();
+        await rig.Store.HandleEventAsync(new ConversationUpdated(update));
+        var raised = new List<ConversationInfo>();
+        rig.Store.ConversationChanged += (_, c) => raised.Add(c);
+
+        // Not Opened, So No Page In Memory: The Message Itself Names It
+        await rig.Store.HandleEventAsync(new MessageReceived(MediaMsg("m2", MediaFormats.ImageJpeg), false));
+
+        Assert.AreEqual("Image", rig.Store.Find("c1")?.SnippetMedia);
+        Assert.AreEqual("Image", raised[^1].SnippetMedia);
+    }
+
+    private static Message MediaMsg(string id, MediaFormats format)
+    {
+        var m = new Message { MessageID = id, ConversationID = "c1", Timestamp = 1_761_700_000_000_000, MessageStatus = new MessageStatus { Status = MessageStatusType.OutgoingComplete } };
+        m.MessageInfo.Add(new MessageInfo { MediaContent = new MediaContent { Format = format, MediaID = "x" } });
+        return m;
+    }
+
     /// <summary>
     /// The cache keeps the last 20 opened conversations: loading a 21st drops the one used longest ago.
     /// </summary>
