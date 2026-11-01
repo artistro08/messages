@@ -21,9 +21,11 @@ namespace GMessages.App.Views.Controls;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The toolbar sits in the title bar row, beside the caption buttons (owner, Plan 7). The window lets clicks through to
-/// it there, keeps the rest of the row dragging the window, and turns the caption buttons dark to read on the scrim, all
-/// while <see cref="IsOpenChanged"/> says the viewer is open (see <c>MainWindow</c>).
+/// The toolbar sits in the title bar row's top-left corner, Close first, then Open in Photos, Download and Save as
+/// (owner, Plan 8). Close is a back arrow on a round, softly filled plate, unlike Windows' caption close, and the icons
+/// dim while the window is inactive (<see cref="ShowActive"/>). The window lets clicks through to the toolbar there,
+/// keeps the rest of the row dragging the window, and turns the caption buttons dark to read on the scrim, all while
+/// <see cref="IsOpenChanged"/> says the viewer is open (see <c>MainWindow</c>).
 /// </para>
 /// <para>
 /// The photo is fitted and centered at 1x in a zoomable <see cref="ScrollViewer"/> (<c>PhotoViewer.Photo</c>, named by
@@ -58,6 +60,9 @@ public sealed partial class PhotoViewer : UserControl
 {
     // The Space Kept Around The Photo At 1x, In Effective Pixels
     private const double PhotoMargin = 24;
+
+    // The Toolbar's Gap From The Window's Left Edge
+    private const double ToolbarInset = 8;
 
     // Opening Grows The Photo Out Of Its Bubble (Fluent's Decelerate Curve), Closing Shrinks It Back Faster (Accelerate)
     private static readonly TimeSpan GrowTime   = TimeSpan.FromMilliseconds(300);
@@ -116,16 +121,27 @@ public sealed partial class PhotoViewer : UserControl
     public event EventHandler? IsOpenChanged;
 
     /// <summary>
-    /// Keeps the toolbar just left of the window's caption buttons, with the toolbar's own spacing between them.
+    /// Keeps the toolbar in the title bar row's top-left corner, 8 px in, past anything the system keeps on the left.
     /// </summary>
-    /// <param name="captionWidth">The caption buttons' width, in effective pixels.</param>
-    public void FitToolbar(double captionWidth)
+    /// <param name="leftInset">The width the system keeps on the row's left, in effective pixels (0 unless right to left).</param>
+    public void FitToolbar(double leftInset)
     {
-        var margin = new Thickness(0, 0, captionWidth + ToolbarPanel.Spacing, 0);
+        var margin = new Thickness(leftInset + ToolbarInset, 0, 0, 0);
         if (ToolbarPanel.Margin != margin)
         {
             ToolbarPanel.Margin = margin;
         }
+    }
+
+    /// <summary>
+    /// Dims the toolbar's icons while the window is inactive, as the title bar's text dims, and brings them back when
+    /// it is active again. A test run puts <c>Active</c> or <c>Inactive</c> in Close's item status.
+    /// </summary>
+    /// <param name="active">True while the window is active.</param>
+    public void ShowActive(bool active)
+    {
+        VisualStateManager.GoToState(this, active ? "Active" : "Inactive", false);
+        TestHooks.ShowState(CloseButton, active ? "Active" : "Inactive");
     }
 
     /// <summary>
