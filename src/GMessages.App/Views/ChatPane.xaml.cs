@@ -220,7 +220,7 @@ public sealed partial class ChatPane : UserControl
     // More Reactions Picked: What The Emoji Picker Opens For Once The Reaction Picker Has Closed
     private (MessageBubbleViewModel Bubble, MessageBubble View, FrameworkElement Anchor)? _emojiPending;
 
-    // The Bubble The Bubble Menu Or Preview Card Menu Last Opened On (Its Items Act On It)
+    // The Bubble The Bubble Menu Or Preview Card Menu Last Opened On (Its Items Act On It); Let Go On A Chat Switch
     private MessageBubble? _menuView;
 
     // The Picker's Buttons With The Fill Behind Each And Their Emoji, So The One Matching My Reaction Can Show Selected
@@ -629,6 +629,7 @@ public sealed partial class ChatPane : UserControl
         pane.StopVoice();
         MessageBubble.StopInlineVideo();
         pane.DropRecorder();
+        pane._menuView = null;
         BindableList.Show(pane.MessageList, chat?.Messages);
         BindableList.Show(pane.AttachmentList, chat?.Attachments);
         if (chat is not null)

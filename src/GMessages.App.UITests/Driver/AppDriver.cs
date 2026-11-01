@@ -169,11 +169,18 @@ public sealed class AppDriver : IAsyncDisposable
     /// </summary>
     /// <param name="automationId">The AutomationId.</param>
     /// <returns>The control, or null.</returns>
-    public AutomationElement? TryFind(string automationId)
+    public AutomationElement? TryFind(string automationId) => TryFindWhere(e => e.Properties.AutomationId.ValueOrDefault == automationId);
+
+    /// <summary>
+    /// Finds the first control that matches, in any of the app's windows (and its popups), without waiting.
+    /// </summary>
+    /// <param name="match">The test each control is put to.</param>
+    /// <returns>The control, or null.</returns>
+    public AutomationElement? TryFindWhere(Func<AutomationElement, bool> match)
     {
         foreach (AutomationElement window in TopLevel())
         {
-            if (Search(window, e => e.Properties.AutomationId.ValueOrDefault == automationId) is { } found)
+            if (Search(window, match) is { } found)
             {
                 return found;
             }

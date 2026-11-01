@@ -264,6 +264,30 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
+    /// A right-click on a message's (selectable) text opens the bubble menu, with React and Reply, at the pointer, not
+    /// the text's own Copy and Select all menu.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task RightClickOnText_OpensBubbleMenu()
+    {
+        await OpenChatAsync("Row.c-ann");
+        AutomationElement text = App.Find("Bubble." + Find("c-ann", AnnLast).MessageID);
+
+        text.RightClick();
+        AutomationElement react = App.Find("Bubble.React");
+        App.Find("Bubble.Reply");
+        Assert.IsNull(App.TryFindWhere(e => string.Equals(AppDriver.SafeName(e), "Select all", StringComparison.OrdinalIgnoreCase)),
+            "The text's own menu opened.");
+
+        // At The Pointer (The Text's Middle), Not Over The Back's Edge
+        System.Drawing.Rectangle box  = text.BoundingRectangle;
+        System.Drawing.Rectangle item = react.BoundingRectangle;
+        Assert.IsTrue(Math.Abs(item.Left - (box.Left + (box.Width / 2))) < 40, $"The menu ({item}) didn't open at the pointer on the text ({box}).");
+        Keyboard.Type(VirtualKeyShort.ESCAPE);
+    }
+
+    /// <summary>
     /// On a short message with its time shown (the time wider than the bubble), received or sent, the reaction pill still
     /// overlaps the bubble's bottom edge on its bottom-right corner, not beside the time.
     /// </summary>
