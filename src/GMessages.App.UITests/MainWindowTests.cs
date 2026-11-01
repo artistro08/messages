@@ -362,8 +362,8 @@ public sealed class MainWindowTests : UiTest
     }
 
     /// <summary>
-    /// A new message in the open conversation lifts its row (with the list's motion and the row's flash, animations
-    /// permitting) and the row stays selected, with its chat still open.
+    /// A new message in the open conversation lifts its row (with the list's motion, animations permitting; no flash) and
+    /// the row stays selected, with its chat still open.
     /// </summary>
     /// <returns>A task for the test.</returns>
     [TestMethod]

@@ -16,7 +16,6 @@ namespace GMessages.App.Views.Controls;
 /// <c>x:Bind</c> here re-reads it. The ⋮ (<c>Row.More.{id}</c>) is collapsed until the pointer is over the row; then it
 /// takes 32 px at the right edge and fades in while this row's time and icons slide left (the <c>Hover</c> visual states
 /// on the root element, snapped when Windows animations are off). It raises <see cref="MoreRequested"/> when clicked.
-/// <see cref="Flash"/> lights the row briefly for a new message.
 /// </remarks>
 public sealed partial class ConversationRow : UserControl
 {
@@ -84,20 +83,6 @@ public sealed partial class ConversationRow : UserControl
         }
     }
 
-    /// <summary>
-    /// Flashes the row: the accent fill rises for a moment, then fades out over about 800 ms. A new message calls it.
-    /// </summary>
-    /// <remarks>Does nothing while Windows' animation effects are off. A second flash restarts the first.</remarks>
-    internal void Flash()
-    {
-        if (!Ui.AnimationsEnabled)
-        {
-            return;
-        }
-
-        FlashStoryboard.Begin();
-    }
-
     // =========================================================================
     // HOVER STATES
     // =========================================================================
@@ -125,14 +110,13 @@ public sealed partial class ConversationRow : UserControl
     // EVENT HANDLERS
     // =========================================================================
 
-    // A Recycled Row Shows Another Conversation: No ⋮ Or Flash Left Over From The Last One
+    // A Recycled Row Shows Another Conversation: No ⋮ Left Over From The Last One
     private static void OnRowChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         var view          = (ConversationRow)d;
         view._pointerOver = false;
         view._keepShown   = false;
         view.HideMore(false);
-        view.FlashStoryboard.Stop();
     }
 
     private void OnPointerEntered(object sender, PointerRoutedEventArgs e)

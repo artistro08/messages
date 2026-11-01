@@ -77,15 +77,6 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
     /// </remarks>
     public event EventHandler<bool>? RowsChanging;
 
-    /// <summary>
-    /// Raised after a live new message (sent or received) lifts a row or adds a newest one; the view flashes the row.
-    /// </summary>
-    /// <remarks>
-    /// Only when the row's last message time moves later: read state, mute, typing and other updates to a row raise
-    /// nothing, nor do loads and pages, nor a conversation arriving below newer ones (such as one unarchived).
-    /// </remarks>
-    public event EventHandler<ConversationRowViewModel>? RowFlashed;
-
     /// <summary>Gets the rows, pinned first, then newest first.</summary>
     public ObservableCollection<ConversationRowViewModel> Rows { get; } = [];
 
@@ -278,8 +269,7 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
     private void OnResynced(object? sender, EventArgs e) => _post(() => _ = LoadAsync());
 
     // Inserts, Moves Or Updates The Row; Removes It When The Conversation Left This Folder. A Live Change Says So First
-    // (RowsChanging), And A Live New Message Flashes Its Row (RowFlashed): A Later Last Message Time, Or A New Row With
-    // Nothing Newer Above It
+    // (RowsChanging), So The List Animates It
     private void Apply(ConversationInfo c, bool live)
     {
         int index = IndexOf(c.Id);
@@ -299,21 +289,14 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
 
         if (index < 0)
         {
-            var row     = new ConversationRowViewModel(c, now);
-            bool newest = Rows.All(r => r.LastMessageTime <= c.LastMessageTime);
+            var row = new ConversationRowViewModel(c, now);
 
             RowsChanging?.Invoke(this, live);
             Rows.Insert(TargetIndex(row, null), row);
-            if (live && newest)
-            {
-                RowFlashed?.Invoke(this, row);
-            }
-
             return;
         }
 
         ConversationRowViewModel existing = Rows[index];
-        bool newer                        = c.LastMessageTime > existing.LastMessageTime;
         existing.Update(c, now);
 
         int target = TargetIndex(existing, existing);
@@ -321,11 +304,6 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
         {
             RowsChanging?.Invoke(this, live);
             Rows.Move(index, target);
-        }
-
-        if (live && newer)
-        {
-            RowFlashed?.Invoke(this, existing);
         }
     }
 

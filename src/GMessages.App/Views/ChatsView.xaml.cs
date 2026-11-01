@@ -79,8 +79,8 @@ public sealed partial class ChatsView : UserControl
     // Reads The Windows Animation Setting Live (Settings > Accessibility > Visual Effects)
     private static readonly UISettings Ui = new();
 
-    // The Rows On Show, Watched So A Moved Open Row Gets Its Highlight Back; Their List, Watched For Live Changes And
-    // New Messages (The List Motion And The Row Flash)
+    // The Rows On Show, Watched So A Moved Open Row Gets Its Highlight Back; Their List, Watched For Live Changes (The
+    // List Motion)
     private ObservableCollection<ConversationRowViewModel>? _shownRows;
     private ConversationListViewModel? _shownList;
 
@@ -142,7 +142,6 @@ public sealed partial class ChatsView : UserControl
         if (_shownList is not null)
         {
             _shownList.RowsChanging -= OnRowsChanging;
-            _shownList.RowFlashed   -= OnRowFlashed;
         }
 
         ViewModel.PropertyChanged -= OnViewModelChanged;
@@ -250,14 +249,12 @@ public sealed partial class ChatsView : UserControl
         if (_shownList is not null)
         {
             _shownList.RowsChanging -= OnRowsChanging;
-            _shownList.RowFlashed   -= OnRowFlashed;
         }
 
         _shownRows                    = rows;
         _shownRows.CollectionChanged += OnRowsChanged;
         _shownList                    = list;
         _shownList.RowsChanging      += OnRowsChanging;
-        _shownList.RowFlashed        += OnRowFlashed;
     }
 
     // The Rows Are About To Change: Windows' List Motion Only For A Live Change (A New Message Lifts A Row, A
@@ -282,37 +279,6 @@ public sealed partial class ChatsView : UserControl
             transitions.Add(new AddDeleteThemeTransition());
             transitions.Add(new ReorderThemeTransition());
         }
-    }
-
-    // A New Message, Sent Or Received: Flash Its Row. On Top Already, It Flashes At Once; Lifted, Its Row Is Shown Again
-    // At The Next Layout, So It Flashes Then. A Row Out Of View Isn't Shown, So It Doesn't Flash
-    private void OnRowFlashed(object? sender, ConversationRowViewModel row)
-    {
-        if (!Ui.AnimationsEnabled || FlashRowView(row))
-        {
-            return;
-        }
-
-        void OnLayoutUpdated(object? s, object e)
-        {
-            ConversationList.LayoutUpdated -= OnLayoutUpdated;
-            _ = FlashRowView(row);
-        }
-
-        ConversationList.LayoutUpdated += OnLayoutUpdated;
-    }
-
-    // Flashes A Row Shown In The List, Found By Its Name In Its Container (AOT Safe; See FindPart)
-    private bool FlashRowView(ConversationRowViewModel row)
-    {
-        if (ConversationList.ContainerFromItem(row) is not { } container
-            || ChatPane.FindPart<ConversationRow>(container, "RowView") is not { } view)
-        {
-            return false;
-        }
-
-        view.Flash();
-        return true;
     }
 
     // The List Highlights The Open Conversation: Picking A Row Opens It, And This Follows Opens From Elsewhere
