@@ -732,7 +732,7 @@ public partial class App : Application, IDisposable
 
                 _dispatcher?.TryEnqueue(() =>
                 {
-                    if (ReferenceEquals(_trayMenu, menu) && !menu.AppWindow.IsVisible)
+                    if (!_quitting && ReferenceEquals(_trayMenu, menu) && !menu.AppWindow.IsVisible)
                     {
                         _trayMenu = null;
                         menu.Close();
