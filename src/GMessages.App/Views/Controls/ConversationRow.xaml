@@ -93,6 +93,18 @@
                     </VisualState.Setters>
                 </VisualState>
             </VisualStateGroup>
+
+            <!-- Read State: an unread row's snippet and time are fully bright (primary text), like its bold name; a read
+                 row's are secondary (their default) -->
+            <VisualStateGroup x:Name="ReadState">
+                <VisualState x:Name="Read" />
+                <VisualState x:Name="Unread">
+                    <VisualState.Setters>
+                        <Setter Target="SnippetText.Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+                        <Setter Target="TimeText.Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
         </VisualStateManager.VisualStateGroups>
 
         <!-- Avatar -->
@@ -117,6 +129,8 @@
                 Text="{x:Bind Row.Name, Mode=OneWay}"
                 TextTrimming="CharacterEllipsis" />
             <TextBlock
+                x:Name="SnippetText"
+                AutomationProperties.AutomationId="{x:Bind local:ConversationRow.PartId('Row.Snippet.', Row.Id), Mode=OneWay, FallbackValue=''}"
                 FontWeight="{x:Bind local:ColorConverters.Weight(Row.IsUnread), Mode=OneWay}"
                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                 MaxLines="1"
@@ -133,6 +147,7 @@
                 <TranslateTransform x:Name="TimeShift" />
             </StackPanel.RenderTransform>
             <TextBlock
+                x:Name="TimeText"
                 HorizontalAlignment="Right"
                 AutomationProperties.AutomationId="{x:Bind local:ConversationRow.PartId('Row.Time.', Row.Id), Mode=OneWay, FallbackValue=''}"
                 FontWeight="{x:Bind local:ColorConverters.Weight(Row.IsUnread), Mode=OneWay}"

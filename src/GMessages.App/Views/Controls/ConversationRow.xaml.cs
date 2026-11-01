@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using GMessages.Presentation.Main;
 using GMessages.Presentation.Messaging;
 using Microsoft.UI.Xaml;
@@ -12,7 +13,8 @@ namespace GMessages.App.Views.Controls;
 /// One conversation list row: avatar, name, snippet, time, the pin and muted icons, and the ⋮ shown on hover.
 /// </summary>
 /// <remarks>
-/// Unread rows draw the name, snippet and time bold. The row view model raises one change for every update, so every
+/// Unread rows draw the name, snippet and time bold, the snippet and time in primary text (the <c>ReadState</c>
+/// visual states). The row view model raises one change for every update, so every
 /// <c>x:Bind</c> here re-reads it. The ⋮ (<c>Row.More.{id}</c>) is collapsed until the pointer is over the row; then it
 /// takes 32 px at the right edge and fades in while this row's time and icons slide left (the <c>Hover</c> visual states
 /// on the root element, snapped when Windows animations are off). It raises <see cref="MoreRequested"/> when clicked.
@@ -110,14 +112,32 @@ public sealed partial class ConversationRow : UserControl
     // EVENT HANDLERS
     // =========================================================================
 
-    // A Recycled Row Shows Another Conversation: No ⋮ Left Over From The Last One
+    // A Recycled Row Shows Another Conversation: No ⋮ Left Over From The Last One, And Its Own Read State, Followed
+    // Through Every Update
     private static void OnRowChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         var view          = (ConversationRow)d;
         view._pointerOver = false;
         view._keepShown   = false;
         view.HideMore(false);
+
+        if (e.OldValue is ConversationRowViewModel old)
+        {
+            old.PropertyChanged -= view.OnRowUpdated;
+        }
+
+        if (e.NewValue is ConversationRowViewModel row)
+        {
+            row.PropertyChanged += view.OnRowUpdated;
+        }
+
+        view.ShowReadState();
     }
+
+    private void OnRowUpdated(object? sender, PropertyChangedEventArgs e) => ShowReadState();
+
+    // Unread: The Snippet And Time In Primary Text (See ReadState)
+    private void ShowReadState() => VisualStateManager.GoToState(this, Row?.IsUnread == true ? "Unread" : "Read", false);
 
     private void OnPointerEntered(object sender, PointerRoutedEventArgs e)
     {
