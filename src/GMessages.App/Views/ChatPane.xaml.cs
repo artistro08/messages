@@ -629,6 +629,7 @@ public sealed partial class ChatPane : UserControl
         pane.StopVoice();
         MessageBubble.StopInlineVideo();
         pane.DropRecorder();
+        pane._menuView?.KeepShown(false);
         pane._menuView = null;
         BindableList.Show(pane.MessageList, chat?.Messages);
         BindableList.Show(pane.AttachmentList, chat?.Attachments);

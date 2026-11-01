@@ -204,7 +204,7 @@ public sealed partial class MediaTests
             Assert.IsTrue(button.Top >= bar.Top && button.Bottom <= bar.Bottom, $"{id} ({button}) isn't in the title bar row ({bar}).");
             Assert.IsTrue(button.Left >= left_edge, $"{id} ({button}) is out of order (Close, Open, Open with, Download, Save as from the left).");
             // Five Buttons End 289 px In At The Test Machine's 125% (224 epx Plus The Window's Edge)
-            Assert.IsTrue(button.Right <= window.Left + 295,$"{id} ({button}) isn't in the top-left corner (window {window}).");
+            Assert.IsTrue(button.Right <= window.Left + 295, $"{id} ({button}) isn't in the top-left corner (window {window}).");
             left_edge = button.Right;
         }
 
