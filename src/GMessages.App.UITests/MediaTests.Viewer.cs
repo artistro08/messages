@@ -200,6 +200,46 @@ public sealed partial class MediaTests
         Keyboard.Type(VirtualKeyShort.ESCAPE);
     }
 
+    /// <summary>
+    /// A photo and a video grow out of their bubbles into the viewer, and Escape and Close shrink them back before the
+    /// viewer goes (animation effects on, as on the test machine).
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Viewer_GrowsFromBubble_ShrinksBack()
+    {
+        await OpenMediaChatAsync();
+        string motion = Path.Combine(App.DataDir, "viewer-motion.txt");
+
+        // Photo, Closed By Escape
+        AutomationElement photo = ViewerPhoto(null);
+        photo.Click();
+        WaitForMotion(motion, "Grew");
+        Keyboard.Type(VirtualKeyShort.ESCAPE);
+        WaitForMotion(motion, "Shrank");
+        WaitForGone("PhotoViewer.Photo");
+
+        // Video, Closed By Close
+        Message video = Server.Phone.PushIncomingMedia("c-media", "video/mp4", File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Fixtures", "clip.mp4")), "clip.mp4");
+        App.Find("Bubble.Video." + video.MessageID).Patterns.Invoke.Pattern.Invoke();
+        WaitForMotion(motion, "Grew");
+        App.Find("PhotoViewer.Close").Patterns.Invoke.Pattern.Invoke();
+        WaitForMotion(motion, "Shrank");
+        WaitForGone("PhotoViewer.Video");
+        Assert.IsNotNull(App.TryFind("Chat.Draft"), "Closing the viewer closed the chat too.");
+    }
+
+    // The Viewer's Last Motion, As The App Noted It
+    private static void WaitForMotion(string path, string expected)
+    {
+        string last = string.Empty;
+        Wait.Until(() =>
+        {
+            last = File.Exists(path) ? ReadShared(path) : string.Empty;
+            return last == expected;
+        }, AppDriver.DefaultTimeout, () => $"The viewer's motion stayed '{last}', not '{expected}'.");
+    }
+
     // The Screen Pixel At A Point
     private static System.Drawing.Color PixelAt(System.Drawing.Point at)
     {

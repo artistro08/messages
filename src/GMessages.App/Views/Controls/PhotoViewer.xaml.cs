@@ -1,12 +1,17 @@
+using System.Numerics;
 using System.Runtime.InteropServices.WindowsRuntime;
 using GMessages.App.Media;
 using GMessages.Presentation.Messaging;
+using Microsoft.UI.Composition;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media.Imaging;
+using Windows.Foundation;
 using Windows.Storage.Streams;
+using Windows.UI.ViewManagement;
 
 namespace GMessages.App.Views.Controls;
 
@@ -36,6 +41,13 @@ namespace GMessages.App.Views.Controls;
 /// A test run puts the zoom in the photo's item status (<c>Zoom1</c>, <c>Zoom2</c>, ...) for the tests to read.
 /// </para>
 /// <para>
+/// Opening grows the photo or video out of its bubble (from the bubble's place and size to its own, 300 ms, Fluent's
+/// decelerate curve) while the backdrop and toolbar fade in; closing by Escape, Close or a click beside the photo
+/// shrinks it back (200 ms, accelerate) while they fade out (owner, Plan 8). Composition scale and translation on the
+/// stage that holds both, so no layout moves. With Windows' animation effects off it shows and hides at once. A test
+/// run notes <c>Grew</c>, <c>Shown</c> (no bubble to grow from) or <c>Shrank</c> in <c>viewer-motion.txt</c>.
+/// </para>
+/// <para>
 /// A video (<see cref="ShowVideoAsync"/>) plays in place of the photo (<c>PhotoViewer.Video</c>) with Windows' full
 /// transport controls, from where the bubble's player got to; Open in Photos reads Open in default app. Opening the
 /// viewer stops a video playing in a bubble, and closing it stops its own.
@@ -46,6 +58,15 @@ public sealed partial class PhotoViewer : UserControl
 {
     // The Space Kept Around The Photo At 1x, In Effective Pixels
     private const double PhotoMargin = 24;
+
+    // Opening Grows The Photo Out Of Its Bubble (Fluent's Decelerate Curve), Closing Shrinks It Back Faster (Accelerate)
+    private static readonly TimeSpan GrowTime   = TimeSpan.FromMilliseconds(300);
+    private static readonly TimeSpan ShrinkTime = TimeSpan.FromMilliseconds(200);
+    private static readonly UISettings Ui       = new();
+
+    // Bumped On Each Open And Close, So A Shrink That Finishes After The Viewer Opened Again Changes Nothing
+    private int _closeRun;
+    private bool _closing;
 
     // The Shown Photo, Its Message, And Where Focus Goes On Close
     private MediaPart? _part;
@@ -148,9 +169,10 @@ public sealed partial class PhotoViewer : UserControl
 
             var image = new BitmapImage();
             await image.SetSourceAsync(stream);
-            if (ReferenceEquals(part, _part))
+            if (ReferenceEquals(part, _part) && !_closing)
             {
                 PhotoImage.Source = image;
+                Grow(PhotoImage, null);
             }
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -192,13 +214,14 @@ public sealed partial class PhotoViewer : UserControl
             }
 
             byte[] bytes = await media.GetAsync(part, thumbnail: false, CancellationToken.None);
-            if (!ReferenceEquals(part, _part))
+            if (!ReferenceEquals(part, _part) || _closing)
             {
                 return;
             }
 
             _video = new VideoPlayback(DispatcherQueue, bytes, part.Mime, start, compact: false, "PhotoViewer.Video", name);
             VideoHost.Children.Add(_video.Element);
+            Grow(VideoHost, part);
             _video.Player.Play();
             DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => _video?.Element.Focus(FocusState.Programmatic));
         }
@@ -215,13 +238,34 @@ public sealed partial class PhotoViewer : UserControl
     /// <summary>
     /// Hides the viewer, stops a playing video, drops the image, and focuses the photo or video in the chat again.
     /// </summary>
-    public void Close()
+    /// <remarks>
+    /// Animated (Escape, Close, a click beside the photo), the photo shrinks back into its bubble while the backdrop and
+    /// toolbar fade out, and the viewer hides once that ends; a video pauses at once. It hides at once when Windows'
+    /// animation effects are off, when the bubble is gone (scrolled away or another chat), or when asked to.
+    /// </remarks>
+    /// <param name="animate">True to shrink back into the bubble first.</param>
+    public void Close(bool animate = false)
     {
-        if (!IsOpen)
+        if (!IsOpen || _closing)
         {
             return;
         }
 
+        if (animate && Shrink())
+        {
+            return;
+        }
+
+        FinishClose();
+    }
+
+    // Hides The Viewer Now, Putting The Animated Layers Back As They Were
+    private void FinishClose()
+    {
+        _closeRun++;
+        _closing         = false;
+        IsHitTestVisible = true;
+        ResetLayers();
         Visibility        = Visibility.Collapsed;
         PhotoImage.Source = null;
         _part             = null;
@@ -247,12 +291,207 @@ public sealed partial class PhotoViewer : UserControl
         ToolTipService.SetToolTip(OpenInPhotosButton, open);
         Zoomer.Visibility    = isVideo ? Visibility.Collapsed : Visibility.Visible;
         VideoHost.Visibility = isVideo ? Visibility.Visible : Visibility.Collapsed;
+
+        // Opened Again While Shrinking: The Shrink Is Dropped And The Layers Put Back
+        if (_closing)
+        {
+            _closeRun++;
+            _closing         = false;
+            IsHitTestVisible = true;
+            ResetLayers();
+        }
+
+        // The Stage Waits Unseen Until Its Photo Or Video Is In (Then It Grows), While The Backdrop And Toolbar Fade In
+        if (Ui.AnimationsEnabled)
+        {
+            ElementCompositionPreview.GetElementVisual(Stage).Opacity = 0;
+            if (!IsOpen)
+            {
+                Fade(0, 1, GrowTime, Decelerate());
+            }
+        }
+
         if (!IsOpen)
         {
             Visibility = Visibility.Visible;
             IsOpenChanged?.Invoke(this, EventArgs.Empty);
         }
     }
+
+    // =========================================================================
+    // GROW AND SHRINK
+    // =========================================================================
+
+    // The Photo Or Video Is In: The Stage Shows, Growing From The Bubble's Place And Size Into Its Own (Translation And
+    // Scale On The Stage's Visual, Centered On Where It Ends Up). Without The Bubble, Or With Animations Off, It Just Shows
+    private void Grow(FrameworkElement target, MediaPart? video)
+    {
+        if (!Ui.AnimationsEnabled)
+        {
+            return;
+        }
+
+        Visual visual  = ElementCompositionPreview.GetElementVisual(Stage);
+        visual.Opacity = 1;
+        Stage.UpdateLayout();
+        if (BubbleRect() is not { } from || ShownRect(target, video, from) is not { } to)
+        {
+            TestHooks.NoteState("viewer-motion", "Shown");
+            return;
+        }
+
+        (Vector3 scale, Vector3 shift) = Between(from, to);
+        PrepareStage(visual, to);
+        AnimateStage(visual, scale, Vector3.One, shift, Vector3.Zero, GrowTime, Decelerate());
+        TestHooks.NoteState("viewer-motion", "Grew");
+    }
+
+    // Shrinks The Stage Back Into The Bubble While The Backdrop And Toolbar Fade Out, Then Hides The Viewer. False (Nothing
+    // Run) When Animations Are Off Or The Bubble Or The Shown Photo Isn't There To Shrink Between
+    private bool Shrink()
+    {
+        FrameworkElement target = _video is null ? PhotoImage : VideoHost;
+        if (!Ui.AnimationsEnabled || BubbleRect() is not { } to || ShownRect(target, _video is null ? null : _part, to) is not { } from)
+        {
+            return false;
+        }
+
+        _closing         = true;
+        IsHitTestVisible = false;
+        _video?.Player.Pause();
+
+        // The Batch Ends Once Every Animation Started Inside It Has
+        int run                        = ++_closeRun;
+        Visual visual                  = ElementCompositionPreview.GetElementVisual(Stage);
+        CompositionScopedBatch done    = visual.Compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
+        (Vector3 scale, Vector3 shift) = Between(to, from);
+        PrepareStage(visual, from);
+        AnimateStage(visual, Vector3.One, scale, Vector3.Zero, shift, ShrinkTime, Accelerate());
+        Fade(1, 0, ShrinkTime, Accelerate());
+        done.End();
+        done.Completed += (_, _) => DispatcherQueue.TryEnqueue(() =>
+        {
+            if (run == _closeRun && _closing)
+            {
+                FinishClose();
+            }
+        });
+        TestHooks.NoteState("viewer-motion", "Shrank");
+        return true;
+    }
+
+    // The Bubble's Photo Or Video Frame In The Stage's Space; Null When It's Gone Or Not Laid Out
+    private Rect? BubbleRect()
+    {
+        if (_returnFocus is not { IsLoaded: true } bubble || bubble.ActualWidth <= 0 || bubble.ActualHeight <= 0 || !ReferenceEquals(bubble.XamlRoot, XamlRoot))
+        {
+            return null;
+        }
+
+        try
+        {
+            return bubble.TransformToVisual(Stage).TransformBounds(new Rect(0, 0, bubble.ActualWidth, bubble.ActualHeight));
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.Runtime.InteropServices.COMException)
+        {
+            return null;
+        }
+    }
+
+    // Where The Photo Or Video Shows In The Stage's Space: The Image's Own Bounds, Or For A Video Its Host Fitted To The
+    // Bubble's Shape (The Player Letterboxes It So). Null Before It Has A Size
+    private Rect? ShownRect(FrameworkElement target, MediaPart? video, Rect bubble)
+    {
+        if (target.ActualWidth <= 0 || target.ActualHeight <= 0)
+        {
+            return null;
+        }
+
+        Rect box = target.TransformToVisual(Stage).TransformBounds(new Rect(0, 0, target.ActualWidth, target.ActualHeight));
+        if (video is null)
+        {
+            return box;
+        }
+
+        double aspect = video is { Width: > 0, Height: > 0 } ? (double)video.Width / video.Height : bubble.Width / bubble.Height;
+        double width  = Math.Min(box.Width, box.Height * aspect);
+        double height = width / aspect;
+        return new Rect(box.X + ((box.Width - width) / 2), box.Y + ((box.Height - height) / 2), width, height);
+    }
+
+    // The Scale And Shift That Make The Shown Rectangle Sit Over The Bubble's (About The Shown One's Middle)
+    private static (Vector3 Scale, Vector3 Shift) Between(Rect bubble, Rect shown) => (
+        new Vector3((float)(bubble.Width / shown.Width), (float)(bubble.Height / shown.Height), 1),
+        new Vector3((float)((bubble.X + (bubble.Width / 2)) - (shown.X + (shown.Width / 2))), (float)((bubble.Y + (bubble.Height / 2)) - (shown.Y + (shown.Height / 2))), 0));
+
+    // Scales About The Shown Rectangle's Middle, With Translation On
+    private void PrepareStage(Visual visual, Rect shown)
+    {
+        ElementCompositionPreview.SetIsTranslationEnabled(Stage, true);
+        visual.CenterPoint = new Vector3((float)(shown.X + (shown.Width / 2)), (float)(shown.Y + (shown.Height / 2)), 0);
+    }
+
+    // Runs The Stage's Scale And Translation Between Two Values
+    private static void AnimateStage(Visual visual, Vector3 scaleFrom, Vector3 scaleTo, Vector3 shiftFrom, Vector3 shiftTo, TimeSpan time, CompositionEasingFunction ease)
+    {
+        Compositor compositor = visual.Compositor;
+
+        Vector3KeyFrameAnimation scale = compositor.CreateVector3KeyFrameAnimation();
+        scale.InsertKeyFrame(0, scaleFrom);
+        scale.InsertKeyFrame(1, scaleTo, ease);
+        scale.Duration = time;
+
+        Vector3KeyFrameAnimation shift = compositor.CreateVector3KeyFrameAnimation();
+        shift.InsertKeyFrame(0, shiftFrom);
+        shift.InsertKeyFrame(1, shiftTo, ease);
+        shift.Duration = time;
+
+        visual.StartAnimation(nameof(Visual.Scale), scale);
+        visual.StartAnimation("Translation", shift);
+    }
+
+    // Fades The Backdrop And The Toolbar Together
+    private void Fade(float from, float to, TimeSpan time, CompositionEasingFunction ease)
+    {
+        foreach (UIElement layer in (ReadOnlySpan<UIElement>)[Backdrop, ToolbarPanel])
+        {
+            Visual visual                = ElementCompositionPreview.GetElementVisual(layer);
+            ScalarKeyFrameAnimation fade = visual.Compositor.CreateScalarKeyFrameAnimation();
+            fade.InsertKeyFrame(0, from);
+            fade.InsertKeyFrame(1, to, ease);
+            fade.Duration = time;
+            visual.StartAnimation(nameof(Visual.Opacity), fade);
+        }
+    }
+
+    // Puts The Stage, Backdrop And Toolbar Back At Rest (Shown, Full Size, In Place); Untouched With Animations Off
+    private void ResetLayers()
+    {
+        if (!Ui.AnimationsEnabled)
+        {
+            return;
+        }
+
+        Visual stage = ElementCompositionPreview.GetElementVisual(Stage);
+        stage.StopAnimation(nameof(Visual.Scale));
+        stage.StopAnimation("Translation");
+        stage.Scale   = Vector3.One;
+        stage.Opacity = 1;
+        stage.Properties.InsertVector3("Translation", Vector3.Zero);
+        foreach (UIElement layer in (ReadOnlySpan<UIElement>)[Backdrop, ToolbarPanel])
+        {
+            Visual visual = ElementCompositionPreview.GetElementVisual(layer);
+            visual.StopAnimation(nameof(Visual.Opacity));
+            visual.Opacity = 1;
+        }
+    }
+
+    // Fluent's Decelerate (Things Arriving) And Accelerate (Things Leaving) Curves
+    private CubicBezierEasingFunction Decelerate() =>
+        ElementCompositionPreview.GetElementVisual(Stage).Compositor.CreateCubicBezierEasingFunction(new Vector2(0.1f, 0.9f), new Vector2(0.2f, 1));
+
+    private CubicBezierEasingFunction Accelerate() =>
+        ElementCompositionPreview.GetElementVisual(Stage).Compositor.CreateCubicBezierEasingFunction(new Vector2(0.7f, 0), new Vector2(1, 0.5f));
 
     // Stops The Viewer's Video And Lets Go Of Its Player And Bytes
     private void StopVideo()
@@ -297,7 +536,7 @@ public sealed partial class PhotoViewer : UserControl
         }
     }
 
-    private void OnCloseClick(object sender, RoutedEventArgs e) => Close();
+    private void OnCloseClick(object sender, RoutedEventArgs e) => Close(animate: true);
 
     // =========================================================================
     // ZOOM
@@ -330,7 +569,7 @@ public sealed partial class PhotoViewer : UserControl
     {
         if (!ReferenceEquals(e.OriginalSource, PhotoImage))
         {
-            Close();
+            Close(animate: true);
         }
     }
 

@@ -27,9 +27,15 @@
     <!-- Scrim: Tab and Shift + Tab cycle inside, so focus never leaves the viewer -->
     <Grid
         x:Name="Scrim"
-        Background="{ThemeResource PhotoViewerScrimBrush}"
         RowDefinitions="48,*"
         TabFocusNavigation="Cycle">
+
+        <!-- Backdrop: the tint, its own layer so it fades in and out (from code) while the photo grows and shrinks. No
+             implicit transitions here or on the toolbar and stage: the code takes their visuals -->
+        <Border
+            x:Name="Backdrop"
+            Grid.RowSpan="2"
+            Background="{ThemeResource PhotoViewerScrimBrush}" />
 
         <!-- Toolbar: in the title bar row (48 px, the tall caption buttons' height), just left of the caption buttons; the
              window keeps their width clear and lets clicks through to these buttons only (set from the window's code) -->
@@ -85,38 +91,42 @@
             </Button>
         </StackPanel>
 
-        <!-- Photo: centered and fitted at 1x (a smaller photo at its own size), Ctrl + mouse wheel and pinch zoom up to 8x, a double-click zooms in or back out.
-             Named for Narrator by the photo's caption (or "Photo"); a click beside the photo closes the viewer -->
-        <ScrollViewer
-            x:Name="Zoomer"
-            Grid.Row="1"
-            AutomationProperties.AutomationId="PhotoViewer.Photo"
-            Background="Transparent"
-            HorizontalScrollBarVisibility="Auto"
-            HorizontalScrollMode="Auto"
-            IsTabStop="True"
-            MaxZoomFactor="8"
-            MinZoomFactor="1"
-            SizeChanged="OnZoomerSizeChanged"
-            Tapped="OnZoomerTapped"
-            VerticalScrollBarVisibility="Auto"
-            VerticalScrollMode="Auto"
-            ViewChanged="OnZoomerViewChanged"
-            ZoomMode="Enabled">
-            <Image
-                x:Name="PhotoImage"
-                HorizontalAlignment="Center"
-                VerticalAlignment="Center"
-                DoubleTapped="OnPhotoDoubleTapped"
-                Stretch="Uniform" />
-        </ScrollViewer>
+        <!-- Stage: the photo or the video, grown from the bubble on open and shrunk back on close (from code) -->
+        <Grid x:Name="Stage" Grid.Row="1">
 
-        <!-- Video: a clicked video plays here, fitted inside the photo's 24 px margin, with Windows' full transport controls
-             (made in code; PhotoViewer.Video). Shown instead of the photo -->
-        <Grid
-            x:Name="VideoHost"
-            Grid.Row="1"
-            Margin="24"
-            Visibility="Collapsed" />
+            <!-- Photo: centered and fitted at 1x (a smaller photo at its own size), Ctrl + mouse wheel and pinch zoom up to
+                 8x, a double-click zooms in or back out. Named for Narrator by the photo's caption (or "Photo"); a click
+                 beside the photo closes the viewer -->
+            <ScrollViewer
+                x:Name="Zoomer"
+                AutomationProperties.AutomationId="PhotoViewer.Photo"
+                Background="Transparent"
+                HorizontalScrollBarVisibility="Auto"
+                HorizontalScrollMode="Auto"
+                IsTabStop="True"
+                MaxZoomFactor="8"
+                MinZoomFactor="1"
+                SizeChanged="OnZoomerSizeChanged"
+                Tapped="OnZoomerTapped"
+                VerticalScrollBarVisibility="Auto"
+                VerticalScrollMode="Auto"
+                ViewChanged="OnZoomerViewChanged"
+                ZoomMode="Enabled">
+                <Image
+                    x:Name="PhotoImage"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    DoubleTapped="OnPhotoDoubleTapped"
+                    Stretch="Uniform" />
+            </ScrollViewer>
+
+            <!-- Video: a clicked video plays here, fitted inside the photo's 24 px margin, with Windows' full transport
+                 controls (made in code; PhotoViewer.Video). Shown instead of the photo -->
+            <Grid
+                x:Name="VideoHost"
+                Margin="24"
+                Visibility="Collapsed" />
+        </Grid>
+        <!-- /Stage -->
     </Grid>
 </UserControl>
