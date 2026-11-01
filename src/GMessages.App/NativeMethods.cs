@@ -354,6 +354,13 @@ internal static class NativeMethods
     [DllImport("user32.dll", SetLastError = true)]
     public static extern uint SendInput(uint count, KEYBOARD_INPUT[] inputs, int size);
 
+    [DllImport("kernel32.dll")]
+    public static extern IntPtr GetProcessHeap();
+
+    // Merges the heap's free blocks; the result is the size of the largest free block (0 on failure)
+    [DllImport("kernel32.dll")]
+    public static extern nuint HeapCompact(IntPtr heap, uint flags);
+
     // -1, -1 empties the working set
     [DllImport("kernel32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]

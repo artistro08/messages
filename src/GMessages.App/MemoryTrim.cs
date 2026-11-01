@@ -64,6 +64,8 @@ internal sealed class MemoryTrim
         GC.WaitForPendingFinalizers();
         GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, blocking: true, compacting: true);
 
+        // Native Heap: Merge Free Blocks So Windows Can Take The Pages Back
+        _ = NativeMethods.HeapCompact(NativeMethods.GetProcessHeap(), 0);
         _ = NativeMethods.SetProcessWorkingSetSize(NativeMethods.GetCurrentProcess(), -1, -1);
 
         // Test Hook: Tells The UI Tests The Trim Ran (A Debug-Build Note, "trim:done")
