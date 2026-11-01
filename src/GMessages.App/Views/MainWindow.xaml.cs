@@ -54,6 +54,9 @@ public sealed partial class MainWindow : Window
     private Button? _backButton;
     private bool _isActive;
 
+    // Dims The Window's Text While It Is Inactive, Like The Title Bar
+    private readonly WindowTextDimmer _textDimmer;
+
     // The Caption Buttons' Theme For The App Theme (Dark Instead While The Photo Viewer Is Open)
     private TitleBarTheme _captionTheme = TitleBarTheme.UseDefaultAppMode;
 
@@ -80,6 +83,7 @@ public sealed partial class MainWindow : Window
         _avatars     = avatars;
         Avatar.Cache = avatars;
         InitializeComponent();
+        _textDimmer = new WindowTextDimmer(RootGrid);
 
         // Window
         Title                      = AppInfo.DisplayName;
@@ -123,9 +127,11 @@ public sealed partial class MainWindow : Window
             _isActive = e.WindowActivationState != WindowActivationState.Deactivated;
             ShowChatFocus();
             PhotoViewer.ShowActive(_isActive);
+            _textDimmer.Show(_isActive);
         };
         Closed += (_, _) =>
         {
+            _textDimmer.Restore();
             CloseSettings();
             DropBody();
             Bindings.StopTracking();
