@@ -222,14 +222,22 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     /// <summary>Gets whether the bubble shows a photo (a received or sent image).</summary>
     public bool HasPhoto { get; private set; }
 
-    /// <summary>Gets whether the bubble shows a card for a video or a file.</summary>
+    /// <summary>Gets whether the bubble shows a card for a file (not a photo, video or voice message).</summary>
     public bool HasFileCard { get; private set; }
+
+    /// <summary>Gets whether the bubble shows a video: its first frame with a play button, played in place.</summary>
+    public bool HasVideo { get; private set; }
+
+    /// <summary>
+    /// Gets whether a photo or a video fills the bubble edge to edge (no padding, the caption inset under it).
+    /// </summary>
+    public bool FillsBubble => HasPhoto || HasVideo;
 
     /// <summary>Gets whether the bubble shows a voice message's player (play, waveform and length).</summary>
     public bool HasVoice { get; private set; }
 
-    /// <summary>Gets whether the bubble shows a photo, a card or a voice message, so its menu has Open and Save as.</summary>
-    public bool HasMediaFile => HasPhoto || HasFileCard || HasVoice;
+    /// <summary>Gets whether the bubble shows a photo, a video, a card or a voice message, so its menu has Open and Save as.</summary>
+    public bool HasMediaFile => HasPhoto || HasVideo || HasFileCard || HasVoice;
 
     /// <summary>
     /// Gets whether the photo or card may open in its default app, so its menu has Open. A program, script or installer
@@ -288,6 +296,9 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
 
     /// <summary>Gets the photo's accessible name: its caption, else "Photo".</summary>
     public string PhotoName => HasBodyText ? Text : ChatCopy.Photo;
+
+    /// <summary>Gets the video's accessible name (its frame, and the viewer): its caption, else "Video".</summary>
+    public string VideoName => HasBodyText ? Text : ChatCopy.Video;
 
     // The Link The Chat Asked A Preview For, So It Asks Once Per Link
     internal Uri? PreviewAskedFor { get; set; }
@@ -603,7 +614,8 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         Kind          = m.Kind;
         Media         = KeepSize(m.Media, Media);
         HasPhoto      = m.Media is not null && m.Kind == MessageKind.Photo;
-        HasFileCard   = m.Media is not null && m.Kind is MessageKind.Video or MessageKind.File;
+        HasVideo      = m.Media is not null && m.Kind == MessageKind.Video;
+        HasFileCard   = m.Media is not null && m.Kind == MessageKind.File;
         HasVoice      = m.Media is not null && m.Kind == MessageKind.Audio;
         HasCopyText   = m.Media is null || m.Text.Length > 0;
 

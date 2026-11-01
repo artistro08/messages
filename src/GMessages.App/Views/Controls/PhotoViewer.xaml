@@ -1,5 +1,6 @@
-<!-- Photo Viewer: a clicked photo over the whole window (the title bar row too, so all of the app is tinted) on a dark scrim,
-     zoomable, with Save as, Download, Open in Photos and Close in the title bar row beside the caption buttons. Dark theme
+<!-- Photo Viewer: a clicked photo (zoomable) or video (playing) over the whole window (the title bar row too, so all of the
+     app is tinted) on a dark scrim, with Save as, Download, Open in Photos (Open in default app for a video) and Close in
+     the title bar row beside the caption buttons. Dark theme
      always, so its icons read on the scrim. Hidden until shown (see the code) -->
 <UserControl
     x:Class="GMessages.App.Views.Controls.PhotoViewer"
@@ -109,5 +110,13 @@
                 DoubleTapped="OnPhotoDoubleTapped"
                 Stretch="Uniform" />
         </ScrollViewer>
+
+        <!-- Video: a clicked video plays here, fitted inside the photo's 24 px margin, with Windows' full transport controls
+             (made in code; PhotoViewer.Video). Shown instead of the photo -->
+        <Grid
+            x:Name="VideoHost"
+            Grid.Row="1"
+            Margin="24"
+            Visibility="Collapsed" />
     </Grid>
 </UserControl>

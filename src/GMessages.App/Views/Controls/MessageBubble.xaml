@@ -225,8 +225,8 @@
                     </Viewbox>
                 </Grid>
 
-                <!-- Fill: the bubble's color and edge, behind its content. A photo with nothing else in its bubble hides it, so the
-                     photo's own edge is the bubble's edge and no fill or stroke shows around it -->
+                <!-- Fill: the bubble's color and edge, behind its content. A photo or video with nothing else in its bubble hides
+                     it, so its own edge is the bubble's edge and no fill or stroke shows around it -->
                 <Border
                     x:Name="BackFill"
                     Grid.Column="1"
@@ -234,13 +234,13 @@
                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                     BorderThickness="1"
                     CornerRadius="{x:Bind local:MessageBubble.CornersOf(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup), Mode=OneWay}"
-                    Visibility="{x:Bind local:MessageBubble.FillShown(Bubble.HasPhoto, Bubble.HasBodyText, Bubble.HasQuote), Mode=OneWay, FallbackValue=Collapsed}" />
+                    Visibility="{x:Bind local:MessageBubble.FillShown(Bubble.FillsBubble, Bubble.HasBodyText, Bubble.HasQuote), Mode=OneWay, FallbackValue=Collapsed}" />
 
                 <!-- Text: a click shows or hides the time -->
                 <Border
                     x:Name="Back"
                     Grid.Column="1"
-                    Padding="{x:Bind local:MessageBubble.BackPadding(Bubble.HasPhoto), Mode=OneWay}"
+                    Padding="{x:Bind local:MessageBubble.BackPadding(Bubble.FillsBubble), Mode=OneWay}"
                     Background="Transparent"
                     CornerRadius="{x:Bind local:MessageBubble.CornersOf(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup), Mode=OneWay}">
                     <StackPanel>
@@ -323,6 +323,102 @@
                             </Grid>
                         </Button>
                         <!-- /Photo -->
+
+                        <!-- Video: edge to edge in the bubble like a photo, at the size its dimensions give (set from code),
+                             rounded to the bubble's corners. Its first frame (the thumbnail the phone sent; a plain fill
+                             without one) with a play button over it. A click on the frame opens the window's viewer; the
+                             play button plays it here, with sound and compact controls (play or pause, seek, volume; made in
+                             code, in VideoHost), and the expand button then opens the viewer where it got to. The frame is
+                             named by the caption, else "Video", and shows the hand cursor (LinkCardButton) -->
+                        <Grid
+                            x:Name="Video"
+                            Background="{ThemeResource SolidBackgroundFillColorTertiaryBrush}"
+                            CornerRadius="{x:Bind local:MessageBubble.PhotoCorners(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup, Bubble.HasBodyText), Mode=OneWay}"
+                            Visibility="{x:Bind Bubble.HasVideo, Mode=OneWay, FallbackValue=Collapsed}">
+                            <local:LinkCardButton
+                                x:Name="VideoFrame"
+                                Padding="0"
+                                HorizontalAlignment="Stretch"
+                                VerticalAlignment="Stretch"
+                                HorizontalContentAlignment="Stretch"
+                                VerticalContentAlignment="Stretch"
+                                AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Bubble.Video.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                                AutomationProperties.Name="{x:Bind Bubble.VideoName, Mode=OneWay, FallbackValue=''}"
+                                BorderThickness="0"
+                                Click="OnVideoFrameClick"
+                                CornerRadius="{x:Bind local:MessageBubble.PhotoCorners(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup, Bubble.HasBodyText), Mode=OneWay}"
+                                Style="{StaticResource IconButtonStyle}">
+                                <Border
+                                    x:Name="VideoThumb"
+                                    CornerRadius="{x:Bind local:MessageBubble.PhotoCorners(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup, Bubble.HasBodyText), Mode=OneWay}" />
+                            </local:LinkCardButton>
+
+                            <!-- Play: on a round plate over the frame's middle -->
+                            <Button
+                                x:Name="VideoPlay"
+                                Width="48"
+                                Height="48"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Video.Play.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                                AutomationProperties.Name="{x:Bind local:MessageBubble.PlayVideoText}"
+                                Click="OnVideoPlayClick"
+                                Style="{StaticResource IconButtonStyle}"
+                                ToolTipService.ToolTip="{x:Bind local:MessageBubble.PlayVideoText}">
+                                <Grid>
+                                    <Ellipse
+                                        Width="48"
+                                        Height="48"
+                                        Fill="{ThemeResource AcrylicInAppFillColorDefaultBrush}" />
+                                    <FontIcon FontSize="20" Glyph="&#xE768;" />
+                                </Grid>
+                            </Button>
+
+                            <!-- Player: the playing video and its compact controls, added and removed from code -->
+                            <Grid x:Name="VideoHost" />
+
+                            <!-- Expand: while it plays, opens it in the viewer where it got to -->
+                            <Button
+                                x:Name="VideoExpand"
+                                Width="32"
+                                Height="32"
+                                Margin="6"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Top"
+                                AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Video.Expand.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                                AutomationProperties.Name="{x:Bind local:MessageBubble.OpenVideoText}"
+                                Click="OnVideoExpandClick"
+                                Style="{StaticResource IconButtonStyle}"
+                                ToolTipService.ToolTip="{x:Bind local:MessageBubble.OpenVideoText}"
+                                Visibility="Collapsed">
+                                <Grid>
+                                    <Ellipse
+                                        Width="32"
+                                        Height="32"
+                                        Fill="{ThemeResource AcrylicInAppFillColorDefaultBrush}" />
+                                    <FontIcon FontSize="14" Glyph="&#xE740;" />
+                                </Grid>
+                            </Button>
+
+                            <!-- Note: downloading, or the failure, on a small plate at the bottom -->
+                            <Border
+                                x:Name="VideoNoteBack"
+                                Margin="12"
+                                Padding="8,4"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Bottom"
+                                Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}"
+                                CornerRadius="4"
+                                IsHitTestVisible="False"
+                                Visibility="Collapsed">
+                                <TextBlock
+                                    x:Name="VideoNote"
+                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                    TextAlignment="Center"
+                                    TextWrapping="Wrap" />
+                            </Border>
+                        </Grid>
+                        <!-- /Video -->
 
                         <!-- File Card: a video or file, with its thumbnail when one came (else its type's icon), its name, and its
                              size as Explorer writes it, or "Downloading…" while it opens, or the failure. A click (or Enter or
@@ -407,7 +503,7 @@
                              only the link shows the card alone -->
                         <TextBlock
                             x:Name="Body"
-                            Margin="{x:Bind local:MessageBubble.CaptionMargin(Bubble.HasPhoto), Mode=OneWay}"
+                            Margin="{x:Bind local:MessageBubble.CaptionMargin(Bubble.FillsBubble), Mode=OneWay}"
                             AutomationProperties.AutomationId="{x:Bind local:MessageBubble.AutomationIdOf(Bubble.Id, Bubble.TmpId), Mode=OneWay}"
                             AutomationProperties.ItemType="{x:Bind Bubble.ItemTypeName, Mode=OneWay, FallbackValue=''}"
                             IsTextSelectionEnabled="True"

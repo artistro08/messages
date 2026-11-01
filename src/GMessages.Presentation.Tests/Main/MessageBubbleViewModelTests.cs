@@ -276,17 +276,33 @@ public sealed class MessageBubbleViewModelTests
     }
 
     [TestMethod]
-    public void Bubble_VideoAndFile_AreCards()
+    public void Bubble_File_IsCard_Video_FillsBubble()
     {
         var video = new MessageBubbleViewModel(MediaMessage(MessageKind.Video) with { Text = string.Empty });
         var file  = new MessageBubbleViewModel(MediaMessage(MessageKind.File) with { Text = string.Empty });
 
-        Assert.IsTrue(video.HasFileCard);
-        Assert.IsTrue(file.HasFileCard);
+        Assert.IsTrue(video.HasVideo);
+        Assert.IsTrue(video.FillsBubble);
+        Assert.IsTrue(video.HasMediaFile);
+        Assert.IsFalse(video.HasFileCard);
         Assert.IsFalse(video.HasPhoto);
-        Assert.AreEqual("clip.mp4", video.FileName);
-        Assert.AreEqual(1234, video.FileSize);
+        Assert.AreEqual(ChatCopy.Video, video.VideoName);
         Assert.IsFalse(video.HasBodyText);
+
+        Assert.IsTrue(file.HasFileCard);
+        Assert.IsFalse(file.HasVideo);
+        Assert.IsFalse(file.FillsBubble);
+        Assert.AreEqual("clip.mp4", file.FileName);
+        Assert.AreEqual(1234, file.FileSize);
+    }
+
+    [TestMethod]
+    public void Bubble_VideoWithCaption_NamedByCaption()
+    {
+        var video = new MessageBubbleViewModel(MediaMessage(MessageKind.Video, "Goal!"));
+
+        Assert.AreEqual("Goal!", video.VideoName);
+        Assert.AreEqual("Goal!", video.BodyText);
     }
 
     [TestMethod]
