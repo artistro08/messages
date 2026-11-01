@@ -314,7 +314,8 @@
                 Visibility="{x:Bind Chat.HasAttachError, Mode=OneWay, FallbackValue=Collapsed}" />
 
             <!-- Replying To: joined to the top of the message box as one control (the same width and left edge, rounded on top
-                 only, while the box squares its top corners): an accent bar, the quoted text and a button to drop the reply -->
+                 only, while the box squares its top corners): an accent bar, the quoted text (for a photo, video or file its
+                 thumbnail or icon and "Image", "Video", "GIF" in italic, or the file name) and a button to drop the reply -->
             <Grid
                 Margin="12,8,12,0"
                 Padding="8,6,4,6"
@@ -329,15 +330,26 @@
                     Width="3"
                     Background="{ThemeResource QuoteBarBrush}"
                     CornerRadius="1.5" />
-                <TextBlock
+                <Grid
                     Grid.Column="1"
-                    VerticalAlignment="Center"
-                    AutomationProperties.AutomationId="Chat.ReplyingTo"
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                    MaxLines="2"
-                    Text="{x:Bind Chat.ReplyingTo.DisplayText, Mode=OneWay, FallbackValue=''}"
-                    TextTrimming="CharacterEllipsis"
-                    TextWrapping="Wrap" />
+                    ColumnDefinitions="Auto,*">
+                    <controls:MediaThumb
+                        Margin="0,0,8,0"
+                        VerticalAlignment="Center"
+                        AutomationProperties.AutomationId="Chat.ReplyingToThumb"
+                        Media="{x:Bind Chat.ReplyingTo.Media, Mode=OneWay}"
+                        Visibility="{x:Bind Chat.ReplyingTo.HasMediaFile, Mode=OneWay, FallbackValue=Collapsed}" />
+                    <TextBlock
+                        Grid.Column="1"
+                        VerticalAlignment="Center"
+                        AutomationProperties.AutomationId="Chat.ReplyingTo"
+                        FontStyle="{x:Bind controls:MessageBubble.LabelStyle(Chat.ReplyingTo.MediaLabelIsLabel), Mode=OneWay}"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        MaxLines="2"
+                        Text="{x:Bind Chat.ReplyingTo.ReplyChipText, Mode=OneWay, FallbackValue=''}"
+                        TextTrimming="CharacterEllipsis"
+                        TextWrapping="Wrap" />
+                </Grid>
                 <Button
                     Grid.Column="2"
                     Width="32"

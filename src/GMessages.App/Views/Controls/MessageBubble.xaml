@@ -260,23 +260,39 @@
                                 x:Name="QuoteBar"
                                 Width="3"
                                 Background="{ThemeResource QuoteBarBrush}" />
-                            <StackPanel Grid.Column="1" Padding="0,6">
-                                <TextBlock
-                                    x:Name="QuoteSender"
-                                    MaxLines="1"
-                                    Style="{StaticResource CaptionTextBlockStyle}"
-                                    Text="{x:Bind Bubble.QuoteSender, Mode=OneWay, FallbackValue=''}"
-                                    TextTrimming="CharacterEllipsis"
-                                    Visibility="{x:Bind local:MessageBubble.ShownIfText(Bubble.QuoteSender), Mode=OneWay, FallbackValue=Collapsed}" />
-                                <TextBlock
-                                    x:Name="QuoteText"
-                                    AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Quote.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
-                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                    MaxLines="2"
-                                    Text="{x:Bind Bubble.QuoteText, Mode=OneWay, FallbackValue=''}"
-                                    TextTrimming="CharacterEllipsis"
-                                    TextWrapping="Wrap" />
-                            </StackPanel>
+
+                            <!-- Quoted Media: its thumbnail (or a file icon) left of two lines, the sender in semibold and
+                                 "Image", "Video", "GIF" in italic (or the file's name) -->
+                            <Grid Grid.Column="1" ColumnDefinitions="Auto,*">
+                                <local:MediaThumb
+                                    Margin="0,6,8,6"
+                                    VerticalAlignment="Center"
+                                    AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('QuoteThumb.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                                    Media="{x:Bind Bubble.QuoteMedia, Mode=OneWay}"
+                                    Visibility="{x:Bind Bubble.HasQuoteMedia, Mode=OneWay, FallbackValue=Collapsed}" />
+                                <StackPanel
+                                    Grid.Column="1"
+                                    Padding="0,6"
+                                    VerticalAlignment="Center">
+                                    <TextBlock
+                                        x:Name="QuoteSender"
+                                        FontWeight="{x:Bind local:MessageBubble.QuoteSenderWeight(Bubble.HasQuoteMedia), Mode=OneWay}"
+                                        MaxLines="1"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        Text="{x:Bind Bubble.QuoteSender, Mode=OneWay, FallbackValue=''}"
+                                        TextTrimming="CharacterEllipsis"
+                                        Visibility="{x:Bind local:MessageBubble.ShownIfText(Bubble.QuoteSender), Mode=OneWay, FallbackValue=Collapsed}" />
+                                    <TextBlock
+                                        x:Name="QuoteText"
+                                        AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Quote.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                                        FontStyle="{x:Bind local:MessageBubble.LabelStyle(Bubble.QuoteIsLabel), Mode=OneWay}"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        MaxLines="2"
+                                        Text="{x:Bind Bubble.QuoteText, Mode=OneWay, FallbackValue=''}"
+                                        TextTrimming="CharacterEllipsis"
+                                        TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Grid>
                         </Grid>
 
                         <!-- Photo: edge to edge in the bubble, rounded to its corners. The thumbnail shows first, decoded tiny

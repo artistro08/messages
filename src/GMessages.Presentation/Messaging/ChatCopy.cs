@@ -152,6 +152,11 @@ public static class ChatCopy
     public const string OpenInDefaultApp = "Open in default app";
     public const string VideoPlayFailed  = "Couldn't play this video.";
 
+    // Reply Quote Labels For Media (Plan 7; Controller Copy, The Owner Signs Off At The Gate)
+    public const string QuoteImage = "Image";
+    public const string QuoteVideo = "Video";
+    public const string QuoteGif   = "GIF";
+
     // Attaching (Plan 6; Controller Copy, The Owner Signs Off At The Gate)
     public const string Attach           = "Attach";
     public const string AttachPhoto      = "Attach photo";

@@ -1213,6 +1213,25 @@ public sealed class ChatViewModelTests
     }
 
     [TestMethod]
+    public async Task Quote_ToPhoto_ShowsImageLabelAndMedia()
+    {
+        using var rig = new MainRig();
+        Message photo = new() { MessageID = "m1", ConversationID = "a", ParticipantID = "p-a", Timestamp = 1_761_700_000_000_000, MessageStatus = new MessageStatus { Status = MessageStatusType.IncomingDelivered } };
+        photo.MessageInfo.Add(new MessageInfo { MediaContent = new MediaContent { MediaID = "media-1", ThumbnailMediaID = "thumb-1", MediaName = "beach.jpg", Format = MediaFormats.ImageJpeg } });
+        Message reply      = Msg("m2", "nice");
+        reply.ReplyMessage = new ReplyMessage { MessageID = "m1" };
+        using ChatViewModel chat = await RcsChat(rig, TimeProvider.System, photo, reply);
+
+        MessageBubbleViewModel quoting = chat.Messages[1];
+        Assert.AreEqual(ChatCopy.QuoteImage, quoting.QuoteText);
+        Assert.AreEqual("Ann", quoting.QuoteSender);
+        Assert.IsTrue(quoting.HasQuoteMedia);
+        Assert.IsTrue(quoting.QuoteIsLabel);
+        Assert.AreEqual("thumb-1", quoting.QuoteMedia!.ThumbnailId);
+        Assert.AreEqual(ChatCopy.QuoteImage, chat.Messages[0].ReplyChipText);
+    }
+
+    [TestMethod]
     public async Task Quote_Unknown_UsesOriginalMessageCopy()
     {
         using var rig      = new MainRig();

@@ -581,6 +581,20 @@ public sealed partial class MessageBubble : UserControl
     }
 
     /// <summary>
+    /// Gives the quote's sender line its weight: semibold beside quoted media's thumbnail, the caption's own otherwise.
+    /// </summary>
+    /// <param name="hasMedia">True when the quote shows the quoted media's thumbnail or icon.</param>
+    /// <returns>The weight.</returns>
+    public static Windows.UI.Text.FontWeight QuoteSenderWeight(bool hasMedia) => hasMedia ? FontWeights.SemiBold : FontWeights.Normal;
+
+    /// <summary>
+    /// Sets a media label ("Image", "Video", "GIF") in italic; a file name or text stays upright.
+    /// </summary>
+    /// <param name="isLabel">True for a label.</param>
+    /// <returns>The style.</returns>
+    public static Windows.UI.Text.FontStyle LabelStyle(bool isLabel) => isLabel ? Windows.UI.Text.FontStyle.Italic : Windows.UI.Text.FontStyle.Normal;
+
+    /// <summary>
     /// Gives the file card's icon: a video's, or a document's for any other file.
     /// </summary>
     /// <param name="kind">The message's kind.</param>
