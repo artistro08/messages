@@ -448,6 +448,36 @@ public sealed class ConversationActionTests : UiTest
     }
 
     /// <summary>
+    /// A ⋮ button's menu opens downward: the chat header's below its button, right edges lined up, and a row's below its
+    /// ⋮ too.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task MoreMenus_OpenBelowTheirButton()
+    {
+        await OpenChatAsync("Row.c-ann");
+
+        // The Header's ⋮
+        AutomationElement more         = App.Find("Chat.More");
+        System.Drawing.Rectangle under = more.BoundingRectangle;
+        more.Patterns.Invoke.Pattern.Invoke();
+        System.Drawing.Rectangle first = App.Find("Conversation.Details").BoundingRectangle;
+        Assert.IsTrue(first.Top >= under.Bottom, $"The header menu's top ({first.Top}) isn't below its button's bottom ({under.Bottom}).");
+        Keyboard.Type(VirtualKeyShort.ESCAPE);
+        WaitForGone("Conversation.Details");
+
+        // A Row's ⋮, Shown On Hover
+        AutomationElement row = App.Find("Row.c-team");
+        PointerInput.Hover(row.BoundingRectangle);
+        AutomationElement row_more      = App.Find("Row.More.c-team");
+        System.Drawing.Rectangle button = row_more.BoundingRectangle;
+        row_more.Patterns.Invoke.Pattern.Invoke();
+        System.Drawing.Rectangle item = App.Find("Conversation.Archive").BoundingRectangle;
+        Assert.IsTrue(item.Top >= button.Bottom, $"The row menu's top ({item.Top}) isn't below its ⋮'s bottom ({button.Bottom}).");
+        Keyboard.Type(VirtualKeyShort.ESCAPE);
+    }
+
+    /// <summary>
     /// Move to trash from the header's menu, once confirmed, closes the chat: the empty state shows, the header goes and
     /// the keyboard focus moves to the conversation list.
     /// </summary>

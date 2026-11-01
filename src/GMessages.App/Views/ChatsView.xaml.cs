@@ -550,7 +550,12 @@ public sealed partial class ChatsView : UserControl
             menu.Closed += (_, _) => from.KeepShown(false);
         }
 
-        menu.ShowAt(target, new FlyoutShowOptions { Position = position });
+        // From A ⋮ Button (A Row's Or The Chat Header's): Below It, Its Right Edges Lined Up (The Button Sits By The Window's
+        // Right Edge), As The Profile Menu Opens. A Right-Click Or The Keyboard Opens It At The Pointer Or On The Row
+        FlyoutShowOptions options = position is null && (from is not null || inHeader)
+            ? new FlyoutShowOptions { Placement = FlyoutPlacementMode.BottomEdgeAlignedRight }
+            : new FlyoutShowOptions { Position = position };
+        menu.ShowAt(target, options);
     }
 
     // Async Void Like A Click Handler, So A Failure Reaches The App's Unhandled Error Log (The Action's Own Failures Show
