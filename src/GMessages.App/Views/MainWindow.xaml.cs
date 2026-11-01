@@ -652,7 +652,7 @@ public sealed partial class MainWindow : Window
         {
             if (e.Key == VirtualKey.Escape)
             {
-                PhotoViewer.Close();
+                PhotoViewer.Close(animate: true);
                 e.Handled = true;
             }
 
