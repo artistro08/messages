@@ -155,6 +155,9 @@ public static class ChatCopy
     public const string OpenInDefaultApp = "Open in default app";
     public const string VideoPlayFailed  = "Couldn't play this video.";
 
+    // Open With (Owner, 2026-11-01: Owner-Named; The Ellipsis Matches Save As, Since A Dialog Follows)
+    public const string OpenWith = "Open with…";
+
     // Reply Quote Labels For Media (Plan 7; Controller Copy, The Owner Signs Off At The Gate)
     public const string QuoteImage = "Image";
     public const string QuoteVideo = "Video";

@@ -50,18 +50,20 @@ internal static class TestHooks
     /// <summary>
     /// When pointed at the fake server, notes a file the app would open in its default app, or a Windows page it would
     /// open (such as <c>ms-settings:privacy-microphone</c>), in <c>{data folder}\launched.txt</c> (one full path or
-    /// address per line) instead of opening it.
+    /// address per line) instead of opening it. A file opened with Windows' app picker (Open with) is noted with
+    /// <c> picker</c> after its path, and no picker shows.
     /// </summary>
     /// <param name="path">The file's full path, or the page's address.</param>
+    /// <param name="picker">True when it would open with Windows' app picker.</param>
     /// <returns>True when noted (the caller must not launch it); false on a normal run.</returns>
-    public static bool RecordLaunch(string path)
+    public static bool RecordLaunch(string path, bool picker = false)
     {
         if (!BlockLaunches || DataDir is null)
         {
             return false;
         }
 
-        File.AppendAllText(Path.Combine(DataDir, "launched.txt"), path + Environment.NewLine);
+        File.AppendAllText(Path.Combine(DataDir, "launched.txt"), path + (picker ? " picker" : string.Empty) + Environment.NewLine);
         return true;
     }
 
@@ -299,8 +301,9 @@ internal static class TestHooks
 
     /// <summary>Always false in Release: the file opens in its default app.</summary>
     /// <param name="path">The file's full path.</param>
+    /// <param name="picker">True when it would open with Windows' app picker.</param>
     /// <returns>False.</returns>
-    public static bool RecordLaunch(string path) => false;
+    public static bool RecordLaunch(string path, bool picker = false) => false;
 
     /// <summary>Does nothing in Release.</summary>
     /// <param name="element">The element.</param>

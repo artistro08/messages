@@ -22,8 +22,8 @@ namespace GMessages.App.Views.Controls;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The toolbar sits in the title bar row's top-left corner, Close first, then Open in Photos, Download and Save as
-/// (owner, Plan 8). Close is a plain back arrow with no plate or fill (owner, Plan 9), and the icons
+/// The toolbar sits in the title bar row's top-left corner, Close first, then Open in Photos, Open with
+/// (<c>PhotoViewer.OpenWith</c>, Windows' app picker; owner, 2026-11-01), Download and Save as (owner, Plan 8). Close is a plain back arrow with no plate or fill (owner, Plan 9), and the icons
 /// dim while the window is inactive (<see cref="ShowActive"/>). The window lets clicks through to the toolbar there,
 /// keeps the rest of the row dragging the window, and turns the caption buttons dark to read on the scrim, all while
 /// <see cref="IsOpenChanged"/> says the viewer is open (see <c>MainWindow</c>).
@@ -112,6 +112,9 @@ public sealed partial class PhotoViewer : UserControl
 
     /// <summary>Gets the Open in Photos button's name and tooltip.</summary>
     public static string OpenInPhotosText => ChatCopy.OpenInPhotos;
+
+    /// <summary>Gets the Open with button's name and tooltip.</summary>
+    public static string OpenWithText => ChatCopy.OpenWith;
 
     /// <summary>Gets the Close button's name and tooltip.</summary>
     public static string CloseText => ChatCopy.Close;
@@ -661,6 +664,16 @@ public sealed partial class PhotoViewer : UserControl
             // A Video Pauses Here While Its Default App Plays It
             _video?.Player.Pause();
             _ = MediaActions.OpenAsync(XamlRoot, part, _messageId);
+        }
+    }
+
+    private void OnOpenWithClick(object sender, RoutedEventArgs e)
+    {
+        if (_part is { } part)
+        {
+            // A Video Pauses Here While The Picked App Plays It
+            _video?.Player.Pause();
+            _ = MediaActions.OpenWithAsync(part, _messageId);
         }
     }
 

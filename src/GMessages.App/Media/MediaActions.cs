@@ -7,8 +7,9 @@ using Windows.System;
 namespace GMessages.App.Media;
 
 /// <summary>
-/// What a photo or file can do, shared by the bubble's menu and the photo viewer: open it in its default app, save a
-/// copy where the person picks (Save as), or save it to their Downloads folder (Download).
+/// What a photo or file can do, shared by the bubble's menu and the photo viewer: open it in its default app, open it
+/// with an app the person picks (Open with), save a copy where the person picks (Save as), or save it to their
+/// Downloads folder (Download).
 /// </summary>
 /// <remarks>
 /// Every action reads the decrypted bytes from the app's <see cref="MediaStore"/>. Failures are logged by the message ID
@@ -59,6 +60,42 @@ internal static class MediaActions
         {
             AppLog.MediaFailed(App.ShellLog, "open", messageId, ex.GetType().Name);
             return false;
+        }
+    }
+
+    /// <summary>
+    /// Writes the file to the private temp folder, as Open does (with the mark of the web), and opens it with Windows'
+    /// app picker, so the person chooses the app.
+    /// </summary>
+    /// <remarks>
+    /// Offered for every attachment, a program or script included (owner): Open never opens those, while the picker and
+    /// the launcher refuse to run a program themselves.
+    /// </remarks>
+    /// <param name="part">The media part.</param>
+    /// <param name="messageId">The message's ID, for the log.</param>
+    /// <returns>A task that ends once Windows was asked.</returns>
+    public static async Task OpenWithAsync(MediaPart part, string messageId)
+    {
+        if ((Application.Current as App)?.Media is not { } media)
+        {
+            return;
+        }
+
+        try
+        {
+            string path = await media.SaveToTempAsync(part, CancellationToken.None);
+            bool launch = !TestHooks.RecordLaunch(path, picker: true);
+            if (launch && !await Launcher.LaunchFileAsync(await StorageFile.GetFileFromPathAsync(path), new LauncherOptions { DisplayApplicationPicker = true }))
+            {
+                AppLog.MediaFailed(App.ShellLog, "openwith", messageId, "NoApp");
+                return;
+            }
+
+            AppLog.MediaOpened(App.ShellLog, messageId, launch);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            AppLog.MediaFailed(App.ShellLog, "openwith", messageId, ex.GetType().Name);
         }
     }
 

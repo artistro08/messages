@@ -12,7 +12,7 @@
         <!-- Bubble Menu: one for every bubble, opened on the bubble it was asked for by a right-click (at the pointer), the
              Application key or Shift + F10 (over the back), or the hover strip's ⋮ (see OnMessageListContextRequested).
              Items show for the bubble it opens on: no Copy on a photo or file without a caption, and no Open on a received
-             program or script (only Save as) -->
+             program or script; Open with shows on every attachment, those included (owner) -->
         <MenuFlyout x:Name="BubbleMenu">
             <MenuFlyoutItem
                 x:Name="BubbleMenuCopy"
@@ -30,6 +30,15 @@
                 Text="{x:Bind controls:MessageBubble.OpenText}">
                 <MenuFlyoutItem.Icon>
                     <FontIcon Glyph="&#xE8E5;" />
+                </MenuFlyoutItem.Icon>
+            </MenuFlyoutItem>
+            <MenuFlyoutItem
+                x:Name="BubbleMenuOpenWith"
+                AutomationProperties.AutomationId="Bubble.OpenWith"
+                Click="OnBubbleMenuOpenWithClick"
+                Text="{x:Bind controls:MessageBubble.OpenWithText}">
+                <MenuFlyoutItem.Icon>
+                    <FontIcon Glyph="&#xE7AC;" />
                 </MenuFlyoutItem.Icon>
             </MenuFlyoutItem>
             <MenuFlyoutItem

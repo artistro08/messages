@@ -276,6 +276,50 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
+    /// The photo menu's Open with launches the photo's temp copy with Windows' app picker (the test hook notes the path
+    /// and <c>picker</c> instead).
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task OpenWith_Photo_LaunchesPickerWithFile()
+    {
+        await OpenMediaChatAsync();
+        byte[] bytes            = Png(64, 64, SplitColors);
+        Message message         = Server.Phone.PushIncomingMedia("c-media", "image/png", bytes, "pick.png");
+        AutomationElement photo = App.Find("Bubble.Photo." + message.MessageID);
+        WaitForStatus(photo, Full);
+
+        OpenMenu(photo);
+        AutomationElement open_with = App.Find("Bubble.OpenWith");
+        Assert.AreEqual(ChatCopy.OpenWith, AppDriver.SafeName(open_with));
+        open_with.Patterns.Invoke.Pattern.Invoke();
+
+        string path = LaunchedWithPicker("Open with");
+        Assert.AreEqual("pick.png", Path.GetFileName(path), "Open with launched another file.");
+        CollectionAssert.AreEqual(bytes, File.ReadAllBytes(path), "Open with's file doesn't hold the photo.");
+    }
+
+    /// <summary>
+    /// A received program's menu has no Open (it is never opened from here), but still offers Open with: Windows' picker
+    /// and launcher refuse to run a program themselves.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task OpenWith_ReceivedProgram_StillOffered()
+    {
+        await OpenMediaChatAsync();
+        byte[] bytes = System.Text.Encoding.UTF8.GetBytes("MZ not really a program");
+
+        Message message        = Server.Phone.PushIncomingMedia("c-media", "application/octet-stream", bytes, "setup.exe");
+        AutomationElement card = App.Find("Bubble.File." + message.MessageID);
+        OpenMenu(card);
+
+        App.Find("Bubble.OpenWith");
+        Assert.IsNull(App.TryFind("Bubble.Open"), "A received program's menu offers Open.");
+        Keyboard.Type(VirtualKeyShort.ESCAPE);
+    }
+
+    /// <summary>
     /// A picked photo shows as a chip; Send uploads it, the phone gets it as a media message and then the text as its own
     /// message (Mia's chat is RCS, which refuses captions), the bubble shows the photo in its shape, and the chip is gone.
     /// </summary>
@@ -1304,6 +1348,17 @@ public sealed partial class MediaTests : UiTest
         App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).SetForeground();
         part.Focus();
         Keyboard.TypeSimultaneously(VirtualKeyShort.SHIFT, VirtualKeyShort.F10);
+    }
+
+    // The Last File Launched With Windows' App Picker (The Test Hook's Note: The Path, Then " picker")
+    private string LaunchedWithPicker(string what)
+    {
+        const string Picker = " picker";
+        string launched     = Path.Combine(App.DataDir, "launched.txt");
+        Wait.Until(() => File.Exists(launched), AppDriver.DefaultTimeout, () => $"{what} launched nothing.");
+        string line = File.ReadAllLines(launched)[^1];
+        Assert.IsTrue(line.EndsWith(Picker, StringComparison.Ordinal), $"{what} launched '{line}' without the app picker.");
+        return line[..^Picker.Length];
     }
 
     // Two Halves: Red Left, Blue Right

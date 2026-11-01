@@ -77,7 +77,8 @@ namespace GMessages.App.Views.Controls;
 /// as an edit of the message. While the phone hasn't sent the photo it reads "Waiting for the photo from your phone…";
 /// a failure (or a full size that never comes) reads "Couldn't load this photo." and a click tries again. Otherwise a
 /// click shows it in the window's photo viewer (see <see cref="PhotoViewer"/>), as does the menu's Open
-/// (<c>Bubble.Open</c>); Save as (<c>Bubble.SaveAs</c>) saves a copy where the person picks, and Download
+/// (<c>Bubble.Open</c>); Open with (<c>Bubble.OpenWith</c>, on every attachment's menu) opens it with Windows' app
+/// picker; Save as (<c>Bubble.SaveAs</c>) saves a copy where the person picks, and Download
 /// (<c>Bubble.Download</c>, also on a file's menu) saves it to the Downloads folder.
 /// </para>
 /// <para>
@@ -338,6 +339,9 @@ public sealed partial class MessageBubble : UserControl
 
     /// <summary>Gets the menu's Open text.</summary>
     public static string OpenText => ChatCopy.Open;
+
+    /// <summary>Gets the menu's Open with text.</summary>
+    public static string OpenWithText => ChatCopy.OpenWith;
 
     /// <summary>Gets the menu's Save as text.</summary>
     public static string SaveAsText => ChatCopy.SaveAs;
@@ -1929,6 +1933,17 @@ public sealed partial class MessageBubble : UserControl
         {
             // A Photo, Or A Voice Message (Whose Bubble Has No Photo Part, So Focus Goes Back To Its Play Button)
             ShowInViewer(part, from);
+        }
+    }
+
+    /// <summary>
+    /// The bubble menu's Open with: the photo, video, voice message or file with Windows' app picker.
+    /// </summary>
+    public void OpenWith()
+    {
+        if (Bubble?.Media is { IsPending: false } part)
+        {
+            _ = MediaActions.OpenWithAsync(part, Bubble.Id);
         }
     }
 

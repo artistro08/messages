@@ -1807,6 +1807,7 @@ public sealed partial class ChatPane : UserControl
 
         BubbleMenuCopy.Visibility     = bubble.HasCopyText ? Visibility.Visible : Visibility.Collapsed;
         BubbleMenuOpen.Visibility     = bubble.CanOpenMedia ? Visibility.Visible : Visibility.Collapsed;
+        BubbleMenuOpenWith.Visibility = bubble.HasMediaFile ? Visibility.Visible : Visibility.Collapsed;
         BubbleMenuSaveAs.Visibility   = bubble.HasMediaFile ? Visibility.Visible : Visibility.Collapsed;
         BubbleMenuDownload.Visibility = bubble.HasMediaFile ? Visibility.Visible : Visibility.Collapsed;
         ShowMenuAt(BubbleMenu, anchor, at);
@@ -1855,6 +1856,8 @@ public sealed partial class ChatPane : UserControl
     private void OnBubbleMenuCopyClick(object sender, RoutedEventArgs e) => _menuView?.Copy();
 
     private void OnBubbleMenuOpenClick(object sender, RoutedEventArgs e) => _menuView?.Open();
+
+    private void OnBubbleMenuOpenWithClick(object sender, RoutedEventArgs e) => _menuView?.OpenWith();
 
     private void OnBubbleMenuSaveAsClick(object sender, RoutedEventArgs e) => _menuView?.SaveAs();
 

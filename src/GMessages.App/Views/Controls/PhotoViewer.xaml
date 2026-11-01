@@ -39,6 +39,7 @@
                     <VisualState.Setters>
                         <Setter Target="CloseIcon.Foreground" Value="{ThemeResource TextFillColorDisabledBrush}" />
                         <Setter Target="OpenIcon.Foreground" Value="{ThemeResource TextFillColorDisabledBrush}" />
+                        <Setter Target="OpenWithIcon.Foreground" Value="{ThemeResource TextFillColorDisabledBrush}" />
                         <Setter Target="DownloadIcon.Foreground" Value="{ThemeResource TextFillColorDisabledBrush}" />
                         <Setter Target="SaveAsIcon.Foreground" Value="{ThemeResource TextFillColorDisabledBrush}" />
                     </VisualState.Setters>
@@ -92,6 +93,21 @@
                     x:Name="OpenIcon"
                     FontSize="16"
                     Glyph="&#xE8A7;" />
+            </Button>
+
+            <!-- Open With: Windows' app picker, for any photo or video -->
+            <Button
+                Width="40"
+                Height="40"
+                AutomationProperties.AutomationId="PhotoViewer.OpenWith"
+                AutomationProperties.Name="{x:Bind local:PhotoViewer.OpenWithText}"
+                Click="OnOpenWithClick"
+                Style="{StaticResource IconButtonStyle}"
+                ToolTipService.ToolTip="{x:Bind local:PhotoViewer.OpenWithText}">
+                <FontIcon
+                    x:Name="OpenWithIcon"
+                    FontSize="16"
+                    Glyph="&#xE7AC;" />
             </Button>
             <Button
                 x:Name="DownloadButton"

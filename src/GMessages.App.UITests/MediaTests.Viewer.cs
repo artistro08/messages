@@ -105,7 +105,7 @@ public sealed partial class MediaTests
         App.Find("PhotoViewer.Photo");
         foreach ((string id, string name) in (ReadOnlySpan<(string, string)>)[
             ("PhotoViewer.SaveAs", ChatCopy.SaveAs), ("PhotoViewer.Download", ChatCopy.Download),
-            ("PhotoViewer.OpenInPhotos", ChatCopy.OpenInPhotos), ("PhotoViewer.Close", ChatCopy.Close)])
+            ("PhotoViewer.OpenInPhotos", ChatCopy.OpenInPhotos), ("PhotoViewer.OpenWith", ChatCopy.OpenWith), ("PhotoViewer.Close", ChatCopy.Close)])
         {
             Assert.AreEqual(name, AppDriver.SafeName(App.Find(id)), $"{id} isn't named '{name}'.");
         }
@@ -159,7 +159,28 @@ public sealed partial class MediaTests
     }
 
     /// <summary>
-    /// The toolbar sits in the title bar row's top-left corner, Close first, then Open in Photos, Download and Save as,
+    /// The toolbar's Open with launches the photo's temp copy with Windows' app picker (the test hook notes the path and
+    /// <c>picker</c> instead), and the viewer stays open.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Viewer_Toolbar_OpenWith()
+    {
+        await OpenMediaChatAsync();
+        byte[] bytes            = Png(400, 300, SplitColors);
+        Message message         = Server.Phone.PushIncomingMedia("c-media", "image/png", bytes, "wide.png");
+        AutomationElement photo = App.Find("Bubble.Photo." + message.MessageID);
+        WaitForStatus(photo, Full);
+        photo.Click();
+
+        App.Find("PhotoViewer.OpenWith").Patterns.Invoke.Pattern.Invoke();
+        string path = LaunchedWithPicker("The viewer's Open with");
+        CollectionAssert.AreEqual(bytes, File.ReadAllBytes(path), "The viewer's Open with launched another file.");
+        Assert.IsNotNull(App.TryFind("PhotoViewer.Photo"), "Open with closed the viewer.");
+    }
+
+    /// <summary>
+    /// The toolbar sits in the title bar row's top-left corner, Close first, then Open in Photos, Open with, Download and Save as,
     /// and takes real mouse clicks there; the scrim tints the title bar row too (its title and profile picture read
     /// dark), and closing puts the row back.
     /// </summary>
@@ -177,12 +198,12 @@ public sealed partial class MediaTests
         App.Find("PhotoViewer.Photo");
         System.Drawing.Rectangle window = App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).BoundingRectangle;
         int left_edge                   = window.Left;
-        foreach (string id in (ReadOnlySpan<string>)["PhotoViewer.Close", "PhotoViewer.OpenInPhotos", "PhotoViewer.Download", "PhotoViewer.SaveAs"])
+        foreach (string id in (ReadOnlySpan<string>)["PhotoViewer.Close", "PhotoViewer.OpenInPhotos", "PhotoViewer.OpenWith", "PhotoViewer.Download", "PhotoViewer.SaveAs"])
         {
             System.Drawing.Rectangle button = App.Find(id).BoundingRectangle;
             Assert.IsTrue(button.Top >= bar.Top && button.Bottom <= bar.Bottom, $"{id} ({button}) isn't in the title bar row ({bar}).");
-            Assert.IsTrue(button.Left >= left_edge, $"{id} ({button}) is out of order (Close, Open, Download, Save as from the left).");
-            Assert.IsTrue(button.Right <= window.Left + 260, $"{id} ({button}) isn't in the top-left corner (window {window}).");
+            Assert.IsTrue(button.Left >= left_edge, $"{id} ({button}) is out of order (Close, Open, Open with, Download, Save as from the left).");
+            Assert.IsTrue(button.Right <= window.Left + 300, $"{id} ({button}) isn't in the top-left corner (window {window}).");
             left_edge = button.Right;
         }
 
