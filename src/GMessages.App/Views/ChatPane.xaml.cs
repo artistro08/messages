@@ -185,6 +185,9 @@ public sealed partial class ChatPane : UserControl
 
     // Pinned To The Newest Message (See ChatScroll.StaysPinned), And The Content And View Heights Last Seen
     private bool _pinned = true;
+
+    // The Opened Chat Whose First Drawn Bubbles Are Still To Be Logged, Or Null
+    private ChatViewModel? _firstDrawFor;
     private double _lastExtent;
     private double _lastViewport;
 
@@ -632,6 +635,8 @@ public sealed partial class ChatPane : UserControl
         {
             chat.Messages.CollectionChanged += pane.OnMessagesChanged;
             chat.PropertyChanged            += pane.OnChatPropertyChanged;
+            pane._firstDrawFor               = chat;
+            pane.LogFirstDraw();
 
             // The Chat Is On Screen, So Its Toasts Are Read
             (Application.Current as App)?.Notifications?.RemoveConversation(chat.ConversationId);
@@ -651,6 +656,25 @@ public sealed partial class ChatPane : UserControl
         }
 
         pane._keepFocus = false;
+    }
+
+    // The Open-Timing Log's Last Step: The Frame That Draws The Opened Chat's First Bubbles (Once Per Chat, Milliseconds
+    // And Counts Only). Called On Open And On Each Change Of The Bubbles Until Then
+    private void LogFirstDraw()
+    {
+        if (_firstDrawFor is not { Messages.Count: > 0 } chat || chat != Chat)
+        {
+            return;
+        }
+
+        _firstDrawFor = null;
+        void OnRendering(object? sender, object e)
+        {
+            CompositionTarget.Rendering -= OnRendering;
+            chat.LogOpenStep("first bubbles drawn");
+        }
+
+        CompositionTarget.Rendering += OnRendering;
     }
 
     // The New Chat's Bubbles Fade In From Clear, Already Pinned To The Newest, So No Frame Shows Them Being Laid Out Or
@@ -723,6 +747,8 @@ public sealed partial class ChatPane : UserControl
     // Already At The End (The Usual Case), KeepPinned Has Done It And Nothing Moves
     private void OnMessagesChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
+        LogFirstDraw();
+
         // An Older Page's First Bubble: Note Where The View Sits, Before The Page Moves It (Pinned, Or On The Way To The
         // Newest Message, The Newest Bubbles Are Where The View Belongs Instead)
         if (e is { Action: NotifyCollectionChangedAction.Add, NewStartingIndex: 0 } && Chat is { IsLoadingOlder: true } chat

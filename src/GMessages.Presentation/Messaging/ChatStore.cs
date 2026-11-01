@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using GMessages.Presentation.Connection;
 using GMessages.Protocol;
 using GMessages.Protocol.Events;
@@ -71,6 +72,10 @@ public sealed partial class ChatStore : IDisposable
 
     // Newest Page Of The Last 20 Opened Conversations, Oldest First; The Dictionary Order Is Least Recently Used First
     private readonly Lock _pagesLock = new();
+
+    // Each Conversation's Newest Live Media Message And Its Label, So A Conversation Update After It (With No Snippet
+    // Text For Media) Still Names It In The List, Its Page In Memory Or Not
+    private readonly ConcurrentDictionary<string, (string MessageId, string Label)> _liveMedia = new();
     private readonly OrderedDictionary<string, List<ChatMessage>> _pages = [];
 
     // Newest Encryption Tombstone Seen Per Conversation, With Its Time In Microseconds
@@ -188,7 +193,7 @@ public sealed partial class ChatStore : IDisposable
         int generation        = Generation;
         Conversation? fetched = await RequireClient().GetConversationAsync(conversationId, ct);
 
-        return fetched is null || generation != Generation ? null : await CacheConversationAsync(fetched, generation);
+        return fetched is null || generation != Generation ? null : CacheConversation(fetched, generation);
     }
 
     /// <summary>
@@ -283,7 +288,7 @@ public sealed partial class ChatStore : IDisposable
         List<ConversationInfo> result = [];
         foreach (Conversation c in response.Conversations)
         {
-            result.Add(await CacheConversationAsync(c, generation));
+            result.Add(CacheConversation(c, generation));
         }
 
         // No Cursor Back: The Next Page Starts At This Page's Last (Oldest) Conversation, Its Time In Milliseconds, As
@@ -306,7 +311,10 @@ public sealed partial class ChatStore : IDisposable
         IMessagingClient client = RequireClient();
 
         int generation                = Generation;
+        long asked                    = Stopwatch.GetTimestamp();
         ListMessagesResponse response = await client.FetchMessagesAsync(conversationId, PageSize, cursor, ct).ConfigureAwait(false);
+        long page_ms                  = (long)Stopwatch.GetElapsedTime(asked).TotalMilliseconds;
+        LogPhonePage(page_ms, response.Messages.Count);
 
         // Unpaired Or Signed Out Meanwhile: The Old Account's Page Is Dropped
         if (generation != Generation)
@@ -356,16 +364,22 @@ public sealed partial class ChatStore : IDisposable
             return null;
         }
 
-        // On The Queue, So A Read Never Reopens (And Recreates) The File After Reset Queued Its Delete
+        // Ahead Of Queued Saves (See ReadNow), Timed: How Long It Waited, Then Read
         int generation               = Generation;
         IReadOnlyList<Message> saved = [];
-        await Enqueue(database =>
+        long asked                   = Stopwatch.GetTimestamp();
+        long started                 = asked;
+        await ReadNow(database =>
         {
+            started = Stopwatch.GetTimestamp();
             if (generation == Generation)
             {
                 saved = database.LoadMessages(conversationId, PageSize);
             }
         }).ConfigureAwait(false);
+        long wait_ms = (long)Stopwatch.GetElapsedTime(asked, started).TotalMilliseconds;
+        long read_ms = (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+        LogSavedPageRead(wait_ms, read_ms, saved.Count);
 
         if (saved.Count == 0 || generation != Generation)
         {
@@ -404,7 +418,7 @@ public sealed partial class ChatStore : IDisposable
     /// </summary>
     /// <remarks>
     /// For a reply's quote. A memory hit completes at once, without leaving the caller's thread and without counting
-    /// as a use; the database is read on the background queue.
+    /// as a use; the database is read at once on the thread pool, ahead of saves still queued.
     /// </remarks>
     /// <param name="conversationId">The conversation ID.</param>
     /// <param name="messageId">The message ID.</param>
@@ -430,10 +444,10 @@ public sealed partial class ChatStore : IDisposable
             return null;
         }
 
-        // On The Queue, So A Read Never Reopens (And Recreates) The File After Reset Queued Its Delete
+        // Ahead Of Queued Saves (See ReadNow)
         int generation = Generation;
         Message? saved = null;
-        await Enqueue(database =>
+        await ReadNow(database =>
         {
             if (generation == Generation)
             {
@@ -696,7 +710,7 @@ public sealed partial class ChatStore : IDisposable
             throw new MessageSendException("ConversationNotFound");
         }
 
-        return await CacheConversationAsync(fetched, generation);
+        return CacheConversation(fetched, generation);
     }
 
     // The SIM Card Of The Participant The Conversation Sends As (From The Last Settings Event), Or Null
@@ -897,6 +911,7 @@ public sealed partial class ChatStore : IDisposable
             Interlocked.Increment(ref _generation);
             _cache.Clear();
             _encryption.Clear();
+            _liveMedia.Clear();
             _me = null;
         }
 
@@ -950,7 +965,7 @@ public sealed partial class ChatStore : IDisposable
         switch (e)
         {
             case ConversationUpdated updated:
-                ConversationInfo info = await WithSnippetMediaAsync(ConversationInfo.From(updated.Conversation));
+                ConversationInfo info = WithSnippetMedia(ConversationInfo.From(updated.Conversation));
                 Upsert(info);
                 SaveConversation(updated.Conversation, Generation);
                 ConversationChanged?.Invoke(this, info);
@@ -1031,6 +1046,11 @@ public sealed partial class ChatStore : IDisposable
                          && message.Time >= _time.GetUtcNow() - NewMessageAge;
         CacheMessage(message);
         SaveMessages(message.ConversationId, [received.Message], generation);
+        if (message is { Media: { } live_media, Id.Length: > 0 })
+        {
+            _liveMedia[message.ConversationId] = (message.Id, ChatFormat.MediaLabel(live_media));
+        }
+
         NoteEncryption(message.ConversationId, [message], generation);
 
         ConversationInfo? conversation = Find(message.ConversationId);
@@ -1047,14 +1067,6 @@ public sealed partial class ChatStore : IDisposable
             }
         }
 
-        // The Conversation Update Came First, With No Snippet Text For This Media: Name It Now The Message Is Here
-        if (conversation is { Snippet.Length: 0, SnippetMedia.Length: 0 } && conversation.LatestMessageId == message.Id && message.Media is { } media)
-        {
-            conversation = conversation with { SnippetMedia = ChatFormat.MediaLabel(media) };
-            Upsert(conversation);
-            ConversationChanged?.Invoke(this, conversation);
-        }
-
         if (conversation is null && _client() is { } client)
         {
             try
@@ -1062,7 +1074,7 @@ public sealed partial class ChatStore : IDisposable
                 Conversation? fetched = await client.GetConversationAsync(message.ConversationId, CancellationToken.None);
                 if (fetched is not null && generation == Generation)
                 {
-                    conversation = await CacheConversationAsync(fetched, generation);
+                    conversation = CacheConversation(fetched, generation);
                 }
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -1077,6 +1089,15 @@ public sealed partial class ChatStore : IDisposable
             return;
         }
 
+        // The Conversation (Its Update, Or The One Fetched Above) Has No Snippet Text For This Media: Name It From The
+        // Message Itself
+        if (conversation is { Snippet.Length: 0, SnippetMedia.Length: 0 } && conversation.LatestMessageId == message.Id && message.Media is { } media)
+        {
+            conversation = conversation with { SnippetMedia = ChatFormat.MediaLabel(media) };
+            Upsert(conversation);
+            ConversationChanged?.Invoke(this, conversation);
+        }
+
         MessageArrived?.Invoke(this, new MessageArrivedEventArgs(message, conversation, received.IsOld, is_new));
     }
 
@@ -1085,9 +1106,9 @@ public sealed partial class ChatStore : IDisposable
     // =========================================================================
 
     // Caches And Saves A Protocol Conversation, Raising ConversationChanged When The Cache Changed
-    private async Task<ConversationInfo> CacheConversationAsync(Conversation c, int generation)
+    private ConversationInfo CacheConversation(Conversation c, int generation)
     {
-        ConversationInfo info = await WithSnippetMediaAsync(ConversationInfo.From(c));
+        ConversationInfo info = WithSnippetMedia(ConversationInfo.From(c));
         SaveConversation(c, generation);
         if (Upsert(info))
         {
@@ -1098,9 +1119,10 @@ public sealed partial class ChatStore : IDisposable
     }
 
     // Names The Newest Message's Media When The Phone Sent No Snippet Text (A Photo, Video, Voice Message Or File With
-    // No Caption): Kept From The Cached Copy Of The Same Message, Else Read From Memory Or The Database. A Memory Hit
-    // Or No Database Completes At Once. No ConfigureAwait(false): Callers Raise Events On Their Own Thread
-    private async Task<ConversationInfo> WithSnippetMediaAsync(ConversationInfo info)
+    // No Caption): Kept From The Cached Copy Of The Same Message, Else From That Message Seen Live, Else From Its Page In
+    // Memory. Never Waits (No Database Here): Events Stay In Order, And The List Never Waits Behind Queued Saves. The
+    // Saved Copies Are Named At Start-Up (LoadSavedAsync)
+    private ConversationInfo WithSnippetMedia(ConversationInfo info)
     {
         if (info.Snippet.Length > 0 || info.SnippetMedia.Length > 0 || info.LatestMessageId.Length == 0)
         {
@@ -1112,8 +1134,18 @@ public sealed partial class ChatStore : IDisposable
             return info with { SnippetMedia = old.SnippetMedia };
         }
 
-        ChatMessage? latest = await FindMessageAsync(info.Id, info.LatestMessageId);
-        return latest?.Media is { } media ? info with { SnippetMedia = ChatFormat.MediaLabel(media) } : info;
+        if (_liveMedia.TryGetValue(info.Id, out (string MessageId, string Label) live) && live.MessageId == info.LatestMessageId)
+        {
+            return info with { SnippetMedia = live.Label };
+        }
+
+        MediaPart? media;
+        lock (_pagesLock)
+        {
+            media = _pages.TryGetValue(info.Id, out List<ChatMessage>? page) ? page.FirstOrDefault(m => m.Id == info.LatestMessageId)?.Media : null;
+        }
+
+        return media is null ? info : info with { SnippetMedia = ChatFormat.MediaLabel(media) };
     }
 
     // Stores A Conversation; True When It Differs From What Was Cached (Participants Compared By Value)
@@ -1245,8 +1277,13 @@ public sealed partial class ChatStore : IDisposable
         }
     }
 
-    // Runs A Database Call On The Background Queue, After Every One Queued Before It. Without A Database Nothing Runs
-    private Task Enqueue(Action<MessageDatabase> work)
+    /// <summary>
+    /// Runs a database call on the background queue, after every one queued before it (saves; tests also queue here).
+    /// </summary>
+    /// <remarks>Without a database nothing runs. A failure logs its error type only.</remarks>
+    /// <param name="work">The call.</param>
+    /// <returns>A task that completes when the call has run.</returns>
+    internal Task Enqueue(Action<MessageDatabase> work)
     {
         if (_database is not { } database)
         {
@@ -1273,6 +1310,32 @@ public sealed partial class ChatStore : IDisposable
 
             return _queue;
         }
+    }
+
+    // A Read Someone Is Waiting On (A Chat Being Opened, A Reply's Quote), Run At Once On The Thread Pool Instead Of Behind
+    // Every Save Queued Before It: After A Catch-Up Or A Resync Hundreds Of Saves Can Be Queued, Each Its Own Transaction,
+    // And A Chat Opened Then Waited For All Of Them Before Its Saved Page Showed. The Database's Own Lock Still Lets One
+    // Call In At A Time, So It Waits For One Save At Most. A Read Just After A Reset Is Skipped By Its Generation Check
+    // ponytail: the check and the read aren't atomic, so a read racing a Reset can recreate an empty file after its
+    // delete; harmless (the next account's saves use it), add a reset gate in MessageDatabase if it ever matters
+    private Task ReadNow(Action<MessageDatabase> work)
+    {
+        if (_database is not { } database)
+        {
+            return Task.CompletedTask;
+        }
+
+        return Task.Run(() =>
+        {
+            try
+            {
+                work(database);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                LogActionFailed("read the message database", ex.GetType().Name);
+            }
+        });
     }
 
     // Queues A Conversation Save, Dropped When A Reset Came After The Generation Was Taken
@@ -1358,4 +1421,19 @@ public sealed partial class ChatStore : IDisposable
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Conversation page ({Folder}): asked {Asked} with a cursor: {CursorSent}; got {Got}, cursor back: {CursorBack}")]
     private partial void LogConversationPage(ConversationFolder folder, int asked, bool cursorSent, int got, bool cursorBack);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Chat open: saved page read in {ReadMs} ms after {WaitMs} ms waiting, {Count} messages")]
+    private partial void LogSavedPageRead(long waitMs, long readMs, int count);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Message page from the phone in {ElapsedMs} ms, {Count} messages")]
+    private partial void LogPhonePage(long elapsedMs, int count);
+
+    /// <summary>
+    /// Logs one step of opening a chat, in milliseconds since it was picked (counts only, never content or IDs).
+    /// </summary>
+    /// <param name="step">The step, such as "cache shown" or "first bubbles drawn".</param>
+    /// <param name="elapsedMs">Milliseconds since the chat was picked.</param>
+    /// <param name="count">How many bubbles or messages the step had.</param>
+    [LoggerMessage(Level = LogLevel.Information, Message = "Chat open: {Step} at {ElapsedMs} ms, {Count} bubbles")]
+    public partial void LogChatOpenStep(string step, long elapsedMs, int count);
 }

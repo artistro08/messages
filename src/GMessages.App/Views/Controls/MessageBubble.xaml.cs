@@ -1100,10 +1100,12 @@ public sealed partial class MessageBubble : UserControl
             Task<byte[]> full_task = media.GetAsync(part, thumbnail: false, CancellationToken.None);
             bool at_once           = full_task.IsCompleted;
             byte[] full            = await full_task;
+            long decode_start      = System.Diagnostics.Stopwatch.GetTimestamp();
             (int pixel_width, int pixel_height) = await PixelSizeAsync(full);
             int decode_width                    = MessageBubbleViewModel.FillDecodeWidth(pixel_width, pixel_height, Photo.Width, Photo.Height);
             ImageSource image                   = await Avatar.ToImageAsync(full, decode_width) ?? throw new InvalidDataException();
-            AppLog.PhotoDecoded(App.ShellLog, bubble.Id, full.Length, part.Size, pixel_width, pixel_height, decode_width);
+            long decode_ms                      = (long)System.Diagnostics.Stopwatch.GetElapsedTime(decode_start).TotalMilliseconds;
+            AppLog.PhotoDecoded(App.ShellLog, bubble.Id, full.Length, part.Size, pixel_width, pixel_height, decode_width, decode_ms);
             if (load != _photoLoad)
             {
                 return;

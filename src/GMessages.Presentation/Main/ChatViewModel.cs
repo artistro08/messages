@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
 using GMessages.Presentation.Messaging;
 using GMessages.Protocol;
 using GMessages.Protocol.Proto;
@@ -142,6 +143,20 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
 
     /// <inheritdoc />
     public event PropertyChangedEventHandler? PropertyChanged;
+
+    /// <summary>Gets when the chat was picked (a <see cref="Stopwatch"/> timestamp), for the open-timing log lines.</summary>
+    public long OpenedAt { get; } = Stopwatch.GetTimestamp();
+
+    /// <summary>
+    /// Logs one step of opening the chat with the milliseconds since it was picked and how many bubbles show (no
+    /// content, no IDs).
+    /// </summary>
+    /// <param name="step">The step, such as "first bubbles drawn".</param>
+    public void LogOpenStep(string step)
+    {
+        long elapsed_ms = (long)Stopwatch.GetElapsedTime(OpenedAt).TotalMilliseconds;
+        _store.LogChatOpenStep(step, elapsed_ms, Messages.Count);
+    }
 
     /// <summary>Gets the conversation ID.</summary>
     public string ConversationId { get; }
@@ -342,6 +357,7 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
             _phonePages++;
             ShowPage(page);
             _fillOlder = true;
+            LogOpenStep("phone page shown");
 
             // Opening An Unread Chat Reads It
             if (conversation is { Unread: true } && conversation.LatestMessageId.Length > 0)
@@ -375,6 +391,7 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
 
         ShowPage(page);
         IsLoadingHistory = false;
+        LogOpenStep("saved page shown");
     }
 
     /// <summary>

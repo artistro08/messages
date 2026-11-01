@@ -95,8 +95,8 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 929, Level = LogLevel.Information, Message = "Paste in {ConversationId}: formats {Formats}; as attachments: {AsMedia}")]
     public static partial void PasteFormats(ILogger logger, string conversationId, IEnumerable<string> formats, bool asMedia);
 
-    [LoggerMessage(EventId = 930, Level = LogLevel.Information, Message = "Photo {MessageId} decoded: {Bytes} of {Expected} bytes, {Width} x {Height} px, at {DecodeWidth} wide")]
-    public static partial void PhotoDecoded(ILogger logger, string messageId, int bytes, long expected, int width, int height, int decodeWidth);
+    [LoggerMessage(EventId = 930, Level = LogLevel.Information, Message = "Photo {MessageId} decoded: {Bytes} of {Expected} bytes, {Width} x {Height} px, at {DecodeWidth} wide, in {DecodeMs} ms")]
+    public static partial void PhotoDecoded(ILogger logger, string messageId, int bytes, long expected, int width, int height, int decodeWidth, long decodeMs);
 
     [LoggerMessage(EventId = 931, Level = LogLevel.Information, Message = "Emoji picker open {Open}: built in {BuildMs} ms, longest stall {StallMs} ms, {Rows} rows made")]
     public static partial void EmojiPickerShown(ILogger logger, int open, long buildMs, long stallMs, int rows);

@@ -239,6 +239,30 @@ public sealed class ChatTests : UiTest
     }
 
     /// <summary>
+    /// Switching back to a chat shows its kept bubbles at once (well under a second) while the phone takes 3 s to answer
+    /// for its page; the log times each step of the open (milliseconds and counts only).
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task SwitchChats_ShowsKeptBubbles_BeforeThePhoneAnswers()
+    {
+        await OpenAnnAsync();
+        App.Find("Row.c-team").Patterns.SelectionItem.Pattern.Select();
+        App.WaitForText("Chat.Header", "Team");
+        Wait.Until(() => Bubbles().Count > 0, AppDriver.DefaultTimeout, () => "Team's chat showed no bubbles.");
+
+        // The Phone Slow To Answer: Ann's Kept Bubbles Still Show At Once
+        Server.Phone.MessagesDelay = TimeSpan.FromSeconds(3);
+        var clock                  = System.Diagnostics.Stopwatch.StartNew();
+        App.Find("Row.c-ann").Patterns.SelectionItem.Pattern.Select();
+        Wait.Until(() => AppDriver.SafeName(App.TryFind("Chat.Header")).Contains("Ann", StringComparison.Ordinal) && Bubbles().Count == 3, TimeSpan.FromSeconds(3),
+            () => $"Ann's kept chat showed {Bubbles().Count} bubbles before the phone answered, not 3.");
+        Assert.IsLessThan(1000, clock.ElapsedMilliseconds, $"Ann's kept bubbles took {clock.ElapsedMilliseconds} ms to show.");
+
+        Wait.Until(() => ReadLog().Contains("Chat open: first bubbles drawn at", StringComparison.Ordinal), AppDriver.DefaultTimeout, () => "No open timing in the log.");
+    }
+
+    /// <summary>
     /// Start chat's picks are chips: picking Ann moves her from the list to a chip above it (a filled pill that stands
     /// out from the pane), Go reads Start Chat, and clicking the chip puts her back in the list.
     /// </summary>
