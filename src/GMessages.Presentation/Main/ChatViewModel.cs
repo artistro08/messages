@@ -804,6 +804,9 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
+        // Only A Message New To This PC Animates In. The Phone Also Sends A Chat's Recent History As Live Messages (On A
+        // Catch-Up, And After Start Chat Opens One), Which Showed As The History Loading A Second Time, Bubble By Bubble;
+        // Those Go In Quietly, In Time Order
         if (FindBubble(m) is { } bubble)
         {
             bubble.Update(m);
@@ -811,8 +814,18 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
         else
         {
             var added = NewBubble(m);
-            MarkNewIfShown(added);
-            Messages.Add(added);
+            if (e.IsNew && !e.IsOld)
+            {
+                MarkNewIfShown(added);
+            }
+
+            int at = Messages.Count;
+            while (at > 0 && Messages[at - 1].Id.Length > 0 && Messages[at - 1].SentAt > m.Time)
+            {
+                at--;
+            }
+
+            Messages.Insert(at, added);
         }
 
         RefreshBubbles();

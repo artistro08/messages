@@ -232,6 +232,28 @@ public sealed class ChatTests : UiTest
         App.WaitForText("Chat.Header", "Ann Lee");
         Wait.Until(() => App.TryFind("StartChat.Query") is null, AppDriver.DefaultTimeout, () => "The Start chat pane stayed open.");
         Wait.Until(() => Bubbles().Count == 3, AppDriver.DefaultTimeout, () => $"Ann's chat showed {Bubbles().Count} bubbles, not 3.");
+
+        // Loaded Once: Her History Never Animates In Bubble By Bubble
+        Thread.Sleep(800);
+        Assert.AreEqual(0, AnimatedCount(), "Start chat's conversation animated its history in.");
+    }
+
+    /// <summary>
+    /// An open chat loads once: history the phone sends again as live catch-up messages (as after Start chat) goes in
+    /// quietly, with no bubble animating in.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task CatchUpHistory_DoesNotAnimateIn()
+    {
+        await OpenAnnAsync();
+        Wait.Until(() => Bubbles().Count == 3, AppDriver.DefaultTimeout, () => $"Ann's chat showed {Bubbles().Count} bubbles, not 3.");
+
+        // A Catch-Up Message (Sent In The Phone's Old Batch) Shows, Without Its Entrance
+        Server.Phone.PushIncoming("c-ann", "from the backlog", old: true);
+        Wait.Until(() => Bubbles().Count == 4, AppDriver.DefaultTimeout, () => $"The catch-up message never showed ({Bubbles().Count} bubbles).");
+        Thread.Sleep(800);
+        Assert.AreEqual(0, AnimatedCount(), "A catch-up message animated in.");
     }
 
     /// <summary>
