@@ -336,6 +336,63 @@ public sealed class ChatTests : UiTest
     }
 
     /// <summary>
+    /// Moving between messages with the keyboard (Ctrl + j, then Up) scrolls the list smoothly, not in jumps.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task KeyboardSelection_ScrollsSmoothly()
+    {
+        Conversation chat = FakeChats.NewConversation("c-long", "Long Pal", false, ConversationStatus.Active, false, false, FakeChats.Person("p-long", "Long Pal", "+15550000006"));
+        long time         = DateTimeOffset.UtcNow.AddDays(-1).ToUnixTimeMilliseconds() * 1000;
+        Message[] texts   = [.. Enumerable.Range(1, ChatStore.PageSize * 3).Select(i => Line($"Line {i}"))];
+        Server.Phone.Chats.Add(chat, texts);
+
+        await OpenMainAsync();
+        App.Find("Row.c-long").Patterns.SelectionItem.Pattern.Select();
+        Wait.Until(() => Shows("m-", NewestLine), AppDriver.DefaultTimeout, () => "The chat never showed its newest line.");
+        Thread.Sleep(1500);
+
+        // Ctrl + j, Then Up Past The View's Top
+        string scroll = Path.Combine(App.DataDir, "chat-scroll.txt");
+        File.Delete(scroll);
+        Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_J);
+        for (int i = 0; i < 25; i++)
+        {
+            Keyboard.Type(VirtualKeyShort.UP);
+            Thread.Sleep(60);
+        }
+
+        Wait.Until(() => File.Exists(scroll) && Read(scroll) == "Smooth", AppDriver.DefaultTimeout, () => "Moving between messages with the keyboard didn't scroll smoothly.");
+
+        static string Read(string path)
+        {
+            try
+            {
+                using var reader = new StreamReader(new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete));
+                return reader.ReadToEnd().Trim();
+            }
+            catch (IOException)
+            {
+                return string.Empty;
+            }
+        }
+
+        Message Line(string text)
+        {
+            var message = new Message
+            {
+                MessageID      = "m-" + text.Split(' ')[1],
+                ConversationID = "c-long",
+                ParticipantID  = "p-long",
+                Timestamp      = time += 1_000_000,
+                MessageStatus  = new MessageStatus { Status = MessageStatusType.IncomingComplete },
+            };
+            message.MessageInfo.Add(new MessageInfo { MessageContent = new MessageContent { Content = text } });
+            return message;
+        }
+    }
+
+    /// <summary>
     /// Scrolling up a long chat loads older pages, and the scroll-to-bottom button shows once far up and takes the list
     /// back to the newest message.
     /// </summary>

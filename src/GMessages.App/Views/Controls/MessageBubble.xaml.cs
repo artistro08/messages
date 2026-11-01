@@ -404,21 +404,6 @@ public sealed partial class MessageBubble : UserControl
     public void ShowMenu() => ShowMenu(Back);
 
     /// <summary>
-    /// Pulses the bubble in a soft accent tint: a reply's jump landed on it.
-    /// </summary>
-    /// <remarks>
-    /// Rises and fades twice over about a second; with Windows' animation effects off the tint holds a moment, then
-    /// clears, with no fade. A second pulse restarts the first.
-    /// </remarks>
-    public void Pulse()
-    {
-        PulseStoryboard.Stop();
-        PulseSteady.Stop();
-        (Ui.AnimationsEnabled ? PulseStoryboard : PulseSteady).Begin();
-        TestHooks.NoteState("pulse", Bubble?.Id ?? string.Empty);
-    }
-
-    /// <summary>
     /// Opens the bubble menu at an element, such as the hover strip's ⋮.
     /// </summary>
     /// <remarks>The hover strip stays shown until the menu closes.</remarks>
@@ -752,8 +737,6 @@ public sealed partial class MessageBubble : UserControl
         view._canAct      = view.Bubble?.CanAct == true;
         VisualStateManager.GoToState(view, "Hidden", false);
         view.ShowFocusRing(false, false);
-        view.PulseStoryboard.Stop();
-        view.PulseSteady.Stop();
 
         if (e.OldValue is MessageBubbleViewModel old_bubble)
         {

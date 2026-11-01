@@ -7,37 +7,6 @@
     PointerEntered="OnPointerEntered"
     PointerExited="OnPointerLeft">
 
-    <!-- Pulse: a reply's jump landed here; the tint rises softly and fades out twice over about a second (see Pulse).
-         With animation effects off, PulseSteady holds it a moment, then clears it, with no fade -->
-    <UserControl.Resources>
-        <Storyboard x:Name="PulseStoryboard">
-            <DoubleAnimationUsingKeyFrames Storyboard.TargetName="PulseFill" Storyboard.TargetProperty="Opacity">
-                <SplineDoubleKeyFrame
-                    KeySpline="{StaticResource ControlFastOutSlowInKeySpline}"
-                    KeyTime="0:0:0.2"
-                    Value="0.25" />
-                <SplineDoubleKeyFrame
-                    KeySpline="{StaticResource ControlFastOutSlowInKeySpline}"
-                    KeyTime="0:0:0.5"
-                    Value="0.08" />
-                <SplineDoubleKeyFrame
-                    KeySpline="{StaticResource ControlFastOutSlowInKeySpline}"
-                    KeyTime="0:0:0.7"
-                    Value="0.25" />
-                <SplineDoubleKeyFrame
-                    KeySpline="{StaticResource ControlFastOutSlowInKeySpline}"
-                    KeyTime="0:0:1.2"
-                    Value="0" />
-            </DoubleAnimationUsingKeyFrames>
-        </Storyboard>
-        <Storyboard x:Name="PulseSteady">
-            <DoubleAnimationUsingKeyFrames Storyboard.TargetName="PulseFill" Storyboard.TargetProperty="Opacity">
-                <DiscreteDoubleKeyFrame KeyTime="0" Value="0.25" />
-                <DiscreteDoubleKeyFrame KeyTime="0:0:1" Value="0" />
-            </DoubleAnimationUsingKeyFrames>
-        </Storyboard>
-    </UserControl.Resources>
-
     <!-- Row: the bubble, with an avatar lane on its left for received bubbles in a group chat (the avatar beside a group's
          last bubble). Bubbles of one group sit 2 px apart, groups further -->
     <Grid
@@ -645,16 +614,6 @@
                         </local:LinkCardButton>
                     </StackPanel>
                 </Border>
-
-                <!-- Pulse: a soft accent tint over the whole back (photos too), clear until a reply's jump lands here (see
-                     Pulse). Takes no clicks -->
-                <Border
-                    x:Name="PulseFill"
-                    Grid.Column="1"
-                    Background="{ThemeResource AccentFillColorDefaultBrush}"
-                    CornerRadius="{x:Bind local:MessageBubble.CornersOf(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup), Mode=OneWay}"
-                    IsHitTestVisible="False"
-                    Opacity="0" />
 
                 <!-- Focus Ring: hugs the back (photos and cards too) 3 px out, following its corners, grouped ones included:
                      a 2 px ring in the accent color, themed instead of Windows' white focus stroke (owner: too glaring), still
