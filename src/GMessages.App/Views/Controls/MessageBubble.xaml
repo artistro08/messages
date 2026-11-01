@@ -14,8 +14,9 @@
         Margin="{x:Bind local:MessageBubble.GroupMargin(Bubble.IsFirstInGroup, Bubble.IsLastInGroup), Mode=OneWay}">
 
         <!-- Sent Or Received: sent RCS sits right on a lighter shade of the accent, sent SMS right on the accent color,
-             received left on the card color; the reaction pill takes the bubble's bottom-right corner on both sides (owner),
-             and a sent bubble's time sits just left of it. The quote is tinted to suit
+             received left on the card color; the reaction pill takes the bubble's bottom corner toward the chat's middle,
+             bottom-right on a received bubble and bottom-left on a sent one (owner; its column and margin are bound, see
+             PillHost), and the time keeps the bubble's outer side. The quote is tinted to suit
              the bubble it sits in. The groups must stay on the control's root element: GoToState only looks there, and
              on any element below it every state silently fails to apply -->
         <VisualStateManager.VisualStateGroups>
@@ -681,10 +682,11 @@
                 <!-- /Hover Strip -->
             </Grid>
 
-            <!-- Under The Bubble: the reaction pill on the bubble's bottom-right corner, and the time or caption row beside it
-                 (on the left of a received bubble, just left of the pill on a sent one). At least as wide as the back (set
-                 from code), so the pill sits on the back's corner. Under a short received bubble the time is wider than the
-                 room beside the pill: the pill is moved back onto the corner and the time drops below it (see LayPill) -->
+            <!-- Under The Bubble: the reaction pill on the bubble's bottom corner toward the chat's middle (bottom-right of a
+                 received bubble, in the right column; bottom-left of a sent one, in the left column), and the time or caption
+                 row on the outer side (the left of a received bubble, the right of a sent one). At least as wide as the back
+                 (set from code), so the pill sits on the back's corner. When the time is wider than the room beside the pill,
+                 the pill is moved back onto the corner and the time drops below it (see LayPill) -->
             <Grid
                 x:Name="Under"
                 Margin="12,0"
@@ -697,8 +699,8 @@
                      circles at any scale. Its top 8 px overlap the back, and it keeps 6 px from the time -->
                 <Grid
                     x:Name="PillHost"
-                    Grid.Column="2"
-                    Margin="6,-8,0,0"
+                    Grid.Column="{x:Bind local:MessageBubble.PillColumn(Bubble.FromMe), Mode=OneWay}"
+                    Margin="{x:Bind local:MessageBubble.PillMargin(Bubble.FromMe), Mode=OneWay}"
                     VerticalAlignment="Top"
                     Visibility="{x:Bind Bubble.HasReactions, Mode=OneWay, FallbackValue=Collapsed}">
 

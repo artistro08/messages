@@ -287,7 +287,7 @@ public sealed class RcsTests : UiTest
         App.Find("Bubble." + id + ".Time");
         Thread.Sleep(500);
 
-        AssertPillOnCorner(bubble, pill);
+        AssertPillOnRightCorner(bubble, pill);
 
         // Sent: Hi, Then Something After It So Its Time Isn't The Status Row
         App.Find("Chat.Draft").Focus();
@@ -306,17 +306,107 @@ public sealed class RcsTests : UiTest
         sent.Click();
         App.Find("Bubble." + sent_id + ".Time");
         Thread.Sleep(500);
-        AssertPillOnCorner(sent, sent_pill);
+        AssertPillOnLeftCorner(sent, sent_pill);
     }
 
-    // The Pill Crosses The Bubble's Bottom Edge At Its Bottom-Right Corner. The Text Sits 12 px Inside The Back
-    private static void AssertPillOnCorner(AutomationElement bubble, AutomationElement pill)
+    // The Pill Crosses The Bubble's Bottom Edge At Its Bottom-Right Corner (Received). The Text Sits 12 px Inside The Back
+    private static void AssertPillOnRightCorner(AutomationElement bubble, AutomationElement pill)
     {
         System.Drawing.Rectangle text = bubble.BoundingRectangle;
         System.Drawing.Rectangle on   = pill.BoundingRectangle;
         Assert.IsTrue(on.Top < text.Bottom + 12 && on.Bottom > text.Bottom + 12, $"The pill {on} doesn't cross the bubble's bottom edge (text {text}).");
         int middle = on.Left + (on.Width / 2);
         Assert.IsTrue(middle >= text.Right - 2 && on.Left < text.Right + 12, $"The pill {on} isn't on the bubble's bottom-right corner (text {text}).");
+    }
+
+    // The Pill Crosses The Bubble's Bottom Edge At Its Bottom-Left Corner (Sent, The Received Pill Mirrored)
+    private static void AssertPillOnLeftCorner(AutomationElement bubble, AutomationElement pill)
+    {
+        System.Drawing.Rectangle text = bubble.BoundingRectangle;
+        System.Drawing.Rectangle on   = pill.BoundingRectangle;
+        Assert.IsTrue(on.Top < text.Bottom + 12 && on.Bottom > text.Bottom + 12, $"The pill {on} doesn't cross the bubble's bottom edge (text {text}).");
+        int middle = on.Left + (on.Width / 2);
+        Assert.IsTrue(middle <= text.Left + 2 && on.Right > text.Left - 12, $"The pill {on} isn't on the bubble's bottom-left corner (text {text}).");
+    }
+
+    /// <summary>
+    /// On a sent message wider than twice the pill, the pill's left edge lines up with the text's left edge (12 px in from
+    /// the back's left), mirroring a received bubble's pill (owner).
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task ReactionPill_LongSentMessage_SitsBottomLeft()
+    {
+        await OpenChatAsync("Row.c-ann");
+        string id = SendAndWait("c-ann", "This one is long enough for the long rule");
+
+        AutomationElement pill = ReactAndWait("c-ann", id, "p-ann");
+        System.Drawing.Rectangle text = App.Find("Bubble." + id).BoundingRectangle;
+        System.Drawing.Rectangle on   = pill.BoundingRectangle;
+
+        Assert.IsTrue(Math.Abs(on.Left - text.Left) <= 2, $"The pill {on} doesn't start at the text's left edge (text {text}).");
+    }
+
+    /// <summary>
+    /// On my newest message "Oh yeahhhh" (owner's screenshot), the pill covers neither the time nor the status: the time
+    /// ends at the bubble's right side and drops below the pill. Team, as the owner's chat had no lock after the status.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task ReactionPill_SentMessage_DoesNotCoverTime()
+    {
+        await OpenChatAsync("Row.c-team");
+        string id = SendAndWait("c-team", "Oh yeahhhh");
+
+        System.Drawing.Rectangle on      = ReactAndWait("c-team", id, "p-bo").BoundingRectangle;
+        System.Drawing.Rectangle text    = App.Find("Bubble." + id).BoundingRectangle;
+        System.Drawing.Rectangle caption = App.Find("Caption." + id).BoundingRectangle;
+        System.Drawing.Rectangle status  = App.Find("Status." + id).BoundingRectangle;
+
+        Assert.IsFalse(on.IntersectsWith(caption), $"The pill {on} covers the time {caption}.");
+        Assert.IsFalse(on.IntersectsWith(status), $"The pill {on} covers the status {status}.");
+        Assert.IsTrue(Math.Abs(status.Right - text.Right) <= 2, $"The status {status} doesn't end at the bubble's right side (text {text}).");
+        Assert.IsTrue(caption.Top >= on.Bottom - 1, $"The time {caption} didn't drop below the pill {on}.");
+    }
+
+    /// <summary>
+    /// On a wide sent message the pill and the time both fit under it, so a reaction doesn't push the time down: the gap
+    /// from the text to the time is the same (within 2 px) before and after the reaction.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task ReactionPill_WideSentMessage_TimeStaysClose()
+    {
+        await OpenChatAsync("Row.c-ann");
+        string id  = SendAndWait("c-ann", "This message is wide enough that the pill and the time both fit under it");
+        int before = App.Find("Caption." + id).BoundingRectangle.Top - App.Find("Bubble." + id).BoundingRectangle.Bottom;
+
+        ReactAndWait("c-ann", id, "p-ann");
+        int after = App.Find("Caption." + id).BoundingRectangle.Top - App.Find("Bubble." + id).BoundingRectangle.Bottom;
+
+        Assert.IsTrue(Math.Abs(after - before) <= 2, $"The time sat {before} px under the text without a reaction and {after} px with one.");
+    }
+
+    // Sends A Message From The Draft And Waits Until The Phone Echoes It As Sent; Returns Its ID
+    private string SendAndWait(string conversationId, string text)
+    {
+        int sent = Server.Phone.Sent.Count;
+        App.Find("Chat.Draft").Focus();
+        Keyboard.Type(text);
+        Keyboard.Type(VirtualKeyShort.RETURN);
+        Wait.Until(() => Server.Phone.Sent.Count == sent + 1, AppDriver.DefaultTimeout, () => "The phone never got the message.");
+        string id = Newest(conversationId).MessageID;
+        App.WaitForText("Status." + id, ChatCopy.Sent);
+        return id;
+    }
+
+    // Has A Participant React 👍 To A Message, Waits For The Pill To Show And Settle; Returns The Pill
+    private AutomationElement ReactAndWait(string conversationId, string id, string participantId)
+    {
+        Server.Phone.PushReactions(conversationId, id, (EmojiType.Like, participantId));
+        Wait.Until(() => App.TryFind("Reactions." + id)?.BoundingRectangle.Height > 0, AppDriver.DefaultTimeout, () => "The pill never showed.");
+        Thread.Sleep(300);
+        return App.Find("Reactions." + id);
     }
 
     /// <summary>

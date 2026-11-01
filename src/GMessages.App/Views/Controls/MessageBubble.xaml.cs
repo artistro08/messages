@@ -117,10 +117,10 @@ public sealed partial class MessageBubble : UserControl
     // How Far The Reaction Pill's Top Overlaps The Back (PillHost's -8 Top Margin)
     private const double PillOverlap = 8;
 
-    // The Gap Between The Reaction Pill And The Time Beside It (PillHost's 6 px Left Margin)
+    // The Gap Between The Reaction Pill And The Time Beside It (PillHost's 6 px Margin On The Time's Side)
     private const double PillGap = 6;
 
-    // A Short Bubble's Pill Is Centered This Far Right Of The Point 12 px In From The Back's Right (4 px In From The Edge)
+    // A Short Bubble's Pill Is Centered This Far Outward Of The Point 12 px In From The Back's Edge (4 px In From The Edge)
     private const double PillCornerReach = 8;
 
     // The Preview Card's Image Width, And Its Gap Below The Text, In Effective Pixels
@@ -552,6 +552,25 @@ public sealed partial class MessageBubble : UserControl
         new(0, isFirst ? GroupGap : InGroupGap, 0, isLast ? GroupGap : InGroupGap);
 
     /// <summary>
+    /// Puts the reaction pill in the column under the row toward the chat's middle: the right one (2) under a received
+    /// bubble, the left one (0) under a sent one, so a sent bubble's time keeps the row's right end.
+    /// </summary>
+    /// <remarks>Bound with <c>x:Bind</c>, not a Side state setter, so the setter never forces a deferred pill to load.</remarks>
+    /// <param name="fromMe">True for a sent bubble.</param>
+    /// <returns>The pill's column.</returns>
+    public static int PillColumn(bool fromMe) => fromMe ? 0 : 2;
+
+    /// <summary>
+    /// Gives the reaction pill's margin: its top 8 px over the back, and a 6 px gap on the time's side (left of a received
+    /// bubble's pill, right of a sent one's).
+    /// </summary>
+    /// <remarks>Bound with <c>x:Bind</c>, not a Side state setter, so the setter never forces a deferred pill to load.</remarks>
+    /// <param name="fromMe">True for a sent bubble.</param>
+    /// <returns>The pill's margin.</returns>
+    public static Thickness PillMargin(bool fromMe) =>
+        fromMe ? new(0, -PillOverlap, PillGap, 0) : new(PillGap, -PillOverlap, 0, 0);
+
+    /// <summary>
     /// Gives the avatar lane's width: received bubbles in a group chat keep it, so their avatar lines up.
     /// </summary>
     /// <param name="hasLane">True for a received bubble in a group chat.</param>
@@ -881,23 +900,34 @@ public sealed partial class MessageBubble : UserControl
         visual.Opacity = 1;
     }
 
-    // The Pill On The Back's Bottom-Right Corner, Its Top 8 px Over The Back, Ending 12 px In From The Back's Right (As On
-    // A Long Bubble). On A Short Bubble (Under Twice The Pill's Width) That Would Put It Under The Bottom-Left, So It Is
-    // Centered 4 px In From The Back's Right Edge Instead, Over The Corner (Owner, Plan 10). The Pill Sits At The Row's Right End, So It
-    // Is Moved There From Wherever The Row's Width Put It; A Received Bubble's Time (On The Left) Drops Below The Pill When
-    // The Two Would Meet. A Sent Bubble's Time Sits Left Of The Pill, Which Only Moves Right, So It Never Meets It
+    // The Pill On The Back's Bottom Corner Toward The Chat's Middle, Its Top 8 px Over The Back: Bottom-Right On A Received
+    // Bubble, Ending 12 px In From The Back's Right; Bottom-Left On A Sent One, Starting 12 px In From The Back's Left (Owner,
+    // The Received Pill Mirrored). On A Short Bubble (Under Twice The Pill's Width) That Would Put It Past The Far Corner, So
+    // It Is Centered 4 px In From The Back's Edge Instead, Over The Corner (Owner, Plan 10). The Pill Sits At Its Column's
+    // End (The Row's Right On Received, Its Left On Sent), So It Is Moved There From Wherever The Row's Width Put It. The
+    // Time (On The Received Row's Left, The Sent Row's Right) Drops Below The Pill When The Two Would Meet; Only Its Top
+    // Margin Changes, Never Its Width, So The Layout Can't Loop
     private void LayPill()
     {
         double pill_width = PillHost.ActualWidth;
         bool shown        = PillHost.Visibility == Visibility.Visible && pill_width > 0;
         bool sent         = Bubble?.FromMe == true;
+        bool short_back   = Under.MinWidth < pill_width * 2;
 
-        // The Point 12 px In From The Back's Right, In The Row's Space (A Sent Row Ends There; A Received One Starts At The Back's Left)
-        double corner  = sent ? Under.ActualWidth : Under.MinWidth;
-        double left    = Under.MinWidth < pill_width * 2 ? corner + PillCornerReach - (pill_width / 2) : corner - pill_width;
-        double shift_x = shown ? left - (Under.ActualWidth - pill_width) : 0;
-        bool drop      = shown && !sent && left < Captions.ActualWidth + PillGap;
-        var margin     = new Thickness(0, drop ? Math.Max(0, PillHost.ActualHeight - PillOverlap) : 0, 0, 0);
+        // Received: The Row Starts 12 px In From The Back's Left; Its MinWidth Point Is 12 px In From The Back's Right
+        // Sent: The Row Ends 12 px In From The Back's Right; 12 px In From The Back's Left Is Under.ActualWidth - Under.MinWidth
+        double left = sent
+            ? (short_back ? (Under.ActualWidth - Under.MinWidth) - PillCornerReach - (pill_width / 2) : Under.ActualWidth - Under.MinWidth)
+            : (short_back ? Under.MinWidth + PillCornerReach - (pill_width / 2) : Under.MinWidth - pill_width);
+
+        double natural = sent ? 0 : Under.ActualWidth - pill_width;
+        double shift_x = shown ? left - natural : 0;
+
+        bool drop = shown && (sent
+            ? left + pill_width + PillGap > Under.ActualWidth - Captions.ActualWidth
+            : left < Captions.ActualWidth + PillGap);
+
+        var margin = new Thickness(0, drop ? Math.Max(0, PillHost.ActualHeight - PillOverlap) : 0, 0, 0);
         if (_pillShift.X != shift_x)
         {
             _pillShift.X = shift_x;
@@ -1747,6 +1777,9 @@ public sealed partial class MessageBubble : UserControl
 
         VisualStateManager.GoToState(this, side, false);
         VisualStateManager.GoToState(this, Bubble?.HasMyReaction == true ? "Mine" : "NotMine", false);
+
+        // Re-Lay The Pill, So A Recycled Bubble That Switched Sides Doesn't Keep The Old Side's Shift
+        LayPill();
     }
 
     // The Text, With Its Web Links As Links (Plain Text When It Has None); Without The Card's Link While The Card Shows
