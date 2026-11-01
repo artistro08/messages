@@ -84,6 +84,13 @@ public partial class App : Application, IDisposable
     private RegisteredWaitHandle? _quitWait;
     private RegisteredWaitHandle? _showWait;
     private bool _quitting;
+
+    // Quitting: The Most Closing The Connection (It Writes A Pending Session Save, Which Matters) And Writing The Queued
+    // Message Saves (A Cache) May Take, And How Long After Exit The Process Is Ended For Sure. A Quit Ends Within About
+    // Eight Seconds Whatever Hangs, Usually Well Under One
+    private static readonly TimeSpan ConnectionLimit = TimeSpan.FromSeconds(4);
+    private static readonly TimeSpan SavesLimit      = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan ExitGrace       = TimeSpan.FromSeconds(2);
     private bool _launched;
 
     /// <summary>
@@ -747,7 +754,12 @@ public partial class App : Application, IDisposable
 
         AppLog.Quit(_logger);
         _quitting = true;
+        long started = Stopwatch.GetTimestamp();
         CloseWindows();
+        long windows_ms    = (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+        long connection_ms = 0;
+        long saves_ms      = 0;
+        bool saves_done    = false;
 
         // Let the client close its long poll and flush a save (while the log is still open), but never hang the quit on it
         try
@@ -758,10 +770,24 @@ public partial class App : Application, IDisposable
                 await _notifications.RemoveAllAsync().WaitAsync(TimeSpan.FromSeconds(5));
             }
 
+            long step = Stopwatch.GetTimestamp();
             if (_connection is not null)
             {
-                await _connection.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+                await _connection.DisposeAsync().AsTask().WaitAsync(ConnectionLimit);
             }
+
+            connection_ms = (long)Stopwatch.GetElapsedTime(step).TotalMilliseconds;
+
+            // The Message Saves Still Queued (After A Catch-Up There Can Be Hundreds) Are Written Before The Exit, Up To
+            // A Limit: The Database Is A Cache, So A Save Cut Off Is Fetched Again From The Phone
+            step = Stopwatch.GetTimestamp();
+            if (_store is not null)
+            {
+                await _store.FlushSavesAsync().WaitAsync(SavesLimit);
+                saves_done = true;
+            }
+
+            saves_ms = (long)Stopwatch.GetElapsedTime(step).TotalMilliseconds;
         }
 #pragma warning disable CA1031 // Quitting regardless
         catch (Exception)
@@ -771,12 +797,23 @@ public partial class App : Application, IDisposable
         }
         finally
         {
+            long total_ms = (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+            AppLog.QuitTimed(_logger, windows_ms, connection_ms, saves_ms, saves_done, total_ms);
+
             // No Decrypted File Outlives The App
             _media?.Clear();
             Dispose();
             Exit();
+            ExitSoon();
         }
     }
+
+    // Exit Ends The Message Loop, Then The Process Ends Once Main Returns; Anything Native Still Winding Down (A Media
+    // Job, A Notification Or Network Teardown) Could Hold The Process Up For About A Minute (0.6.4). Nothing Is Left To
+    // Save By Now, So The Process Ends For Sure Shortly After
+    // ponytail: a hard exit after a fixed wait; find the native holder in a dump if the wait ever fires in the log-free gap
+    private static void ExitSoon() =>
+        _ = Task.Delay(ExitGrace).ContinueWith(_ => Environment.Exit(0), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
 
     // =========================================================================
     // LOGGER FACTORY
