@@ -27,7 +27,7 @@ public static class ColorConverters
         if (!Brushes.TryGetValue(argb, out SolidColorBrush? brush))
         {
             brush         = new(Color.FromArgb((byte)(argb >> 24), (byte)(argb >> 16), (byte)(argb >> 8), (byte)argb));
-            Brushes[argb]  = brush;
+            Brushes[argb] = brush;
         }
 
         return brush;

@@ -127,18 +127,66 @@ public sealed partial class MediaTests
         }
 
         Wait.Until(() => ReadNote(note) == "6000", AppDriver.DefaultTimeout, () => $"Zoomed past 2x, the photo stayed decoded {ReadNote(note)} px wide.");
+    }
 
-        static string ReadNote(string path)
+    /// <summary>
+    /// A tall, narrow photo (100 x 20000) decodes narrow enough that its height stays within 8192 px, opened and zoomed
+    /// past 2x alike.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Viewer_TallPhoto_DecodeHeightCapped()
+    {
+        await OpenMediaChatAsync();
+        Message message         = Server.Phone.PushIncomingMedia("c-media", "image/png", Png(100, 20000, SplitColors), "tall.png");
+        AutomationElement photo = App.Find("Bubble.Photo." + message.MessageID);
+        WaitForStatus(photo, Full);
+        App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).SetForeground();
+
+        // Invoked: Its Bubble Is Only A Few Pixels Wide, Too Narrow To Click Reliably
+        photo.Patterns.Invoke.Pattern.Invoke();
+        string note = Path.Combine(App.DataDir, "viewer-decode.txt");
+        Wait.Until(() => ReadNote(note).Length > 0, AppDriver.DefaultTimeout, () => "The viewer never decoded the photo.");
+        AssertHeightCapped();
+
+        // Ctrl + Wheel Past 2x: Still Within The Cap
+        AutomationElement viewer     = App.Find("PhotoViewer.Photo");
+        System.Drawing.Rectangle box = viewer.BoundingRectangle;
+        Mouse.Position               = new System.Drawing.Point(box.Left + (box.Width / 2), box.Top + (box.Height / 2));
+        Thread.Sleep(500);
+        using (Keyboard.Pressing(VirtualKeyShort.CONTROL))
         {
-            try
+            for (int i = 0; i < 8; i++)
             {
-                using var reader = new StreamReader(new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete));
-                return reader.ReadToEnd().Trim();
+                Mouse.Scroll(2);
+                Thread.Sleep(50);
             }
-            catch (IOException)
-            {
-                return string.Empty;
-            }
+        }
+
+        Wait.Until(() => viewer.Properties.ItemStatus.ValueOrDefault is "Zoom3" or "Zoom4" or "Zoom5" or "Zoom6" or "Zoom7" or "Zoom8",
+            AppDriver.DefaultTimeout, () => $"Ctrl + wheel didn't zoom past 2x ({viewer.Properties.ItemStatus.ValueOrDefault}).");
+        Thread.Sleep(1000);
+        AssertHeightCapped();
+
+        void AssertHeightCapped()
+        {
+            int width   = int.Parse(ReadNote(note), System.Globalization.CultureInfo.InvariantCulture);
+            long height =(long)width * 20000 / 100;
+            Assert.IsTrue(width > 0 && height <= 8192, $"The 100 x 20000 photo decoded {width} px wide, {height} px tall.");
+        }
+    }
+
+    // A Test Note The App Wrote, Or Empty Before It Has
+    private static string ReadNote(string path)
+    {
+        try
+        {
+            using var reader = new StreamReader(new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete));
+            return reader.ReadToEnd().Trim();
+        }
+        catch (IOException)
+        {
+            return string.Empty;
         }
     }
 

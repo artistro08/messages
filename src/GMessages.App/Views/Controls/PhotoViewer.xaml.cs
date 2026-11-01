@@ -87,8 +87,9 @@ public sealed partial class PhotoViewer : UserControl
     private string _messageId = string.Empty;
     private Control? _returnFocus;
 
-    // The Shown Photo's Own Width (0 When Unknown) And The Width It Is Decoded At, Both In Physical Pixels
+    // The Shown Photo's Own Size (0 x 0 When Unknown) And The Width It Is Decoded At, All In Physical Pixels
     private int _photoWidth;
+    private int _photoHeight;
     private int _decodedWidth;
 
     // How The Photo In The Chat Had Focus When The Viewer Opened (Pointer For A Click), So Closing Gives It Back The Same
@@ -201,12 +202,13 @@ public sealed partial class PhotoViewer : UserControl
                 throw new InvalidOperationException("No media store.");
             }
 
-            // Decoded No Wider Than Twice The Window In Physical Pixels (Sharp To 2x Zoom), And Never Past MaxDecodeWidth
+            // Decoded No Wider Than Twice The Window In Physical Pixels (Sharp To 2x Zoom), And Neither Side Past
+            // MaxDecodeWidth
             byte[] bytes = await media.GetAsync(part, thumbnail: false, CancellationToken.None);
             double twice = (XamlRoot?.Size.Width ?? 0) * (XamlRoot?.RasterizationScale ?? 1) * 2;
             int fit      = twice > 0 ? (int)Math.Min(Math.Ceiling(twice), MaxDecodeWidth) : MaxDecodeWidth;
-            (ImageSource? image, int pixel_width, _, int decode_width) =
-                await Avatar.ToFittedImageAsync(bytes, (w, _) => w > 0 ? Math.Min(w, fit) : fit, DecodePixelType.Physical);
+            (ImageSource? image, int pixel_width, int pixel_height, int decode_width) =
+                await Avatar.ToFittedImageAsync(bytes, (w, h) => CappedWidth(w, h, fit), DecodePixelType.Physical);
             if (image is null)
             {
                 throw new InvalidDataException();
@@ -215,6 +217,7 @@ public sealed partial class PhotoViewer : UserControl
             if (ReferenceEquals(part, _part) && !_closing)
             {
                 _photoWidth       = pixel_width;
+                _photoHeight      = pixel_height;
                 _decodedWidth     = decode_width;
                 PhotoImage.Source = image;
                 TestHooks.NoteState("viewer-decode", decode_width.ToString(System.Globalization.CultureInfo.InvariantCulture));
@@ -766,10 +769,24 @@ public sealed partial class PhotoViewer : UserControl
         TestHooks.ShowState(Zoomer, "Zoom" + Math.Round(Zoomer.ZoomFactor).ToString(System.Globalization.CultureInfo.InvariantCulture));
     }
 
-    // Zoomed Past 2x: The Photo Decodes Again At Its Own Width (MaxDecodeWidth At Most), Once, So It Stays Sharp Up Close
+    // The Width To Decode A Photo At: Its Own, No Wider Than The Limit, And Narrow Enough That Its Height Stays Within
+    // MaxDecodeWidth Too (A 100 x 20000 Photo Would Otherwise Decode Full Height); The Limit When Its Size Is Unknown
+    private static int CappedWidth(int width, int height, int limit)
+    {
+        if (width <= 0 || height <= 0)
+        {
+            return limit;
+        }
+
+        int height_cap = (int)Math.Min(int.MaxValue, (long)MaxDecodeWidth * width / height);
+        return Math.Max(1, Math.Min(width, Math.Min(limit, height_cap)));
+    }
+
+    // Zoomed Past 2x: The Photo Decodes Again At Its Own Width (Neither Side Past MaxDecodeWidth), Once, So It Stays
+    // Sharp Up Close
     private async Task DecodeFullAsync()
     {
-        int full = Math.Min(_photoWidth, MaxDecodeWidth);
+        int full = _photoWidth > 0 ? CappedWidth(_photoWidth, _photoHeight, MaxDecodeWidth) : 0;
         if (_part is not { } part || _closing || full <= _decodedWidth || (Application.Current as App)?.Media is not { } media)
         {
             return;

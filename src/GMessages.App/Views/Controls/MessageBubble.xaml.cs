@@ -257,6 +257,9 @@ public sealed partial class MessageBubble : UserControl
     private bool _popPill;
     private Visual? _pillVisual;
 
+    // The Row Let Go Of Its Media And Waits To Be Used Again: Its Message's Updates Load None Into It Meanwhile
+    private bool _released;
+
     // Whether The Entrance Ran On This Row, So A Recycle Puts Its Visual Back (A Row That Never Animated Makes None)
     private bool _animatedIn;
 
@@ -905,7 +908,11 @@ public sealed partial class MessageBubble : UserControl
     {
         ShowText();
         ShowStates();
-        LoadMedia();
+        if (!_released)
+        {
+            LoadMedia();
+        }
+
         ShowHoverStrip();
         ShowReactionChange();
 
@@ -1142,6 +1149,7 @@ public sealed partial class MessageBubble : UserControl
     /// </remarks>
     internal void LoadMedia()
     {
+        _released = false;
         ShowPreviewImage();
         ShowPhoto();
         ShowFile();
@@ -1160,6 +1168,8 @@ public sealed partial class MessageBubble : UserControl
     /// </remarks>
     internal void ReleaseMedia()
     {
+        _released = true;
+
         // Video: The Inline Player And Its Frame
         ReleaseVideo();
         _videoPart       = null;
