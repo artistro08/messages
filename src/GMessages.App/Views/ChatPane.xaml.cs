@@ -1652,8 +1652,7 @@ public sealed partial class ChatPane : UserControl
 
         string html = HtmlFormatHelper.GetStaticFragment(await view.GetHtmlFormatAsync());
         if (ImageSource().Match(html) is not { Success: true } match
-            || !Uri.TryCreate(System.Net.WebUtility.HtmlDecode(match.Groups[1].Value), UriKind.Absolute, out Uri? url)
-            || !LinkPreviewer.IsAllowed(url, TestHooks.AllowLoopbackPreviews))
+            || !Uri.TryCreate(System.Net.WebUtility.HtmlDecode(match.Groups[1].Value), UriKind.Absolute, out Uri? url))
         {
             return null;
         }

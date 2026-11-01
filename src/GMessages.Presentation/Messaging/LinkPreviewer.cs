@@ -792,7 +792,7 @@ public sealed partial class LinkPreviewer : IDisposable
         // Count The Brackets Once, Then Keep The Counts In Step As Characters Come Off (A Long Run Of ")" Stays Linear)
         int round_open   = link.AsSpan().Count('(');
         int round_close  = link.AsSpan().Count(')');
-        int square_open  =link.AsSpan().Count('[');
+        int square_open  = link.AsSpan().Count('[');
         int square_close = link.AsSpan().Count(']');
         int curly_open   = link.AsSpan().Count('{');
         int curly_close  = link.AsSpan().Count('}');
