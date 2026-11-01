@@ -112,6 +112,7 @@ public sealed partial class MainWindow : Window
         {
             _isActive = e.WindowActivationState != WindowActivationState.Deactivated;
             ShowChatFocus();
+            PhotoViewer.ShowActive(_isActive);
         };
         Closed += (_, _) =>
         {
@@ -258,9 +259,9 @@ public sealed partial class MainWindow : Window
         PunchViewerToolbar();
     }
 
-    // While The Photo Viewer Is Open: Its Toolbar Moves Just Left Of The Caption Buttons, And Its Bounds (Physical Pixels,
-    // From The Window's Top Left) Become The Title Bar's Only Click-Through Hole. Its Own SetRegionRects Replaces The
-    // TitleBar Control's Holes For ☰, Back And The Profile, Which The Scrim Covers
+    // While The Photo Viewer Is Open: Its Toolbar Sits In The Row's Top-Left Corner (Past The System's Left Inset), And
+    // Its Bounds (Physical Pixels, From The Window's Top Left) Become The Title Bar's Only Click-Through Hole. Its Own
+    // SetRegionRects Replaces The TitleBar Control's Holes For ☰, Back And The Profile, Which The Scrim Covers
     private void PunchViewerToolbar()
     {
         if (!PhotoViewer.IsOpen || RootGrid.XamlRoot is not { } root)
@@ -269,7 +270,7 @@ public sealed partial class MainWindow : Window
         }
 
         double scale = root.RasterizationScale;
-        PhotoViewer.FitToolbar(AppWindow.TitleBar.RightInset / scale);
+        PhotoViewer.FitToolbar(AppWindow.TitleBar.LeftInset / scale);
         PhotoViewer.UpdateLayout();
 
         FrameworkElement toolbar = PhotoViewer.Toolbar;

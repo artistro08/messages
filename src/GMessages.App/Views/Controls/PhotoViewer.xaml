@@ -1,7 +1,7 @@
 <!-- Photo Viewer: a clicked photo (zoomable) or video (playing) over the whole window (the title bar row too, so all of the
-     app is tinted) on a dark scrim, with Save as, Download, Open in Photos (Open in default app for a video) and Close in
-     the title bar row beside the caption buttons. Dark theme
-     always, so its icons read on the scrim. Hidden until shown (see the code) -->
+     app is tinted) on a dark scrim, with Close, Open in Photos (Open in default app for a video), Download and Save as in
+     the title bar row's top-left corner. Dark theme always, so its icons read on the scrim. Hidden until shown (see the
+     code) -->
 <UserControl
     x:Class="GMessages.App.Views.Controls.PhotoViewer"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -30,6 +30,22 @@
         RowDefinitions="48,*"
         TabFocusNavigation="Cycle">
 
+        <!-- Window Activation: the toolbar's icons dim while the window is inactive, as the title bar's text does (set from
+             the window's Activated, through ShowActive) -->
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="Activation">
+                <VisualState x:Name="Active" />
+                <VisualState x:Name="Inactive">
+                    <VisualState.Setters>
+                        <Setter Target="CloseIcon.Foreground" Value="{ThemeResource TextFillColorDisabledBrush}" />
+                        <Setter Target="OpenIcon.Foreground" Value="{ThemeResource TextFillColorDisabledBrush}" />
+                        <Setter Target="DownloadIcon.Foreground" Value="{ThemeResource TextFillColorDisabledBrush}" />
+                        <Setter Target="SaveAsIcon.Foreground" Value="{ThemeResource TextFillColorDisabledBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+
         <!-- Backdrop: the tint, its own layer so it fades in and out (from code) while the photo grows and shrinks. No
              implicit transitions here or on the toolbar and stage: the code takes their visuals -->
         <Border
@@ -37,24 +53,53 @@
             Grid.RowSpan="2"
             Background="{ThemeResource PhotoViewerScrimBrush}" />
 
-        <!-- Toolbar: in the title bar row (48 px, the tall caption buttons' height), just left of the caption buttons; the
-             window keeps their width clear and lets clicks through to these buttons only (set from the window's code) -->
+        <!-- Toolbar: in the title bar row's top-left corner (48 px, the tall caption buttons' height), Close first. The
+             window lets clicks through to these buttons only (set from the window's code) -->
         <StackPanel
             x:Name="ToolbarPanel"
-            HorizontalAlignment="Right"
+            Margin="8,0,0,0"
+            HorizontalAlignment="Left"
             VerticalAlignment="Center"
             Orientation="Horizontal"
             Spacing="4">
+
+            <!-- Close: a back arrow on a round, softly filled plate, so it never reads as Windows' square caption close -->
             <Button
-                x:Name="SaveAsButton"
+                x:Name="CloseButton"
                 Width="40"
                 Height="40"
-                AutomationProperties.AutomationId="PhotoViewer.SaveAs"
-                AutomationProperties.Name="{x:Bind local:PhotoViewer.SaveAsText}"
-                Click="OnSaveAsClick"
+                AutomationProperties.AutomationId="PhotoViewer.Close"
+                AutomationProperties.Name="{x:Bind local:PhotoViewer.CloseText}"
+                Click="OnCloseClick"
                 Style="{StaticResource IconButtonStyle}"
-                ToolTipService.ToolTip="{x:Bind local:PhotoViewer.SaveAsText}">
-                <FontIcon FontSize="16" Glyph="&#xE792;" />
+                ToolTipService.ToolTip="{x:Bind local:PhotoViewer.CloseText}">
+                <Grid>
+                    <Ellipse
+                        Width="36"
+                        Height="36"
+                        Fill="{ThemeResource ControlFillColorSecondaryBrush}"
+                        Stroke="{ThemeResource ControlStrokeColorDefaultBrush}"
+                        StrokeThickness="1" />
+                    <FontIcon
+                        x:Name="CloseIcon"
+                        FontSize="16"
+                        Glyph="&#xE72B;" />
+                </Grid>
+            </Button>
+
+            <!-- Open In Photos, Or Open In Default App For A Video: Named From Code On Each Open (A Bound Name Was Set Back
+                 Once The Viewer First Loaded) -->
+            <Button
+                x:Name="OpenInPhotosButton"
+                Width="40"
+                Height="40"
+                AutomationProperties.AutomationId="PhotoViewer.OpenInPhotos"
+                Click="OnOpenInPhotosClick"
+                Style="{StaticResource IconButtonStyle}">
+                <FontIcon
+                    x:Name="OpenIcon"
+                    FontSize="16"
+                    Glyph="&#xE8A7;" />
             </Button>
             <Button
                 x:Name="DownloadButton"
@@ -65,31 +110,27 @@
                 Click="OnDownloadClick"
                 Style="{StaticResource IconButtonStyle}"
                 ToolTipService.ToolTip="{x:Bind local:PhotoViewer.DownloadText}">
-                <FontIcon FontSize="16" Glyph="&#xE896;" />
-            </Button>
-            <!-- Open In Photos, Or Open In Default App For A Video: Named From Code On Each Open (A Bound Name Was Set Back
-                 Once The Viewer First Loaded) -->
-            <Button
-                x:Name="OpenInPhotosButton"
-                Width="40"
-                Height="40"
-                AutomationProperties.AutomationId="PhotoViewer.OpenInPhotos"
-                Click="OnOpenInPhotosClick"
-                Style="{StaticResource IconButtonStyle}">
-                <FontIcon FontSize="16" Glyph="&#xE8A7;" />
+                <FontIcon
+                    x:Name="DownloadIcon"
+                    FontSize="16"
+                    Glyph="&#xE896;" />
             </Button>
             <Button
-                x:Name="CloseButton"
+                x:Name="SaveAsButton"
                 Width="40"
                 Height="40"
-                AutomationProperties.AutomationId="PhotoViewer.Close"
-                AutomationProperties.Name="{x:Bind local:PhotoViewer.CloseText}"
-                Click="OnCloseClick"
+                AutomationProperties.AutomationId="PhotoViewer.SaveAs"
+                AutomationProperties.Name="{x:Bind local:PhotoViewer.SaveAsText}"
+                Click="OnSaveAsClick"
                 Style="{StaticResource IconButtonStyle}"
-                ToolTipService.ToolTip="{x:Bind local:PhotoViewer.CloseText}">
-                <FontIcon FontSize="16" Glyph="&#xE711;" />
+                ToolTipService.ToolTip="{x:Bind local:PhotoViewer.SaveAsText}">
+                <FontIcon
+                    x:Name="SaveAsIcon"
+                    FontSize="16"
+                    Glyph="&#xE792;" />
             </Button>
         </StackPanel>
+        <!-- /Toolbar -->
 
         <!-- Stage: the photo or the video, grown from the bubble on open and shrunk back on close (from code) -->
         <Grid x:Name="Stage" Grid.Row="1">

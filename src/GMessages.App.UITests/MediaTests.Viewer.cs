@@ -159,8 +159,9 @@ public sealed partial class MediaTests
     }
 
     /// <summary>
-    /// The toolbar sits in the title bar row, left of the caption buttons, and takes real mouse clicks there; the scrim
-    /// tints the title bar row too (its title and profile picture read dark), and closing puts the row back.
+    /// The toolbar sits in the title bar row's top-left corner, Close first, then Open in Photos, Download and Save as,
+    /// and takes real mouse clicks there; the scrim tints the title bar row too (its title and profile picture read
+    /// dark), and closing puts the row back.
     /// </summary>
     /// <returns>A task for the test.</returns>
     [TestMethod]
@@ -170,21 +171,24 @@ public sealed partial class MediaTests
         AutomationElement photo      = ViewerPhoto(null);
         System.Drawing.Rectangle bar = App.Find("Main.TitleBar").BoundingRectangle;
         AutomationElement profile    = App.Find("Main.ProfileButton");
-        double title_before          = Luma(PixelAt(new System.Drawing.Point(bar.Left + 160, bar.Top + (bar.Height / 2))));
+        double title_before          = Luma(PixelAt(new System.Drawing.Point(bar.Left + 240, bar.Top + (bar.Height / 2))));
 
         photo.Click();
         App.Find("PhotoViewer.Photo");
         System.Drawing.Rectangle window = App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).BoundingRectangle;
-        foreach (string id in (ReadOnlySpan<string>)["PhotoViewer.SaveAs", "PhotoViewer.Download", "PhotoViewer.OpenInPhotos", "PhotoViewer.Close"])
+        int left_edge                   = window.Left;
+        foreach (string id in (ReadOnlySpan<string>)["PhotoViewer.Close", "PhotoViewer.OpenInPhotos", "PhotoViewer.Download", "PhotoViewer.SaveAs"])
         {
             System.Drawing.Rectangle button = App.Find(id).BoundingRectangle;
             Assert.IsTrue(button.Top >= bar.Top && button.Bottom <= bar.Bottom, $"{id} ({button}) isn't in the title bar row ({bar}).");
-            Assert.IsTrue(button.Right <= window.Right - 100, $"{id} ({button}) overlaps the caption buttons (window {window}).");
+            Assert.IsTrue(button.Left >= left_edge, $"{id} ({button}) is out of order (Close, Open, Download, Save as from the left).");
+            Assert.IsTrue(button.Right <= window.Left + 260, $"{id} ({button}) isn't in the top-left corner (window {window}).");
+            left_edge = button.Right;
         }
 
         // The Title Bar Row Is Under The Scrim: Its Title And The Profile Picture Read Near Black
         Thread.Sleep(300);
-        double title_after   = Luma(PixelAt(new System.Drawing.Point(bar.Left + 160, bar.Top + (bar.Height / 2))));
+        double title_after   = Luma(PixelAt(new System.Drawing.Point(bar.Left + 240, bar.Top + (bar.Height / 2))));
         double profile_after = Luma(CenterPixel(profile));
         Assert.IsTrue(title_after < 40 && title_after <= title_before, $"The title bar row isn't tinted (luma {title_before:F0} before, {title_after:F0} after).");
         Assert.IsTrue(profile_after < 40, $"The profile picture isn't tinted (luma {profile_after:F0}).");
@@ -198,6 +202,29 @@ public sealed partial class MediaTests
         profile.Click();
         App.Find("Main.Profile.Settings");
         Keyboard.Type(VirtualKeyShort.ESCAPE);
+    }
+
+    /// <summary>
+    /// The toolbar's icons dim while the window is inactive (the tray menu takes activation) and come back when it is
+    /// active again; the viewer stays open throughout.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Viewer_ToolbarDimsWhenInactive()
+    {
+        await OpenMediaChatAsync();
+        ViewerPhoto(null).Click();
+        AutomationElement close = App.Find("PhotoViewer.Close");
+
+        Tray.RightClick();
+        App.Find("TrayMenu.Open");
+        WaitForStatus(close, "Inactive");
+
+        Keyboard.Type(VirtualKeyShort.ESCAPE);
+        Tray.CloseOverflow();
+        App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).SetForeground();
+        WaitForStatus(close, "Active");
+        Assert.IsNotNull(App.TryFind("PhotoViewer.Photo"), "Leaving the window closed the viewer.");
     }
 
     /// <summary>
