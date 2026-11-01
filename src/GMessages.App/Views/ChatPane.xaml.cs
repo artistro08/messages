@@ -926,6 +926,7 @@ public sealed partial class ChatPane : UserControl
 
         // The Same Content Height Means The Person (Or The Arrow) Moved The List; A New One Is Bubbles Measuring Or A Page
         bool content_changed = ContentChanged(scroller);
+        bool was_pinned      = _pinned;
         _pinned              = ChatScroll.StaysPinned(_pinned, content_changed, scroller.VerticalOffset, scroller.ScrollableHeight);
 
         // The Person Is Scrolling: An Older Page's Corrections Would Snap Them Back, So They End
@@ -945,6 +946,13 @@ public sealed partial class ChatPane : UserControl
             _toNewest = false;
             _pinned   = true;
             KeepPinned(scroller);
+        }
+
+        // Back At The Newest Message After Scrolling Up: The Older Pages Above The Newest 200 Bubbles Go (Scrolling Up
+        // Again Loads Them Back)
+        if (!was_pinned && _pinned)
+        {
+            Chat.TrimToNewest();
         }
 
         bool show_arrow = ChatScroll.ShowScrollToBottom(scroller.VerticalOffset, scroller.ScrollableHeight, scroller.ViewportHeight);

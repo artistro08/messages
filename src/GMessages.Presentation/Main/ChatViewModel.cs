@@ -41,6 +41,9 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     /// <summary>The most older pages a reply quote's jump loads looking for the quoted message (25 messages each).</summary>
     public const int ReplyJumpPages = 10;
 
+    // The Most Bubbles Kept Once The List Is Back At The Newest Message (See TrimToNewest)
+    internal const int MaxLoaded = 200;
+
     private readonly ChatStore _store;
     private readonly TimeProvider _time;
     private readonly Action<Action> _post;
@@ -474,6 +477,34 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
                 return null;
             }
         }
+    }
+
+    /// <summary>
+    /// Lets go of the older pages above the newest 200 bubbles (the list is back at the newest message).
+    /// </summary>
+    /// <remarks>
+    /// Call on the UI thread. Does nothing while a page loads or with 200 bubbles or fewer. The next older page starts again
+    /// from the new oldest bubble, as <see cref="ChatStore"/>'s own fallback cursor does (its time in milliseconds), so
+    /// scrolling up brings the dropped messages back.
+    /// </remarks>
+    public void TrimToNewest()
+    {
+        if (IsLoading || Messages.Count <= MaxLoaded)
+        {
+            return;
+        }
+
+        // Oldest First: Drop From The Top, With Any Upload A Dropped Bubble Kept
+        while (Messages.Count > MaxLoaded)
+        {
+            _outgoing.Remove(Messages[0]);
+            Messages.RemoveAt(0);
+        }
+
+        MessageBubbleViewModel oldest = Messages[0];
+        _older     = new Cursor { LastItemID = oldest.Id, LastItemTimestamp = oldest.SentAt.ToUnixTimeMilliseconds() };
+        _fillOlder = true;
+        RefreshBubbles();
     }
 
     // A Resync Arrived Mid-Load: The Page Above May Be Stale, So Load Again

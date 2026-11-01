@@ -466,6 +466,70 @@ public sealed class ChatTests : UiTest
     }
 
     /// <summary>
+    /// Back at the newest message after paging up past 200 bubbles, the older ones go (the newest 200 stay), and
+    /// scrolling up again brings them back from the phone, page by page.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task BackAtNewest_KeepsNewest200_ScrollUpBringsOlderBack()
+    {
+        // Ten Pages Of One-Liners
+        const int Count   = ChatStore.PageSize * 10;
+        Conversation chat = FakeChats.NewConversation("c-trim", "Trim Pal", false, ConversationStatus.Active, false, false, FakeChats.Person("p-trim", "Trim Pal", "+15550000009"));
+        long time         = DateTimeOffset.UtcNow.AddDays(-1).ToUnixTimeMilliseconds() * 1000;
+        Server.Phone.Chats.Add(chat, [.. Enumerable.Range(1, Count).Select(Line)]);
+
+        await OpenMainAsync();
+        App.Find("Row.c-trim").Patterns.SelectionItem.Pattern.Select();
+        Wait.Until(() => Shows("t-", Count), AppDriver.DefaultTimeout, () => $"The chat showed {Bubbles().Count} bubbles, without its newest.");
+
+        // Up Until Every Page Is In
+        var scroll = App.Find("Chat.Messages").Patterns.Scroll.Pattern;
+        Wait.Until(() =>
+        {
+            scroll.SetScrollPercent(-1, 0);
+            return OldestShown("t-") == 1;
+        }, TimeSpan.FromSeconds(60), () => $"Scrolling up stopped at line {OldestShown("t-")}.");
+
+        // Back To The Newest: The Older Pages Go, So The Top Is Now The 200th Newest Line Until The Phone Answers
+        Server.Phone.OlderPagesDelay = TimeSpan.FromSeconds(3);
+        AutomationElement down       = App.Find("Chat.ScrollToBottom");
+        Wait.Until(() => down.Properties.IsKeyboardFocusable.ValueOrDefault, AppDriver.DefaultTimeout, () => "Scroll to bottom didn't show at the top of the chat.");
+        down.Patterns.Invoke.Pattern.Invoke();
+        Wait.Until(() => scroll.VerticalScrollPercent.ValueOrDefault >= 99, AppDriver.DefaultTimeout, () => $"Scroll to bottom left the list at {scroll.VerticalScrollPercent.ValueOrDefault:0}%.");
+        Thread.Sleep(1000);
+        AssertAtNewest("Back at the newest message");
+
+        int kept_oldest = Count - 200 + 1;
+        Wait.Until(() =>
+        {
+            scroll.SetScrollPercent(-1, 0);
+            return OldestShown("t-") == kept_oldest;
+        }, AppDriver.DefaultTimeout, () => $"At the top after the trim, the oldest line was {OldestShown("t-")}, not {kept_oldest}.");
+
+        // The Dropped Lines Come Back From The Phone
+        Wait.Until(() =>
+        {
+            scroll.SetScrollPercent(-1, 0);
+            return OldestShown("t-") < kept_oldest;
+        }, AppDriver.DefaultTimeout, () => $"Scrolling up after the trim stayed at line {OldestShown("t-")}.");
+
+        Message Line(int i)
+        {
+            var message = new Message
+            {
+                MessageID      = $"t-{i}",
+                ConversationID = "c-trim",
+                ParticipantID  = "p-trim",
+                Timestamp      = time += 1_000_000,
+                MessageStatus  = new MessageStatus { Status = MessageStatusType.IncomingComplete },
+            };
+            message.MessageInfo.Add(new MessageInfo { MessageContent = new MessageContent { Content = $"Trim {i}" } });
+            return message;
+        }
+    }
+
+    /// <summary>
     /// Scrolling up with the mouse wheel (real input, not UI Automation) loads older pages, and the scroll-to-bottom
     /// button shows once far up.
     /// </summary>

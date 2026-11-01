@@ -988,6 +988,82 @@ public sealed class ChatViewModelTests
 
         Assert.AreEqual("four", chat.Messages[^1].Text);
     }
+
+    // A Phone With A Long History: m1 (Oldest) To m{count}, A Second Apart. Each Fetch Answers The Page Before The
+    // Cursor's Time (In Milliseconds), Newest First, With No Cursor (As Google Sends It)
+    private static Func<long, Cursor?, ListMessagesResponse> History(int count) => (size, cursor) =>
+    {
+        var page = new ListMessagesResponse();
+        page.Messages.AddRange(Enumerable.Range(1, count)
+            .Select(k => Msg("m" + k, "text " + k, ts: 1_761_000_000_000_000 + (k * 1_000_000L)))
+            .Where(m => cursor is null || m.Timestamp / 1000 < cursor.LastItemTimestamp)
+            .Reverse()
+            .Take((int)size));
+        return page;
+    };
+
+    // Opens The Chat And Pages Older Until It Shows Every Message Of The History
+    private static async Task<ChatViewModel> LoadAll(MainRig rig, int count)
+    {
+        ChatViewModel chat = NewChat(rig);
+        rig.Client.PageFor = History(count);
+        await chat.LoadAsync();
+        for (int i = 0; i < count && chat.Messages.Count < count; i++)
+        {
+            await chat.LoadOlderAsync();
+        }
+
+        Assert.AreEqual(count, chat.Messages.Count);
+        return chat;
+    }
+
+    [TestMethod]
+    public async Task TrimToNewest_KeepsNewest200()
+    {
+        using var rig            = new MainRig();
+        using ChatViewModel chat = await LoadAll(rig, 400);
+
+        chat.TrimToNewest();
+
+        Assert.AreEqual(ChatViewModel.MaxLoaded, chat.Messages.Count);
+        Assert.AreEqual("m201", chat.Messages[0].Id);
+        Assert.AreEqual("m400", chat.Messages[^1].Id);
+        Assert.IsTrue(chat.CanFillOlder);
+    }
+
+    /// <summary>
+    /// After a trim the next older page starts from the new oldest bubble: the messages just dropped come back.
+    /// </summary>
+    [TestMethod]
+    public async Task TrimToNewest_ThenLoadOlder_ReturnsTheDroppedMessages()
+    {
+        using var rig            = new MainRig();
+        using ChatViewModel chat = await LoadAll(rig, 400);
+        chat.TrimToNewest();
+
+        await chat.LoadOlderAsync();
+
+        // Messages 201 To 225, Counting Back From The Newest: m200 Down To m176
+        Assert.AreEqual(225, chat.Messages.Count);
+        Assert.AreEqual("m176", chat.Messages[0].Id);
+        Assert.AreEqual("m200", chat.Messages[24].Id);
+        Assert.AreEqual("m201", chat.Messages[25].Id);
+    }
+
+    [TestMethod]
+    public async Task TrimToNewest_WhileMessageArrives_KeepsIt()
+    {
+        using var rig            = new MainRig();
+        using ChatViewModel chat = await LoadAll(rig, 400);
+        await rig.LiveMessage(Msg("m401", "newest", ts: 1_761_000_000_000_000 + (401 * 1_000_000L)));
+
+        chat.TrimToNewest();
+
+        Assert.AreEqual(ChatViewModel.MaxLoaded, chat.Messages.Count);
+        Assert.AreEqual("m202", chat.Messages[0].Id);
+        Assert.AreEqual("m401", chat.Messages[^1].Id);
+    }
+
     /// <summary>
     /// A bubble's time is hidden until the bubble is clicked, and a second click hides it again.
     /// </summary>

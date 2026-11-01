@@ -171,7 +171,7 @@ public sealed partial class MediaTests
         void AssertHeightCapped()
         {
             int width   = int.Parse(ReadNote(note), System.Globalization.CultureInfo.InvariantCulture);
-            long height =(long)width * 20000 / 100;
+            long height = (long)width * 20000 / 100;
             Assert.IsTrue(width > 0 && height <= 8192, $"The 100 x 20000 photo decoded {width} px wide, {height} px tall.");
         }
     }
