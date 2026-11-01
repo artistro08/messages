@@ -8,6 +8,7 @@ using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.Foundation;
 using Windows.Storage.Streams;
@@ -47,8 +48,10 @@ namespace GMessages.App.Views.Controls;
 /// decelerate curve) while the backdrop and toolbar fade in; closing by Escape, Close or a click beside the photo
 /// shrinks it back (200 ms, accelerate) while they fade out (owner, Plan 8). A uniform Composition scale and a
 /// translation on the stage that holds both, with an inset clip that opens from the bubble's crop to the whole photo,
-/// so a cropped photo reveals itself undistorted and no layout moves. With Windows' animation effects off it shows and hides at once. A test
-/// run notes <c>Grew</c>, <c>Shown</c> (no bubble to grow from) or <c>Shrank</c> in <c>viewer-motion.txt</c>.
+/// so a cropped photo reveals itself undistorted and no layout moves. With Windows' animation effects off it shows and hides at once. A
+/// video grows and shrinks as the bubble's still frame (a playing video's picture doesn't scale smoothly); its player
+/// takes over once it plays. A test run notes <c>Grew</c>, <c>GrewStill</c>, <c>Player</c>, <c>Shown</c> (no bubble to
+/// grow from) or <c>Shrank</c> in <c>viewer-motion.txt</c>.
 /// </para>
 /// <para>
 /// A video (<see cref="ShowVideoAsync"/>) plays in place of the photo (<c>PhotoViewer.Video</c>) with Windows' full
@@ -83,8 +86,9 @@ public sealed partial class PhotoViewer : UserControl
     // Way: A Clicked Photo Gets No Focus Ring Back, Even When Escape Closes The Viewer
     private FocusState _returnState = FocusState.Programmatic;
 
-    // The Playing Video, While One Shows
+    // The Playing Video, While One Shows, And The Still It Grows And Shrinks As
     private VideoPlayback? _video;
+    private ImageSource? _poster;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PhotoViewer"/> class, hidden.
@@ -189,7 +193,7 @@ public sealed partial class PhotoViewer : UserControl
             if (ReferenceEquals(part, _part) && !_closing)
             {
                 PhotoImage.Source = image;
-                Grow(PhotoImage, null);
+                _ = Grow(PhotoImage, null);
             }
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -216,13 +220,21 @@ public sealed partial class PhotoViewer : UserControl
     /// <param name="returnFocus">The video's frame in the chat, focused again on close.</param>
     /// <param name="returnState">How the clicked button had focus, so closing gives it back the same way.</param>
     /// <param name="start">Where to start playing.</param>
+    /// <param name="frame">The bubble's still frame, which grows out of the bubble while the video loads (the player
+    /// shows once it plays); null when none showed, and the player itself then grows once it is in.</param>
     /// <returns>A task that ends once the video plays, or failed.</returns>
-    public async Task ShowVideoAsync(MediaPart part, string messageId, string name, Control returnFocus, FocusState returnState, TimeSpan start)
+    public async Task ShowVideoAsync(MediaPart part, string messageId, string name, Control returnFocus, FocusState returnState, TimeSpan start, ImageSource? frame)
     {
         ArgumentNullException.ThrowIfNull(part);
         ArgumentNullException.ThrowIfNull(returnFocus);
 
         Open(part, messageId, returnFocus, returnState, isVideo: true);
+
+        // The Still Grows At Once, Over The Player, Which Stays Clear Until It Plays
+        bool poster = frame is not null && Ui.AnimationsEnabled;
+        _poster     = poster ? frame : null;
+        ShowPoster(_poster);
+        Task grown = poster ? Grow(VideoPoster, null, "GrewStill") : Task.CompletedTask;
         try
         {
             if ((Application.Current as App)?.Media is not { } media)
@@ -236,10 +248,36 @@ public sealed partial class PhotoViewer : UserControl
                 return;
             }
 
-            _video = new VideoPlayback(DispatcherQueue, bytes, part.Mime, start, compact: false, "PhotoViewer.Video", name);
-            VideoHost.Children.Add(_video.Element);
-            Grow(VideoHost, part);
-            _video.Player.Play();
+            VideoPlayback video = new(DispatcherQueue, bytes, part.Mime, start, compact: false, "PhotoViewer.Video", name);
+            _video              = video;
+            VideoHost.Children.Add(video.Element);
+            if (!poster)
+            {
+                _ = Grow(VideoHost, part);
+            }
+
+            await grown;
+            if (!ReferenceEquals(video, _video) || _closing)
+            {
+                return;
+            }
+
+            // The Player Takes Over From The Still Once Its Picture Moves
+            video.Player.PlaybackSession.PlaybackStateChanged += (session, _) =>
+            {
+                if (session.PlaybackState == Windows.Media.Playback.MediaPlaybackState.Playing)
+                {
+                    DispatcherQueue.TryEnqueue(() =>
+                    {
+                        if (ReferenceEquals(video, _video) && !_closing && VideoPoster.Source is not null)
+                        {
+                            ShowPoster(null);
+                            TestHooks.NoteState("viewer-motion", "Player");
+                        }
+                    });
+                }
+            };
+            video.Player.Play();
             DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => _video?.Element.Focus(FocusState.Programmatic));
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -340,12 +378,12 @@ public sealed partial class PhotoViewer : UserControl
     // =========================================================================
 
     // The Photo Or Video Is In: The Stage Shows, Growing From The Bubble's Place, Size And Crop Into Its Own (See Morph).
-    // Without The Bubble, Or With Animations Off, It Just Shows
-    private void Grow(FrameworkElement target, MediaPart? video)
+    // Without The Bubble, Or With Animations Off, It Just Shows. The Task Ends When The Growth Has
+    private Task Grow(FrameworkElement target, MediaPart? video, string grew = "Grew")
     {
         if (!Ui.AnimationsEnabled)
         {
-            return;
+            return Task.CompletedTask;
         }
 
         Visual visual  = ElementCompositionPreview.GetElementVisual(Stage);
@@ -354,11 +392,24 @@ public sealed partial class PhotoViewer : UserControl
         if (BubbleRect() is not { } from || ShownRect(target, video, from) is not { } to)
         {
             TestHooks.NoteState("viewer-motion", "Shown");
-            return;
+            return Task.CompletedTask;
         }
 
+        var ended                   = new TaskCompletionSource();
+        CompositionScopedBatch done = visual.Compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
         Morph(visual, from, to, growing: true, GrowTime, Decelerate());
-        TestHooks.NoteState("viewer-motion", "Grew");
+        done.End();
+        done.Completed += (_, _) => DispatcherQueue.TryEnqueue(() => ended.TrySetResult());
+        TestHooks.NoteState("viewer-motion", grew);
+        return ended.Task;
+    }
+
+    // The Video's Still Over Its Player (Which Is Clear Meanwhile), Or Gone With The Player Shown
+    private void ShowPoster(ImageSource? frame)
+    {
+        VideoPoster.Source     = frame;
+        VideoPoster.Visibility = frame is null ? Visibility.Collapsed : Visibility.Visible;
+        VideoHost.Opacity      = frame is null ? 1 : 0;
     }
 
     // Shrinks The Stage Back Into The Bubble While The Backdrop And Toolbar Fade Out, Then Hides The Viewer. False (Nothing
@@ -374,6 +425,12 @@ public sealed partial class PhotoViewer : UserControl
         _closing         = true;
         IsHitTestVisible = false;
         _video?.Player.Pause();
+
+        // A Video Shrinks As Its Still, Over The Paused Player, As Smoothly As It Grew
+        if (_video is not null && _poster is { } still)
+        {
+            ShowPoster(still);
+        }
 
         // The Batch Ends Once Every Animation Started Inside It Has
         int run                     = ++_closeRun;
@@ -531,6 +588,8 @@ public sealed partial class PhotoViewer : UserControl
     // Stops The Viewer's Video And Lets Go Of Its Player And Bytes
     private void StopVideo()
     {
+        _poster = null;
+        ShowPoster(null);
         if (_video is not { } video)
         {
             return;

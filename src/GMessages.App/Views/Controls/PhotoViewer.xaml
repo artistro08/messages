@@ -167,6 +167,19 @@
                 x:Name="VideoHost"
                 Margin="24"
                 Visibility="Collapsed" />
+
+            <!-- Video Still: the bubble's frame, fitted where the video will show. It grows out of the bubble (a still
+                 image grows as smoothly as a photo; a playing video doesn't), then the player takes over once it plays.
+                 On close it is back over the player for the shrink -->
+            <Image
+                x:Name="VideoPoster"
+                Margin="24"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                AutomationProperties.AccessibilityView="Raw"
+                IsHitTestVisible="False"
+                Stretch="Uniform"
+                Visibility="Collapsed" />
         </Grid>
         <!-- /Stage -->
     </Grid>
