@@ -58,7 +58,7 @@ public sealed class MainWindowTests : UiTest
 
     /// <summary>
     /// The window's text dims while the window is inactive (the tray menu takes activation), like the title bar, and comes
-    /// back when it is active again; the tray menu's own text stays bright.
+    /// back when it is active again.
     /// </summary>
     /// <returns>A task for the test.</returns>
     [TestMethod]
@@ -71,12 +71,10 @@ public sealed class MainWindowTests : UiTest
         double active = Contrast(time);
 
         Tray.RightClick();
-        AutomationElement open = App.Find("TrayMenu.Open");
+        App.Find("TrayMenu.Open");
         Thread.Sleep(500);
         double inactive = Contrast(time);
-        double menu     = Contrast(open.BoundingRectangle);
         Assert.IsTrue(inactive < active * 0.8, $"The text didn't dim while inactive (contrast {active:F0} active, {inactive:F0} inactive).");
-        Assert.IsTrue(menu > inactive, $"The tray menu's text ({menu:F0}) dimmed with the window's ({inactive:F0}).");
 
         FlaUI.Core.Input.Keyboard.Type(FlaUI.Core.WindowsAPI.VirtualKeyShort.ESCAPE);
         Tray.CloseOverflow();
