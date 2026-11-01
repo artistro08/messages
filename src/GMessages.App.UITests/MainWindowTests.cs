@@ -38,6 +38,45 @@ public sealed class MainWindowTests : UiTest
     }
 
     /// <summary>
+    /// An unread row's snippet and time are fully bright (primary text): Ann's unread time and snippet stand out from
+    /// their background more than read Team's secondary ones.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task UnreadRow_SnippetAndTimeArePrimaryText()
+    {
+        await OpenMainAsync();
+        WaitForRows(InboxRows);
+
+        foreach (string part in (ReadOnlySpan<string>)["Row.Time.", "Row.Snippet."])
+        {
+            double unread = Contrast(App.Find(part + "c-ann").BoundingRectangle);
+            double read   = Contrast(App.Find(part + "c-team").BoundingRectangle);
+            Assert.IsTrue(unread > read + 20, $"{part} of the unread row (contrast {unread:F0}) isn't brighter than the read row's ({read:F0}).");
+        }
+    }
+
+    // How Far A Text's Strongest Pixel Stands From The Background (Its Corner Pixel), 0 To 255
+    private static double Contrast(System.Drawing.Rectangle area)
+    {
+        using FlaUI.Core.Capturing.CaptureImage capture = FlaUI.Core.Capturing.Capture.Rectangle(area);
+        System.Drawing.Bitmap bitmap = capture.Bitmap;
+        double background            = Luma(bitmap.GetPixel(0, 0));
+        double most                  = 0;
+        for (int y = 0; y < bitmap.Height; y++)
+        {
+            for (int x = 0; x < bitmap.Width; x++)
+            {
+                most = Math.Max(most, Math.Abs(Luma(bitmap.GetPixel(x, y)) - background));
+            }
+        }
+
+        return most;
+    }
+
+    private static double Luma(System.Drawing.Color c) => (0.2126 * c.R) + (0.7152 * c.G) + (0.0722 * c.B);
+
+    /// <summary>
     /// A live low battery alert from the phone shows the warning banner, and the restored alert hides it.
     /// </summary>
     /// <returns>A task for the test.</returns>
