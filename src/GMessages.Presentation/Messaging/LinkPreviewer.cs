@@ -4,6 +4,8 @@ using System.Text;
 using System.Text.RegularExpressions;
 using GMessages.Protocol.Http;
 using Microsoft.Extensions.Logging;
+using Windows.Graphics.Imaging;
+using Windows.Storage.Streams;
 
 namespace GMessages.Presentation.Messaging;
 
@@ -21,8 +23,9 @@ namespace GMessages.Presentation.Messaging;
 /// </para>
 /// <para>
 /// A page must be <c>text/html</c> within <see cref="MaxPageBytes"/> and an image <c>image/*</c> within
-/// <see cref="MaxImageBytes"/>, each answered within <see cref="RequestTimeout"/>. Results, failures included, stay in
-/// an in-memory list of the last 50 links and are never written to disk. A failure is logged by its error type only,
+/// <see cref="MaxImageBytes"/>, each answered within <see cref="RequestTimeout"/>. An image wider than
+/// <see cref="MaxImageWidth"/> is kept scaled down (<see cref="ShrinkAsync"/>). Results, failures included, stay in an
+/// in-memory list of the last 50 links (fewer once their images pass 4 MB) and are never written to disk. A failure is logged by its error type only,
 /// never the link, title or description.
 /// </para>
 /// </remarks>
@@ -37,8 +40,12 @@ public sealed partial class LinkPreviewer : IDisposable
     /// <summary>How long each request (the page, then its image) may take.</summary>
     public static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(5);
 
-    // How Many Links' Results Are Kept In Memory
+    /// <summary>The widest a card image is kept, in pixels; a wider one is scaled down when fetched.</summary>
+    public const int MaxImageWidth = 480;
+
+    // How Many Links' Results Are Kept In Memory, And Their Images' Byte Budget
     private const int CacheSize = 50;
+    private const int CacheImageBytes = 4 * 1024 * 1024;
 
     // How Many Redirects A Request May Follow
     private const int MaxRedirects = 3;
@@ -413,24 +420,16 @@ public sealed partial class LinkPreviewer : IDisposable
             return null;
         }
 
-        // Most Recently Used Goes Last; The Oldest Drops Off The Front
+        // Most Recently Used Goes Last; The Oldest Drop Off The Front Past 50 Links Or 4 MB Of Images (Never The Newest)
         Task<LinkPreview?> fetch;
         lock (_cacheLock)
         {
-            if (_cache.Remove(url, out Task<LinkPreview?>? cached))
-            {
-                fetch = cached;
-            }
-            else
-            {
-                fetch = FetchAsync(url);
-                if (_cache.Count >= CacheSize)
-                {
-                    _cache.RemoveAt(0);
-                }
-            }
-
+            fetch = _cache.Remove(url, out Task<LinkPreview?>? cached) ? cached : FetchAsync(url);
             _cache.Add(url, fetch);
+            while (_cache.Count > 1 && (_cache.Count > CacheSize || CachedImageBytes() > CacheImageBytes))
+            {
+                _cache.RemoveAt(0);
+            }
         }
 
         try
@@ -472,7 +471,7 @@ public sealed partial class LinkPreviewer : IDisposable
             }
 
             byte[]? image = head.Image is { } image_url ? (await GetBodyAsync(image_url, "image/*", MaxImageBytes).ConfigureAwait(false))?.Body : null;
-            return new LinkPreview(url, head.Title, head.Site, image);
+            return new LinkPreview(url, head.Title, head.Site, image is null ? null : await ShrinkAsync(image).ConfigureAwait(false));
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -486,6 +485,76 @@ public sealed partial class LinkPreviewer : IDisposable
                 _fetchSlots.Release();
             }
         }
+    }
+
+    /// <summary>
+    /// Makes a card image small: one wider than <see cref="MaxImageWidth"/> is scaled down to it (EXIF orientation
+    /// applied) and saved as JPEG, or as PNG when it has any transparent pixel.
+    /// </summary>
+    /// <remarks>
+    /// One that is narrow enough keeps its own bytes, so a small GIF still moves. Bytes Windows can't read give no image,
+    /// as the card couldn't show them anyway.
+    /// </remarks>
+    /// <param name="bytes">The image as fetched.</param>
+    /// <returns>The image to keep, or null for none.</returns>
+    internal static async Task<byte[]?> ShrinkAsync(byte[] bytes)
+    {
+        try
+        {
+            using IRandomAccessStream input = new MemoryStream(bytes, writable: false).AsRandomAccessStream();
+            BitmapDecoder decoder           = await BitmapDecoder.CreateAsync(input);
+            if (decoder.OrientedPixelWidth <= MaxImageWidth)
+            {
+                return bytes;
+            }
+
+            // Scaled Before Orientation (Windows Scales, Then Flips And Rotates), So The Transform Takes The Stored Size And
+            // The Pixels Come Out Upright, Turned A Quarter When The Orientation Swaps The Sides
+            double scale  = (double)MaxImageWidth / decoder.OrientedPixelWidth;
+            var transform = new BitmapTransform
+            {
+                ScaledWidth       = Math.Max(1, (uint)Math.Round(decoder.PixelWidth * scale)),
+                ScaledHeight      = Math.Max(1, (uint)Math.Round(decoder.PixelHeight * scale)),
+                InterpolationMode = BitmapInterpolationMode.Fant,
+            };
+            PixelDataProvider data = await decoder.GetPixelDataAsync(BitmapPixelFormat.Bgra8, BitmapAlphaMode.Straight, transform, ExifOrientationMode.RespectExifOrientation, ColorManagementMode.ColorManageToSRgb);
+            byte[] pixels          = data.DetachPixelData();
+            (uint width, uint height) = decoder.OrientedPixelWidth == decoder.PixelWidth
+                ? (transform.ScaledWidth, transform.ScaledHeight)
+                : (transform.ScaledHeight, transform.ScaledWidth);
+
+            // Any Pixel Not Fully Opaque Keeps PNG; Else JPEG
+            bool transparent = false;
+            for (int i = 3; i < pixels.Length && !transparent; i += 4)
+            {
+                transparent = pixels[i] != 255;
+            }
+
+            using var output      = new MemoryStream();
+            BitmapEncoder encoder = await BitmapEncoder.CreateAsync(transparent ? BitmapEncoder.PngEncoderId : BitmapEncoder.JpegEncoderId, output.AsRandomAccessStream());
+            encoder.SetPixelData(BitmapPixelFormat.Bgra8, transparent ? BitmapAlphaMode.Straight : BitmapAlphaMode.Ignore, width, height, 96, 96, pixels);
+            await encoder.FlushAsync();
+            return output.ToArray();
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            return null;
+        }
+    }
+
+    // The Bytes Of The Cached Previews' Images (Fetches Still Running Count As None). Called Under The Cache Lock
+    private long CachedImageBytes()
+    {
+        long total = 0;
+        foreach (Task<LinkPreview?> fetch in _cache.Values)
+        {
+            if (fetch.IsCompletedSuccessfully && fetch.Result?.Image is { } image)
+            {
+                total += image.Length;
+            }
+        }
+
+        return total;
     }
 
     // One GET Within The Time And Size Limits, Of The Wanted Type. Every Hop, Redirects Included, Must Be Allowed And

@@ -3,6 +3,7 @@ using System.Text;
 using GMessages.Presentation.Messaging;
 using GMessages.Protocol.Http;
 using GMessages.Protocol.Tests.Fakes;
+using Windows.Graphics.Imaging;
 
 namespace GMessages.Presentation.Tests.Messaging;
 
@@ -245,17 +246,40 @@ public sealed class LinkPreviewerTests
     // FETCHING
     // =========================================================================
 
+    // A Page Whose Card Image Is The Given Bytes
+    private static FakeHttpHandler ImagePage(byte[] png) => new()
+    {
+        Respond = (_, r) => r.Url.EndsWith(".png", StringComparison.Ordinal)
+            ? FakeHttpHandler.Response(HttpStatusCode.OK, "image/png", png)
+            : HtmlResponse(Html.Replace("</head>", "<meta property=\"og:image\" content=\"https://cdn.example.com/c.png\"></head>", StringComparison.Ordinal)),
+    };
+
+    // A PNG Of The Given Size, Opaque Or Half See-Through
+    private static async Task<byte[]> MakePngAsync(uint width, uint height, byte alpha)
+    {
+        byte[] pixels = new byte[width * height * 4];
+        for (int i = 0; i < pixels.Length; i += 4)
+        {
+            (pixels[i], pixels[i + 1], pixels[i + 2], pixels[i + 3]) = ((byte)(i % 251), 80, 160, alpha);
+        }
+
+        using var output      = new MemoryStream();
+        BitmapEncoder encoder = await BitmapEncoder.CreateAsync(BitmapEncoder.PngEncoderId, output.AsRandomAccessStream());
+        encoder.SetPixelData(BitmapPixelFormat.Bgra8, BitmapAlphaMode.Straight, width, height, 96, 96, pixels);
+        await encoder.FlushAsync();
+        return output.ToArray();
+    }
+
+    // The Image's Decoder, To Read Its Size And Format
+    private static async Task<BitmapDecoder> DecodeAsync(byte[] bytes) =>
+        await BitmapDecoder.CreateAsync(new MemoryStream(bytes, writable: false).AsRandomAccessStream());
+
     [TestMethod]
     public async Task Get_Html_GivesPreview_WithImage()
     {
-        byte[] png   = [1, 2, 3];
-        var handler  = new FakeHttpHandler
-        {
-            Respond = (_, r) => r.Url.EndsWith(".png", StringComparison.Ordinal)
-                ? FakeHttpHandler.Response(HttpStatusCode.OK, "image/png", png)
-                : HtmlResponse(Html.Replace("</head>", "<meta property=\"og:image\" content=\"https://cdn.example.com/c.png\"></head>", StringComparison.Ordinal)),
-        };
-        using var previewer = new LinkPreviewer(handler, false, new CollectingLogger(), TestProxy.Direct);
+        byte[] png              = await MakePngAsync(40, 20, 255);
+        FakeHttpHandler handler = ImagePage(png);
+        using var previewer     = new LinkPreviewer(handler, false, new CollectingLogger(), TestProxy.Direct);
 
         LinkPreview? preview = await previewer.GetAsync(Page, CancellationToken.None);
 
@@ -266,6 +290,39 @@ public sealed class LinkPreviewerTests
         CollectionAssert.AreEqual(png, preview.Image);
         Assert.AreEqual(GmConstants.UserAgent, handler.Requests[0].Headers["User-Agent"]);
         Assert.IsFalse(handler.Requests[0].Headers.ContainsKey("Cookie"));
+    }
+
+    /// <summary>
+    /// A wide opaque card image is kept at most 480 pixels wide, as JPEG, with its shape.
+    /// </summary>
+    [TestMethod]
+    public async Task Preview_LargeImage_StoredAtMost480Wide()
+    {
+        using var previewer = new LinkPreviewer(ImagePage(await MakePngAsync(1600, 800, 255)), false, new CollectingLogger(), TestProxy.Direct);
+
+        LinkPreview? preview = await previewer.GetAsync(Page, CancellationToken.None);
+
+        Assert.IsNotNull(preview?.Image);
+        BitmapDecoder decoder = await DecodeAsync(preview.Image);
+        Assert.AreEqual((uint)LinkPreviewer.MaxImageWidth, decoder.PixelWidth);
+        Assert.AreEqual(240u, decoder.PixelHeight);
+        Assert.AreEqual(BitmapDecoder.JpegDecoderId, decoder.DecoderInformation.CodecId);
+    }
+
+    /// <summary>
+    /// A wide card image with transparency is scaled down but stays PNG.
+    /// </summary>
+    [TestMethod]
+    public async Task Preview_TransparentPng_StaysPng()
+    {
+        using var previewer = new LinkPreviewer(ImagePage(await MakePngAsync(1600, 800, 128)), false, new CollectingLogger(), TestProxy.Direct);
+
+        LinkPreview? preview = await previewer.GetAsync(Page, CancellationToken.None);
+
+        Assert.IsNotNull(preview?.Image);
+        BitmapDecoder decoder = await DecodeAsync(preview.Image);
+        Assert.AreEqual((uint)LinkPreviewer.MaxImageWidth, decoder.PixelWidth);
+        Assert.AreEqual(BitmapDecoder.PngDecoderId, decoder.DecoderInformation.CodecId);
     }
 
     [TestMethod]

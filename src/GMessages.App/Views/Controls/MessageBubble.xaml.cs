@@ -186,8 +186,8 @@ public sealed partial class MessageBubble : UserControl
     // Whether The Bubble Took The Strip When Last Seen, So A Change (Sending To Sent) Shows Or Hides It Under The Pointer
     private bool _canAct;
 
-    // The Image Bytes The Card Shows (Or Is Decoding), So A Change Decodes Once
-    private byte[]? _previewImage;
+    // The Preview The Card Shows (Or Is Decoding), So A Change Decodes Once; Only Its Decoded Image Is Held Here
+    private LinkPreview? _previewShown;
 
     // A Click On A Link In The Text Also Reaches The Bubble's Back, Which Must Not Toggle The Time For It. Its Click And
     // The Back's Tap Come In Either Order, So The Tap Waits A Turn
@@ -1128,14 +1128,14 @@ public sealed partial class MessageBubble : UserControl
     // Its Image With It
     private async void ShowPreviewImage()
     {
-        byte[]? bytes = Bubble?.Preview?.Image;
-        if (ReferenceEquals(bytes, _previewImage))
+        LinkPreview? preview = Bubble?.Preview;
+        if (ReferenceEquals(preview, _previewShown))
         {
             return;
         }
 
-        _previewImage = bytes;
-        if (Bubble?.Preview is null)
+        _previewShown = preview;
+        if (preview is null)
         {
             return;
         }
@@ -1143,14 +1143,14 @@ public sealed partial class MessageBubble : UserControl
         FindName(nameof(Preview));
         PreviewImage.Source     = null;
         PreviewImage.Visibility = Visibility.Collapsed;
-        if (bytes is null)
+        if (preview.Image is not { } bytes)
         {
             return;
         }
 
         // A Recycled Container May Have Moved On While Decoding
         ImageSource? image = await Avatar.ToImageAsync(bytes, PreviewImageWidth);
-        if (image is null || !ReferenceEquals(bytes, _previewImage))
+        if (image is null || !ReferenceEquals(preview, _previewShown))
         {
             return;
         }
@@ -1236,7 +1236,7 @@ public sealed partial class MessageBubble : UserControl
         }
 
         // Preview Card: Its Image
-        _previewImage = null;
+        _previewShown = null;
         if (PreviewImage is not null)
         {
             PreviewImage.Source     = null;
