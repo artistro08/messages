@@ -616,23 +616,24 @@ public sealed class ChatStoreTests
     }
 
     /// <summary>
-    /// A message that arrived before the drop is still not new when the phone echoes it after.
+    /// A message that was in a dropped page is still not new when the phone echoes it after, even when it is not in the
+    /// notified ring (a page loaded it; the ring never saw it).
     /// </summary>
     [TestMethod]
     public async Task DropPages_KeepsNotificationDeDup()
     {
         using var rig = new Rig(withDatabase: true);
         await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1")));
+        rig.Client.MessagesPage = PageOf(Msg("m1", "c1"));
+        await rig.Store.LoadMessagesAsync("c1", null, Ct);
         var got = new List<MessageArrivedEventArgs>();
         rig.Store.MessageArrived += (_, e) => got.Add(e);
-        await rig.Store.HandleEventAsync(new MessageReceived(Msg("m1", "c1"), false));
 
         await rig.Store.DropPagesAsync();
         await rig.Store.HandleEventAsync(new MessageReceived(Msg("m1", "c1"), false));
         await rig.Store.FlushAsync();
 
-        Assert.IsTrue(got[0].IsNew);
-        Assert.IsFalse(got[1].IsNew);
+        Assert.IsFalse(got.Single().IsNew);
     }
 
     [TestMethod]

@@ -78,6 +78,9 @@ public sealed partial class ChatStore : IDisposable
     private readonly ConcurrentDictionary<string, (string MessageId, string Label)> _liveMedia = new();
     private readonly OrderedDictionary<string, List<ChatMessage>> _pages = [];
 
+    // IDs Of The Messages In Pages DropPagesAsync Dropped, So IsCached Still Blocks A Second Toast For Them (Under _pagesLock)
+    private readonly HashSet<string> _droppedIds = [];
+
     // Newest Encryption Tombstone Seen Per Conversation, With Its Time In Microseconds
     private readonly ConcurrentDictionary<string, (bool Encrypted, long At)> _encryption = new();
 
@@ -928,6 +931,7 @@ public sealed partial class ChatStore : IDisposable
         lock (_pagesLock)
         {
             _pages.Clear();
+            _droppedIds.Clear();
         }
 
         _media?.Clear();
@@ -1230,8 +1234,9 @@ public sealed partial class ChatStore : IDisposable
         lock (_pagesLock)
         {
             return message.Id.Length > 0
-                && _pages.TryGetValue(message.ConversationId, out List<ChatMessage>? page)
-                && page.Exists(m => m.Id == message.Id);
+                && (_droppedIds.Contains(message.Id)
+                    || (_pages.TryGetValue(message.ConversationId, out List<ChatMessage>? page)
+                        && page.Exists(m => m.Id == message.Id)));
         }
     }
 
@@ -1296,6 +1301,7 @@ public sealed partial class ChatStore : IDisposable
             {
                 foreach (string id in _pages.Where(p => !p.Value.Exists(m => m.Id.Length == 0 || m.IsFailed)).Select(p => p.Key).ToList())
                 {
+                    _droppedIds.UnionWith(_pages[id].Where(m => m.Id.Length > 0).Select(m => m.Id));
                     _pages.Remove(id);
                 }
             }
