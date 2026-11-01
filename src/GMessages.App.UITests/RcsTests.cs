@@ -947,12 +947,12 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// Clicking a reply's quote jumps to the quoted message, scrolled up out of view by newer ones, and pulses it; Enter
-    /// on the focused quote does the same.
+    /// Clicking a reply's quote scrolls smoothly to the quoted message, scrolled up out of view by newer ones, with no
+    /// pulse; Enter on the focused quote does the same.
     /// </summary>
     /// <returns>A task for the test.</returns>
     [TestMethod]
-    public async Task ReplyQuote_Click_JumpsToTheOriginal_AndPulsesIt()
+    public async Task ReplyQuote_Click_ScrollsToTheOriginal()
     {
         await OpenChatAsync("Row.c-ann");
         string original = Find("c-ann", AnnFirst).MessageID;
@@ -966,12 +966,13 @@ public sealed class RcsTests : UiTest
         Message reply = Server.Phone.PushIncoming("c-ann", "Sure", replyToId: original);
         App.WaitForText("Quote." + reply.MessageID, AnnFirst);
 
-        string pulse  = Path.Combine(App.DataDir, "pulse.txt");
+        string pulse  = Path.Combine(App.DataDir, "reply-jump.txt");
         string scroll = Path.Combine(App.DataDir, "chat-scroll.txt");
         Thread.Sleep(2000);
         File.Delete(scroll);
         App.Find("QuoteJump." + reply.MessageID).Click();
-        Wait.Until(() => File.Exists(pulse) && ReadPulse(pulse) == original, AppDriver.DefaultTimeout, () => "The quote's click never pulsed the original.");
+        Wait.Until(() => File.Exists(pulse) && ReadPulse(pulse) == original, AppDriver.DefaultTimeout, () => "The quote's click never landed on the original.");
+        Assert.IsFalse(File.Exists(Path.Combine(App.DataDir, "pulse.txt")), "The original pulsed.");
         System.Drawing.Rectangle list = App.Find("Chat.Messages").BoundingRectangle;
         System.Drawing.Rectangle shown = App.Find("Bubble." + original).BoundingRectangle;
         Assert.IsTrue(shown.Top >= list.Top && shown.Bottom <= list.Bottom, $"The original ({shown}) isn't in view ({list}).");
@@ -981,7 +982,7 @@ public sealed class RcsTests : UiTest
         File.Delete(pulse);
         App.Find("QuoteJump." + reply.MessageID).Focus();
         Keyboard.Type(VirtualKeyShort.ENTER);
-        Wait.Until(() => File.Exists(pulse) && ReadPulse(pulse) == original, AppDriver.DefaultTimeout, () => "Enter on the quote never pulsed the original.");
+        Wait.Until(() => File.Exists(pulse) && ReadPulse(pulse) == original, AppDriver.DefaultTimeout, () => "Enter on the quote never landed on the original.");
 
         static string ReadPulse(string path)
         {

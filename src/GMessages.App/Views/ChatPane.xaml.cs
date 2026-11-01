@@ -183,6 +183,11 @@ public sealed partial class ChatPane : UserControl
 
     private ScrollViewer? _scroller;
 
+    // The Rows' Panel Hands Focus Scrolls To OnBubbleBringIntoView (Hooked Once), Which Keeps A Shown Bubble This Far
+    // From The View's Edge
+    private const double BringMargin = 8;
+    private bool _bringHooked;
+
     // Pinned To The Newest Message (See ChatScroll.StaysPinned), And The Content And View Heights Last Seen
     private bool _pinned = true;
 
@@ -794,7 +799,48 @@ public sealed partial class ChatPane : UserControl
             MessageList.LayoutUpdated += OnMessageListLayoutUpdated;
         }
 
+        // Bubbles Brought Into View By Focus (Moving Between Messages With The Keyboard) Scroll Smoothly. Hooked On The
+        // Rows' Panel: The Request Reaches The Scroller Before The List, So It Must Be Taken Below It
+        if (_scroller is not null && !_bringHooked && MessageList.ItemsPanelRoot is { } panel)
+        {
+            _bringHooked                  = true;
+            panel.BringIntoViewRequested += OnBubbleBringIntoView;
+        }
+
         return _scroller;
+    }
+
+    // A Bubble Asked To Be Seen (It Took Focus): The Scroller's Own Jump Is Taken Over By The Shared Smooth Scroll, Just
+    // Far Enough To Show The Whole Bubble, 8 px Clear Of The Edge
+    private void OnBubbleBringIntoView(UIElement sender, BringIntoViewRequestedEventArgs args)
+    {
+        if (_scroller is not { } scroller || args.TargetElement is null)
+        {
+            return;
+        }
+
+        Windows.Foundation.Rect shown;
+        try
+        {
+            shown = args.TargetElement.TransformToVisual(scroller).TransformBounds(args.TargetRect);
+        }
+        catch (ArgumentException)
+        {
+            return;
+        }
+
+        args.Handled = true;
+        double offset = scroller.VerticalOffset;
+        if (shown.Top < 0)
+        {
+            offset += shown.Top - BringMargin;
+        }
+        else if (shown.Bottom > scroller.ViewportHeight)
+        {
+            offset += Math.Min(shown.Top - BringMargin, shown.Bottom - scroller.ViewportHeight + BringMargin);
+        }
+
+        _ = ScrollSmoothlyAsync(scroller, offset);
     }
 
     // A Page Finished Loading: Too Short To Scroll Means There Is No Top To Reach, So Load Older Here
@@ -1254,8 +1300,8 @@ public sealed partial class ChatPane : UserControl
         }
     }
 
-    // A Reply Quote's Click, Enter Or Space: Jump To The Quoted Message (Paging Older Until It Shows, Up To A Cap) And
-    // Pulse It. Not Found, Or The Chat Changed Meanwhile: Nothing Happens. Async Void Like A Click Handler, So A Failure
+    // A Reply Quote's Click, Enter Or Space: Scroll To The Quoted Message (Paging Older Until It Shows, Up To A Cap), With
+    // No Pulse (Owner, Plan 10). Not Found, Or The Chat Changed Meanwhile: Nothing Happens. Async Void Like A Click Handler, So A Failure
     // Reaches The App's Unhandled Error Log
     private async void OnQuoteRequested(object? sender, EventArgs e)
     {
@@ -1286,16 +1332,9 @@ public sealed partial class ChatPane : UserControl
             scroller.ChangeView(null, from, null, true);
             MessageList.UpdateLayout();
             await ScrollSmoothlyAsync(scroller, offset);
-            if (Chat != chat)
-            {
-                return;
-            }
         }
 
-        if (MessageList.ContainerFromItem(target) is { } shown && FindPart<MessageBubble>(shown, "BubbleView") is { } view)
-        {
-            view.Pulse();
-        }
+        TestHooks.NoteState("reply-jump", target.Id);
     }
 
     // The Reply Chip's Close: Its Button Goes With It, So Focus Goes Back To The Message Box
