@@ -63,7 +63,7 @@
             Orientation="Horizontal"
             Spacing="4">
 
-            <!-- Close: a back arrow on a round, softly filled plate, so it never reads as Windows' square caption close -->
+            <!-- Close: a plain back arrow, like the toolbar's other icons (owner) -->
             <Button
                 x:Name="CloseButton"
                 Width="40"
@@ -73,18 +73,10 @@
                 Click="OnCloseClick"
                 Style="{StaticResource IconButtonStyle}"
                 ToolTipService.ToolTip="{x:Bind local:PhotoViewer.CloseText}">
-                <Grid>
-                    <Ellipse
-                        Width="36"
-                        Height="36"
-                        Fill="{ThemeResource ControlFillColorSecondaryBrush}"
-                        Stroke="{ThemeResource ControlStrokeColorDefaultBrush}"
-                        StrokeThickness="1" />
-                    <FontIcon
-                        x:Name="CloseIcon"
-                        FontSize="16"
-                        Glyph="&#xE72B;" />
-                </Grid>
+                <FontIcon
+                    x:Name="CloseIcon"
+                    FontSize="16"
+                    Glyph="&#xE72B;" />
             </Button>
 
             <!-- Open In Photos, Or Open In Default App For A Video: Named From Code On Each Open (A Bound Name Was Set Back

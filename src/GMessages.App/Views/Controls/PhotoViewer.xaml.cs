@@ -23,7 +23,7 @@ namespace GMessages.App.Views.Controls;
 /// <remarks>
 /// <para>
 /// The toolbar sits in the title bar row's top-left corner, Close first, then Open in Photos, Download and Save as
-/// (owner, Plan 8). Close is a back arrow on a round, softly filled plate, unlike Windows' caption close, and the icons
+/// (owner, Plan 8). Close is a plain back arrow with no plate or fill (owner, Plan 9), and the icons
 /// dim while the window is inactive (<see cref="ShowActive"/>). The window lets clicks through to the toolbar there,
 /// keeps the rest of the row dragging the window, and turns the caption buttons dark to read on the scrim, all while
 /// <see cref="IsOpenChanged"/> says the viewer is open (see <c>MainWindow</c>).
