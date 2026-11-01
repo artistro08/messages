@@ -60,7 +60,7 @@ public sealed class LifecycleTests : UiTest
     {
         await OpenMainAsync();
         App.Find("Row.c-ann").Patterns.SelectionItem.Pattern.Select();
-        App.WaitForText("Chat.Header", "Ann");
+        App.WaitForText("Chat.Header", "Ann Lee");
 
         var clock = Stopwatch.StartNew();
         await App.QuitAsync();
