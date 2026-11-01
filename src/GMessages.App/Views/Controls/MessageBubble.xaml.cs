@@ -1271,9 +1271,10 @@ public sealed partial class MessageBubble : UserControl
     /// </summary>
     internal static void StopInlineVideo() => s_playingVideo?.ReleaseVideo();
 
-    // Another Video: Stopped, Its Frame (The Thumbnail) Loaded When One Came. The Echo Of One Sent From Here Keeps What
-    // Shows, Its Bytes Seeded Under The New Media ID
-    private async void ShowVideo()
+    // Another Video: Stopped, On The Plain Fill With Its Play Button Until Its Frame Loads (The Phone's Thumbnail, Else
+    // One Made Here; see VideoStill). The Echo Of One Sent From Here Keeps What Shows, Its Bytes Seeded Under The New
+    // Media ID; Without A Frame Yet, It Loads One
+    private void ShowVideo()
     {
         MediaPart? part = Bubble is { HasVideo: true } bubble ? bubble.Media : null;
         if (SameMedia(part, _videoPart) && ReferenceEquals(Bubble, _videoBubble))
@@ -1284,6 +1285,11 @@ public sealed partial class MessageBubble : UserControl
         if (part is not null && Bubble is not null && ReferenceEquals(Bubble, _videoBubble) && KeepSentMedia(_videoPart, part))
         {
             _videoPart = part;
+            if (VideoThumb.Background is null)
+            {
+                LoadVideoFrame(part);
+            }
+
             return;
         }
 
@@ -1293,24 +1299,39 @@ public sealed partial class MessageBubble : UserControl
         VideoThumb.Background = null;
         ShowVideoNote(null, string.Empty);
         SizePhoto();
-        if (part is not { ThumbnailId.Length: > 0 } || (Application.Current as App)?.Media is not { } media)
+        if (part is not null)
+        {
+            LoadVideoFrame(part);
+        }
+    }
+
+    // The Video's Frame, In The Background; One That Won't Load Leaves The Plain Fill. The Play Button's Item Status Says
+    // Which Shows, For The Tests: Pending, Then Frame Or NoFrame
+    private async void LoadVideoFrame(MediaPart part)
+    {
+        TestHooks.ShowState(VideoPlay, "Pending");
+        if (part.IsPending || (Application.Current as App)?.Media is not { } media)
         {
             return;
         }
 
-        // A Frame That Won't Load Leaves The Plain Fill
         try
         {
-            byte[] bytes      = await media.GetAsync(part, thumbnail: true, CancellationToken.None);
+            byte[] bytes      = await VideoStill.GetAsync(media, part);
             ImageSource image = await Avatar.ToImageAsync(bytes, (int)Math.Ceiling(MaxBubbleWidth)) ?? throw new InvalidDataException();
             if (ReferenceEquals(part, _videoPart))
             {
                 VideoThumb.Background = new ImageBrush { ImageSource = image, Stretch = Stretch.UniformToFill };
+                TestHooks.ShowState(VideoPlay, "Frame");
             }
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             AppLog.MediaFailed(App.ShellLog, "thumbnail", Bubble?.Id ?? string.Empty, ex.GetType().Name);
+            if (ReferenceEquals(part, _videoPart))
+            {
+                TestHooks.ShowState(VideoPlay, "NoFrame");
+            }
         }
     }
 
