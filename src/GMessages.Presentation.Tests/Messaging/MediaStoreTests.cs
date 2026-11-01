@@ -221,6 +221,22 @@ public sealed class MediaStoreTests
     }
 
     /// <summary>
+    /// ClearMemory empties the memory cache: the next ask downloads again.
+    /// </summary>
+    [TestMethod]
+    public async Task ClearMemory_EmptiesCache()
+    {
+        using var rig           = new Rig();
+        rig.Client.Media["m-1"] = [9];
+        rig.Store.Seed("m-1", [4, 5]);
+
+        rig.Store.ClearMemory();
+
+        CollectionAssert.AreEqual(new byte[] { 9 }, await rig.Store.GetAsync(Part("m-1"), thumbnail: false, Ct));
+        Assert.HasCount(1, rig.Client.DownloadCalls);
+    }
+
+    /// <summary>
     /// A Clear (sign-out) during a save's download means no decrypted file is written.
     /// </summary>
     [TestMethod]

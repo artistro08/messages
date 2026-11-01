@@ -435,6 +435,19 @@ public sealed partial class MediaStore
     }
 
     /// <summary>
+    /// Drops the decrypted bytes held in memory (the window closed); temp files and downloads on their way are left alone.
+    /// </summary>
+    /// <remarks>A download still running may add one item back afterward.</remarks>
+    public void ClearMemory()
+    {
+        lock (_lock)
+        {
+            _cache.Clear();
+            _cachedBytes = 0;
+        }
+    }
+
+    /// <summary>
     /// Forgets every decrypted file: the memory cache, the downloads on their way, the full-size asks, and the temp folder.
     /// </summary>
     /// <remarks>

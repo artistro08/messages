@@ -572,6 +572,69 @@ public sealed class ChatStoreTests
         Assert.IsNull(await rig.Store.CachedMessagesAsync("c2"));
     }
 
+    /// <summary>
+    /// Dropping the pages loses nothing: the newest page reads back the same from the database.
+    /// </summary>
+    [TestMethod]
+    public async Task DropPages_ThenCachedMessages_ReadsSameFromDatabase()
+    {
+        using var rig = new Rig(withDatabase: true);
+        await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1")));
+        rig.Client.MessagesPage = PageOf([.. Enumerable.Range(1, 25).Select(i => Msg($"m{i:00}", "c1", ts: i * 1_000_000L))]);
+        await rig.Store.LoadMessagesAsync("c1", null, Ct);
+        string before = Ids(rig.Store.CachedMessages("c1"));
+
+        await rig.Store.DropPagesAsync();
+
+        Assert.IsNull(rig.Store.CachedMessages("c1"), "dropped from memory");
+        Assert.AreEqual(before, Ids(await rig.Store.CachedMessagesAsync("c1")));
+    }
+
+    /// <summary>
+    /// A pending send and a failed send exist only in memory, so their page survives the drop.
+    /// </summary>
+    [TestMethod]
+    public async Task DropPages_KeepsPendingAndFailedSends()
+    {
+        using var rig = new Rig(withDatabase: true);
+        await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1")));
+        await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c2")));
+        rig.Client.MessagesPage = PageOf(Msg("m1", "c1"));
+        await rig.Store.LoadMessagesAsync("c1", null, Ct);
+        await rig.Store.SendTextAsync("c1", "sending", "tmp-1", null, Ct);
+
+        rig.Client.MessagesPage = PageOf(Msg("m2", "c2"));
+        await rig.Store.LoadMessagesAsync("c2", null, Ct);
+        Message failed = Msg("m3", "c2", ts: 1_761_700_001_000_000);
+        failed.MessageStatus.Status = MessageStatusType.OutgoingFailedGeneric;
+        await rig.Store.HandleEventAsync(new MessageReceived(failed, false));
+
+        await rig.Store.DropPagesAsync();
+
+        Assert.AreEqual("m1,tmp-1", Ids(rig.Store.CachedMessages("c1")));
+        Assert.AreEqual("m2,m3", Ids(rig.Store.CachedMessages("c2")));
+    }
+
+    /// <summary>
+    /// A message that arrived before the drop is still not new when the phone echoes it after.
+    /// </summary>
+    [TestMethod]
+    public async Task DropPages_KeepsNotificationDeDup()
+    {
+        using var rig = new Rig(withDatabase: true);
+        await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1")));
+        var got = new List<MessageArrivedEventArgs>();
+        rig.Store.MessageArrived += (_, e) => got.Add(e);
+        await rig.Store.HandleEventAsync(new MessageReceived(Msg("m1", "c1"), false));
+
+        await rig.Store.DropPagesAsync();
+        await rig.Store.HandleEventAsync(new MessageReceived(Msg("m1", "c1"), false));
+        await rig.Store.FlushAsync();
+
+        Assert.IsTrue(got[0].IsNew);
+        Assert.IsFalse(got[1].IsNew);
+    }
+
     [TestMethod]
     public async Task LiveMessage_IsSaved()
     {

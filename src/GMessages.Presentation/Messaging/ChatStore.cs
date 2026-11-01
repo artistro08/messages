@@ -1272,6 +1272,41 @@ public sealed partial class ChatStore : IDisposable
     public Task FlushSavesAsync() => FlushAsync();
 
     /// <summary>
+    /// Drops the cached message pages (the window closed), after the queued saves are written, so the next open reads them
+    /// back from the database.
+    /// </summary>
+    /// <remarks>
+    /// A page holding a pending send (empty ID) or a failed one stays: those live only in memory. Never throws; a failure
+    /// is logged by type.
+    /// </remarks>
+    /// <returns>A task that completes when the pages are dropped.</returns>
+    public async Task DropPagesAsync()
+    {
+        // Without A Database Nothing Could Bring The Pages Back
+        if (_database is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await FlushAsync().ConfigureAwait(false);
+
+            lock (_pagesLock)
+            {
+                foreach (string id in _pages.Where(p => !p.Value.Exists(m => m.Id.Length == 0 || m.IsFailed)).Select(p => p.Key).ToList())
+                {
+                    _pages.Remove(id);
+                }
+            }
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            LogActionFailed("drop message pages", ex.GetType().Name);
+        }
+    }
+
+    /// <summary>
     /// Waits for every database call queued so far (tests).
     /// </summary>
     /// <returns>A task that completes when the queue is empty up to now.</returns>
