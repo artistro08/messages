@@ -365,6 +365,32 @@ public sealed class ChatStoreTests
         Assert.AreEqual("Image", raised[^1].SnippetMedia);
     }
 
+    /// <summary>
+    /// Opening a chat reads its saved page at once, never behind the saves still queued (a catch-up's hundreds): with the
+    /// queue held up, the saved page still comes back.
+    /// </summary>
+    [TestMethod]
+    public async Task SavedPage_ReadsAheadOfQueuedSaves()
+    {
+        using var rig = new Rig(withDatabase: true);
+        rig.Client.MessagesPage = PageOf(Msg("m1", "c1"), Msg("m2", "c1"));
+        await rig.Store.LoadMessagesAsync("c1", null, Ct);
+        await rig.Store.FlushAsync();
+
+        // A Fresh Store On The Same File (Nothing In Memory), Its Queue Held Up By A Slow Save
+        using var reopened = new ChatStore(rig.Controller, () => rig.Client, NullLogger.Instance, rig.Database, rig.Time, rig.Media);
+        using var gate     = new ManualResetEventSlim();
+        Task held          = reopened.Enqueue(_ => gate.Wait(TimeSpan.FromSeconds(10)));
+
+        Task<IReadOnlyList<ChatMessage>?> read = reopened.CachedMessagesAsync("c1");
+        Task first                             = await Task.WhenAny(read, Task.Delay(TimeSpan.FromSeconds(3)));
+        gate.Set();
+        await held;
+
+        Assert.AreSame(read, first, "The saved page waited behind the queued save.");
+        Assert.AreEqual("m1,m2", Ids(await read));
+    }
+
     private static Message MediaMsg(string id, MediaFormats format)
     {
         var m = new Message { MessageID = id, ConversationID = "c1", Timestamp = 1_761_700_000_000_000, MessageStatus = new MessageStatus { Status = MessageStatusType.OutgoingComplete } };
