@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using GMessages.Presentation.Messaging;
+using GMessages.Protocol;
 using GMessages.Protocol.Proto;
 
 namespace GMessages.Presentation.Main;

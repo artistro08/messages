@@ -394,7 +394,7 @@ internal sealed partial class DittoPinger(
         }
         catch (Exception ex)
         {
-            LogHandlerFailed(log, ex, evt.GetType().Name);
+            ProtocolLog.LogHandlerFailed(log, ex, evt.GetType().Name);
         }
     }
 
@@ -436,7 +436,4 @@ internal sealed partial class DittoPinger(
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Failed to send extra GET_UPDATES call: {Reason}")]
     private static partial void LogGapRequestFailed(ILogger logger, Exception exception, string reason);
-
-    [LoggerMessage(Level = LogLevel.Error, Message = "An event subscriber threw for {EventType}")]
-    private static partial void LogHandlerFailed(ILogger logger, Exception exception, string eventType);
 }

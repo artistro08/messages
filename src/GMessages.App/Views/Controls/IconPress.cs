@@ -71,7 +71,7 @@ public static class IconPress
     // Template's Root (Fluent's Button Template), Found By Name As AOT Requires
     private static void OnIsPressedChanged(DependencyObject sender, DependencyProperty dp)
     {
-        if (!Ui.AnimationsEnabled || ChatPane.FindPart<UIElement>(sender, "ContentPresenter") is not { } content)
+        if (!Ui.AnimationsEnabled || UiHelpers.FindPart<UIElement>(sender, "ContentPresenter") is not { } content)
         {
             return;
         }

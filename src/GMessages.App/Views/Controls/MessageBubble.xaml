@@ -3,6 +3,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:GMessages.App.Views.Controls"
+    xmlns:views="using:GMessages.App.Views"
     PointerCanceled="OnPointerLeft"
     PointerEntered="OnPointerEntered"
     PointerExited="OnPointerLeft">
@@ -265,7 +266,7 @@
                                             Style="{StaticResource CaptionTextBlockStyle}"
                                             Text="{x:Bind Bubble.QuoteSender, Mode=OneWay, FallbackValue=''}"
                                             TextTrimming="CharacterEllipsis"
-                                            Visibility="{x:Bind local:MessageBubble.ShownIfText(Bubble.QuoteSender), Mode=OneWay, FallbackValue=Collapsed}" />
+                                            Visibility="{x:Bind views:UiHelpers.ShownIfText(Bubble.QuoteSender), Mode=OneWay, FallbackValue=Collapsed}" />
                                         <TextBlock
                                             x:Name="QuoteText"
                                             AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Quote.', Bubble.PartKey), Mode=OneWay}"

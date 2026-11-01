@@ -10,6 +10,7 @@ using GMessages.Presentation.Messaging;
 using GMessages.Presentation.Notifications;
 using GMessages.Presentation.Pairing;
 using GMessages.Presentation.Settings;
+using GMessages.Protocol;
 using GMessages.Protocol.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Dispatching;
@@ -182,7 +183,7 @@ public partial class App : Application, IDisposable
         // Media: decrypted files for other apps go to the package's temp folder (Temp\Media under the data folder
         // when unpackaged); whatever the last run left there goes now
         var connection                    = _connection;
-        Func<IMessagingClient?> messaging = () => connection.Client is { } client ? new GmMessagingClient(client) : null;
+        Func<IMessagingClient?> messaging = () => connection.Client;
         string media_folder               = AppIdentity.IsPackaged
             ? Path.Combine(ApplicationData.Current.TemporaryFolder.Path, "Media")
             : Path.Combine(paths.DataFolder, "Temp", "Media");
@@ -246,7 +247,7 @@ public partial class App : Application, IDisposable
         _networkDebounce                         = dispatcher.CreateTimer();
         _networkDebounce.Interval                = TimeSpan.FromSeconds(3);
         _networkDebounce.IsRepeating             = false;
-        _networkDebounce.Tick                   += (_, _) => RunOnUi("network", c => c.NotifyNetworkAvailableAsync());
+        _networkDebounce.Tick                   += (_, _) => RunOnUi("network", c => c.ReconnectAsync());
         PowerManager.SystemSuspendStatusChanged += OnSystemSuspendStatusChanged;
         NetworkInformation.NetworkStatusChanged += OnNetworkStatusChanged;
 
@@ -624,7 +625,7 @@ public partial class App : Application, IDisposable
             return;
         }
 
-        RunOnUi("resume", c => c.NotifyResumedAsync());
+        RunOnUi("resume", c => c.ReconnectAsync());
     }
 
     // Raised on a background thread for any change. Any change with internet (including a Wi-Fi to Ethernet switch
@@ -797,7 +798,7 @@ public partial class App : Application, IDisposable
             step = Stopwatch.GetTimestamp();
             if (_store is not null)
             {
-                await _store.FlushSavesAsync().WaitAsync(SavesLimit);
+                await _store.FlushAsync().WaitAsync(SavesLimit);
                 saves_done = true;
             }
 

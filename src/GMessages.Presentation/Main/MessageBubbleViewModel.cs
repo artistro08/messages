@@ -299,7 +299,7 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     public bool MediaLabelIsLabel => Media is { } media && IsLabel(media);
 
     /// <summary>Gets the reply chip's text: the media label for a photo, video or file, else the text.</summary>
-    public string ReplyChipText => Media is { } media ? MediaLabel(media) : DisplayText;
+    public string ReplyChipText => Media is { } media ? ChatFormat.MediaLabel(media) : DisplayText;
 
     /// <summary>Gets the first web link in the text, or null.</summary>
     public Uri? LinkUrl { get; private set; }
@@ -624,14 +624,6 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         RaiseChanges(before);
     }
 
-    /// <summary>
-    /// Names a quoted or replied-to message's media: "GIF" for a GIF, "Image" for any other picture, "Video", the file's
-    /// name for a file, else its kind ("Voice message", "File").
-    /// </summary>
-    /// <param name="media">The media.</param>
-    /// <returns>The label.</returns>
-    public static string MediaLabel(MediaPart media) => ChatFormat.MediaLabel(media);
-
     // A Label (Italic), Not The Sender's File Name
     private static bool IsLabel(MediaPart media) => media is not { Kind: MessageKind.File, Name.Length: > 0 };
 
@@ -639,7 +631,7 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     // Its Thumbnail; The Same Media Again (A New Part From An Update) Changes Nothing
     internal void SetQuote(string sender, string text, MediaPart? media = null)
     {
-        string shown = media is null ? ChatFormat.WithColorEmoji(text) : MediaLabel(media);
+        string shown = media is null ? ChatFormat.WithColorEmoji(text) : ChatFormat.MediaLabel(media);
         bool same    = media is null ? QuoteMedia is null
             : QuoteMedia is { } q && q.MediaId == media.MediaId && q.ThumbnailId == media.ThumbnailId && q.Kind == media.Kind && q.Name == media.Name;
         if (QuoteSender == sender && QuoteText == shown && same)

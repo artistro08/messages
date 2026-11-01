@@ -156,7 +156,7 @@
                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                 MaxLines="1"
                                 Text="{x:Bind Subtitle}"
-                                Visibility="{x:Bind local:MainWindow.ShownIfText(Subtitle)}" />
+                                Visibility="{x:Bind local:UiHelpers.ShownIfText(Subtitle)}" />
                         </StackPanel>
                     </Grid>
                 </DataTemplate>

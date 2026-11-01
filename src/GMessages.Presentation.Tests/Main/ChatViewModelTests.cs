@@ -3,6 +3,7 @@ using GMessages.Presentation.Main;
 using GMessages.Presentation.Messaging;
 using GMessages.Presentation.Settings;
 using GMessages.Presentation.Tests.Messaging;
+using GMessages.Presentation.Tests.Settings;
 using GMessages.Protocol.Events;
 using GMessages.Protocol.Proto;
 using GMessages.Protocol.Rpc;

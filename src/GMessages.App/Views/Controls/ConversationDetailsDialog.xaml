@@ -5,6 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:GMessages.App.Views.Controls"
     xmlns:main="using:GMessages.Presentation.Main"
+    xmlns:views="using:GMessages.App.Views"
     AutomationProperties.AutomationId="Dialog.Details"
     DefaultButton="Close">
 
@@ -36,7 +37,7 @@
                                 MaxLines="1"
                                 Text="{x:Bind Number}"
                                 TextTrimming="CharacterEllipsis"
-                                Visibility="{x:Bind local:MessageBubble.ShownIfText(Number)}" />
+                                Visibility="{x:Bind views:UiHelpers.ShownIfText(Number)}" />
                         </StackPanel>
                     </Grid>
                 </DataTemplate>

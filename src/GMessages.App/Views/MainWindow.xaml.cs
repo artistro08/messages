@@ -464,11 +464,11 @@ public sealed partial class MainWindow : Window
         }
 
         // Back Is Made The First Time It Shows (Deferred In The Template), So The Layout Runs First. Found By Its Part Name:
-        // Native AOT Can Hand Template Parts Back As Base Types, So A Plain Cast Would Miss It (See ChatPane.FindPart)
+        // Native AOT Can Hand Template Parts Back As Base Types, So A Plain Cast Would Miss It (See UiHelpers.FindPart)
         if (_backButton is null)
         {
             AppTitleBar.UpdateLayout();
-            _backButton = ChatPane.FindPart<Button>(AppTitleBar, "PART_BackButton");
+            _backButton = UiHelpers.FindPart<Button>(AppTitleBar, "PART_BackButton");
         }
 
         if (_backButton is not null)
@@ -515,13 +515,6 @@ public sealed partial class MainWindow : Window
     /// <param name="hidden">True to hide.</param>
     /// <returns>Collapsed when set.</returns>
     public static Visibility HiddenIf(bool hidden) => hidden ? Visibility.Collapsed : Visibility.Visible;
-
-    /// <summary>
-    /// Shows an element only when there is text.
-    /// </summary>
-    /// <param name="text">The text, or null.</param>
-    /// <returns>Visible for non-empty text.</returns>
-    public static Visibility ShownIfText(string? text) => string.IsNullOrEmpty(text) ? Visibility.Collapsed : Visibility.Visible;
 
     // =========================================================================
     // EVENT HANDLERS
@@ -706,7 +699,7 @@ public sealed partial class MainWindow : Window
         // Matched By Name, Not By Type (The Native AOT Build Can Hand The Box Back As A Base Type). These Are The App's
         // Only Text Boxes: A New One Must Be Added Here
         bool focus_in_text_box = FocusManager.GetFocusedElement(RootGrid.XamlRoot) is FrameworkElement { Name: "DraftBox" or "QueryBox" };
-        if (ShortcutMap.Resolve(e.Key, IsDown(VirtualKey.Control), IsDown(VirtualKey.Shift), IsDown(VirtualKey.Menu), focus_in_text_box, IsDown(VirtualKey.RightMenu)) is { } command)
+        if (ShortcutMap.Resolve(e.Key, UiHelpers.IsDown(VirtualKey.Control), UiHelpers.IsDown(VirtualKey.Shift), UiHelpers.IsDown(VirtualKey.Menu), focus_in_text_box, UiHelpers.IsDown(VirtualKey.RightMenu)) is { } command)
         {
             e.Handled = Run(chats, command);
         }
@@ -730,7 +723,4 @@ public sealed partial class MainWindow : Window
                 return chats.Run(command);
         }
     }
-
-    private static bool IsDown(VirtualKey key) =>
-        InputKeyboardSource.GetKeyStateForCurrentThread(key).HasFlag(CoreVirtualKeyStates.Down);
 }

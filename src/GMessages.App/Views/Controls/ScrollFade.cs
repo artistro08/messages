@@ -104,14 +104,14 @@ internal sealed class ScrollFade
     /// <returns>The fade, or null when the scroller has no content presenter yet.</returns>
     public static ScrollFade? Attach(ScrollViewer scroller)
     {
-        if (ChatPane.FindPart<ScrollContentPresenter>(scroller, "ScrollContentPresenter") is not { } content
+        if (UiHelpers.FindPart<ScrollContentPresenter>(scroller, "ScrollContentPresenter") is not { } content
             || VisualTreeHelper.GetParent(content) is not { } parent_object)
         {
             return null;
         }
 
         // The Template's Unnamed Grid Holding The Content. A WinRT Cast, Not A Type Test: The Native AOT Build Hands It
-        // Back As A Base Type (See ChatPane.FindScroller)
+        // Back As A Base Type (See UiHelpers.FindScroller)
         Panel parent = parent_object.As<Panel>();
 
         // The Template's Empty Layer Right Above The Content (Below The Scroll Bars), Else The Scroller Itself

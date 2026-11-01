@@ -1,9 +1,9 @@
 using GMessages.Protocol.Proto;
 
-namespace GMessages.Presentation.Messaging;
+namespace GMessages.Protocol;
 
 /// <summary>
-/// The requests the chat code sends to the phone; <see cref="GmMessagingClient"/> forwards them to the protocol client.
+/// The requests the chat code sends to the phone; <see cref="GmClient"/> is the real implementation.
 /// </summary>
 /// <remarks>Exists so the chat code can be tested with a fake. Each member matches the <c>GmClient</c> method of the same name.</remarks>
 public interface IMessagingClient

@@ -1,4 +1,4 @@
-using GMessages.Presentation.Messaging;
+using GMessages.Protocol;
 using GMessages.Protocol.Proto;
 
 namespace GMessages.Presentation.Tests.Messaging;

@@ -573,7 +573,7 @@ public sealed partial class LongPollLoop(
         }
         catch (Exception ex)
         {
-            LogHandlerFailed(log, ex, evt.GetType().Name);
+            ProtocolLog.LogHandlerFailed(log, ex, evt.GetType().Name);
         }
     }
 
@@ -603,7 +603,4 @@ public sealed partial class LongPollLoop(
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Long polling ended with an error while stopping")]
     private static partial void LogStopError(ILogger logger, Exception exception);
-
-    [LoggerMessage(Level = LogLevel.Error, Message = "An event subscriber threw for {EventType}")]
-    private static partial void LogHandlerFailed(ILogger logger, Exception exception, string eventType);
 }

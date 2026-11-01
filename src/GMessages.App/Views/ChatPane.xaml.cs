@@ -823,7 +823,7 @@ public sealed partial class ChatPane : UserControl
     // Strong While Its Text Above Faded Out (Owner Report). The Scroller's Plain Clip Cuts Text And Fill On One Line
     private ScrollViewer? Scroller()
     {
-        if (_scroller is null && FindScroller(MessageList) is { } found)
+        if (_scroller is null && UiHelpers.FindScroller(MessageList) is { } found)
         {
             _scroller                  = found;
             _scroller.ViewChanged     += OnScrolled;
@@ -991,7 +991,7 @@ public sealed partial class ChatPane : UserControl
 
     // Enter Or Space On A Focused Bubble Shows Or Hides Its Time, Like A Click (Not On Its Retry Link, Which Has Focus Then).
     // The Row Is Matched As A ContentControl Holding A Bubble: In The Native AOT Build It Arrives As A ContentControl, Not
-    // A ListViewItem (See FindScroller)
+    // A ListViewItem (See UiHelpers.FindScroller)
     private void OnMessageListKeyDown(object sender, KeyRoutedEventArgs e)
     {
         if (e.Key is not (VirtualKey.Enter or VirtualKey.Space) || e.OriginalSource is not ContentControl { Content: MessageBubbleViewModel bubble })
@@ -1545,7 +1545,7 @@ public sealed partial class ChatPane : UserControl
 
     // Ctrl + V And Shift + Insert
     private static bool IsPasteKey(VirtualKey key) =>
-        (key == VirtualKey.V && IsDown(VirtualKey.Control)) || (key == VirtualKey.Insert && IsShiftDown());
+        (key == VirtualKey.V && UiHelpers.IsDown(VirtualKey.Control)) || (key == VirtualKey.Insert && IsShiftDown());
 
     // The Box's Own Paste (Its Menu's Paste, Or Any Paste The Keys Above Didn't Take): Media Becomes Chips, Text Is Left To It
     private void OnDraftPaste(object sender, TextControlPasteEventArgs e)
@@ -1825,7 +1825,7 @@ public sealed partial class ChatPane : UserControl
     }
 
     // The Bubble An Element Sits In, And The Link Preview Card It Sits On (Null Off The Card): Found Going Up By Name, As
-    // FindPart Goes Down (AOT Safe). A Link In The Text Isn't In The Visual Tree, So Its Text Stands In For It
+    // UiHelpers.FindPart Goes Down (AOT Safe). A Link In The Text Isn't In The Visual Tree, So Its Text Stands In For It
     private static (MessageBubble? View, FrameworkElement? Card) BubbleViewAround(DependencyObject element)
     {
         FrameworkElement? card = null;
@@ -1885,12 +1885,12 @@ public sealed partial class ChatPane : UserControl
     private static bool SendEmojiShortcut()
     {
         List<NativeMethods.KEYBOARD_INPUT> keys = [];
-        if (IsDown(VirtualKey.Control))
+        if (UiHelpers.IsDown(VirtualKey.Control))
         {
             keys.Add(Key(NativeMethods.VK_CONTROL, NativeMethods.KEYEVENTF_KEYUP));
         }
 
-        if (IsDown(VirtualKey.Shift))
+        if (UiHelpers.IsDown(VirtualKey.Shift))
         {
             keys.Add(Key(NativeMethods.VK_SHIFT, NativeMethods.KEYEVENTF_KEYUP));
         }
@@ -1984,9 +1984,9 @@ public sealed partial class ChatPane : UserControl
     private MessageBubble? FocusedBubbleView() =>
         XamlRoot is { } root && FocusManager.GetFocusedElement(root) is { } focused ? RowBubbleView(focused.As<DependencyObject>()) : null;
 
-    // A Row's Bubble, Or Null When The Element Isn't One Of The List's Rows. Found By Its Name (See FindPart)
+    // A Row's Bubble, Or Null When The Element Isn't One Of The List's Rows. Found By Its Name (See UiHelpers.FindPart)
     private MessageBubble? RowBubbleView(DependencyObject element) =>
-        MessageList.IndexFromContainer(element) >= 0 ? FindPart<MessageBubble>(element, "BubbleView") : null;
+        MessageList.IndexFromContainer(element) >= 0 ? UiHelpers.FindPart<MessageBubble>(element, "BubbleView") : null;
 
     // Opens The Reaction Picker Over A Bubble's Part; Not For A Bubble The Phone Hasn't Reported Yet (Nothing To React
     // To). The Bubble's Hover Strip Stays Until The Picker Closes
@@ -2345,44 +2345,5 @@ public sealed partial class ChatPane : UserControl
         ScrollToBottomButton.IsTabStop        = show;
     }
 
-    private static bool IsShiftDown() => IsDown(VirtualKey.Shift);
-
-    private static bool IsDown(VirtualKey key) =>
-        InputKeyboardSource.GetKeyStateForCurrentThread(key).HasFlag(CoreVirtualKeyStates.Down);
-
-    /// <summary>
-    /// Finds the first <see cref="ScrollViewer"/> under an element (a list's template holds one).
-    /// </summary>
-    /// <remarks>
-    /// In the Native AOT build, the visual tree hands a template's scroller back as a base type (a
-    /// <see cref="ContentControl"/>), so a plain <c>as ScrollViewer</c> finds nothing there. The template part is
-    /// found by its name instead and cast with a WinRT cast (a COM QueryInterface), which needs no type lookup.
-    /// </remarks>
-    /// <param name="root">The element to search under.</param>
-    /// <returns>The scroller, or null before the element has its template.</returns>
-    internal static ScrollViewer? FindScroller(DependencyObject root) => FindPart<ScrollViewer>(root, "ScrollViewer");
-
-    /// <summary>
-    /// Finds the first element of a type, or a template part of that name, under an element (AOT safe; see
-    /// <see cref="FindScroller"/>).
-    /// </summary>
-    /// <typeparam name="T">The element's type.</typeparam>
-    /// <param name="root">The element to search under.</param>
-    /// <param name="partName">The template part's name, such as "ScrollViewer".</param>
-    /// <returns>The element, or null when there is none (yet).</returns>
-    internal static T? FindPart<T>(DependencyObject root, string partName)
-        where T : class
-    {
-        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
-        {
-            DependencyObject child = VisualTreeHelper.GetChild(root, i);
-            T? part = child as T ?? (child is FrameworkElement element && element.Name == partName ? element.As<T>() : null);
-            if ((part ?? FindPart<T>(child, partName)) is { } found)
-            {
-                return found;
-            }
-        }
-
-        return null;
-    }
+    private static bool IsShiftDown() => UiHelpers.IsDown(VirtualKey.Shift);
 }

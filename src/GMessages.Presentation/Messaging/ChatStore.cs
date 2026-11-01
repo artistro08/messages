@@ -497,7 +497,7 @@ public sealed partial class ChatStore : IDisposable
 
         await SendCheckedAsync(client, request, ct).ConfigureAwait(false);
 
-        var pending = new ChatMessage(string.Empty, tmpId, conversationId, outgoing_id, DateTimeOffset.UtcNow, true, MessageKind.Text, text, MessageStatusType.OutgoingSending)
+        var pending = ChatMessage.Pending(tmpId, conversationId, outgoing_id, _time.GetUtcNow(), MessageKind.Text, text) with
         {
             ReplyToId = replyToId ?? string.Empty,
         };
@@ -616,7 +616,7 @@ public sealed partial class ChatStore : IDisposable
         await SendCheckedAsync(client, request, ct).ConfigureAwait(false);
         LogMediaSent(conversationId, media.Size);
 
-        var pending = new ChatMessage(string.Empty, tmpId, conversationId, conversation.DefaultOutgoingId, DateTimeOffset.UtcNow, true, MediaPart.KindOf(media.Format), caption_apart ? string.Empty : text, MessageStatusType.OutgoingSending)
+        var pending = ChatMessage.Pending(tmpId, conversationId, conversation.DefaultOutgoingId, _time.GetUtcNow(), MediaPart.KindOf(media.Format), caption_apart ? string.Empty : text) with
         {
             Media = MediaPart.From(media),
             IsRcs     = conversation.IsRcs,
@@ -1271,12 +1271,6 @@ public sealed partial class ChatStore : IDisposable
     private int Generation => Volatile.Read(ref _generation);
 
     /// <summary>
-    /// Waits for every save queued so far to be written (the app's quit, bounded by its own timeout).
-    /// </summary>
-    /// <returns>A task that completes when the queue is empty up to now.</returns>
-    public Task FlushSavesAsync() => FlushAsync();
-
-    /// <summary>
     /// Drops the cached message pages (the window closed), after the queued saves are written, so the next open reads them
     /// back from the database.
     /// </summary>
@@ -1313,10 +1307,10 @@ public sealed partial class ChatStore : IDisposable
     }
 
     /// <summary>
-    /// Waits for every database call queued so far (tests).
+    /// Waits for every save queued so far to be written (the app's quit, bounded by its own timeout; also tests).
     /// </summary>
     /// <returns>A task that completes when the queue is empty up to now.</returns>
-    internal Task FlushAsync()
+    public Task FlushAsync()
     {
         lock (_queueLock)
         {

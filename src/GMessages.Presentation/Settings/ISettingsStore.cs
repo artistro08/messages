@@ -18,27 +18,3 @@ public interface ISettingsStore
     /// <param name="value">New value, or null to remove.</param>
     void SetString(string key, string? value);
 }
-
-/// <summary>
-/// Settings kept in memory. Used by tests.
-/// </summary>
-public sealed class InMemorySettingsStore : ISettingsStore
-{
-    private readonly Dictionary<string, string> _values = [];
-
-    /// <inheritdoc />
-    public string? GetString(string key) => _values.GetValueOrDefault(key);
-
-    /// <inheritdoc />
-    public void SetString(string key, string? value)
-    {
-        // Remove On Null
-        if (value is null)
-        {
-            _values.Remove(key);
-            return;
-        }
-
-        _values[key] = value;
-    }
-}

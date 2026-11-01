@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using GMessages.Protocol;
 using Microsoft.Extensions.Logging;
 
 namespace GMessages.Presentation.Messaging;

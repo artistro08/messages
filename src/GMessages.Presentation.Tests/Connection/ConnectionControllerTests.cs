@@ -485,7 +485,7 @@ public sealed class ConnectionControllerTests
         await rig.Controller.StartAsync().WaitAsync(HangGuard);
         WaitUntil(() => rig.Controller.Client!.IsConnected && rig.Requests("/ReceiveMessages").Length == 1, "first connect");
 
-        await rig.Controller.NotifyResumedAsync().WaitAsync(HangGuard);
+        await rig.Controller.ReconnectAsync().WaitAsync(HangGuard);
 
         WaitUntil(() => rig.Requests("/ReceiveMessages").Length == 2, "reconnected");
         WaitUntil(() => rig.Controller.Client!.IsConnected, "connected again");
@@ -502,8 +502,8 @@ public sealed class ConnectionControllerTests
         await using var rig = new Rig();
         await rig.Controller.StartAsync().WaitAsync(HangGuard);
 
-        await rig.Controller.NotifyResumedAsync().WaitAsync(HangGuard);
-        await rig.Controller.NotifyNetworkAvailableAsync().WaitAsync(HangGuard);
+        await rig.Controller.ReconnectAsync().WaitAsync(HangGuard);
+        await rig.Controller.ReconnectAsync().WaitAsync(HangGuard);
 
         Assert.AreEqual(ConnectionState.NotPaired, rig.Controller.State);
         Assert.IsEmpty(rig.Handler.Requests);

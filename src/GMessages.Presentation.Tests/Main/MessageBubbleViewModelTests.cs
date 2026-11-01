@@ -361,7 +361,7 @@ public sealed class MessageBubbleViewModelTests
         var media  = new MediaPart("media-1", [], "thumb-1", [], [], name, 10, 40, 30, kind, mime);
         var bubble = new MessageBubbleViewModel(MediaMessage(kind) with { Text = string.Empty, Media = media });
 
-        Assert.AreEqual(label, MessageBubbleViewModel.MediaLabel(media));
+        Assert.AreEqual(label, ChatFormat.MediaLabel(media));
         Assert.AreEqual(label, bubble.ReplyChipText);
         Assert.AreEqual(isLabel, bubble.MediaLabelIsLabel);
     }

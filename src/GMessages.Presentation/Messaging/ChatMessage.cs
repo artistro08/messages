@@ -56,6 +56,19 @@ public sealed record ChatMessage(
     public MediaPart? Media { get; init; }
 
     /// <summary>
+    /// Makes the message of mine that is on its way to the phone: no ID yet, sending.
+    /// </summary>
+    /// <param name="tmpId">The temporary ID the send carries.</param>
+    /// <param name="conversationId">The conversation it goes to.</param>
+    /// <param name="outgoingId">Who sends it (the conversation's outgoing participant), or empty when not known.</param>
+    /// <param name="now">The time it was sent.</param>
+    /// <param name="kind">What it shows.</param>
+    /// <param name="text">The text, or the media's caption.</param>
+    /// <returns>The pending message; the caller sets the reply, RCS flag and media with <c>with</c>.</returns>
+    public static ChatMessage Pending(string tmpId, string conversationId, string outgoingId, DateTimeOffset now, MessageKind kind, string text) =>
+        new(string.Empty, tmpId, conversationId, outgoingId, now, true, kind, text, MessageStatusType.OutgoingSending);
+
+    /// <summary>
     /// Copies the fields the app needs out of a protocol message.
     /// </summary>
     /// <remarks>

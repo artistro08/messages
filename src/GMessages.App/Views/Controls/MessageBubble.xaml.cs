@@ -466,13 +466,6 @@ public sealed partial class MessageBubble : UserControl
     public static string PartIdOf(string prefix, string key) => prefix + key;
 
     /// <summary>
-    /// Shows an element only when there is text.
-    /// </summary>
-    /// <param name="text">The text.</param>
-    /// <returns>Visible for non-empty text.</returns>
-    public static Visibility ShownIfText(string text) => string.IsNullOrEmpty(text) ? Visibility.Collapsed : Visibility.Visible;
-
-    /// <summary>
     /// Gives the text's AutomationId: <c>Bubble.</c> and the bubble's part key (the message ID, or the temporary ID until
     /// the phone has reported the message).
     /// </summary>
@@ -1490,28 +1483,38 @@ public sealed partial class MessageBubble : UserControl
             _photoFullVisual ??= ElementCompositionPreview.GetElementVisual(PhotoFullImage);
             Visual visual      = _photoFullVisual;
 
-            // Not Laid Out Yet: Its SizeChanged Clips It Later. A Corner Can't Be Rounder Than Half The Shorter Side, Or
-            // The Clip Is Refused (Which Crashed The App On Opening A Chat)
-            float width  = (float)PhotoFullImage.ActualWidth;
-            float height = (float)PhotoFullImage.ActualHeight;
-            if (!_photoAnimated || width <= 0 || height <= 0)
+            // The Photo's Corners From The Bubble Itself, Not The Bound Ones, Which May Not Have Caught Up With A Change Yet.
+            // Not Laid Out Yet: Its SizeChanged Clips It Later
+            CornerRadius r = PhotoCorners(bubble.FromMe, bubble.IsFirstInGroup, bubble.IsLastInGroup, bubble.HasBodyText);
+            if (!_photoAnimated || !ClipRounded(visual, PhotoFullImage, r))
             {
                 visual.Clip = null;
-                return;
             }
-
-            // The Photo's Corners From The Bubble Itself, Not The Bound Ones, Which May Not Have Caught Up With A Change Yet
-            float most     = Math.Min(width, height) / 2;
-            CornerRadius r = PhotoCorners(bubble.FromMe, bubble.IsFirstInGroup, bubble.IsLastInGroup, bubble.HasBodyText);
-            visual.Clip    = visual.Compositor.CreateRectangleClip(
-                0, 0, width, height,
-                Corner(r.TopLeft, most), Corner(r.TopRight, most), Corner(r.BottomRight, most), Corner(r.BottomLeft, most));
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             // Square Corners Beat A Crash; The Next Size Change Tries Again
             AppLog.MediaFailed(App.ShellLog, "clip", Bubble?.Id ?? string.Empty, ex.GetType().Name);
         }
+    }
+
+    // Rounds A Visual To An Element's Size With The Given Corners; False When The Element Isn't Laid Out Yet (Nothing
+    // Changed). A Corner Can't Be Rounder Than Half The Shorter Side, Or The Clip Is Refused (Which Crashed The App On
+    // Opening A Chat)
+    private static bool ClipRounded(Visual visual, FrameworkElement element, CornerRadius corners)
+    {
+        float width  = (float)element.ActualWidth;
+        float height = (float)element.ActualHeight;
+        if (width <= 0 || height <= 0)
+        {
+            return false;
+        }
+
+        float most  = Math.Min(width, height) / 2;
+        visual.Clip = visual.Compositor.CreateRectangleClip(
+            0, 0, width, height,
+            Corner(corners.TopLeft, most), Corner(corners.TopRight, most), Corner(corners.BottomRight, most), Corner(corners.BottomLeft, most));
+        return true;
 
         static Vector2 Corner(double radius, float most) => new(Math.Min((float)radius, most));
     }
@@ -2072,25 +2075,12 @@ public sealed partial class MessageBubble : UserControl
         try
         {
             _videoHostVisual ??= ElementCompositionPreview.GetElementVisual(VideoHost);
-            float width        = (float)VideoHost.ActualWidth;
-            float height       = (float)VideoHost.ActualHeight;
-            if (width <= 0 || height <= 0)
-            {
-                return;
-            }
-
-            float most               = Math.Min(width, height) / 2;
-            CornerRadius r           = Video.CornerRadius;
-            _videoHostVisual.Clip    = _videoHostVisual.Compositor.CreateRectangleClip(
-                0, 0, width, height,
-                Corner(r.TopLeft, most), Corner(r.TopRight, most), Corner(r.BottomRight, most), Corner(r.BottomLeft, most));
+            ClipRounded(_videoHostVisual, VideoHost, Video.CornerRadius);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             AppLog.MediaFailed(App.ShellLog, "clip", Bubble?.Id ?? string.Empty, ex.GetType().Name);
         }
-
-        static Vector2 Corner(double radius, float most) => new(Math.Min((float)radius, most));
     }
 
     // =========================================================================

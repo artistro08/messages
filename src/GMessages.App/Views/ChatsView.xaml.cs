@@ -349,7 +349,7 @@ public sealed partial class ChatsView : UserControl
     // Each Realized Row Tries Again Until It Is Found
     private void WatchListScroller()
     {
-        if (_listScroller is not null || ChatPane.FindScroller(ConversationList) is not { } scroller)
+        if (_listScroller is not null || UiHelpers.FindScroller(ConversationList) is not { } scroller)
         {
             return;
         }
@@ -426,7 +426,7 @@ public sealed partial class ChatsView : UserControl
 
     // Right-Click On A Row Opens Its Menu At The Pointer; The Application Key Or Shift + F10 On The Focused Row Opens It
     // On The Row. The Row Is Found By Walking Up From The Source To The List's Container, Matched By Index And Never By
-    // A Type Test (See ChatPane.FindPart)
+    // A Type Test (See UiHelpers.FindPart)
     private void OnConversationListContextRequested(UIElement sender, ContextRequestedEventArgs e)
     {
         if (e.OriginalSource is null || RowContainer(e.OriginalSource.As<DependencyObject>()) is not { } container
@@ -487,7 +487,7 @@ public sealed partial class ChatsView : UserControl
     }
 
     // A Row Of The List Has Keyboard Focus (Arrow Keys, Tab), Not Pointer Or Programmatic Focus. Matched As A Row Of The
-    // List And Read Through A WinRT Cast, Not A Type Test (See ChatPane.FindPart)
+    // List And Read Through A WinRT Cast, Not A Type Test (See UiHelpers.FindPart)
     private bool IsBrowsingWithKeys() =>
         XamlRoot is { } root && FocusManager.GetFocusedElement(root) is { } focused
         && ConversationList.IndexFromContainer(focused.As<DependencyObject>()) >= 0

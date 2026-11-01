@@ -1,3 +1,4 @@
+using GMessages.App.Views;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -157,14 +158,14 @@ internal sealed class VideoPlayback : IDisposable
     private void HideExtras(object? sender, object e)
     {
         MediaTransportControls controls = Element.TransportControls;
-        if (FindNamed(controls, "CastButton") is not { } cast)
+        if (UiHelpers.FindPart<FrameworkElement>(controls, "CastButton") is not { } cast)
         {
             return;
         }
 
         // Full Window Isn't Always Made In The Compact Bar
         controls.LayoutUpdated -= _hideExtras;
-        FrameworkElement? full  = FindNamed(controls, "FullWindowButton");
+        FrameworkElement? full  = UiHelpers.FindPart<FrameworkElement>(controls, "FullWindowButton");
         foreach (FrameworkElement? button in (ReadOnlySpan<FrameworkElement?>)[cast, full])
         {
             if (button is null)
@@ -178,26 +179,6 @@ internal sealed class VideoPlayback : IDisposable
             button.As<Control>().IsTabStop = false;
             AutomationProperties.SetAccessibilityView(button, Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
         }
-    }
-
-    // A Template Part By Its Name Only (No Type Check, So It Is AOT Safe)
-    private static FrameworkElement? FindNamed(DependencyObject root, string name)
-    {
-        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
-        {
-            DependencyObject child = VisualTreeHelper.GetChild(root, i);
-            if (child is FrameworkElement { Name: var found_name } element && found_name == name)
-            {
-                return element;
-            }
-
-            if (FindNamed(child, name) is { } found)
-            {
-                return found;
-            }
-        }
-
-        return null;
     }
 
     // Raised Off The UI Thread: The State For The Tests

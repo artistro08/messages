@@ -294,7 +294,7 @@ public sealed partial class UpdateDispatcher(RpcSession rpc, ILogger log)
         }
         catch (Exception ex)
         {
-            LogHandlerFailed(log, ex, evt.GetType().Name);
+            ProtocolLog.LogHandlerFailed(log, ex, evt.GetType().Name);
         }
     }
 
@@ -318,7 +318,4 @@ public sealed partial class UpdateDispatcher(RpcSession rpc, ILogger log)
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to ack browser presence")]
     private static partial void LogBrowserPresenceFailed(ILogger logger, Exception exception);
-
-    [LoggerMessage(Level = LogLevel.Error, Message = "An event subscriber threw for {EventType}")]
-    private static partial void LogHandlerFailed(ILogger logger, Exception exception, string eventType);
 }

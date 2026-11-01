@@ -34,7 +34,7 @@ namespace GMessages.Protocol;
 /// never logged.
 /// </para>
 /// </remarks>
-public sealed partial class GmClient : IAsyncDisposable
+public sealed partial class GmClient : IMessagingClient, IAsyncDisposable
 {
     /// <summary>The shortest time between two automatic session saves.</summary>
     public static readonly TimeSpan SaveDebounce = TimeSpan.FromSeconds(5);
@@ -842,7 +842,7 @@ public sealed partial class GmClient : IAsyncDisposable
         }
         catch (Exception ex)
         {
-            LogHandlerFailed(_log, ex, evt.GetType().Name);
+            ProtocolLog.LogHandlerFailed(_log, ex, evt.GetType().Name);
         }
     }
 
@@ -890,9 +890,6 @@ public sealed partial class GmClient : IAsyncDisposable
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Long polling ended with an error while stopping")]
     private static partial void LogStopError(ILogger logger, Exception exception);
-
-    [LoggerMessage(Level = LogLevel.Error, Message = "An event subscriber threw for {EventType}")]
-    private static partial void LogHandlerFailed(ILogger logger, Exception exception, string eventType);
 }
 
 /// <summary>

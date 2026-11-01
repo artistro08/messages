@@ -386,19 +386,11 @@ public sealed partial class ConnectionController : IAsyncDisposable
     // =========================================================================
 
     /// <summary>
-    /// Tells the controller the PC woke up; reconnects right away when paired.
+    /// Reconnects right away when paired (the PC woke up or the network came back).
     /// </summary>
+    /// <remarks>A running client reconnects now (Plan 1 R24); a stopped one connects again, which may find the session expired.</remarks>
     /// <returns>A task that completes when the reconnect is requested.</returns>
-    public Task NotifyResumedAsync() => ReconnectAsync();
-
-    /// <summary>
-    /// Tells the controller the network came back; reconnects right away when paired.
-    /// </summary>
-    /// <returns>A task that completes when the reconnect is requested.</returns>
-    public Task NotifyNetworkAvailableAsync() => ReconnectAsync();
-
-    // Running Client: Reconnect Now (Plan 1 R24). Stopped Client: Connect Again, Which May Find The Session Expired
-    private async Task ReconnectAsync()
+    public async Task ReconnectAsync()
     {
         if (State is ConnectionState.NotPaired or ConnectionState.SignedOut)
         {

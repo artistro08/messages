@@ -626,7 +626,7 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
 
         if (text_apart)
         {
-            bubbles.Add(AddPending(new ChatMessage(string.Empty, GmClient.NewTmpId(), ConversationId, string.Empty, _time.GetUtcNow(), true, MessageKind.Text, text, MessageStatusType.OutgoingSending)
+            bubbles.Add(AddPending(ChatMessage.Pending(GmClient.NewTmpId(), ConversationId, string.Empty, _time.GetUtcNow(), MessageKind.Text, text) with
             {
                 ReplyToId = reply_to ?? string.Empty,
                 IsRcs     = is_rcs,
@@ -1034,7 +1034,7 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
         MessageKind kind = MediaPart.KindOf(MediaFormatsMap.FromMime(mime));
         var media        = new MediaPart(string.Empty, [], string.Empty, [], bytes, name, bytes.LongLength, width, height, kind, mime);
 
-        return new ChatMessage(string.Empty, GmClient.NewTmpId(), ConversationId, string.Empty, _time.GetUtcNow(), true, kind, caption, MessageStatusType.OutgoingSending)
+        return ChatMessage.Pending(GmClient.NewTmpId(), ConversationId, string.Empty, _time.GetUtcNow(), kind, caption) with
         {
             Media     = media,
             IsRcs     = isRcs,
