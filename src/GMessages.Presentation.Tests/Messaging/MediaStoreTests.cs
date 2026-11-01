@@ -373,4 +373,53 @@ public sealed class MediaStoreTests
         await rig.Store.RequestFullSizeAsync(photo);
         Assert.HasCount(2, rig.Client.FullSizeCalls);
     }
+
+    /// <summary>
+    /// A video without the phone's thumbnail has its frame made once from its bytes and kept as a file; asking again
+    /// reads the file (nothing made or downloaded again), and a clear deletes it.
+    /// </summary>
+    [TestMethod]
+    public async Task Frame_MadeOnce_KeptUntilClear()
+    {
+        using var rig           = new Rig();
+        rig.Client.Media["v-1"] = [1, 2, 3];
+        var made                = new List<byte[]>();
+        Task<byte[]> Extract(byte[] video, string mime)
+        {
+            made.Add(video);
+            return Task.FromResult<byte[]>([9, 9]);
+        }
+
+        CollectionAssert.AreEqual(new byte[] { 9, 9 }, await rig.Store.GetFrameAsync(Part("v-1"), Extract, Ct));
+        CollectionAssert.AreEqual(new byte[] { 9, 9 }, await rig.Store.GetFrameAsync(Part("v-1"), Extract, Ct));
+        Assert.HasCount(1, made);
+        CollectionAssert.AreEqual(new byte[] { 1, 2, 3 }, made[0]);
+        Assert.HasCount(1, rig.Client.DownloadCalls);
+        Assert.HasCount(1, Directory.GetFiles(Path.Combine(rig.Folder, "Frames")));
+
+        rig.Store.Clear();
+        Assert.IsFalse(Directory.Exists(Path.Combine(rig.Folder, "Frames")), "Clear left the frames.");
+    }
+
+    /// <summary>
+    /// The phone's thumbnail is the frame when it sent one, and a video still on its way is made from its own bytes;
+    /// neither is kept as a file.
+    /// </summary>
+    [TestMethod]
+    public async Task Frame_PhoneThumbnail_ThenInlineBytes()
+    {
+        using var rig             = new Rig();
+        rig.Client.Media["thumb"] = [5];
+        int made                  = 0;
+        Task<byte[]> Extract(byte[] video, string mime)
+        {
+            made++;
+            return Task.FromResult<byte[]>([.. video, 7]);
+        }
+
+        CollectionAssert.AreEqual(new byte[] { 5 }, await rig.Store.GetFrameAsync(Part("full", "thumb"), Extract, Ct));
+        CollectionAssert.AreEqual(new byte[] { 4, 7 }, await rig.Store.GetFrameAsync(Part(inline: [4]), Extract, Ct));
+        Assert.AreEqual(1, made);
+        Assert.IsFalse(Directory.Exists(Path.Combine(rig.Folder, "Frames")), "A frame not made from a downloaded video was kept.");
+    }
 }

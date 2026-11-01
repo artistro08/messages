@@ -341,8 +341,8 @@
                         <!-- /Photo -->
 
                         <!-- Video: edge to edge in the bubble like a photo, at the size its dimensions give (set from code),
-                             rounded to the bubble's corners. Its first frame (the thumbnail the phone sent; a plain fill
-                             without one) with a play button over it. A click on the frame opens the window's viewer; the
+                             rounded to the bubble's corners. Its still frame (the thumbnail the phone sent, else one made
+                             here from the video; a plain fill until it loads) with a play button over it. A click on the frame opens the window's viewer; the
                              play button plays it here, with sound and compact controls (play or pause, seek, volume; made in
                              code, in VideoHost), and the expand button then opens the viewer where it got to. The frame is
                              named by the caption, else "Video", and shows the hand cursor (LinkCardButton) -->

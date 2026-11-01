@@ -77,6 +77,13 @@ public sealed partial class MediaStore
     // Downloads On Their Way, By Media ID
     private readonly Dictionary<string, Task<byte[]>> _inFlight = [];
 
+    // Video Frames Being Made, By Media ID
+    private readonly Dictionary<string, Task<byte[]>> _framesInFlight = [];
+
+    // One Frame Made At A Time: Each Needs Its Whole Video, So A Chat Full Of Videos Downloads Them One By One
+    // ponytail: one at a time across all chats; a queue that drops scrolled-away videos if long chats feel slow
+    private readonly SemaphoreSlim _frameTurn = new(1, 1);
+
     // Messages Whose Full-Size Image Was Asked For
     private readonly HashSet<string> _fullSizeAsked = [];
 
@@ -164,6 +171,64 @@ public sealed partial class MediaStore
             }
 
             return download.WaitAsync(ct);
+        }
+    }
+
+    /// <summary>
+    /// Gets a video's still frame: the thumbnail the phone sent, else one made on this device from the video and kept.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The phone rarely sends a thumbnail for a video (LibGM passes on any <c>thumbnailMediaID</c> it gets, but has no
+    /// frame of its own), so without one the video is fetched (memory, or a download) and <paramref name="extract"/>
+    /// makes the frame. The frame is kept as a file in the temp folder (<c>{temp}\Frames</c>, named by a hash of the
+    /// media ID), so the video isn't fetched again for it; <see cref="Clear"/> empties it with the rest.
+    /// </para>
+    /// <para>
+    /// The work runs off the calling thread, one frame at a time, and two callers asking for one video share it. A
+    /// video sent from here, still on its way, has its bytes in the part: its frame is made from them and not kept.
+    /// </para>
+    /// </remarks>
+    /// <param name="part">The video's media part.</param>
+    /// <param name="extract">Makes a still image (PNG or JPEG bytes) from a video's bytes and mime type.</param>
+    /// <param name="ct">Cancels the wait (not the work another caller shares).</param>
+    /// <returns>The frame's image bytes.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="part"/> or <paramref name="extract"/> is null.</exception>
+    /// <exception cref="MediaPendingException">The part has no media ID, thumbnail or inline data yet.</exception>
+    /// <exception cref="MessagingUnavailableException">Not connected.</exception>
+    public Task<byte[]> GetFrameAsync(MediaPart part, Func<byte[], string, Task<byte[]>> extract, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(part);
+        ArgumentNullException.ThrowIfNull(extract);
+
+        // The Phone's Thumbnail, When It Sent One
+        if (part.ThumbnailId.Length > 0)
+        {
+            return GetAsync(part, thumbnail: true, ct);
+        }
+
+        // Sent From Here And Still On Its Way: Made From The Bytes In The Part, Not Kept
+        if (part.MediaId.Length == 0)
+        {
+            if (part.InlineData.Length == 0)
+            {
+                throw new MediaPendingException();
+            }
+
+            return Task.Run(() => extract(part.InlineData, part.Mime), CancellationToken.None).WaitAsync(ct);
+        }
+
+        lock (_lock)
+        {
+            if (!_framesInFlight.TryGetValue(part.MediaId, out Task<byte[]>? making))
+            {
+                // Started Off This Thread, So It Can't Finish (And Leave _framesInFlight) Before It Is Added
+                int generation                = _generation;
+                making                        = Task.Run(() => MakeFrameAsync(part, extract, generation), CancellationToken.None);
+                _framesInFlight[part.MediaId] = making;
+            }
+
+            return making.WaitAsync(ct);
         }
     }
 
@@ -388,6 +453,7 @@ public sealed partial class MediaStore
             _cache.Clear();
             _cachedBytes = 0;
             _inFlight.Clear();
+            _framesInFlight.Clear();
             _fullSizeAsked.Clear();
         }
 
@@ -574,6 +640,56 @@ public sealed partial class MediaStore
         }
     }
 
+    // A Video's Frame: The Kept File, Else Made From The Video (One At A Time) And Kept Unless Clear Ran Meanwhile. The
+    // File Is Written Under The Lock, So A Clear Never Leaves One Behind
+    private async Task<byte[]> MakeFrameAsync(MediaPart part, Func<byte[], string, Task<byte[]>> extract, int generation)
+    {
+        string path = Path.Combine(_tempFolder, "Frames", Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(part.MediaId)))[..32] + ".frame");
+        try
+        {
+            if (File.Exists(path))
+            {
+                return await File.ReadAllBytesAsync(path).ConfigureAwait(false);
+            }
+
+            await _frameTurn.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                byte[] video = await GetAsync(part, thumbnail: false, CancellationToken.None).ConfigureAwait(false);
+                byte[] frame = await extract(video, part.Mime).ConfigureAwait(false);
+                lock (_lock)
+                {
+                    if (generation == _generation)
+                    {
+                        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                        File.WriteAllBytes(path, frame);
+                    }
+                }
+
+                return frame;
+            }
+            finally
+            {
+                _frameTurn.Release();
+            }
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            LogFrameFailed(part.MediaId, ex.GetType().Name);
+            throw;
+        }
+        finally
+        {
+            lock (_lock)
+            {
+                if (generation == _generation)
+                {
+                    _framesInFlight.Remove(part.MediaId);
+                }
+            }
+        }
+    }
+
     // Adds To The Memory Cache, Dropping The Least Recently Used Past The Cap; A File Over The Cap Is Not Kept
     private void Keep(string id, byte[] bytes)
     {
@@ -634,6 +750,9 @@ public sealed partial class MediaStore
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Could not download media {MediaId} ({ErrorType})")]
     private partial void LogDownloadFailed(string mediaId, string errorType);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Could not make the frame of video {MediaId} ({ErrorType})")]
+    private partial void LogFrameFailed(string mediaId, string errorType);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Could not ask for the full-size image of {MessageId} ({ErrorType})")]
     private partial void LogFullSizeFailed(string messageId, string errorType);

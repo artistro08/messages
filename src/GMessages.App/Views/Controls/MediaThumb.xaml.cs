@@ -1,3 +1,4 @@
+using GMessages.App.Media;
 using GMessages.Presentation.Messaging;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation.Peers;
@@ -15,8 +16,8 @@ namespace GMessages.App.Views.Controls;
 /// A photo or video shows its thumbnail, decoded 80 px wide (sharp at 200% scale), cropped to fill the 40 px square; a
 /// GIF shows still (a brush draws its first frame). Until the picture arrives, the square shows a neutral fill, and the
 /// picture swaps in when it does: the media store reads it from memory, or downloads it in the background, so nothing
-/// waits on it. A video without a thumbnail keeps the fill (its whole file is never fetched for this). A file or voice
-/// message shows a file icon.
+/// waits on it. A video shows the bubble's still frame (the phone's thumbnail, else one made here and kept; see
+/// <see cref="GMessages.App.Media.VideoStill"/>). A file or voice message shows a file icon.
 /// </para>
 /// <para>
 /// A test run puts its state in its item status: <c>Thumb</c> once the picture shows, <c>Placeholder</c> while it waits
@@ -65,8 +66,7 @@ public sealed partial class MediaThumb : UserControl
         view.Picture.Background = null;
         view.Icon.Visibility    = part is not null && !visual ? Visibility.Visible : Visibility.Collapsed;
         TestHooks.ShowState(view, visual ? "Placeholder" : "Icon");
-        if (part is null || !visual || part.IsPending || (part.Kind == MessageKind.Video && part.ThumbnailId.Length == 0)
-            || (Application.Current as App)?.Media is not { } media)
+        if (part is null || !visual || part.IsPending || (Application.Current as App)?.Media is not { } media)
         {
             return;
         }
@@ -74,7 +74,7 @@ public sealed partial class MediaThumb : UserControl
         // A Picture That Won't Load Keeps The Fill
         try
         {
-            byte[] bytes      = await media.GetAsync(part, thumbnail: true, CancellationToken.None);
+            byte[] bytes      = part.Kind == MessageKind.Video ? await VideoStill.GetAsync(media, part) : await media.GetAsync(part, thumbnail: true, CancellationToken.None);
             ImageSource image = await Avatar.ToImageAsync(bytes, DecodeWidth) ?? throw new InvalidDataException();
             if (ReferenceEquals(part, view.Media))
             {

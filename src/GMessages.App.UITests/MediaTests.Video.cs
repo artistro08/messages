@@ -103,6 +103,29 @@ public sealed partial class MediaTests
         WaitForGone("PhotoViewer.Video");
     }
 
+    /// <summary>
+    /// A video the phone sent no thumbnail for shows a frame made from the video in its bubble (the play button's state
+    /// goes from Pending to Frame), and a reply to it shows the same frame in its quote and in the reply chip.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Video_NoThumbnail_FrameMadeForBubbleQuoteAndChip()
+    {
+        await OpenMediaChatAsync();
+        Message video = PushVideo();
+        WaitForStatus(App.Find("Video.Play." + video.MessageID), "Frame");
+
+        Message reply = Server.Phone.PushIncoming("c-media", "Nice", replyToId: video.MessageID);
+        App.WaitForText("Quote." + reply.MessageID, ChatCopy.QuoteVideo);
+        WaitForStatus(App.Find("QuoteThumb." + reply.MessageID), "Thumb");
+
+        // The Reply Chip
+        OpenMenu(App.Find("Bubble.Video." + video.MessageID));
+        App.Find("Bubble.Reply").Patterns.Invoke.Pattern.Invoke();
+        App.WaitForText("Chat.ReplyingTo", ChatCopy.QuoteVideo);
+        WaitForStatus(App.Find("Chat.ReplyingToThumb"), "Thumb");
+    }
+
     // Mia Sends The 2 s Test Clip
     private Message PushVideo() =>
         Server.Phone.PushIncomingMedia("c-media", "video/mp4", File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Fixtures", "clip.mp4")), "clip.mp4");
