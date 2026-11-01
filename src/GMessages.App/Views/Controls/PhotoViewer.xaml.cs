@@ -45,8 +45,9 @@ namespace GMessages.App.Views.Controls;
 /// <para>
 /// Opening grows the photo or video out of its bubble (from the bubble's place and size to its own, 300 ms, Fluent's
 /// decelerate curve) while the backdrop and toolbar fade in; closing by Escape, Close or a click beside the photo
-/// shrinks it back (200 ms, accelerate) while they fade out (owner, Plan 8). Composition scale and translation on the
-/// stage that holds both, so no layout moves. With Windows' animation effects off it shows and hides at once. A test
+/// shrinks it back (200 ms, accelerate) while they fade out (owner, Plan 8). A uniform Composition scale and a
+/// translation on the stage that holds both, with an inset clip that opens from the bubble's crop to the whole photo,
+/// so a cropped photo reveals itself undistorted and no layout moves. With Windows' animation effects off it shows and hides at once. A test
 /// run notes <c>Grew</c>, <c>Shown</c> (no bubble to grow from) or <c>Shrank</c> in <c>viewer-motion.txt</c>.
 /// </para>
 /// <para>
@@ -338,8 +339,8 @@ public sealed partial class PhotoViewer : UserControl
     // GROW AND SHRINK
     // =========================================================================
 
-    // The Photo Or Video Is In: The Stage Shows, Growing From The Bubble's Place And Size Into Its Own (Translation And
-    // Scale On The Stage's Visual, Centered On Where It Ends Up). Without The Bubble, Or With Animations Off, It Just Shows
+    // The Photo Or Video Is In: The Stage Shows, Growing From The Bubble's Place, Size And Crop Into Its Own (See Morph).
+    // Without The Bubble, Or With Animations Off, It Just Shows
     private void Grow(FrameworkElement target, MediaPart? video)
     {
         if (!Ui.AnimationsEnabled)
@@ -356,9 +357,7 @@ public sealed partial class PhotoViewer : UserControl
             return;
         }
 
-        (Vector3 scale, Vector3 shift) = Between(from, to);
-        PrepareStage(visual, to);
-        AnimateStage(visual, scale, Vector3.One, shift, Vector3.Zero, GrowTime, Decelerate());
+        Morph(visual, from, to, growing: true, GrowTime, Decelerate());
         TestHooks.NoteState("viewer-motion", "Grew");
     }
 
@@ -377,12 +376,10 @@ public sealed partial class PhotoViewer : UserControl
         _video?.Player.Pause();
 
         // The Batch Ends Once Every Animation Started Inside It Has
-        int run                        = ++_closeRun;
-        Visual visual                  = ElementCompositionPreview.GetElementVisual(Stage);
-        CompositionScopedBatch done    = visual.Compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
-        (Vector3 scale, Vector3 shift) = Between(to, from);
-        PrepareStage(visual, from);
-        AnimateStage(visual, Vector3.One, scale, Vector3.Zero, shift, ShrinkTime, Accelerate());
+        int run                     = ++_closeRun;
+        Visual visual               = ElementCompositionPreview.GetElementVisual(Stage);
+        CompositionScopedBatch done = visual.Compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
+        Morph(visual, to, from, growing: false, ShrinkTime, Accelerate());
         Fade(1, 0, ShrinkTime, Accelerate());
         done.End();
         done.Completed += (_, _) => DispatcherQueue.TryEnqueue(() =>
@@ -435,35 +432,56 @@ public sealed partial class PhotoViewer : UserControl
         return new Rect(box.X + ((box.Width - width) / 2), box.Y + ((box.Height - height) / 2), width, height);
     }
 
-    // The Scale And Shift That Make The Shown Rectangle Sit Over The Bubble's (About The Shown One's Middle)
-    private static (Vector3 Scale, Vector3 Shift) Between(Rect bubble, Rect shown) => (
-        new Vector3((float)(bubble.Width / shown.Width), (float)(bubble.Height / shown.Height), 1),
-        new Vector3((float)((bubble.X + (bubble.Width / 2)) - (shown.X + (shown.Width / 2))), (float)((bubble.Y + (bubble.Height / 2)) - (shown.Y + (shown.Height / 2))), 0));
-
-    // Scales About The Shown Rectangle's Middle, With Translation On
-    private void PrepareStage(Visual visual, Rect shown)
-    {
-        ElementCompositionPreview.SetIsTranslationEnabled(Stage, true);
-        visual.CenterPoint = new Vector3((float)(shown.X + (shown.Width / 2)), (float)(shown.Y + (shown.Height / 2)), 0);
-    }
-
-    // Runs The Stage's Scale And Translation Between Two Values
-    private static void AnimateStage(Visual visual, Vector3 scaleFrom, Vector3 scaleTo, Vector3 shiftFrom, Vector3 shiftTo, TimeSpan time, CompositionEasingFunction ease)
+    // Moves The Stage Between The Bubble And The Shown Photo Without Distorting It: One Uniform Scale About The Shown
+    // Photo's Middle, Just Big Enough To Cover The Bubble (As The Bubble's Crop Does), A Translation Onto The Bubble's
+    // Middle, And An Inset Clip From The Bubble's Crop (In The Stage's Own Space, Before The Scale) Out To The Whole
+    // Stage. Growing Runs Bubble To Shown; Shrinking Runs It Back
+    private void Morph(Visual visual, Rect bubble, Rect shown, bool growing, TimeSpan time, CompositionEasingFunction ease)
     {
         Compositor compositor = visual.Compositor;
+        var middle            = new Vector2((float)(shown.X + (shown.Width / 2)), (float)(shown.Y + (shown.Height / 2)));
+        float scale           = (float)Math.Max(bubble.Width / shown.Width, bubble.Height / shown.Height);
+        var shift             = new Vector3((float)(bubble.X + (bubble.Width / 2)) - middle.X, (float)(bubble.Y + (bubble.Height / 2)) - middle.Y, 0);
 
-        Vector3KeyFrameAnimation scale = compositor.CreateVector3KeyFrameAnimation();
-        scale.InsertKeyFrame(0, scaleFrom);
-        scale.InsertKeyFrame(1, scaleTo, ease);
-        scale.Duration = time;
+        // The Bubble's Crop Before The Scale: The Bubble's Size Over The Scale, On The Shown Photo's Middle
+        float crop_width  = (float)bubble.Width / scale;
+        float crop_height = (float)bubble.Height / scale;
+        float stage_width = (float)Stage.ActualWidth;
+        float stage_high  = (float)Stage.ActualHeight;
+        var insets        = new Vector4(
+            Math.Max(0, middle.X - (crop_width / 2)),
+            Math.Max(0, middle.Y - (crop_height / 2)),
+            Math.Max(0, stage_width - (middle.X + (crop_width / 2))),
+            Math.Max(0, stage_high - (middle.Y + (crop_height / 2))));
 
-        Vector3KeyFrameAnimation shift = compositor.CreateVector3KeyFrameAnimation();
-        shift.InsertKeyFrame(0, shiftFrom);
-        shift.InsertKeyFrame(1, shiftTo, ease);
-        shift.Duration = time;
+        ElementCompositionPreview.SetIsTranslationEnabled(Stage, true);
+        visual.CenterPoint = new Vector3(middle, 0);
+        InsetClip clip     = compositor.CreateInsetClip();
+        visual.Clip        = clip;
 
-        visual.StartAnimation(nameof(Visual.Scale), scale);
-        visual.StartAnimation("Translation", shift);
+        // Each Property From Its Bubble Value To Its Shown Value, Or Back
+        Vector3KeyFrameAnimation size = compositor.CreateVector3KeyFrameAnimation();
+        size.InsertKeyFrame(0, growing ? new Vector3(scale, scale, 1) : Vector3.One);
+        size.InsertKeyFrame(1, growing ? Vector3.One : new Vector3(scale, scale, 1), ease);
+        size.Duration = time;
+
+        Vector3KeyFrameAnimation move = compositor.CreateVector3KeyFrameAnimation();
+        move.InsertKeyFrame(0, growing ? shift : Vector3.Zero);
+        move.InsertKeyFrame(1, growing ? Vector3.Zero : shift, ease);
+        move.Duration = time;
+
+        visual.StartAnimation(nameof(Visual.Scale), size);
+        visual.StartAnimation("Translation", move);
+        foreach ((string side, float inset) in (ReadOnlySpan<(string, float)>)[
+            (nameof(InsetClip.LeftInset), insets.X), (nameof(InsetClip.TopInset), insets.Y),
+            (nameof(InsetClip.RightInset), insets.Z), (nameof(InsetClip.BottomInset), insets.W)])
+        {
+            ScalarKeyFrameAnimation reveal = compositor.CreateScalarKeyFrameAnimation();
+            reveal.InsertKeyFrame(0, growing ? inset : 0);
+            reveal.InsertKeyFrame(1, growing ? 0 : inset, ease);
+            reveal.Duration = time;
+            clip.StartAnimation(side, reveal);
+        }
     }
 
     // Fades The Backdrop And The Toolbar Together
@@ -493,6 +511,7 @@ public sealed partial class PhotoViewer : UserControl
         stage.StopAnimation("Translation");
         stage.Scale   = Vector3.One;
         stage.Opacity = 1;
+        stage.Clip    = null;
         stage.Properties.InsertVector3("Translation", Vector3.Zero);
         foreach (UIElement layer in (ReadOnlySpan<UIElement>)[Backdrop, ToolbarPanel])
         {
