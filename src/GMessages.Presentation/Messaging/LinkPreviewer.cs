@@ -40,6 +40,9 @@ public sealed partial class LinkPreviewer : IDisposable
     /// <summary>How long each request (the page, then its image) may take.</summary>
     public static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(5);
 
+    /// <summary>How long a pasted picture (<see cref="FetchImageAsync"/>) may take, since it can be far bigger than a card image.</summary>
+    public static readonly TimeSpan PictureTimeout = TimeSpan.FromSeconds(15);
+
     /// <summary>The widest a card image is kept, in pixels; a wider one is scaled down when fetched.</summary>
     public const int MaxImageWidth = 480;
 
@@ -102,6 +105,18 @@ public sealed partial class LinkPreviewer : IDisposable
         _allowLoopback = allowLoopback;
         _log           = log;
         _proxy         = proxy ?? HttpClient.DefaultProxy;
+    }
+
+    /// <summary>
+    /// Creates the previewer with the app's own vetted handler (<see cref="CreateHandler"/>), so the loopback flag is passed once.
+    /// </summary>
+    /// <param name="allowLoopback">True in UI test runs only, so <c>http://127.0.0.1</c> (the fake server) can be previewed.</param>
+    /// <param name="log">Takes failures, by error type only.</param>
+    /// <param name="proxy">The proxy Windows would send the link through; null for the system's.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="log"/> is null.</exception>
+    public LinkPreviewer(bool allowLoopback, ILogger log, IWebProxy? proxy = null)
+        : this(CreateHandler(allowLoopback), allowLoopback, log, proxy)
+    {
     }
 
     // =========================================================================
@@ -245,7 +260,8 @@ public sealed partial class LinkPreviewer : IDisposable
     /// </summary>
     /// <remarks>
     /// False for loopback, private (10/8, 172.16/12, 192.168/16, fc00::/7), link-local (169.254/16, fe80::/10), CGNAT
-    /// (100.64/10), unspecified (0/8, ::), multicast and reserved (224/4, 240/4, ff00::/8) and the old IPv6 site-local
+    /// (100.64/10), IETF protocol and documentation ranges (192.0.0/24, 192.0.2/24, 198.51.100/24, 203.0.113/24),
+    /// benchmarking (198.18/15), unspecified (0/8, ::), multicast and reserved (224/4, 240/4, ff00::/8) and the old IPv6 site-local
     /// range. IPv6 that carries an IPv4 address is judged by that address: IPv4-mapped (<c>::ffff:10.0.0.1</c>), NAT64
     /// (64:ff9b::/96) and 6to4 (2002::/16). Local-use NAT64 (64:ff9b:1::/48, whose layout the network picks),
     /// Teredo (2001::/32), SIIT (::ffff:0:0/96) and IPv4-compatible (::/96) addresses are refused outright.
@@ -275,6 +291,10 @@ public sealed partial class LinkPreviewer : IDisposable
                 || (b[0] == 169 && b[1] == 254)
                 || (b[0] == 172 && (b[1] & 0xF0) == 16)
                 || (b[0] == 192 && b[1] == 168)
+                || (b[0] == 192 && b[1] == 0 && (b[2] == 0 || b[2] == 2))
+                || (b[0] == 198 && (b[1] & 0xFE) == 18)
+                || (b[0] == 198 && b[1] == 51 && b[2] == 100)
+                || (b[0] == 203 && b[1] == 0 && b[2] == 113)
                 || b[0] >= 224);
         }
 
@@ -447,6 +467,33 @@ public sealed partial class LinkPreviewer : IDisposable
         }
     }
 
+    /// <summary>
+    /// Fetches a picture a message pastes, such as a GIF from the emoji panel, through the same vetted handler as the cards.
+    /// </summary>
+    /// <remarks>
+    /// The same rules as a card's page: <see cref="IsAllowed"/> on every hop, redirects held to it (3 at most), no
+    /// cookies, nothing through a proxy. Unlike a card image it is not shrunk or cached: it is sent as an attachment at
+    /// full size. Never throws: any failure, a different type, a body over <paramref name="maxBytes"/>, or
+    /// <paramref name="ct"/> being canceled gives null.
+    /// </remarks>
+    /// <param name="uri">The picture's address.</param>
+    /// <param name="mime">The type the response must declare, such as <c>image/gif</c>.</param>
+    /// <param name="maxBytes">The most bytes read.</param>
+    /// <param name="ct">Stops the fetch.</param>
+    /// <returns>The picture's bytes, or null when there are none.</returns>
+    public async Task<byte[]?> FetchImageAsync(Uri uri, string mime, long maxBytes, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(uri);
+        ArgumentException.ThrowIfNullOrEmpty(mime);
+
+        if (!IsAllowed(uri, _allowLoopback))
+        {
+            return null;
+        }
+
+        return (await GetBodyAsync(uri, mime, maxBytes, PictureTimeout, ct).ConfigureAwait(false))?.Body;
+    }
+
     /// <inheritdoc />
     public void Dispose()
     {
@@ -464,7 +511,7 @@ public sealed partial class LinkPreviewer : IDisposable
             await _fetchSlots.WaitAsync(_closing.Token).ConfigureAwait(false);
             slot = true;
 
-            if (await GetBodyAsync(url, "text/html", MaxPageBytes).ConfigureAwait(false) is not { } page)
+            if (await GetBodyAsync(url, "text/html", MaxPageBytes, RequestTimeout).ConfigureAwait(false) is not { } page)
             {
                 return null;
             }
@@ -475,7 +522,7 @@ public sealed partial class LinkPreviewer : IDisposable
                 return null;
             }
 
-            byte[]? image = head.Image is { } image_url ? (await GetBodyAsync(image_url, "image/*", MaxImageBytes).ConfigureAwait(false))?.Body : null;
+            byte[]? image = head.Image is { } image_url ? (await GetBodyAsync(image_url, "image/*", MaxImageBytes, RequestTimeout).ConfigureAwait(false))?.Body : null;
             return new LinkPreview(url, head.Title, head.Site, image is null ? null : await ShrinkAsync(image).ConfigureAwait(false));
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -573,12 +620,12 @@ public sealed partial class LinkPreviewer : IDisposable
 
     // One GET Within The Time And Size Limits, Of The Wanted Type. Every Hop, Redirects Included, Must Be Allowed And
     // Not Go Through The System's Proxy. Null, Logged By Reason Or Error Type, Otherwise
-    private async Task<(byte[] Body, string? CharSet, Uri Final)?> GetBodyAsync(Uri url, string accept, int maxBytes)
+    private async Task<(byte[] Body, string? CharSet, Uri Final)?> GetBodyAsync(Uri url, string accept, long maxBytes, TimeSpan limit, CancellationToken ct = default)
     {
         try
         {
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(_closing.Token);
-            timeout.CancelAfter(RequestTimeout);
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(_closing.Token, ct);
+            timeout.CancelAfter(limit);
 
             for (int hop = 0; ; hop++)
             {
@@ -609,7 +656,7 @@ public sealed partial class LinkPreviewer : IDisposable
     }
 
     // One Hop: A Redirect's Target, Or The Body. Null When Refused, Logged By Reason
-    private async Task<(byte[] Body, string? CharSet, Uri? RedirectTo)?> GetHopAsync(Uri url, string accept, int maxBytes, CancellationToken ct)
+    private async Task<(byte[] Body, string? CharSet, Uri? RedirectTo)?> GetHopAsync(Uri url, string accept, long maxBytes, CancellationToken ct)
     {
         string? before = !IsAllowed(url, _allowLoopback) ? "link not allowed"
             : IsProxied(url)                             ? "system proxy"
@@ -742,19 +789,41 @@ public sealed partial class LinkPreviewer : IDisposable
     // Sentence Punctuation Comes Off The End; A Closing Bracket Stays When The Link Opened One Itself
     private static string TrimLink(string link)
     {
-        while (link.Length > 0 && TrailingPunctuation.Contains(link[^1], StringComparison.Ordinal))
+        // Count The Brackets Once, Then Keep The Counts In Step As Characters Come Off (A Long Run Of ")" Stays Linear)
+        int round_open   = link.AsSpan().Count('(');
+        int round_close  = link.AsSpan().Count(')');
+        int square_open  =link.AsSpan().Count('[');
+        int square_close = link.AsSpan().Count(']');
+        int curly_open   = link.AsSpan().Count('{');
+        int curly_close  = link.AsSpan().Count('}');
+
+        int end = link.Length;
+        while (end > 0 && TrailingPunctuation.Contains(link[end - 1], StringComparison.Ordinal))
         {
-            char last = link[^1];
-            char open = last switch { ')' => '(', ']' => '[', '}' => '{', _ => '\0' };
-            if (open != '\0' && link.Count(c => c == open) >= link.Count(c => c == last))
+            switch (link[end - 1])
             {
-                break;
+                case ')' when round_open >= round_close:
+                case ']' when square_open >= square_close:
+                case '}' when curly_open >= curly_close:
+                    return link[..end];
+
+                case ')':
+                    round_close--;
+                    break;
+
+                case ']':
+                    square_close--;
+                    break;
+
+                case '}':
+                    curly_close--;
+                    break;
             }
 
-            link = link[..^1];
+            end--;
         }
 
-        return link;
+        return link[..end];
     }
 
     [GeneratedRegex(@"\bhttps?://\S+", RegexOptions.IgnoreCase)]

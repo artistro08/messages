@@ -444,7 +444,7 @@ public partial class App : Application, IDisposable
         {
             var settings   = new SettingsViewModel(_settings, _startup, _connection, OpenFolder, _paths.LogsFolder, _logger);
             _mainWindow    = new MainWindow(settings, new AvatarCache(_store, _paths.AvatarsFolder));
-            _linkPreviewer = new LinkPreviewer(LinkPreviewer.CreateHandler(TestHooks.AllowLoopbackPreviews), TestHooks.AllowLoopbackPreviews, _logger);
+            _linkPreviewer = new LinkPreviewer(TestHooks.AllowLoopbackPreviews, _logger);
             _mainWindow.ApplyTheme(_settings.Theme);
             _mainWindow.SettingsRequested += (_, _) => ShowSettings();
             _mainWindow.Closed            += (_, _) =>

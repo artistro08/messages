@@ -41,6 +41,9 @@ public sealed class LinkPreviewerTests
     [DataRow("wow https://x.com/a!?", "https://x.com/a")]
     [DataRow("https://en.wikipedia.org/wiki/Foo_(bar)", "https://en.wikipedia.org/wiki/Foo_(bar)")]
     [DataRow("go to http://b.example/c; then", "http://b.example/c")]
+    [DataRow("a https://x.com/a)))", "https://x.com/a")]
+    [DataRow("a https://x.com/a_(b)).", "https://x.com/a_(b)")]
+    [DataRow("a https://x.com/a[1]],", "https://x.com/a[1]")]
     public void FirstLink_TrimsPunctuation(string text, string expected) =>
         Assert.AreEqual(new Uri(expected), LinkPreviewer.FirstLink(text));
 
@@ -135,6 +138,12 @@ public sealed class LinkPreviewerTests
     [DataRow("224.0.0.1")]
     [DataRow("ff02::1")]
     [DataRow("255.255.255.255")]
+    [DataRow("192.0.0.8")]
+    [DataRow("192.0.2.1")]
+    [DataRow("198.18.0.1")]
+    [DataRow("198.19.255.255")]
+    [DataRow("198.51.100.7")]
+    [DataRow("203.0.113.9")]
     [DataRow("::ffff:10.0.0.1")]
     [DataRow("64:ff9b::a00:1")]
     [DataRow("64:ff9b::7f00:1")]
@@ -157,6 +166,11 @@ public sealed class LinkPreviewerTests
     [DataRow("8.8.8.8")]
     [DataRow("172.32.0.1")]
     [DataRow("100.128.0.1")]
+    [DataRow("192.0.1.1")]
+    [DataRow("198.17.255.255")]
+    [DataRow("198.20.0.1")]
+    [DataRow("198.51.101.1")]
+    [DataRow("203.0.112.1")]
     [DataRow("2606:4700::1111")]
     [DataRow("64:ff9b::808:808")]
     [DataRow("2002:808:808::1")]
@@ -392,6 +406,38 @@ public sealed class LinkPreviewerTests
 
         Assert.IsNotNull(preview);
         Assert.IsNull(preview.Image);
+    }
+
+    [TestMethod]
+    public async Task FetchImageAsync_Gif_FullBytesNotShrunk()
+    {
+        byte[] gif  = [.. "GIF89a"u8.ToArray(), .. new byte[5000]];
+        var handler = new FakeHttpHandler { Respond = (_, _) => FakeHttpHandler.Response(HttpStatusCode.OK, "image/gif", gif) };
+        using var previewer = new LinkPreviewer(handler, false, new CollectingLogger(), TestProxy.Direct);
+
+        byte[]? bytes = await previewer.FetchImageAsync(new Uri("https://media.example.com/a.gif"), "image/gif", 10_000, CancellationToken.None);
+
+        CollectionAssert.AreEqual(gif, bytes);
+    }
+
+    [TestMethod]
+    public async Task FetchImageAsync_OverMaxBytes_Null()
+    {
+        var handler = new FakeHttpHandler { Respond = (_, _) => FakeHttpHandler.Response(HttpStatusCode.OK, "image/gif", new byte[5000]) };
+        using var previewer = new LinkPreviewer(handler, false, new CollectingLogger(), TestProxy.Direct);
+
+        Assert.IsNull(await previewer.FetchImageAsync(new Uri("https://media.example.com/a.gif"), "image/gif", 4_999, CancellationToken.None));
+    }
+
+    [TestMethod]
+    public async Task FetchImageAsync_WrongTypeOrDisallowedLink_NullAndNoRequest()
+    {
+        var handler = new FakeHttpHandler { Respond = (_, _) => FakeHttpHandler.Response(HttpStatusCode.OK, "image/png", new byte[10]) };
+        using var previewer = new LinkPreviewer(handler, false, new CollectingLogger(), TestProxy.Direct);
+
+        Assert.IsNull(await previewer.FetchImageAsync(new Uri("https://media.example.com/a.gif"), "image/gif", 10_000, CancellationToken.None));
+        Assert.IsNull(await previewer.FetchImageAsync(new Uri("http://10.0.0.1/a.gif"), "image/gif", 10_000, CancellationToken.None));
+        Assert.AreEqual(1, handler.Requests.Count);
     }
 
     [TestMethod]

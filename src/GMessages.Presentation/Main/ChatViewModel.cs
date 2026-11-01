@@ -185,6 +185,9 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     /// <summary>Gets the conversation ID.</summary>
     public string ConversationId { get; }
 
+    /// <summary>Gets the previewer that fetches link cards, which the chat also uses to fetch a pasted web picture; null for none.</summary>
+    public LinkPreviewer? Previews => _previews;
+
     /// <summary>Gets the conversation name.</summary>
     public string Title { get; private set; } = string.Empty;
 
