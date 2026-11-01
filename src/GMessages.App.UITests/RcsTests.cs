@@ -637,6 +637,53 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
+    /// The bubble's focus ring is themed: the pixels it draws carry the accent color, never Windows' white or black focus
+    /// stroke.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task KeyboardFocus_RingIsAccentColored()
+    {
+        await OpenChatAsync("Row.c-ann");
+        AutomationElement text = App.Find("Bubble." + Find("c-ann", AnnLast).MessageID);
+        System.Drawing.Rectangle around = System.Drawing.Rectangle.Inflate(text.BoundingRectangle, 24, 16);
+        App.Find("Chat.Draft").Focus();
+        Thread.Sleep(300);
+        using FlaUI.Core.Capturing.CaptureImage before = FlaUI.Core.Capturing.Capture.Rectangle(around);
+
+        FocusLastRow();
+        WaitForRing(text, "FocusRing");
+        Thread.Sleep(300);
+        using FlaUI.Core.Capturing.CaptureImage after = FlaUI.Core.Capturing.Capture.Rectangle(around);
+
+        // The Ring's Pixels: What Changed, Each One Colored (Not Gray, White Or Black)
+        int changed = 0;
+        int gray    = 0;
+        for (int y = 0; y < after.Bitmap.Height; y++)
+        {
+            for (int x = 0; x < after.Bitmap.Width; x++)
+            {
+                System.Drawing.Color was = before.Bitmap.GetPixel(x, y);
+                System.Drawing.Color now = after.Bitmap.GetPixel(x, y);
+                if (Math.Abs(was.R - now.R) + Math.Abs(was.G - now.G) + Math.Abs(was.B - now.B) < 60)
+                {
+                    continue;
+                }
+
+                changed++;
+                int chroma = Math.Max(now.R, Math.Max(now.G, now.B)) - Math.Min(now.R, Math.Min(now.G, now.B));
+                if (chroma < 30)
+                {
+                    gray++;
+                }
+            }
+        }
+
+        Assert.IsTrue(changed > 20, $"The ring drew only {changed} pixels.");
+        Assert.IsTrue(gray * 4 < changed, $"{gray} of the ring's {changed} pixels are gray, white or black, not the accent.");
+    }
+
+    /// <summary>
     /// With the mouse over Ann's last bubble, the hover strip's Reply starts a reply to it.
     /// </summary>
     /// <returns>A task for the test.</returns>
