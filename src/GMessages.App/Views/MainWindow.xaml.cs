@@ -334,6 +334,9 @@ public sealed partial class MainWindow : Window
         ShowTitleBarButtons();
         ShowChatFocus();
 
+        // The Emoji Picker's Emoji Draw Once In The Background, So It Opens Fully Drawn
+        EmojiWarmUp.Start(RootGrid);
+
         // The List Can Show From The Store's Cache Before These Handlers Exist, And An Unchanged Refresh Moves No Row,
         // So Ask For The Owner's Photo Now Too
         _ = ShowProfilePhotoAsync();

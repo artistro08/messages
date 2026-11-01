@@ -101,6 +101,9 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 931, Level = LogLevel.Information, Message = "Emoji picker open {Open}: built in {BuildMs} ms, longest stall {StallMs} ms, {Rows} rows made")]
     public static partial void EmojiPickerShown(ILogger logger, int open, long buildMs, long stallMs, int rows);
 
+    [LoggerMessage(EventId = 932, Level = LogLevel.Information, Message = "Emoji warm-up done: {Count} emoji in {ElapsedMs} ms")]
+    public static partial void EmojiWarmedUp(ILogger logger, int count, long elapsedMs);
+
     [LoggerMessage(EventId = 951,Level = LogLevel.Information, Message = "Test endpoint {Endpoint}, data folder {DataFolder}")]
     public static partial void TestEndpoint(ILogger logger, string endpoint, string dataFolder);
 }
