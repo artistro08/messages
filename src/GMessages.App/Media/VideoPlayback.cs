@@ -1,10 +1,12 @@
 using Microsoft.UI.Dispatching;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Windows.Media.Core;
 using Windows.Media.Playback;
 using Windows.Storage.Streams;
+using WinRT;
 
 namespace GMessages.App.Media;
 
@@ -15,8 +17,8 @@ namespace GMessages.App.Media;
 /// <remarks>
 /// <para>
 /// Made the way <see cref="VoicePlayer"/> makes its player: the bytes play from memory (never from disk), as media (a
-/// communications stream goes to the default communications device, often not the speakers), off the system media
-/// controls, and muted in a test run. A bubble plays one in place with compact controls (play or pause, seek, volume);
+/// communications stream goes to the default communications device, often not the speakers), and muted in a test run.
+/// Its command manager stays on: with it off, the play button of Windows' controls never played a paused video. A bubble plays one in place with compact controls (play or pause, seek, volume);
 /// the viewer plays one with the full controls. Windows' zoom button stays hidden; its full window button can't be hidden
 /// in WinUI 3, so its press is turned back and raises <see cref="FullWindowRequested"/>: the bubble's expand and the
 /// viewer stand in for it.
@@ -57,25 +59,44 @@ internal sealed class VideoPlayback : IDisposable
             IsMuted       = TestHooks.BlockLaunches,
             Source        = new MediaPlaybackItem(MediaSource.CreateFromStream(_stream, mime), start),
         };
-        Player.CommandManager.IsEnabled              = false;
         Player.MediaFailed                          += OnMediaFailed;
         Player.PlaybackSession.PlaybackStateChanged += OnPlaybackStateChanged;
 
-        // Element: Windows' Controls, Without Its Own Full Window And Zoom
+        // Element: Windows' Controls, Without Its Own Full Window, Zoom And Cast. The Element's Own Controls Are Set Up
+        // In Place: A New MediaTransportControls Put In Their Stead Never Heard The Player's State, So Its Play Button
+        // Stayed On "Play" While The Video Played And Only Ever Paused It
         Element = new MediaPlayerElement
         {
             AreTransportControlsEnabled = true,
             Stretch                     = Stretch.Uniform,
-            TransportControls           = new MediaTransportControls
-            {
-                IsCompact           = compact,
-                IsZoomButtonVisible = false,
-                IsZoomEnabled       = false,
-            },
         };
         AutomationProperties.SetAutomationId(Element, automationId);
         AutomationProperties.SetName(Element, name);
         Element.SetMediaPlayer(Player);
+
+        MediaTransportControls controls = Element.TransportControls;
+        controls.IsCompact              = compact;
+        controls.IsZoomButtonVisible    = false;
+        controls.IsZoomEnabled          = false;
+
+        // Cast: WinUI 3's Controls Have No Property For It, And Set The Template's Button Visible Themselves (Collapsing It
+        // Fought Them And Hung The Window), So Once It Is Made It Is Clear, Takes No Input And Leaves Narrator's Tree. It
+        // Keeps Its Place, So Volume And Play Stay Where They Were, Balanced In The Bar
+        controls.LayoutUpdated += HideCast;
+
+        void HideCast(object? sender, object e)
+        {
+            if (FindNamed(controls, "CastButton") is not { } cast)
+            {
+                return;
+            }
+
+            controls.LayoutUpdated -= HideCast;
+            cast.Opacity            = 0;
+            cast.IsHitTestVisible   = false;
+            cast.As<Control>().IsTabStop = false;
+            AutomationProperties.SetAccessibilityView(cast, Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
+        }
 
         // Windows' Full Window Button: WinUI 3's Controls Have No Property To Hide It (Only IsFullWindow Exists), So Its
         // Press Is Turned Back At Once And Handed To The Owner, Whose Viewer Is The Only Full-Size View
@@ -124,6 +145,26 @@ internal sealed class VideoPlayback : IDisposable
         Player.Pause();
         Player.Dispose();
         _stream.Dispose();
+    }
+
+    // A Template Part By Its Name Only (No Type Check, So It Is AOT Safe)
+    private static FrameworkElement? FindNamed(DependencyObject root, string name)
+    {
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+        {
+            DependencyObject child = VisualTreeHelper.GetChild(root, i);
+            if (child is FrameworkElement { Name: var found_name } element && found_name == name)
+            {
+                return element;
+            }
+
+            if (FindNamed(child, name) is { } found)
+            {
+                return found;
+            }
+        }
+
+        return null;
     }
 
     // Raised Off The UI Thread: The State For The Tests
