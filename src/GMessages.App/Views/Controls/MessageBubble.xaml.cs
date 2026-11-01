@@ -117,6 +117,12 @@ public sealed partial class MessageBubble : UserControl
     // How Far The Reaction Pill's Top Overlaps The Back (PillHost's -8 Top Margin)
     private const double PillOverlap = 8;
 
+    // The Gap Between The Reaction Pill And The Time Beside It (PillHost's 6 px Left Margin)
+    private const double PillGap = 6;
+
+    // A Short Bubble's Pill Is Centered This Far Right Of The Point 12 px In From The Back's Right (4 px In From The Edge)
+    private const double PillCornerReach = 8;
+
     // The Preview Card's Image Width, And Its Gap Below The Text, In Effective Pixels
     private const int PreviewImageWidth = 240;
     private const double PreviewGap     = 8;
@@ -892,17 +898,23 @@ public sealed partial class MessageBubble : UserControl
         visual.Opacity = 1;
     }
 
-    // The Pill On The Back's Bottom-Right Corner, Its Top 8 px Over The Back. Beside A Long Bubble The Time Fits Next To
-    // It. Under A Short Received One (The Time Wider Than The Room Beside The Pill) The Row Grows Past The Back's Right,
-    // So The Pill Is Moved Back Onto The Corner And The Time Drops Below It (Owner, Plan 9: A Pill Beside The Time Looked
-    // Detached). A Sent Row Is Right-Aligned, So Its Pill Is Always On The Corner And Its Row Grows Leftward Instead
+    // The Pill On The Back's Bottom-Right Corner, Its Top 8 px Over The Back, Ending 12 px In From The Back's Right (As On
+    // A Long Bubble). On A Short Bubble (Under Twice The Pill's Width) That Would Put It Under The Bottom-Left, So It Is
+    // Centered 4 px In From The Back's Right Edge Instead, Over The Corner (Owner, Plan 10). The Pill Sits At The Row's Right End, So It
+    // Is Moved There From Wherever The Row's Width Put It; A Received Bubble's Time (On The Left) Drops Below The Pill When
+    // The Two Would Meet. A Sent Bubble's Time Sits Left Of The Pill, Which Only Moves Right, So It Never Meets It
     private void LayPill()
     {
-        bool shown     = Bubble?.FromMe != true && PillHost.Visibility == Visibility.Visible && PillHost.ActualWidth > 0;
-        double shift   = shown ? Math.Max(0, Under.ActualWidth - Under.MinWidth) : 0;
-        bool narrow    = shift >= 1;
-        double shift_x = narrow ? -shift : 0;
-        var margin     = new Thickness(0, narrow ? Math.Max(0, PillHost.ActualHeight - PillOverlap) : 0, 0, 0);
+        double pill_width = PillHost.ActualWidth;
+        bool shown        = PillHost.Visibility == Visibility.Visible && pill_width > 0;
+        bool sent         = Bubble?.FromMe == true;
+
+        // The Point 12 px In From The Back's Right, In The Row's Space (A Sent Row Ends There; A Received One Starts At The Back's Left)
+        double corner  = sent ? Under.ActualWidth : Under.MinWidth;
+        double left    = Under.MinWidth < pill_width * 2 ? corner + PillCornerReach - (pill_width / 2) : corner - pill_width;
+        double shift_x = shown ? left - (Under.ActualWidth - pill_width) : 0;
+        bool drop      = shown && !sent && left < Captions.ActualWidth + PillGap;
+        var margin     = new Thickness(0, drop ? Math.Max(0, PillHost.ActualHeight - PillOverlap) : 0, 0, 0);
         if (_pillShift.X != shift_x)
         {
             _pillShift.X = shift_x;

@@ -315,7 +315,8 @@ public sealed class RcsTests : UiTest
         System.Drawing.Rectangle text = bubble.BoundingRectangle;
         System.Drawing.Rectangle on   = pill.BoundingRectangle;
         Assert.IsTrue(on.Top < text.Bottom + 12 && on.Bottom > text.Bottom + 12, $"The pill {on} doesn't cross the bubble's bottom edge (text {text}).");
-        Assert.IsTrue(on.Left < text.Right + 12 && on.Right > text.Right - 4, $"The pill {on} isn't on the bubble's bottom-right corner (text {text}).");
+        int middle = on.Left + (on.Width / 2);
+        Assert.IsTrue(middle >= text.Right - 2 && on.Left < text.Right + 12, $"The pill {on} isn't on the bubble's bottom-right corner (text {text}).");
     }
 
     /// <summary>
