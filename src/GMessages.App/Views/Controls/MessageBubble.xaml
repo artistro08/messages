@@ -674,13 +674,13 @@
                     Visibility="Collapsed" />
 
                 <!-- Hover Strip: react, reply and the ⋮ (see Hover above), right of a received back and left of a sent one. Its
-                     slot is always there and always the strip's width (104 px, HoverStripWidth), so no bubble moves when it
+                     slot is always there and always the strip's width (StripWidth, from HoverStripWidth), so no bubble moves when it
                      shows; as tall as the back and transparent, so the pointer stays on the bubble on its way to the buttons.
                      The strip itself loads on the bubble's first hover or keyboard focus (LoadHoverStrip). Not tab stops: the
                      keyboard has the bubble menu, Shift + + and Ctrl + Enter -->
                 <Grid
                     Grid.Column="{x:Bind local:MessageBubble.StripColumn(Bubble.FromMe), Mode=OneWay, FallbackValue=2}"
-                    Width="104"
+                    Width="{x:Bind local:MessageBubble.StripWidth}"
                     Background="Transparent">
                     <StackPanel
                         x:Name="HoverStrip"

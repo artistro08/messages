@@ -147,7 +147,7 @@ public sealed partial class MessageBubble : UserControl
     // The Avatar Lane Beside Received Bubbles In A Group Chat
     private const double AvatarLane = 36;
 
-    // The Hover Strip: Three 32 px Buttons With 4 px Either Side (MessageBubble.xaml)
+    // The Hover Strip: Three 32 px Buttons With 4 px Either Side (Its Slot In MessageBubble.xaml Binds StripWidth)
     private const double HoverStripWidth = 104;
 
     // A Photo's Blurred Look: Its Thumbnail Decoded This Wide, Then Stretched To The Photo's Size
@@ -346,6 +346,9 @@ public sealed partial class MessageBubble : UserControl
     /// <summary>Gets the playing video's expand button name and tooltip.</summary>
     public static string OpenVideoText => ChatCopy.OpenVideo;
 
+    /// <summary>Gets the hover strip slot's width (see <see cref="LanePadding"/>), kept the same in the XAML.</summary>
+    public static double StripWidth => HoverStripWidth;
+
     /// <summary>Gets the caption row lock's tooltip and name.</summary>
     public static string EncryptedText => ChatCopy.EndToEndEncrypted;
 
@@ -387,8 +390,8 @@ public sealed partial class MessageBubble : UserControl
     /// <param name="systemVisual">True when the row's system focus visual draws (high contrast).</param>
     internal void ShowFocusRing(bool shown, bool systemVisual)
     {
-        // Keyboard Focus Loads The Hover Strip, As The Pointer Does
-        if (shown)
+        // Keyboard Focus Loads The Hover Strip, As The Pointer Does; In High Contrast The System Visual Stands In For The Ring
+        if (shown || systemVisual)
         {
             LoadHoverStrip();
         }
@@ -2287,7 +2290,6 @@ public sealed partial class MessageBubble : UserControl
     private void OnPointerEntered(object sender, PointerRoutedEventArgs e)
     {
         _pointerOver = true;
-        LoadHoverStrip();
         if (Bubble?.CanAct == true)
         {
             ShowHover(true, Ui.AnimationsEnabled);
