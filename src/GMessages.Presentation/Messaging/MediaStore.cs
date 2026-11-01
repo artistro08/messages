@@ -57,7 +57,8 @@ public sealed partial class MediaStore
     {
         ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tif", ".tiff", ".heic", ".heif", ".avif",
         ".mp4", ".mov", ".m4v", ".3gp", ".3g2", ".mkv", ".avi", ".webm",
-        ".mp3", ".m4a", ".ogg", ".wav", ".aac", ".amr",
+        ".mpeg", ".mpg", ".3gpp",
+        ".mp3", ".m4a", ".ogg", ".wav", ".aac", ".amr", ".flac", ".opus",
         ".pdf", ".txt", ".csv", ".rtf", ".vcf", ".ics",
         ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".odt",
     };
@@ -752,6 +753,12 @@ public sealed partial class MediaStore
             "text/plain"                                    => ".txt",
             "text/vcard" or "text/x-vcard"                  => ".vcf",
             "text/calendar"                                 => ".ics",
+            "application/msword"                            => ".doc",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"   => ".docx",
+            "application/vnd.ms-excel"                      => ".xls",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"         => ".xlsx",
+            "application/vnd.ms-powerpoint"                 => ".ppt",
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation" => ".pptx",
             _                                               => subtype.Length is > 0 and <= 5 && subtype.All(char.IsAsciiLetterOrDigit) ? "." + subtype : string.Empty,
         };
     }

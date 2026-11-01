@@ -291,7 +291,7 @@ public sealed class MediaStoreTests
     [DataRow("console.txt", "text/plain", "console.txt")]
     [DataRow(" . ", "image/jpeg", "attachment.jpg")]
     [DataRow("", "audio/mp4", "attachment.m4a")]
-    [DataRow("", "application/vnd.ms-excel", "attachment")]
+    [DataRow("", "application/vnd.ms-excel", "attachment.xls")]
     [DataRow("tab\there.txt", "text/plain", "tab_here.txt")]
     public void SanitizeName_Cases(string name, string mime, string expected) =>
         Assert.AreEqual(expected, MediaStore.SanitizeName(name, mime));
@@ -347,6 +347,15 @@ public sealed class MediaStoreTests
     [DataRow("image/png")]
     [DataRow("image/heic")]
     [DataRow("application/pdf")]
+    [DataRow("application/msword")]
+    [DataRow("application/vnd.openxmlformats-officedocument.wordprocessingml.document")]
+    [DataRow("application/vnd.ms-excel")]
+    [DataRow("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")]
+    [DataRow("application/vnd.ms-powerpoint")]
+    [DataRow("application/vnd.openxmlformats-officedocument.presentationml.presentation")]
+    [DataRow("audio/flac")]
+    [DataRow("audio/opus")]
+    [DataRow("video/mpeg")]
     public void CanOpen_EveryExtensionOfType_ExceptSvg_True(string mime) =>
         Assert.IsTrue(MediaStore.CanOpen("file" + MediaStore.ExtensionOf(mime), mime));
 
@@ -379,6 +388,11 @@ public sealed class MediaStoreTests
     [DataRow(".wav")]
     [DataRow(".aac")]
     [DataRow(".amr")]
+    [DataRow(".flac")]
+    [DataRow(".opus")]
+    [DataRow(".mpeg")]
+    [DataRow(".mpg")]
+    [DataRow(".3gpp")]
     [DataRow(".pdf")]
     [DataRow(".txt")]
     [DataRow(".csv")]
@@ -445,7 +459,14 @@ public sealed class MediaStoreTests
     [DataRow("application/pdf", ".pdf")]
     [DataRow("text/x-vcard", ".vcf")]
     [DataRow("IMAGE/JPEG; charset=binary", ".jpg")]
-    [DataRow("application/vnd.ms-excel", "")]
+    [DataRow("application/msword", ".doc")]
+    [DataRow("application/vnd.openxmlformats-officedocument.wordprocessingml.document", ".docx")]
+    [DataRow("application/vnd.ms-excel", ".xls")]
+    [DataRow("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", ".xlsx")]
+    [DataRow("application/vnd.ms-powerpoint", ".ppt")]
+    [DataRow("application/vnd.openxmlformats-officedocument.presentationml.presentation", ".pptx")]
+    [DataRow("audio/flac", ".flac")]
+    [DataRow("video/mpeg", ".mpeg")]
     [DataRow("", "")]
     public void ExtensionOf_CommonTypes(string mime, string expected) =>
         Assert.AreEqual(expected, MediaStore.ExtensionOf(mime));
