@@ -63,15 +63,15 @@ public sealed partial class TokenRefresher(GmHttpClient http, AuthData auth, GmE
         }
 
         // Sign "{id}:{micros}"
-        string request_id = Guid.NewGuid().ToString();
+        string requestId  = Guid.NewGuid().ToString();
         long timestamp    = now.ToUnixTimeMilliseconds() * 1000;
-        byte[] signature  = auth.RefreshKey.SignSha256Der(Encoding.UTF8.GetBytes(request_id + ":" + timestamp.ToString(CultureInfo.InvariantCulture)));
+        byte[] signature  = auth.RefreshKey.SignSha256Der(Encoding.UTF8.GetBytes(requestId + ":" + timestamp.ToString(CultureInfo.InvariantCulture)));
 
         var payload = new RegisterRefreshRequest
         {
             MessageAuth = new AuthMessage
             {
-                RequestID        = request_id,
+                RequestID        = requestId,
                 TachyonAuthToken = ByteString.CopyFrom(auth.TachyonAuthToken ?? []),
                 Network          = auth.AuthNetwork,
                 ConfigVersion    = GmConstants.ConfigVersion,
@@ -101,8 +101,8 @@ public sealed partial class TokenRefresher(GmHttpClient http, AuthData auth, GmE
         {
             // Diagnosis: Which Failure, And The HTTP Status When There Was One (0 Otherwise)
             int status = ex is GmRequestException req ? req.StatusCode : 0;
-            string error_type = ex.GetType().Name;
-            LogRefreshFailed(log, error_type, status);
+            string errorType = ex.GetType().Name;
+            LogRefreshFailed(log, errorType, status);
             throw;
         }
 
@@ -121,8 +121,8 @@ public sealed partial class TokenRefresher(GmHttpClient http, AuthData auth, GmE
     public void Update(TokenData data)
     {
         Apply(auth, data, time);
-        TimeSpan valid_for = TimeSpan.FromMicroseconds(auth.TachyonTtlMicros);
-        LogUpdated(log, auth.TachyonExpiry, valid_for);
+        TimeSpan validFor = TimeSpan.FromMicroseconds(auth.TachyonTtlMicros);
+        LogUpdated(log, auth.TachyonExpiry, validFor);
     }
 
     /// <summary>
@@ -141,10 +141,10 @@ public sealed partial class TokenRefresher(GmHttpClient http, AuthData auth, GmE
     {
         ArgumentNullException.ThrowIfNull(data);
 
-        TimeSpan valid_for = data.TTL == 0 ? DefaultValidFor : TimeSpan.FromMicroseconds(data.TTL);
+        TimeSpan validFor = data.TTL == 0 ? DefaultValidFor : TimeSpan.FromMicroseconds(data.TTL);
 
         // One Swap, So A Concurrent Save Never Sees A New Token With An Old Expiry
-        auth.Tachyon = new TachyonToken(data.TachyonAuthToken.ToByteArray(), time.GetUtcNow() + valid_for, (long)valid_for.TotalMicroseconds);
+        auth.Tachyon = new TachyonToken(data.TachyonAuthToken.ToByteArray(), time.GetUtcNow() + validFor, (long)validFor.TotalMicroseconds);
     }
 
     /// <summary>
@@ -167,8 +167,8 @@ public sealed partial class TokenRefresher(GmHttpClient http, AuthData auth, GmE
                 continue;
             }
 
-            bool known_error = req.Error is { Type: 16, Message: InvalidCredentialsMessage } or { Type: 5, Message: EntityNotFoundMessage };
-            if (known_error || req.StatusCode is 401 or 403 or 404)
+            bool knownError = req.Error is { Type: 16, Message: InvalidCredentialsMessage } or { Type: 5, Message: EntityNotFoundMessage };
+            if (knownError || req.StatusCode is 401 or 403 or 404)
             {
                 return true;
             }

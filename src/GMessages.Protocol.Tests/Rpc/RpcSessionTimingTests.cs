@@ -186,7 +186,7 @@ public class RpcSessionTimingTests
         Rig rig = CreateRig();
         Task<IncomingRpc> send = rig.Session.SendAsync(new SendParams(ActionType.GetUpdates, RequestId: "req-1"), CancellationToken.None);
         await WaitForTimersAsync(rig.Time, 1);
-        Task<IncomingRpc> no_wait = await rig.Session.SendAsyncNoWait(new SendParams(ActionType.GetUpdates, RequestId: "req-2"), CancellationToken.None);
+        Task<IncomingRpc> no_wait = await rig.Session.SendNoWaitAsync(new SendParams(ActionType.GetUpdates, RequestId: "req-2"), CancellationToken.None);
 
         rig.Session.FailAllWaiters();
 
@@ -220,8 +220,8 @@ public class RpcSessionTimingTests
             Raw     = new IncomingRPCMessage { ResponseID = "resp-1" },
             Message = new RPCMessageData { SessionID = id, Action = action, UnencryptedData = ByteString.CopyFromUtf8("x") },
         };
-        Task<IncomingRpc> first = await rig.Session.SendAsyncNoWait(new SendParams(ActionType.GetUpdates, RequestId: "req-1"), CancellationToken.None);
-        Task<IncomingRpc> second = await rig.Session.SendAsyncNoWait(new SendParams(ActionType.CreateGaiaPairingClientInit, RequestId: "req-2"), CancellationToken.None);
+        Task<IncomingRpc> first = await rig.Session.SendNoWaitAsync(new SendParams(ActionType.GetUpdates, RequestId: "req-1"), CancellationToken.None);
+        Task<IncomingRpc> second = await rig.Session.SendNoWaitAsync(new SendParams(ActionType.CreateGaiaPairingClientInit, RequestId: "req-2"), CancellationToken.None);
 
         Assert.IsFalse(rig.Session.TryDeliverResponse(Unencrypted("req-1", ActionType.GetUpdates)));
         Assert.IsTrue(rig.Session.TryDeliverResponse(Unencrypted("req-2", ActionType.CreateGaiaPairingClientInit)));

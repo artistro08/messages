@@ -127,10 +127,10 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
             }
 
             // Wait And Retry
-            TimeSpan retry_in = attempt * ServerErrorRetryInterval;
-            LogServerErrorRetry(log, (int)res.StatusCode, url.AbsolutePath, attempt, retry_in);
+            TimeSpan retryIn = attempt * ServerErrorRetryInterval;
+            LogServerErrorRetry(log, (int)res.StatusCode, url.AbsolutePath, attempt, retryIn);
             res.Dispose();
-            await Task.Delay(retry_in, time, ct).ConfigureAwait(false);
+            await Task.Delay(retryIn, time, ct).ConfigureAwait(false);
         }
     }
 
@@ -242,13 +242,13 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
             throw new GmRequestException(status, null, body);
         }
 
-        var response_headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var responseHeaders = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach ((string name, IEnumerable<string> values) in res.Headers.Concat(res.Content.Headers))
         {
-            response_headers[name] = string.Join(",", values);
+            responseHeaders[name] = string.Join(",", values);
         }
 
-        return new GmMediaResponse(status, response_headers, body);
+        return new GmMediaResponse(status, responseHeaders, body);
     }
 
     // =========================================================================
@@ -266,7 +266,8 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
             throw new InvalidDataException("The response is too large.");
         }
 
-        await using Stream stream = await content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+        Stream stream = await content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+        await using var streamScope = stream.ConfigureAwait(false);
 
         // Known Length: Exactly That Many Bytes, Never Read Past
         if (length is { } known)
@@ -324,25 +325,25 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
             }
 
             // Only A Change Is News: The Same Cookie Names With The Same Expiry Attributes As Last Time Stay Quiet
-            string name_set = string.Join(",", set.Select(c => c.Name).Order(StringComparer.Ordinal));
+            string nameSet  = string.Join(",", set.Select(c => c.Name).Order(StringComparer.Ordinal));
             string current  = string.Join(",", set.Select(c => $"{c.Name}|{c.Stamp}").Order(StringComparer.Ordinal));
             lock (_loggedCookies)
             {
-                if (_loggedCookies.TryGetValue(name_set, out string? last) && last == current)
+                if (_loggedCookies.TryGetValue(nameSet, out string? last) && last == current)
                 {
                     return;
                 }
 
-                _loggedCookies[name_set] = current;
+                _loggedCookies[nameSet] = current;
             }
 
-            string line_text = string.Join(", ", set.Select(c => $"{c.Name} ({c.When})"));
-            LogCookiesSet(log, path, line_text);
+            string lineText = string.Join(", ", set.Select(c => $"{c.Name} ({c.When})"));
+            LogCookiesSet(log, path, lineText);
         }
         catch (Exception ex)
         {
-            string error_type = ex.GetType().Name;
-            LogCookiesNotLogged(log, error_type);
+            string errorType = ex.GetType().Name;
+            LogCookiesNotLogged(log, errorType);
         }
     }
 

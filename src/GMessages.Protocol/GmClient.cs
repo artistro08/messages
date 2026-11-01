@@ -170,13 +170,13 @@ public sealed partial class GmClient : IMessagingClient, IAsyncDisposable
             return new GmClient(auth, store, endpoints, time, logs, handler, ownsHandler: false);
         }
 
-        var socket_handler = new SocketsHttpHandler
+        var socketHandler = new SocketsHttpHandler
         {
             UseCookies             = false,
             AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate | DecompressionMethods.Brotli,
         };
 
-        return new GmClient(auth, store, endpoints, time, logs, socket_handler, ownsHandler: true);
+        return new GmClient(auth, store, endpoints, time, logs, socketHandler, ownsHandler: true);
     }
 
     // =========================================================================
@@ -308,19 +308,19 @@ public sealed partial class GmClient : IMessagingClient, IAsyncDisposable
             }
 
             // Pair With Saves Paused; Disconnect And Dispose Cancel It
-            string phone_id;
-            using var pair_cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            Volatile.Write(ref _pairCts, pair_cts);
+            string phoneId;
+            using var pairCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            Volatile.Write(ref _pairCts, pairCts);
             if (Volatile.Read(ref _finished) != 0)
             {
                 // Dispose Ran Before _pairCts Was Visible
-                await pair_cts.CancelAsync().ConfigureAwait(false);
+                await pairCts.CancelAsync().ConfigureAwait(false);
             }
 
             SetSavesSuspended(true);
             try
             {
-                phone_id = await PairCoreAsync(showEmoji, pair_cts.Token).ConfigureAwait(false);
+                phoneId = await PairCoreAsync(showEmoji, pairCts.Token).ConfigureAwait(false);
             }
             catch
             {
@@ -334,9 +334,9 @@ public sealed partial class GmClient : IMessagingClient, IAsyncDisposable
             }
 
             // Save, Announce, Reconnect
-            LogPaired(_log, Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(phone_id)))[..8]);
+            LogPaired(_log, Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(phoneId)))[..8]);
             SaveNow();
-            Raise(new PairSuccessful(phone_id));
+            Raise(new PairSuccessful(phoneId));
             await ReconnectAsync().ConfigureAwait(false);
         }
         finally
@@ -590,14 +590,14 @@ public sealed partial class GmClient : IMessagingClient, IAsyncDisposable
         await cts.CancelAsync().ConfigureAwait(false);
         await AwaitStoppingAsync(run).ConfigureAwait(false);
 
-        Task post_connect;
+        Task postConnect;
         lock (_runLock)
         {
-            post_connect = _postConnect;
+            postConnect  = _postConnect;
             _postConnect = Task.CompletedTask;
         }
 
-        await AwaitStoppingAsync(post_connect).ConfigureAwait(false);
+        await AwaitStoppingAsync(postConnect).ConfigureAwait(false);
         cts.Dispose();
     }
 

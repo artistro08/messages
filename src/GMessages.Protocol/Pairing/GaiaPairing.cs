@@ -121,34 +121,34 @@ public sealed partial class GaiaPairing(GaiaSignIn signIn, RpcSession rpc, LongP
         }
 
         PrimaryDevice dest = devices[HackyDeviceSwitcher % devices.Count];
-        if (!Guid.TryParse(dest.RegId, out Guid dest_reg_id))
+        if (!Guid.TryParse(dest.RegId, out Guid destRegId))
         {
             throw new InvalidDataException("failed to parse destination UUID");
         }
 
-        auth.DestRegId = dest_reg_id;
+        auth.DestRegId = destRegId;
 
         // Start The Long Poll And Wait For It To Connect
-        var connected  = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        Task long_poll = longPoll.RunAsync(false, () => connected.TrySetResult(), CancellationToken.None);
+        var connected    = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        Task longPollRun = longPoll.RunAsync(false, () => connected.TrySetResult(), CancellationToken.None);
         try
         {
-            if (await Task.WhenAny(connected.Task, long_poll).WaitAsync(ct).ConfigureAwait(false) != connected.Task)
+            if (await Task.WhenAny(connected.Task, longPollRun).WaitAsync(ct).ConfigureAwait(false) != connected.Task)
             {
                 // Surface The Long Poll's Own Error (Such As A 401) Before The Generic One
-                await long_poll.ConfigureAwait(false);
+                await longPollRun.ConfigureAwait(false);
                 throw new InvalidOperationException("Long polling stopped before connecting.");
             }
 
             (string Emoji, PairingSession Session) started = await HandshakeAsync(dest, devices.Count, ct).ConfigureAwait(false);
-            _longPoll = long_poll;
+            _longPoll = longPollRun;
             return started;
         }
         catch
         {
             // Wait For The Long Poll To End; Its Own Error Must Not Hide This One
             longPoll.Stop();
-            await long_poll.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+            await longPollRun.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
             throw;
         }
     }
@@ -219,13 +219,13 @@ public sealed partial class GaiaPairing(GaiaSignIn signIn, RpcSession rpc, LongP
         }
 
         // Store The Keys
-        (byte[] aes_key, byte[] hmac_key) = session.DeriveRequestKeys();
-        auth.RequestCrypto = new AesCtrHelper(aes_key, hmac_key);
+        (byte[] aesKey, byte[] hmacKey) = session.DeriveRequestKeys();
+        auth.RequestCrypto = new AesCtrHelper(aesKey, hmacKey);
         auth.PairingId     = session.Id;
         auth.DestPhoneId   = session.DestRegDevice.UnknownTs;
 
-        ulong phone_number = session.DestRegDevice.UnknownTs != 0 ? session.DestRegDevice.UnknownTs : session.DestRegDevice.UnknownInt;
-        return $"{auth.Mobile?.SourceID}/{phone_number}";
+        ulong phoneNumber = session.DestRegDevice.UnknownTs != 0 ? session.DestRegDevice.UnknownTs : session.DestRegDevice.UnknownInt;
+        return $"{auth.Mobile?.SourceID}/{phoneNumber}";
     }
 
     /// <summary>
@@ -315,10 +315,10 @@ public sealed partial class GaiaPairing(GaiaSignIn signIn, RpcSession rpc, LongP
             StartTimestamp   = session.Start.ToUnixTimeMilliseconds(),
             Data             = ByteString.CopyFrom(data),
         };
-        MessageType message_type = MessageType.Gaia2;
+        MessageType messageType = MessageType.Gaia2;
         if (action == ActionType.CreateGaiaPairingClientFinished)
         {
-            message_type                     = MessageType.BugleMessage;
+            messageType                      = MessageType.BugleMessage;
             container.PrivateAPIConfirmation = PrivateApiConfirmation;
         }
         else
@@ -327,7 +327,7 @@ public sealed partial class GaiaPairing(GaiaSignIn signIn, RpcSession rpc, LongP
             container.ProposedKeyDerivationVersion    = 1;
         }
 
-        Task<IncomingRpc> answer = await rpc.SendAsyncNoWait(new SendParams(action, container, CustomTtlMicros: PairingTtlMicros, DontEncrypt: true, MessageType: message_type), ct).ConfigureAwait(false);
+        Task<IncomingRpc> answer = await rpc.SendNoWaitAsync(new SendParams(action, container, CustomTtlMicros: PairingTtlMicros, DontEncrypt: true, MessageType: messageType), ct).ConfigureAwait(false);
         IncomingRpc response     = await answer.ConfigureAwait(false);
         try
         {
@@ -353,16 +353,16 @@ public sealed partial class GaiaPairing(GaiaSignIn signIn, RpcSession rpc, LongP
     private async Task<(string Emoji, PairingSession Session)> HandshakeAsync(PrimaryDevice dest, int deviceCount, CancellationToken ct)
     {
         PairingSession session = PairingSession.Create(dest, time);
-        (byte[] client_init, _) = session.PreparePayloads();
+        (byte[] clientInit, _) = session.PreparePayloads();
 
         // Send The Client Init With A 20 s Timeout
-        GaiaPairingResponseContainer server_init;
+        GaiaPairingResponseContainer serverInit;
         using (var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(GaiaInitTimeoutSeconds), time))
         using (var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, timeout.Token))
         {
             try
             {
-                server_init = await SendGaiaPairingMessageAsync(session, ActionType.CreateGaiaPairingClientInit, client_init, linked.Token).ConfigureAwait(false);
+                serverInit = await SendGaiaPairingMessageAsync(session, ActionType.CreateGaiaPairingClientInit, clientInit, linked.Token).ConfigureAwait(false);
             }
             catch (Exception)
             {
@@ -377,10 +377,10 @@ public sealed partial class GaiaPairing(GaiaSignIn signIn, RpcSession rpc, LongP
         }
 
         // Check The Answer And Pick The Emoji
-        LogServerInit(log, server_init.ConfirmedKeyDerivationVersion, server_init.ConfirmedVerificationCodeVersion);
+        LogServerInit(log, serverInit.ConfirmedKeyDerivationVersion, serverInit.ConfirmedVerificationCodeVersion);
         try
         {
-            string emoji = session.ProcessServerInit(server_init);
+            string emoji = session.ProcessServerInit(serverInit);
             return (emoji, session);
         }
         catch (InvalidDataException)

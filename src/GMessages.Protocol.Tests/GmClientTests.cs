@@ -301,7 +301,7 @@ public class GmClientTests
         await using Rig rig = CreateRig();
 
         await Assert.ThrowsExactlyAsync<ConnectionClosedException>(() => rig.Client.Rpc.SendAsync(new SendParams(ActionType.ListConversations), CancellationToken.None).WaitAsync(HangGuard));
-        await Assert.ThrowsExactlyAsync<ConnectionClosedException>(() => rig.Client.Rpc.SendAsyncNoWait(new SendParams(ActionType.ListConversations), CancellationToken.None).WaitAsync(HangGuard));
+        await Assert.ThrowsExactlyAsync<ConnectionClosedException>(() => rig.Client.Rpc.SendNoWaitAsync(new SendParams(ActionType.ListConversations), CancellationToken.None).WaitAsync(HangGuard));
 
         Assert.IsEmpty(rig.Requests("/SendMessage"));
         Assert.AreEqual(0, rig.Time.CountTimers(RpcSession.ResponseHardTimeout));

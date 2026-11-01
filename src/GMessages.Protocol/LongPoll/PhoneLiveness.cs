@@ -51,15 +51,15 @@ internal sealed class PhoneLiveness(TimeProvider time)
     {
         lock (_lock)
         {
-            bool not_responding_sent = _notRespondingSent;
-            bool was_failing         = not_responding_sent || _timeouts > 0 || _sendFails > 0;
-            bool needs_catch_up      = not_responding_sent || _timeouts >= DittoPinger.SetActiveSessionAfterTimeouts;
+            bool notRespondingSent   = _notRespondingSent;
+            bool wasFailing          = notRespondingSent || _timeouts > 0 || _sendFails > 0;
+            bool needsCatchUp        = notRespondingSent || _timeouts >= DittoPinger.SetActiveSessionAfterTimeouts;
             _firstPingDone     = true;
             _notRespondingSent = false;
             _timeouts          = 0;
             _sendFails         = 0;
             _recoveryInterval  = TimeSpan.Zero;
-            return (not_responding_sent, was_failing, needs_catch_up);
+            return (notRespondingSent, wasFailing, needsCatchUp);
         }
     }
 
@@ -75,9 +75,9 @@ internal sealed class PhoneLiveness(TimeProvider time)
         {
             int timeouts             = ++_timeouts;
             bool alert               = !_firstPingDone || timeouts >= alertTimeoutCount;
-            bool send_not_responding = alert && !_notRespondingSent;
-            _notRespondingSent      |= send_not_responding;
-            return (timeouts, send_not_responding);
+            bool sendNotResponding   = alert && !_notRespondingSent;
+            _notRespondingSent      |= sendNotResponding;
+            return (timeouts, sendNotResponding);
         }
     }
 

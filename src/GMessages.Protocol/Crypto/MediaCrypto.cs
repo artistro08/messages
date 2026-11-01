@@ -60,9 +60,9 @@ public static class MediaCrypto
         }
 
         // Header
-        int plain_chunk = OutgoingRawChunkSize - ChunkOverhead;
-        int chunk_count = (plain.Length + plain_chunk - 1) / plain_chunk;
-        byte[] output   = new byte[HeaderSize + plain.Length + (ChunkOverhead * chunk_count)];
+        int plainChunk  = OutgoingRawChunkSize - ChunkOverhead;
+        int chunkCount  = (plain.Length + plainChunk - 1) / plainChunk;
+        byte[] output   = new byte[HeaderSize + plain.Length + (ChunkOverhead * chunkCount)];
         output[0]       = 0;
         output[1]       = (byte)BitOperations.Log2(OutgoingRawChunkSize);
 
@@ -70,11 +70,11 @@ public static class MediaCrypto
         using var gcm = new AesGcm(key, TagSize);
         Span<byte> aad = stackalloc byte[5];
         int write      = HeaderSize;
-        for (int index = 0; index < chunk_count; index++)
+        for (int index = 0; index < chunkCount; index++)
         {
-            int start               = index * plain_chunk;
-            ReadOnlySpan<byte> part = plain.Slice(start, Math.Min(plain_chunk, plain.Length - start));
-            WriteAad(aad, (uint)index, index == chunk_count - 1);
+            int start               = index * plainChunk;
+            ReadOnlySpan<byte> part = plain.Slice(start, Math.Min(plainChunk, plain.Length - start));
+            WriteAad(aad, (uint)index, index == chunkCount - 1);
 
             Span<byte> nonce  = output.AsSpan(write, NonceSize);
             Span<byte> cipher = output.AsSpan(write + NonceSize, part.Length);
@@ -119,32 +119,32 @@ public static class MediaCrypto
             throw new CryptographicException("Media chunk size too large.");
         }
 
-        int raw_chunk           = 1 << data[1];
+        int rawChunk            = 1 << data[1];
         ReadOnlySpan<byte> body = data[HeaderSize..];
-        int chunk_count         = (int)((body.Length + (long)raw_chunk - 1) / raw_chunk);
+        int chunkCount          = (int)((body.Length + (long)rawChunk - 1) / rawChunk);
 
         // Every Chunk (The Last Is The Shortest) Must Hold A Nonce And A Tag
-        int last_length = body.Length - ((chunk_count - 1) * raw_chunk);
-        if (chunk_count > 0 && (raw_chunk < ChunkOverhead || last_length < ChunkOverhead))
+        int lastLength = body.Length - ((chunkCount - 1) * rawChunk);
+        if (chunkCount > 0 && (rawChunk < ChunkOverhead || lastLength < ChunkOverhead))
         {
             throw new CryptographicException("Media chunk is truncated.");
         }
 
-        byte[] output = new byte[body.Length - (ChunkOverhead * chunk_count)];
+        byte[] output = new byte[body.Length - (ChunkOverhead * chunkCount)];
 
         // Chunks
         using var gcm = new AesGcm(key, TagSize);
         Span<byte> aad = stackalloc byte[5];
         int write      = 0;
-        for (int index = 0; index < chunk_count; index++)
+        for (int index = 0; index < chunkCount; index++)
         {
-            int start                = index * raw_chunk;
-            ReadOnlySpan<byte> chunk = body.Slice(start, Math.Min(raw_chunk, body.Length - start));
+            int start                = index * rawChunk;
+            ReadOnlySpan<byte> chunk = body.Slice(start, Math.Min(rawChunk, body.Length - start));
 
-            WriteAad(aad, (uint)index, index == chunk_count - 1);
-            int plain_length = chunk.Length - ChunkOverhead;
-            gcm.Decrypt(chunk[..NonceSize], chunk.Slice(NonceSize, plain_length), chunk[^TagSize..], output.AsSpan(write, plain_length), aad);
-            write += plain_length;
+            WriteAad(aad, (uint)index, index == chunkCount - 1);
+            int plainLength = chunk.Length - ChunkOverhead;
+            gcm.Decrypt(chunk[..NonceSize], chunk.Slice(NonceSize, plainLength), chunk[^TagSize..], output.AsSpan(write, plainLength), aad);
+            write += plainLength;
         }
 
         return output;

@@ -1,0 +1,138 @@
+# Code Style For Every Project Under src/
+# tools/ sits outside this folder on purpose, so these rules don't reach it
+
+[*]
+indent_style = space
+charset = utf-8
+
+# Indentation
+[*.{cs,xaml}]
+indent_size = 4
+
+[*.{json,props,csproj}]
+indent_size = 2
+
+[*.cs]
+
+# Namespaces
+csharp_style_namespace_declarations = file_scoped:warning
+dotnet_diagnostic.IDE0161.severity = warning
+
+# Analyzers At Warning
+dotnet_diagnostic.IDE0051.severity = warning
+dotnet_diagnostic.IDE0052.severity = warning
+dotnet_diagnostic.IDE0060.severity = warning
+dotnet_diagnostic.IDE0090.severity = warning
+dotnet_diagnostic.IDE0300.severity = warning
+dotnet_diagnostic.IDE0301.severity = warning
+dotnet_diagnostic.IDE0302.severity = warning
+dotnet_diagnostic.IDE0303.severity = warning
+dotnet_diagnostic.IDE0304.severity = warning
+dotnet_diagnostic.IDE0305.severity = warning
+csharp_style_implicit_object_creation_when_type_is_apparent = true:warning
+dotnet_style_prefer_collection_expression = when_types_loosely_match:warning
+
+# Naming
+dotnet_diagnostic.IDE1006.severity = warning
+
+# Naming Styles
+dotnet_naming_style.pascal_case.capitalization = pascal_case
+
+# The _ separator makes request_id two words, so camelCase flags the lowercase "id"
+dotnet_naming_style.camel_case.capitalization  = camel_case
+dotnet_naming_style.camel_case.word_separator  = _
+
+dotnet_naming_style.underscore_camel_case.capitalization  = camel_case
+dotnet_naming_style.underscore_camel_case.required_prefix = _
+
+dotnet_naming_style.interface_style.capitalization  = pascal_case
+dotnet_naming_style.interface_style.required_prefix = I
+
+dotnet_naming_style.async_suffix.capitalization  = pascal_case
+dotnet_naming_style.async_suffix.required_suffix = Async
+
+# Naming Symbols
+dotnet_naming_symbols.interfaces.applicable_kinds = interface
+
+dotnet_naming_symbols.types.applicable_kinds = class, struct, enum, delegate
+
+dotnet_naming_symbols.async_methods.applicable_kinds   = method
+dotnet_naming_symbols.async_methods.required_modifiers = async
+
+dotnet_naming_symbols.public_members.applicable_kinds           = property, method, event, field
+dotnet_naming_symbols.public_members.applicable_accessibilities = public, internal, protected, protected_internal, private_protected
+
+dotnet_naming_symbols.private_consts.applicable_kinds           = field
+dotnet_naming_symbols.private_consts.applicable_accessibilities = private
+dotnet_naming_symbols.private_consts.required_modifiers         = const
+
+dotnet_naming_symbols.private_static_readonly.applicable_kinds           = field
+dotnet_naming_symbols.private_static_readonly.applicable_accessibilities = private
+dotnet_naming_symbols.private_static_readonly.required_modifiers         = static, readonly
+
+dotnet_naming_symbols.private_statics.applicable_kinds           = field
+dotnet_naming_symbols.private_statics.applicable_accessibilities = private
+dotnet_naming_symbols.private_statics.required_modifiers         = static
+
+dotnet_naming_symbols.private_fields.applicable_kinds           = field
+dotnet_naming_symbols.private_fields.applicable_accessibilities = private
+
+dotnet_naming_symbols.locals_and_parameters.applicable_kinds = local, parameter
+
+# Naming Rules
+dotnet_naming_rule.interfaces_rule.symbols  = interfaces
+dotnet_naming_rule.interfaces_rule.style    = interface_style
+dotnet_naming_rule.interfaces_rule.severity = warning
+
+dotnet_naming_rule.types_rule.symbols  = types
+dotnet_naming_rule.types_rule.style    = pascal_case
+dotnet_naming_rule.types_rule.severity = warning
+
+dotnet_naming_rule.async_methods_rule.symbols  = async_methods
+dotnet_naming_rule.async_methods_rule.style    = async_suffix
+dotnet_naming_rule.async_methods_rule.severity = warning
+
+dotnet_naming_rule.private_consts_rule.symbols  = private_consts
+dotnet_naming_rule.private_consts_rule.style    = pascal_case
+dotnet_naming_rule.private_consts_rule.severity = warning
+
+dotnet_naming_rule.private_static_readonly_rule.symbols  = private_static_readonly
+dotnet_naming_rule.private_static_readonly_rule.style    = pascal_case
+dotnet_naming_rule.private_static_readonly_rule.severity = warning
+
+# Existing s_ statics are left alone
+dotnet_naming_rule.private_statics_rule.symbols  = private_statics
+dotnet_naming_rule.private_statics_rule.style    = camel_case
+dotnet_naming_rule.private_statics_rule.severity = none
+
+dotnet_naming_rule.private_fields_rule.symbols  = private_fields
+dotnet_naming_rule.private_fields_rule.style    = underscore_camel_case
+dotnet_naming_rule.private_fields_rule.severity = warning
+
+dotnet_naming_rule.public_members_rule.symbols  = public_members
+dotnet_naming_rule.public_members_rule.style    = pascal_case
+dotnet_naming_rule.public_members_rule.severity = warning
+
+dotnet_naming_rule.locals_and_parameters_rule.symbols  = locals_and_parameters
+dotnet_naming_rule.locals_and_parameters_rule.style    = camel_case
+dotnet_naming_rule.locals_and_parameters_rule.severity = warning
+
+# TEMPORARY: Projects Not Yet Brought In Line (Removed When Task 5.1 Finishes)
+[{GMessages.Presentation,GMessages.App,GMessages.Protocol.Tests,GMessages.Presentation.Tests,GMessages.App.UITests}/**.cs]
+dotnet_diagnostic.IDE0028.severity = none
+dotnet_diagnostic.IDE0051.severity = none
+dotnet_diagnostic.IDE0052.severity = none
+dotnet_diagnostic.IDE0060.severity = none
+dotnet_diagnostic.IDE0090.severity = none
+dotnet_diagnostic.IDE0161.severity = none
+dotnet_diagnostic.IDE0300.severity = none
+dotnet_diagnostic.IDE0301.severity = none
+dotnet_diagnostic.IDE0302.severity = none
+dotnet_diagnostic.IDE0303.severity = none
+dotnet_diagnostic.IDE0304.severity = none
+dotnet_diagnostic.IDE0305.severity = none
+dotnet_diagnostic.IDE1006.severity = none
+
+# ConfigureAwait In The Protocol Library Only
+[GMessages.Protocol/**.cs]
+dotnet_diagnostic.CA2007.severity = warning

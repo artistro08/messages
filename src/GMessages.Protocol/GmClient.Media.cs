@@ -64,11 +64,11 @@ public sealed partial class GmClient
         progress?.Report(0);
 
         // Start: Base64 Of The Start Request
-        var start_request = new StartMediaUploadRequest { AttachmentType = 1, AuthData = MediaAuth(), Mobile = _auth.Mobile };
-        var start_body    = new ByteArrayContent(System.Text.Encoding.ASCII.GetBytes(Convert.ToBase64String(start_request.ToByteArray())));
-        GmMediaResponse started = await _http.SendMediaAsync(HttpMethod.Post, _endpoints.UploadMedia, UploadHeaders(size, "start", "", mime, "resumable"), start_body, requireOk: true, ct).ConfigureAwait(false);
+        var startRequest  = new StartMediaUploadRequest { AttachmentType = 1, AuthData = MediaAuth(), Mobile = _auth.Mobile };
+        var startBody     = new ByteArrayContent(System.Text.Encoding.ASCII.GetBytes(Convert.ToBase64String(startRequest.ToByteArray())));
+        GmMediaResponse started = await _http.SendMediaAsync(HttpMethod.Post, _endpoints.UploadMedia, UploadHeaders(size, "start", "", mime, "resumable"), startBody, requireOk: true, ct).ConfigureAwait(false);
 
-        if (!started.Headers.TryGetValue("x-goog-upload-url", out string? upload_url) || !Uri.TryCreate(upload_url, UriKind.Absolute, out Uri? upload_uri))
+        if (!started.Headers.TryGetValue("x-goog-upload-url", out string? uploadUrl) || !Uri.TryCreate(uploadUrl, UriKind.Absolute, out Uri? uploadUri))
         {
             throw new InvalidDataException("The upload start answer has no upload URL.");
         }
@@ -79,8 +79,8 @@ public sealed partial class GmClient
         }
 
         // Finalize: The Whole Encrypted File
-        var file_body             = new ProgressContent(encrypted, progress);
-        GmMediaResponse finalized = await _http.SendMediaAsync(HttpMethod.Post, upload_uri, UploadHeaders(size, "upload, finalize", "0", mime, ""), file_body, requireOk: true, ct).ConfigureAwait(false);
+        var fileBody              = new ProgressContent(encrypted, progress);
+        GmMediaResponse finalized = await _http.SendMediaAsync(HttpMethod.Post, uploadUri, UploadHeaders(size, "upload, finalize", "0", mime, ""), fileBody, requireOk: true, ct).ConfigureAwait(false);
         UploadMediaResponse uploaded = UploadMediaResponse.Parser.ParseFrom(DecodeUploadAnswer(finalized.Body));
         if (uploaded.Media is not { MediaID.Length: > 0 } media)
         {
@@ -131,10 +131,10 @@ public sealed partial class GmClient
             Info     = new AttachmentInfo { AttachmentID = mediaId, Encrypted = true },
             AuthData = MediaAuth(),
         };
-        string metadata_header = Convert.ToBase64String(metadata.ToByteArray());
+        string metadataHeader = Convert.ToBase64String(metadata.ToByteArray());
 
         // Download And Decrypt
-        GmMediaResponse res = await _http.SendMediaAsync(HttpMethod.Get, _endpoints.UploadMedia, DownloadHeaders(metadata_header), null, requireOk: false, ct).ConfigureAwait(false);
+        GmMediaResponse res = await _http.SendMediaAsync(HttpMethod.Get, _endpoints.UploadMedia, DownloadHeaders(metadataHeader), null, requireOk: false, ct).ConfigureAwait(false);
         ct.ThrowIfCancellationRequested();
         return MediaCrypto.Decrypt(res.Body, key.Span);
     }

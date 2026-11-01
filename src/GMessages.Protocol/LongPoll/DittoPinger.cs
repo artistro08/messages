@@ -93,10 +93,10 @@ internal sealed partial class DittoPinger(
         _stopToken = ct;
         while (!ct.IsCancellationRequested)
         {
-            var short_circuit = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            Volatile.Write(ref _shortCircuit, short_circuit);
+            var shortCircuit = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            Volatile.Write(ref _shortCircuit, shortCircuit);
 
-            bool elapsed = await DelayOrAsync(PingInterval, short_circuit.Task, ct).ConfigureAwait(false);
+            bool elapsed = await DelayOrAsync(PingInterval, shortCircuit.Task, ct).ConfigureAwait(false);
             if (ct.IsCancellationRequested)
             {
                 return;
@@ -140,20 +140,20 @@ internal sealed partial class DittoPinger(
     /// <param name="source">What arrived, for the log.</param>
     public void OnPhoneActivity(string source)
     {
-        (bool not_responding_sent, bool was_failing, bool needs_catch_up) = liveness.OnLiveness();
-        if (!was_failing)
+        (bool notRespondingSent, bool wasFailing, bool needsCatchUp) = liveness.OnLiveness();
+        if (!wasFailing)
         {
             return;
         }
 
-        LogActivityWhileUnresponsive(log, source, not_responding_sent);
+        LogActivityWhileUnresponsive(log, source, notRespondingSent);
         liveness.CurrentReset?.Done();
-        if (not_responding_sent)
+        if (notRespondingSent)
         {
             Raise(new PhoneRespondingAgain());
         }
 
-        if (needs_catch_up)
+        if (needsCatchUp)
         {
             _ = RequestUpdatesAfterGapAsync("phone started responding again");
         }
@@ -201,25 +201,25 @@ internal sealed partial class DittoPinger(
     // Port Of dittoPinger.Ping: Send, Then Wait In The Background
     private async Task PingAsync(TimeSpan timeout, PingResetter reset, CancellationToken ct)
     {
-        long ping_id = Interlocked.Increment(ref _pingId);
+        long pingId = Interlocked.Increment(ref _pingId);
         if (!liveness.TryStartPing())
         {
-            LogPingSkipped(log, ping_id);
+            LogPingSkipped(log, pingId);
             return;
         }
 
         DateTimeOffset start = time.GetUtcNow();
         liveness.CurrentReset = reset;
 
-        var wait_cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var waitCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         Task<IncomingRpc> wait;
         try
         {
-            wait = await rpc.SendAsyncNoWait(new SendParams(ActionType.NotifyDittoActivity, new NotifyDittoActivityRequest { Success = true }), wait_cts.Token).ConfigureAwait(false);
+            wait = await rpc.SendNoWaitAsync(new SendParams(ActionType.NotifyDittoActivity, new NotifyDittoActivityRequest { Success = true }), waitCts.Token).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
-            wait_cts.Dispose();
+            waitCts.Dispose();
 
             // Stopping: Whatever The Send Failed With, It Is Not A Ping Failure
             if (ct.IsCancellationRequested)
@@ -227,13 +227,13 @@ internal sealed partial class DittoPinger(
                 return;
             }
 
-            int send_fails = liveness.AddSendFail();
-            LogPingSendFailed(log, ex, ping_id);
-            Raise(new PingFailed(new InvalidOperationException("Failed to notify ditto activity.", ex), send_fails));
+            int sendFails = liveness.AddSendFail();
+            LogPingSendFailed(log, ex, pingId);
+            Raise(new PingFailed(new InvalidOperationException("Failed to notify ditto activity.", ex), sendFails));
             return;
         }
 
-        _ = WaitForResponseAsync(ping_id, start, wait, wait_cts, timeout, reset, ct);
+        _ = WaitForResponseAsync(pingId, start, wait, waitCts, timeout, reset, ct);
     }
 
     // Port Of dittoPinger.WaitForResponse
@@ -274,14 +274,14 @@ internal sealed partial class DittoPinger(
 
     private void OnRespond(long pingId, TimeSpan took, PingResetter reset)
     {
-        (bool not_responding_sent, bool was_failing, bool needs_catch_up) = liveness.OnLiveness();
-        LogPingAnswered(log, pingId, took, not_responding_sent, was_failing);
-        if (was_failing)
+        (bool notRespondingSent, bool wasFailing, bool needsCatchUp) = liveness.OnLiveness();
+        LogPingAnswered(log, pingId, took, notRespondingSent, wasFailing);
+        if (wasFailing)
         {
             Raise(new PhoneRespondingAgain());
         }
 
-        if (needs_catch_up)
+        if (needsCatchUp)
         {
             _ = RequestUpdatesAfterGapAsync("phone started responding to pings again");
         }
@@ -292,9 +292,9 @@ internal sealed partial class DittoPinger(
 
     private void OnTimeout(long pingId, bool urgent, PingResetter reset)
     {
-        (int timeouts, bool send_not_responding) = liveness.OnTimeout(AlertTimeoutCount);
+        (int timeouts, bool sendNotResponding) = liveness.OnTimeout(AlertTimeoutCount);
         LogPingTimeout(log, pingId, timeouts, urgent);
-        if (send_not_responding)
+        if (sendNotResponding)
         {
             Raise(new PhoneNotResponding());
         }
@@ -311,7 +311,7 @@ internal sealed partial class DittoPinger(
         CancellationToken ct = _stopToken;
         try
         {
-            bool did_set_active_session = false;
+            bool didSetActiveSession = false;
             while (true)
             {
                 if (!await DelayOrAsync(liveness.GetRecoveryInterval(), reset.Task, ct).ConfigureAwait(false) || ct.IsCancellationRequested)
@@ -334,9 +334,9 @@ internal sealed partial class DittoPinger(
                     await reconnect().ConfigureAwait(false);
                     reconnected = true;
                 }
-                else if (timeouts >= SetActiveSessionAfterTimeouts && !did_set_active_session)
+                else if (timeouts >= SetActiveSessionAfterTimeouts && !didSetActiveSession)
                 {
-                    did_set_active_session = true;
+                    didSetActiveSession = true;
                     LogRearming(log, timeouts);
                     try
                     {

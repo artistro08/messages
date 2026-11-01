@@ -69,19 +69,19 @@ public sealed partial class GaiaSignIn(GmHttpClient http, AuthData auth, GmEndpo
         }
 
         // Take The Session ID From The Device Info
-        string device_id = config.DeviceInfo?.DeviceID ?? "";
-        if (device_id.Length == 0)
+        string deviceId = config.DeviceInfo?.DeviceID ?? "";
+        if (deviceId.Length == 0)
         {
             return;
         }
 
-        if (Guid.TryParse(device_id, out Guid session_id))
+        if (Guid.TryParse(deviceId, out Guid sessionId))
         {
-            auth.SessionId = session_id;
+            auth.SessionId = sessionId;
         }
         else
         {
-            LogBadDeviceId(log, device_id);
+            LogBadDeviceId(log, deviceId);
         }
     }
 
@@ -125,23 +125,23 @@ public sealed partial class GaiaSignIn(GmHttpClient http, AuthData auth, GmEndpo
         phone.SourceID = device.SourceID.ToLowerInvariant();
         auth.Mobile    = phone;
         auth.Browser   = device;
-        TimeSpan valid_for = TimeSpan.FromMicroseconds(auth.TachyonTtlMicros);
-        LogSignedIn(log, auth.TachyonExpiry, valid_for);
+        TimeSpan validFor  = TimeSpan.FromMicroseconds(auth.TachyonTtlMicros);
+        LogSignedIn(log, auth.TachyonExpiry, validFor);
 
         // Find The Phones
         var devices = new List<PrimaryDevice>();
-        var by_uuid = new Dictionary<string, int>();
+        var byUuid  = new Dictionary<string, int>();
         foreach (var item in response.DeviceData.UnknownItems2.Where(i => i.UnknownInt4 == 1))
         {
             // Note: Go keeps a map, so a repeated UUID points at the last entry
-            by_uuid[item.DestOrSourceUUID] = devices.Count;
+            byUuid[item.DestOrSourceUUID] = devices.Count;
             devices.Add(new PrimaryDevice(item.DestOrSourceUUID, item.UnknownBigInt7, 0, default));
         }
 
         // Join Last-Seen Data By UUID
         foreach (var item in response.DeviceData.UnknownItems3)
         {
-            if (!by_uuid.TryGetValue(item.DestOrSourceUUID, out int index))
+            if (!byUuid.TryGetValue(item.DestOrSourceUUID, out int index))
             {
                 continue;
             }

@@ -132,11 +132,11 @@ public sealed partial class LongPollLoop(
     /// <exception cref="InvalidOperationException">Not logged in, and the token refresh failed fatally.</exception>
     public async Task RunAsync(bool loggedIn, Action? onFirstConnect, CancellationToken ct)
     {
-        using var stop_cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        CancellationToken stop = stop_cts.Token;
+        using var stopCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        CancellationToken stop = stopCts.Token;
         lock (_lock)
         {
-            _stopCts = stop_cts;
+            _stopCts = stopCts;
         }
 
         // Pinger And Ack Timer (Logged In Only)
@@ -170,7 +170,7 @@ public sealed partial class LongPollLoop(
         }
         finally
         {
-            await stop_cts.CancelAsync().ConfigureAwait(false);
+            await stopCts.CancelAsync().ConfigureAwait(false);
             try
             {
                 await background.ConfigureAwait(false);
@@ -187,7 +187,7 @@ public sealed partial class LongPollLoop(
             // Only Clear Our Own CTS, So A Newer Run Started Meanwhile Stays Stoppable
             lock (_lock)
             {
-                if (_stopCts == stop_cts)
+                if (_stopCts == stopCts)
                 {
                     _stopCts = null;
                 }
@@ -202,13 +202,13 @@ public sealed partial class LongPollLoop(
     public void Stop()
     {
         Volatile.Write(ref _connected, 0);
-        CancellationTokenSource? stop_cts;
+        CancellationTokenSource? stopCts;
         lock (_lock)
         {
-            stop_cts = _stopCts;
+            stopCts = _stopCts;
         }
 
-        CancelInBackground(stop_cts);
+        CancelInBackground(stopCts);
     }
 
     /// <summary>
@@ -231,10 +231,10 @@ public sealed partial class LongPollLoop(
     // Returns The Fatal Error That Ended The Loop, Or Null When It Was Stopped
     private async Task<Exception?> ListenAsync(bool loggedIn, Action? onFirstConnect, CancellationToken stop)
     {
-        Action? first_connect           = onFirstConnect;
-        string listen_request_id        = Guid.NewGuid().ToString();
-        int error_count                 = 1;
-        DateTimeOffset? disconnected_at = null;
+        Action? firstConnect            = onFirstConnect;
+        string listenRequestId          = Guid.NewGuid().ToString();
+        int errorCount                  = 1;
+        DateTimeOffset? disconnectedAt  = null;
 
         // Recovery Reconnect: Start Over Like A New doLongPoll (Go: Reconnect Starts A Fresh Loop With postConnect)
         bool TakeReconnect()
@@ -249,10 +249,10 @@ public sealed partial class LongPollLoop(
                 _reconnectRequested = false;
             }
 
-            first_connect     = onFirstConnect;
-            listen_request_id = Guid.NewGuid().ToString();
-            error_count       = 1;
-            disconnected_at   = null;
+            firstConnect      = onFirstConnect;
+            listenRequestId   = Guid.NewGuid().ToString();
+            errorCount        = 1;
+            disconnectedAt    = null;
             _pinger?.BumpDataReceiveCheck(TimeSpan.FromMinutes(10));
             return true;
         }
@@ -262,10 +262,10 @@ public sealed partial class LongPollLoop(
             TakeReconnect();
 
             // One Connection Attempt; A Reconnect Request Cancels Its Backoff Wait Or Its Read
-            using var attempt_cts = CancellationTokenSource.CreateLinkedTokenSource(stop);
+            using var attemptCts = CancellationTokenSource.CreateLinkedTokenSource(stop);
             lock (_lock)
             {
-                _connectionCts = attempt_cts;
+                _connectionCts = attemptCts;
             }
 
             try
@@ -290,17 +290,17 @@ public sealed partial class LongPollLoop(
                 }
 
                 // Stream Lifetime Starts With The Request, As Go's Client Timeout Does
-                using var lifetime_cts = new CancellationTokenSource(StreamLifetime, time);
+                using var lifetimeCts = new CancellationTokenSource(StreamLifetime, time);
 
                 // Open The Stream; A Reconnect Request Or 1 Minute Without Headers Interrupts It
                 HttpResponseMessage? res = null;
                 if (error is null)
                 {
-                    using var open_timeout = new CancellationTokenSource(ReadIdleTimeout, time);
-                    using var open_cts     = CancellationTokenSource.CreateLinkedTokenSource(attempt_cts.Token, open_timeout.Token);
+                    using var openTimeout  = new CancellationTokenSource(ReadIdleTimeout, time);
+                    using var openCts      = CancellationTokenSource.CreateLinkedTokenSource(attemptCts.Token, openTimeout.Token);
                     try
                     {
-                        res = await http.PostAsync(auth.HasCookies ? endpoints.ReceiveMessagesGoogle : endpoints.ReceiveMessages, BuildReceiveRequest(listen_request_id), GmContentType.PbLite, true, open_cts.Token).ConfigureAwait(false);
+                        res = await http.PostAsync(auth.HasCookies ? endpoints.ReceiveMessagesGoogle : endpoints.ReceiveMessages, BuildReceiveRequest(listenRequestId), GmContentType.PbLite, true, openCts.Token).ConfigureAwait(false);
                         int status = (int)res.StatusCode;
                         if (status >= 400)
                         {
@@ -318,7 +318,7 @@ public sealed partial class LongPollLoop(
                             error = failure;
                         }
                     }
-                    catch (Exception) when (attempt_cts.IsCancellationRequested && !stop.IsCancellationRequested)
+                    catch (Exception) when (attemptCts.IsCancellationRequested && !stop.IsCancellationRequested)
                     {
                         // Reconnect Requested While Opening: Start Over Right Away
                         res?.Dispose();
@@ -327,7 +327,7 @@ public sealed partial class LongPollLoop(
                     catch (Exception ex) when (!stop.IsCancellationRequested)
                     {
                         res?.Dispose();
-                        error = open_timeout.IsCancellationRequested
+                        error = openTimeout.IsCancellationRequested
                             ? new TimeoutException($"No response headers within {ReadIdleTimeout.TotalSeconds:0} seconds.", ex)
                             : ex;
                     }
@@ -337,10 +337,10 @@ public sealed partial class LongPollLoop(
                 if (error is not null)
                 {
                     RaiseIf(loggedIn, new ListenTemporaryError(error));
-                    error_count++;
-                    TimeSpan sleep = RetryDelay(error_count);
+                    errorCount++;
+                    TimeSpan sleep = RetryDelay(errorCount);
                     LogRetrying(log, error, sleep);
-                    await PauseAsync(sleep, attempt_cts.Token, stop).ConfigureAwait(false);
+                    await PauseAsync(sleep, attemptCts.Token, stop).ConfigureAwait(false);
                     continue;
                 }
 
@@ -353,44 +353,44 @@ public sealed partial class LongPollLoop(
                         continue;
                     }
 
-                    if (error_count > 0)
+                    if (errorCount > 0)
                     {
-                        error_count = 0;
+                        errorCount = 0;
                         RaiseIf(loggedIn, new ListenRecovered());
                     }
 
                     LogOpened(log);
                     Volatile.Write(ref _connected, 1);
-                    if (loggedIn && disconnected_at is { } since && time.GetUtcNow() - since > GapCatchUp)
+                    if (loggedIn && disconnectedAt is { } since && time.GetUtcNow() - since > GapCatchUp)
                     {
                         _ = _pinger!.RequestUpdatesAfterGapAsync("long polling was disconnected");
                     }
 
-                    if (first_connect is not null)
+                    if (firstConnect is not null)
                     {
-                        _ = RunFirstConnectAsync(first_connect);
-                        first_connect = null;
+                        _ = RunFirstConnectAsync(firstConnect);
+                        firstConnect = null;
                     }
 
-                    DateTimeOffset opened_at = time.GetUtcNow();
+                    DateTimeOffset openedAt = time.GetUtcNow();
                     try
                     {
                         // Reaching The Lifetime Ends The Read Like Any Stream End: No Error, Reopen After The Refresh Check
-                        using var read_cts = CancellationTokenSource.CreateLinkedTokenSource(attempt_cts.Token, lifetime_cts.Token);
-                        await ReadAsync(res!, read_cts.Token, stop).ConfigureAwait(false);
+                        using var readCts = CancellationTokenSource.CreateLinkedTokenSource(attemptCts.Token, lifetimeCts.Token);
+                        await ReadAsync(res!, readCts.Token, stop).ConfigureAwait(false);
                     }
                     finally
                     {
                         Volatile.Write(ref _connected, 0);
-                        TimeSpan lifetime = time.GetUtcNow() - opened_at;
+                        TimeSpan lifetime = time.GetUtcNow() - openedAt;
                         LogClosed(log, lifetime);
                     }
 
                     // A Stream That Ended Almost At Once Gets A Pause, So A Server Closing Right Away Can't Spin The Loop
-                    disconnected_at = time.GetUtcNow();
-                    if (disconnected_at - opened_at < MinStreamLifetime)
+                    disconnectedAt = time.GetUtcNow();
+                    if (disconnectedAt - openedAt < MinStreamLifetime)
                     {
-                        await PauseAsync(MinStreamLifetime, attempt_cts.Token, stop).ConfigureAwait(false);
+                        await PauseAsync(MinStreamLifetime, attemptCts.Token, stop).ConfigureAwait(false);
                     }
                 }
             }
@@ -398,7 +398,7 @@ public sealed partial class LongPollLoop(
             {
                 lock (_lock)
                 {
-                    if (_connectionCts == attempt_cts)
+                    if (_connectionCts == attemptCts)
                     {
                         _connectionCts = null;
                     }
@@ -416,8 +416,8 @@ public sealed partial class LongPollLoop(
     /// <returns>The wait.</returns>
     internal static TimeSpan RetryDelay(int errorCount)
     {
-        TimeSpan go_delay = TimeSpan.FromSeconds((errorCount + 1) * 5.0);
-        return go_delay < MaxRetryDelay ? go_delay : MaxRetryDelay;
+        TimeSpan goDelay = TimeSpan.FromSeconds((errorCount + 1) * 5.0);
+        return goDelay < MaxRetryDelay ? goDelay : MaxRetryDelay;
     }
 
     // Waits Out A Backoff Or Pause; A Reconnect Request Ends It Early (Go Starts The New Loop Right Away)
@@ -531,14 +531,14 @@ public sealed partial class LongPollLoop(
     // Port Of Reconnect As Used By The Pinger: Drop The Connection, Then Start Over
     private Task RequestReconnectAsync()
     {
-        CancellationTokenSource? connection_cts;
+        CancellationTokenSource? connectionCts;
         lock (_lock)
         {
             _reconnectRequested = true;
-            connection_cts      = _connectionCts;
+            connectionCts       = _connectionCts;
         }
 
-        CancelInBackground(connection_cts);
+        CancelInBackground(connectionCts);
         return Task.CompletedTask;
     }
 

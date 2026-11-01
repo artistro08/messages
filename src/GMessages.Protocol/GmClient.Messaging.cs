@@ -46,9 +46,9 @@ public sealed partial class GmClient
         var request = new ListConversationsRequest { Folder = folder, Count = count, Cursor = cursor };
 
         // First Call Is An Annotation, As In Go
-        MessageType message_type = Interlocked.Exchange(ref _conversationsFetchedOnce, 1) == 0 ? MessageType.BugleAnnotation : MessageType.BugleMessage;
+        MessageType messageType = Interlocked.Exchange(ref _conversationsFetchedOnce, 1) == 0 ? MessageType.BugleAnnotation : MessageType.BugleMessage;
 
-        IncomingRpc answer = await Rpc.SendAsync(new SendParams(ActionType.ListConversations, request, MessageType: message_type), ct).ConfigureAwait(false);
+        IncomingRpc answer = await Rpc.SendAsync(new SendParams(ActionType.ListConversations, request, MessageType: messageType), ct).ConfigureAwait(false);
         return Typed<ListConversationsResponse>(answer);
     }
 

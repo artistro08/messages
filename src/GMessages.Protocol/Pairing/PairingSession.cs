@@ -117,18 +117,18 @@ public sealed class PairingSession
         byte[] finish = new Ukey2Message { MessageType = Ukey2Message.Types.Type.ClientFinish, MessageData = finished.ToByteString() }.ToByteArray();
 
         // Client Init: Commitment To The Finished Message
-        var client_init = new Ukey2ClientInit
+        var clientInit = new Ukey2ClientInit
         {
             Version      = 1,
             Random       = ByteString.CopyFrom(RandomNumberGenerator.GetBytes(32)),
             NextProtocol = "AES_256_CBC-HMAC_SHA256",
         };
-        client_init.CipherCommitments.Add(new Ukey2ClientInit.Types.CipherCommitment
+        clientInit.CipherCommitments.Add(new Ukey2ClientInit.Types.CipherCommitment
         {
             HandshakeCipher = Ukey2HandshakeCipher.P256Sha512,
             Commitment      = ByteString.CopyFrom(SHA512.HashData(finish)),
         });
-        byte[] init = new Ukey2Message { MessageType = Ukey2Message.Types.Type.ClientInit, MessageData = client_init.ToByteString() }.ToByteArray();
+        byte[] init = new Ukey2Message { MessageType = Ukey2Message.Types.Type.ClientInit, MessageData = clientInit.ToByteString() }.ToByteArray();
 
         FinishPayload = finish;
         InitPayload   = init;
@@ -162,38 +162,38 @@ public sealed class PairingSession
             throw new InvalidDataException($"unexpected message type: {EnumName(Ukey2Message.Descriptor.EnumTypes[0], (int)message.MessageType)}");
         }
 
-        Ukey2ServerInit server_init = Parse(Ukey2ServerInit.Parser, message.MessageData, "failed to unmarshal server init payload");
-        if (server_init.Version != 1)
+        Ukey2ServerInit serverInit = Parse(Ukey2ServerInit.Parser, message.MessageData, "failed to unmarshal server init payload");
+        if (serverInit.Version != 1)
         {
-            throw new InvalidDataException($"unexpected server init version: {server_init.Version}");
+            throw new InvalidDataException($"unexpected server init version: {serverInit.Version}");
         }
 
-        if (server_init.HandshakeCipher != Ukey2HandshakeCipher.P256Sha512)
+        if (serverInit.HandshakeCipher != Ukey2HandshakeCipher.P256Sha512)
         {
-            throw new InvalidDataException($"unexpected handshake cipher: {EnumName(UkeyReflection.Descriptor.EnumTypes.First(e => e.Name == "Ukey2HandshakeCipher"), (int)server_init.HandshakeCipher)}");
+            throw new InvalidDataException($"unexpected handshake cipher: {EnumName(UkeyReflection.Descriptor.EnumTypes.First(e => e.Name == "Ukey2HandshakeCipher"), (int)serverInit.HandshakeCipher)}");
         }
 
-        if (server_init.Random.Length != 32)
+        if (serverInit.Random.Length != 32)
         {
-            throw new InvalidDataException($"unexpected random length {server_init.Random.Length}");
+            throw new InvalidDataException($"unexpected random length {serverInit.Random.Length}");
         }
 
         // Server Public Key
-        byte[] x = StripPrefix(server_init.PublicKey?.EcP256PublicKey?.X, "x");
-        byte[] y = StripPrefix(server_init.PublicKey?.EcP256PublicKey?.Y, "y");
+        byte[] x = StripPrefix(serverInit.PublicKey?.EcP256PublicKey?.X, "x");
+        byte[] y = StripPrefix(serverInit.PublicKey?.EcP256PublicKey?.Y, "y");
         if (x.Length != 32 || y.Length != 32)
         {
             throw new InvalidDataException($"invalid server key coordinate lengths: {x.Length}, {y.Length}");
         }
 
         // Shared Secret: SHA-256 Of The Raw ECDH X Coordinate
-        byte[] shared_secret;
+        byte[] sharedSecret;
         try
         {
             using var server = ECDiffieHellman.Create(new ECParameters { Curve = ECCurve.NamedCurves.nistP256, Q = new ECPoint { X = x, Y = y } });
             using var client = ECDiffieHellman.Create(_key);
-            using ECDiffieHellmanPublicKey server_public = server.PublicKey;
-            shared_secret = SHA256.HashData(client.DeriveRawSecretAgreement(server_public));
+            using ECDiffieHellmanPublicKey serverPublic = server.PublicKey;
+            sharedSecret = SHA256.HashData(client.DeriveRawSecretAgreement(serverPublic));
         }
         catch (CryptographicException ex)
         {
@@ -201,11 +201,11 @@ public sealed class PairingSession
         }
 
         // Auth And Next Keys
-        byte[] auth_info = [.. InitPayload, .. msg.Data.Span];
-        byte[] auth_key  = Hkdf(shared_secret, "UKEY2 v1 auth"u8.ToArray(), auth_info);
-        NextKey          = Hkdf(shared_secret, "UKEY2 v1 next"u8.ToArray(), auth_info);
+        byte[] authInfo  = [.. InitPayload, .. msg.Data.Span];
+        byte[] authKey   = Hkdf(sharedSecret, "UKEY2 v1 auth"u8.ToArray(), authInfo);
+        NextKey          = Hkdf(sharedSecret, "UKEY2 v1 next"u8.ToArray(), authInfo);
 
-        return PairingEmojis.Pick(BinaryPrimitives.ReadUInt32BigEndian(auth_key), msg.ConfirmedVerificationCodeVersion);
+        return PairingEmojis.Pick(BinaryPrimitives.ReadUInt32BigEndian(authKey), msg.ConfirmedVerificationCodeVersion);
     }
 
     /// <summary>
@@ -227,16 +227,16 @@ public sealed class PairingSession
             throw new InvalidOperationException("The server init has not been processed.");
         }
 
-        byte[] client_key = Hkdf(NextKey, EncryptionKeyInfo, "client"u8.ToArray());
-        byte[] server_key = Hkdf(NextKey, EncryptionKeyInfo, "server"u8.ToArray());
+        byte[] clientKey = Hkdf(NextKey, EncryptionKeyInfo, "client"u8.ToArray());
+        byte[] serverKey = Hkdf(NextKey, EncryptionKeyInfo, "server"u8.ToArray());
         switch (KeyDerivationVersion)
         {
             case 0:
-                return (client_key, server_key);
+                return (clientKey, serverKey);
 
             case 1:
-                bool client_first   = JavaHash.ByteHash(client_key) < JavaHash.ByteHash(server_key);
-                byte[] concatenated = client_first ? [.. EncryptionKeyInfo, .. client_key, .. server_key] : [.. EncryptionKeyInfo, .. server_key, .. client_key];
+                bool clientFirst    = JavaHash.ByteHash(clientKey) < JavaHash.ByteHash(serverKey);
+                byte[] concatenated = clientFirst ? [.. EncryptionKeyInfo, .. clientKey, .. serverKey] : [.. EncryptionKeyInfo, .. serverKey, .. clientKey];
                 byte[] hash         = SHA256.HashData(concatenated);
                 return (Hkdf(hash, "Ditto salt 1"u8.ToArray(), "Ditto info 1"u8.ToArray()), Hkdf(hash, "Ditto salt 2"u8.ToArray(), "Ditto info 2"u8.ToArray()));
 

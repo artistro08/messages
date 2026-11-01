@@ -138,7 +138,7 @@ public sealed partial class RpcSession(GmHttpClient http, AuthData auth, GmEndpo
     {
         ArgumentNullException.ThrowIfNull(p);
 
-        (string request_id, TaskCompletionSource<IncomingRpc> waiter) = await PostWithWaiterAsync(p, ct).ConfigureAwait(false);
+        (string requestId, TaskCompletionSource<IncomingRpc> waiter) = await PostWithWaiterAsync(p, ct).ConfigureAwait(false);
 
         // Timers: Hard Timeout, Plus The Early Notice For User Requests
         using var hard   = new CancellationTokenSource(ResponseHardTimeout, time);
@@ -155,12 +155,12 @@ public sealed partial class RpcSession(GmHttpClient http, AuthData auth, GmEndpo
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested && hard.IsCancellationRequested)
         {
-            CancelWaiter(request_id);
+            CancelWaiter(requestId);
             throw new PhoneNotRespondingException($"Phone did not respond to request in {ResponseHardTimeout.TotalSeconds:0} seconds.");
         }
         catch (OperationCanceledException)
         {
-            CancelWaiter(request_id);
+            CancelWaiter(requestId);
             throw;
         }
         finally
@@ -183,12 +183,12 @@ public sealed partial class RpcSession(GmHttpClient http, AuthData auth, GmEndpo
     /// <exception cref="ConnectionClosedException">Not connected.</exception>
     /// <exception cref="GmRequestException">The server refused the request.</exception>
     /// <exception cref="OperationCanceledException"><paramref name="ct"/> was canceled.</exception>
-    public async Task<Task<IncomingRpc>> SendAsyncNoWait(SendParams p, CancellationToken ct)
+    public async Task<Task<IncomingRpc>> SendNoWaitAsync(SendParams p, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(p);
 
-        (string request_id, TaskCompletionSource<IncomingRpc> waiter) = await PostWithWaiterAsync(p, ct).ConfigureAwait(false);
-        return WaitCancellableAsync(request_id, waiter, ct);
+        (string requestId, TaskCompletionSource<IncomingRpc> waiter) = await PostWithWaiterAsync(p, ct).ConfigureAwait(false);
+        return WaitCancellableAsync(requestId, waiter, ct);
     }
 
     /// <summary>
@@ -204,8 +204,8 @@ public sealed partial class RpcSession(GmHttpClient http, AuthData auth, GmEndpo
     {
         ArgumentNullException.ThrowIfNull(p);
 
-        OutgoingRPCMessage payload = Build(p, out string request_id);
-        LogSending(log, p.Action, request_id, false);
+        OutgoingRPCMessage payload = Build(p, out string requestId);
+        LogSending(log, p.Action, requestId, false);
         await http.PostTypedAsync<OutgoingRPCResponse>(SendUrl, payload, GmContentType.PbLite, ct).ConfigureAwait(false);
     }
 
@@ -222,7 +222,7 @@ public sealed partial class RpcSession(GmHttpClient http, AuthData auth, GmEndpo
     internal OutgoingRPCMessage Build(SendParams p, out string requestId)
     {
         requestId = string.IsNullOrEmpty(p.RequestId) ? Guid.NewGuid().ToString() : p.RequestId;
-        MessageType message_type = p.MessageType == MessageType.UnknownMessageType ? MessageType.BugleMessage : p.MessageType;
+        MessageType messageType  = p.MessageType == MessageType.UnknownMessageType ? MessageType.BugleMessage : p.MessageType;
         TachyonToken tachyon     = auth.Tachyon;
 
         var message = new OutgoingRPCMessage
@@ -232,7 +232,7 @@ public sealed partial class RpcSession(GmHttpClient http, AuthData auth, GmEndpo
             {
                 RequestID       = requestId,
                 BugleRoute      = BugleRoute.DataEvent,
-                MessageTypeData = new OutgoingRPCMessage.Types.Data.Types.Type { EmptyArr = new EmptyArr(), MessageType = message_type },
+                MessageTypeData = new OutgoingRPCMessage.Types.Data.Types.Type { EmptyArr = new EmptyArr(), MessageType = messageType },
             },
             Auth = new OutgoingRPCMessage.Types.Auth
             {
@@ -316,8 +316,8 @@ public sealed partial class RpcSession(GmHttpClient http, AuthData auth, GmEndpo
         // Ignore Odd Messages That Come Before Real Responses
         // Note: Length > 0 stands in for Go's != nil on bytes fields. A field that is present on the wire with zero
         // length is nil-vs-empty in Go (non-nil) but indistinguishable from absent here; real payloads are never empty.
-        bool is_pairing_action = data.Action is ActionType.CreateGaiaPairingClientInit or ActionType.CreateGaiaPairingClientFinished;
-        if (auth.HasCookies && !is_pairing_action && data.UnencryptedData.Length > 0 && data.EncryptedData.Length == 0)
+        bool isPairingAction = data.Action is ActionType.CreateGaiaPairingClientInit or ActionType.CreateGaiaPairingClientFinished;
+        if (auth.HasCookies && !isPairingAction && data.UnencryptedData.Length > 0 && data.EncryptedData.Length == 0)
         {
             return false;
         }
@@ -481,26 +481,26 @@ public sealed partial class RpcSession(GmHttpClient http, AuthData auth, GmEndpo
             throw new ConnectionClosedException("Not connected: no long poll is running to receive the answer.");
         }
 
-        OutgoingRPCMessage payload = Build(p, out string request_id);
+        OutgoingRPCMessage payload = Build(p, out string requestId);
 
         var waiter = new TaskCompletionSource<IncomingRpc>(TaskCreationOptions.RunContinuationsAsynchronously);
         lock (_waitersLock)
         {
-            _waiters[request_id] = waiter;
+            _waiters[requestId] = waiter;
         }
 
-        LogSending(log, p.Action, request_id, true);
+        LogSending(log, p.Action, requestId, true);
         try
         {
             await http.PostTypedAsync<OutgoingRPCResponse>(SendUrl, payload, GmContentType.PbLite, ct).ConfigureAwait(false);
         }
         catch
         {
-            CancelWaiter(request_id);
+            CancelWaiter(requestId);
             throw;
         }
 
-        return (request_id, waiter);
+        return (requestId, waiter);
     }
 
     // Port Of cancelResponse: Only Cancel If Nobody Claimed It Yet
@@ -555,24 +555,24 @@ public sealed partial class RpcSession(GmHttpClient http, AuthData auth, GmEndpo
         RPCMessageData message = Parse(RPCMessageData.Parser, raw.MessageData.ToByteArray(), "data event");
 
         MessageParser? parser       = ResponseTypesMap.GetValueOrDefault(message.Action);
-        IMessage? decrypted_message = parser?.ParseFrom([]);
-        byte[]? decrypted_data      = null;
+        IMessage? decryptedMessage  = parser?.ParseFrom([]);
+        byte[]? decryptedData       = null;
 
         if (message.EncryptedData.Length > 0)
         {
-            decrypted_data = Decrypt(message.EncryptedData, "data event");
+            decryptedData = Decrypt(message.EncryptedData, "data event");
             if (parser is not null)
             {
-                decrypted_message = Parse(parser, decrypted_data, "decrypted data event");
+                decryptedMessage = Parse(parser, decryptedData, "decrypted data event");
             }
         }
         else if (message.EncryptedData2.Length > 0)
         {
-            decrypted_data = Decrypt(message.EncryptedData2, "field 2 in data event");
-            Parse(EncryptedData2Container.Parser, decrypted_data, "decrypted field 2 data event");
+            decryptedData = Decrypt(message.EncryptedData2, "field 2 in data event");
+            Parse(EncryptedData2Container.Parser, decryptedData, "decrypted field 2 data event");
         }
 
-        return new IncomingRpc { Raw = raw, Message = message, DecryptedData = decrypted_data, DecryptedMessage = decrypted_message };
+        return new IncomingRpc { Raw = raw, Message = message, DecryptedData = decryptedData, DecryptedMessage = decryptedMessage };
     }
 
     private byte[] Decrypt(ByteString data, string what)

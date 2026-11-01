@@ -62,7 +62,7 @@ public sealed class CookieJar
     {
         lock (_lock)
         {
-            return _cookies is null ? new Dictionary<string, string>() : new Dictionary<string, string>(_cookies);
+            return _cookies is null ? [] : new Dictionary<string, string>(_cookies);
         }
     }
 
@@ -79,7 +79,7 @@ public sealed class CookieJar
     {
         ArgumentNullException.ThrowIfNull(req);
 
-        string cookie_header;
+        string cookieHeader;
         string? sapisid;
         lock (_lock)
         {
@@ -88,14 +88,14 @@ public sealed class CookieJar
                 return;
             }
 
-            cookie_header = string.Join("; ", _cookies.Select(c => c.Key + "=" + c.Value));
+            cookieHeader = string.Join("; ", _cookies.Select(c => c.Key + "=" + c.Value));
             _cookies.TryGetValue("SAPISID", out sapisid);
         }
 
         // Cookie Header
-        if (cookie_header.Length > 0)
+        if (cookieHeader.Length > 0)
         {
-            req.Headers.TryAddWithoutValidation("Cookie", cookie_header);
+            req.Headers.TryAddWithoutValidation("Cookie", cookieHeader);
         }
 
         // Authorization Header

@@ -84,9 +84,9 @@ public static partial class LongPollStreamReader
         byte[] buffer     = new byte[InitialBufferSize];
         int length        = 0;
         int pos           = 0;
-        int payload_start = -1;
+        int payloadStart  = -1;
         int depth         = 0;
-        bool in_string    = false;
+        bool inString     = false;
         bool escaped      = false;
         bool opened       = false;
 
@@ -114,7 +114,7 @@ public static partial class LongPollStreamReader
                     // Between Payloads
                     if (b == (byte)'[')
                     {
-                        payload_start = pos;
+                        payloadStart  = pos;
                         depth         = 1;
                     }
                     else if (b == (byte)']')
@@ -127,7 +127,7 @@ public static partial class LongPollStreamReader
                         throw new InvalidDataException("Unexpected byte between long-poll payloads.");
                     }
                 }
-                else if (in_string)
+                else if (inString)
                 {
                     // Inside A JSON String
                     if (escaped)
@@ -140,12 +140,12 @@ public static partial class LongPollStreamReader
                     }
                     else if (b == (byte)'"')
                     {
-                        in_string = false;
+                        inString = false;
                     }
                 }
                 else if (b == (byte)'"')
                 {
-                    in_string = true;
+                    inString = true;
                 }
                 else if (b is (byte)'[' or (byte)'{')
                 {
@@ -158,8 +158,8 @@ public static partial class LongPollStreamReader
                     if (depth == 0)
                     {
                         // Payload Complete
-                        LongPollingPayload? payload = Decode(buffer.AsSpan(payload_start, pos - payload_start + 1), logger);
-                        payload_start = -1;
+                        LongPollingPayload? payload = Decode(buffer.AsSpan(payloadStart, pos - payloadStart + 1), logger);
+                        payloadStart = -1;
 
                         if (payload is not null)
                         {
@@ -174,21 +174,21 @@ public static partial class LongPollStreamReader
             }
 
             // Cap One In-Progress Payload
-            if (payload_start >= 0 && length - payload_start > maxPayloadBytes)
+            if (payloadStart >= 0 && length - payloadStart > maxPayloadBytes)
             {
                 throw new InvalidDataException($"Long-poll payload is larger than {maxPayloadBytes} bytes.");
             }
 
             // Compact Consumed Bytes
-            int keep = payload_start >= 0 ? payload_start : pos;
+            int keep = payloadStart >= 0 ? payloadStart : pos;
             if (keep > 0)
             {
                 Buffer.BlockCopy(buffer, keep, buffer, 0, length - keep);
                 length -= keep;
                 pos    -= keep;
-                if (payload_start >= 0)
+                if (payloadStart >= 0)
                 {
-                    payload_start = 0;
+                    payloadStart = 0;
                 }
             }
 
@@ -220,9 +220,9 @@ public static partial class LongPollStreamReader
             if (read == 0)
             {
                 // Stream Ended (Log Any Half-Received Payload)
-                if (payload_start >= 0)
+                if (payloadStart >= 0)
                 {
-                    LogDroppedPartial(logger, length - payload_start);
+                    LogDroppedPartial(logger, length - payloadStart);
                 }
 
                 yield break;

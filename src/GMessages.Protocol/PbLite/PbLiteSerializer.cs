@@ -104,11 +104,11 @@ public static class PbLiteSerializer
     {
         // Slots Run To The Highest Declared Field Number
         IList<FieldDescriptor> fields = message.Descriptor.Fields.InFieldNumberOrder();
-        int max_field_number          = fields.Count == 0 ? 0 : fields[^1].FieldNumber;
-        int next_field                = 0;
+        int maxFieldNumber            = fields.Count == 0 ? 0 : fields[^1].FieldNumber;
+        int nextField                 = 0;
 
         builder.Append('[');
-        for (int slot = 1; slot <= max_field_number; slot++)
+        for (int slot = 1; slot <= maxFieldNumber; slot++)
         {
             if (slot > 1)
             {
@@ -116,13 +116,13 @@ public static class PbLiteSerializer
             }
 
             // Unset Slot
-            if (fields[next_field].FieldNumber != slot)
+            if (fields[nextField].FieldNumber != slot)
             {
                 builder.Append("null");
                 continue;
             }
 
-            FieldDescriptor field = fields[next_field++];
+            FieldDescriptor field = fields[nextField++];
             if (!IsSet(field, message))
             {
                 builder.Append("null");
@@ -359,19 +359,19 @@ public static class PbLiteSerializer
             return double.IsNegative(value) ? "-0" : "0";
         }
 
-        // Pull Digits And Decimal Exponent Out Of The Round-Trip Text (magnitude = 0.DIGITS x 10^decimal_exponent)
+        // Pull Digits And Decimal Exponent Out Of The Round-Trip Text (magnitude = 0.DIGITS x 10^decimalExponent)
         double magnitude = Math.Abs(value);
         string text      = magnitude.ToString("R", CultureInfo.InvariantCulture);
-        int exponent_at  = text.IndexOf('E', StringComparison.Ordinal);
-        int exponent     = exponent_at < 0
+        int exponentAt   = text.IndexOf('E', StringComparison.Ordinal);
+        int exponent     = exponentAt < 0
             ? 0
-            : int.Parse(text.AsSpan(exponent_at + 1), NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture);
-        string mantissa  = exponent_at < 0 ? text : text[..exponent_at];
-        int point_at     = mantissa.IndexOf('.', StringComparison.Ordinal);
-        string all_digits = mantissa.Replace(".", string.Empty, StringComparison.Ordinal);
-        int leading_zeros = all_digits.Length - all_digits.TrimStart('0').Length;
-        string digits     = all_digits.Trim('0');
-        int decimal_exponent = (point_at < 0 ? mantissa.Length : point_at) + exponent - leading_zeros;
+            : int.Parse(text.AsSpan(exponentAt + 1), NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture);
+        string mantissa  = exponentAt < 0 ? text : text[..exponentAt];
+        int pointAt      = mantissa.IndexOf('.', StringComparison.Ordinal);
+        string allDigits  = mantissa.Replace(".", string.Empty, StringComparison.Ordinal);
+        int leadingZeros  = allDigits.Length - allDigits.TrimStart('0').Length;
+        string digits     = allDigits.Trim('0');
+        int decimalExponent  = (pointAt < 0 ? mantissa.Length : pointAt) + exponent - leadingZeros;
 
         // Lay Out
         var result = new StringBuilder();
@@ -388,21 +388,21 @@ public static class PbLiteSerializer
                 result.Append('.').Append(digits, 1, digits.Length - 1);
             }
 
-            int scientific = decimal_exponent - 1;
+            int scientific = decimalExponent - 1;
             result.Append('e').Append(scientific < 0 ? '-' : '+');
             result.Append(Math.Abs(scientific).ToString(scientific < 0 ? "0" : "00", CultureInfo.InvariantCulture));
         }
-        else if (decimal_exponent <= 0)
+        else if (decimalExponent <= 0)
         {
-            result.Append("0.").Append('0', -decimal_exponent).Append(digits);
+            result.Append("0.").Append('0', -decimalExponent).Append(digits);
         }
-        else if (decimal_exponent >= digits.Length)
+        else if (decimalExponent >= digits.Length)
         {
-            result.Append(digits).Append('0', decimal_exponent - digits.Length);
+            result.Append(digits).Append('0', decimalExponent - digits.Length);
         }
         else
         {
-            result.Append(digits, 0, decimal_exponent).Append('.').Append(digits, decimal_exponent, digits.Length - decimal_exponent);
+            result.Append(digits, 0, decimalExponent).Append('.').Append(digits, decimalExponent, digits.Length - decimalExponent);
         }
 
         return result.ToString();
@@ -428,8 +428,8 @@ public static class PbLiteSerializer
 
         // A Trailing Object Holds Overrides Keyed By Field Number
         JsonElement overrides = default;
-        bool has_overrides    = slots.Count > 0 && slots[^1].ValueKind == JsonValueKind.Object;
-        if (has_overrides)
+        bool hasOverrides     = slots.Count > 0 && slots[^1].ValueKind == JsonValueKind.Object;
+        if (hasOverrides)
         {
             overrides = slots[^1];
             slots.RemoveAt(slots.Count - 1);
@@ -441,7 +441,7 @@ public static class PbLiteSerializer
 
             // Override First, Then The Array Slot; Null Means Unset
             JsonElement value = default;
-            bool found        = has_overrides
+            bool found        = hasOverrides
                 && overrides.TryGetProperty((index + 1).ToString(CultureInfo.InvariantCulture), out value)
                 && value.ValueKind != JsonValueKind.Null;
             if (!found && index < slots.Count)
@@ -486,10 +486,10 @@ public static class PbLiteSerializer
         }
 
         var list       = (IList)field.Accessor.GetValue(message);
-        int item_index = 0;
+        int itemIndex  = 0;
         foreach (JsonElement item in value.EnumerateArray())
         {
-            list.Add(ReadOne(item, item_index++, field));
+            list.Add(ReadOne(item, itemIndex++, field));
         }
     }
 
@@ -512,19 +512,19 @@ public static class PbLiteSerializer
                 return ByteString.CopyFrom(ReadBase64(value, index, field));
 
             case FieldType.Enum:
-                return ReadNumber<int>(value, index, field, NumberStyles.None, allow_string: false);
+                return ReadNumber<int>(value, index, field, NumberStyles.None, allowString: false);
 
             case FieldType.Int32:
-                return ReadNumber<int>(value, index, field, NumberStyles.AllowLeadingSign, allow_string: true);
+                return ReadNumber<int>(value, index, field, NumberStyles.AllowLeadingSign, allowString: true);
 
             case FieldType.Int64:
-                return ReadNumber<long>(value, index, field, NumberStyles.AllowLeadingSign, allow_string: true);
+                return ReadNumber<long>(value, index, field, NumberStyles.AllowLeadingSign, allowString: true);
 
             case FieldType.UInt32:
-                return ReadNumber<uint>(value, index, field, NumberStyles.None, allow_string: true);
+                return ReadNumber<uint>(value, index, field, NumberStyles.None, allowString: true);
 
             case FieldType.UInt64:
-                return ReadNumber<ulong>(value, index, field, NumberStyles.None, allow_string: true);
+                return ReadNumber<ulong>(value, index, field, NumberStyles.None, allowString: true);
 
             case FieldType.Float:
                 return (float)ReadDouble(value, index, field);
@@ -586,7 +586,7 @@ public static class PbLiteSerializer
             throw Fail(field, index, "untyped array", value);
         }
 
-        IMessage nested = parser.ParseFrom(ReadOnlySpan<byte>.Empty);
+        IMessage nested = parser.ParseFrom([]);
         ReadMessage(value, nested);
         return nested;
     }
@@ -628,15 +628,15 @@ public static class PbLiteSerializer
     /// <param name="index">The slot or list index, for errors.</param>
     /// <param name="field">The field, for errors.</param>
     /// <param name="styles">Which signs the number text may carry.</param>
-    /// <param name="allow_string">Whether a JSON string is accepted (not for enums, as in Go).</param>
+    /// <param name="allowString">Whether a JSON string is accepted (not for enums, as in Go).</param>
     /// <returns>The number, boxed as <typeparamref name="T"/>.</returns>
     /// <exception cref="PbLiteException">The value is neither a number nor a parsable string.</exception>
-    private static object ReadNumber<T>(JsonElement value, int index, FieldDescriptor field, NumberStyles styles, bool allow_string)
+    private static object ReadNumber<T>(JsonElement value, int index, FieldDescriptor field, NumberStyles styles, bool allowString)
         where T : IBinaryInteger<T>
     {
         switch (value.ValueKind)
         {
-            case JsonValueKind.String when allow_string:
+            case JsonValueKind.String when allowString:
                 if (T.TryParse(ReadText(value, index, field), styles, CultureInfo.InvariantCulture, out T? parsed))
                 {
                     return parsed;
@@ -653,7 +653,7 @@ public static class PbLiteSerializer
                 return T.CreateTruncating(ReadDouble(value, index, field));
 
             default:
-                throw Fail(field, index, allow_string ? "float64 or string" : "float64", value);
+                throw Fail(field, index, allowString ? "float64 or string" : "float64", value);
         }
     }
 

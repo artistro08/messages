@@ -235,13 +235,13 @@ public sealed partial class UpdateDispatcher(RpcSession rpc, ILogger log)
         byte[] hash = SHA256.HashData(msg.DecryptedData);
         for (int i = _recentUpdatesPtr + RecentUpdatesLength - 1; i >= _recentUpdatesPtr; i--)
         {
-            (string? seen_id, byte[]? seen_hash) = _recentUpdates[i % RecentUpdatesLength];
-            if (seen_id != id)
+            (string? seenId, byte[]? seenHash) = _recentUpdates[i % RecentUpdatesLength];
+            if (seenId != id)
             {
                 continue;
             }
 
-            if (seen_hash.AsSpan().SequenceEqual(hash))
+            if (seenHash.AsSpan().SequenceEqual(hash))
             {
                 LogDuplicate(log, id, msg.IsOld);
                 return true;
