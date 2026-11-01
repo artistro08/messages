@@ -257,6 +257,13 @@ public sealed partial class MessageBubble : UserControl
     private bool _popPill;
     private Visual? _pillVisual;
 
+    // Whether The Entrance Ran On This Row, So A Recycle Puts Its Visual Back (A Row That Never Animated Makes None)
+    private bool _animatedIn;
+
+    // The Moving GIF Shown, And Whether It Was Paused For Being Off Screen (So Only That Pause Plays It Again)
+    private BitmapImage? _gif;
+    private bool _gifPaused;
+
     /// <summary>
     /// Creates the bubble.
     /// </summary>
@@ -809,21 +816,24 @@ public sealed partial class MessageBubble : UserControl
     {
         var view = (MessageBubble)d;
 
-        // No Entrance Left Running From The Container's Last Bubble. Guarded: This Runs In x:Bind's ProcessBindings, Where
-        // Windows Can Refuse The Visual (E_ACCESSDENIED, As It Did The Photo's Clip), And A Throw Escaping Into XAML Crashes
-        // The App
-        try
+        // No Entrance Left Running From The Container's Last Bubble; Only When One Ran, So A Row That Never Animated Makes
+        // No Visual. Guarded: This Runs In x:Bind's ProcessBindings, Where Windows Can Refuse The Visual (E_ACCESSDENIED, As
+        // It Did The Photo's Clip), And A Throw Escaping Into XAML Crashes The App
+        if (view._animatedIn)
         {
-            Visual row = ElementCompositionPreview.GetElementVisual(view.Row);
-            ElementCompositionPreview.SetIsTranslationEnabled(view.Row, true);
-            row.StopAnimation(nameof(Visual.Opacity));
-            row.StopAnimation("Translation");
-            row.Opacity = 1;
-            row.Properties.InsertVector3("Translation", Vector3.Zero);
-        }
-        catch (Exception ex) when (ex is not OutOfMemoryException)
-        {
-            AppLog.MediaFailed(App.ShellLog, "entrance", view.Bubble?.Id ?? string.Empty, ex.GetType().Name);
+            view._animatedIn = false;
+            try
+            {
+                Visual row = ElementCompositionPreview.GetElementVisual(view.Row);
+                row.StopAnimation(nameof(Visual.Opacity));
+                row.StopAnimation("Translation");
+                row.Opacity = 1;
+                row.Properties.InsertVector3("Translation", Vector3.Zero);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                AppLog.MediaFailed(App.ShellLog, "entrance", view.Bubble?.Id ?? string.Empty, ex.GetType().Name);
+            }
         }
 
         view._pointerOver = false;
@@ -844,11 +854,7 @@ public sealed partial class MessageBubble : UserControl
 
         view.ShowText();
         view.ShowStates();
-        view.ShowPreviewImage();
-        view.ShowPhoto();
-        view.ShowFile();
-        view.ShowVoice();
-        view.ShowVideo();
+        view.LoadMedia();
 
         // Another Message's Reactions Show As They Are, With No Pop (A Recycled Row's Half-Run Pop Is Put Back). With None,
         // The Pill Unloads, Its Visual With It
@@ -888,6 +894,7 @@ public sealed partial class MessageBubble : UserControl
 
         visual.StartAnimation(nameof(Visual.Opacity), fade);
         visual.StartAnimation("Translation", rise);
+        _animatedIn = true;
 
         string id = PartIdOf(string.Empty, Bubble?.Id ?? string.Empty, Bubble?.TmpId ?? string.Empty);
         AppLog.BubbleAnimatedIn(App.ShellLog, id);
@@ -898,11 +905,7 @@ public sealed partial class MessageBubble : UserControl
     {
         ShowText();
         ShowStates();
-        ShowPreviewImage();
-        ShowPhoto();
-        ShowFile();
-        ShowVoice();
-        ShowVideo();
+        LoadMedia();
         ShowHoverStrip();
         ShowReactionChange();
 
@@ -1125,6 +1128,86 @@ public sealed partial class MessageBubble : UserControl
     }
 
     // =========================================================================
+    // MEDIA
+    // =========================================================================
+
+    /// <summary>
+    /// Shows the message's media: the preview card's image, the photo, the file card's thumbnail, the voice message and
+    /// the video's frame, loading only what changed.
+    /// </summary>
+    /// <remarks>
+    /// The bubble calls it when its message or the message's media changes; the chat calls it again once a list row has
+    /// its message (phase 1), so a row given back the message it showed before its media was let go
+    /// (<see cref="ReleaseMedia"/>) loads it again.
+    /// </remarks>
+    internal void LoadMedia()
+    {
+        ShowPreviewImage();
+        ShowPhoto();
+        ShowFile();
+        ShowVoice();
+        ShowVideo();
+    }
+
+    /// <summary>
+    /// Lets go of the media a list row holds while it waits to be used again: the inline video's player, the voice
+    /// message's audio and waveform, and every decoded image (preview card, photo, file thumbnail, video frame).
+    /// </summary>
+    /// <remarks>
+    /// Loads still running stop, and the media shown is forgotten, so <see cref="LoadMedia"/> loads it again. The bubble
+    /// keeps its message: clearing it would unload and reload every deferred (<c>x:Load</c>) part on each recycle. Parts
+    /// the message doesn't use aren't loaded, so each is checked first.
+    /// </remarks>
+    internal void ReleaseMedia()
+    {
+        // Video: The Inline Player And Its Frame
+        ReleaseVideo();
+        _videoPart       = null;
+        _videoBubble     = null;
+        _videoFrameImage = null;
+        if (VideoThumb is not null)
+        {
+            VideoThumb.Background = null;
+        }
+
+        // Voice: Its Audio And Waveform; A Late Load Or Player Update Stops
+        _voicePart   = null;
+        _voiceBubble = null;
+        _voiceAudio  = null;
+        _voiceWave   = null;
+        _voiceLoad++;
+
+        // Photo: Its Blurred And Full Images, And Any GIF; A Load Still Running Stops
+        _photoPart   = null;
+        _photoBubble = null;
+        _photoFailed = false;
+        NextPhotoLoad();
+        WatchGif(null);
+        if (Photo is not null)
+        {
+            PhotoBlur.Background  = null;
+            PhotoFull.Background  = null;
+            PhotoFullImage.Source = null;
+        }
+
+        // File Card: Its Thumbnail
+        _filePart   = null;
+        _fileBubble = null;
+        if (FileThumb is not null)
+        {
+            FileThumb.Background = null;
+        }
+
+        // Preview Card: Its Image
+        _previewImage = null;
+        if (PreviewImage is not null)
+        {
+            PreviewImage.Source     = null;
+            PreviewImage.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    // =========================================================================
     // PHOTO
     // =========================================================================
 
@@ -1148,6 +1231,7 @@ public sealed partial class MessageBubble : UserControl
             _photoAnimated   = false;
             _photoFullVisual = null;
             NextPhotoLoad();
+            WatchGif(null);
             return;
         }
 
@@ -1176,6 +1260,7 @@ public sealed partial class MessageBubble : UserControl
             PhotoFull.OpacityTransition = null;
             PhotoFull.Opacity           = 0;
             _photoAnimated              = false;
+            WatchGif(null);
             ClipPhotoFull();
         }
 
@@ -1319,8 +1404,10 @@ public sealed partial class MessageBubble : UserControl
 
             // A Moving GIF Plays In An Image (A Brush Shows Only Its First Frame; Test Runs Note It); A Still Photo Is The
             // Layer's Brush, Which The Border's Corners Clip With No Composition Clip
-            bool animated               = image.As<BitmapImage>() is { IsAnimatedBitmap: true };
+            BitmapImage? gif            = image.As<BitmapImage>() is { IsAnimatedBitmap: true } moving ? moving : null;
+            bool animated               = gif is not null;
             _photoAnimated              = animated;
+            WatchGif(gif);
             PhotoFullImage.Source       = animated ? image : null;
             PhotoFull.Background        = animated ? null : new ImageBrush { ImageSource = image, Stretch = Stretch.UniformToFill };
             PhotoFull.OpacityTransition = at_once || !Ui.AnimationsEnabled ? null : _photoFade;
@@ -1403,6 +1490,54 @@ public sealed partial class MessageBubble : UserControl
 
         static Vector2 Corner(double radius, float most) => new(Math.Min((float)radius, most));
     }
+
+    // Follows Where The Moving GIF Shown Is (Null For None), So It Pauses Off Screen (A Realized Row Off Screen Isn't
+    // Recycled At Once, And Its GIF Kept Playing)
+    private void WatchGif(BitmapImage? gif)
+    {
+        if (ReferenceEquals(gif, _gif))
+        {
+            return;
+        }
+
+        if (_gif is null)
+        {
+            EffectiveViewportChanged += OnGifViewportChanged;
+        }
+        else if (gif is null)
+        {
+            EffectiveViewportChanged -= OnGifViewportChanged;
+        }
+
+        _gif       = gif;
+        _gifPaused = false;
+    }
+
+    // Off Screen: The GIF Pauses; Back On Screen, One Paused Here Plays Again (One Windows Never Played, With Animation
+    // Effects Off, Stays Still)
+    private void OnGifViewportChanged(FrameworkElement sender, EffectiveViewportChangedEventArgs args)
+    {
+        if (_gif is not { } gif)
+        {
+            return;
+        }
+
+        bool out_of_sight = OutOfSight(args.EffectiveViewport);
+        if (out_of_sight && gif.IsPlaying)
+        {
+            gif.Stop();
+            _gifPaused = true;
+        }
+        else if (!out_of_sight && _gifPaused)
+        {
+            gif.Play();
+            _gifPaused = false;
+        }
+    }
+
+    // Whether None Of The Bubble Is In The Viewport Seen
+    private bool OutOfSight(Windows.Foundation.Rect seen) =>
+        seen.Width <= 0 || seen.Height <= 0 || seen.Bottom <= 0 || seen.Top >= ActualHeight || seen.Right <= 0 || seen.Left >= ActualWidth;
 
     private void ShowPhotoFailed()
     {
@@ -1829,8 +1964,7 @@ public sealed partial class MessageBubble : UserControl
     // Scrolled Out Of Sight: The Video Stops (A Realized Row Off Screen Isn't Recycled At Once)
     private void OnVideoViewportChanged(FrameworkElement sender, EffectiveViewportChangedEventArgs args)
     {
-        Windows.Foundation.Rect seen = args.EffectiveViewport;
-        if (seen.Width <= 0 || seen.Height <= 0 || seen.Bottom <= 0 || seen.Top >= ActualHeight || seen.Right <= 0 || seen.Left >= ActualWidth)
+        if (OutOfSight(args.EffectiveViewport))
         {
             ReleaseVideo();
         }

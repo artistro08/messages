@@ -228,7 +228,10 @@
             </ListView.ItemContainerTransitions>
             <ListView.ItemsPanel>
                 <ItemsPanelTemplate>
-                    <ItemsStackPanel VerticalAlignment="Bottom" ItemsUpdatingScrollMode="KeepItemsInView" />
+                    <ItemsStackPanel
+                        VerticalAlignment="Bottom"
+                        CacheLength="1"
+                        ItemsUpdatingScrollMode="KeepItemsInView" />
                 </ItemsPanelTemplate>
             </ListView.ItemsPanel>
             <!-- Rows: no system focus visual across the whole row; a focused bubble rings itself instead (owner request).

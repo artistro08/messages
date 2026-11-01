@@ -340,8 +340,8 @@ public sealed partial class ChatPane : UserControl
             DropRecorder();
         };
 
-        // A Recycled Row Starts Below Its Neighbors Again (A Focused Row Was Raised For Its Ring)
-        MessageList.ContainerContentChanging += (_, args) => Canvas.SetZIndex(args.ItemContainer, 0);
+        // A Recycled Row Starts Below Its Neighbors Again (A Focused Row Was Raised For Its Ring), And Lets Go Of Its Media
+        MessageList.ContainerContentChanging += OnMessageContainerChanging;
 
         // Recording: The Time And The Input Level, 20 Times A Second, Over A Live Waveform As Wide As The Bar Allows
         RecordBars.FillsWidth = true;
@@ -613,6 +613,29 @@ public sealed partial class ChatPane : UserControl
             ShowFocusRing(focused.As<DependencyObject>());
         }
     }
+
+    // A Row Leaves The List Or Gets A Message. Leaving (The Recycle Queue): It Starts Below Its Neighbors Again (A Focused
+    // Row Was Raised For Its Ring) And Lets Go Of Its Media. Getting One: Its Media Loads In Phase 1, Once x:Bind Has
+    // Given It The Message (A Row Given The Same Message Back Gets No Bubble Change, So Its Released Media Loads Here)
+    private static void OnMessageContainerChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
+    {
+        Canvas.SetZIndex(args.ItemContainer, 0);
+        if (args.ItemContainer.ContentTemplateRoot is not MessageBubble view)
+        {
+            return;
+        }
+
+        if (args.InRecycleQueue)
+        {
+            view.ReleaseMedia();
+            return;
+        }
+
+        args.RegisterUpdateCallback(1, OnMessageContainerPhase);
+    }
+
+    private static void OnMessageContainerPhase(ListViewBase sender, ContainerContentChangingEventArgs args) =>
+        (args.ItemContainer.ContentTemplateRoot as MessageBubble)?.LoadMedia();
 
     // Another Chat Opened: Show Its Bubbles And Follow Their Changes
     private static void OnChatChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)

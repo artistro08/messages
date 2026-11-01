@@ -1067,8 +1067,9 @@ public sealed class RcsTests : UiTest
         Assert.IsTrue(shown.Top >= list.Top && shown.Bottom <= list.Bottom, $"The original ({shown}) isn't in view ({list}).");
         Assert.AreEqual("Smooth", File.Exists(scroll) ? ReadPulse(scroll) : string.Empty, "The jump to the original wasn't a smooth scroll.");
 
-        // Enter On The Focused Quote
+        // Enter On The Focused Quote, Back At The Newest (The Reply's Row Isn't Kept Realized That Far Up)
         File.Delete(pulse);
+        App.Find("Chat.ScrollToBottom").Patterns.Invoke.Pattern.Invoke();
         App.Find("QuoteJump." + reply.MessageID).Focus();
         Keyboard.Type(VirtualKeyShort.ENTER);
         Wait.Until(() => File.Exists(pulse) && ReadPulse(pulse) == original, AppDriver.DefaultTimeout, () => "Enter on the quote never landed on the original.");
