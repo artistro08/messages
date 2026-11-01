@@ -29,6 +29,7 @@ internal sealed partial class TrayMenuWindow : Window
     private readonly MenuFlyout _menu = new() { ShouldConstrainToRootBounds = false };
     private readonly IntPtr _hwnd;
     private FlyoutShowOptions? _pendingShow;
+    private bool _closed;
 
     /// <summary>
     /// Creates the hidden host window and its menu.
@@ -39,7 +40,14 @@ internal sealed partial class TrayMenuWindow : Window
         _hwnd   = WindowNative.GetWindowHandle(this);
 
         BuildItems();
-        _menu.Closed += (_, _) => AppWindow?.Hide();
+        _menu.Closed += (_, _) =>
+        {
+            if (!_closed)
+            {
+                AppWindow?.Hide();
+            }
+        };
+        Closed += (_, _) => _closed = true;
 
         // Window Chrome
         var presenter = OverlappedPresenter.Create();
@@ -137,6 +145,11 @@ internal sealed partial class TrayMenuWindow : Window
     // host left shown kept the old theme's backdrop (the dark menu after choosing Light)
     private void HideMenu()
     {
+        if (_closed)
+        {
+            return;
+        }
+
         _menu.Hide();
         AppWindow?.Hide();
     }
@@ -163,7 +176,7 @@ internal sealed partial class TrayMenuWindow : Window
 
     private void ShowPendingMenu()
     {
-        if (_pendingShow is not { } options)
+        if (_closed || _pendingShow is not { } options)
         {
             return;
         }

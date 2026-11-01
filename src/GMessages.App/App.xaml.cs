@@ -568,19 +568,9 @@ public partial class App : Application, IDisposable
         _mainWindow?.ApplyTheme(theme);
     }
 
-    // Tray Menu: its popup keeps the backdrop of the theme it first opened with (a light theme set later gives dark
-    // text on a dark background), so a hidden menu is dropped and made fresh, with the new theme, on the next right-click
-    private void RefreshTrayMenu(AppTheme theme)
-    {
-        if (_trayMenu is { } menu && !menu.AppWindow.IsVisible)
-        {
-            _trayMenu = null;
-            menu.Close();
-            return;
-        }
-
-        _trayMenu?.ApplyTheme(theme);
-    }
+    // Tray Menu: a hidden menu is closed (see ShowTrayMenu) and made fresh, with the current theme, on the next
+    // right-click, so only an open menu needs the new theme
+    private void RefreshTrayMenu(AppTheme theme) => _trayMenu?.ApplyTheme(theme);
 
     // Windows Switched Light And Dark: With "System" The Tray Menu Follows It, The Same Way As A Theme Setting Change
     private void OnSystemThemeChanged()
@@ -726,13 +716,25 @@ public partial class App : Application, IDisposable
             _trayMenu.SettingsRequested += (_, _) => ShowSettings();
             _trayMenu.QuitRequested     += (_, _) => Quit();
 
-            // Memory Trim: once the menu is gone, hand what it used back to Windows
-            _trayMenu.AppWindow.Changed += (sender, e) =>
+            // Close The Menu Window Once It Hides (A Hidden WinUI Window Keeps Its XAML Island And D3D Device), Then Trim.
+            // Deferred, So The Click Handler That Hid It Finishes First
+            var menu = _trayMenu;
+            menu.AppWindow.Changed += (sender, e) =>
             {
-                if (e.DidVisibilityChange && !sender.IsVisible && !_quitting)
+                if (!e.DidVisibilityChange || sender.IsVisible || _quitting)
                 {
-                    _memoryTrim?.Schedule();
+                    return;
                 }
+
+                _dispatcher?.TryEnqueue(() =>
+                {
+                    if (ReferenceEquals(_trayMenu, menu) && !menu.AppWindow.IsVisible)
+                    {
+                        _trayMenu = null;
+                        menu.Close();
+                        _memoryTrim?.Schedule();
+                    }
+                });
             };
         }
 
