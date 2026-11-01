@@ -162,6 +162,7 @@
                         x:Name="BubbleView"
                         Bubble="{x:Bind}"
                         ReactRequested="OnReactRequested"
+                        QuoteRequested="OnQuoteRequested"
                         ReplyRequested="OnReplyRequested"
                         RetryRequested="OnRetryRequested"
                         VoiceRequested="OnVoiceRequested" />

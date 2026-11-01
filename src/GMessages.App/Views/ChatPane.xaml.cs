@@ -1225,6 +1225,43 @@ public sealed partial class ChatPane : UserControl
         }
     }
 
+    // A Reply Quote's Click, Enter Or Space: Jump To The Quoted Message (Paging Older Until It Shows, Up To A Cap) And
+    // Pulse It. Not Found, Or The Chat Changed Meanwhile: Nothing Happens. Async Void Like A Click Handler, So A Failure
+    // Reaches The App's Unhandled Error Log
+    private async void OnQuoteRequested(object? sender, EventArgs e)
+    {
+        if (sender is not MessageBubble { Bubble.ReplyToId: { Length: > 0 } id } || Chat is not { } chat)
+        {
+            return;
+        }
+
+        MessageBubbleViewModel? target = await chat.FindForJumpAsync(id);
+        if (target is null || Chat != chat || Scroller() is not { } scroller)
+        {
+            return;
+        }
+
+        // Off The Newest Messages: Nothing Pins The View Back Down, And No Older Page's Anchoring Pulls It
+        _pinned = false;
+        EndOlderAnchor();
+        MessageList.ScrollIntoView(target);
+        MessageList.UpdateLayout();
+
+        // Centered In The View Where It Fits
+        if (RowTop(scroller, target) is { } top && MessageList.ContainerFromItem(target) is { } container)
+        {
+            double height = container.As<FrameworkElement>().ActualHeight;
+            double offset = scroller.VerticalOffset + top - Math.Max(0, (scroller.ViewportHeight - height) / 2);
+            scroller.ChangeView(null, Math.Clamp(offset, 0, scroller.ScrollableHeight), null, true);
+            MessageList.UpdateLayout();
+        }
+
+        if (MessageList.ContainerFromItem(target) is { } shown && FindPart<MessageBubble>(shown, "BubbleView") is { } view)
+        {
+            view.Pulse();
+        }
+    }
+
     // The Reply Chip's Close: Its Button Goes With It, So Focus Goes Back To The Message Box
     private void OnCancelReplyClick(object sender, RoutedEventArgs e)
     {

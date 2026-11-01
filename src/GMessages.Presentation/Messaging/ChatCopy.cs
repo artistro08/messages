@@ -157,6 +157,9 @@ public static class ChatCopy
     public const string QuoteVideo = "Video";
     public const string QuoteGif   = "GIF";
 
+    // A Reply Quote's Jump To The Quoted Message, Its Accessible Name (Controller Copy, Batch F; Owner Signs Off)
+    public const string GoToOriginalMessage = "Go to original message";
+
     // Attaching (Plan 6; Controller Copy, The Owner Signs Off At The Gate)
     public const string Attach           = "Attach";
     public const string AttachPhoto      = "Attach photo";
