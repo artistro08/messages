@@ -35,7 +35,13 @@ namespace GMessages.App.Views.Controls;
 /// <para>
 /// A test run puts the zoom in the photo's item status (<c>Zoom1</c>, <c>Zoom2</c>, ...) for the tests to read.
 /// </para>
+/// <para>
+/// A video (<see cref="ShowVideoAsync"/>) plays in place of the photo (<c>PhotoViewer.Video</c>) with Windows' full
+/// transport controls, from where the bubble's player got to; Open in Photos reads Open in default app. Opening the
+/// viewer stops a video playing in a bubble, and closing it stops its own.
+/// </para>
 /// </remarks>
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1001", Justification = "Close disposes the video's player; a control has no Dispose of its own.")]
 public sealed partial class PhotoViewer : UserControl
 {
     // The Space Kept Around The Photo At 1x, In Effective Pixels
@@ -49,6 +55,9 @@ public sealed partial class PhotoViewer : UserControl
     // How The Photo In The Chat Had Focus When The Viewer Opened (Pointer For A Click), So Closing Gives It Back The Same
     // Way: A Clicked Photo Gets No Focus Ring Back, Even When Escape Closes The Viewer
     private FocusState _returnState = FocusState.Programmatic;
+
+    // The Playing Video, While One Shows
+    private VideoPlayback? _video;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PhotoViewer"/> class, hidden.
@@ -113,19 +122,12 @@ public sealed partial class PhotoViewer : UserControl
     public async Task ShowAsync(MediaPart part, string messageId, string name, Control returnFocus)
     {
         ArgumentNullException.ThrowIfNull(part);
+        ArgumentNullException.ThrowIfNull(returnFocus);
 
-        _part        = part;
-        _messageId   = messageId;
-        _returnFocus = returnFocus;
-        _returnState = returnFocus.FocusState == FocusState.Unfocused ? FocusState.Programmatic : returnFocus.FocusState;
+        Open(part, messageId, returnFocus, returnFocus.FocusState, isVideo: false);
         AutomationProperties.SetName(Zoomer, name);
         PhotoImage.Source = null;
         Zoomer.ChangeView(0, 0, 1, disableAnimation: true);
-        if (!IsOpen)
-        {
-            Visibility = Visibility.Visible;
-            IsOpenChanged?.Invoke(this, EventArgs.Empty);
-        }
 
         // Focus Moves In Once The Viewer Is Laid Out (Before That It Can't Take It), After The Click Has Finished With
         // The Photo In The Chat
@@ -162,7 +164,56 @@ public sealed partial class PhotoViewer : UserControl
     }
 
     /// <summary>
-    /// Hides the viewer, drops the image, and focuses the photo in the chat again.
+    /// Shows a video and plays it with Windows' full transport controls, from where the bubble's player got to.
+    /// </summary>
+    /// <remarks>
+    /// The bytes come from the media store's memory (or a download) and play from memory, as media, like the bubble's
+    /// player (see <see cref="VideoPlayback"/>). A video that won't load closes the viewer again and logs the error type
+    /// only. Escape or Close stops it and lets go of the player.
+    /// </remarks>
+    /// <param name="part">The video's media part.</param>
+    /// <param name="messageId">The message's ID, for the log and the actions.</param>
+    /// <param name="name">What Narrator calls the video: its caption, or "Video".</param>
+    /// <param name="returnFocus">The video's frame in the chat, focused again on close.</param>
+    /// <param name="returnState">How the clicked button had focus, so closing gives it back the same way.</param>
+    /// <param name="start">Where to start playing.</param>
+    /// <returns>A task that ends once the video plays, or failed.</returns>
+    public async Task ShowVideoAsync(MediaPart part, string messageId, string name, Control returnFocus, FocusState returnState, TimeSpan start)
+    {
+        ArgumentNullException.ThrowIfNull(part);
+        ArgumentNullException.ThrowIfNull(returnFocus);
+
+        Open(part, messageId, returnFocus, returnState, isVideo: true);
+        try
+        {
+            if ((Application.Current as App)?.Media is not { } media)
+            {
+                throw new InvalidOperationException("No media store.");
+            }
+
+            byte[] bytes = await media.GetAsync(part, thumbnail: false, CancellationToken.None);
+            if (!ReferenceEquals(part, _part))
+            {
+                return;
+            }
+
+            _video = new VideoPlayback(DispatcherQueue, bytes, part.Mime, start, compact: false, "PhotoViewer.Video", name);
+            VideoHost.Children.Add(_video.Element);
+            _video.Player.Play();
+            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => _video?.Element.Focus(FocusState.Programmatic));
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            AppLog.MediaFailed(App.ShellLog, "view", messageId, ex.GetType().Name);
+            if (ReferenceEquals(part, _part))
+            {
+                Close();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Hides the viewer, stops a playing video, drops the image, and focuses the photo or video in the chat again.
     /// </summary>
     public void Close()
     {
@@ -174,9 +225,46 @@ public sealed partial class PhotoViewer : UserControl
         Visibility        = Visibility.Collapsed;
         PhotoImage.Source = null;
         _part             = null;
+        StopVideo();
         _returnFocus?.Focus(_returnState);
         _returnFocus = null;
         IsOpenChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    // Shows The Viewer For A Photo Or A Video: Any Video Playing (Here Or In A Bubble) Stops, The Right Layer Shows, And
+    // Open In Photos Becomes Open In Default App For A Video
+    private void Open(MediaPart part, string messageId, Control returnFocus, FocusState returnState, bool isVideo)
+    {
+        StopVideo();
+        MessageBubble.StopInlineVideo();
+        _part        = part;
+        _messageId   = messageId;
+        _returnFocus = returnFocus;
+        _returnState = returnState == FocusState.Unfocused ? FocusState.Programmatic : returnState;
+
+        string open = isVideo ? ChatCopy.OpenInDefaultApp : ChatCopy.OpenInPhotos;
+        AutomationProperties.SetName(OpenInPhotosButton, open);
+        ToolTipService.SetToolTip(OpenInPhotosButton, open);
+        Zoomer.Visibility    = isVideo ? Visibility.Collapsed : Visibility.Visible;
+        VideoHost.Visibility = isVideo ? Visibility.Visible : Visibility.Collapsed;
+        if (!IsOpen)
+        {
+            Visibility = Visibility.Visible;
+            IsOpenChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    // Stops The Viewer's Video And Lets Go Of Its Player And Bytes
+    private void StopVideo()
+    {
+        if (_video is not { } video)
+        {
+            return;
+        }
+
+        _video = null;
+        VideoHost.Children.Clear();
+        video.Dispose();
     }
 
     // =========================================================================
@@ -203,6 +291,8 @@ public sealed partial class PhotoViewer : UserControl
     {
         if (_part is { } part)
         {
+            // A Video Pauses Here While Its Default App Plays It
+            _video?.Player.Pause();
             _ = MediaActions.OpenAsync(XamlRoot, part, _messageId);
         }
     }

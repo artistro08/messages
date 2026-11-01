@@ -606,6 +606,7 @@ public sealed partial class ChatPane : UserControl
 
         var chat = (ChatViewModel?)e.NewValue;
         pane.StopVoice();
+        MessageBubble.StopInlineVideo();
         pane.DropRecorder();
         BindableList.Show(pane.MessageList, chat?.Messages);
         BindableList.Show(pane.AttachmentList, chat?.Attachments);

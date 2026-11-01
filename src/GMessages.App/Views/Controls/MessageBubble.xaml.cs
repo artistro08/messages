@@ -80,9 +80,17 @@ namespace GMessages.App.Views.Controls;
 /// (<c>Bubble.Download</c>, also on a file's menu) saves it to the Downloads folder.
 /// </para>
 /// <para>
-/// A video or file shows as a card (<c>Bubble.File.{id}</c>, named by the file name): its thumbnail when one came, else
-/// its type's icon, the name, and the size as Explorer writes it. A click shows "Downloading…" while it downloads, then
+/// A file shows as a card (<c>Bubble.File.{id}</c>, named by the file name): its thumbnail when one came, else its
+/// type's icon, the name, and the size as Explorer writes it. A click shows "Downloading…" while it downloads, then
 /// opens it in its default app; a failure reads "Couldn't open this file." until the next click.
+/// </para>
+/// <para>
+/// A video fills the bubble like a photo: its first frame (<c>Bubble.Video.{id}</c>, named by its caption or "Video",
+/// with the hand cursor) under a play button (<c>Video.Play.{id}</c>, "Play video"). Play plays it in place
+/// (<c>Video.Player.{id}</c>, a <see cref="VideoPlayback"/> with compact controls), with sound, as media; only one
+/// plays at a time. The player is let go when the row is recycled, unloads or scrolls out of sight, on a chat switch,
+/// and when the viewer opens. The frame, the menu's Open, or the expand button over a playing video
+/// (<c>Video.Expand.{id}</c>, "Open video") opens it in the window's viewer, from where it got to.
 /// </para>
 /// <para>
 /// A bubble the chat added live (sent, or arrived while the chat is open; see
@@ -95,6 +103,7 @@ namespace GMessages.App.Views.Controls;
 /// row's system focus visual; in high contrast the system visual shows instead.
 /// </para>
 /// </remarks>
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1001", Justification = "ReleaseVideo disposes the inline player on recycle, scroll away, unload and chat switch; a control has no Dispose of its own.")]
 public sealed partial class MessageBubble : UserControl
 {
     /// <summary>Identifies the <see cref="Bubble"/> property.</summary>
@@ -214,6 +223,17 @@ public sealed partial class MessageBubble : UserControl
     private byte[]? _voiceAudio;
     private VoiceWave? _voiceWave;
 
+    // The Bubble Whose Video Plays In Place: One At A Time Across The Chat
+    private static MessageBubble? s_playingVideo;
+
+    // The Video Shown, Its Bubble, Its Load Number (Bumped When It Stops Or Another Message Shows, So A Late Download
+    // Stops), The Inline Player While It Plays, And The Player Host's Visual (For Its Rounded Clip; Taken Once)
+    private MediaPart? _videoPart;
+    private MessageBubbleViewModel? _videoBubble;
+    private int _videoLoad;
+    private VideoPlayback? _video;
+    private Visual? _videoHostVisual;
+
     /// <summary>
     /// Creates the bubble.
     /// </summary>
@@ -227,6 +247,11 @@ public sealed partial class MessageBubble : UserControl
         Photo.AddHandler(TappedEvent, new TappedEventHandler((_, _) => _previewTapped = true), handledEventsToo: true);
         FileCard.AddHandler(TappedEvent, new TappedEventHandler((_, _) => _previewTapped = true), handledEventsToo: true);
         Voice.AddHandler(TappedEvent, new TappedEventHandler((_, _) => _previewTapped = true), handledEventsToo: true);
+        Video.AddHandler(TappedEvent, new TappedEventHandler((_, _) => _previewTapped = true), handledEventsToo: true);
+
+        // A Playing Video Stops When The Bubble Leaves The Tree, And Its Player Keeps The Bubble's Corners
+        Unloaded               += (_, _) => ReleaseVideo();
+        VideoHost.SizeChanged  += (_, _) => ClipVideoHost();
 
         // The Row Under The Bubble Is At Least As Wide As The Back (Inside Its Margins), So The Pill Sits On The Back's Corner
         Back.SizeChanged += (_, _) => Under.MinWidth = Math.Max(0, Back.ActualWidth - Under.Margin.Left - Under.Margin.Right);
@@ -299,6 +324,12 @@ public sealed partial class MessageBubble : UserControl
 
     /// <summary>Gets the menu's Download text.</summary>
     public static string DownloadText => ChatCopy.Download;
+
+    /// <summary>Gets the video's play button name and tooltip.</summary>
+    public static string PlayVideoText => ChatCopy.PlayVideo;
+
+    /// <summary>Gets the playing video's expand button name and tooltip.</summary>
+    public static string OpenVideoText => ChatCopy.OpenVideo;
 
     /// <summary>Gets the caption row lock's tooltip and name.</summary>
     public static string EncryptedText => ChatCopy.EndToEndEncrypted;
@@ -655,6 +686,7 @@ public sealed partial class MessageBubble : UserControl
         view.ShowPhoto();
         view.ShowFile();
         view.ShowVoice();
+        view.ShowVideo();
 
         // A Bubble Added Live Animates In, Once (The Flag Clears, So A Recycled Row Never Replays It)
         if (view.Bubble?.TakeNew() == true && Ui.AnimationsEnabled)
@@ -698,6 +730,7 @@ public sealed partial class MessageBubble : UserControl
         ShowPhoto();
         ShowFile();
         ShowVoice();
+        ShowVideo();
         ShowHoverStrip();
     }
 
@@ -822,19 +855,20 @@ public sealed partial class MessageBubble : UserControl
         return ++_photoLoad;
     }
 
-    // The Photo's Size From Its Dimensions, Fitted To The Bubble (See MessageBubbleViewModel.PhotoSize)
+    // The Photo's Or Video's Size From Its Dimensions, Fitted To The Bubble (See MessageBubbleViewModel.PhotoSize)
     private void SizePhoto()
     {
-        if (Bubble is not { HasPhoto: true, Media: { } media })
+        if (Bubble is not { FillsBubble: true, Media: { } media } bubble)
         {
             return;
         }
 
         (double width, double height) = MessageBubbleViewModel.PhotoSize(media.Width, media.Height, _photoMaxWidth);
-        if (Photo.Width != width || Photo.Height != height)
+        FrameworkElement shown        = bubble.HasVideo ? Video : Photo;
+        if (shown.Width != width || shown.Height != height)
         {
-            Photo.Width  = width;
-            Photo.Height = height;
+            shown.Width  = width;
+            shown.Height = height;
         }
     }
 
@@ -1215,6 +1249,211 @@ public sealed partial class MessageBubble : UserControl
     }
 
     // =========================================================================
+    // VIDEO
+    // =========================================================================
+
+    /// <summary>
+    /// Stops the video playing in place, wherever it is (a chat switch, the viewer opening).
+    /// </summary>
+    internal static void StopInlineVideo() => s_playingVideo?.ReleaseVideo();
+
+    // Another Video: Stopped, Its Frame (The Thumbnail) Loaded When One Came. The Echo Of One Sent From Here Keeps What
+    // Shows, Its Bytes Seeded Under The New Media ID
+    private async void ShowVideo()
+    {
+        MediaPart? part = Bubble is { HasVideo: true } bubble ? bubble.Media : null;
+        if (SameMedia(part, _videoPart) && ReferenceEquals(Bubble, _videoBubble))
+        {
+            return;
+        }
+
+        if (part is not null && Bubble is not null && ReferenceEquals(Bubble, _videoBubble) && KeepSentMedia(_videoPart, part))
+        {
+            _videoPart = part;
+            return;
+        }
+
+        ReleaseVideo();
+        _videoPart            = part;
+        _videoBubble          = Bubble;
+        VideoThumb.Background = null;
+        ShowVideoNote(null, string.Empty);
+        SizePhoto();
+        if (part is not { ThumbnailId.Length: > 0 } || (Application.Current as App)?.Media is not { } media)
+        {
+            return;
+        }
+
+        // A Frame That Won't Load Leaves The Plain Fill
+        try
+        {
+            byte[] bytes      = await media.GetAsync(part, thumbnail: true, CancellationToken.None);
+            ImageSource image = await Avatar.ToImageAsync(bytes, (int)Math.Ceiling(MaxBubbleWidth)) ?? throw new InvalidDataException();
+            if (ReferenceEquals(part, _videoPart))
+            {
+                VideoThumb.Background = new ImageBrush { ImageSource = image, Stretch = Stretch.UniformToFill };
+            }
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            AppLog.MediaFailed(App.ShellLog, "thumbnail", Bubble?.Id ?? string.Empty, ex.GetType().Name);
+        }
+    }
+
+    // Play: Downloads (Or Reads From Memory) The Video And Plays It Here, With Sound, Stopping Any Other One First
+    private async void OnVideoPlayClick(object sender, RoutedEventArgs e)
+    {
+        if (_videoPart is not { IsPending: false } part || _video is not null || (Application.Current as App)?.Media is not { } media)
+        {
+            return;
+        }
+
+        if (!ReferenceEquals(s_playingVideo, this))
+        {
+            s_playingVideo?.ReleaseVideo();
+        }
+
+        s_playingVideo = this;
+        int load       = ++_videoLoad;
+        ShowVideoNote(ChatCopy.Downloading, "Downloading");
+        try
+        {
+            byte[] bytes = await media.GetAsync(part, thumbnail: false, CancellationToken.None);
+            if (load != _videoLoad || !ReferenceEquals(s_playingVideo, this))
+            {
+                return;
+            }
+
+            string id = PartIdOf("Video.Player.", Bubble?.Id ?? string.Empty, Bubble?.TmpId ?? string.Empty);
+            _video    = new VideoPlayback(DispatcherQueue, bytes, part.Mime, TimeSpan.Zero, compact: true, id, Bubble?.VideoName ?? ChatCopy.Video);
+            _video.Failed += OnVideoFailed;
+            VideoHost.Children.Add(_video.Element);
+            VideoPlay.Visibility   = Visibility.Collapsed;
+            VideoExpand.Visibility = Visibility.Visible;
+            ShowVideoNote(null, "Playing");
+            EffectiveViewportChanged += OnVideoViewportChanged;
+            ClipVideoHost(mayTake: true);
+            _video.Player.Play();
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            if (load != _videoLoad)
+            {
+                return;
+            }
+
+            AppLog.MediaFailed(App.ShellLog, "video", Bubble?.Id ?? string.Empty, ex.GetType().Name);
+            ReleaseVideo();
+            ShowVideoNote(ChatCopy.VideoPlayFailed, "Failed");
+        }
+    }
+
+    // The Player Couldn't Play It: Back To The Frame, Saying So
+    private void OnVideoFailed(object? sender, EventArgs e)
+    {
+        AppLog.MediaFailed(App.ShellLog, "video", Bubble?.Id ?? string.Empty, "MediaFailed");
+        ReleaseVideo();
+        ShowVideoNote(ChatCopy.VideoPlayFailed, "Failed");
+    }
+
+    // A Click On The Frame Opens The Viewer From The Start
+    private void OnVideoFrameClick(object sender, RoutedEventArgs e) => OpenVideoInViewer(VideoFrame);
+
+    // Expand: The Viewer Carries On Where The Inline Player Got To
+    private void OnVideoExpandClick(object sender, RoutedEventArgs e) => OpenVideoInViewer(VideoExpand);
+
+    // Stops The Inline Player (Keeping Its Position) And Shows The Video Over The Whole Window. Focus Comes Back To The
+    // Frame On Close, The Way The Clicked Button Had It (A Click Brings No Focus Ring Back)
+    private void OpenVideoInViewer(Control from)
+    {
+        if (_videoPart is not { IsPending: false } part)
+        {
+            return;
+        }
+
+        TimeSpan start  = _video?.Position ?? TimeSpan.Zero;
+        FocusState how  = from.FocusState;
+        ReleaseVideo();
+        ShowVideoNote(null, string.Empty);
+        (Application.Current as App)?.MainWindow?.ShowVideo(part, Bubble?.Id ?? string.Empty, Bubble?.VideoName ?? ChatCopy.Video, VideoFrame, how, start);
+    }
+
+    // Scrolled Out Of Sight: The Video Stops (A Realized Row Off Screen Isn't Recycled At Once)
+    private void OnVideoViewportChanged(FrameworkElement sender, EffectiveViewportChangedEventArgs args)
+    {
+        Windows.Foundation.Rect seen = args.EffectiveViewport;
+        if (seen.Width <= 0 || seen.Height <= 0 || seen.Bottom <= 0 || seen.Top >= ActualHeight || seen.Right <= 0 || seen.Left >= ActualWidth)
+        {
+            ReleaseVideo();
+        }
+    }
+
+    // Stops The Inline Player And Lets Go Of It And The Bytes, Back To The Frame And Its Play Button
+    private void ReleaseVideo()
+    {
+        _videoLoad++;
+        if (ReferenceEquals(s_playingVideo, this))
+        {
+            s_playingVideo = null;
+        }
+
+        if (_video is not { } video)
+        {
+            return;
+        }
+
+        _video                    = null;
+        EffectiveViewportChanged -= OnVideoViewportChanged;
+        video.Failed             -= OnVideoFailed;
+        VideoHost.Children.Clear();
+        video.Dispose();
+        VideoPlay.Visibility   = Visibility.Visible;
+        VideoExpand.Visibility = Visibility.Collapsed;
+        TestHooks.ShowState(VideoFrame, "Stopped");
+    }
+
+    // The Note Over The Frame (Downloading, Or Failed), Or None; Its State Goes On The Frame For The Tests
+    private void ShowVideoNote(string? text, string state)
+    {
+        VideoNote.Text           = text ?? string.Empty;
+        VideoNoteBack.Visibility = text is null ? Visibility.Collapsed : Visibility.Visible;
+        TestHooks.ShowState(VideoFrame, state);
+    }
+
+    // The Player's Host Rounded To The Bubble's Corners (The Video's Swap Chain Isn't Clipped By The Grid's Corners). The
+    // Host Uses No Implicit Transitions, So Windows Hands Out Its Visual; It Is Taken Once, When A Video Starts
+    private void ClipVideoHost(bool mayTake = false)
+    {
+        if (_videoHostVisual is null && (!mayTake || !VideoHost.IsLoaded))
+        {
+            return;
+        }
+
+        try
+        {
+            _videoHostVisual ??= ElementCompositionPreview.GetElementVisual(VideoHost);
+            float width        = (float)VideoHost.ActualWidth;
+            float height       = (float)VideoHost.ActualHeight;
+            if (width <= 0 || height <= 0)
+            {
+                return;
+            }
+
+            float most               = Math.Min(width, height) / 2;
+            CornerRadius r           = Video.CornerRadius;
+            _videoHostVisual.Clip    = _videoHostVisual.Compositor.CreateRectangleClip(
+                0, 0, width, height,
+                Corner(r.TopLeft, most), Corner(r.TopRight, most), Corner(r.BottomRight, most), Corner(r.BottomLeft, most));
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            AppLog.MediaFailed(App.ShellLog, "clip", Bubble?.Id ?? string.Empty, ex.GetType().Name);
+        }
+
+        static Vector2 Corner(double radius, float most) => new(Math.Min((float)radius, most));
+    }
+
+    // =========================================================================
     // OPEN AND SAVE
     // =========================================================================
 
@@ -1227,6 +1466,10 @@ public sealed partial class MessageBubble : UserControl
         if (Bubble?.HasFileCard == true)
         {
             OnFileClick(sender, e);
+        }
+        else if (Bubble?.HasVideo == true)
+        {
+            OpenVideoInViewer(VideoFrame);
         }
         else if (Bubble?.Media is { IsPending: false } part)
         {

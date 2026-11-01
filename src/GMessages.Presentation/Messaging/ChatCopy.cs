@@ -146,6 +146,12 @@ public static class ChatCopy
     public const string ShowInFolder     = "Show in folder";
     public const string OpenInPhotos     = "Open in Photos";
 
+    // Videos (Plan 7; Controller Copy, The Owner Signs Off At The Gate)
+    public const string PlayVideo        = "Play video";
+    public const string OpenVideo        = "Open video";
+    public const string OpenInDefaultApp = "Open in default app";
+    public const string VideoPlayFailed  = "Couldn't play this video.";
+
     // Attaching (Plan 6; Controller Copy, The Owner Signs Off At The Gate)
     public const string Attach           = "Attach";
     public const string AttachPhoto      = "Attach photo";
