@@ -240,6 +240,9 @@ public sealed partial class MessageBubble : UserControl
     private VideoPlayback? _video;
     private Visual? _videoHostVisual;
 
+    // The Video's Still Frame Once It Shows, Which The Viewer Grows Out Of The Bubble Before Its Player Takes Over
+    private ImageSource? _videoFrameImage;
+
     // The Reactions The Pill Shows, So A Change On The Same Bubble Pops It In; Set When A Pill Just Shown Waits For Its
     // Size To Pop; And The Pill Host's Visual (No Implicit Transitions On It, So Windows Hands It Out), Taken Once
     private string _reactionsShown = string.Empty;
@@ -1447,6 +1450,7 @@ public sealed partial class MessageBubble : UserControl
         _videoPart            = part;
         _videoBubble          = Bubble;
         VideoThumb.Background = null;
+        _videoFrameImage      = null;
         ShowVideoNote(null, string.Empty);
         SizePhoto();
         if (part is not null)
@@ -1472,6 +1476,7 @@ public sealed partial class MessageBubble : UserControl
             if (ReferenceEquals(part, _videoPart))
             {
                 VideoThumb.Background = new ImageBrush { ImageSource = image, Stretch = Stretch.UniformToFill };
+                _videoFrameImage      = image;
                 TestHooks.ShowState(VideoPlay, "Frame");
             }
         }
@@ -1565,7 +1570,7 @@ public sealed partial class MessageBubble : UserControl
         FocusState how  = from.FocusState;
         ReleaseVideo();
         ShowVideoNote(null, string.Empty);
-        (Application.Current as App)?.MainWindow?.ShowVideo(part, Bubble?.Id ?? string.Empty, Bubble?.VideoName ?? ChatCopy.Video, VideoFrame, how, start);
+        (Application.Current as App)?.MainWindow?.ShowVideo(part, Bubble?.Id ?? string.Empty, Bubble?.VideoName ?? ChatCopy.Video, VideoFrame, how, start, _videoFrameImage);
     }
 
     // Scrolled Out Of Sight: The Video Stops (A Realized Row Off Screen Isn't Recycled At Once)

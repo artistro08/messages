@@ -246,10 +246,12 @@ public sealed partial class MediaTests
         WaitForMotion(motion, "Shrank");
         WaitForGone("PhotoViewer.Photo");
 
-        // Video, Closed By Close
-        Message video = Server.Phone.PushIncomingMedia("c-media", "video/mp4", File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Fixtures", "clip.mp4")), "clip.mp4");
+        // Video, Closed By Close: Its Still Grows, Then The Player Takes Over Once It Plays
+        Message video = Server.Phone.PushIncomingMedia("c-media", "video/mp4", File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Fixtures", "clip-long.mp4")), "clip-long.mp4");
+        WaitForStatus(App.Find("Video.Play." + video.MessageID), "Frame");
         App.Find("Bubble.Video." + video.MessageID).Patterns.Invoke.Pattern.Invoke();
-        WaitForMotion(motion, "Grew");
+        WaitForMotion(motion, "GrewStill");
+        WaitForMotion(motion, "Player");
         App.Find("PhotoViewer.Close").Patterns.Invoke.Pattern.Invoke();
         WaitForMotion(motion, "Shrank");
         WaitForGone("PhotoViewer.Video");
