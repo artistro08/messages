@@ -133,6 +133,35 @@ public sealed class ChatViewModelTests
         Assert.IsFalse(chat.CanFillOlder, "nothing was added");
     }
 
+    /// <summary>
+    /// A reply's jump finds a loaded bubble at once, pages older until the quoted one shows, and gives up quietly when
+    /// the history ends without it.
+    /// </summary>
+    [TestMethod]
+    public async Task FindForJump_PagesOlderUntilFound_NullWhenGone()
+    {
+        using var rig = new MainRig();
+        using ChatViewModel chat = NewChat(rig, null, Msg("m3", "three"));
+        rig.Client.MessagesPage.Cursor = new Cursor { LastItemID = "m3" };
+        await chat.LoadAsync();
+
+        var page_2 = new ListMessagesResponse { Cursor = new Cursor { LastItemID = "m2" } };
+        page_2.Messages.Add(Msg("m2", "two"));
+        var page_1 = new ListMessagesResponse();
+        page_1.Messages.Add(Msg("m1", "one"));
+        rig.Client.MessagePages.Enqueue(page_2);
+        rig.Client.MessagePages.Enqueue(page_1);
+
+        Assert.AreEqual("m3", (await chat.FindForJumpAsync("m3"))?.Id, "a loaded bubble");
+        Assert.AreEqual(1, rig.Client.FetchCount, "a loaded bubble needs no page");
+
+        Assert.AreEqual("m1", (await chat.FindForJumpAsync("m1"))?.Id, "two older pages in");
+        Assert.AreEqual(3, rig.Client.FetchCount);
+
+        Assert.IsNull(await chat.FindForJumpAsync("m0"), "the history ended without it");
+        Assert.IsNull(await chat.FindForJumpAsync(string.Empty));
+    }
+
     [TestMethod]
     public async Task Load_Read_DoesNotMarkRead()
     {

@@ -37,6 +37,9 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     /// <summary>The most the chips may hold together, in bytes: 200 MiB.</summary>
     public const long MaxTotalAttachmentBytes = 200L * 1024 * 1024;
 
+    /// <summary>The most older pages a reply quote's jump loads looking for the quoted message (25 messages each).</summary>
+    public const int ReplyJumpPages = 10;
+
     private readonly ChatStore _store;
     private readonly TimeProvider _time;
     private readonly Action<Action> _post;
@@ -417,6 +420,43 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
         }
 
         await RunPendingReloadAsync();
+    }
+
+    /// <summary>
+    /// Finds the bubble a reply quotes, loading older pages until it shows (a reply quote's click jumps to it).
+    /// </summary>
+    /// <remarks>
+    /// Call on the UI thread. Stops at <see cref="ReplyJumpPages"/> older pages, at the oldest message, when another load
+    /// is running, or when a page adds nothing (a failed load included). Never throws.
+    /// </remarks>
+    /// <param name="messageId">The quoted message's ID.</param>
+    /// <returns>The bubble, or null when it wasn't found.</returns>
+    public async Task<MessageBubbleViewModel?> FindForJumpAsync(string messageId)
+    {
+        if (string.IsNullOrEmpty(messageId))
+        {
+            return null;
+        }
+
+        for (int page = 0; ; page++)
+        {
+            if (Messages.FirstOrDefault(b => b.Id == messageId) is { } found)
+            {
+                return found;
+            }
+
+            if (page >= ReplyJumpPages || _older is null || IsLoading)
+            {
+                return null;
+            }
+
+            int before = Messages.Count;
+            await LoadOlderAsync();
+            if (Messages.Count == before)
+            {
+                return null;
+            }
+        }
     }
 
     // A Resync Arrived Mid-Load: The Page Above May Be Stale, So Load Again

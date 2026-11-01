@@ -260,6 +260,7 @@ public sealed partial class MessageBubble : UserControl
         FileCard.AddHandler(TappedEvent, new TappedEventHandler((_, _) => _previewTapped = true), handledEventsToo: true);
         Voice.AddHandler(TappedEvent, new TappedEventHandler((_, _) => _previewTapped = true), handledEventsToo: true);
         Video.AddHandler(TappedEvent, new TappedEventHandler((_, _) => _previewTapped = true), handledEventsToo: true);
+        QuoteButton.AddHandler(TappedEvent, new TappedEventHandler((_, _) => _previewTapped = true), handledEventsToo: true);
 
         // A Playing Video Stops When The Bubble Leaves The Tree, And Its Player Keeps The Bubble's Corners
         Unloaded               += (_, _) => ReleaseVideo();
@@ -326,6 +327,14 @@ public sealed partial class MessageBubble : UserControl
     /// </summary>
     public event EventHandler<VoiceRequest>? VoiceRequested;
 
+    /// <summary>
+    /// Asks the chat to jump to the message this bubble's quote shows (a click, Enter or Space on the quote).
+    /// </summary>
+    public event EventHandler? QuoteRequested;
+
+    /// <summary>Gets the quote's accessible name: it jumps to the quoted message.</summary>
+    public static string QuoteJumpText => ChatCopy.GoToOriginalMessage;
+
     /// <summary>Gets the menu's Copy text.</summary>
     public static string CopyText => ChatCopy.Copy;
 
@@ -370,6 +379,21 @@ public sealed partial class MessageBubble : UserControl
     /// Opens the bubble menu over the back (the Application key or Shift + F10 on the bubble's row).
     /// </summary>
     public void ShowMenu() => ShowMenu(Back);
+
+    /// <summary>
+    /// Pulses the bubble in a soft accent tint: a reply's jump landed on it.
+    /// </summary>
+    /// <remarks>
+    /// Rises and fades twice over about a second; with Windows' animation effects off the tint holds a moment, then
+    /// clears, with no fade. A second pulse restarts the first.
+    /// </remarks>
+    public void Pulse()
+    {
+        PulseStoryboard.Stop();
+        PulseSteady.Stop();
+        (Ui.AnimationsEnabled ? PulseStoryboard : PulseSteady).Begin();
+        TestHooks.NoteState("pulse", Bubble?.Id ?? string.Empty);
+    }
 
     /// <summary>
     /// Opens the bubble menu at an element, such as the hover strip's ⋮.
@@ -705,6 +729,8 @@ public sealed partial class MessageBubble : UserControl
         view._canAct      = view.Bubble?.CanAct == true;
         VisualStateManager.GoToState(view, "Hidden", false);
         view.ShowFocusRing(false, false);
+        view.PulseStoryboard.Stop();
+        view.PulseSteady.Stop();
 
         if (e.OldValue is MessageBubbleViewModel old_bubble)
         {
@@ -1737,6 +1763,9 @@ public sealed partial class MessageBubble : UserControl
         _links.Add(link);
         return link;
     }
+
+    // The Quote's Click, Enter Or Space: The Chat Jumps To The Quoted Message
+    private void OnQuoteClick(object sender, RoutedEventArgs e) => QuoteRequested?.Invoke(this, EventArgs.Empty);
 
     // A New Width Moves The Line Ends
     private void OnBodySizeChanged(object sender, SizeChangedEventArgs e) => BlockLinkEnds();

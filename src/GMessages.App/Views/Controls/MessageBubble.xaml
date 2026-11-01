@@ -7,6 +7,37 @@
     PointerEntered="OnPointerEntered"
     PointerExited="OnPointerLeft">
 
+    <!-- Pulse: a reply's jump landed here; the tint rises softly and fades out twice over about a second (see Pulse).
+         With animation effects off, PulseSteady holds it a moment, then clears it, with no fade -->
+    <UserControl.Resources>
+        <Storyboard x:Name="PulseStoryboard">
+            <DoubleAnimationUsingKeyFrames Storyboard.TargetName="PulseFill" Storyboard.TargetProperty="Opacity">
+                <SplineDoubleKeyFrame
+                    KeySpline="{StaticResource ControlFastOutSlowInKeySpline}"
+                    KeyTime="0:0:0.2"
+                    Value="0.25" />
+                <SplineDoubleKeyFrame
+                    KeySpline="{StaticResource ControlFastOutSlowInKeySpline}"
+                    KeyTime="0:0:0.5"
+                    Value="0.08" />
+                <SplineDoubleKeyFrame
+                    KeySpline="{StaticResource ControlFastOutSlowInKeySpline}"
+                    KeyTime="0:0:0.7"
+                    Value="0.25" />
+                <SplineDoubleKeyFrame
+                    KeySpline="{StaticResource ControlFastOutSlowInKeySpline}"
+                    KeyTime="0:0:1.2"
+                    Value="0" />
+            </DoubleAnimationUsingKeyFrames>
+        </Storyboard>
+        <Storyboard x:Name="PulseSteady">
+            <DoubleAnimationUsingKeyFrames Storyboard.TargetName="PulseFill" Storyboard.TargetProperty="Opacity">
+                <DiscreteDoubleKeyFrame KeyTime="0" Value="0.25" />
+                <DiscreteDoubleKeyFrame KeyTime="0:0:1" Value="0" />
+            </DoubleAnimationUsingKeyFrames>
+        </Storyboard>
+    </UserControl.Resources>
+
     <!-- Row: the bubble, with an avatar lane on its left for received bubbles in a group chat (the avatar beside a group's
          last bubble). Bubbles of one group sit 2 px apart, groups further -->
     <Grid
@@ -246,54 +277,68 @@
                     <StackPanel>
 
                         <!-- Quote: the message this one replies to on a tint of the bubble's color, after an accent bar; sender in
-                             caption style and at most two lines of text -->
-                        <Grid
-                            x:Name="Quote"
+                             caption style and at most two lines of text. A click, Enter or Space jumps to the quoted message
+                             (the chat finds it, paging older if needed, and pulses it); the hand shows over it, as over a
+                             link. No hover or press fill (IconButtonStyle), so the quote keeps its own tint -->
+                        <local:LinkCardButton
+                            x:Name="QuoteButton"
                             Margin="-4,0,-4,6"
-                            Padding="0,0,8,0"
-                            Background="{ThemeResource QuoteFillBrush}"
-                            ColumnDefinitions="Auto,*"
-                            ColumnSpacing="8"
+                            Padding="0"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Stretch"
+                            AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('QuoteJump.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                            AutomationProperties.Name="{x:Bind local:MessageBubble.QuoteJumpText}"
+                            Click="OnQuoteClick"
                             CornerRadius="8"
+                            Style="{StaticResource IconButtonStyle}"
                             Visibility="{x:Bind Bubble.HasQuote, Mode=OneWay, FallbackValue=Collapsed}">
-                            <Border
-                                x:Name="QuoteBar"
-                                Width="3"
-                                Background="{ThemeResource QuoteBarBrush}" />
+                            <Grid
+                                x:Name="Quote"
+                                Padding="0,0,8,0"
+                                Background="{ThemeResource QuoteFillBrush}"
+                                ColumnDefinitions="Auto,*"
+                                ColumnSpacing="8"
+                                CornerRadius="8">
+                                <Border
+                                    x:Name="QuoteBar"
+                                    Width="3"
+                                    Background="{ThemeResource QuoteBarBrush}" />
 
-                            <!-- Quoted Media: its thumbnail (or a file icon) left of two lines, the sender in semibold and
-                                 "Image", "Video", "GIF" in italic (or the file's name) -->
-                            <Grid Grid.Column="1" ColumnDefinitions="Auto,*">
-                                <local:MediaThumb
-                                    Margin="0,6,8,6"
-                                    VerticalAlignment="Center"
-                                    AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('QuoteThumb.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
-                                    Media="{x:Bind Bubble.QuoteMedia, Mode=OneWay}"
-                                    Visibility="{x:Bind Bubble.HasQuoteMedia, Mode=OneWay, FallbackValue=Collapsed}" />
-                                <StackPanel
-                                    Grid.Column="1"
-                                    Padding="0,6"
-                                    VerticalAlignment="Center">
-                                    <TextBlock
-                                        x:Name="QuoteSender"
-                                        FontWeight="{x:Bind local:MessageBubble.QuoteSenderWeight(Bubble.HasQuoteMedia), Mode=OneWay}"
-                                        MaxLines="1"
-                                        Style="{StaticResource CaptionTextBlockStyle}"
-                                        Text="{x:Bind Bubble.QuoteSender, Mode=OneWay, FallbackValue=''}"
-                                        TextTrimming="CharacterEllipsis"
-                                        Visibility="{x:Bind local:MessageBubble.ShownIfText(Bubble.QuoteSender), Mode=OneWay, FallbackValue=Collapsed}" />
-                                    <TextBlock
-                                        x:Name="QuoteText"
-                                        AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Quote.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
-                                        FontStyle="{x:Bind local:MessageBubble.LabelStyle(Bubble.QuoteIsLabel), Mode=OneWay}"
-                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                        MaxLines="2"
-                                        Text="{x:Bind Bubble.QuoteText, Mode=OneWay, FallbackValue=''}"
-                                        TextTrimming="CharacterEllipsis"
-                                        TextWrapping="Wrap" />
-                                </StackPanel>
+                                <!-- Quoted Media: its thumbnail (or a file icon) left of two lines, the sender in semibold and
+                                     "Image", "Video", "GIF" in italic (or the file's name) -->
+                                <Grid Grid.Column="1" ColumnDefinitions="Auto,*">
+                                    <local:MediaThumb
+                                        Margin="0,6,8,6"
+                                        VerticalAlignment="Center"
+                                        AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('QuoteThumb.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                                        Media="{x:Bind Bubble.QuoteMedia, Mode=OneWay}"
+                                        Visibility="{x:Bind Bubble.HasQuoteMedia, Mode=OneWay, FallbackValue=Collapsed}" />
+                                    <StackPanel
+                                        Grid.Column="1"
+                                        Padding="0,6"
+                                        VerticalAlignment="Center">
+                                        <TextBlock
+                                            x:Name="QuoteSender"
+                                            FontWeight="{x:Bind local:MessageBubble.QuoteSenderWeight(Bubble.HasQuoteMedia), Mode=OneWay}"
+                                            MaxLines="1"
+                                            Style="{StaticResource CaptionTextBlockStyle}"
+                                            Text="{x:Bind Bubble.QuoteSender, Mode=OneWay, FallbackValue=''}"
+                                            TextTrimming="CharacterEllipsis"
+                                            Visibility="{x:Bind local:MessageBubble.ShownIfText(Bubble.QuoteSender), Mode=OneWay, FallbackValue=Collapsed}" />
+                                        <TextBlock
+                                            x:Name="QuoteText"
+                                            AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Quote.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                                            FontStyle="{x:Bind local:MessageBubble.LabelStyle(Bubble.QuoteIsLabel), Mode=OneWay}"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            MaxLines="2"
+                                            Text="{x:Bind Bubble.QuoteText, Mode=OneWay, FallbackValue=''}"
+                                            TextTrimming="CharacterEllipsis"
+                                            TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Grid>
                             </Grid>
-                        </Grid>
+                        </local:LinkCardButton>
+                        <!-- /Quote -->
 
                         <!-- Photo: edge to edge in the bubble, rounded to its corners. The thumbnail shows first, decoded tiny
                              and stretched (blurred), then the full image fades in over it. The size is kept from the photo's
@@ -598,6 +643,16 @@
                         </local:LinkCardButton>
                     </StackPanel>
                 </Border>
+
+                <!-- Pulse: a soft accent tint over the whole back (photos too), clear until a reply's jump lands here (see
+                     Pulse). Takes no clicks -->
+                <Border
+                    x:Name="PulseFill"
+                    Grid.Column="1"
+                    Background="{ThemeResource AccentFillColorDefaultBrush}"
+                    CornerRadius="{x:Bind local:MessageBubble.CornersOf(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup), Mode=OneWay}"
+                    IsHitTestVisible="False"
+                    Opacity="0" />
 
                 <!-- Focus Ring: hugs the back (photos and cards too) 3 px out, following its corners, grouped ones included:
                      Fluent's focus stroke, a 2 px outer ring with a 1 px inner one, as Windows' own focus visual. Drawn only
