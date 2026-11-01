@@ -57,7 +57,7 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
     /// <summary>The largest API (protobuf) response body read: 16 MiB, far above any real page of conversations or messages.</summary>
     public const long MaxApiBodyBytes = 16L * 1024 * 1024;
 
-    private const string ProtobufMime ="application/x-protobuf";
+    private const string ProtobufMime = "application/x-protobuf";
     private const string PbLiteMime   = "application/json+protobuf";
 
     // The Last Cookie Line Logged Per Set Of Cookie Names, So An Unchanged Response Stays Quiet
@@ -251,22 +251,6 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
         return new GmMediaResponse(status, response_headers, body);
     }
 
-    /// <summary>
-    /// Tells whether an HTTP header belongs to Device Bound Session Credentials (DBSC).
-    /// </summary>
-    /// <remarks>
-    /// The W3C draft's <c>Secure-Session-Registration</c>, <c>-Challenge</c>, <c>-Response</c>, <c>-Skipped</c> and
-    /// <c>Sec-Secure-Session-Id</c> (<see href="https://w3c.github.io/webappsec-dbsc/"/>), and the <c>Sec-Session-*</c>
-    /// names of earlier drafts and Chrome's Google-only prototype (<c>Sec-Session-Google-Registration</c>). A bound
-    /// session's <c>__Secure-1PSIDTS</c> can only be renewed with the browser's private key, which this app never has.
-    /// </remarks>
-    /// <param name="name">The header name.</param>
-    /// <returns>True for a DBSC header.</returns>
-    public static bool IsBoundSessionHeader(string name) =>
-        name.StartsWith("Secure-Session-", StringComparison.OrdinalIgnoreCase)
-        || name.StartsWith("Sec-Secure-Session-", StringComparison.OrdinalIgnoreCase)
-        || name.StartsWith("Sec-Session-", StringComparison.OrdinalIgnoreCase);
-
     // =========================================================================
     // HELPERS
     // =========================================================================
@@ -279,7 +263,7 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
         long? length = content.Headers.ContentLength;
         if (length > max)
         {
-            throw new InvalidDataException("The media response is too large.");
+            throw new InvalidDataException("The response is too large.");
         }
 
         await using Stream stream = await content.ReadAsStreamAsync(ct).ConfigureAwait(false);
@@ -299,7 +283,7 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
         {
             if (buffer.Length + read > max)
             {
-                throw new InvalidDataException("The media response is too large.");
+                throw new InvalidDataException("The response is too large.");
             }
 
             buffer.Write(chunk, 0, read);

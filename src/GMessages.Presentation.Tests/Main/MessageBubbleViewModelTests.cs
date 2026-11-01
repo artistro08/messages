@@ -346,7 +346,7 @@ public sealed class MessageBubbleViewModelTests
         Assert.IsFalse(file.HasVideo);
         Assert.IsFalse(file.FillsBubble);
         Assert.AreEqual("clip.mp4", file.FileName);
-        Assert.AreEqual(1234, file.FileSize);
+        Assert.AreEqual(1234, file.Media?.Size);
     }
 
     [TestMethod]

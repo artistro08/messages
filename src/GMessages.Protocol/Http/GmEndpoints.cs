@@ -31,7 +31,7 @@ public sealed record GmEndpoints(Uri MessagesBase, Uri InstantMessagingBase, Uri
     public Uri Authentication => new(MessagesBase, "/web/authentication");
 
     /// <summary>Web app time source (<c>/web/timesource</c>).</summary>
-    public Uri Timesource => new(MessagesBase, "/web/timesource");
+    internal Uri Timesource => new(MessagesBase, "/web/timesource");
 
     /// <summary>Web app config (<c>/web/config</c>).</summary>
     public Uri Config => new(MessagesBase, "/web/config");

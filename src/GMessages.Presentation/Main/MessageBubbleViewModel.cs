@@ -65,7 +65,6 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         (nameof(QuoteMedia), b => b.QuoteMedia),
         (nameof(HasQuoteMedia), b => b.HasQuoteMedia),
         (nameof(QuoteIsLabel), b => b.QuoteIsLabel),
-        (nameof(MediaLabelText), b => b.MediaLabelText),
         (nameof(MediaLabelIsLabel), b => b.MediaLabelIsLabel),
         (nameof(ReplyChipText), b => b.ReplyChipText),
         (nameof(LinkUrl), b => b.LinkUrl),
@@ -86,9 +85,7 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         (nameof(UploadPercent), b => b.UploadPercent),
         (nameof(NotSentText), b => b.NotSentText),
         (nameof(FileName), b => b.FileName),
-        (nameof(FileSize), b => b.FileSize),
         (nameof(Kind), b => b.Kind),
-        (nameof(IsMediaPending), b => b.IsMediaPending),
         (nameof(PhotoName), b => b.PhotoName),
         (nameof(VideoName), b => b.VideoName),
     ];
@@ -298,9 +295,6 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     /// <summary>Gets whether the quote's text is a label ("Image", "Video", "GIF"), shown in italic, not a file name.</summary>
     public bool QuoteIsLabel => QuoteMedia is not null && IsLabel(QuoteMedia);
 
-    /// <summary>Gets the label the reply chip shows for this message's media ("Image", "GIF", "Video", or the file name), or empty.</summary>
-    public string MediaLabelText => Media is { } media ? MediaLabel(media) : string.Empty;
-
     /// <summary>Gets whether this message's media label is a label (italic), not a file name.</summary>
     public bool MediaLabelIsLabel => Media is { } media && IsLabel(media);
 
@@ -392,14 +386,8 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     /// <summary>Gets the card's file name: the sender's, or the kind label ("Video", "File") without one.</summary>
     public string FileName => Media is { Name.Length: > 0 } media ? media.Name : ChatFormat.KindLabel(Kind);
 
-    /// <summary>Gets the size in bytes of the file the card shows, or 0 when unknown.</summary>
-    public long FileSize => Media?.Size ?? 0;
-
     /// <summary>Gets the kind of message (Text, Photo, Video, File...).</summary>
     public MessageKind Kind { get; private set; }
-
-    /// <summary>Gets whether the photo is still on its way from the phone (no media ID, thumbnail or inline data yet).</summary>
-    public bool IsMediaPending => Media?.IsPending == true;
 
     /// <summary>Gets the photo's accessible name: its caption, else "Photo".</summary>
     public string PhotoName => HasBodyText ? Text : ChatCopy.Photo;

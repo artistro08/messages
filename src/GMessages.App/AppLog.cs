@@ -65,9 +65,6 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 917, Level = LogLevel.Error, Message = "Unhandled error ({ErrorType} 0x{HResult:X8}, handled: {Handled}) at {Frames}")]
     public static partial void UnhandledError(ILogger logger, string errorType, int hResult, bool handled, string frames);
 
-    [LoggerMessage(EventId = 919, Level = LogLevel.Information, Message = "Sign-in device-bound session headers: {Headers}")]
-    public static partial void BoundSessionHeaders(ILogger logger, string headers);
-
     [LoggerMessage(EventId = 920, Level = LogLevel.Warning, Message = "Copy failed ({ErrorType}); the clipboard is busy")]
     public static partial void CopyFailed(ILogger logger, string errorType);
 

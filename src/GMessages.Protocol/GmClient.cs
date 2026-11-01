@@ -78,7 +78,6 @@ public sealed partial class GmClient : IAsyncDisposable
     private DateTimeOffset _lastSaveStart = DateTimeOffset.MinValue;
     private bool _savesStopped;
     private bool _savesSuspended;
-    private int _saveCount;
 
     private GmClient(AuthData auth, SessionStore store, GmEndpoints endpoints, TimeProvider time, ILoggerFactory logs, HttpMessageHandler handler, bool ownsHandler)
     {
@@ -137,9 +136,6 @@ public sealed partial class GmClient : IAsyncDisposable
     /// </summary>
     /// <remarks>Ported from <c>IsConnected</c>; briefly false while the long poll reconnects, as in Go.</remarks>
     public bool IsConnected => _loop.IsConnected;
-
-    /// <summary>Gets how many session writes have finished (test hook).</summary>
-    internal int SaveCount => Volatile.Read(ref _saveCount);
 
     /// <summary>Runs inside each session write, before the file is written (test hook).</summary>
     internal Action? OnWritingForTests { get; set; }
@@ -799,7 +795,6 @@ public sealed partial class GmClient : IAsyncDisposable
             {
                 OnWritingForTests?.Invoke();
                 _store.Save(_auth);
-                Interlocked.Increment(ref _saveCount);
             }
             catch (Exception ex)
             {

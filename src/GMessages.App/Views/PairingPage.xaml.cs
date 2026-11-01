@@ -48,9 +48,6 @@ public sealed partial class PairingPage : UserControl
     private bool _captured;
     private bool _closed;
 
-    // Device-Bound Session (DBSC) Header Names Seen This Attempt, As "host response|request Name"; Never Values
-    private readonly HashSet<string> _boundHeaders = [];
-
     /// <summary>
     /// Creates the page and starts the first sign-in.
     /// </summary>
@@ -110,8 +107,7 @@ public sealed partial class PairingPage : UserControl
     private async Task StartSignInAsync()
     {
         _captured      = false;
-        _boundHeaders.Clear();
-        _profileFolder = Path.Combine(Path.GetTempPath(), $"{ProfilePrefix}{Guid.NewGuid():N}");
+        _profileFolder =Path.Combine(Path.GetTempPath(), $"{ProfilePrefix}{Guid.NewGuid():N}");
 
         var web = new WebView2();
         AutomationProperties.SetAutomationId(web, "Pairing.SignIn");
@@ -137,9 +133,6 @@ public sealed partial class PairingPage : UserControl
             web.CoreWebView2.Settings.IsWebMessageEnabled   = false;
             web.CoreWebView2.Settings.AreHostObjectsAllowed = false;
             web.NavigationCompleted            += (_, _) => _ = CheckCookiesAsync(force: false);
-
-            // Diagnosis: Does Google Bind This Sign-In To The Browser (DBSC)? Header Names Only
-            web.CoreWebView2.WebResourceResponseReceived += (_, e) => NoteBoundSessionHeaders(e);
 
             // No Popups: a Google link that opens a new window would outlive sign-in and keep the profile folder locked
             web.CoreWebView2.NewWindowRequested += (_, e) => e.Handled = true;
@@ -254,40 +247,6 @@ public sealed partial class PairingPage : UserControl
         }
     }
 
-    // Notes DBSC Headers: Google Asking To Bind (Response) Or The Browser Holding A Bound Session (Request)
-    private void NoteBoundSessionHeaders(CoreWebView2WebResourceResponseReceivedEventArgs e)
-    {
-        if (_captured)
-        {
-            return;
-        }
-
-        try
-        {
-            string host = new Uri(e.Request.Uri).Host;
-            foreach (KeyValuePair<string, string> header in e.Response.Headers)
-            {
-                if (GmHttpClient.IsBoundSessionHeader(header.Key))
-                {
-                    _boundHeaders.Add($"{host} response {header.Key}");
-                }
-            }
-
-            foreach (KeyValuePair<string, string> header in e.Request.Headers)
-            {
-                if (GmHttpClient.IsBoundSessionHeader(header.Key))
-                {
-                    _boundHeaders.Add($"{host} request {header.Key}");
-                }
-            }
-        }
-#pragma warning disable CA1031 // Diagnostics Must Never Break Sign-In
-        catch (Exception)
-#pragma warning restore CA1031
-        {
-        }
-    }
-
     // The Authentication Page's Origin, Plus google.com In Production (The Fake Server Under Test Has Only Its Own)
     private IEnumerable<string> CookieOrigins()
     {
@@ -318,7 +277,6 @@ public sealed partial class PairingPage : UserControl
         _sessionCookieTimer.Stop();
         string names = string.Join(", ", cookies.Keys.Select(name => $"{name} ({expiries[name]})"));
         AppLog.CookiesCaptured(_log, names);
-        AppLog.BoundSessionHeaders(_log, _boundHeaders.Count > 0 ? string.Join(", ", _boundHeaders.Order(StringComparer.Ordinal)) : "none");
 
         _ = ViewModel.OnCookiesCapturedAsync(cookies);
         CloseSignIn();

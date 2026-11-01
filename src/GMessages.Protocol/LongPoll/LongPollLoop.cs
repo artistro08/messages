@@ -115,11 +115,6 @@ public sealed partial class LongPollLoop(
     internal DittoPinger? Pinger => _pinger;
 
     /// <summary>
-    /// Gets the phone liveness state, which outlives every run and its pinger (Go keeps it on the client).
-    /// </summary>
-    internal PhoneLiveness Liveness => _liveness;
-
-    /// <summary>
     /// Runs the loop until it is stopped, canceled, or the credentials are refused.
     /// </summary>
     /// <remarks>

@@ -67,9 +67,6 @@ internal static class NativeMethods
     public const uint SWP_FRAMECHANGED  = 0x0020;
     public const int BLACK_BRUSH        = 4;
 
-    // Any process may take the foreground next
-    public const uint ASFW_ANY = unchecked((uint)-1);
-
     // ShowWindow: restore a minimized window to its last size and place
     public const int SW_RESTORE = 9;
 

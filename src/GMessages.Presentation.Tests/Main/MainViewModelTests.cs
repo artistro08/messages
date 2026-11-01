@@ -114,13 +114,13 @@ public sealed class MainViewModelTests
 
         vm.OpenSpamBlocked();
 
-        Assert.IsTrue(vm.IsSpamView);
+        Assert.AreEqual(ConversationFolder.SpamBlocked, vm.Folder);
         Assert.IsNotNull(vm.SpamBlocked);
         Assert.AreSame(vm.SpamBlocked, vm.CurrentList);
 
         vm.BackToInbox();
 
-        Assert.IsFalse(vm.IsSpamView);
+        Assert.AreEqual(ConversationFolder.Inbox, vm.Folder);
         Assert.AreSame(vm.Inbox, vm.CurrentList);
     }
 
@@ -141,7 +141,6 @@ public sealed class MainViewModelTests
         Assert.AreEqual(ConversationFolder.Archived, vm.Folder);
         Assert.IsTrue(vm.IsArchivedView);
         Assert.IsTrue(vm.IsFolderView);
-        Assert.IsFalse(vm.IsSpamView);
         Assert.AreNotSame(vm.Inbox, vm.CurrentList);
         Assert.AreEqual("z", string.Join(",", vm.CurrentList.Rows.Select(r => r.Id)));
         Assert.AreEqual(ListConversationsRequest.Types.Folder.Archive, rig.Client.ListCalls.Last().Folder);
@@ -161,7 +160,7 @@ public sealed class MainViewModelTests
 
         // The Spam List Is Its Own
         vm.OpenSpamBlocked();
-        Assert.IsTrue(vm.IsSpamView);
+        Assert.AreEqual(ConversationFolder.SpamBlocked, vm.Folder);
         Assert.IsFalse(vm.IsArchivedView);
         Assert.AreSame(vm.SpamBlocked, vm.CurrentList);
         Assert.AreNotSame(archived, vm.CurrentList);

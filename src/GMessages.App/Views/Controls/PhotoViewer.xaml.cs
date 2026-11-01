@@ -120,9 +120,6 @@ public sealed partial class PhotoViewer : UserControl
     /// <summary>Gets the Download button's name and tooltip.</summary>
     public static string DownloadText => ChatCopy.Download;
 
-    /// <summary>Gets the Open in Photos button's name and tooltip.</summary>
-    public static string OpenInPhotosText => ChatCopy.OpenInPhotos;
-
     /// <summary>Gets the Open with button's name and tooltip.</summary>
     public static string OpenWithText => ChatCopy.OpenWith;
 

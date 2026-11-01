@@ -110,9 +110,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// <summary>Gets the folder whose list shows now.</summary>
     public ConversationFolder Folder { get; private set; }
 
-    /// <summary>Gets whether the spam and blocked list shows instead of the inbox.</summary>
-    public bool IsSpamView => Folder == ConversationFolder.SpamBlocked;
-
     /// <summary>Gets whether the archived list shows instead of the inbox.</summary>
     public bool IsArchivedView => Folder == ConversationFolder.Archived;
 

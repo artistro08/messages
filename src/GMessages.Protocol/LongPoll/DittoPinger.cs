@@ -74,10 +74,10 @@ internal sealed partial class DittoPinger(
     public TimeSpan DataReceiveCheckInterval { get; init; } = TimeSpan.FromHours(2) + TimeSpan.FromMinutes(55);
 
     /// <summary>Gets how many pings were answered and fully handled; lets tests wait for an answer deterministically.</summary>
-    public int AnsweredPings => Volatile.Read(ref _answeredPings);
+    internal int AnsweredPings => Volatile.Read(ref _answeredPings);
 
     /// <summary>Gets whether the recovery loop is running.</summary>
-    public bool IsRecovering => Volatile.Read(ref _recovering) != 0;
+    internal bool IsRecovering => Volatile.Read(ref _recovering) != 0;
 
     /// <summary>
     /// Runs the ping loop until <paramref name="ct"/> is canceled.

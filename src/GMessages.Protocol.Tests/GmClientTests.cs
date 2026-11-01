@@ -352,11 +352,10 @@ public class GmClientTests
 
         rig.Time.Advance(TimeSpan.FromMilliseconds(1));
         Assert.AreEqual("newest-sid", rig.Store.Load()!.Cookies.Snapshot()["SID"], "saved at the end of the window");
-        Assert.AreEqual(2, rig.Client.SaveCount);
 
         // A Change Right After That Save Waits For A New Window; Dispose Flushes It
         rig.Auth.Cookies.UpdateFrom(FakeHttpHandler.Response(HttpStatusCode.OK, setCookies: "SID=final-sid; Path=/"));
-        Assert.AreEqual(2, rig.Client.SaveCount);
+        Assert.AreEqual("newest-sid", rig.Store.Load()!.Cookies.Snapshot()["SID"], "waits for a new window");
         await rig.Client.DisposeAsync();
         Assert.AreEqual("final-sid", rig.Store.Load()!.Cookies.Snapshot()["SID"]);
     }
@@ -389,7 +388,7 @@ public class GmClientTests
         // A Pending Debounced Save
         rig.Auth.Cookies.UpdateFrom(FakeHttpHandler.Response(HttpStatusCode.OK, setCookies: "SID=first-sid; Path=/"));
         rig.Auth.Cookies.UpdateFrom(FakeHttpHandler.Response(HttpStatusCode.OK, setCookies: "SID=pending-sid; Path=/"));
-        Assert.AreEqual(1, rig.Client.SaveCount);
+        Assert.AreEqual("first-sid", rig.Store.Load()!.Cookies.Snapshot()["SID"], "only the first change is saved so far");
 
         await rig.Client.DisposeAsync().AsTask().WaitAsync(HangGuard);
 
@@ -450,7 +449,7 @@ public class GmClientTests
 
         rig.Auth.Cookies.UpdateFrom(FakeHttpHandler.Response(HttpStatusCode.OK, setCookies: "SID=new-sid; Path=/"));
 
-        Assert.AreEqual(0, rig.Client.SaveCount);
+        Assert.IsFalse(File.Exists(rig.SessionPath), "nothing written");
         lock (rig.Events)
         {
             Assert.AreEqual("IOException", rig.Events.OfType<SessionSaveFailed>().Single().ErrorType);
@@ -465,8 +464,10 @@ public class GmClientTests
     {
         await using Rig rig = CreateRig();
         bool changed_once   = false;
+        int writes          = 0;
         rig.Client.OnWritingForTests = () =>
         {
+            writes++;
             if (!changed_once)
             {
                 changed_once = true;
@@ -475,11 +476,11 @@ public class GmClientTests
         };
 
         rig.Auth.Cookies.UpdateFrom(FakeHttpHandler.Response(HttpStatusCode.OK, setCookies: "SID=first-sid; Path=/"));
-        Assert.AreEqual(1, rig.Client.SaveCount, "first save");
+        Assert.AreEqual(1, writes, "first save");
         Assert.AreEqual(1, rig.Time.CountTimers(GmClient.SaveDebounce), "the change during the write opened a window");
 
         rig.Time.Advance(GmClient.SaveDebounce);
-        Assert.AreEqual(2, rig.Client.SaveCount, "second save");
+        Assert.AreEqual(2, writes, "second save");
         Assert.AreEqual("during-sid", rig.Store.Load()!.Cookies.Snapshot()["SID"]);
     }
 
@@ -659,7 +660,6 @@ public class GmClientTests
 
         rig.Time.Advance(GmClient.SaveDebounce);
         Assert.IsFalse(File.Exists(rig.SessionPath), "nothing saved");
-        Assert.AreEqual(0, rig.Client.SaveCount);
         Assert.IsFalse(rig.Client.IsLoggedIn, "pairing cleared");
         Assert.IsFalse(rig.Client.IsConnected, "pairing poll stopped");
         Assert.AreEqual(1, rig.Requests("/ReceiveMessages").Length, "no reconnect");
@@ -806,7 +806,6 @@ public class GmClientTests
         Assert.IsFalse(rig.Client.IsLoggedIn, "pairing cleared");
         Assert.IsFalse(rig.Client.IsConnected, "pairing poll stopped");
         Assert.IsFalse(File.Exists(rig.SessionPath), "nothing saved");
-        Assert.AreEqual(0, rig.Client.SaveCount);
         Assert.IsTrue(rig.Requests("/SendMessage").Any(r => ActionOf(r) == ActionType.CancelGaiaPairing), "cancel sent");
     }
 }
