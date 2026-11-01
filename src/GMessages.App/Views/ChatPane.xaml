@@ -195,9 +195,10 @@
             <Border.Shadow>
                 <ThemeShadow />
             </Border.Shadow>
+            <!-- 24 px: a whole 3 px stroke, as the chat list's ring (20 px drew a jagged 2.5 px one) -->
             <ProgressRing
-                Width="20"
-                Height="20"
+                Width="24"
+                Height="24"
                 AutomationProperties.AutomationId="Chat.LoadingOlder"
                 IsActive="{x:Bind Chat.IsLoadingOlder, Mode=OneWay, FallbackValue=False}" />
         </Border>
