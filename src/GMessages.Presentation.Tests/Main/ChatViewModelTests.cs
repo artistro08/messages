@@ -162,6 +162,28 @@ public sealed class ChatViewModelTests
         Assert.IsNull(await chat.FindForJumpAsync(string.Empty));
     }
 
+    /// <summary>
+    /// History the phone sends as live messages after the page (a catch-up, or a chat Start chat opened) goes in quietly
+    /// and in time order; only a message new to this PC animates in.
+    /// </summary>
+    [TestMethod]
+    public async Task LiveHistory_GoesInQuietly_InOrder_OnlyNewAnimates()
+    {
+        using var rig = new MainRig();
+        using ChatViewModel chat = NewChat(rig, null, Msg("m3", "three", ts: 1_761_700_000_000_000));
+        await chat.LoadAsync();
+
+        // An Older Message In The Catch-Up Batch: Above m3, Not Animated
+        await rig.Store.HandleEventAsync(new MessageReceived(Msg("m2", "two", ts: 1_761_699_000_000_000), true));
+        Assert.AreEqual("m2,m3", string.Join(",", chat.Messages.Select(b => b.Id)));
+        Assert.IsFalse(chat.Messages[0].TakeNew(), "history animated in");
+
+        // A New One: At The Bottom, Animated
+        await rig.Store.HandleEventAsync(new MessageReceived(Msg("m4", "four", ts: DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() * 1000), false));
+        Assert.AreEqual("m2,m3,m4", string.Join(",", chat.Messages.Select(b => b.Id)));
+        Assert.IsTrue(chat.Messages[2].TakeNew(), "a new message didn't animate in");
+    }
+
     [TestMethod]
     public async Task Load_Read_DoesNotMarkRead()
     {
@@ -204,7 +226,7 @@ public sealed class ChatViewModelTests
 
         chat.Draft = "hello";
         await chat.SendAsync();
-        await rig.LiveMessage(Msg("m2", "two", ts: 1_761_700_000_000_001));
+        await rig.LiveMessage(Msg("m2", "two", ts: DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() * 1000));
 
         Assert.IsTrue(chat.Messages[1].TakeNew(), "The sent bubble wasn't new.");
         Assert.IsTrue(chat.Messages[2].TakeNew(), "The arrived bubble wasn't new.");
