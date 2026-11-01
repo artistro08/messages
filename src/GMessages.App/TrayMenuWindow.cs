@@ -30,10 +30,6 @@ internal sealed partial class TrayMenuWindow : Window
     private readonly IntPtr _hwnd;
     private FlyoutShowOptions? _pendingShow;
 
-    // The Items' Text Color, Kept Apart From The Theme's Shared Text Brush: The Main Window Dims That One While Inactive
-    // (WindowTextDimmer), Which Is Just When This Menu Shows
-    private readonly Microsoft.UI.Xaml.Media.SolidColorBrush _text = new();
-
     /// <summary>
     /// Creates the hidden host window and its menu.
     /// </summary>
@@ -43,9 +39,7 @@ internal sealed partial class TrayMenuWindow : Window
         _hwnd   = WindowNative.GetWindowHandle(this);
 
         BuildItems();
-        ColorText();
-        _root.ActualThemeChanged += (_, _) => ColorText();
-        _menu.Closed             += (_, _) => AppWindow?.Hide();
+        _menu.Closed += (_, _) => AppWindow?.Hide();
 
         // Window Chrome
         var presenter = OverlappedPresenter.Create();
@@ -121,25 +115,12 @@ internal sealed partial class TrayMenuWindow : Window
     /// Sets the menu's light or dark look from the app theme.
     /// </summary>
     /// <param name="theme">The app theme setting.</param>
-    public void ApplyTheme(AppTheme theme)
+    public void ApplyTheme(AppTheme theme) => _root.RequestedTheme = theme switch
     {
-        _root.RequestedTheme = theme switch
-        {
-            AppTheme.Light => ElementTheme.Light,
-            AppTheme.Dark  => ElementTheme.Dark,
-            _              => ElementTheme.Default,
-        };
-        ColorText();
-    }
-
-    // The Items' Text In The Menu's Theme's Text Color, Full Strength
-    private void ColorText()
-    {
-        if (Views.WindowTextDimmer.FindBrush(_root.ActualTheme, "TextFillColorPrimaryBrush") is { } shared)
-        {
-            _text.Color = shared.Color;
-        }
-    }
+        AppTheme.Light => ElementTheme.Light,
+        AppTheme.Dark  => ElementTheme.Dark,
+        _              => ElementTheme.Default,
+    };
 
     // Open, Settings, Separator, Quit
     private void BuildItems()
@@ -172,13 +153,6 @@ internal sealed partial class TrayMenuWindow : Window
             Padding = NarrowPadding,
         };
         AutomationProperties.SetAutomationId(item, automationId);
-
-        // Its Text Draws With The Menu's Own Brush (See ColorText), Not The Shared One The Main Window Dims
-        foreach (string key in (ReadOnlySpan<string>)["MenuFlyoutItemForeground", "MenuFlyoutItemForegroundPointerOver", "MenuFlyoutItemForegroundPressed"])
-        {
-            item.Resources[key] = _text;
-        }
-
         item.Click += (_, _) =>
         {
             HideMenu();
