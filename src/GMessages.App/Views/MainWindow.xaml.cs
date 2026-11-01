@@ -191,9 +191,11 @@ public sealed partial class MainWindow : Window
     /// <param name="returnFocus">The video's frame in the chat, focused again when the viewer closes.</param>
     /// <param name="returnState">How the clicked button had focus, given back the same way on close.</param>
     /// <param name="start">Where to start playing (where the bubble's player got to).</param>
+    /// <param name="play">True to play from there, false to stay paused there (as the bubble's player was).</param>
     /// <param name="frame">The bubble's still frame, grown in its place before the player shows; null when none showed.</param>
-    public void ShowVideo(MediaPart part, string messageId, string name, Control returnFocus, FocusState returnState, TimeSpan start, ImageSource? frame) =>
-        _ = PhotoViewer.ShowVideoAsync(part, messageId, name, returnFocus, returnState, start, frame);
+    /// <param name="closed">Given the viewer's position and whether it was playing when it closes; null when nothing carries on.</param>
+    public void ShowVideo(MediaPart part, string messageId, string name, Control returnFocus, FocusState returnState, TimeSpan start, bool play, ImageSource? frame, Action<TimeSpan, bool>? closed) =>
+        _ = PhotoViewer.ShowVideoAsync(part, messageId, name, returnFocus, returnState, start, play, frame, closed);
 
     /// <summary>
     /// Shows the "Saved to Downloads" confirmation for a few seconds; its Show in folder opens File Explorer on the file.

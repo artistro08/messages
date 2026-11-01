@@ -18,10 +18,9 @@ namespace GMessages.App.Media;
 /// <para>
 /// Made the way <see cref="VoicePlayer"/> makes its player: the bytes play from memory (never from disk), as media (a
 /// communications stream goes to the default communications device, often not the speakers), and muted in a test run.
-/// Its command manager stays on: with it off, the play button of Windows' controls never played a paused video. A bubble plays one in place with compact controls (play or pause, seek, volume);
-/// the viewer plays one with the full controls. Windows' zoom button stays hidden; its full window button can't be hidden
-/// in WinUI 3, so its press is turned back and raises <see cref="FullWindowRequested"/>: the bubble's expand and the
-/// viewer stand in for it.
+/// Its command manager stays on: with it off, the play button of Windows' controls never played a paused video. The
+/// bubble and the viewer show the same compact bar: play or pause, seek, volume. Zoom, cast and full window are hidden
+/// (the bubble's expand and the viewer stand in for full window).
 /// </para>
 /// <para>
 /// The owner puts <see cref="Element"/> in a panel, and on <see cref="Dispose"/> takes it out first, then disposes:
@@ -43,10 +42,9 @@ internal sealed class VideoPlayback : IDisposable
     /// <param name="bytes">The video file's bytes.</param>
     /// <param name="mime">The video's mime type.</param>
     /// <param name="start">Where to start.</param>
-    /// <param name="compact">True for a bubble's compact controls, false for the viewer's full ones.</param>
     /// <param name="automationId">The element's AutomationId.</param>
     /// <param name="name">What Narrator calls the element.</param>
-    public VideoPlayback(DispatcherQueue queue, byte[] bytes, string mime, TimeSpan start, bool compact, string automationId, string name)
+    public VideoPlayback(DispatcherQueue queue, byte[] bytes, string mime, TimeSpan start, string automationId, string name)
     {
         ArgumentNullException.ThrowIfNull(queue);
         ArgumentNullException.ThrowIfNull(bytes);
@@ -60,6 +58,13 @@ internal sealed class VideoPlayback : IDisposable
             Source        = new MediaPlaybackItem(MediaSource.CreateFromStream(_stream, mime), start),
         };
         Player.MediaFailed                          += OnMediaFailed;
+
+        // The Start Position Once Opened (The Item's Own Start Time Alone Left The Player At The Beginning)
+        if (start > TimeSpan.Zero)
+        {
+            Player.MediaOpened += (sender, _) => sender.PlaybackSession.Position = start;
+        }
+
         Player.PlaybackSession.PlaybackStateChanged += OnPlaybackStateChanged;
 
         // Element: Windows' Controls, Without Its Own Full Window, Zoom And Cast. The Element's Own Controls Are Set Up
@@ -74,51 +79,46 @@ internal sealed class VideoPlayback : IDisposable
         AutomationProperties.SetName(Element, name);
         Element.SetMediaPlayer(Player);
 
-        MediaTransportControls controls = Element.TransportControls;
-        controls.IsCompact              = compact;
-        controls.IsZoomButtonVisible    = false;
-        controls.IsZoomEnabled          = false;
+        // One Bar For The Bubble And The Viewer (Owner, Plan 10): Play Or Pause On The Left, The Seek Bar, Volume On The Right
+        MediaTransportControls controls     = Element.TransportControls;
+        controls.IsCompact                  = true;
+        controls.IsZoomButtonVisible        = false;
 
-        // Cast: WinUI 3's Controls Have No Property For It, And Set The Template's Button Visible Themselves (Collapsing It
-        // Fought Them And Hung The Window), So Once It Is Made It Is Clear, Takes No Input And Leaves Narrator's Tree. It
-        // Keeps Its Place, So Volume And Play Stay Where They Were, Balanced In The Bar
-        controls.LayoutUpdated += HideCast;
+        // Cast And Full Window: WinUI 3's Controls Have No Property For Either, And Set The Template's Buttons Visible
+        // Themselves (Collapsing Them Fought That And Hung The Window), So Once Made They Get No Width, No Input, No Tab
+        // Stop And No Place In Narrator's Tree. The Compact Bar Then Ends At Volume, With No Empty Slot (Owner, Plan 10)
+        controls.LayoutUpdated += HideExtras;
 
-        void HideCast(object? sender, object e)
+        void HideExtras(object? sender, object e)
         {
             if (FindNamed(controls, "CastButton") is not { } cast)
             {
                 return;
             }
 
-            controls.LayoutUpdated -= HideCast;
-            cast.Opacity            = 0;
-            cast.IsHitTestVisible   = false;
-            cast.As<Control>().IsTabStop = false;
-            AutomationProperties.SetAccessibilityView(cast, Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
-        }
-
-        // Windows' Full Window Button: WinUI 3's Controls Have No Property To Hide It (Only IsFullWindow Exists), So Its
-        // Press Is Turned Back At Once And Handed To The Owner, Whose Viewer Is The Only Full-Size View
-        Element.RegisterPropertyChangedCallback(MediaPlayerElement.IsFullWindowProperty, (_, _) =>
-        {
-            if (Element.IsFullWindow)
+            // Full Window Isn't Always Made In The Compact Bar
+            controls.LayoutUpdated -= HideExtras;
+            FrameworkElement? full = FindNamed(controls, "FullWindowButton");
+            foreach (FrameworkElement? button in (ReadOnlySpan<FrameworkElement?>)[cast, full])
             {
-                Element.IsFullWindow = false;
-                FullWindowRequested?.Invoke(this, EventArgs.Empty);
+                if (button is null)
+                {
+                    continue;
+                }
+
+                button.MaxWidth         = 0;
+                button.Margin           = new Thickness(0);
+                button.IsHitTestVisible = false;
+                button.As<Control>().IsTabStop = false;
+                AutomationProperties.SetAccessibilityView(button, Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
             }
-        });
+        }
     }
 
     /// <summary>
     /// Raised on the UI thread when the video can't play.
     /// </summary>
     public event EventHandler? Failed;
-
-    /// <summary>
-    /// Raised when Windows' full window button is pressed; the bubble opens its viewer instead.
-    /// </summary>
-    public event EventHandler? FullWindowRequested;
 
     /// <summary>Gets the player.</summary>
     public MediaPlayer Player { get; }
@@ -128,6 +128,9 @@ internal sealed class VideoPlayback : IDisposable
 
     /// <summary>Gets how far the video has played.</summary>
     public TimeSpan Position => _disposed ? TimeSpan.Zero : Player.PlaybackSession.Position;
+
+    /// <summary>Gets a value indicating whether the video is playing (or opening or buffering to play).</summary>
+    public bool IsPlaying => !_disposed && Player.PlaybackSession.PlaybackState is MediaPlaybackState.Playing or MediaPlaybackState.Opening or MediaPlaybackState.Buffering;
 
     /// <summary>
     /// Stops the video and lets go of the player and the bytes. Take <see cref="Element"/> out of its panel first.
