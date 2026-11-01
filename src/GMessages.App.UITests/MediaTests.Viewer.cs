@@ -92,6 +92,57 @@ public sealed partial class MediaTests
     }
 
     /// <summary>
+    /// A photo wider than twice the window opens decoded narrower than its own width, and zoomed past 2x it decodes
+    /// again at its own width.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Viewer_ZoomPast2x_DecodesFullWidth()
+    {
+        await OpenMediaChatAsync();
+        Message message         = Server.Phone.PushIncomingMedia("c-media", "image/png", Png(6000, 600, SplitColors), "huge.png");
+        AutomationElement photo = App.Find("Bubble.Photo." + message.MessageID);
+        WaitForStatus(photo, Full);
+        App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).SetForeground();
+
+        // Opened: Decoded At Twice The Window, Not Its Own 6000 px
+        photo.Click();
+        string note = Path.Combine(App.DataDir, "viewer-decode.txt");
+        Wait.Until(() => ReadNote(note).Length > 0, AppDriver.DefaultTimeout, () => "The viewer never decoded the photo.");
+        int first = int.Parse(ReadNote(note), System.Globalization.CultureInfo.InvariantCulture);
+        Assert.IsTrue(first is > 0 and < 6000, $"The viewer decoded the 6000 px photo {first} px wide.");
+
+        // Ctrl + Wheel Past 2x: Decoded Again At Its Own Width
+        AutomationElement viewer     = App.Find("PhotoViewer.Photo");
+        System.Drawing.Rectangle box = viewer.BoundingRectangle;
+        Mouse.Position               = new System.Drawing.Point(box.Left + (box.Width / 2), box.Top + (box.Height / 2));
+        Thread.Sleep(500);
+        using (Keyboard.Pressing(VirtualKeyShort.CONTROL))
+        {
+            for (int i = 0; i < 8; i++)
+            {
+                Mouse.Scroll(2);
+                Thread.Sleep(50);
+            }
+        }
+
+        Wait.Until(() => ReadNote(note) == "6000", AppDriver.DefaultTimeout, () => $"Zoomed past 2x, the photo stayed decoded {ReadNote(note)} px wide.");
+
+        static string ReadNote(string path)
+        {
+            try
+            {
+                using var reader = new StreamReader(new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete));
+                return reader.ReadToEnd().Trim();
+            }
+            catch (IOException)
+            {
+                return string.Empty;
+            }
+        }
+    }
+
+    /// <summary>
     /// Tab and Shift + Tab stay inside the viewer, and every toolbar button carries its name.
     /// </summary>
     /// <returns>A task for the test.</returns>

@@ -68,6 +68,11 @@ public sealed partial class PhotoViewer : UserControl
     // The Toolbar's Gap From The Window's Left Edge
     private const double ToolbarInset = 8;
 
+    // The Widest A Photo Is Ever Decoded, In Physical Pixels (A 30000 px Photo Can't Exhaust Memory), And The Zoom Past
+    // Which It Decodes Again At Its Own Width
+    private const int MaxDecodeWidth  = 8192;
+    private const float FullDecodeZoom = 2;
+
     // Opening Grows The Photo Out Of Its Bubble (Fluent's Decelerate Curve), Closing Shrinks It Back Faster (Accelerate)
     private static readonly TimeSpan GrowTime   = TimeSpan.FromMilliseconds(300);
     private static readonly TimeSpan ShrinkTime = TimeSpan.FromMilliseconds(200);
@@ -81,6 +86,10 @@ public sealed partial class PhotoViewer : UserControl
     private MediaPart? _part;
     private string _messageId = string.Empty;
     private Control? _returnFocus;
+
+    // The Shown Photo's Own Width (0 When Unknown) And The Width It Is Decoded At, Both In Physical Pixels
+    private int _photoWidth;
+    private int _decodedWidth;
 
     // How The Photo In The Chat Had Focus When The Viewer Opened (Pointer For A Click), So Closing Gives It Back The Same
     // Way: A Clicked Photo Gets No Focus Ring Back, Even When Escape Closes The Viewer
@@ -192,16 +201,23 @@ public sealed partial class PhotoViewer : UserControl
                 throw new InvalidOperationException("No media store.");
             }
 
-            byte[] bytes     = await media.GetAsync(part, thumbnail: false, CancellationToken.None);
-            using var stream = new InMemoryRandomAccessStream();
-            await stream.WriteAsync(bytes.AsBuffer());
-            stream.Seek(0);
+            // Decoded No Wider Than Twice The Window In Physical Pixels (Sharp To 2x Zoom), And Never Past MaxDecodeWidth
+            byte[] bytes = await media.GetAsync(part, thumbnail: false, CancellationToken.None);
+            double twice = (XamlRoot?.Size.Width ?? 0) * (XamlRoot?.RasterizationScale ?? 1) * 2;
+            int fit      = twice > 0 ? (int)Math.Min(Math.Ceiling(twice), MaxDecodeWidth) : MaxDecodeWidth;
+            (ImageSource? image, int pixel_width, _, int decode_width) =
+                await Avatar.ToFittedImageAsync(bytes, (w, _) => w > 0 ? Math.Min(w, fit) : fit, DecodePixelType.Physical);
+            if (image is null)
+            {
+                throw new InvalidDataException();
+            }
 
-            var image = new BitmapImage();
-            await image.SetSourceAsync(stream);
             if (ReferenceEquals(part, _part) && !_closing)
             {
+                _photoWidth       = pixel_width;
+                _decodedWidth     = decode_width;
                 PhotoImage.Source = image;
+                TestHooks.NoteState("viewer-decode", decode_width.ToString(System.Globalization.CultureInfo.InvariantCulture));
                 _ = Grow(PhotoImage, null);
             }
         }
@@ -737,9 +753,43 @@ public sealed partial class PhotoViewer : UserControl
 
     private void OnZoomerViewChanged(object? sender, ScrollViewerViewChangedEventArgs e)
     {
-        if (!e.IsIntermediate)
+        if (e.IsIntermediate)
         {
-            TestHooks.ShowState(Zoomer, "Zoom" + Math.Round(Zoomer.ZoomFactor).ToString(System.Globalization.CultureInfo.InvariantCulture));
+            return;
+        }
+
+        if (Zoomer.ZoomFactor > FullDecodeZoom)
+        {
+            _ = DecodeFullAsync();
+        }
+
+        TestHooks.ShowState(Zoomer, "Zoom" + Math.Round(Zoomer.ZoomFactor).ToString(System.Globalization.CultureInfo.InvariantCulture));
+    }
+
+    // Zoomed Past 2x: The Photo Decodes Again At Its Own Width (MaxDecodeWidth At Most), Once, So It Stays Sharp Up Close
+    private async Task DecodeFullAsync()
+    {
+        int full = Math.Min(_photoWidth, MaxDecodeWidth);
+        if (_part is not { } part || _closing || full <= _decodedWidth || (Application.Current as App)?.Media is not { } media)
+        {
+            return;
+        }
+
+        _decodedWidth = full;
+        try
+        {
+            byte[] bytes                = await media.GetAsync(part, thumbnail: false, CancellationToken.None);
+            (ImageSource? image, _, _, _) = await Avatar.ToFittedImageAsync(bytes, (_, _) => full, DecodePixelType.Physical);
+            if (image is not null && ReferenceEquals(part, _part) && !_closing)
+            {
+                PhotoImage.Source = image;
+                TestHooks.NoteState("viewer-decode", full.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            }
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // The Sharper Decode Failed: The First Keeps Showing
+            AppLog.MediaFailed(App.ShellLog, "view", _messageId, ex.GetType().Name);
         }
     }
 }

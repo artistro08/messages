@@ -1,5 +1,4 @@
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices.WindowsRuntime;
 using GMessages.Presentation.Messaging;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -7,6 +6,7 @@ using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
+using Windows.Graphics.Imaging;
 using Windows.Storage.Streams;
 
 namespace GMessages.App.Views.Controls;
@@ -53,8 +53,8 @@ public sealed partial class Avatar : UserControl
     public static readonly DependencyProperty SecondPhotoIdProperty =
         DependencyProperty.Register(nameof(SecondPhotoId), typeof(string), typeof(Avatar), new PropertyMetadata(string.Empty, OnPhotoIdChanged));
 
-    // Photos Are Decoded At Twice The 40 px Circle, Enough For 200% Scaling
-    private const int PhotoDecodeWidth = 80;
+    // Photos Are Decoded At The 40 px Circle, In Logical Pixels (The Display Scale Is Already In Them)
+    private const int PhotoDecodeWidth = 40;
 
     // Photos Already Decoded, By Their Bytes: The Photo Cache Hands Back The Same Array For An ID, So A Photo Shown Before
     // Shows Again At Once (Switching Chats Showed The Letter For A Few Frames While It Decoded Again). An Entry Lives As
@@ -137,11 +137,8 @@ public sealed partial class Avatar : UserControl
 
         try
         {
-            using var stream = new InMemoryRandomAccessStream();
-            await stream.WriteAsync(photo.AsBuffer());
-            stream.Seek(0);
-
-            var image = new BitmapImage { DecodePixelWidth = decodeWidth > 0 ? decodeWidth : PhotoDecodeWidth, DecodePixelType = DecodePixelType.Logical };
+            using IRandomAccessStream stream = new MemoryStream(photo, writable: false).AsRandomAccessStream();
+            var image                        = new BitmapImage { DecodePixelWidth = decodeWidth > 0 ? decodeWidth : PhotoDecodeWidth, DecodePixelType = DecodePixelType.Logical };
             await image.SetSourceAsync(stream);
             return image;
         }
@@ -149,6 +146,52 @@ public sealed partial class Avatar : UserControl
         {
             // Not An Image: Keep The Initial
             return null;
+        }
+    }
+
+    /// <summary>
+    /// Turns image bytes into an image decoded only as wide as it shows, from its own size read first.
+    /// </summary>
+    /// <remarks>
+    /// One stream over the bytes (no copy): its header gives the picture's size as shown (after its orientation), then
+    /// the same stream decodes at the width <paramref name="decodeWidth"/> picks from that size. A header that won't
+    /// read gives 0 x 0, and the decode still tries.
+    /// </remarks>
+    /// <param name="photo">The image bytes.</param>
+    /// <param name="decodeWidth">Given the picture's width and height in pixels (0 x 0 when unknown), the width to
+    /// decode to; 0 for its own width.</param>
+    /// <param name="type">Whether the decode width is in logical (effective) or physical pixels.</param>
+    /// <returns>The image (null when the bytes are not an image), the picture's width and height, and the width it was
+    /// decoded to.</returns>
+    public static async Task<(ImageSource? Image, int Width, int Height, int DecodeWidth)> ToFittedImageAsync(
+        byte[] photo, Func<int, int, int> decodeWidth, DecodePixelType type = DecodePixelType.Logical)
+    {
+        ArgumentNullException.ThrowIfNull(photo);
+        ArgumentNullException.ThrowIfNull(decodeWidth);
+
+        (int width, int height, int decode) = (0, 0, 0);
+        try
+        {
+            using IRandomAccessStream stream = new MemoryStream(photo, writable: false).AsRandomAccessStream();
+            try
+            {
+                BitmapDecoder decoder = await BitmapDecoder.CreateAsync(stream);
+                (width, height)       = ((int)decoder.OrientedPixelWidth, (int)decoder.OrientedPixelHeight);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                // The Size Stays Unknown; The Decode Below Still Tries
+            }
+
+            stream.Seek(0);
+            decode    = decodeWidth(width, height);
+            var image = new BitmapImage { DecodePixelWidth = decode, DecodePixelType = type };
+            await image.SetSourceAsync(stream);
+            return (image, width, height, decode);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            return (null, width, height, decode);
         }
     }
 

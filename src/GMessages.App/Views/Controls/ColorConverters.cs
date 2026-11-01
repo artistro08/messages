@@ -13,13 +13,25 @@ namespace GMessages.App.Views.Controls;
 /// </remarks>
 public static class ColorConverters
 {
+    // Brushes Made So Far, By Color: Every Avatar And Sender Name Of One Color Shares One (Only The UI Thread Calls)
+    private static readonly Dictionary<uint, SolidColorBrush> Brushes = [];
+
     /// <summary>
-    /// Makes a solid brush from an opaque ARGB color.
+    /// Gives a solid brush for an opaque ARGB color, the same one each time for a color.
     /// </summary>
+    /// <remarks>Shared, so callers never change it.</remarks>
     /// <param name="argb">The color as <c>0xAARRGGBB</c>.</param>
     /// <returns>The brush.</returns>
-    public static SolidColorBrush ToBrush(uint argb) =>
-        new(Color.FromArgb((byte)(argb >> 24), (byte)(argb >> 16), (byte)(argb >> 8), (byte)argb));
+    public static SolidColorBrush ToBrush(uint argb)
+    {
+        if (!Brushes.TryGetValue(argb, out SolidColorBrush? brush))
+        {
+            brush         = new(Color.FromArgb((byte)(argb >> 24), (byte)(argb >> 16), (byte)(argb >> 8), (byte)argb));
+            Brushes[argb]  = brush;
+        }
+
+        return brush;
+    }
 
     /// <summary>
     /// Gives bold for unread rows and normal for the rest.

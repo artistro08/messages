@@ -154,8 +154,8 @@ public sealed partial class MessageBubble : UserControl
     // A Photo's Blurred Look: Its Thumbnail Decoded This Wide, Then Stretched To The Photo's Size
     private const int BlurDecodeWidth = 24;
 
-    // The File Card's Thumbnail Width (Its 40 px Square, Sharp At 200% Scale)
-    private const int FileThumbWidth = 80;
+    // The File Card's Thumbnail Width: Its 40 px Square, In Logical Pixels (The Display Scale Is Already In Them)
+    private const int FileThumbWidth = 40;
 
     // A New Bubble's Entrance Rises From This Far Below (Over EntranceTime)
     private const float EntranceRise = 12;
@@ -1387,15 +1387,18 @@ public sealed partial class MessageBubble : UserControl
             bool at_once           = full_task.IsCompleted;
             byte[] full            = await full_task;
             long decode_start      = System.Diagnostics.Stopwatch.GetTimestamp();
-            (int pixel_width, int pixel_height) = await PixelSizeAsync(full);
             if (load != _photoLoad)
             {
                 return;
             }
 
-            int decode_width                    = MessageBubbleViewModel.FillDecodeWidth(pixel_width, pixel_height, Photo.Width, Photo.Height);
-            ImageSource image                   = await Avatar.ToImageAsync(full, decode_width) ?? throw new InvalidDataException();
-            long decode_ms                      = (long)System.Diagnostics.Stopwatch.GetElapsedTime(decode_start).TotalMilliseconds;
+            // Its Size Read From The Same Stream It Decodes From, Then Decoded To Fill The Box
+            double box_width  = Photo.Width;
+            double box_height = Photo.Height;
+            (ImageSource? fitted, int pixel_width, int pixel_height, int decode_width) =
+                await Avatar.ToFittedImageAsync(full, (w, h) => MessageBubbleViewModel.FillDecodeWidth(w, h, box_width, box_height));
+            ImageSource image = fitted ?? throw new InvalidDataException();
+            long decode_ms    = (long)System.Diagnostics.Stopwatch.GetElapsedTime(decode_start).TotalMilliseconds;
             AppLog.PhotoDecoded(App.ShellLog, bubble.Id, full.Length, part.Size, pixel_width, pixel_height, decode_width, decode_ms);
             if (load != _photoLoad)
             {
@@ -1428,21 +1431,6 @@ public sealed partial class MessageBubble : UserControl
 
             AppLog.MediaFailed(App.ShellLog, "photo", bubble.Id, ex.GetType().Name);
             ShowPhotoFailed();
-        }
-    }
-
-    // A Picture's Own Size As Shown (After Its Orientation), From Its Header; 0 x 0 When It Won't Decode
-    private static async Task<(int Width, int Height)> PixelSizeAsync(byte[] bytes)
-    {
-        try
-        {
-            using Windows.Storage.Streams.IRandomAccessStream stream = new MemoryStream(bytes, writable: false).AsRandomAccessStream();
-            Windows.Graphics.Imaging.BitmapDecoder decoder           = await Windows.Graphics.Imaging.BitmapDecoder.CreateAsync(stream);
-            return ((int)decoder.OrientedPixelWidth, (int)decoder.OrientedPixelHeight);
-        }
-        catch (Exception ex) when (ex is not OutOfMemoryException)
-        {
-            return (0, 0);
         }
     }
 
@@ -1842,10 +1830,12 @@ public sealed partial class MessageBubble : UserControl
             return;
         }
 
+        // Decoded As Wide As The Video Shows (Sized Before This Runs)
+        int frame_width = (int)Math.Ceiling(Video is { Width: > 0 } box ? box.Width : MaxBubbleWidth);
         try
         {
             byte[] bytes      = await VideoStill.GetAsync(media, part);
-            ImageSource image = await Avatar.ToImageAsync(bytes, (int)Math.Ceiling(MaxBubbleWidth)) ?? throw new InvalidDataException();
+            ImageSource image = await Avatar.ToImageAsync(bytes, frame_width) ?? throw new InvalidDataException();
             if (ReferenceEquals(part, _videoPart))
             {
                 VideoThumb.Background = new ImageBrush { ImageSource = image, Stretch = Stretch.UniformToFill };
