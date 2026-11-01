@@ -52,6 +52,23 @@ public sealed class LifecycleTests : UiTest
     }
 
     /// <summary>
+    /// <c>--quit</c> with a chat open ends the process within 5 s, and the log times each quit step (milliseconds only).
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Quit_WithChatOpen_ExitsWithinFiveSeconds()
+    {
+        await OpenMainAsync();
+        App.Find("Row.c-ann").Patterns.SelectionItem.Pattern.Select();
+        App.WaitForText("Chat.Header", "Ann");
+
+        var clock = Stopwatch.StartNew();
+        await App.QuitAsync();
+        Assert.IsLessThan(5000, clock.ElapsedMilliseconds, $"Quitting took {clock.ElapsedMilliseconds} ms.");
+        StringAssert.Contains(ReadLog(), "Quit steps:", "The quit's timing line is missing.");
+    }
+
+    /// <summary>
     /// The user starting the app (here, paired) shows the main window without a tray click; only Windows' startup task
     /// at sign-in keeps it in the tray (LaunchWindow's unit tests).
     /// </summary>

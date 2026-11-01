@@ -14,6 +14,9 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 902, Level = LogLevel.Information, Message = "Quit")]
     public static partial void Quit(ILogger logger);
 
+    [LoggerMessage(EventId = 933, Level = LogLevel.Information, Message = "Quit steps: windows {WindowsMs} ms, connection {ConnectionMs} ms, saves {SavesMs} ms (all written: {SavesDone}), total {TotalMs} ms")]
+    public static partial void QuitTimed(ILogger logger, long windowsMs, long connectionMs, long savesMs, bool savesDone, long totalMs);
+
     [LoggerMessage(EventId = 903, Level = LogLevel.Information, Message = "Tray icon added: {Added}")]
     public static partial void TrayAdded(ILogger logger, bool added);
 

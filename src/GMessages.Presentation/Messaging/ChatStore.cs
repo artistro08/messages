@@ -1266,6 +1266,12 @@ public sealed partial class ChatStore : IDisposable
     private int Generation => Volatile.Read(ref _generation);
 
     /// <summary>
+    /// Waits for every save queued so far to be written (the app's quit, bounded by its own timeout).
+    /// </summary>
+    /// <returns>A task that completes when the queue is empty up to now.</returns>
+    public Task FlushSavesAsync() => FlushAsync();
+
+    /// <summary>
     /// Waits for every database call queued so far (tests).
     /// </summary>
     /// <returns>A task that completes when the queue is empty up to now.</returns>
