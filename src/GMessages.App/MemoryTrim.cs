@@ -1,4 +1,3 @@
-using System.Runtime;
 using Microsoft.UI.Dispatching;
 
 namespace GMessages.App;
@@ -33,9 +32,16 @@ internal sealed class MemoryTrim
     /// <summary>
     /// Trims in a few seconds, restarting the wait if one is already pending.
     /// </summary>
-    public void Schedule()
+    public void Schedule() => Schedule(TimeSpan.FromSeconds(5));
+
+    /// <summary>
+    /// Trims after a given wait, restarting the wait if one is already pending, so a burst of calls ends in one trim.
+    /// </summary>
+    /// <param name="delay">How long to wait before the trim.</param>
+    public void Schedule(TimeSpan delay)
     {
         _timer.Stop();
+        _timer.Interval = delay;
         _timer.Start();
     }
 
@@ -51,12 +57,16 @@ internal sealed class MemoryTrim
             return;
         }
 
-        GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+        // Aggressive Also Compacts The Large Object Heap
         GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, blocking: true, compacting: true);
 
-        // Finalizers release the WinRT objects behind closed windows; collect what they let go
+        // Finalizers release the WinRT objects behind closed windows; collect what they let go, and hand it back too
         GC.WaitForPendingFinalizers();
-        GC.Collect();
+        GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, blocking: true, compacting: true);
+
         _ = NativeMethods.SetProcessWorkingSetSize(NativeMethods.GetCurrentProcess(), -1, -1);
+
+        // Test Hook: Tells The UI Tests The Trim Ran (A Debug-Build Note, "trim:done")
+        TestHooks.NoteState("trim-done", "1");
     }
 }

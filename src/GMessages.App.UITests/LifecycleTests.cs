@@ -157,6 +157,32 @@ public sealed class LifecycleTests : UiTest
         AssertStillRunning();
     }
 
+    /// <summary>
+    /// Once paired and connected, closing the main window leaves the tray idle; the app trims its memory (a debug-build
+    /// note, <c>trim-done.txt</c>, says when) and its private bytes end below what they were right after the close.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task TrayIdle_AfterConnectAndClose_Trims()
+    {
+        await OpenMainAsync();
+
+        // No Trim Note Yet: A Trim Skipped For The Open Window Writes None
+        string done = Path.Combine(App.DataDir, "trim-done.txt");
+        File.Delete(done);
+        CloseMainWindow();
+
+        App.Process.Refresh();
+        long after_close = App.Process.PrivateMemorySize64;
+
+        Wait.Until(() => File.Exists(done), TimeSpan.FromSeconds(30), () => "The tray never trimmed after the window closed.");
+
+        App.Process.Refresh();
+        long after_trim = App.Process.PrivateMemorySize64;
+        Console.WriteLine($"Private bytes: {after_close} after the close, {after_trim} after the trim.");
+        Assert.IsLessThan(after_close, after_trim, "The trim didn't lower the private bytes.");
+    }
+
     private void AssertStillRunning()
     {
         Assert.IsFalse(App.Process.HasExited, "Closing a window ended the app.");

@@ -198,14 +198,22 @@ public partial class App : Application, IDisposable
         var store      = _store;
         _notifications = new NotificationService(store, _settings, new AvatarCache(store, paths.AvatarsFolder), () => _mainWindow?.ViewModel, dispatcher, _logProvider.CreateLogger("GMessages.Notifications"));
         _notifications.OpenConversationRequested += (_, id) => OpenConversation(id);
-        store.MessageArrived                     += (_, e) => _ = _notifications.ShowAsync(e);
+        store.MessageArrived                     += (_, e) =>
+        {
+            _ = _notifications.ShowAsync(e);
+            ScheduleBackgroundTrim();
+        };
         _notifications.Register();
 
         // Taskbar Badge: the unread chat count, recounted on every conversation change
         ILogger badge_log          = _logProvider.CreateLogger("GMessages.Badge");
         var badge                  = new UnreadBadge(store.CachedConversations, count => TaskbarBadge.Show(count, badge_log), TimeProvider.System);
         _badge                     = badge;
-        store.ConversationChanged += (_, _) => badge.Update();
+        store.ConversationChanged += (_, _) =>
+        {
+            badge.Update();
+            ScheduleBackgroundTrim();
+        };
 
         // Started By A Toast Click: Read After Register, As The Windows App SDK Requires. A Reply Waits For Connected; An
         // Open Shows The Main Window At Once (Held Until Start-Up Ends)
@@ -345,6 +353,13 @@ public partial class App : Application, IDisposable
 
         AppLog.ConnectionStateChanged(_logger, _connection.State);
         HandleLaunchNotification(timedOut: false);
+
+        // Connecting With Nothing On Screen: Trim Once The Connect And Catch-Up Have Settled (Each Reconnect Too)
+        if (_connection.State == ConnectionState.Connected && _mainWindow is null)
+        {
+            _memoryTrim?.Schedule(TimeSpan.FromSeconds(10));
+        }
+
         if (NeedsPairing())
         {
             // The Chats Go (Showing Pairing Drops Them First), And Nothing Of The Old Phone (Names, Numbers, Owner, SIMs)
@@ -583,6 +598,15 @@ public partial class App : Application, IDisposable
         if (!_quitting)
         {
             _memoryTrim?.Schedule();
+        }
+    }
+
+    // Messages Arriving With Only The Tray Up: Trim 30 s After The Last One, So A Burst Ends In One Trim
+    private void ScheduleBackgroundTrim()
+    {
+        if (!_quitting && _mainWindow is null)
+        {
+            _memoryTrim?.Schedule(TimeSpan.FromSeconds(30));
         }
     }
 
