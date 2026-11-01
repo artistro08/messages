@@ -17,8 +17,8 @@ namespace GMessages.App.Views;
 /// The first time Windows draws a color emoji costs about 12 ms (Plan 7, 46fbf4d); once drawn, the glyph is kept for the
 /// rest of the run. A few seconds after the chats show, a nearly clear line of text in the window's live tree (it must
 /// really draw, so it is not fully clear) shows the catalog's emoji two at a time, ten times a second, in the picker's
-/// font and size. Each pair counts as drawn once the next tick comes (see <see cref="EmojiRowFactory.Drawn"/>), so the
-/// picker shows those at once.
+/// font and size. The picker still draws its emoji a few per frame (see <see cref="EmojiRowFactory"/>): the UI tests
+/// showed this warm-up's glyphs don't spare the picker's popup its first-draw cost.
 /// </para>
 /// <para>
 /// Throttled so the app never feels it: about 25 ms of drawing per 100 ms at most, and only while the window shows (a
@@ -82,7 +82,6 @@ internal static class EmojiWarmUp
 
         DispatcherQueueTimer timer = host.DispatcherQueue.CreateTimer();
         var clock                  = Stopwatch.StartNew();
-        string[] shown             = [];
         int next                   = 0;
         s_running                  = true;
         timer.Interval             = StartDelay;
@@ -112,12 +111,9 @@ internal static class EmojiWarmUp
                 return;
             }
 
-            // The Last Pair Has Drawn By Now
-            foreach (string emoji in shown)
-            {
-                EmojiRowFactory.Drawn.Add(emoji);
-            }
-
+            // Not Marked Drawn For The Picker: The UI Tests Showed The Picker Drawing Them All At Once After This Still
+            // Stood Still For 391 ms, So The Picker Keeps Its Few-Per-Frame Drawing Either Way
+            // TODO: The warm-up's glyphs don't carry over to the picker's popup as measured; find what the first draw really caches before relying on it
             if (next >= waiting.Count)
             {
                 host.Unloaded -= OnUnloaded;
@@ -127,9 +123,8 @@ internal static class EmojiWarmUp
                 return;
             }
 
-            shown     = [.. waiting.Skip(next).Take(PerTick)];
-            line.Text = string.Concat(shown);
-            next     += shown.Length;
+            line.Text = string.Concat(waiting.Skip(next).Take(PerTick));
+            next     += PerTick;
         };
         timer.Start();
     }
