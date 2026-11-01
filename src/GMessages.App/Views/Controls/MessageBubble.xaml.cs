@@ -229,12 +229,13 @@ public sealed partial class MessageBubble : UserControl
     private bool _fileFailed;
 
     // The Voice Message Shown, Its Bubble, Its Player Key (Kept Through The Echo), Its Load Number (Bumped When Another
-    // Message Shows, So A Late Load Or Player Update Stops), And Its Audio And Waveform Once Read
+    // Message Shows, So A Late Load Or Player Update Stops), The Load Number Whose Audio Fetch Started, And Its Waveform
+    // Once Read. The Audio Itself Isn't Kept: Play Gets It From The Media Store Again
     private MediaPart? _voicePart;
     private MessageBubbleViewModel? _voiceBubble;
     private string _voiceKey = string.Empty;
     private int _voiceLoad;
-    private byte[]? _voiceAudio;
+    private int _voiceFetched = -1;
     private VoiceWave? _voiceWave;
 
     // The Bubble Whose Video Plays In Place: One At A Time Across The Chat
@@ -853,9 +854,10 @@ public sealed partial class MessageBubble : UserControl
             new_bubble.PropertyChanged += view.OnBubblePropertyChanged;
         }
 
+        // The Voice Message's Audio Waits For Phase 1 (The Chat's LoadMedia), So A Row Passed Over While Scrolling Fetches None
         view.ShowText();
         view.ShowStates();
-        view.LoadMedia();
+        view.LoadMedia(fetchVoice: false);
 
         // Another Message's Reactions Show As They Are, With No Pop (A Recycled Row's Half-Run Pop Is Put Back). With None,
         // The Pill Unloads, Its Visual With It
@@ -1168,21 +1170,24 @@ public sealed partial class MessageBubble : UserControl
     /// <remarks>
     /// The bubble calls it when its message or the message's media changes; the chat calls it again once a list row has
     /// its message (phase 1), so a row given back the message it showed before its media was let go
-    /// (<see cref="ReleaseMedia"/>) loads it again.
+    /// (<see cref="ReleaseMedia"/>) loads it again. A voice message's audio is fetched (for its waveform and length) only
+    /// when <paramref name="fetchVoice"/> is true: the bubble's own call on a new message passes false, so the audio
+    /// waits for the chat's phase 1 call.
     /// </remarks>
-    internal void LoadMedia()
+    /// <param name="fetchVoice">True to fetch a voice message's audio for its waveform.</param>
+    internal void LoadMedia(bool fetchVoice = true)
     {
         _released = false;
         ShowPreviewImage();
         ShowPhoto();
         ShowFile();
-        ShowVoice();
+        ShowVoice(fetchVoice);
         ShowVideo();
     }
 
     /// <summary>
     /// Lets go of the media a list row holds while it waits to be used again: the inline video's player, the voice
-    /// message's audio and waveform, and every decoded image (preview card, photo, file thumbnail, video frame).
+    /// message's waveform, and every decoded image (preview card, photo, file thumbnail, video frame).
     /// </summary>
     /// <remarks>
     /// Loads still running stop, and the media shown is forgotten, so <see cref="LoadMedia"/> loads it again. The bubble
@@ -1203,10 +1208,9 @@ public sealed partial class MessageBubble : UserControl
             VideoThumb.Background = null;
         }
 
-        // Voice: Its Audio And Waveform; A Late Load Or Player Update Stops
+        // Voice: Its Waveform; A Late Load Or Player Update Stops
         _voicePart   = null;
         _voiceBubble = null;
-        _voiceAudio  = null;
         _voiceWave   = null;
         _voiceLoad++;
 
@@ -1693,19 +1697,21 @@ public sealed partial class MessageBubble : UserControl
     // VOICE
     // =========================================================================
 
-    // Another Voice Message: Shown Stopped, Then Downloaded And Its Waveform And Length Read (Once Per File, In Memory).
-    // The Echo Of One Sent From Here Keeps Its Audio, Waveform And Play State, So A Playing Message Plays On
-    private async void ShowVoice()
+    // Another Voice Message: Shown Stopped, Then (When Asked To Fetch) Downloaded And Its Waveform And Length Read. The
+    // Echo Of One Sent From Here Keeps Its Waveform And Play State, So A Playing Message Plays On
+    private void ShowVoice(bool fetch)
     {
         MediaPart? part = Bubble is { HasVoice: true } bubble ? bubble.Media : null;
         if (SameMedia(part, _voicePart) && ReferenceEquals(Bubble, _voiceBubble))
         {
+            FetchVoice(fetch);
             return;
         }
 
         if (part is not null && Bubble is not null && ReferenceEquals(Bubble, _voiceBubble) && KeepSentMedia(_voicePart, part))
         {
             _voicePart = part;
+            FetchVoice(fetch);
             return;
         }
 
@@ -1713,7 +1719,6 @@ public sealed partial class MessageBubble : UserControl
         _voiceBubble = Bubble;
         _voiceKey    = Bubble is { } shown ? (shown.TmpId.Length > 0 ? shown.TmpId : shown.Id) : string.Empty;
         _voiceLoad++;
-        _voiceAudio  = null;
         _voiceWave   = null;
 
         // No Voice Message: Its Part Unloads (x:Load)
@@ -1727,22 +1732,28 @@ public sealed partial class MessageBubble : UserControl
         VoiceBars.Show(null);
         VoiceBars.Length = TimeSpan.Zero;
         ShowVoicePlaying(false, 0);
-        if (part.IsPending || (Application.Current as App)?.Media is not { } media)
+        FetchVoice(fetch);
+    }
+
+    // The Shown Voice Message's Audio, Read For Its Waveform And Length Once Per Message Shown; The Audio Is Let Go After
+    private async void FetchVoice(bool fetch)
+    {
+        if (!fetch || _voicePart is not { IsPending: false } part || _voiceWave is not null || _voiceFetched == _voiceLoad
+            || (Application.Current as App)?.Media is not { } media)
         {
             return;
         }
 
-        int load = _voiceLoad;
+        int load      = _voiceLoad;
+        _voiceFetched = load;
         try
         {
-            byte[] audio   = await media.GetAsync(part, thumbnail: false, CancellationToken.None);
-            VoiceWave wave = await WaveformReader.ReadAsync(audio);
+            VoiceWave wave = await WaveformReader.ReadAsync(await media.GetAsync(part, thumbnail: false, CancellationToken.None));
             if (load != _voiceLoad)
             {
                 return;
             }
 
-            _voiceAudio      = audio;
             _voiceWave       = wave;
             VoiceLength.Text = VoiceWave.LengthText(wave.Length);
             VoiceBars.Show(wave.Peaks);
@@ -1768,15 +1779,32 @@ public sealed partial class MessageBubble : UserControl
     // A Click On The Waveform Seeks There
     private void OnVoiceSeekRequested(object? sender, double share) => RequestVoice(share);
 
-    private void RequestVoice(double? seekTo)
+    // The Audio Comes From The Media Store Again (Kept In Its Memory Cache Since The Waveform Was Read)
+    private async void RequestVoice(double? seekTo)
     {
-        if (_voiceAudio is not { } audio || _voiceWave is not { } wave)
+        if (_voicePart is not { IsPending: false } part || _voiceWave is not { } wave || (Application.Current as App)?.Media is not { } media)
         {
             return;
         }
 
         // Only While This View Still Shows The Message (A Recycled Row Moves On; Its Echo Doesn't)
         int load = _voiceLoad;
+        byte[] audio;
+        try
+        {
+            audio = await media.GetAsync(part, thumbnail: false, CancellationToken.None);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            AppLog.MediaFailed(App.ShellLog, "voice", Bubble?.Id ?? string.Empty, ex.GetType().Name);
+            return;
+        }
+
+        if (load != _voiceLoad)
+        {
+            return;
+        }
+
         VoiceRequested?.Invoke(this, new VoiceRequest(_voiceKey, audio, wave.Length, seekTo, (playing, share) =>
         {
             if (load == _voiceLoad)

@@ -33,6 +33,10 @@ internal sealed class VideoPlayback : IDisposable
 {
     private readonly DispatcherQueue _queue;
     private readonly IRandomAccessStream _stream;
+    private readonly MediaSource _source;
+
+    // Hides Cast And Full Window Once The Controls Make Them; Held, So Dispose Can Take It Off If They Never Did
+    private readonly EventHandler<object> _hideExtras;
     private bool _disposed;
 
     /// <summary>
@@ -51,11 +55,12 @@ internal sealed class VideoPlayback : IDisposable
 
         _queue  = queue;
         _stream = new MemoryStream(bytes, writable: false).AsRandomAccessStream();
+        _source = MediaSource.CreateFromStream(_stream, mime);
         Player  = new MediaPlayer
         {
             AudioCategory = MediaPlayerAudioCategory.Media,
             IsMuted       = TestHooks.BlockLaunches,
-            Source        = new MediaPlaybackItem(MediaSource.CreateFromStream(_stream, mime), start),
+            Source        = new MediaPlaybackItem(_source, start),
         };
         Player.MediaFailed                          += OnMediaFailed;
 
@@ -92,32 +97,8 @@ internal sealed class VideoPlayback : IDisposable
         // Cast And Full Window: WinUI 3's Controls Have No Property For Either, And Set The Template's Buttons Visible
         // Themselves (Collapsing Them Fought That And Hung The Window), So Once Made They Get No Width, No Input, No Tab
         // Stop And No Place In Narrator's Tree. The Compact Bar Then Ends At Volume, With No Empty Slot (Owner, Plan 10)
-        controls.LayoutUpdated += HideExtras;
-
-        void HideExtras(object? sender, object e)
-        {
-            if (FindNamed(controls, "CastButton") is not { } cast)
-            {
-                return;
-            }
-
-            // Full Window Isn't Always Made In The Compact Bar
-            controls.LayoutUpdated -= HideExtras;
-            FrameworkElement? full = FindNamed(controls, "FullWindowButton");
-            foreach (FrameworkElement? button in (ReadOnlySpan<FrameworkElement?>)[cast, full])
-            {
-                if (button is null)
-                {
-                    continue;
-                }
-
-                button.MaxWidth         = 0;
-                button.Margin           = new Thickness(0);
-                button.IsHitTestVisible = false;
-                button.As<Control>().IsTabStop = false;
-                AutomationProperties.SetAccessibilityView(button, Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
-            }
-        }
+        _hideExtras             = HideExtras;
+        controls.LayoutUpdated += _hideExtras;
     }
 
     /// <summary>
@@ -148,11 +129,45 @@ internal sealed class VideoPlayback : IDisposable
         }
 
         _disposed                                    = true;
+        Element.TransportControls.LayoutUpdated     -= _hideExtras;
         Player.MediaFailed                          -= OnMediaFailed;
         Player.PlaybackSession.PlaybackStateChanged -= OnPlaybackStateChanged;
         Player.Pause();
+
+        // The Element Lets Go Of The Player, Then The Player, Its Item (Not Closable: Dropped As Its Source), Source And
+        // Stream Go
+        Element.SetMediaPlayer(null);
+        Player.Source = null;
         Player.Dispose();
+        _source.Dispose();
         _stream.Dispose();
+    }
+
+    // Cast And Full Window, Once The Controls Make Them: No Width, No Input, No Tab Stop, No Place In Narrator's Tree
+    private void HideExtras(object? sender, object e)
+    {
+        MediaTransportControls controls = Element.TransportControls;
+        if (FindNamed(controls, "CastButton") is not { } cast)
+        {
+            return;
+        }
+
+        // Full Window Isn't Always Made In The Compact Bar
+        controls.LayoutUpdated -= _hideExtras;
+        FrameworkElement? full  = FindNamed(controls, "FullWindowButton");
+        foreach (FrameworkElement? button in (ReadOnlySpan<FrameworkElement?>)[cast, full])
+        {
+            if (button is null)
+            {
+                continue;
+            }
+
+            button.MaxWidth         = 0;
+            button.Margin           = new Thickness(0);
+            button.IsHitTestVisible = false;
+            button.As<Control>().IsTabStop = false;
+            AutomationProperties.SetAccessibilityView(button, Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
+        }
     }
 
     // A Template Part By Its Name Only (No Type Check, So It Is AOT Safe)

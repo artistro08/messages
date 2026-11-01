@@ -219,6 +219,33 @@ public class GmClientMediaTests
     }
 
     /// <summary>
+    /// A body with a declared length is read into one array of exactly that size, never reading past it.
+    /// </summary>
+    [TestMethod]
+    public async Task ReadCapped_KnownLength_ReadsExactly()
+    {
+        using var content             = new StreamContent(new ExactStream(1000, 1000));
+        content.Headers.ContentLength = 1000;
+
+        byte[] body = await GmHttpClient.ReadCappedAsync(content, GmHttpClient.MaxMediaBodyBytes, CancellationToken.None);
+
+        Assert.HasCount(1000, body);
+        Assert.IsTrue(body.All(b => b == 7));
+    }
+
+    /// <summary>
+    /// A body shorter than its declared length throws instead of returning zeros at the end.
+    /// </summary>
+    [TestMethod]
+    public async Task ReadCapped_ShortBody_Throws()
+    {
+        using var content             = new StreamContent(new ExactStream(1000, 400));
+        content.Headers.ContentLength = 1000;
+
+        await Assert.ThrowsExactlyAsync<EndOfStreamException>(() => GmHttpClient.ReadCappedAsync(content, GmHttpClient.MaxMediaBodyBytes, CancellationToken.None));
+    }
+
+    /// <summary>
     /// A refused download throws with its status instead of decrypting an error page.
     /// </summary>
     [TestMethod]
@@ -279,6 +306,45 @@ public class GmClientMediaTests
     private sealed class SyncProgress(Action<double> report) : IProgress<double>
     {
         public void Report(double value) => report(value);
+    }
+
+    // A Non-Seekable Stream Of Sevens That Ends After "Sent" Bytes, And Fails Any Read Once "Declared" Bytes Were Read
+    private sealed class ExactStream(long declared, long sent) : Stream
+    {
+        private long _read;
+
+        public override bool CanRead => true;
+
+        public override bool CanSeek => false;
+
+        public override bool CanWrite => false;
+
+        public override long Length => throw new NotSupportedException();
+
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            if (_read >= declared)
+            {
+                throw new InvalidOperationException("Read past the declared length.");
+            }
+
+            int read = (int)Math.Min(count, sent - _read);
+            Array.Fill(buffer, (byte)7, offset, read);
+            _read += read;
+            return read;
+        }
+
+        public override void Flush()
+        {
+        }
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 
     // A Non-Seekable Stream Of Zeros With No Declared Length

@@ -268,17 +268,29 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
     // HELPERS
     // =========================================================================
 
-    // Reads A Body Up To A Cap: A Declared Length Over It Fails At Once, A Streamed One Fails When It Crosses It
-    private static async Task<byte[]> ReadCappedAsync(HttpContent content, long max, CancellationToken ct)
+    // Reads A Body Up To A Cap: A Declared Length Over It Fails At Once, A Streamed One Fails When It Crosses It. A
+    // Declared Length Is Read Straight Into One Array Of That Size (A Short Body Throws EndOfStreamException), So A Big
+    // Video Is Held Once, Not Twice
+    internal static async Task<byte[]> ReadCappedAsync(HttpContent content, long max, CancellationToken ct)
     {
-        if (content.Headers.ContentLength > max)
+        long? length = content.Headers.ContentLength;
+        if (length > max)
         {
             throw new InvalidDataException("The media response is too large.");
         }
 
         await using Stream stream = await content.ReadAsStreamAsync(ct).ConfigureAwait(false);
-        using var buffer          = new MemoryStream((int)Math.Min(content.Headers.ContentLength ?? 0, max));
-        byte[] chunk              = new byte[81920];
+
+        // Known Length: Exactly That Many Bytes, Never Read Past
+        if (length is { } known)
+        {
+            byte[] body = new byte[known];
+            await stream.ReadExactlyAsync(body, ct).ConfigureAwait(false);
+            return body;
+        }
+
+        using var buffer = new MemoryStream();
+        byte[] chunk     = new byte[81920];
         int read;
         while ((read = await stream.ReadAsync(chunk, ct).ConfigureAwait(false)) > 0)
         {
@@ -290,7 +302,8 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
             buffer.Write(chunk, 0, read);
         }
 
-        return buffer.ToArray();
+        // The Buffer Itself When It Is Exactly Full, Else A Trimmed Copy
+        return buffer.TryGetBuffer(out ArraySegment<byte> filled) && filled.Array is { } all && all.Length == filled.Count ? all : buffer.ToArray();
     }
 
     // Port Of util.BuildRelayHeaders (Content-Type Is Added By The Caller)

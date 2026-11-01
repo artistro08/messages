@@ -39,6 +39,7 @@ internal sealed class VoicePlayer : IDisposable
     private readonly DispatcherQueue _queue;
     private readonly DispatcherQueueTimer _timer;
     private MediaPlayer? _player;
+    private MediaSource? _source;
     private IRandomAccessStream? _stream;
 
     // Whether The Loaded Message Plays (Asked For: The Player's Own State Lags)
@@ -114,10 +115,13 @@ internal sealed class VoicePlayer : IDisposable
         {
             _player.MediaEnded  -= OnMediaEnded;
             _player.MediaFailed -= OnMediaFailed;
+            _player.Source = null;
             _player.Dispose();
             _player = null;
         }
 
+        _source?.Dispose();
+        _source = null;
         _stream?.Dispose();
         _stream = null;
         show?.Invoke(false, 0);
@@ -136,12 +140,12 @@ internal sealed class VoicePlayer : IDisposable
         _show   = request.Show;
         _stream = new MemoryStream(request.Audio, writable: false).AsRandomAccessStream();
 
-        var source = MediaSource.CreateFromStream(_stream, "audio/mp4");
-        _player    = new MediaPlayer
+        _source = MediaSource.CreateFromStream(_stream, "audio/mp4");
+        _player = new MediaPlayer
         {
             AudioCategory = MediaPlayerAudioCategory.Media,
             IsMuted       = TestHooks.BlockLaunches,
-            Source        = new MediaPlaybackItem(source, _length * (request.SeekTo ?? 0)),
+            Source        = new MediaPlaybackItem(_source, _length * (request.SeekTo ?? 0)),
         };
         _player.CommandManager.IsEnabled = false;
         _player.MediaEnded              += OnMediaEnded;
@@ -193,9 +197,11 @@ internal sealed class VoicePlayer : IDisposable
             return;
         }
 
-        // Test Run: The Player's Real State, Position And Length (Seconds)
+#if EnableTestHooks
+        // Test Run: The Player's Real State, Position And Length (Seconds); Never Built Ten Times A Second Outside One
         MediaPlaybackSession session = player.PlaybackSession;
         TestHooks.NoteState("voice-player", FormattableString.Invariant($"{session.PlaybackState} {session.Position.TotalSeconds:0.00} {session.NaturalDuration.TotalSeconds:0.00} {player.AudioCategory}"));
+#endif
 
         double total = Duration().TotalSeconds;
         show(_playing, total > 0 ? player.PlaybackSession.Position.TotalSeconds / total : 0);
