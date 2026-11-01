@@ -32,7 +32,7 @@ public sealed class TestHookArgsTests
     [TestMethod]
     public void Validate_RelativeDir_IsMadeFull()
     {
-        var (_, dir, error) = TestHookArgs.Validate(["x.exe", "--test-endpoints", "https://h", "--test-data-dir", "rel"]);
+        var (_, dir, error) = TestHookArgs.Validate(["x.exe", "--test-endpoints", "http://127.0.0.1:9", "--test-data-dir", "rel"]);
 
         Assert.IsNull(error);
         Assert.IsTrue(Path.IsPathFullyQualified(dir!));
@@ -41,17 +41,19 @@ public sealed class TestHookArgsTests
     /// <summary>Every bad combination is refused with a reason and no values.</summary>
     [TestMethod]
     [DataRow("--test-data-dir", @"C:\d")]
-    [DataRow("--test-endpoints", "http://h")]
+    [DataRow("--test-endpoints", "http://127.0.0.1:9")]
+    [DataRow("--test-endpoints", "http://h", "--test-data-dir", @"C:\d")]
+    [DataRow("--test-endpoints", "https://example.com", "--test-data-dir", @"C:\d")]
     [DataRow("--test-endpoints", "not a url", "--test-data-dir", @"C:\d")]
     [DataRow("--test-endpoints", "ftp://h", "--test-data-dir", @"C:\d")]
     [DataRow("--test-endpoints", "/relative", "--test-data-dir", @"C:\d")]
-    [DataRow("--test-endpoints", "http://h", "--test-data-dir")]
-    [DataRow("--test-endpoints", "http://h", "--test-data-dir", "--quit")]
-    [DataRow("--test-endpoints", "http://h", "--test-data-dir", "")]
-    [DataRow("--test-endpoints", "http://h", "--test-data-dir", "C:\\a|b")]
+    [DataRow("--test-endpoints", "http://127.0.0.1:9", "--test-data-dir")]
+    [DataRow("--test-endpoints", "http://127.0.0.1:9", "--test-data-dir", "--quit")]
+    [DataRow("--test-endpoints", "http://127.0.0.1:9", "--test-data-dir", "")]
+    [DataRow("--test-endpoints", "http://127.0.0.1:9", "--test-data-dir", "C:\\a|b")]
     [DataRow("--test-endpoints", "--quit", "--test-data-dir", @"C:\d")]
-    [DataRow("--test-endpoints", "http://h", "--test-endpoints", "http://h2", "--test-data-dir", @"C:\d")]
-    [DataRow("--test-endpoints", "http://h", "--test-data-dir", @"C:\a", "--test-data-dir", @"C:\b")]
+    [DataRow("--test-endpoints", "http://127.0.0.1:9", "--test-endpoints", "http://127.0.0.1:10", "--test-data-dir", @"C:\d")]
+    [DataRow("--test-endpoints", "http://127.0.0.1:9", "--test-data-dir", @"C:\a", "--test-data-dir", @"C:\b")]
     public void Validate_Bad_IsRefused(params string[] tail)
     {
         var (endpoint, dir, error) = TestHookArgs.Validate(["x.exe", .. tail]);

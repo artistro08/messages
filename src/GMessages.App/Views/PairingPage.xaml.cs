@@ -143,6 +143,9 @@ public sealed partial class PairingPage : UserControl
 
             // No Popups: a Google link that opens a new window would outlive sign-in and keep the profile folder locked
             web.CoreWebView2.NewWindowRequested += (_, e) => e.Handled = true;
+
+            // Https Only: hosts are not allowlisted (Workspace SSO uses third-party providers, Google uses country domains)
+            web.CoreWebView2.NavigationStarting += OnNavigationStarting;
             web.CoreWebView2.Navigate(_endpoints.Authentication.AbsoluteUri);
         }
 #pragma warning disable CA1031 // Any Start-Up Failure (No WebView2 Runtime, Bad Folder) Becomes The Failure Screen
@@ -158,6 +161,33 @@ public sealed partial class PairingPage : UserControl
             AppLog.SignInStartFailed(_log, ex.GetType().Name);
             CloseSignIn();
             ViewModel.SignInFailed();
+        }
+    }
+
+    // Cancels Any Top-Level Navigation That Isn't https (Redirects Included). Allowed: about:blank (WebView2 uses it
+    // Internally) And, In A Test Run, http To Loopback (The Fake Auth Server). Logs The Host Only
+    private void OnNavigationStarting(CoreWebView2 sender, CoreWebView2NavigationStartingEventArgs e)
+    {
+        if (!Uri.TryCreate(e.Uri, UriKind.Absolute, out Uri? uri))
+        {
+            e.Cancel = true;
+            AppLog.SignInNavigationBlocked(_log, "invalid");
+            return;
+        }
+
+        bool blank = uri.Scheme == "about" && string.Equals(e.Uri, "about:blank", StringComparison.OrdinalIgnoreCase);
+        bool https = uri.Scheme == Uri.UriSchemeHttps;
+        bool fake  = TestHooks.Endpoints is not null && uri.Scheme == Uri.UriSchemeHttp && uri.IsLoopback;
+        if (!blank && !https && !fake)
+        {
+            e.Cancel = true;
+            AppLog.SignInNavigationBlocked(_log, uri.Scheme);
+            return;
+        }
+
+        if (!blank)
+        {
+            AppLog.SignInNavigating(_log, uri.Host);
         }
     }
 

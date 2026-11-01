@@ -119,6 +119,24 @@ public class GmHttpClientTests
         Assert.IsTrue(log.Messages.Any(m => m == "Cookies set by /x/Ping: A (expires ?)"), string.Join("\n", log.Messages));
     }
 
+    /// <summary>
+    /// A typed API answer that declares a body over the 16 MiB cap is refused before it is read.
+    /// </summary>
+    [TestMethod]
+    public async Task ReadTyped_OverCap_Throws()
+    {
+        Rig rig = CreateRig(new Dictionary<string, string>(GoCookies));
+        rig.Handler.Respond = (_, _) =>
+        {
+            HttpResponseMessage res          = FakeHttpHandler.Response(HttpStatusCode.OK, "application/x-protobuf", new byte[16]);
+            res.Content.Headers.ContentLength = GmHttpClient.MaxApiBodyBytes + 1;
+            return res;
+        };
+
+        await Assert.ThrowsExactlyAsync<InvalidDataException>(
+            () => rig.Client.GetTypedAsync<Config>(GmEndpoints.Production.Config, CancellationToken.None));
+    }
+
     private static long GoTimestamp(string authorization) =>
         long.Parse(authorization["SAPISIDHASH ".Length..authorization.IndexOf('_', StringComparison.Ordinal)], CultureInfo.InvariantCulture);
 

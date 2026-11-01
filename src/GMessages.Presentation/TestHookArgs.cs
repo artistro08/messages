@@ -18,7 +18,7 @@ public static class TestHookArgs
     /// </summary>
     /// <param name="args">The full command line (the first item may be the exe path).</param>
     /// <returns>
-    /// Neither flag: all null (a normal run). Both valid: the fake server base address (absolute http or https) and the
+    /// Neither flag: all null (a normal run). Both valid: the fake server base address (absolute http or https, loopback host only) and the
     /// full data folder path. Anything else: <c>Error</c> holds a one-line reason and the app must not start.
     /// </returns>
     public static (Uri? EndpointBase, string? DataDir, string? Error) Validate(string[] args)
@@ -44,9 +44,10 @@ public static class TestHookArgs
         var endpoint = ValueOf(args, EndpointFlag);
         if (endpoint is null
             || !Uri.TryCreate(endpoint, UriKind.Absolute, out var uri)
-            || uri.Scheme is not ("http" or "https"))
+            || uri.Scheme is not ("http" or "https")
+            || !uri.IsLoopback)
         {
-            return (null, null, $"{EndpointFlag} needs an absolute http or https address.");
+            return (null, null, $"{EndpointFlag} needs an absolute http or https address on this computer (loopback).");
         }
 
         // Data Folder

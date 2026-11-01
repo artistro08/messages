@@ -54,7 +54,10 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
     /// <summary>The largest media response body read: LibGM's 100 MiB file limit plus 4 MiB for encryption overhead.</summary>
     public const long MaxMediaBodyBytes = (100L + 4L) * 1024 * 1024;
 
-    private const string ProtobufMime = "application/x-protobuf";
+    /// <summary>The largest API (protobuf) response body read: 16 MiB, far above any real page of conversations or messages.</summary>
+    public const long MaxApiBodyBytes = 16L * 1024 * 1024;
+
+    private const string ProtobufMime ="application/x-protobuf";
     private const string PbLiteMime   = "application/json+protobuf";
 
     // The Last Cookie Line Logged Per Set Of Cookie Names, So An Unchanged Response Stays Quiet
@@ -421,7 +424,7 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
     {
         using (res)
         {
-            byte[] body = await res.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
+            byte[] body = await ReadCappedAsync(res.Content, MaxApiBodyBytes, ct).ConfigureAwait(false);
             string? mime = res.Content.Headers.ContentType?.MediaType;
             int status = (int)res.StatusCode;
 

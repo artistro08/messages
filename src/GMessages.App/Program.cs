@@ -104,7 +104,7 @@ public static class Program
         {
             if (showRequest is not null)
             {
-                NativeMethods.AllowSetForegroundWindow(NativeMethods.ASFW_ANY);
+                NativeMethods.AllowSetForegroundWindow((uint)instance.ProcessId);
                 showRequest.Set();
             }
             showRequest?.Dispose();

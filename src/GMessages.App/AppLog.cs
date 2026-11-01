@@ -104,6 +104,12 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 931, Level = LogLevel.Information, Message = "Emoji picker open {Open}: built in {BuildMs} ms, longest stall {StallMs} ms, {Rows} rows made")]
     public static partial void EmojiPickerShown(ILogger logger, int open, long buildMs, long stallMs, int rows);
 
+    [LoggerMessage(EventId = 934, Level = LogLevel.Debug, Message = "Sign-in navigating to {Host}")]
+    public static partial void SignInNavigating(ILogger logger, string host);
+
+    [LoggerMessage(EventId = 935, Level = LogLevel.Warning, Message = "Sign-in navigation blocked (scheme {Scheme})")]
+    public static partial void SignInNavigationBlocked(ILogger logger, string scheme);
+
     [LoggerMessage(EventId = 951,Level = LogLevel.Information, Message = "Test endpoint {Endpoint}, data folder {DataFolder}")]
     public static partial void TestEndpoint(ILogger logger, string endpoint, string dataFolder);
 }
