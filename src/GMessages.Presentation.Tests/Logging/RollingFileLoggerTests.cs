@@ -35,6 +35,19 @@ public sealed class RollingFileLoggerTests
     }
 
     [TestMethod]
+    public void Log_Exception_OmitsMessage()
+    {
+        using var provider = new RollingFileLoggerProvider(_directory, new LogLevelSwitch(), TimeProvider.System);
+
+        provider.CreateLogger("Tests").Log(LogLevel.Error, new InvalidOperationException("secret-body-text"), "failed");
+
+        string text = File.ReadAllText(provider.CurrentFilePath);
+        StringAssert.Contains(text, "InvalidOperationException");
+        StringAssert.Contains(text, "HResult");
+        Assert.DoesNotContain("secret-body-text", text);
+    }
+
+    [TestMethod]
     public void SkipsDebugUntilSwitchAllowsIt()
     {
         var levelSwitch = new LogLevelSwitch();

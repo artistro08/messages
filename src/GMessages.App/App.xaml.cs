@@ -282,23 +282,7 @@ public partial class App : Application, IDisposable
     private void OnUnhandledException(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs e)
     {
         e.Handled = _launched && e.Exception is not OutOfMemoryException;
-        AppLog.UnhandledError(_logger, e.Exception?.GetType().Name ?? "Unknown", e.Exception?.HResult ?? 0, e.Handled, StackFrames(e.Exception));
-    }
-
-    // An Error's Stack As "Type.Method(Parameter Types)" Frames Joined By " < ", Innermost First: The Method Names Only,
-    // Never The Message, Source Paths Or Line Numbers. "None" When The Error Came From WinUI Without A Managed Stack
-    private static string StackFrames(Exception? error)
-    {
-        if (string.IsNullOrWhiteSpace(error?.StackTrace))
-        {
-            return "None";
-        }
-
-        IEnumerable<string> frames = error.StackTrace
-            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(line => line.StartsWith("at ", StringComparison.Ordinal) ? line[3..] : line)
-            .Select(line => line.IndexOf(" in ", StringComparison.Ordinal) is int at and >= 0 ? line[..at] : line);
-        return string.Join(" < ", frames);
+        AppLog.UnhandledError(_logger, e.Exception?.GetType().Name ?? "Unknown", e.Exception?.HResult ?? 0, e.Handled, ExceptionText.StackFrames(e.Exception));
     }
 
     // =========================================================================

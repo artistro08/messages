@@ -66,7 +66,7 @@ public sealed class RollingFileLoggerProvider : ILoggerProvider
             .Append(message);
         if (exception is not null)
         {
-            line.AppendLine().Append(exception);
+            line.AppendLine().Append(ExceptionText.Describe(exception));
         }
         line.AppendLine();
         var text = line.ToString();

@@ -21,7 +21,7 @@ namespace GMessages.Protocol.Pairing;
 /// one and waits for it to connect before sending the client init. That long poll keeps running after a successful
 /// start so the finish answer can arrive; the caller stops it with <see cref="StopLongPollAsync"/> (Go's
 /// <c>Reconnect</c> does the same) once pairing is over. Gaia events on the long poll are only logged by the
-/// dispatcher, as in Go; pairing needs nothing from them. Keys are never logged; device IDs and the emoji may be.
+/// dispatcher, as in Go; pairing needs nothing from them. Keys, device IDs and the emoji are never logged.
 /// </remarks>
 /// <param name="signIn">Signs in and lists the account's phones.</param>
 /// <param name="rpc">Sends the pairing messages.</param>
@@ -121,7 +121,6 @@ public sealed partial class GaiaPairing(GaiaSignIn signIn, RpcSession rpc, LongP
         }
 
         PrimaryDevice dest = devices[HackyDeviceSwitcher % devices.Count];
-        LogDevicePicked(log, dest.RegId, dest.UnknownInt, dest.UnknownTs, dest.LastSeen);
         if (!Guid.TryParse(dest.RegId, out Guid dest_reg_id))
         {
             throw new InvalidDataException("failed to parse destination UUID");
@@ -382,7 +381,6 @@ public sealed partial class GaiaPairing(GaiaSignIn signIn, RpcSession rpc, LongP
         try
         {
             string emoji = session.ProcessServerInit(server_init);
-            LogEmoji(log, emoji);
             return (emoji, session);
         }
         catch (InvalidDataException)
@@ -414,14 +412,8 @@ public sealed partial class GaiaPairing(GaiaSignIn signIn, RpcSession rpc, LongP
     [LoggerMessage(Level = LogLevel.Warning, Message = "Found {Count} primary-looking devices for gaia pairing, hacky device switcher {Switcher}")]
     private static partial void LogMultipleDevices(ILogger logger, int count, int switcher);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Found UUID to use for gaia pairing: {RegId}, unknown int {UnknownInt}, unknown ts {UnknownTs}, last seen {LastSeen}")]
-    private static partial void LogDevicePicked(ILogger logger, string regId, ulong unknownInt, ulong unknownTs, DateTimeOffset lastSeen);
-
     [LoggerMessage(Level = LogLevel.Debug, Message = "Received server init: key derivation version {KeyDerivationVersion}, verification code version {VerificationCodeVersion}")]
     private static partial void LogServerInit(ILogger logger, int keyDerivationVersion, int verificationCodeVersion);
-
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Pairing emoji is {Emoji}")]
-    private static partial void LogEmoji(ILogger logger, string emoji);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Sending gaia pairing cancel after the wait was canceled")]
     private static partial void LogCancelAfterCanceled(ILogger logger);

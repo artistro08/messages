@@ -1,4 +1,6 @@
 using System.Net;
+using System.Security.Cryptography;
+using System.Text;
 using GMessages.Protocol.Auth;
 using GMessages.Protocol.Events;
 using GMessages.Protocol.Http;
@@ -336,7 +338,7 @@ public sealed partial class GmClient : IAsyncDisposable
             }
 
             // Save, Announce, Reconnect
-            LogPaired(_log, phone_id);
+            LogPaired(_log, Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(phone_id)))[..8]);
             SaveNow();
             Raise(new PairSuccessful(phone_id));
             await ReconnectAsync().ConfigureAwait(false);
@@ -873,8 +875,8 @@ public sealed partial class GmClient : IAsyncDisposable
     [LoggerMessage(Level = LogLevel.Error, Message = "Post-connect steps failed")]
     private static partial void LogPostConnectFailed(ILogger logger, Exception exception);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Paired with phone {PhoneId}")]
-    private static partial void LogPaired(ILogger logger, string phoneId);
+    [LoggerMessage(Level = LogLevel.Information, Message = "Paired with phone {PhoneIdHash}")]
+    private static partial void LogPaired(ILogger logger, string phoneIdHash);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "The pairing long poll ended with an error")]
     private static partial void LogPairingLongPollFailed(ILogger logger, Exception exception);

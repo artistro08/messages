@@ -56,8 +56,17 @@ public sealed partial class SessionStore(string filePath, ILogger? logger = null
         };
 
         // Encrypt
-        byte[] json      = JsonSerializer.SerializeToUtf8Bytes(file, SessionJsonContext.Default.SessionFile);
-        byte[] encrypted = ProtectedData.Protect(json, null, DataProtectionScope.CurrentUser);
+        // ponytail: best effort; the SessionFile above still holds the same secrets
+        byte[] json = JsonSerializer.SerializeToUtf8Bytes(file, SessionJsonContext.Default.SessionFile);
+        byte[] encrypted;
+        try
+        {
+            encrypted = ProtectedData.Protect(json, null, DataProtectionScope.CurrentUser);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(json);
+        }
 
         // Write Temp, Then Replace
         string? dir = Path.GetDirectoryName(Path.GetFullPath(filePath));
@@ -92,9 +101,11 @@ public sealed partial class SessionStore(string filePath, ILogger? logger = null
             return null;
         }
 
+        // Wiped In The Finally: Best Effort, The Parsed Session Still Holds The Same Secrets
+        byte[]? json = null;
         try
         {
-            byte[] json   = ProtectedData.Unprotect(File.ReadAllBytes(filePath), null, DataProtectionScope.CurrentUser);
+            json          = ProtectedData.Unprotect(File.ReadAllBytes(filePath), null, DataProtectionScope.CurrentUser);
             SessionFile f = JsonSerializer.Deserialize(json, SessionJsonContext.Default.SessionFile)
                             ?? throw new InvalidDataException("Empty session.");
 
@@ -138,6 +149,13 @@ public sealed partial class SessionStore(string filePath, ILogger? logger = null
             }
 
             return null;
+        }
+        finally
+        {
+            if (json is not null)
+            {
+                CryptographicOperations.ZeroMemory(json);
+            }
         }
     }
 
