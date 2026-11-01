@@ -239,6 +239,44 @@ public sealed class ChatTests : UiTest
     }
 
     /// <summary>
+    /// Start chat's picks are chips: picking Ann moves her from the list to a chip above it (a filled pill that stands
+    /// out from the pane), Go reads Start Chat, and clicking the chip puts her back in the list.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task StartChat_PickedPersonIsAChip_LeavesTheList_ComesBack()
+    {
+        await OpenMainAsync();
+        App.Find("Main.StartChat").Patterns.Invoke.Pattern.Invoke();
+        App.Find("StartChat.Query").Patterns.Value.Pattern.SetValue("Ann");
+        Wait.Until(() => AppDriver.SafeName(App.TryFind("Contact.0")).Contains("Ann Lee", StringComparison.Ordinal), AppDriver.DefaultTimeout,
+            () => "Ann never showed in the list.");
+        Assert.AreEqual(ChatCopy.StartChatGo, AppDriver.SafeName(App.Find("StartChat.Go")), "Go doesn't read Start Chat.");
+        Assert.IsNull(App.TryFind("StartChat.Chip.0"), "A chip showed before anyone was picked.");
+
+        App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).SetForeground();
+        App.Find("Contact.0").Click();
+
+        // Her Chip Shows, With Its Own Fill, And She Left The List
+        AutomationElement chip = App.Find("StartChat.Chip.0");
+        Wait.Until(() => App.TryFind("Contact.0") is null || !AppDriver.SafeName(App.TryFind("Contact.0")).Contains("Ann Lee", StringComparison.Ordinal),
+            AppDriver.DefaultTimeout, () => "Ann stayed in the list after being picked.");
+        System.Drawing.Rectangle box = chip.BoundingRectangle;
+        using (FlaUI.Core.Capturing.CaptureImage capture = FlaUI.Core.Capturing.Capture.Rectangle(new System.Drawing.Rectangle(box.Left - 6, box.Top + (box.Height / 2), 4, 1)))
+        using (FlaUI.Core.Capturing.CaptureImage inside = FlaUI.Core.Capturing.Capture.Rectangle(new System.Drawing.Rectangle(box.Left + 6, box.Top + (box.Height / 2), 1, 1)))
+        {
+            System.Drawing.Color pane = capture.Bitmap.GetPixel(0, 0);
+            System.Drawing.Color fill = inside.Bitmap.GetPixel(0, 0);
+            Assert.AreNotEqual(pane.ToArgb(), fill.ToArgb(), $"The chip's fill ({fill}) is the pane's ({pane}).");
+        }
+
+        // Its Click Puts Her Back
+        chip.Click();
+        Wait.Until(() => App.TryFind("StartChat.Chip.0") is null && AppDriver.SafeName(App.TryFind("Contact.0")).Contains("Ann Lee", StringComparison.Ordinal),
+            AppDriver.DefaultTimeout, () => "Removing the chip didn't put Ann back in the list.");
+    }
+
+    /// <summary>
     /// An open chat loads once: history the phone sends again as live catch-up messages (as after Start chat) goes in
     /// quietly, with no bubble animating in.
     /// </summary>

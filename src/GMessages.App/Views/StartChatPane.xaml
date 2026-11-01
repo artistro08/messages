@@ -19,17 +19,23 @@
                 x:Name="QueryBox"
                 AutomationProperties.AutomationId="StartChat.Query"
                 Text="{x:Bind StartChat.Query, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, FallbackValue=''}" />
+            <!-- Go: "Start Chat" with an arrow after it -->
             <Button
                 Grid.Column="1"
-                Width="40"
                 Height="32"
-                Padding="0"
                 AutomationProperties.AutomationId="StartChat.Go"
-                AutomationProperties.Name="Start"
                 Click="OnGoClick"
                 IsEnabled="{x:Bind StartChat.CanStart, Mode=OneWay, FallbackValue=False}"
                 Style="{StaticResource AccentButtonStyle}">
-                <FontIcon FontSize="16" Glyph="&#xE72A;" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock
+                        VerticalAlignment="Center"
+                        Text="{x:Bind local:StartChatPane.GoText}" />
+                    <FontIcon
+                        VerticalAlignment="Center"
+                        FontSize="14"
+                        Glyph="&#xE72A;" />
+                </StackPanel>
             </Button>
         </Grid>
 
@@ -43,28 +49,69 @@
             TextWrapping="Wrap"
             Visibility="{x:Bind StartChat.HasError, Mode=OneWay, FallbackValue=Collapsed}" />
 
-        <!-- Picked: one chip per person; clicking a chip removes it -->
-        <GridView
+        <!-- Picked: one chip per person in a row under the box (scrolling sideways when they don't fit), each a rounded
+             pill on the control fill with its stroke, so it stands apart from the pane: the name, then a ×. A click, Enter
+             or Space on a chip removes it, and the person goes back to the list below. Each chip keeps its own width (a
+             grid would size them all like the first) -->
+        <ListView
             x:Name="PickedList"
             Grid.Row="2"
             Margin="12,8,12,0"
+            Padding="0,0,0,4"
             AutomationProperties.AutomationId="StartChat.Picked"
             ContainerContentChanging="OnContainerContentChanging"
             IsItemClickEnabled="True"
             ItemClick="OnContactClick"
-            SelectionMode="None">
-            <GridView.ItemTemplate>
+            ScrollViewer.HorizontalScrollBarVisibility="Auto"
+            ScrollViewer.HorizontalScrollMode="Enabled"
+            ScrollViewer.VerticalScrollMode="Disabled"
+            SelectionMode="None"
+            Visibility="{x:Bind StartChat.CanStart, Mode=OneWay, FallbackValue=Collapsed}">
+            <ListView.Resources>
+                <!-- The Chip Is The Look: The Row Itself Gets No Hover Or Press Fill Around It -->
+                <SolidColorBrush x:Key="ListViewItemBackgroundPointerOver" Color="Transparent" />
+                <SolidColorBrush x:Key="ListViewItemBackgroundPressed" Color="Transparent" />
+            </ListView.Resources>
+            <ListView.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <ItemsStackPanel Orientation="Horizontal" />
+                </ItemsPanelTemplate>
+            </ListView.ItemsPanel>
+            <ListView.ItemContainerStyle>
+                <Style BasedOn="{StaticResource DefaultListViewItemStyle}" TargetType="ListViewItem">
+                    <Setter Property="Margin" Value="0,0,8,0" />
+                    <Setter Property="MinHeight" Value="0" />
+                    <Setter Property="MinWidth" Value="0" />
+                    <Setter Property="Padding" Value="0" />
+                    <Setter Property="CornerRadius" Value="16" />
+                </Style>
+            </ListView.ItemContainerStyle>
+            <ListView.ItemTemplate>
                 <DataTemplate x:DataType="main:ContactRowViewModel">
-                    <StackPanel
-                        Padding="4,2,8,2"
-                        Orientation="Horizontal"
-                        Spacing="6">
-                        <TextBlock VerticalAlignment="Center" Text="{x:Bind Name}" />
-                        <FontIcon FontSize="10" Glyph="&#xE711;" />
-                    </StackPanel>
+                    <Border
+                        Height="32"
+                        Padding="12,0,8,0"
+                        Background="{ThemeResource ControlFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                        BorderThickness="1"
+                        CornerRadius="16">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock
+                                MaxWidth="200"
+                                VerticalAlignment="Center"
+                                MaxLines="1"
+                                Text="{x:Bind Name}"
+                                TextTrimming="CharacterEllipsis" />
+                            <FontIcon
+                                VerticalAlignment="Center"
+                                FontSize="10"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Glyph="&#xE711;" />
+                        </StackPanel>
+                    </Border>
                 </DataTemplate>
-            </GridView.ItemTemplate>
-        </GridView>
+            </ListView.ItemTemplate>
+        </ListView>
 
         <!-- Contacts: a "Send to" row for a typed number first, then top contacts, then everyone else -->
         <ListView

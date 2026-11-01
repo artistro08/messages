@@ -13,7 +13,7 @@ namespace GMessages.App.Views;
 /// </summary>
 /// <remarks>
 /// Contact rows are <c>Contact.{n}</c> and picked chips <c>StartChat.Chip.{n}</c>, numbered top to bottom. Clicking a
-/// row picks it, clicking it again or its chip drops it. Both lists are wrapped with <see cref="BindableList"/> (see
+/// row picks it, which moves it from the list to its chip; clicking the chip drops it back into the list. Both lists are wrapped with <see cref="BindableList"/> (see
 /// there for why).
 /// </remarks>
 public sealed partial class StartChatPane : UserControl
@@ -35,6 +35,9 @@ public sealed partial class StartChatPane : UserControl
     /// Raised with the conversation ID once Go has opened (or found) the conversation.
     /// </summary>
     public event EventHandler<string>? Started;
+
+    /// <summary>Gets Go's text (for bindings).</summary>
+    public static string GoText => ChatCopy.StartChatGo;
 
     /// <summary>Gets or sets the pane's state, or null while closed.</summary>
     public StartChatViewModel? StartChat
