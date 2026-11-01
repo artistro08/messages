@@ -638,10 +638,10 @@ public sealed partial class ChatPane : UserControl
     {
         var pane = (ChatPane)d;
 
-        if (e.OldValue is ChatViewModel old_chat)
+        if (e.OldValue is ChatViewModel oldChat)
         {
-            old_chat.Messages.CollectionChanged -= pane.OnMessagesChanged;
-            old_chat.PropertyChanged            -= pane.OnChatPropertyChanged;
+            oldChat.Messages.CollectionChanged -= pane.OnMessagesChanged;
+            oldChat.PropertyChanged            -= pane.OnChatPropertyChanged;
         }
 
         var chat = (ChatViewModel?)e.NewValue;
@@ -681,10 +681,10 @@ public sealed partial class ChatPane : UserControl
             // Is Focus Inside The Window Only: It Never Activates The Window Or Takes The Foreground, So A Window Opened In The
             // Background Stays There, And Shows The Cursor In The Box Once The Person Brings It Up. Browsing The List With
             // The Arrow Keys Opens Each Chat But Keeps The Focus On The List
-            bool keep_focus = pane._keepFocus;
+            bool keepFocus = pane._keepFocus;
             pane.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
             {
-                if (pane.Chat == chat && !keep_focus)
+                if (pane.Chat == chat && !keepFocus)
                 {
                     pane.DraftBox.Focus(FocusState.Programmatic);
                 }
@@ -921,16 +921,16 @@ public sealed partial class ChatPane : UserControl
         }
 
         // The Same Content Height Means The Person (Or The Arrow) Moved The List; A New One Is Bubbles Measuring Or A Page
-        bool content_changed = ContentChanged(scroller);
-        bool was_pinned      = _pinned;
-        _pinned              = ChatScroll.StaysPinned(_pinned, content_changed, scroller.VerticalOffset, scroller.ScrollableHeight);
+        bool contentChanged  = ContentChanged(scroller);
+        bool wasPinned       = _pinned;
+        _pinned              = ChatScroll.StaysPinned(_pinned, contentChanged, scroller.VerticalOffset, scroller.ScrollableHeight);
 
         // The Person Is Scrolling: An Older Page's Corrections Would Snap Them Back, So They End
-        if (e.IsIntermediate && !content_changed)
+        if (e.IsIntermediate && !contentChanged)
         {
             EndOlderAnchor();
         }
-        if (content_changed)
+        if (contentChanged)
         {
             KeepPinned(scroller);
         }
@@ -946,19 +946,19 @@ public sealed partial class ChatPane : UserControl
 
         // Back At The Newest Message After Scrolling Up: The Older Pages Above The Newest 200 Bubbles Go (Scrolling Up
         // Again Loads Them Back)
-        if (!was_pinned && _pinned)
+        if (!wasPinned && _pinned)
         {
             Chat.TrimToNewest();
         }
 
-        bool show_arrow = ChatScroll.ShowScrollToBottom(scroller.VerticalOffset, scroller.ScrollableHeight, scroller.ViewportHeight);
+        bool showArrow = ChatScroll.ShowScrollToBottom(scroller.VerticalOffset, scroller.ScrollableHeight, scroller.ViewportHeight);
         // Not While An Older Page's Corrections Are Pending: One Passing Near The Top Would Ask For Another Page, And They
         // Wait While It Loads
-        bool load_older = scroller.ScrollableHeight > 0 && _olderBubble is null
+        bool loadOlder = scroller.ScrollableHeight > 0 && _olderBubble is null
             && ChatScroll.ShouldLoadOlder(scroller.VerticalOffset, scroller.ScrollableHeight, scroller.ViewportHeight);
 
-        ShowScrollToBottom(show_arrow);
-        if (load_older)
+        ShowScrollToBottom(showArrow);
+        if (loadOlder)
         {
             _ = Chat.LoadOlderAsync();
         }
@@ -1132,7 +1132,7 @@ public sealed partial class ChatPane : UserControl
     private async Task OpenMicrophoneSettingsAsync()
     {
         var page               = new Uri("ms-settings:privacy-microphone");
-        string conversation_id = Chat?.ConversationId ?? string.Empty;
+        string conversationId  = Chat?.ConversationId ?? string.Empty;
         if (TestHooks.RecordLaunch(page.OriginalString))
         {
             return;
@@ -1142,12 +1142,12 @@ public sealed partial class ChatPane : UserControl
         {
             if (!await Launcher.LaunchUriAsync(page))
             {
-                AppLog.MediaFailed(App.ShellLog, "settings", conversation_id, "NotLaunched");
+                AppLog.MediaFailed(App.ShellLog, "settings", conversationId, "NotLaunched");
             }
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            AppLog.MediaFailed(App.ShellLog, "settings", conversation_id, ex.GetType().Name);
+            AppLog.MediaFailed(App.ShellLog, "settings", conversationId, ex.GetType().Name);
         }
     }
 
@@ -1599,7 +1599,7 @@ public sealed partial class ChatPane : UserControl
             if (view.Contains(StandardDataFormats.StorageItems))
             {
                 IReadOnlyList<IStorageItem> items = await view.GetStorageItemsAsync();
-                await AttachFilesAsync(chat, items.Where(i => i.IsOfType(StorageItemTypes.File)).Select(i => i.As<StorageFile>()).ToList());
+                await AttachFilesAsync(chat, [.. items.Where(i => i.IsOfType(StorageItemTypes.File)).Select(i => i.As<StorageFile>())]);
             }
             else if ((await PastedPictureAsync(view) ?? await PastedWebGifAsync(view, chat.Previews)) is { } picture)
             {
@@ -1771,7 +1771,7 @@ public sealed partial class ChatPane : UserControl
         if (card is not null)
         {
             _menuView = view;
-            ShowMenuAt(PreviewMenu, card, e.TryGetPosition(card, out Windows.Foundation.Point on_card) ? on_card : null);
+            ShowMenuAt(PreviewMenu, card, e.TryGetPosition(card, out Windows.Foundation.Point onCard) ? onCard : null);
             return;
         }
 
@@ -1962,10 +1962,10 @@ public sealed partial class ChatPane : UserControl
         }
 
         Control row        = element.As<Control>();
-        bool high_contrast = Access.HighContrast;
-        bool shown         = MessageBubbleViewModel.ShowsFocusRing(row.FocusState != FocusState.Unfocused, row.FocusState == FocusState.Pointer, high_contrast);
+        bool highContrast  = Access.HighContrast;
+        bool shown         = MessageBubbleViewModel.ShowsFocusRing(row.FocusState != FocusState.Unfocused, row.FocusState == FocusState.Pointer, highContrast);
 
-        if (high_contrast)
+        if (highContrast)
         {
             row.FocusVisualPrimaryThickness   = SystemFocusPrimary;
             row.FocusVisualSecondaryThickness = SystemFocusSecondary;
@@ -1977,7 +1977,7 @@ public sealed partial class ChatPane : UserControl
         }
 
         Canvas.SetZIndex(row, shown ? 1 : 0);
-        view.ShowFocusRing(shown, high_contrast);
+        view.ShowFocusRing(shown, highContrast);
     }
 
     // The Bubble Of The Row With Keyboard Focus, Or Null When Focus Is Elsewhere (Also On A Link Inside A Row)
@@ -2086,9 +2086,9 @@ public sealed partial class ChatPane : UserControl
             }
 
             Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnRendering;
-            long build_ms = (long)System.Diagnostics.Stopwatch.GetElapsedTime(start, built).TotalMilliseconds;
+            long buildMs  = (long)System.Diagnostics.Stopwatch.GetElapsedTime(start, built).TotalMilliseconds;
             int rows      = _emojiFactory?.Made ?? 0;
-            AppLog.EmojiPickerShown(App.ShellLog, open, build_ms, stall, rows);
+            AppLog.EmojiPickerShown(App.ShellLog, open, buildMs, stall, rows);
         }
 
         void OnClosed(object? sender, object e)
@@ -2104,8 +2104,8 @@ public sealed partial class ChatPane : UserControl
     // Edge To Edge With The Search Box; The Scroll Bar Overlays Them The Windows Way
     private Flyout BuildEmojiPicker()
     {
-        Style button_style = ReactionButtons.Resources["ReactionButtonStyle"].As<Style>();
-        Style note_style   = ReactionButtons.Resources["EmojiPickerNoteStyle"].As<Style>();
+        Style buttonStyle  = ReactionButtons.Resources["ReactionButtonStyle"].As<Style>();
+        Style noteStyle    = ReactionButtons.Resources["EmojiPickerNoteStyle"].As<Style>();
         var flyout         = new Flyout { Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.Top };
 
         // Search Box
@@ -2115,10 +2115,10 @@ public sealed partial class ChatPane : UserControl
         _emojiSearch.TextChanged += (_, _) => FilterEmoji();
 
         // Empty Search
-        _emojiEmpty = new TextBlock { Text = ChatCopy.NoEmojiFound, Margin = new Thickness(4, 8, 0, 8), Style = note_style, Visibility = Visibility.Collapsed };
+        _emojiEmpty = new TextBlock { Text = ChatCopy.NoEmojiFound, Margin = new Thickness(4, 8, 0, 8), Style = noteStyle, Visibility = Visibility.Collapsed };
 
         // Rows: About Half A Screen Above And Below The View Is Made Ahead
-        _emojiFactory = new EmojiRowFactory(EmojiPickerColumns, EmojiCellSize, button_style, note_style, PickEmoji);
+        _emojiFactory = new EmojiRowFactory(EmojiPickerColumns, EmojiCellSize, buttonStyle, noteStyle, PickEmoji);
         _emojiRows    = new ItemsRepeater { ItemTemplate = _emojiFactory, VerticalCacheLength = 1 };
         _emojiScroller = new ScrollViewer { Content = _emojiRows, Height = EmojiPickerHeight, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
 
@@ -2144,7 +2144,7 @@ public sealed partial class ChatPane : UserControl
             rows.Add(new EmojiRow(name, []));
             for (int i = 0; i < emoji.Count; i += EmojiPickerColumns)
             {
-                rows.Add(new EmojiRow(null, emoji.Skip(i).Take(EmojiPickerColumns).ToList()));
+                rows.Add(new EmojiRow(null, [.. emoji.Skip(i).Take(EmojiPickerColumns)]));
             }
         }
 
@@ -2230,10 +2230,10 @@ public sealed partial class ChatPane : UserControl
             return;
         }
 
-        if (_olderFromEnd is { } from_end)
+        if (_olderFromEnd is { } fromEnd)
         {
             _olderFromEnd = null;
-            scroller.ChangeView(null, Math.Max(0, scroller.ExtentHeight - from_end), null, true);
+            scroller.ChangeView(null, Math.Max(0, scroller.ExtentHeight - fromEnd), null, true);
             return;
         }
 

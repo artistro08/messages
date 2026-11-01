@@ -184,10 +184,10 @@ public partial class App : Application, IDisposable
         // when unpackaged); whatever the last run left there goes now
         var connection                    = _connection;
         Func<IMessagingClient?> messaging = () => connection.Client;
-        string media_folder               = AppIdentity.IsPackaged
+        string mediaFolder                = AppIdentity.IsPackaged
             ? Path.Combine(ApplicationData.Current.TemporaryFolder.Path, "Media")
             : Path.Combine(paths.DataFolder, "Temp", "Media");
-        _media                            = new MediaStore(messaging, media_folder, _logProvider.CreateLogger("GMessages.Media"));
+        _media                            = new MediaStore(messaging, mediaFolder, _logProvider.CreateLogger("GMessages.Media"));
         _media.DownloadTimeout            = static () => TestHooks.ShortWait("download-timeout") ?? MediaStore.DefaultDownloadTimeout;
         _media.Clear();
 
@@ -207,8 +207,8 @@ public partial class App : Application, IDisposable
         _notifications.Register();
 
         // Taskbar Badge: the unread chat count, recounted on every conversation change
-        ILogger badge_log          = _logProvider.CreateLogger("GMessages.Badge");
-        var badge                  = new UnreadBadge(store.CachedConversations, count => TaskbarBadge.Show(count, badge_log), TimeProvider.System);
+        ILogger badgeLog           = _logProvider.CreateLogger("GMessages.Badge");
+        var badge                  = new UnreadBadge(store.CachedConversations, count => TaskbarBadge.Show(count, badgeLog), TimeProvider.System);
         _badge                     = badge;
         store.ConversationChanged += (_, _) =>
         {
@@ -492,16 +492,16 @@ public partial class App : Application, IDisposable
             return;
         }
 
-        uint foreground_thread = NativeMethods.GetWindowThreadProcessId(NativeMethods.GetForegroundWindow(), IntPtr.Zero);
-        uint my_thread         = NativeMethods.GetCurrentThreadId();
-        if (foreground_thread == 0 || foreground_thread == my_thread || !NativeMethods.AttachThreadInput(my_thread, foreground_thread, true))
+        uint foregroundThread = NativeMethods.GetWindowThreadProcessId(NativeMethods.GetForegroundWindow(), IntPtr.Zero);
+        uint myThread         = NativeMethods.GetCurrentThreadId();
+        if (foregroundThread == 0 || foregroundThread == myThread || !NativeMethods.AttachThreadInput(myThread, foregroundThread, true))
         {
             return;
         }
 
         NativeMethods.BringWindowToTop(hwnd);
         NativeMethods.SetForegroundWindow(hwnd);
-        NativeMethods.AttachThreadInput(my_thread, foreground_thread, false);
+        NativeMethods.AttachThreadInput(myThread, foregroundThread, false);
     }
 
     // Pairing While Unpaired Or Signed Out, Else The Chats. An Open Window Switches In Place Only When That Changes, So
@@ -771,10 +771,10 @@ public partial class App : Application, IDisposable
         _quitting = true;
         long started = Stopwatch.GetTimestamp();
         CloseWindows();
-        long windows_ms    = (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds;
-        long connection_ms = 0;
-        long saves_ms      = 0;
-        bool saves_done    = false;
+        long windowsMs    = (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+        long connectionMs = 0;
+        long savesMs      = 0;
+        bool savesDone    = false;
 
         // Let the client close its long poll and flush a save (while the log is still open), but never hang the quit on it
         try
@@ -791,7 +791,7 @@ public partial class App : Application, IDisposable
                 await _connection.DisposeAsync().AsTask().WaitAsync(ConnectionLimit);
             }
 
-            connection_ms = (long)Stopwatch.GetElapsedTime(step).TotalMilliseconds;
+            connectionMs = (long)Stopwatch.GetElapsedTime(step).TotalMilliseconds;
 
             // The Message Saves Still Queued (After A Catch-Up There Can Be Hundreds) Are Written Before The Exit, Up To
             // A Limit: The Database Is A Cache, So A Save Cut Off Is Fetched Again From The Phone
@@ -799,10 +799,10 @@ public partial class App : Application, IDisposable
             if (_store is not null)
             {
                 await _store.FlushAsync().WaitAsync(SavesLimit);
-                saves_done = true;
+                savesDone = true;
             }
 
-            saves_ms = (long)Stopwatch.GetElapsedTime(step).TotalMilliseconds;
+            savesMs = (long)Stopwatch.GetElapsedTime(step).TotalMilliseconds;
         }
 #pragma warning disable CA1031 // Quitting regardless
         catch (Exception)
@@ -812,8 +812,8 @@ public partial class App : Application, IDisposable
         }
         finally
         {
-            long total_ms = (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds;
-            AppLog.QuitTimed(_logger, windows_ms, connection_ms, saves_ms, saves_done, total_ms);
+            long totalMs = (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+            AppLog.QuitTimed(_logger, windowsMs, connectionMs, savesMs, savesDone, totalMs);
 
             // No Decrypted File Outlives The App
             _media?.Clear();

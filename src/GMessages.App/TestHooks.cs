@@ -125,7 +125,7 @@ internal static class TestHooks
             return [];
         }
 
-        string[] paths = File.ReadAllLines(pick).Where(p => p.Length > 0).ToArray();
+        string[] paths = [.. File.ReadAllLines(pick).Where(p => p.Length > 0)];
         File.Delete(pick);
         return paths;
     }

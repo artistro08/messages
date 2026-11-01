@@ -204,7 +204,7 @@ public sealed partial class PhotoViewer : UserControl
             byte[] bytes = await media.GetAsync(part, thumbnail: false, CancellationToken.None);
             double twice = (XamlRoot?.Size.Width ?? 0) * (XamlRoot?.RasterizationScale ?? 1) * 2;
             int fit      = twice > 0 ? (int)Math.Min(Math.Ceiling(twice), MaxDecodeWidth) : MaxDecodeWidth;
-            (ImageSource? image, int pixel_width, int pixel_height, int decode_width) =
+            (ImageSource? image, int pixelWidth, int pixelHeight, int decodeWidth) =
                 await Avatar.ToFittedImageAsync(bytes, (w, h) => CappedWidth(w, h, fit), DecodePixelType.Physical);
             if (image is null)
             {
@@ -213,11 +213,11 @@ public sealed partial class PhotoViewer : UserControl
 
             if (ReferenceEquals(part, _part) && !_closing)
             {
-                _photoWidth       = pixel_width;
-                _photoHeight      = pixel_height;
-                _decodedWidth     = decode_width;
+                _photoWidth       = pixelWidth;
+                _photoHeight      = pixelHeight;
+                _decodedWidth     = decodeWidth;
                 PhotoImage.Source = image;
-                TestHooks.NoteState("viewer-decode", decode_width.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                TestHooks.NoteState("viewer-decode", decodeWidth.ToString(System.Globalization.CultureInfo.InvariantCulture));
                 _ = Grow(PhotoImage, null);
             }
         }
@@ -554,15 +554,15 @@ public sealed partial class PhotoViewer : UserControl
         var shift             = new Vector3((float)(bubble.X + (bubble.Width / 2)) - middle.X, (float)(bubble.Y + (bubble.Height / 2)) - middle.Y, 0);
 
         // The Bubble's Crop Before The Scale: The Bubble's Size Over The Scale, On The Shown Photo's Middle
-        float crop_width  = (float)bubble.Width / scale;
-        float crop_height = (float)bubble.Height / scale;
-        float stage_width = (float)Stage.ActualWidth;
-        float stage_high  = (float)Stage.ActualHeight;
+        float cropWidth   = (float)bubble.Width / scale;
+        float cropHeight  = (float)bubble.Height / scale;
+        float stageWidth  = (float)Stage.ActualWidth;
+        float stageHigh   = (float)Stage.ActualHeight;
         var insets        = new Vector4(
-            Math.Max(0, middle.X - (crop_width / 2)),
-            Math.Max(0, middle.Y - (crop_height / 2)),
-            Math.Max(0, stage_width - (middle.X + (crop_width / 2))),
-            Math.Max(0, stage_high - (middle.Y + (crop_height / 2))));
+            Math.Max(0, middle.X - (cropWidth / 2)),
+            Math.Max(0, middle.Y - (cropHeight / 2)),
+            Math.Max(0, stageWidth - (middle.X + (cropWidth / 2))),
+            Math.Max(0, stageHigh - (middle.Y + (cropHeight / 2))));
 
         ElementCompositionPreview.SetIsTranslationEnabled(Stage, true);
         visual.CenterPoint = new Vector3(middle, 0);
@@ -775,8 +775,8 @@ public sealed partial class PhotoViewer : UserControl
             return limit;
         }
 
-        int height_cap = (int)Math.Min(int.MaxValue, (long)MaxDecodeWidth * width / height);
-        return Math.Max(1, Math.Min(width, Math.Min(limit, height_cap)));
+        int heightCap = (int)Math.Min(int.MaxValue, (long)MaxDecodeWidth * width / height);
+        return Math.Max(1, Math.Min(width, Math.Min(limit, heightCap)));
     }
 
     // Zoomed Past 2x: The Photo Decodes Again At Its Own Width (Neither Side Past MaxDecodeWidth), Once, So It Stays

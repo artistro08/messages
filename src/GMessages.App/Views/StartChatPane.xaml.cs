@@ -100,9 +100,9 @@ public sealed partial class StartChatPane : UserControl
         }
 
         // Start Chat Closed Or Reopened While The Phone Answered: Open Nothing
-        if (await start.StartAsync() is { } conversation_id && StartChat == start)
+        if (await start.StartAsync() is { } conversationId && StartChat == start)
         {
-            Started?.Invoke(this, conversation_id);
+            Started?.Invoke(this, conversationId);
         }
     }
 }

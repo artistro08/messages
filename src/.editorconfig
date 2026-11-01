@@ -117,8 +117,16 @@ dotnet_naming_rule.locals_and_parameters_rule.symbols  = locals_and_parameters
 dotnet_naming_rule.locals_and_parameters_rule.style    = camel_case
 dotnet_naming_rule.locals_and_parameters_rule.severity = warning
 
+# Code-Behind: async void Event Handlers (And Fire-And-Forget UI Helpers) Can't Be Awaited, So They Take No Async Suffix
+[GMessages.App/**.xaml.cs]
+dotnet_naming_rule.async_methods_rule.severity = none
+
+# Win32 Interop: Struct Fields Keep Their Windows SDK Names (cbSize, hWnd)
+[GMessages.App/NativeMethods.cs]
+dotnet_diagnostic.IDE1006.severity = none
+
 # TEMPORARY: Projects Not Yet Brought In Line (Removed When Task 5.1 Finishes)
-[{GMessages.App,GMessages.Protocol.Tests,GMessages.Presentation.Tests,GMessages.App.UITests}/**.cs]
+[{GMessages.Protocol.Tests,GMessages.Presentation.Tests,GMessages.App.UITests}/**.cs]
 dotnet_diagnostic.IDE0028.severity = none
 dotnet_diagnostic.IDE0051.severity = none
 dotnet_diagnostic.IDE0052.severity = none

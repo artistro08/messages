@@ -163,18 +163,18 @@ internal sealed class VoiceRecorder : IDisposable
             // The File (M4A, AAC) And The Levels
             await File.WriteAllBytesAsync(path, []);
             StorageFile storage                      = await StorageFile.GetFileFromPathAsync(path);
-            CreateAudioFileOutputNodeResult out_file = await graph.CreateFileOutputNodeAsync(storage, MediaEncodingProfile.CreateM4a(Quality));
-            if (out_file.Status != AudioFileNodeCreationStatus.Success)
+            CreateAudioFileOutputNodeResult outFile  = await graph.CreateFileOutputNodeAsync(storage, MediaEncodingProfile.CreateM4a(Quality));
+            if (outFile.Status != AudioFileNodeCreationStatus.Success)
             {
-                throw new IOException(out_file.Status.ToString());
+                throw new IOException(outFile.Status.ToString());
             }
 
             AudioFrameOutputNode frames = graph.CreateFrameOutputNode();
-            input.DeviceInputNode.AddOutgoingConnection(out_file.FileOutputNode);
+            input.DeviceInputNode.AddOutgoingConnection(outFile.FileOutputNode);
             input.DeviceInputNode.AddOutgoingConnection(frames);
             graph.Start();
 
-            var recorder = new VoiceRecorder(path, graph, out_file.FileOutputNode, frames);
+            var recorder = new VoiceRecorder(path, graph, outFile.FileOutputNode, frames);
             graph = null;
             return recorder;
         }
@@ -232,15 +232,15 @@ internal sealed class VoiceRecorder : IDisposable
     // Which Device The Graph Really Opened, Against The Chosen One And Windows' Defaults; Names And IDs Never Logged
     private static void LogOpenedDevice(string? openedId, string? chosenId)
     {
-        string default_id       = MediaDevice.GetDefaultAudioCaptureId(AudioDeviceRole.Default);
-        string communication_id = MediaDevice.GetDefaultAudioCaptureId(AudioDeviceRole.Communications);
+        string defaultId        = MediaDevice.GetDefaultAudioCaptureId(AudioDeviceRole.Default);
+        string communicationId  = MediaDevice.GetDefaultAudioCaptureId(AudioDeviceRole.Communications);
         string opened           = openedId is null ? "unknown"
             : string.Equals(openedId, chosenId, StringComparison.OrdinalIgnoreCase) ? "chosen"
-            : string.Equals(openedId, default_id, StringComparison.OrdinalIgnoreCase) ? "default"
-            : string.Equals(openedId, communication_id, StringComparison.OrdinalIgnoreCase) ? "communications default"
+            : string.Equals(openedId, defaultId, StringComparison.OrdinalIgnoreCase) ? "default"
+            : string.Equals(openedId, communicationId, StringComparison.OrdinalIgnoreCase) ? "communications default"
             : "other";
 
-        MicrophoneConsent.Log("opened", $"{opened}; chosen is default: {string.Equals(chosenId, default_id, StringComparison.OrdinalIgnoreCase)}");
+        MicrophoneConsent.Log("opened", $"{opened}; chosen is default: {string.Equals(chosenId, defaultId, StringComparison.OrdinalIgnoreCase)}");
     }
 
     /// <summary>

@@ -303,7 +303,7 @@ public sealed partial class MainWindow : Window
             (int)Math.Round(bounds.Y * scale),
             (int)Math.Round(bounds.Width * scale),
             (int)Math.Round(bounds.Height * scale));
-        InputNonClientPointerSource.GetForWindowId(AppWindow.Id).SetRegionRects(NonClientRegionKind.Passthrough, new[] { hole });
+        InputNonClientPointerSource.GetForWindowId(AppWindow.Id).SetRegionRects(NonClientRegionKind.Passthrough, [hole]);
     }
 
     // =========================================================================
@@ -450,15 +450,15 @@ public sealed partial class MainWindow : Window
     // Place Of ☰, Named For The Page It Leaves (The Tests Find It By That). Returns Back While It Shows
     private Button? ShowTitleBarButtons()
     {
-        bool show_back = ShowsBack();
+        bool showBack = ShowsBack();
 
-        AppTitleBar.IsBackButtonVisible = show_back;
-        MenuButton.Visibility           = _chats is not null && !show_back && ViewModel?.IsNarrow != true ? Visibility.Visible : Visibility.Collapsed;
+        AppTitleBar.IsBackButtonVisible = showBack;
+        MenuButton.Visibility           = _chats is not null && !showBack && ViewModel?.IsNarrow != true ? Visibility.Visible : Visibility.Collapsed;
         ProfileButton.Visibility        = _chats is not null ? Visibility.Visible : Visibility.Collapsed;
 
         // The Title Bar Only Lets Clicks Through Where Its Buttons Are When It Computes Its Regions
         RecomputeTitleBarRegions();
-        if (!show_back)
+        if (!showBack)
         {
             return null;
         }
@@ -555,8 +555,8 @@ public sealed partial class MainWindow : Window
 
         double scale       = root.RasterizationScale;
         double caption     = AppWindow.TitleBar.RightInset / scale;
-        double content_end = TitleBarContent.TransformToVisual(RootGrid).TransformPoint(new Windows.Foundation.Point(TitleBarContent.ActualWidth, 0)).X;
-        double overhang    = Math.Round((content_end - (RootGrid.ActualWidth - caption)) * scale) / scale;
+        double contentEnd  =TitleBarContent.TransformToVisual(RootGrid).TransformPoint(new Windows.Foundation.Point(TitleBarContent.ActualWidth, 0)).X;
+        double overhang    = Math.Round((contentEnd - (RootGrid.ActualWidth - caption)) * scale) / scale;
         if (ProfileButton.Margin.Right != overhang)
         {
             ProfileButton.Margin = new Thickness(0, 0, overhang, 0);
@@ -569,10 +569,10 @@ public sealed partial class MainWindow : Window
     private void OnChatsChanged(object? sender, PropertyChangedEventArgs e)
     {
         // The View Model Raises Everything At Once (An Empty Name), So The Title Bar Is Only Touched When It Would Change
-        bool show_back = ShowsBack();
-        bool show_menu = _chats is not null && !show_back && ViewModel?.IsNarrow != true;
-        if (AppTitleBar.IsBackButtonVisible != show_back || (MenuButton.Visibility == Visibility.Visible) != show_menu
-            || (show_back && _backButton is not null && AutomationProperties.GetAutomationId(_backButton) != BackId()))
+        bool showBack = ShowsBack();
+        bool showMenu = _chats is not null && !showBack && ViewModel?.IsNarrow != true;
+        if (AppTitleBar.IsBackButtonVisible != showBack || (MenuButton.Visibility == Visibility.Visible) != showMenu
+            || (showBack && _backButton is not null && AutomationProperties.GetAutomationId(_backButton) != BackId()))
         {
             ShowTitleBarButtons();
         }
@@ -610,13 +610,13 @@ public sealed partial class MainWindow : Window
     // Load Or Reconnect Ask Again; The Cache Remembers "No Photo", So That Costs The Phone Nothing
     private async Task ShowProfilePhotoAsync()
     {
-        if (_profileAsked || ViewModel?.MeId is not { } me_id)
+        if (_profileAsked || ViewModel?.MeId is not { } meId)
         {
             return;
         }
 
         _profileAsked = true;
-        if (await _avatars.GetAsync(me_id, CancellationToken.None) is not { } photo)
+        if (await _avatars.GetAsync(meId, CancellationToken.None) is not { } photo)
         {
             _profileAsked = false;
             return;
@@ -698,8 +698,8 @@ public sealed partial class MainWindow : Window
 
         // Matched By Name, Not By Type (The Native AOT Build Can Hand The Box Back As A Base Type). These Are The App's
         // Only Text Boxes: A New One Must Be Added Here
-        bool focus_in_text_box = FocusManager.GetFocusedElement(RootGrid.XamlRoot) is FrameworkElement { Name: "DraftBox" or "QueryBox" };
-        if (ShortcutMap.Resolve(e.Key, UiHelpers.IsDown(VirtualKey.Control), UiHelpers.IsDown(VirtualKey.Shift), UiHelpers.IsDown(VirtualKey.Menu), focus_in_text_box, UiHelpers.IsDown(VirtualKey.RightMenu)) is { } command)
+        bool focusInTextBox = FocusManager.GetFocusedElement(RootGrid.XamlRoot) is FrameworkElement { Name: "DraftBox" or "QueryBox" };
+        if (ShortcutMap.Resolve(e.Key, UiHelpers.IsDown(VirtualKey.Control), UiHelpers.IsDown(VirtualKey.Shift), UiHelpers.IsDown(VirtualKey.Menu), focusInTextBox, UiHelpers.IsDown(VirtualKey.RightMenu)) is { } command)
         {
             e.Handled = Run(chats, command);
         }

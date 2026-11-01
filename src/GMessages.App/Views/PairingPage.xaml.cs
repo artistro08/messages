@@ -107,7 +107,7 @@ public sealed partial class PairingPage : UserControl
     private async Task StartSignInAsync()
     {
         _captured      = false;
-        _profileFolder =Path.Combine(Path.GetTempPath(), $"{ProfilePrefix}{Guid.NewGuid():N}");
+        _profileFolder = Path.Combine(Path.GetTempPath(), $"{ProfilePrefix}{Guid.NewGuid():N}");
 
         var web = new WebView2();
         AutomationProperties.SetAutomationId(web, "Pairing.SignIn");
@@ -375,11 +375,11 @@ public sealed partial class PairingPage : UserControl
     {
         string? emoji = ViewModel.Emoji;
         string? name  = string.IsNullOrEmpty(emoji) ? null : PairingViewModel.EmojiFileName(emoji);
-        bool has_image = name is not null && File.Exists(Path.Combine(AppContext.BaseDirectory, "Assets", "Emoji", name));
+        bool hasImage = name is not null && File.Exists(Path.Combine(AppContext.BaseDirectory, "Assets", "Emoji", name));
 
-        EmojiImage.Source     = has_image ? new BitmapImage(new Uri("ms-appx:///Assets/Emoji/" + name)) : null;
-        EmojiImage.Visibility = has_image ? Visibility.Visible : Visibility.Collapsed;
-        EmojiText.Visibility  = has_image ? Visibility.Collapsed : Visibility.Visible;
+        EmojiImage.Source     = hasImage ? new BitmapImage(new Uri("ms-appx:///Assets/Emoji/" + name)) : null;
+        EmojiImage.Visibility = hasImage ? Visibility.Visible : Visibility.Collapsed;
+        EmojiText.Visibility  = hasImage ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private void OnTryAgainClick(object sender, RoutedEventArgs e) => ViewModel.TryAgain();

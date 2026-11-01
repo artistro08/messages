@@ -58,10 +58,10 @@ internal sealed class ScrollFade
         _layer    = layer;
 
         // The Content's Copy
-        Visual content_visual = ElementCompositionPreview.GetElementVisual(content);
-        _compositor           = content_visual.Compositor;
+        Visual contentVisual  =ElementCompositionPreview.GetElementVisual(content);
+        _compositor           = contentVisual.Compositor;
         _surface              = _compositor.CreateVisualSurface();
-        _surface.SourceVisual = content_visual;
+        _surface.SourceVisual = contentVisual;
 
         // The Mask: Opaque Everywhere Until An Edge Fades
         CompositionLinearGradientBrush gradient = _compositor.CreateLinearGradientBrush();
@@ -84,7 +84,7 @@ internal sealed class ScrollFade
         _sprite       = _compositor.CreateSpriteVisual();
         _sprite.Brush = mask;
         ElementCompositionPreview.SetElementChildVisual(layer, _sprite);
-        content_visual.Opacity = 0;
+        contentVisual.Opacity = 0;
 
         Resize();
 
@@ -105,14 +105,14 @@ internal sealed class ScrollFade
     public static ScrollFade? Attach(ScrollViewer scroller)
     {
         if (UiHelpers.FindPart<ScrollContentPresenter>(scroller, "ScrollContentPresenter") is not { } content
-            || VisualTreeHelper.GetParent(content) is not { } parent_object)
+            || VisualTreeHelper.GetParent(content) is not { } parentObject)
         {
             return null;
         }
 
         // The Template's Unnamed Grid Holding The Content. A WinRT Cast, Not A Type Test: The Native AOT Build Hands It
         // Back As A Base Type (See UiHelpers.FindScroller)
-        Panel parent = parent_object.As<Panel>();
+        Panel parent = parentObject.As<Panel>();
 
         // The Template's Empty Layer Right Above The Content (Below The Scroll Bars), Else The Scroller Itself
         int at = parent.Children.IndexOf(content);

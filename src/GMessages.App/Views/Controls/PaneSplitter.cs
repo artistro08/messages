@@ -82,12 +82,12 @@ public sealed partial class PaneSplitter : UserControl
 
     private void OnPointerMoved(object sender, PointerRoutedEventArgs e)
     {
-        if (_pressX is not { } press_x)
+        if (_pressX is not { } pressX)
         {
             return;
         }
 
-        Resized?.Invoke(this, e.GetCurrentPoint(null).Position.X - press_x);
+        Resized?.Invoke(this, e.GetCurrentPoint(null).Position.X - pressX);
         e.Handled = true;
     }
 

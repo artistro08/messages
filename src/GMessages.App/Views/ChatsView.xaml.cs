@@ -318,11 +318,11 @@ public sealed partial class ChatsView : UserControl
     // View's List Pane Fills The Width
     private void OnSizeChanged(object sender, SizeChangedEventArgs e)
     {
-        bool is_narrow       = e.NewSize.Width < NarrowBelow;
-        Panes.OpenPaneLength = is_narrow ? e.NewSize.Width : FitListWidth(_listWidth, e.NewSize.Width);
-        if (is_narrow != ViewModel.IsNarrow)
+        bool isNarrow        = e.NewSize.Width < NarrowBelow;
+        Panes.OpenPaneLength = isNarrow ? e.NewSize.Width : FitListWidth(_listWidth, e.NewSize.Width);
+        if (isNarrow != ViewModel.IsNarrow)
         {
-            ViewModel.IsNarrow = is_narrow;
+            ViewModel.IsNarrow = isNarrow;
         }
     }
 
@@ -563,10 +563,10 @@ public sealed partial class ChatsView : UserControl
     // Escape Does
     private async void RunMenuItem(XamlRoot root, ConversationInfo c, ConversationMenuItem item)
     {
-        bool was_open = ViewModel.SelectedConversationId == c.Id;
+        bool wasOpen = ViewModel.SelectedConversationId == c.Id;
         await ConversationMenuFlyout.RunAsync(ViewModel, root, c, item, () => ShowDetailsAsync(root, c.Id));
 
-        if (was_open && !ViewModel.IsChatOpen)
+        if (wasOpen && !ViewModel.IsChatOpen)
         {
             DispatcherQueue.TryEnqueue(() => ConversationList.Focus(FocusState.Programmatic));
         }

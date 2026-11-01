@@ -716,10 +716,10 @@ public sealed partial class MessageBubble : UserControl
         if (double.IsFinite(availableSize.Width))
         {
             double cap       = Math.Min(MaxBubbleWidth, Math.Floor(availableSize.Width * MaxWidthShare));
-            double max_width = cap + HoverStripWidth;
-            if (Root.MaxWidth != max_width)
+            double maxWidth  = cap + HoverStripWidth;
+            if (Root.MaxWidth != maxWidth)
             {
-                Root.MaxWidth = max_width;
+                Root.MaxWidth = maxWidth;
             }
 
             // The Photo Fills The Bubble Edge To Edge, Beside The Avatar Lane
@@ -837,14 +837,14 @@ public sealed partial class MessageBubble : UserControl
         view.ShowHover(false, false);
         view.ShowFocusRing(false, false);
 
-        if (e.OldValue is MessageBubbleViewModel old_bubble)
+        if (e.OldValue is MessageBubbleViewModel oldBubble)
         {
-            old_bubble.PropertyChanged -= view.OnBubblePropertyChanged;
+            oldBubble.PropertyChanged -= view.OnBubblePropertyChanged;
         }
 
-        if (e.NewValue is MessageBubbleViewModel new_bubble)
+        if (e.NewValue is MessageBubbleViewModel newBubble)
         {
-            new_bubble.PropertyChanged += view.OnBubblePropertyChanged;
+            newBubble.PropertyChanged += view.OnBubblePropertyChanged;
         }
 
         // The Voice Message's Audio Waits For Phase 1 (The Chat's LoadMedia), So A Row Passed Over While Scrolling Fetches None
@@ -1052,28 +1052,28 @@ public sealed partial class MessageBubble : UserControl
             return;
         }
 
-        double pill_width = PillHost.ActualWidth;
-        bool shown        = pill_width > 0;
+        double pillWidth  = PillHost.ActualWidth;
+        bool shown        = pillWidth > 0;
         bool sent         = Bubble.FromMe;
-        bool short_back   = Under.MinWidth < pill_width * 2;
+        bool shortBack    = Under.MinWidth < pillWidth * 2;
 
         // Received: The Row Starts 12 px In From The Back's Left; Its MinWidth Point Is 12 px In From The Back's Right
         // Sent: The Row Ends 12 px In From The Back's Right; 12 px In From The Back's Left Is Under.ActualWidth - Under.MinWidth
         double left = sent
-            ? (short_back ? (Under.ActualWidth - Under.MinWidth) - PillCornerReach - (pill_width / 2) : Under.ActualWidth - Under.MinWidth)
-            : (short_back ? Under.MinWidth + PillCornerReach - (pill_width / 2) : Under.MinWidth - pill_width);
+            ? (shortBack ? (Under.ActualWidth - Under.MinWidth) - PillCornerReach - (pillWidth / 2) : Under.ActualWidth - Under.MinWidth)
+            : (shortBack ? Under.MinWidth + PillCornerReach - (pillWidth / 2) : Under.MinWidth - pillWidth);
 
-        double natural = sent ? 0 : Under.ActualWidth - pill_width;
-        double shift_x = shown ? left - natural : 0;
+        double natural = sent ? 0 : Under.ActualWidth - pillWidth;
+        double shiftX  = shown ? left - natural : 0;
 
         bool drop = shown && (sent
-            ? left + pill_width + PillGap > Under.ActualWidth - Captions.ActualWidth
+            ? left + pillWidth + PillGap > Under.ActualWidth - Captions.ActualWidth
             : left < Captions.ActualWidth + PillGap);
 
         var margin = new Thickness(0, drop ? Math.Max(0, PillHost.ActualHeight - PillOverlap) : 0, 0, 0);
-        if (PillShift.X != shift_x)
+        if (PillShift.X != shiftX)
         {
-            PillShift.X = shift_x;
+            PillShift.X = shiftX;
         }
 
         if (Captions.Margin != margin)
@@ -1107,14 +1107,14 @@ public sealed partial class MessageBubble : UserControl
     // It Without The Pointer Moving
     private void ShowHoverStrip()
     {
-        bool can_act = Bubble?.CanAct == true;
-        if (can_act == _canAct)
+        bool canAct = Bubble?.CanAct == true;
+        if (canAct == _canAct)
         {
             return;
         }
 
-        _canAct = can_act;
-        ShowHover(can_act && (_pointerOver || _keepShown), Ui.AnimationsEnabled);
+        _canAct = canAct;
+        ShowHover(canAct && (_pointerOver || _keepShown), Ui.AnimationsEnabled);
     }
 
     // Decodes The Card's Image From Its Bytes; Bytes Windows Can't Read Leave The Card Without One. No Card: It Unloads,
@@ -1266,8 +1266,8 @@ public sealed partial class MessageBubble : UserControl
         }
 
         FindName(nameof(Photo));
-        bool same_message = Bubble is not null && ReferenceEquals(Bubble, _photoBubble);
-        if (same_message && KeepSentMedia(_photoPart, part))
+        bool sameMessage = Bubble is not null && ReferenceEquals(Bubble, _photoBubble);
+        if (sameMessage && KeepSentMedia(_photoPart, part))
         {
             // An Echo With Only A Thumbnail (An MMS Photo's) Keeps The Sent Bytes On Show: Loading It Showed The Tiny
             // Thumbnail Blurred, Waiting For A Full Size That May Never Come
@@ -1282,7 +1282,7 @@ public sealed partial class MessageBubble : UserControl
         int load     = NextPhotoLoad();
 
         // Another Message, Or None (A Bubble Without A Photo): Let Go Of The Old Images
-        if (!same_message)
+        if (!sameMessage)
         {
             PhotoBlur.Background        = null;
             PhotoFull.Background        = null;
@@ -1413,23 +1413,23 @@ public sealed partial class MessageBubble : UserControl
             }
 
             // Sharp: Decoded At The Photo's Size. One Already In Memory (A Recycled Row Showing It Again) Shows At Once
-            Task<byte[]> full_task = media.GetAsync(part, thumbnail: false, CancellationToken.None);
-            bool at_once           = full_task.IsCompleted;
-            byte[] full            = await full_task;
-            long decode_start      = System.Diagnostics.Stopwatch.GetTimestamp();
+            Task<byte[]> fullTask  = media.GetAsync(part, thumbnail: false, CancellationToken.None);
+            bool atOnce            = fullTask.IsCompleted;
+            byte[] full            = await fullTask;
+            long decodeStart       = System.Diagnostics.Stopwatch.GetTimestamp();
             if (load != _photoLoad)
             {
                 return;
             }
 
             // Its Size Read From The Same Stream It Decodes From, Then Decoded To Fill The Box
-            double box_width  = Photo.Width;
-            double box_height = Photo.Height;
-            (ImageSource? fitted, int pixel_width, int pixel_height, int decode_width) =
-                await Avatar.ToFittedImageAsync(full, (w, h) => MessageBubbleViewModel.FillDecodeWidth(w, h, box_width, box_height));
+            double boxWidth  = Photo.Width;
+            double boxHeight = Photo.Height;
+            (ImageSource? fitted, int pixelWidth, int pixelHeight, int decodeWidth) =
+                await Avatar.ToFittedImageAsync(full, (w, h) => MessageBubbleViewModel.FillDecodeWidth(w, h, boxWidth, boxHeight));
             ImageSource image = fitted ?? throw new InvalidDataException();
-            long decode_ms    = (long)System.Diagnostics.Stopwatch.GetElapsedTime(decode_start).TotalMilliseconds;
-            AppLog.PhotoDecoded(App.ShellLog, bubble.Id, full.Length, part.Size, pixel_width, pixel_height, decode_width, decode_ms);
+            long decodeMs     = (long)System.Diagnostics.Stopwatch.GetElapsedTime(decodeStart).TotalMilliseconds;
+            AppLog.PhotoDecoded(App.ShellLog, bubble.Id, full.Length, part.Size, pixelWidth, pixelHeight, decodeWidth, decodeMs);
             if (load != _photoLoad)
             {
                 return;
@@ -1443,7 +1443,7 @@ public sealed partial class MessageBubble : UserControl
             WatchGif(gif);
             PhotoFullImage.Source       = animated ? image : null;
             PhotoFull.Background        = animated ? null : new ImageBrush { ImageSource = image, Stretch = Stretch.UniformToFill };
-            PhotoFull.OpacityTransition = at_once || !Ui.AnimationsEnabled ? null : _photoFade;
+            PhotoFull.OpacityTransition = atOnce || !Ui.AnimationsEnabled ? null : _photoFade;
             PhotoFull.Opacity           = 1;
             ClipPhotoFull(mayTake: true);
             TestHooks.ShowState(Photo, "Full");
@@ -1550,13 +1550,13 @@ public sealed partial class MessageBubble : UserControl
             return;
         }
 
-        bool out_of_sight = OutOfSight(args.EffectiveViewport);
-        if (out_of_sight && gif.IsPlaying)
+        bool outOfSight = OutOfSight(args.EffectiveViewport);
+        if (outOfSight && gif.IsPlaying)
         {
             gif.Stop();
             _gifPaused = true;
         }
-        else if (!out_of_sight && _gifPaused)
+        else if (!outOfSight && _gifPaused)
         {
             gif.Play();
             _gifPaused = false;
@@ -1895,11 +1895,11 @@ public sealed partial class MessageBubble : UserControl
         }
 
         // Decoded As Wide As The Video Shows (Sized Before This Runs)
-        int frame_width = (int)Math.Ceiling(Video is { Width: > 0 } box ? box.Width : MaxBubbleWidth);
+        int frameWidth = (int)Math.Ceiling(Video is { Width: > 0 } box ? box.Width : MaxBubbleWidth);
         try
         {
             byte[] bytes      = await VideoStill.GetAsync(media, part);
-            ImageSource image = await Avatar.ToImageAsync(bytes, frame_width) ?? throw new InvalidDataException();
+            ImageSource image = await Avatar.ToImageAsync(bytes, frameWidth) ?? throw new InvalidDataException();
             if (ReferenceEquals(part, _videoPart))
             {
                 VideoThumb.Background = new ImageBrush { ImageSource = image, Stretch = Stretch.UniformToFill };
@@ -2002,7 +2002,7 @@ public sealed partial class MessageBubble : UserControl
         bool play                          = inline?.IsPlaying ?? true;
         FocusState how                     = from.FocusState;
         MessageBubbleViewModel? bubble     = Bubble;
-        Action<TimeSpan, bool>? hand_back  = inline is null ? null : (position, playing) =>
+        Action<TimeSpan, bool>? handBack   = inline is null ? null : (position, playing) =>
         {
             if (ReferenceEquals(Bubble, bubble) && ReferenceEquals(_videoPart, part) && IsLoaded)
             {
@@ -2012,7 +2012,7 @@ public sealed partial class MessageBubble : UserControl
 
         ReleaseVideo();
         ShowVideoNote(null, string.Empty);
-        (Application.Current as App)?.MainWindow?.ShowVideo(part, Bubble?.Id ?? string.Empty, Bubble?.VideoName ?? ChatCopy.Video, VideoFrame, how, start, play, _videoFrameImage, hand_back);
+        (Application.Current as App)?.MainWindow?.ShowVideo(part, Bubble?.Id ?? string.Empty, Bubble?.VideoName ?? ChatCopy.Video, VideoFrame, how, start, play, _videoFrameImage, handBack);
     }
 
     // Scrolled Out Of Sight: The Video Stops (A Realized Row Off Screen Isn't Recycled At Once)

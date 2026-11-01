@@ -190,15 +190,15 @@ internal static class MediaActions
     /// <returns>A task that ends once Explorer was asked.</returns>
     public static async Task ShowInFolderAsync(string path)
     {
-        string folder_path = Path.GetDirectoryName(path) ?? string.Empty;
-        if (TestHooks.RecordLaunch(folder_path))
+        string folderPath = Path.GetDirectoryName(path) ?? string.Empty;
+        if (TestHooks.RecordLaunch(folderPath))
         {
             return;
         }
 
         try
         {
-            StorageFolder folder = await StorageFolder.GetFolderFromPathAsync(folder_path);
+            StorageFolder folder = await StorageFolder.GetFolderFromPathAsync(folderPath);
             var options          = new FolderLauncherOptions();
             options.ItemsToSelect.Add(await StorageFile.GetFileFromPathAsync(path));
             await Launcher.LaunchFolderAsync(folder, options);
