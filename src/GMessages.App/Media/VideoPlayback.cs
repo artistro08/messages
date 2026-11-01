@@ -84,6 +84,11 @@ internal sealed class VideoPlayback : IDisposable
         controls.IsCompact                  = true;
         controls.IsZoomButtonVisible        = false;
 
+        // Across The Whole Video, Inside The Bar's Own 12 px Inset: The Style's 296 px Minimum Ran Past A Narrow Bubble's
+        // Right Edge, And Its 720 px Maximum Left A Wide Video's Bar Short (Owner, Plan 11)
+        controls.MinWidth = 0;
+        controls.MaxWidth = double.PositiveInfinity;
+
         // Cast And Full Window: WinUI 3's Controls Have No Property For Either, And Set The Template's Buttons Visible
         // Themselves (Collapsing Them Fought That And Hung The Window), So Once Made They Get No Width, No Input, No Tab
         // Stop And No Place In Narrator's Tree. The Compact Bar Then Ends At Volume, With No Empty Slot (Owner, Plan 10)

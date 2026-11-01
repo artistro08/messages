@@ -101,6 +101,7 @@ public sealed partial class PhotoViewer : UserControl
     public PhotoViewer()
     {
         InitializeComponent();
+        VideoHost.SizeChanged += (_, _) => FitVideo(_video);
     }
 
     /// <summary>Gets the Save as button's name and tooltip.</summary>
@@ -260,6 +261,7 @@ public sealed partial class PhotoViewer : UserControl
             VideoPlayback video = new(DispatcherQueue, bytes, part.Mime, start, "PhotoViewer.Video", name);
             _video              = video;
             VideoHost.Children.Add(video.Element);
+            video.Player.MediaOpened += (_, _) => DispatcherQueue.TryEnqueue(() => FitVideo(video));
             if (!poster)
             {
                 _ = Grow(VideoHost, part);
@@ -667,6 +669,27 @@ public sealed partial class PhotoViewer : UserControl
     // =========================================================================
     // ZOOM
     // =========================================================================
+
+    // The Player Sized To The Video's Picture, Fitted In Its Host, So Its Bar Spans The Picture As In The Bubble (Owner,
+    // Plan 11), Not The Empty Bands Beside It. Left To Fill The Host Until The Video's Size Is Known
+    private void FitVideo(VideoPlayback? video)
+    {
+        if (video is null || !ReferenceEquals(video, _video))
+        {
+            return;
+        }
+
+        double width  = video.Player.PlaybackSession.NaturalVideoWidth;
+        double height = video.Player.PlaybackSession.NaturalVideoHeight;
+        if (width <= 0 || height <= 0 || VideoHost.ActualWidth <= 0 || VideoHost.ActualHeight <= 0)
+        {
+            return;
+        }
+
+        double scale         = Math.Min(VideoHost.ActualWidth / width, VideoHost.ActualHeight / height);
+        video.Element.Width  = Math.Floor(width * scale);
+        video.Element.Height = Math.Floor(height * scale);
+    }
 
     // At 1x The Photo Fits The Viewport, Inside A 24 px Margin (A Smaller Photo Shows At Its Own Size); Zooming Scales It
     // From There. The Image Is Only As Big As The Photo, So A Click Beside It Isn't On It
