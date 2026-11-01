@@ -193,8 +193,9 @@ public sealed partial class MessageBubble : UserControl
     // The Back's Tap Come In Either Order, So The Tap Waits A Turn
     private bool _linkClicked;
 
-    // The Text And ID The Text's Runs Were Built For: Rebuilt Only When They Change (A Rebuild Drops A Selection)
+    // The Text And Part Key The Text's Runs Were Built For: Rebuilt Only When They Change (A Rebuild Drops A Selection)
     private string? _shownText;
+    private string? _shownKey;
 
     // The Text's Links, Kept In The Text's Color
     private readonly List<Hyperlink> _links = [];
@@ -455,14 +456,13 @@ public sealed partial class MessageBubble : UserControl
     // =========================================================================
 
     /// <summary>
-    /// Gives a part's AutomationId: the prefix, then the message ID or, until the phone has reported the message, the
-    /// temporary ID.
+    /// Gives a part's AutomationId: the prefix, then the bubble's <see cref="MessageBubbleViewModel.PartKey"/> (the message
+    /// ID or, until the phone has reported the message, the temporary ID).
     /// </summary>
     /// <param name="prefix">The prefix, such as "Status.".</param>
-    /// <param name="id">The message ID, or empty.</param>
-    /// <param name="tmpId">The temporary ID, or empty.</param>
+    /// <param name="key">The bubble's part key.</param>
     /// <returns>The AutomationId.</returns>
-    public static string PartIdOf(string prefix, string id, string tmpId) => prefix + (id.Length > 0 ? id : tmpId);
+    public static string PartIdOf(string prefix, string key) => prefix + key;
 
     /// <summary>
     /// Shows an element only when there is text.
@@ -472,28 +472,26 @@ public sealed partial class MessageBubble : UserControl
     public static Visibility ShownIfText(string text) => string.IsNullOrEmpty(text) ? Visibility.Collapsed : Visibility.Visible;
 
     /// <summary>
-    /// Gives the text's AutomationId: the message ID, or the temporary ID until the phone has reported the message.
+    /// Gives the text's AutomationId: <c>Bubble.</c> and the bubble's part key (the message ID, or the temporary ID until
+    /// the phone has reported the message).
     /// </summary>
-    /// <param name="id">The message ID, or empty.</param>
-    /// <param name="tmpId">The temporary ID, or empty.</param>
+    /// <param name="key">The bubble's part key.</param>
     /// <returns>The AutomationId.</returns>
-    public static string AutomationIdOf(string id, string tmpId) => PartIdOf("Bubble.", id, tmpId);
+    public static string AutomationIdOf(string key) => PartIdOf("Bubble.", key);
 
     /// <summary>
     /// Gives the "Not sent" link's AutomationId.
     /// </summary>
-    /// <param name="id">The message ID, or empty.</param>
-    /// <param name="tmpId">The temporary ID, or empty.</param>
+    /// <param name="key">The bubble's part key.</param>
     /// <returns>The AutomationId.</returns>
-    public static string RetryIdOf(string id, string tmpId) => AutomationIdOf(id, tmpId) + ".Retry";
+    public static string RetryIdOf(string key) => AutomationIdOf(key) + ".Retry";
 
     /// <summary>
     /// Gives the time's AutomationId.
     /// </summary>
-    /// <param name="id">The message ID, or empty.</param>
-    /// <param name="tmpId">The temporary ID, or empty.</param>
+    /// <param name="key">The bubble's part key.</param>
     /// <returns>The AutomationId.</returns>
-    public static string TimeIdOf(string id, string tmpId) => AutomationIdOf(id, tmpId) + ".Time";
+    public static string TimeIdOf(string key) => AutomationIdOf(key) + ".Time";
 
     /// <summary>
     /// Shows the time once the bubble was clicked, unless the retry link takes its place or the caption row already shows it.
@@ -899,25 +897,50 @@ public sealed partial class MessageBubble : UserControl
         visual.StartAnimation("Translation", rise);
         _animatedIn = true;
 
-        string id = PartIdOf(string.Empty, Bubble?.Id ?? string.Empty, Bubble?.TmpId ?? string.Empty);
-        AppLog.BubbleAnimatedIn(App.ShellLog, id);
+        AppLog.BubbleAnimatedIn(App.ShellLog, Bubble?.PartKey ?? string.Empty);
     }
 
-    // An Echo Can Make A Sending Bubble RCS, My Reaction Comes And Goes, And A Preview Card Arrives
+    // The Bubble Raises Each Property It Changed By Name (Bindings Follow On Their Own); Only The Work The Name Touches
+    // Runs Here. An Echo Can Make A Sending Bubble RCS, My Reaction Comes And Goes, And A Preview Card Arrives
     private void OnBubblePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        ShowText();
-        ShowStates();
-        if (!_released)
+        switch (e.PropertyName)
         {
-            LoadMedia();
+            // The Text, Or The ID Its Links Are Named By
+            case nameof(MessageBubbleViewModel.BodyText) or nameof(MessageBubbleViewModel.PartKey):
+                ShowText();
+                break;
+
+            // The Side, My Reaction's Fill, And Where The Pill Sits; The Photo's Corners Follow The Side
+            case nameof(MessageBubbleViewModel.FromMe) or nameof(MessageBubbleViewModel.IsRcs)
+                or nameof(MessageBubbleViewModel.HasMyReaction) or nameof(MessageBubbleViewModel.HasReactions):
+                ShowStates();
+                ClipPhotoFull();
+                break;
+
+            // The Media Or The Preview Card Changed: Loaded, Unless The Row Let Go Of Its Media While Waiting To Be Used Again
+            case nameof(MessageBubbleViewModel.Media) or nameof(MessageBubbleViewModel.Preview) or nameof(MessageBubbleViewModel.HasPhoto)
+                or nameof(MessageBubbleViewModel.HasVideo) or nameof(MessageBubbleViewModel.HasFileCard) or nameof(MessageBubbleViewModel.HasVoice):
+                if (!_released)
+                {
+                    LoadMedia();
+                }
+
+                break;
+
+            case nameof(MessageBubbleViewModel.CanAct):
+                ShowHoverStrip();
+                break;
+
+            case nameof(MessageBubbleViewModel.ReactionsText):
+                ShowReactionChange();
+                break;
+
+            // The Photo's Corners Follow The Group (A Bubble Added Below) And The Caption, And A GIF's Clip With Them
+            case nameof(MessageBubbleViewModel.IsFirstInGroup) or nameof(MessageBubbleViewModel.IsLastInGroup) or nameof(MessageBubbleViewModel.HasBodyText):
+                ClipPhotoFull();
+                break;
         }
-
-        ShowHoverStrip();
-        ShowReactionChange();
-
-        // The Photo's Corners Follow The Group (A Bubble Added Below), And A GIF's Clip With Them
-        ClipPhotoFull();
     }
 
     // =========================================================================
@@ -997,7 +1020,7 @@ public sealed partial class MessageBubble : UserControl
 
         visual.StartAnimation(nameof(Visual.Scale), scale);
         visual.StartAnimation(nameof(Visual.Opacity), fade);
-        TestHooks.NoteState("reaction-pop", PartIdOf(string.Empty, Bubble?.Id ?? string.Empty, Bubble?.TmpId ?? string.Empty));
+        TestHooks.NoteState("reaction-pop", Bubble?.PartKey ?? string.Empty);
     }
 
     // Puts The Pill Back At Rest (Full Size, Shown), Stopping A Pop
@@ -1891,7 +1914,7 @@ public sealed partial class MessageBubble : UserControl
                 return;
             }
 
-            string id = PartIdOf("Video.Player.", Bubble?.Id ?? string.Empty, Bubble?.TmpId ?? string.Empty);
+            string id = PartIdOf("Video.Player.", Bubble?.PartKey ?? string.Empty);
             _video         = new VideoPlayback(DispatcherQueue, bytes, part.Mime, start, id, Bubble?.VideoName ?? ChatCopy.Video);
             _video.Failed += OnVideoFailed;
             VideoHost.Children.Add(_video.Element);
@@ -2123,13 +2146,14 @@ public sealed partial class MessageBubble : UserControl
     private void ShowText()
     {
         string text = Bubble?.BodyText ?? string.Empty;
-        string key  = text + "|" + PartIdOf("Link.", Bubble?.Id ?? string.Empty, Bubble?.TmpId ?? string.Empty);
-        if (key == _shownText)
+        string key  = Bubble?.PartKey ?? string.Empty;
+        if (text == _shownText && key == _shownKey)
         {
             return;
         }
 
-        _shownText = key;
+        _shownText = text;
+        _shownKey  = key;
         _links.Clear();
         LinkBlockers.Children.Clear();
 
@@ -2174,7 +2198,7 @@ public sealed partial class MessageBubble : UserControl
     {
         var link = new Hyperlink { Foreground = Body.Foreground, UnderlineStyle = UnderlineStyle.Single };
         link.Inlines.Add(new Run { Text = shown });
-        AutomationProperties.SetAutomationId(link, PartIdOf("Link.", Bubble?.Id ?? string.Empty, Bubble?.TmpId ?? string.Empty) + "." + number);
+        AutomationProperties.SetAutomationId(link, PartIdOf("Link.", Bubble?.PartKey ?? string.Empty) + "." + number);
         link.Click += (_, _) =>
         {
             _linkClicked = true;

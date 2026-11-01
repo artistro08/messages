@@ -393,6 +393,31 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
+    /// A photo sending from here shows the upload bar under it while it uploads; once the phone has it, the bar goes.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task SendPhoto_ShowsUploadBarUntilSent()
+    {
+        await OpenMediaChatAsync();
+        Server.UploadDelay = TimeSpan.FromSeconds(3);
+        Pick(("split.png", Png(300, 200, SplitColors)));
+        App.Find("Chat.Attach").Patterns.Invoke.Pattern.Invoke();
+        App.Find("Chat.Attachment.1");
+        App.Find("Chat.Send").Patterns.Invoke.Pattern.Invoke();
+
+        Wait.Until(() => UploadBar() is not null, AppDriver.DefaultTimeout, () => "The upload bar didn't show while the photo uploaded.");
+        Wait.Until(() => Server.Phone.Sent.Count == 1, AppDriver.DefaultTimeout, () => "The phone didn't get the photo.");
+        Wait.Until(() => UploadBar() is null, AppDriver.DefaultTimeout, () => "The upload bar stayed after the photo was sent.");
+
+        // Any Upload Bar In The Chat, Or Null
+        AutomationElement? UploadBar() =>
+            App.TryFind("Chat.Messages") is { } list
+                ? AppDriver.Search(list, e => e.Properties.AutomationId.ValueOrDefault?.StartsWith("Upload.", StringComparison.Ordinal) == true)
+                : null;
+    }
+
+    /// <summary>
     /// A download that stalls gives up after the download timeout (shortened by the test hook) and shows the photo's
     /// failure; a click tries again and shows it.
     /// </summary>

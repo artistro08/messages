@@ -226,7 +226,7 @@
                             Padding="0"
                             HorizontalAlignment="Stretch"
                             HorizontalContentAlignment="Stretch"
-                            AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('QuoteJump.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                            AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('QuoteJump.', Bubble.PartKey), Mode=OneWay}"
                             AutomationProperties.Name="{x:Bind local:MessageBubble.QuoteJumpText}"
                             x:Load="{x:Bind Bubble.HasQuote, Mode=OneWay, FallbackValue=False}"
                             Click="OnQuoteClick"
@@ -251,7 +251,7 @@
                                     <local:MediaThumb
                                         Margin="0,6,8,6"
                                         VerticalAlignment="Center"
-                                        AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('QuoteThumb.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                                        AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('QuoteThumb.', Bubble.PartKey), Mode=OneWay}"
                                         Media="{x:Bind Bubble.QuoteMedia, Mode=OneWay}"
                                         Visibility="{x:Bind Bubble.HasQuoteMedia, Mode=OneWay, FallbackValue=Collapsed}" />
                                     <StackPanel
@@ -268,7 +268,7 @@
                                             Visibility="{x:Bind local:MessageBubble.ShownIfText(Bubble.QuoteSender), Mode=OneWay, FallbackValue=Collapsed}" />
                                         <TextBlock
                                             x:Name="QuoteText"
-                                            AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Quote.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                                            AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Quote.', Bubble.PartKey), Mode=OneWay}"
                                             FontStyle="{x:Bind local:MessageBubble.LabelStyle(Bubble.QuoteIsLabel), Mode=OneWay}"
                                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                             MaxLines="2"
@@ -291,7 +291,7 @@
                             BorderThickness="0"
                             HorizontalContentAlignment="Stretch"
                             VerticalContentAlignment="Stretch"
-                            AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Bubble.Photo.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                            AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Bubble.Photo.', Bubble.PartKey), Mode=OneWay}"
                             x:Load="{x:Bind Bubble.HasPhoto, Mode=OneWay, FallbackValue=False}"
                             AutomationProperties.Name="{x:Bind Bubble.PhotoName, Mode=OneWay, FallbackValue=''}"
                             Click="OnPhotoClick"
@@ -351,7 +351,7 @@
                                 VerticalAlignment="Stretch"
                                 HorizontalContentAlignment="Stretch"
                                 VerticalContentAlignment="Stretch"
-                                AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Bubble.Video.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                                AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Bubble.Video.', Bubble.PartKey), Mode=OneWay}"
                                 AutomationProperties.Name="{x:Bind Bubble.VideoName, Mode=OneWay, FallbackValue=''}"
                                 BorderThickness="0"
                                 Click="OnVideoFrameClick"
@@ -371,7 +371,7 @@
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center"
                                 BorderThickness="0"
-                                AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Video.Play.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                                AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Video.Play.', Bubble.PartKey), Mode=OneWay}"
                                 AutomationProperties.Name="{x:Bind local:MessageBubble.PlayVideoText}"
                                 Click="OnVideoPlayClick"
                                 Style="{StaticResource IconButtonStyle}"
@@ -397,7 +397,7 @@
                                 HorizontalAlignment="Right"
                                 VerticalAlignment="Top"
                                 BorderThickness="0"
-                                AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Video.Expand.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                                AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Video.Expand.', Bubble.PartKey), Mode=OneWay}"
                                 AutomationProperties.Name="{x:Bind local:MessageBubble.OpenVideoText}"
                                 Click="OnVideoExpandClick"
                                 Style="{StaticResource IconButtonStyle}"
@@ -440,7 +440,7 @@
                             Padding="0"
                             HorizontalAlignment="Stretch"
                             HorizontalContentAlignment="Stretch"
-                            AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Bubble.File.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                            AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Bubble.File.', Bubble.PartKey), Mode=OneWay}"
                             x:Load="{x:Bind Bubble.HasFileCard, Mode=OneWay, FallbackValue=False}"
                             AutomationProperties.Name="{x:Bind Bubble.FileName, Mode=OneWay, FallbackValue=''}"
                             Click="OnFileClick"
@@ -483,7 +483,7 @@
                                 Width="32"
                                 Height="32"
                                 Margin="-6,0,0,0"
-                                AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Voice.Play.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                                AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Voice.Play.', Bubble.PartKey), Mode=OneWay}"
                                 Click="OnVoicePlayClick"
                                 Style="{StaticResource IconButtonStyle}">
                                 <FontIcon x:Name="VoiceGlyph" FontSize="16" />
@@ -492,14 +492,14 @@
                                 x:Name="VoiceBars"
                                 Grid.Column="1"
                                 VerticalAlignment="Center"
-                                AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Voice.Wave.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                                AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Voice.Wave.', Bubble.PartKey), Mode=OneWay}"
                                 BarBrush="{ThemeResource TextFillColorPrimaryBrush}"
                                 SeekRequested="OnVoiceSeekRequested" />
                             <TextBlock
                                 x:Name="VoiceLength"
                                 Grid.Column="2"
                                 VerticalAlignment="Center"
-                                AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Bubble.Voice.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                                AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Bubble.Voice.', Bubble.PartKey), Mode=OneWay}"
                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                 Style="{StaticResource CaptionTextBlockStyle}" />
                         </Grid>
@@ -510,7 +510,7 @@
                             x:Name="UploadBar"
                             Margin="10,6"
                             x:Load="{x:Bind Bubble.IsUploading, Mode=OneWay, FallbackValue=False}"
-                            AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Upload.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                            AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Upload.', Bubble.PartKey), Mode=OneWay}"
                             Maximum="100"
                             Value="{x:Bind Bubble.UploadPercent, Mode=OneWay, FallbackValue=0}" />
 
@@ -521,7 +521,7 @@
                             Visibility="{x:Bind Bubble.HasBodyText, Mode=OneWay, FallbackValue=Collapsed}">
                             <TextBlock
                                 x:Name="Body"
-                                AutomationProperties.AutomationId="{x:Bind local:MessageBubble.AutomationIdOf(Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                                AutomationProperties.AutomationId="{x:Bind local:MessageBubble.AutomationIdOf(Bubble.PartKey), Mode=OneWay}"
                                 AutomationProperties.ItemType="{x:Bind Bubble.ItemTypeName, Mode=OneWay, FallbackValue=''}"
                                 IsTextSelectionEnabled="True"
                                 IsColorFontEnabled="True"
@@ -548,7 +548,7 @@
                             HorizontalAlignment="Stretch"
                             HorizontalContentAlignment="Stretch"
                             x:Load="{x:Bind Bubble.HasPreview, Mode=OneWay, FallbackValue=False}"
-                            AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Preview.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                            AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Preview.', Bubble.PartKey), Mode=OneWay}"
                             AutomationProperties.Name="{x:Bind Bubble.PreviewName, Mode=OneWay, FallbackValue=''}"
                             Click="OnPreviewClick"
                             CornerRadius="8"
@@ -624,7 +624,7 @@
                             Width="32"
                             Height="32"
                             VerticalAlignment="Center"
-                            AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('HoverReact.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                            AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('HoverReact.', Bubble.PartKey), Mode=OneWay}"
                             AutomationProperties.Name="{x:Bind local:MessageBubble.ReactText}"
                             Click="OnHoverReactClick"
                             IsHitTestVisible="False"
@@ -638,7 +638,7 @@
                             Width="32"
                             Height="32"
                             VerticalAlignment="Center"
-                            AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('HoverReply.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                            AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('HoverReply.', Bubble.PartKey), Mode=OneWay}"
                             AutomationProperties.Name="{x:Bind local:MessageBubble.ReplyText}"
                             Click="OnHoverReplyClick"
                             IsHitTestVisible="False"
@@ -652,7 +652,7 @@
                             Width="32"
                             Height="32"
                             VerticalAlignment="Center"
-                            AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('HoverMore.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                            AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('HoverMore.', Bubble.PartKey), Mode=OneWay}"
                             AutomationProperties.Name="{x:Bind local:MessageBubble.MoreOptionsText}"
                             Click="OnHoverMoreClick"
                             IsHitTestVisible="False"
@@ -708,7 +708,7 @@
                         MinHeight="24"
                         Padding="8,0"
                         VerticalContentAlignment="Center"
-                        AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Reactions.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                        AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Reactions.', Bubble.PartKey), Mode=OneWay}"
                         Background="Transparent"
                         BackgroundSizing="OuterBorderEdge"
                         BorderBrush="{ThemeResource ReactionPillBorderBrush}"
@@ -757,7 +757,7 @@
                     <!-- Time (Hidden Until The Bubble Is Clicked), Or The Retry Link When The Send Failed -->
                     <Grid x:Name="Footer">
                         <TextBlock
-                            AutomationProperties.AutomationId="{x:Bind local:MessageBubble.TimeIdOf(Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                            AutomationProperties.AutomationId="{x:Bind local:MessageBubble.TimeIdOf(Bubble.PartKey), Mode=OneWay}"
                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                             Style="{StaticResource CaptionTextBlockStyle}"
                             Text="{x:Bind Bubble.Time, Mode=OneWay}"
@@ -776,7 +776,7 @@
                                 Glyph="&#xE783;" />
                             <HyperlinkButton
                                 Padding="0"
-                                AutomationProperties.AutomationId="{x:Bind local:MessageBubble.RetryIdOf(Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                                AutomationProperties.AutomationId="{x:Bind local:MessageBubble.RetryIdOf(Bubble.PartKey), Mode=OneWay}"
                                 Click="OnRetryClick"
                                 Content="{x:Bind Bubble.NotSentText, Mode=OneWay, FallbackValue=''}"
                                 FontSize="12"
@@ -795,7 +795,7 @@
                         Spacing="4">
                         <TextBlock
                             VerticalAlignment="Center"
-                            AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Caption.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                            AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Caption.', Bubble.PartKey), Mode=OneWay}"
                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                             Style="{StaticResource CaptionTextBlockStyle}"
                             Text="{x:Bind Bubble.Time, Mode=OneWay}" />
@@ -883,7 +883,7 @@
                             <!-- Name: the status words for screen readers and the tests; draws nothing -->
                             <TextBlock
                                 AutomationProperties.AccessibilityView="Content"
-                                AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Status.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
+                                AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Status.', Bubble.PartKey), Mode=OneWay}"
                                 AutomationProperties.LiveSetting="Polite"
                                 AutomationProperties.Name="{x:Bind Bubble.StatusText, Mode=OneWay, FallbackValue=''}" />
                         </Grid>

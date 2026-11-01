@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Diagnostics;
 using GMessages.Presentation.Messaging;
@@ -98,6 +99,15 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     // Again. Dropped When The Chat Closes
     private readonly Dictionary<MessageBubbleViewModel, OutgoingMedia> _outgoing = [];
 
+    // The Bubbles By Message ID And By Temporary ID, Kept In Step With Messages (OnMessagesChanged, Index). A Lookup Checks
+    // The Bubble Still Has The Key
+    private readonly Dictionary<string, MessageBubbleViewModel> _byId    = [];
+    private readonly Dictionary<string, MessageBubbleViewModel> _byTmpId = [];
+
+    // The Conversation The Last Full Refresh Grouped The Bubbles For; A Live Change Refreshes Everything When Its
+    // Participants Differ Since (See SameForBubbles)
+    private ConversationInfo? _bubblesFor;
+
     /// <summary>
     /// Creates an empty chat and starts listening to the store.
     /// </summary>
@@ -122,6 +132,8 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
 
         _typingTimer = time.CreateTimer(_ => _post(OnTypingTimeout), null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
         _isEncrypted = store.IsEncrypted(conversationId);
+
+        Messages.CollectionChanged += OnMessagesChanged;
 
         _store.MessageArrived      += OnMessageArrived;
         _store.Resynced            += OnResynced;
@@ -460,7 +472,7 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
 
         for (int page = 0; ; page++)
         {
-            if (Messages.FirstOrDefault(b => b.Id == messageId) is { } found)
+            if (ById(messageId) is { } found)
             {
                 return found;
             }
@@ -608,8 +620,6 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
                 IsRcs     = is_rcs,
             }));
         }
-
-        RefreshBubbles();
 
         // One At A Time, So They Arrive In Order
         foreach (MessageBubbleViewModel bubble in bubbles)
@@ -781,8 +791,11 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
+        // A New Temporary ID: The Old One Leaves The Lookup
+        _byTmpId.Remove(failed.TmpId);
         failed.MarkSending(GmClient.NewTmpId());
-        RefreshBubbles();
+        Index(failed);
+        RefreshAround(failed);
         await SendBubbleAsync(failed);
     }
 
@@ -815,7 +828,7 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
         {
             _store.LogFailure("send", ex);
             bubble.MarkFailed();
-            RefreshBubbles();
+            RefreshAround(bubble);
         }
     }
 
@@ -848,23 +861,25 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
         if (m.Kind == MessageKind.Tombstone)
         {
             IsEncrypted = _store.IsEncrypted(ConversationId);
-            RefreshStatus(IsEncrypted);
+            RefreshStatus(IsEncrypted, Messages.Count - 1);
             return;
         }
 
         // Only A Message New To This PC Animates In. The Phone Also Sends A Chat's Recent History As Live Messages (On A
         // Catch-Up, And After Start Chat Opens One), Which Showed As The History Loading A Second Time, Bubble By Bubble;
         // Those Go In Quietly, In Time Order
-        if (FindBubble(m) is { } bubble)
+        MessageBubbleViewModel? bubble = FindBubble(m);
+        if (bubble is not null)
         {
             bubble.Update(m);
+            Index(bubble);
         }
         else
         {
-            var added = NewBubble(m);
+            bubble = NewBubble(m);
             if (e.IsNew && !e.IsOld)
             {
-                MarkNewIfShown(added);
+                MarkNewIfShown(bubble);
             }
 
             int at = Messages.Count;
@@ -873,10 +888,10 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
                 at--;
             }
 
-            Messages.Insert(at, added);
+            Messages.Insert(at, bubble);
         }
 
-        RefreshBubbles();
+        RefreshAround(bubble);
 
         // Their Message Ends Their Typing
         if (!m.FromMe && m.ParticipantId == _typingParticipant)
@@ -914,6 +929,12 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
         {
             IsMuted = c.IsMuted;
             Raise(nameof(IsMuted));
+        }
+
+        // Someone Joined, Left Or Was Renamed: Every Bubble's Sender, Avatar And Reactions Follow
+        if (!SameForBubbles(_bubblesFor, c))
+        {
+            RefreshBubbles();
         }
     }
 
@@ -990,6 +1011,7 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
         var bubble = NewBubble(pending);
         MarkNewIfShown(bubble);
         Messages.Add(bubble);
+        RefreshAround(bubble);
         return bubble;
     }
 
@@ -1068,8 +1090,59 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
 
     // Match By ID, Then By The Temporary ID Of A Bubble Sent From Here
     private MessageBubbleViewModel? FindBubble(ChatMessage m) =>
-        Messages.FirstOrDefault(b => m.Id.Length > 0 && b.Id == m.Id)
-        ?? Messages.FirstOrDefault(b => m.TmpId.Length > 0 && b.TmpId == m.TmpId);
+        ById(m.Id) ?? (m.TmpId.Length > 0 && _byTmpId.TryGetValue(m.TmpId, out MessageBubbleViewModel? b) && b.TmpId == m.TmpId ? b : null);
+
+    // The Bubble Shown For A Message ID, Or Null
+    private MessageBubbleViewModel? ById(string id) =>
+        id.Length > 0 && _byId.TryGetValue(id, out MessageBubbleViewModel? b) && b.Id == id ? b : null;
+
+    // Keeps The ID Lookups In Step With The Bubbles Shown
+    private void OnMessagesChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (e.Action == NotifyCollectionChangedAction.Reset)
+        {
+            _byId.Clear();
+            _byTmpId.Clear();
+            foreach (MessageBubbleViewModel b in Messages)
+            {
+                Index(b);
+            }
+
+            return;
+        }
+
+        foreach (MessageBubbleViewModel b in e.OldItems ?? Array.Empty<MessageBubbleViewModel>())
+        {
+            if (_byId.TryGetValue(b.Id, out MessageBubbleViewModel? by_id) && by_id == b)
+            {
+                _byId.Remove(b.Id);
+            }
+
+            if (_byTmpId.TryGetValue(b.TmpId, out MessageBubbleViewModel? by_tmp) && by_tmp == b)
+            {
+                _byTmpId.Remove(b.TmpId);
+            }
+        }
+
+        foreach (MessageBubbleViewModel b in e.NewItems ?? Array.Empty<MessageBubbleViewModel>())
+        {
+            Index(b);
+        }
+    }
+
+    // A Bubble Under Its IDs; Call Again When An Echo Gives It Its ID. The First Bubble With An ID Keeps It
+    private void Index(MessageBubbleViewModel b)
+    {
+        if (b.Id.Length > 0)
+        {
+            _byId.TryAdd(b.Id, b);
+        }
+
+        if (b.TmpId.Length > 0)
+        {
+            _byTmpId.TryAdd(b.TmpId, b);
+        }
+    }
 
     // Shows The Newest Page In Place Of The Bubbles, Reusing (And Updating) The Ones Already Shown So The List Doesn't
     // Redraw Them. Unsent Bubbles, And Ones That Arrived While The Page Was On Its Way (Newer Than Anything In It),
@@ -1077,46 +1150,58 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     private void ShowPage(IReadOnlyList<ChatMessage> page)
     {
         _pageShown = true;
-        List<MessageBubbleViewModel> wanted = [];
+        List<MessageBubbleViewModel> wanted  = [];
+        HashSet<MessageBubbleViewModel> keep = [];
         foreach (ChatMessage m in page.Where(m => m.Kind != MessageKind.Tombstone))
         {
             MessageBubbleViewModel? bubble = FindBubble(m);
-            if (bubble is null || wanted.Contains(bubble))
+            if (bubble is null || keep.Contains(bubble))
             {
                 bubble = NewBubble(m);
             }
             else
             {
                 bubble.Update(m);
+                Index(bubble);
             }
 
             wanted.Add(bubble);
+            keep.Add(bubble);
         }
 
-        DateTimeOffset? newest = page.Count > 0 ? page.Max(m => m.Time) : null;
-        wanted.AddRange([.. Messages
-            .Where(b => !wanted.Contains(b) && (b.Id.Length == 0 || b.SentAt > newest))
-            .OrderBy(b => b.SentAt)]);
+        DateTimeOffset? newest         = page.Count > 0 ? page.Max(m => m.Time) : null;
+        MessageBubbleViewModel[] newer = [.. Messages
+            .Where(b => !keep.Contains(b) && (b.Id.Length == 0 || b.SentAt > newest))
+            .OrderBy(b => b.SentAt)];
+        wanted.AddRange(newer);
+        keep.UnionWith(newer);
 
-        // Drop What The Page No Longer Holds, Then Put Each Bubble In Its Place
+        // Drop What The Page No Longer Holds
         for (int i = Messages.Count - 1; i >= 0; i--)
         {
-            if (!wanted.Contains(Messages[i]))
+            if (!keep.Contains(Messages[i]))
             {
                 Messages.RemoveAt(i);
             }
         }
 
+        // Then Put Each Bubble In Its Place. Usually It Is Already There, So Only One Out Of Place Is Looked For (A
+        // Position Map Would Go Stale With Every Insert Or Move)
+        HashSet<MessageBubbleViewModel> shown = [.. Messages];
         for (int i = 0; i < wanted.Count; i++)
         {
-            int at = Messages.IndexOf(wanted[i]);
-            if (at < 0)
+            if (i < Messages.Count && ReferenceEquals(Messages[i], wanted[i]))
+            {
+                continue;
+            }
+
+            if (shown.Contains(wanted[i]))
+            {
+                Messages.Move(Messages.IndexOf(wanted[i]), i);
+            }
+            else
             {
                 Messages.Insert(i, wanted[i]);
-            }
-            else if (at != i)
-            {
-                Messages.Move(at, i);
             }
         }
 
@@ -1157,17 +1242,47 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
-    // Brings Everything That Depends On The Bubbles Up To Date After Any Change: Senders, Quotes, The Status Line And The Lock
+    // Brings Everything That Depends On The Bubbles Up To Date After A Page, An Older Page, A Trim Or A Conversation
+    // Change: Senders, Quotes, The Status Line And The Lock, On Every Bubble
     private void RefreshBubbles()
     {
         ConversationInfo? c = _store.Find(ConversationId);
+        bool encrypted      = _store.IsEncrypted(ConversationId);
+        _bubblesFor         = c;
 
-        RefreshGroups(c);
+        RefreshGroups(c, 0, Messages.Count - 1);
         RefreshQuotes(c);
-        RefreshStatus(_store.IsEncrypted(ConversationId));
+        RefreshStatus(encrypted, 0);
         RefreshPreviews(c);
-        IsEncrypted = _store.IsEncrypted(ConversationId);
+        IsEncrypted = encrypted;
     }
+
+    // The Same After One Bubble Was Added Or Changed Live: Only It And Its Neighbors Regroup, And Only The Last Two
+    // Bubbles Can Gain Or Lose The Status Line. A Bubble No Longer Shown, Or A Conversation Whose People Changed Since
+    // The Last Full Refresh, Refreshes Everything
+    private void RefreshAround(MessageBubbleViewModel bubble)
+    {
+        ConversationInfo? c = _store.Find(ConversationId);
+        int at              = Messages.IndexOf(bubble);
+        if (at < 0 || !SameForBubbles(_bubblesFor, c))
+        {
+            RefreshBubbles();
+            return;
+        }
+
+        bool encrypted = _store.IsEncrypted(ConversationId);
+        RefreshGroups(c, at - 1, at + 1);
+        RefreshQuotes(c);
+        RefreshStatus(encrypted, Messages.Count - 2);
+        RefreshPreviews(c);
+        IsEncrypted = encrypted;
+    }
+
+    // Whether Two Copies Of The Conversation Show The Bubbles Alike: Group Or Not, Its People (Names, Colors, Which Is Me)
+    // And Who I Send As
+    private static bool SameForBubbles(ConversationInfo? a, ConversationInfo? b) =>
+        ReferenceEquals(a, b)
+        || (a is not null && b is not null && a.IsGroup == b.IsGroup && a.DefaultOutgoingId == b.DefaultOutgoingId && a.Participants.SequenceEqual(b.Participants));
 
     // Asks Once Per Link For Each Bubble's Preview Card, Only In An Inbox Chat: Never For Spam, Blocked Or Archived
     // Chats, Or One Not Known Yet, So A Stranger's Link Is Never Fetched
@@ -1206,12 +1321,14 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     }
 
     // Groups The Bubbles As Google Messages Does: The Same Sender (Me, Or One Person), Each A Few Minutes After The Last.
-    // In A Group Chat A Received Group Is Named Over Its First Bubble And Shows Its Sender's Avatar Beside Its Last
-    private void RefreshGroups(ConversationInfo? c)
+    // In A Group Chat A Received Group Is Named Over Its First Bubble And Shows Its Sender's Avatar Beside Its Last. Only
+    // The Bubbles From One Index To Another (Clamped To The List)
+    private void RefreshGroups(ConversationInfo? c, int from, int to)
     {
         bool is_group = c is { IsGroup: true };
+        int end       = Math.Min(to, Messages.Count - 1);
 
-        for (int i = 0; i < Messages.Count; i++)
+        for (int i = Math.Max(0, from); i <= end; i++)
         {
             MessageBubbleViewModel b = Messages[i];
             bool first               = i == 0 || !SameGroup(Messages[i - 1], b);
@@ -1235,7 +1352,7 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     {
         foreach (MessageBubbleViewModel b in Messages.Where(b => b.HasQuote))
         {
-            if (Messages.FirstOrDefault(q => q.Id == b.ReplyToId) is { } shown)
+            if (ById(b.ReplyToId) is { } shown)
             {
                 b.SetQuote(ChatFormat.SenderName(c?.FindParticipant(shown.ParticipantId)), shown.Text, shown.Media);
             }
@@ -1266,14 +1383,16 @@ public sealed class ChatViewModel : INotifyPropertyChanged, IDisposable
     }
 
     // The Caption Row Goes Under The Chat's Newest Bubble Only, Mine Or Received, With The Lock In An Encrypted Chat. When
-    // It Is Mine: "Sent", "Delivered" Or "Read" (Google's Icon, Named So), Or The Clock While Sending
-    private void RefreshStatus(bool encrypted)
+    // It Is Mine: "Sent", "Delivered" Or "Read" (Google's Icon, Named So), Or The Clock While Sending. Only The Bubbles
+    // From An Index On
+    private void RefreshStatus(bool encrypted, int from)
     {
         MessageBubbleViewModel? newest = Messages.Count > 0 ? Messages[^1] : null;
 
-        foreach (MessageBubbleViewModel b in Messages)
+        for (int i = Math.Max(0, from); i < Messages.Count; i++)
         {
-            bool is_newest = b == newest;
+            MessageBubbleViewModel b = Messages[i];
+            bool is_newest           = b == newest;
             b.SetStatus(is_newest, is_newest && b.FromMe ? ChatFormat.StatusText(b.Status) : string.Empty, is_newest && encrypted);
         }
     }

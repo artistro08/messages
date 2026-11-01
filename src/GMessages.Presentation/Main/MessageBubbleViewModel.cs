@@ -9,12 +9,92 @@ namespace GMessages.Presentation.Main;
 /// One message bubble in the chat.
 /// </summary>
 /// <remarks>
-/// Every change raises <see cref="PropertyChanged"/> once with an empty property name, which tells <c>x:Bind</c> to
-/// re-read every property. Call everything on the UI thread.
+/// A change raises <see cref="PropertyChanged"/> once for each property whose value it moved, computed ones (such as
+/// <see cref="HasPreview"/> or <see cref="ShowsStatusRow"/>) included, so <c>x:Bind</c> re-reads only those bindings.
+/// Call everything on the UI thread.
 /// </remarks>
 public sealed class MessageBubbleViewModel : INotifyPropertyChanged
 {
-    private static readonly PropertyChangedEventArgs AllChanged = new(string.Empty);
+    // Every Public Property, With Its Getter: A Change Compares Them Before And After And Raises Only The Ones That Moved.
+    // The Empty Name Raised Before Made x:Bind Re-Read All Of A Bubble's ~60 Bindings On Every Change. A New Public
+    // Property Goes Here Too (A Test Checks)
+    internal static readonly (string Name, Func<MessageBubbleViewModel, object?> Get)[] Watched =
+    [
+        (nameof(Id), b => b.Id),
+        (nameof(TmpId), b => b.TmpId),
+        (nameof(PartKey), b => b.PartKey),
+        (nameof(ParticipantId), b => b.ParticipantId),
+        (nameof(Text), b => b.Text),
+        (nameof(DisplayText), b => b.DisplayText),
+        (nameof(BodyText), b => b.BodyText),
+        (nameof(HasBodyText), b => b.HasBodyText),
+        (nameof(FromMe), b => b.FromMe),
+        (nameof(SenderName), b => b.SenderName),
+        (nameof(SenderColor), b => b.SenderColor),
+        (nameof(HasSenderName), b => b.HasSenderName),
+        (nameof(IsFirstInGroup), b => b.IsFirstInGroup),
+        (nameof(IsLastInGroup), b => b.IsLastInGroup),
+        (nameof(HasAvatarLane), b => b.HasAvatarLane),
+        (nameof(ShowsAvatar), b => b.ShowsAvatar),
+        (nameof(AvatarInitial), b => b.AvatarInitial),
+        (nameof(AvatarPhotoId), b => b.AvatarPhotoId),
+        (nameof(SentAt), b => b.SentAt),
+        (nameof(Time), b => b.Time),
+        (nameof(IsTimeShown), b => b.IsTimeShown),
+        (nameof(IsNewest), b => b.IsNewest),
+        (nameof(IsCaptionHidden), b => b.IsCaptionHidden),
+        (nameof(IsFailed), b => b.IsFailed),
+        (nameof(IsSending), b => b.IsSending),
+        (nameof(IsRcs), b => b.IsRcs),
+        (nameof(CanAct), b => b.CanAct),
+        (nameof(ItemTypeName), b => b.ItemTypeName),
+        (nameof(StatusText), b => b.StatusText),
+        (nameof(StatusIcon), b => b.StatusIcon),
+        (nameof(ShowsStatusRow), b => b.ShowsStatusRow),
+        (nameof(ShowsLock), b => b.ShowsLock),
+        (nameof(ShowsCaptionDot), b => b.ShowsCaptionDot),
+        (nameof(ReactionsText), b => b.ReactionsText),
+        (nameof(HasReactions), b => b.HasReactions),
+        (nameof(MyReaction), b => b.MyReaction),
+        (nameof(HasMyReaction), b => b.HasMyReaction),
+        (nameof(IsGroupChat), b => b.IsGroupChat),
+        (nameof(ReplyToId), b => b.ReplyToId),
+        (nameof(QuoteSender), b => b.QuoteSender),
+        (nameof(QuoteText), b => b.QuoteText),
+        (nameof(HasQuote), b => b.HasQuote),
+        (nameof(QuoteMedia), b => b.QuoteMedia),
+        (nameof(HasQuoteMedia), b => b.HasQuoteMedia),
+        (nameof(QuoteIsLabel), b => b.QuoteIsLabel),
+        (nameof(MediaLabelText), b => b.MediaLabelText),
+        (nameof(MediaLabelIsLabel), b => b.MediaLabelIsLabel),
+        (nameof(ReplyChipText), b => b.ReplyChipText),
+        (nameof(LinkUrl), b => b.LinkUrl),
+        (nameof(Preview), b => b.Preview),
+        (nameof(HasPreview), b => b.HasPreview),
+        (nameof(PreviewName), b => b.PreviewName),
+        (nameof(Media), b => b.Media),
+        (nameof(HasPhoto), b => b.HasPhoto),
+        (nameof(HasFileCard), b => b.HasFileCard),
+        (nameof(HasVideo), b => b.HasVideo),
+        (nameof(FillsBubble), b => b.FillsBubble),
+        (nameof(HasVoice), b => b.HasVoice),
+        (nameof(HasMediaFile), b => b.HasMediaFile),
+        (nameof(CanOpenMedia), b => b.CanOpenMedia),
+        (nameof(HasCopyText), b => b.HasCopyText),
+        (nameof(IsLocalMedia), b => b.IsLocalMedia),
+        (nameof(IsUploading), b => b.IsUploading),
+        (nameof(UploadPercent), b => b.UploadPercent),
+        (nameof(NotSentText), b => b.NotSentText),
+        (nameof(FileName), b => b.FileName),
+        (nameof(FileSize), b => b.FileSize),
+        (nameof(Kind), b => b.Kind),
+        (nameof(IsMediaPending), b => b.IsMediaPending),
+        (nameof(PhotoName), b => b.PhotoName),
+        (nameof(VideoName), b => b.VideoName),
+    ];
+
+    // One Event Args Per Watched Property, Made Once
+    private static readonly PropertyChangedEventArgs[] WatchedArgs = [.. Watched.Select(w => new PropertyChangedEventArgs(w.Name))];
 
     // The Conversation, For Which Reaction Is Mine; Null When Not Known
     private ConversationInfo? _conversation;
@@ -62,6 +142,12 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
 
     /// <summary>Gets the temporary ID the app made when sending, or empty.</summary>
     public string TmpId { get; private set; } = string.Empty;
+
+    /// <summary>
+    /// Gets what the bubble's AutomationIds end in: the message ID, or the temporary ID until the phone has reported the
+    /// message. Raised only when it changes, so the IDs are built again only then.
+    /// </summary>
+    public string PartKey => Id.Length > 0 ? Id : TmpId;
 
     /// <summary>Gets the sender's participant ID.</summary>
     public string ParticipantId { get; private set; } = string.Empty;
@@ -339,8 +425,9 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     {
         ArgumentNullException.ThrowIfNull(m);
 
+        object?[]? before = Snapshot();
         Fill(m);
-        PropertyChanged?.Invoke(this, AllChanged);
+        RaiseChanges(before);
     }
 
     /// <summary>
@@ -442,6 +529,7 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     /// </summary>
     public void ToggleTime()
     {
+        object?[]? before = Snapshot();
         if (IsNewest)
         {
             IsCaptionHidden = !IsCaptionHidden;
@@ -451,7 +539,7 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
             IsTimeShown = !IsTimeShown;
         }
 
-        PropertyChanged?.Invoke(this, AllChanged);
+        RaiseChanges(before);
     }
 
     /// <summary>
@@ -498,15 +586,10 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
             return;
         }
 
-        _conversation = conversation;
-        string? mine  = FindMyReaction();
-        if (MyReaction == mine)
-        {
-            return;
-        }
-
-        MyReaction = mine;
-        PropertyChanged?.Invoke(this, AllChanged);
+        object?[]? before = Snapshot();
+        _conversation     = conversation;
+        MyReaction        = FindMyReaction();
+        RaiseChanges(before);
     }
 
     // The Newest Bubble Shows The Caption Row; One That Stops Being The Newest Forgets A Click That Hid It, And One That
@@ -520,12 +603,13 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
             return;
         }
 
-        IsNewest        = isNewest;
-        IsCaptionHidden = hidden;
-        IsTimeShown     = time_shown;
-        StatusText      = text;
-        ShowsLock       = showsLock;
-        PropertyChanged?.Invoke(this, AllChanged);
+        object?[]? before = Snapshot();
+        IsNewest          = isNewest;
+        IsCaptionHidden   = hidden;
+        IsTimeShown       = time_shown;
+        StatusText        = text;
+        ShowsLock         = showsLock;
+        RaiseChanges(before);
     }
 
     // Where The Bubble Sits In Its Group, Its Name Over The First And Its Avatar Beside The Last (Group Chats Only)
@@ -540,15 +624,16 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
             return;
         }
 
-        IsFirstInGroup = first;
-        IsLastInGroup  = last;
-        HasAvatarLane  = avatarLane;
-        ShowsAvatar    = shows_avatar;
-        SenderName     = senderName;
-        SenderColor    = senderColor;
-        AvatarInitial  = initial;
-        AvatarPhotoId  = photo_id;
-        PropertyChanged?.Invoke(this, AllChanged);
+        object?[]? before = Snapshot();
+        IsFirstInGroup    = first;
+        IsLastInGroup     = last;
+        HasAvatarLane     = avatarLane;
+        ShowsAvatar       = shows_avatar;
+        SenderName        = senderName;
+        SenderColor       = senderColor;
+        AvatarInitial     = initial;
+        AvatarPhotoId     = photo_id;
+        RaiseChanges(before);
     }
 
     /// <summary>
@@ -574,10 +659,11 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
             return;
         }
 
-        QuoteSender = sender;
-        QuoteText   = shown;
-        QuoteMedia  = media;
-        PropertyChanged?.Invoke(this, AllChanged);
+        object?[]? before = Snapshot();
+        QuoteSender       = sender;
+        QuoteText         = shown;
+        QuoteMedia        = media;
+        RaiseChanges(before);
     }
 
     internal void SetPreview(LinkPreview preview)
@@ -587,9 +673,10 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
             return;
         }
 
-        Preview  = preview;
-        BodyText = BodyOf(Text, DisplayText, _link, preview);
-        PropertyChanged?.Invoke(this, AllChanged);
+        object?[]? before = Snapshot();
+        Preview           = preview;
+        BodyText          = BodyOf(Text, DisplayText, _link, preview);
+        RaiseChanges(before);
     }
 
     // Added Live (Sent, Or Arrived In The Open Chat): Animates In When It First Shows
@@ -597,18 +684,54 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
 
     internal void MarkFailed()
     {
-        IsFailed  = true;
-        IsSending = false;
-        PropertyChanged?.Invoke(this, AllChanged);
+        object?[]? before = Snapshot();
+        IsFailed          = true;
+        IsSending         = false;
+        RaiseChanges(before);
     }
 
     internal void MarkSending(string tmpId)
     {
-        TmpId         = tmpId;
-        IsFailed      = false;
-        IsSending     = true;
-        UploadPercent = 0;
-        PropertyChanged?.Invoke(this, AllChanged);
+        object?[]? before = Snapshot();
+        TmpId             = tmpId;
+        IsFailed          = false;
+        IsSending         = true;
+        UploadPercent     = 0;
+        RaiseChanges(before);
+    }
+
+    // The Watched Values Before A Change; Null When No View Listens (A Bubble Off Screen), So Nothing Is Read
+    private object?[]? Snapshot()
+    {
+        if (PropertyChanged is null)
+        {
+            return null;
+        }
+
+        var values = new object?[Watched.Length];
+        for (int i = 0; i < Watched.Length; i++)
+        {
+            values[i] = Watched[i].Get(this);
+        }
+
+        return values;
+    }
+
+    // Raises Each Watched Property Whose Value The Change Moved
+    private void RaiseChanges(object?[]? before)
+    {
+        if (before is null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < Watched.Length; i++)
+        {
+            if (!Equals(before[i], Watched[i].Get(this)))
+            {
+                PropertyChanged?.Invoke(this, WatchedArgs[i]);
+            }
+        }
     }
 
     // The Upload Moved On: Raised Only When The Whole Percent Changes, So A Big File Doesn't Flood The View

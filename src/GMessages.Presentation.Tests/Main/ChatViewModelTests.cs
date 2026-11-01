@@ -989,6 +989,30 @@ public sealed class ChatViewModelTests
         Assert.AreEqual("four", chat.Messages[^1].Text);
     }
 
+    /// <summary>
+    /// A message from someone else arriving inside a group splits it: the bubbles on either side of it end and start
+    /// their own groups, with only them refreshed.
+    /// </summary>
+    [TestMethod]
+    public async Task LiveInsert_MidGroup_RegroupsNeighbors()
+    {
+        const long Start         = 1_761_700_000_000_000;
+        using var rig            = new MainRig();
+        using ChatViewModel chat = NewChat(rig, null, Msg("m1", "one", ts: Start), Msg("m3", "three", ts: Start + 120_000_000));
+        await chat.LoadAsync();
+        Assert.IsFalse(chat.Messages[0].IsLastInGroup, "m1 and m3 group before");
+        Assert.IsFalse(chat.Messages[1].IsFirstInGroup);
+
+        await rig.LiveMessage(Msg("m2", "two", from: "p-b", ts: Start + 60_000_000));
+
+        Assert.AreEqual("m1,m2,m3", string.Join(",", chat.Messages.Select(b => b.Id)));
+        Assert.IsTrue(chat.Messages[0].IsLastInGroup, "m1 ends its group");
+        Assert.IsTrue(chat.Messages[1].IsFirstInGroup && chat.Messages[1].IsLastInGroup, "m2 is a group of its own");
+        Assert.IsTrue(chat.Messages[2].IsFirstInGroup, "m3 starts its group");
+        Assert.IsTrue(chat.Messages[2].IsNewest, "m3 keeps the caption row");
+        Assert.IsFalse(chat.Messages[1].IsNewest);
+    }
+
     // A Phone With A Long History: m1 (Oldest) To m{count}, A Second Apart. Each Fetch Answers The Page Before The
     // Cursor's Time (In Milliseconds), Newest First, With No Cursor (As Google Sends It)
     private static Func<long, Cursor?, ListMessagesResponse> History(int count) => (size, cursor) =>

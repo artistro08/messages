@@ -210,6 +210,11 @@ public sealed class FakeGoogleServer : IAsyncDisposable
     }
 
     /// <summary>
+    /// Gets or sets how long an upload's finalize waits before it answers, so a test can see the upload bar.
+    /// </summary>
+    public TimeSpan UploadDelay { get; set; }
+
+    /// <summary>
     /// Gets or sets how long a media download waits before it answers (zero: at once), as a stalled download.
     /// </summary>
     public TimeSpan MediaDownloadDelay
@@ -399,6 +404,7 @@ public sealed class FakeGoogleServer : IAsyncDisposable
                     }
 
                     string media_id = Phone.Chats.StoreUpload(await ReadBodyAsync(request));
+                    await Task.Delay(UploadDelay, _stop.Token);
                     var uploaded    = new UploadMediaResponse { Media = new UploadedMedia { MediaID = media_id, MediaNumber = 1 } };
                     await RespondAsync(context.Response, 200, "text/plain", Encoding.ASCII.GetBytes(Convert.ToBase64String(uploaded.ToByteArray())));
                     break;

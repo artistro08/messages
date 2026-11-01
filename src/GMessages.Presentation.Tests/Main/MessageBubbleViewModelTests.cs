@@ -101,14 +101,67 @@ public sealed class MessageBubbleViewModelTests
     [TestMethod]
     public void BodyText_PreviewArrivesLater_UpdatesAndRaisesChange()
     {
-        var bubble  = new MessageBubbleViewModel(Message("see https://x.com today"));
-        int changes = 0;
-        bubble.PropertyChanged += (_, e) => changes += e.PropertyName?.Length == 0 ? 1 : 0;
+        var bubble          = new MessageBubbleViewModel(Message("see https://x.com today"));
+        List<string?> names = [];
+        bubble.PropertyChanged += (_, e) => names.Add(e.PropertyName);
 
         bubble.SetPreview(new LinkPreview(bubble.LinkUrl!, "Title", "x.com", null));
 
         Assert.AreEqual("see today", bubble.BodyText);
-        Assert.AreEqual(1, changes);
+        CollectionAssert.AreEquivalent(
+            new[] { nameof(bubble.BodyText), nameof(bubble.Preview), nameof(bubble.HasPreview), nameof(bubble.PreviewName) },
+            names,
+            "Only what the card changed is raised, by name (the deferred card loads on HasPreview).");
+    }
+
+    /// <summary>
+    /// Every public property is watched, so a change raises it by name; one left out would never update its binding.
+    /// </summary>
+    [TestMethod]
+    public void Watched_CoversEveryPublicProperty()
+    {
+        string[] properties = [.. typeof(MessageBubbleViewModel)
+            .GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)
+            .Select(p => p.Name)];
+
+        CollectionAssert.AreEquivalent(properties, MessageBubbleViewModel.Watched.Select(w => w.Name).ToArray());
+    }
+
+    /// <summary>
+    /// The phone's echo of a sent message raises only what moved (its ID, the sending state and what follows from them),
+    /// never the empty name that re-reads every binding.
+    /// </summary>
+    [TestMethod]
+    public void Update_Echo_RaisesOnlyWhatChanged()
+    {
+        var sending = new ChatMessage(string.Empty, "tmp1", "c1", "me1", DateTimeOffset.UnixEpoch, true, MessageKind.Text, "hi", MessageStatusType.OutgoingSending);
+        var bubble  = new MessageBubbleViewModel(sending, Conversation());
+        bubble.SetStatus(true, "Sending", false);
+        List<string?> names = [];
+        bubble.PropertyChanged += (_, e) => names.Add(e.PropertyName);
+
+        bubble.Update(sending with { Id = "m9", Status = MessageStatusType.OutgoingDelivered });
+
+        CollectionAssert.IsSubsetOf(new[] { nameof(bubble.Id), nameof(bubble.PartKey), nameof(bubble.IsSending), nameof(bubble.CanAct), nameof(bubble.StatusIcon) }, names);
+        CollectionAssert.DoesNotContain(names, string.Empty);
+        CollectionAssert.DoesNotContain(names, nameof(bubble.Text));
+        CollectionAssert.DoesNotContain(names, nameof(bubble.HasPhoto));
+    }
+
+    /// <summary>
+    /// A failed send raises what shows the retry footer and hides the caption row.
+    /// </summary>
+    [TestMethod]
+    public void MarkFailed_RaisesFooterAndCaptionRow()
+    {
+        var bubble = new MessageBubbleViewModel(new ChatMessage(string.Empty, "tmp1", "c1", "me1", DateTimeOffset.UnixEpoch, true, MessageKind.Text, "hi", MessageStatusType.OutgoingSending));
+        bubble.SetStatus(true, string.Empty, false);
+        List<string?> names = [];
+        bubble.PropertyChanged += (_, e) => names.Add(e.PropertyName);
+
+        bubble.MarkFailed();
+
+        CollectionAssert.IsSubsetOf(new[] { nameof(bubble.IsFailed), nameof(bubble.IsSending), nameof(bubble.ShowsStatusRow) }, names);
     }
 
     [TestMethod]
