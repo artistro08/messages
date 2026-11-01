@@ -24,6 +24,7 @@
                 Grid.Column="1"
                 Height="32"
                 AutomationProperties.AutomationId="StartChat.Go"
+                AutomationProperties.Name="{x:Bind local:StartChatPane.GoText}"
                 Click="OnGoClick"
                 IsEnabled="{x:Bind StartChat.CanStart, Mode=OneWay, FallbackValue=False}"
                 Style="{StaticResource AccentButtonStyle}">
