@@ -414,13 +414,15 @@
                                     CornerRadius="{x:Bind local:MessageBubble.PhotoCorners(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup, Bubble.HasBodyText), Mode=OneWay}" />
                             </local:LinkCardButton>
 
-                            <!-- Play: on a round plate over the frame's middle -->
+                            <!-- Play: on a round plate over the frame's middle. No border: the button's 1 px border would
+                                 shrink its content to 46 px and cut the 48 px plate's right and bottom -->
                             <Button
                                 x:Name="VideoPlay"
                                 Width="48"
                                 Height="48"
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center"
+                                BorderThickness="0"
                                 AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Video.Play.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
                                 AutomationProperties.Name="{x:Bind local:MessageBubble.PlayVideoText}"
                                 Click="OnVideoPlayClick"
@@ -446,6 +448,7 @@
                                 Margin="6"
                                 HorizontalAlignment="Right"
                                 VerticalAlignment="Top"
+                                BorderThickness="0"
                                 AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Video.Expand.', Bubble.Id, Bubble.TmpId), Mode=OneWay}"
                                 AutomationProperties.Name="{x:Bind local:MessageBubble.OpenVideoText}"
                                 Click="OnVideoExpandClick"
