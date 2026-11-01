@@ -279,9 +279,9 @@ public sealed partial class MessageBubble : UserControl
         Under.SizeChanged    += (_, _) => LayPill();
         Captions.SizeChanged += (_, _) => LayPill();
 
-        // The Text's Own Menu Would Win A Right-Click On It, So It Gets The Bubble Menu Too (Which Has Copy)
-        Body.ContextFlyout = Menu;
-        Menu.Closed       += (_, _) => KeepShown(false);
+        // The Text's Own Menu Would Win A Right-Click On It, So It Has None: The Request Goes On Up To The Chat Pane, Whose
+        // Bubble Menu Has Copy
+        Body.ContextFlyout = null;
 
         // Links Follow The Text's Color: Its Side's State And The Theme Set It
         Body.RegisterPropertyChangedCallback(TextBlock.ForegroundProperty, (_, _) => ColorLinks());
@@ -302,6 +302,11 @@ public sealed partial class MessageBubble : UserControl
     /// Asks the chat to start a reply to this bubble (the menu's Reply or the hover strip's Reply).
     /// </summary>
     public event EventHandler? ReplyRequested;
+
+    /// <summary>
+    /// Asks the chat to open its bubble menu on this bubble, at the element given: the back, or the hover strip's ⋮.
+    /// </summary>
+    public event EventHandler<FrameworkElement>? MenuRequested;
 
     /// <summary>
     /// Asks the chat's voice player to play, pause or seek this bubble's voice message.
@@ -363,20 +368,16 @@ public sealed partial class MessageBubble : UserControl
     }
 
     /// <summary>
-    /// Opens the bubble menu over the back (the Application key or Shift + F10 on the bubble's row).
+    /// Opens the chat's bubble menu over the back.
     /// </summary>
     public void ShowMenu() => ShowMenu(Back);
 
     /// <summary>
-    /// Opens the bubble menu at an element, such as the hover strip's ⋮.
+    /// Opens the chat's bubble menu at an element, such as the hover strip's ⋮ (see <see cref="MenuRequested"/>).
     /// </summary>
-    /// <remarks>The hover strip stays shown until the menu closes.</remarks>
+    /// <remarks>The chat keeps the hover strip shown until the menu closes.</remarks>
     /// <param name="anchor">The element the menu opens at.</param>
-    public void ShowMenu(FrameworkElement anchor)
-    {
-        KeepShown(true);
-        Menu.ShowAt(anchor);
-    }
+    public void ShowMenu(FrameworkElement anchor) => MenuRequested?.Invoke(this, anchor);
 
     /// <summary>
     /// Shows or hides the ring around the bubble's back, for its row's keyboard focus.
@@ -1910,12 +1911,15 @@ public sealed partial class MessageBubble : UserControl
     // Opens The File In Its Default App (See MediaActions.OpenAsync). True When Opened Or Offered For Saving
     private Task<bool> OpenMediaAsync(MediaPart part) => MediaActions.OpenAsync(XamlRoot, part, Bubble?.Id ?? string.Empty);
 
-    // The Menu's Open: As A Click On The Photo (The Viewer) Or The Card
-    private void OnOpenClick(object sender, RoutedEventArgs e)
+    /// <summary>
+    /// The bubble menu's Open: as a click on the photo (the viewer), the video's frame, the voice message, or the file
+    /// card (its default app).
+    /// </summary>
+    public void Open()
     {
         if (Bubble?.HasFileCard == true)
         {
-            OnFileClick(sender, e);
+            OnFileClick(this, new RoutedEventArgs());
         }
         else if (Bubble?.HasVideo == true)
         {
@@ -1928,8 +1932,10 @@ public sealed partial class MessageBubble : UserControl
         }
     }
 
-    // The Menu's Save As
-    private void OnSaveAsClick(object sender, RoutedEventArgs e)
+    /// <summary>
+    /// The bubble menu's Save as: the Windows Save dialog for the photo or file.
+    /// </summary>
+    public void SaveAs()
     {
         if (Bubble?.Media is { IsPending: false } part)
         {
@@ -1937,8 +1943,10 @@ public sealed partial class MessageBubble : UserControl
         }
     }
 
-    // The Menu's Download: Into The Downloads Folder, With The Window's Confirmation
-    private void OnDownloadClick(object sender, RoutedEventArgs e)
+    /// <summary>
+    /// The bubble menu's Download: into the Downloads folder, with the window's confirmation.
+    /// </summary>
+    public void Download()
     {
         if (Bubble?.Media is { IsPending: false } part)
         {
@@ -2104,7 +2112,7 @@ public sealed partial class MessageBubble : UserControl
         return false;
     }
 
-    // A Clear Strip That Takes The Pointer (A Transparent Fill), With The Bubble's Menu Like The Text
+    // A Clear Strip That Takes The Pointer (A Transparent Fill); Its Right-Click Goes On Up To The Chat's Bubble Menu, Like The Text's
     private void AddBlocker(double left, double top, double width, double height)
     {
         if (width < 1 || height < 1)
@@ -2112,7 +2120,7 @@ public sealed partial class MessageBubble : UserControl
             return;
         }
 
-        var blocker = new Border { Width = width, Height = height, Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent), ContextFlyout = Menu };
+        var blocker = new Border { Width = width, Height = height, Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent) };
         Canvas.SetLeft(blocker, left);
         Canvas.SetTop(blocker, top);
         LinkBlockers.Children.Add(blocker);
@@ -2175,9 +2183,11 @@ public sealed partial class MessageBubble : UserControl
 
     private void OnRetryClick(object sender, RoutedEventArgs e) => RetryRequested?.Invoke(this, EventArgs.Empty);
 
-    // Copies The Selected Text, Or The Whole Text When Nothing Is Selected, As The Text's Own Copy Did; Always As Sent,
-    // Without The VS16 Added For Showing Color Emoji
-    private void OnCopyClick(object sender, RoutedEventArgs e)
+    /// <summary>
+    /// The bubble menu's Copy: the selected text, or the whole text when nothing is selected, as the text's own Copy did.
+    /// </summary>
+    /// <remarks>Always as sent, without the VS16 added for showing color emoji.</remarks>
+    public void Copy()
     {
         string original = Bubble?.Text ?? string.Empty;
         string text     = Body.SelectedText.Length > 0 ? ChatFormat.OriginalOf(original, Body.SelectedText) : original;
@@ -2189,8 +2199,10 @@ public sealed partial class MessageBubble : UserControl
         ToClipboard(text);
     }
 
-    // The Card's Copy Link: The Whole Address As Sent, Though The Text No Longer Shows It
-    private void OnCopyLinkClick(object sender, RoutedEventArgs e)
+    /// <summary>
+    /// The preview card menu's Copy link: the whole address as sent, though the text no longer shows it.
+    /// </summary>
+    public void CopyLink()
     {
         if (Bubble?.LinkUrl is { } url)
         {
@@ -2214,8 +2226,10 @@ public sealed partial class MessageBubble : UserControl
         }
     }
 
-    // The Menu's React: The Picker Opens Over The Back
-    private void OnReactClick(object sender, RoutedEventArgs e) => ReactRequested?.Invoke(this, Back);
+    /// <summary>
+    /// The bubble menu's React: asks the chat to open the reaction picker over the back.
+    /// </summary>
+    public void React() => ReactRequested?.Invoke(this, Back);
 
     // The Pill: Who Reacted, In Every Chat (Never The Picker; The Menu, The Strip And Shift + + Open That)
     private void OnPillClick(object sender, RoutedEventArgs e)
@@ -2308,5 +2322,8 @@ public sealed partial class MessageBubble : UserControl
         }
     }
 
-    private void OnReplyClick(object sender, RoutedEventArgs e) => ReplyRequested?.Invoke(this, EventArgs.Empty);
+    /// <summary>
+    /// The bubble menu's Reply: asks the chat to start a reply to this bubble.
+    /// </summary>
+    public void Reply() => ReplyRequested?.Invoke(this, EventArgs.Empty);
 }

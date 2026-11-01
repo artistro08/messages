@@ -60,8 +60,12 @@ namespace GMessages.App.Views;
 /// <para>
 /// One reaction picker (<c>ReactionPicker</c>, buttons <c>ReactionPicker.1</c> to <c>.7</c>) serves every bubble: a
 /// bubble's menu, or Shift + + on its row, opens it over that bubble (its hover strip's React, over that
-/// button). A bubble's Reply, or Ctrl + Enter on its row, starts the reply and moves to the message box. The
-/// Application key or Shift + F10 on a row opens its menu.
+/// button). A bubble's Reply, or Ctrl + Enter on its row, starts the reply and moves to the message box.
+/// </para>
+/// <para>
+/// One bubble menu (<c>BubbleMenu</c>) serves every bubble too: a right-click on a bubble opens it at the pointer, the
+/// Application key or Shift + F10 on its row over its back, and its hover strip's ⋮ at the ⋮. Its items call the bubble
+/// it opened on. A link preview card opens its own menu (<c>PreviewMenu</c>, with Copy link) instead.
 /// </para>
 /// <para>
 /// The header's ⋮ (<c>Chat.More</c>), or a right-click on the header, raises <see cref="MenuRequested"/>; the chats
@@ -216,6 +220,9 @@ public sealed partial class ChatPane : UserControl
     // More Reactions Picked: What The Emoji Picker Opens For Once The Reaction Picker Has Closed
     private (MessageBubbleViewModel Bubble, MessageBubble View, FrameworkElement Anchor)? _emojiPending;
 
+    // The Bubble The Bubble Menu Or Preview Card Menu Last Opened On (Its Items Act On It)
+    private MessageBubble? _menuView;
+
     // The Picker's Buttons With The Fill Behind Each And Their Emoji, So The One Matching My Reaction Can Show Selected
     private readonly List<(Button Button, Border Back, string Emoji)> _reactionButtons = [];
 
@@ -284,6 +291,9 @@ public sealed partial class ChatPane : UserControl
         ToolTipService.SetToolTip(more, ChatCopy.MoreReactions);
         more.Click += (_, _) => OnMoreReactionsClick();
         ReactionButtons.Children.Add(more);
+
+        // The Bubble Menu Closed: Its Bubble's Hover Strip Hides Unless The Pointer Is On It
+        BubbleMenu.Closed += (_, _) => _menuView?.KeepShown(false);
 
         ReactionPicker.Closed += (_, _) =>
         {
@@ -1737,18 +1747,124 @@ public sealed partial class ChatPane : UserControl
         }
     }
 
-    // The Application Key Or Shift + F10 On A Bubble's Row Opens That Bubble's Menu (A Right-Click On The Bubble Opens It
-    // There, Before This)
+    // =========================================================================
+    // BUBBLE MENU
+    // =========================================================================
+
+    // A Right-Click On A Bubble, Or The Application Key Or Shift + F10 On Its Row Or Inside It, Opens The Bubble Menu On
+    // That Bubble; On A Link Preview Card, The Card's Menu. A Right-Click Opens It At The Pointer, The Keyboard Over The
+    // Bubble's Back (Or The Card)
     private void OnMessageListContextRequested(UIElement sender, ContextRequestedEventArgs e)
     {
-        if (e.OriginalSource is null || RowBubbleView(e.OriginalSource.As<DependencyObject>()) is not { } view)
+        if (e.OriginalSource is null)
+        {
+            return;
+        }
+
+        DependencyObject source = e.OriginalSource.As<DependencyObject>();
+        (MessageBubble? view, FrameworkElement? card) = RowBubbleView(source) is { } row ? (row, null) : BubbleViewAround(source);
+        if (view is null)
         {
             return;
         }
 
         e.Handled = true;
-        view.ShowMenu();
+        if (card is not null)
+        {
+            _menuView = view;
+            ShowMenuAt(PreviewMenu, card, e.TryGetPosition(card, out Windows.Foundation.Point on_card) ? on_card : null);
+            return;
+        }
+
+        bool pointer = e.TryGetPosition(view, out Windows.Foundation.Point at);
+        ShowBubbleMenu(view, pointer ? view : view.Anchor, pointer ? at : null);
     }
+
+    // A Bubble's Hover Strip ⋮, Or Its ShowMenu
+    private void OnMenuRequested(object? sender, FrameworkElement anchor)
+    {
+        if (sender is MessageBubble view)
+        {
+            ShowBubbleMenu(view, anchor, null);
+        }
+    }
+
+    // Opens The Bubble Menu On A Bubble, With The Items It Takes, Keeping Its Hover Strip Shown Until The Menu Closes
+    private void ShowBubbleMenu(MessageBubble view, FrameworkElement anchor, Windows.Foundation.Point? at)
+    {
+        if (view.Bubble is not { } bubble)
+        {
+            return;
+        }
+
+        if (!ReferenceEquals(view, _menuView))
+        {
+            _menuView?.KeepShown(false);
+        }
+
+        _menuView = view;
+        view.KeepShown(true);
+
+        BubbleMenuCopy.Visibility     = bubble.HasCopyText ? Visibility.Visible : Visibility.Collapsed;
+        BubbleMenuOpen.Visibility     = bubble.CanOpenMedia ? Visibility.Visible : Visibility.Collapsed;
+        BubbleMenuSaveAs.Visibility   = bubble.HasMediaFile ? Visibility.Visible : Visibility.Collapsed;
+        BubbleMenuDownload.Visibility = bubble.HasMediaFile ? Visibility.Visible : Visibility.Collapsed;
+        ShowMenuAt(BubbleMenu, anchor, at);
+    }
+
+    // A Menu At A Point On The Element (A Right-Click), Else At The Element Itself
+    private static void ShowMenuAt(MenuFlyout menu, FrameworkElement anchor, Windows.Foundation.Point? at)
+    {
+        if (at is { } point)
+        {
+            menu.ShowAt(anchor, new Microsoft.UI.Xaml.Controls.Primitives.FlyoutShowOptions { Position = point });
+            return;
+        }
+
+        menu.ShowAt(anchor);
+    }
+
+    // The Bubble An Element Sits In, And The Link Preview Card It Sits On (Null Off The Card): Found Going Up By Name, As
+    // FindPart Goes Down (AOT Safe). A Link In The Text Isn't In The Visual Tree, So Its Text Stands In For It
+    private static (MessageBubble? View, FrameworkElement? Card) BubbleViewAround(DependencyObject element)
+    {
+        FrameworkElement? card = null;
+        DependencyObject? at   = element is TextElement text ? text.ContentStart.VisualParent : element;
+        for (; at is not null; at = VisualTreeHelper.GetParent(at))
+        {
+            if (at is not FrameworkElement named)
+            {
+                continue;
+            }
+
+            if (named.Name == "Preview")
+            {
+                card ??= named;
+            }
+            else if (named.Name == "BubbleView")
+            {
+                return (named.As<MessageBubble>(), card);
+            }
+        }
+
+        return (null, null);
+    }
+
+    // The Menus' Items Act On The Bubble The Menu Opened On. It Stays Set After The Menu Closes, Since An Item's Click Can
+    // Come After The Close
+    private void OnBubbleMenuCopyClick(object sender, RoutedEventArgs e) => _menuView?.Copy();
+
+    private void OnBubbleMenuOpenClick(object sender, RoutedEventArgs e) => _menuView?.Open();
+
+    private void OnBubbleMenuSaveAsClick(object sender, RoutedEventArgs e) => _menuView?.SaveAs();
+
+    private void OnBubbleMenuDownloadClick(object sender, RoutedEventArgs e) => _menuView?.Download();
+
+    private void OnBubbleMenuReactClick(object sender, RoutedEventArgs e) => _menuView?.React();
+
+    private void OnBubbleMenuReplyClick(object sender, RoutedEventArgs e) => _menuView?.Reply();
+
+    private void OnPreviewMenuCopyLinkClick(object sender, RoutedEventArgs e) => _menuView?.CopyLink();
 
     // The Header's ⋮: The Menu Opens Below It
     private void OnMoreClick(object sender, RoutedEventArgs e) => MenuRequested?.Invoke(this, (MoreButton, null));

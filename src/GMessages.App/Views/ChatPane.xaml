@@ -7,6 +7,83 @@
     xmlns:local="using:GMessages.App.Views"
     xmlns:main="using:GMessages.Presentation.Main">
 
+    <UserControl.Resources>
+
+        <!-- Bubble Menu: one for every bubble, opened on the bubble it was asked for by a right-click (at the pointer), the
+             Application key or Shift + F10 (over the back), or the hover strip's ⋮ (see OnMessageListContextRequested).
+             Items show for the bubble it opens on: no Copy on a photo or file without a caption, and no Open on a received
+             program or script (only Save as) -->
+        <MenuFlyout x:Name="BubbleMenu">
+            <MenuFlyoutItem
+                x:Name="BubbleMenuCopy"
+                AutomationProperties.AutomationId="Bubble.Copy"
+                Click="OnBubbleMenuCopyClick"
+                Text="{x:Bind controls:MessageBubble.CopyText}">
+                <MenuFlyoutItem.Icon>
+                    <FontIcon Glyph="&#xE8C8;" />
+                </MenuFlyoutItem.Icon>
+            </MenuFlyoutItem>
+            <MenuFlyoutItem
+                x:Name="BubbleMenuOpen"
+                AutomationProperties.AutomationId="Bubble.Open"
+                Click="OnBubbleMenuOpenClick"
+                Text="{x:Bind controls:MessageBubble.OpenText}">
+                <MenuFlyoutItem.Icon>
+                    <FontIcon Glyph="&#xE8E5;" />
+                </MenuFlyoutItem.Icon>
+            </MenuFlyoutItem>
+            <MenuFlyoutItem
+                x:Name="BubbleMenuSaveAs"
+                AutomationProperties.AutomationId="Bubble.SaveAs"
+                Click="OnBubbleMenuSaveAsClick"
+                Text="{x:Bind controls:MessageBubble.SaveAsText}">
+                <MenuFlyoutItem.Icon>
+                    <FontIcon Glyph="&#xE792;" />
+                </MenuFlyoutItem.Icon>
+            </MenuFlyoutItem>
+            <MenuFlyoutItem
+                x:Name="BubbleMenuDownload"
+                AutomationProperties.AutomationId="Bubble.Download"
+                Click="OnBubbleMenuDownloadClick"
+                Text="{x:Bind controls:MessageBubble.DownloadText}">
+                <MenuFlyoutItem.Icon>
+                    <FontIcon Glyph="&#xE896;" />
+                </MenuFlyoutItem.Icon>
+            </MenuFlyoutItem>
+            <MenuFlyoutItem
+                AutomationProperties.AutomationId="Bubble.React"
+                Click="OnBubbleMenuReactClick"
+                KeyboardAcceleratorTextOverride="Shift + +"
+                Text="{x:Bind controls:MessageBubble.ReactText}">
+                <MenuFlyoutItem.Icon>
+                    <FontIcon Glyph="&#xE76E;" />
+                </MenuFlyoutItem.Icon>
+            </MenuFlyoutItem>
+            <MenuFlyoutItem
+                AutomationProperties.AutomationId="Bubble.Reply"
+                Click="OnBubbleMenuReplyClick"
+                KeyboardAcceleratorTextOverride="Ctrl + Enter"
+                Text="{x:Bind controls:MessageBubble.ReplyText}">
+                <MenuFlyoutItem.Icon>
+                    <FontIcon Glyph="&#xE97A;" />
+                </MenuFlyoutItem.Icon>
+            </MenuFlyoutItem>
+        </MenuFlyout>
+        <!-- /Bubble Menu -->
+
+        <!-- Preview Card Menu: a link preview card's own, in place of the bubble menu, with Copy link -->
+        <MenuFlyout x:Name="PreviewMenu">
+            <MenuFlyoutItem
+                AutomationProperties.AutomationId="Preview.CopyLink"
+                Click="OnPreviewMenuCopyLinkClick"
+                Text="{x:Bind controls:MessageBubble.CopyLinkText}">
+                <MenuFlyoutItem.Icon>
+                    <FontIcon Glyph="&#xE71B;" />
+                </MenuFlyoutItem.Icon>
+            </MenuFlyoutItem>
+        </MenuFlyout>
+    </UserControl.Resources>
+
     <Grid RowDefinitions="Auto,*,Auto,Auto,Auto">
 
         <!-- Header: avatar and name, with the lock after it in an encrypted chat (a narrow window's back is the title bar's),
@@ -161,6 +238,7 @@
                     <controls:MessageBubble
                         x:Name="BubbleView"
                         Bubble="{x:Bind}"
+                        MenuRequested="OnMenuRequested"
                         ReactRequested="OnReactRequested"
                         QuoteRequested="OnQuoteRequested"
                         ReplyRequested="OnReplyRequested"
