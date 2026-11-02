@@ -359,20 +359,32 @@ public sealed partial class ChatsView : UserControl
         _ = ScrollFade.Attach(scroller);
     }
 
-    // Start Chat Hides While Scrolling Down And Shows Again Scrolling Up Or At The Top, Sliding And Fading (The Button's
-    // Transitions Animate It). Hidden, It Takes No Clicks Or Tab Stops, And UI Automation Reads "Hidden" As Its Status
+    // Within A Screen Of The Bottom The Next Page Loads, Even When The Last Row Showing Didn't Ask For It (It Asks Only
+    // As It Is Drawn). Start Chat Hides While Scrolling Down And Shows Again Scrolling Up Or At The Top, Sliding And
+    // Fading (Its Backing's Transitions Animate It). Hidden, It Takes No Clicks Or Tab Stops, And UI Automation Reads
+    // "Hidden" As Its Status
     private void OnListScrolled(object? sender, ScrollViewerViewChangedEventArgs e)
     {
-        if (_listScroller is not { } scroller || !_startChatHider.Scrolled(scroller.VerticalOffset))
+        if (_listScroller is not { } scroller)
+        {
+            return;
+        }
+
+        if (!ViewModel.CurrentList.IsLoading && scroller.VerticalOffset >= scroller.ScrollableHeight - scroller.ViewportHeight)
+        {
+            _ = ViewModel.CurrentList.LoadMoreAsync();
+        }
+
+        if (!_startChatHider.Scrolled(scroller.VerticalOffset))
         {
             return;
         }
 
         bool show = _startChatHider.IsShown;
 
-        StartChatButton.Opacity          = show ? 1 : 0;
-        StartChatButton.Translation      = new Vector3(0, show ? 0 : StartChatDrop, StartChatLift);
-        StartChatButton.IsHitTestVisible = show;
+        StartChatHost.Opacity            = show ? 1 : 0;
+        StartChatHost.Translation        = new Vector3(0, show ? 0 : StartChatDrop, StartChatLift);
+        StartChatHost.IsHitTestVisible   = show;
         StartChatButton.IsTabStop        = show;
         AutomationProperties.SetItemStatus(StartChatButton, show ? string.Empty : "Hidden");
     }

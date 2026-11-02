@@ -26,6 +26,10 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
     private readonly TimeProvider _time;
     private readonly Action<Action> _post;
 
+    // Every Conversation The Pages Listed Since The Newest Page: A Page With None New Is The End. Not The Rows, Which
+    // Live Updates Also Fill (The Phone Pushes The Next Page's Conversations Too)
+    private readonly HashSet<string> _paged = [];
+
     // Where The Last Page Ended; Null Means No More Pages
     private Cursor? _next;
     private bool _isLoading;
@@ -163,6 +167,8 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
             }
 
             _next = next;
+            _paged.Clear();
+            _paged.UnionWith(listed);
             foreach (ConversationInfo c in page)
             {
                 Apply(c, live: false);
@@ -188,8 +194,9 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
     /// <remarks>
     /// Call on the UI thread. Does nothing when there are no more pages. Asked while a page is loading, it runs once that
     /// load ends: the list asks when its last row shows, and a row that showed mid-load won't show again until it is
-    /// scrolled away and back (the paging that stalled now and then). A page with no conversation the list doesn't
-    /// already show (empty, or the phone ignored the cursor) is the end, so scrolling never asks for the same page forever.
+    /// scrolled away and back (the paging that stalled now and then). A page with no conversation the earlier pages
+    /// didn't list (empty, or the phone ignored the cursor) is the end, so scrolling never asks for the same page forever.
+    /// A page whose rows live updates had already shown loads the next one at once, as the last row didn't change.
     /// </remarks>
     /// <returns>A task that completes when the page is shown.</returns>
     public async Task LoadMoreAsync()
@@ -214,10 +221,23 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
         {
             (IReadOnlyList<ConversationInfo> page, Cursor? next) = await _store.LoadFolderAsync(_folder, _next, CancellationToken.None);
 
-            _next = page.Any(c => !shown.Contains(c.Id)) ? next : null;
+            bool isNew = false;
+            foreach (ConversationInfo c in page)
+            {
+                isNew |= _paged.Add(c.Id);
+            }
+
+            _next = isNew ? next : null;
             foreach (ConversationInfo c in page)
             {
                 Apply(c, live: false);
+            }
+
+            // Every Row Of The Page Was On Screen Already (Live Updates Brought Them First): The Last Row Didn't Change,
+            // So It Won't Show Again To Ask For The Next Page. Ask Now
+            if (_next is not null && page.All(c => shown.Contains(c.Id)))
+            {
+                _morePending = true;
             }
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)

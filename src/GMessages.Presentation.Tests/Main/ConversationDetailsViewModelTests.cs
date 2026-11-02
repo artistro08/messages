@@ -11,18 +11,23 @@ namespace GMessages.Presentation.Tests.Main;
 public sealed class ConversationDetailsViewModelTests
 {
     [TestMethod]
-    public void People_SkipMe_NumberFallbacks()
+    public void People_SkipMeAndHidden_NumberFallbacks()
     {
         Conversation proto = MainRig.Conv("g", "Team");
         proto.IsGroupChat  = true;
         proto.Participants.Clear();
-        proto.Participants.Add(new Participant { ID = new SmallInfo { ParticipantID = "me", Number = "+15550000000" }, IsMe = true, FullName = "Me" });
-        proto.Participants.Add(new Participant { ID = new SmallInfo { ParticipantID = "p-bo", Number = "+15550000002" }, FullName = "Bo", FormattedNumber = "(555) 000-0002", AvatarHexColor = "#112233" });
-        proto.Participants.Add(new Participant { ID = new SmallInfo { ParticipantID = "p-x", Number = "+15550000009" } });
+        proto.Participants.Add(new Participant { ID = new SmallInfo { ParticipantID = "me", Number = "+15550000000" }, IsMe = true, IsVisible = true, FullName = "Me" });
+        proto.Participants.Add(new Participant { ID = new SmallInfo { ParticipantID = "p-bo", Number = "+15550000002" }, IsVisible = true, FullName = "Bo", FormattedNumber = "(555) 000-0002", AvatarHexColor = "#112233" });
+        proto.Participants.Add(new Participant { ID = new SmallInfo { ParticipantID = "p-x", Number = "+15550000009" }, IsVisible = true });
+
+        // Hidden Ones The Phone Lists But Never Shows: An Old Copy Of Me, Unknown Sender, Someone Who Left
+        proto.Participants.Add(new Participant { ID = new SmallInfo { ParticipantID = "me-old", Number = "+15550000000" }, FullName = "Me", FormattedNumber = "(555) 000-0000" });
+        proto.Participants.Add(new Participant { ID = new SmallInfo { ParticipantID = "unknown", Number = "UNKNOWN_SENDER" }, FormattedNumber = "Unknown sender" });
+        proto.Participants.Add(new Participant { ID = new SmallInfo { ParticipantID = "p-left", Number = "+15550000005" }, FullName = "Left" });
 
         var details = new ConversationDetailsViewModel(ConversationInfo.From(proto));
 
-        // Me Is Left Out; The Phone's Order Is Kept
+        // Me And The Hidden Ones Are Left Out; The Phone's Order Is Kept
         Assert.HasCount(2, details.People);
 
         // A Saved Person: Full Name, Formatted Number, Their Letter, Color And Photo

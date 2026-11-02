@@ -377,6 +377,45 @@ public sealed class ConversationListViewModelTests
     }
 
     /// <summary>
+    /// The next page's conversations can reach the list first as live updates (the phone pushes them): that page is
+    /// still new to the paging, so the paging goes on. Its rows were already on screen, so the last row never changed to
+    /// ask for the next page: it loads at once instead.
+    /// </summary>
+    [TestMethod]
+    public async Task LoadMore_PageAlreadyShownByLiveUpdates_KeepsPaging()
+    {
+        using var rig = new MainRig();
+        rig.Page(MainRig.Conv("a", "Ann"));
+        rig.Client.ConversationsPage.Cursor = new Cursor { LastItemID = "p2" };
+        using var list = NewList(rig);
+        await list.LoadAsync();
+
+        // Page 2's Conversation Arrives Live Before Page 2 Is Asked For
+        Conversation bo = MainRig.Conv("b", "Bo", minutesAgo: 30);
+        await rig.Live(bo);
+        Assert.AreEqual("a,b", Ids(list));
+
+        var page2 = new ListConversationsResponse { Cursor = new Cursor { LastItemID = "p3" } };
+        page2.Conversations.Add(bo);
+        var page3 = new ListConversationsResponse { Cursor = new Cursor { LastItemID = "p4" } };
+        page3.Conversations.Add(MainRig.Conv("c", "Cy", minutesAgo: 60));
+        rig.Client.NextPages.Enqueue(page2);
+        rig.Client.NextPages.Enqueue(page3);
+        rig.Page();
+
+        await list.LoadMoreAsync();
+
+        Assert.AreEqual("a,b,c", Ids(list));
+        Assert.AreEqual(3, rig.Client.ListCalls.Count);
+        Assert.AreEqual("p3", rig.Client.ListCursors[2]?.LastItemID);
+
+        // Page 3 Added A Row, So The Next Page Waits For The List To Ask; The Empty Page After It Ends The Paging
+        await list.LoadMoreAsync();
+        await list.LoadMoreAsync();
+        Assert.AreEqual(4, rig.Client.ListCalls.Count);
+    }
+
+    /// <summary>
     /// The bottom ring shows only while the next page loads, not while the list reloads.
     /// </summary>
     [TestMethod]

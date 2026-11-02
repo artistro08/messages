@@ -33,13 +33,15 @@ public sealed class ConversationDetailsViewModel
         AvatarParts header                       = AvatarParts.Of(c);
         IReadOnlyList<ConversationMenuItem> menu = ConversationMenu.For(c, inHeader: true);
 
-        People   = [.. c.Participants.Where(p => !p.IsMe).Select(p => RowOf(p, c.IsGroup ? null : header))];
+        // Only The People The Phone Shows: A Conversation Also Lists Hidden Ones (Old Copies Of The Owner's Own Number,
+        // "Unknown sender", People Who Left A Group), Which Google Messages Never Shows
+        People   = [.. c.Participants.Where(p => !p.IsMe && p.IsVisible).Select(p => RowOf(p, c.IsGroup ? null : header))];
         IsMuted  = c.IsMuted;
         CanMute  = menu.Contains(ConversationMenuItem.Mute) || menu.Contains(ConversationMenuItem.Unmute);
         CanBlock = menu.Contains(ConversationMenuItem.BlockAndReport);
     }
 
-    /// <summary>Gets everyone in the conversation but the phone's owner, in the phone's order.</summary>
+    /// <summary>Gets everyone the phone shows in the conversation but its owner, in the phone's order.</summary>
     public IReadOnlyList<PersonRow> People { get; }
 
     /// <summary>Gets whether the conversation is muted.</summary>

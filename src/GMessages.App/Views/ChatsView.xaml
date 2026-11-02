@@ -130,7 +130,9 @@
                     IsActive="{x:Bind ViewModel.CurrentList.IsLoadingFirstPage, Mode=OneWay}" />
 
                 <!-- Undo: after an archive (only: owner), for a few seconds (the view model hides it), above Start chat; Undo puts
-                     the conversation back. It never takes the focus (Tab reaches it), and Narrator announces it -->
+                     the conversation back. It never takes the focus (Tab reaches it), and Narrator announces it. It floats over
+                     the rows, so it is solid: the informational tint alone is see-through, and the rows showed through it.
+                     InfoBar draws its Background over that tint -->
                 <InfoBar
                     x:Name="UndoBar"
                     Grid.Row="4"
@@ -139,6 +141,7 @@
                     AutomationProperties.AutomationId="Main.Undo"
                     AutomationProperties.LiveSetting="Polite"
                     AutomationProperties.Name="{x:Bind ViewModel.UndoNotice, Mode=OneWay, FallbackValue=''}"
+                    Background="{ThemeResource SolidBackgroundFillColorTertiaryBrush}"
                     CloseButtonClick="OnUndoClosed"
                     IsClosable="True"
                     IsOpen="{x:Bind ViewModel.HasUndo, Mode=OneWay}"
@@ -156,32 +159,40 @@
                 </InfoBar>
 
                 <!-- Start Chat: floats at the bottom right over the inbox, the standard accent button's size; scrolling down
-                     slides it away, scrolling up brings it back (set from code, animated by its transitions) -->
-                <Button
-                    x:Name="StartChatButton"
+                     slides it away, scrolling up brings it back (set from code on the backing, animated by its transitions).
+                     The backing is solid: Windows' hover, pressed and disabled accent fills are see-through, and the rows
+                     showed through the button -->
+                <Grid
+                    x:Name="StartChatHost"
                     Grid.Row="4"
                     Margin="0,0,16,16"
                     HorizontalAlignment="Right"
                     VerticalAlignment="Bottom"
-                    AutomationProperties.AutomationId="Main.StartChat"
-                    Click="OnStartChatClick"
-                    Style="{StaticResource AccentButtonStyle}"
+                    Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+                    CornerRadius="{ThemeResource ControlCornerRadius}"
                     Translation="0,0,16"
                     Visibility="{x:Bind local:MainWindow.HiddenIf(ViewModel.IsFolderView), Mode=OneWay}">
-                    <Button.Shadow>
+                    <Grid.Shadow>
                         <ThemeShadow />
-                    </Button.Shadow>
-                    <Button.OpacityTransition>
+                    </Grid.Shadow>
+                    <Grid.OpacityTransition>
                         <ScalarTransition />
-                    </Button.OpacityTransition>
-                    <Button.TranslationTransition>
+                    </Grid.OpacityTransition>
+                    <Grid.TranslationTransition>
                         <Vector3Transition />
-                    </Button.TranslationTransition>
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <FontIcon FontSize="16" Glyph="&#xE8BD;" />
-                        <TextBlock x:Name="StartChatText" />
-                    </StackPanel>
-                </Button>
+                    </Grid.TranslationTransition>
+                    <Button
+                        x:Name="StartChatButton"
+                        AutomationProperties.AutomationId="Main.StartChat"
+                        Click="OnStartChatClick"
+                        Style="{StaticResource AccentButtonStyle}">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon FontSize="16" Glyph="&#xE8BD;" />
+                            <TextBlock x:Name="StartChatText" />
+                        </StackPanel>
+                    </Button>
+                </Grid>
+                <!-- /Start Chat -->
             </Grid>
         </SplitView.Pane>
         <!-- /List Pane -->

@@ -18,6 +18,9 @@ internal sealed class FakeMessagingClient : IMessagingClient
 
     public ListConversationsResponse ConversationsPage { get; set; } = new();
 
+    /// <summary>Pages the next list calls return, in order, before falling back to <see cref="ConversationsPage"/>.</summary>
+    public Queue<ListConversationsResponse> NextPages { get; } = new();
+
     public ListMessagesResponse MessagesPage { get; set; } = new();
 
     public SendMessageResponse SendAnswer { get; set; } = new() { Status = SendMessageResponse.Types.Status.Success };
@@ -49,7 +52,7 @@ internal sealed class FakeMessagingClient : IMessagingClient
             throw ex;
         }
 
-        ListConversationsResponse page = ConversationsPage;
+        ListConversationsResponse page = NextPages.Count > 0 ? NextPages.Dequeue() : ConversationsPage;
 
         if (ListGate is { } gate)
         {
