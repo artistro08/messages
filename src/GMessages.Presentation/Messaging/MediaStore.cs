@@ -27,9 +27,7 @@ namespace GMessages.Presentation.Messaging;
 /// types are never logged; only counts and error type names are. Safe to call from any thread.
 /// </para>
 /// </remarks>
-#pragma warning disable CA1001 // Lives As Long As The App; Clear Cancels Its Token Source And Replaces It
-public sealed partial class MediaStore
-#pragma warning restore CA1001
+public sealed partial class MediaStore : IDisposable
 {
     /// <summary>How many bytes of decrypted media stay in memory.</summary>
     public const long MemoryCapBytes = 64L * 1024 * 1024;
@@ -434,6 +432,19 @@ public sealed partial class MediaStore
     }
 
     /// <summary>
+    /// Releases the token source and the frame gate. The temp folder is left to <see cref="Clear"/>.
+    /// </summary>
+    public void Dispose()
+    {
+        lock (_lock)
+        {
+            _generationCancel.Dispose();
+        }
+
+        _frameTurn.Dispose();
+    }
+
+    /// <summary>
     /// Drops the decrypted bytes held in memory (the window closed); temp files and downloads on their way are left alone.
     /// </summary>
     /// <remarks>A download still running may add one item back afterward.</remarks>
@@ -461,6 +472,7 @@ public sealed partial class MediaStore
         {
             _generation++;
             _generationCancel.Cancel();
+            _generationCancel.Dispose();
             _generationCancel = new CancellationTokenSource();
             _cache.Clear();
             _cachedBytes = 0;

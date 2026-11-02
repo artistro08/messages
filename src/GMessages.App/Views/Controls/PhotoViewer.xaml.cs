@@ -218,7 +218,7 @@ public sealed partial class PhotoViewer : UserControl
                 _decodedWidth     = decodeWidth;
                 PhotoImage.Source = image;
                 TestHooks.NoteState("viewer-decode", decodeWidth.ToString(System.Globalization.CultureInfo.InvariantCulture));
-                _ = Grow(PhotoImage, null);
+                _ = GrowAsync(PhotoImage, null);
             }
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -263,7 +263,7 @@ public sealed partial class PhotoViewer : UserControl
         bool poster = frame is not null && Ui.AnimationsEnabled;
         _poster     = poster ? frame : null;
         ShowPoster(_poster);
-        Task grown = poster ? Grow(VideoPoster, null, "GrewStill") : Task.CompletedTask;
+        Task grown = poster ? GrowAsync(VideoPoster, null, "GrewStill") : Task.CompletedTask;
         try
         {
             if ((Application.Current as App)?.Media is not { } media)
@@ -283,7 +283,7 @@ public sealed partial class PhotoViewer : UserControl
             video.Player.MediaOpened += (_, _) => DispatcherQueue.TryEnqueue(() => FitVideo(video));
             if (!poster)
             {
-                _ = Grow(VideoHost, part);
+                _ = GrowAsync(VideoHost, part);
             }
 
             await grown;
@@ -432,7 +432,7 @@ public sealed partial class PhotoViewer : UserControl
 
     // The Photo Or Video Is In: The Stage Shows, Growing From The Bubble's Place, Size And Crop Into Its Own (See Morph).
     // Without The Bubble, Or With Animations Off, It Just Shows. The Task Ends When The Growth Has
-    private Task Grow(FrameworkElement target, MediaPart? video, string grew = "Grew")
+    private Task GrowAsync(FrameworkElement target, MediaPart? video, string grew = "Grew")
     {
         if (!Ui.AnimationsEnabled)
         {

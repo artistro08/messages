@@ -140,11 +140,11 @@ internal static class TestHooks
     /// there.
     /// </summary>
     /// <remarks>
-    /// The paste must decide at once whether it takes the paste, so this answers synchronously, waiting for the files
-    /// (test runs only).
+    /// The paste takes itself at once in a test run (see <see cref="BlockLaunches"/>), so the caller decides before
+    /// awaiting this (test runs only).
     /// </remarks>
     /// <returns>The clipboard's content, or null to read the real clipboard (a normal run, or no file).</returns>
-    public static Windows.ApplicationModel.DataTransfer.DataPackageView? PasteContent()
+    public static async Task<Windows.ApplicationModel.DataTransfer.DataPackageView?> PasteContentAsync()
     {
         if (!BlockLaunches || DataDir is null)
         {
@@ -169,14 +169,14 @@ internal static class TestHooks
                     package.SetText(line[5..]);
                     break;
                 case "file":
-                    files.Add(Windows.Storage.StorageFile.GetFileFromPathAsync(line[5..]).AsTask().GetAwaiter().GetResult());
+                    files.Add(await Windows.Storage.StorageFile.GetFileFromPathAsync(line[5..]));
                     break;
                 case "html":
                     package.SetHtmlFormat(Windows.ApplicationModel.DataTransfer.HtmlFormatHelper.CreateHtmlFormat(line[5..]));
                     break;
                 case "bitmap":
                     package.SetBitmap(Windows.Storage.Streams.RandomAccessStreamReference.CreateFromFile(
-                        Windows.Storage.StorageFile.GetFileFromPathAsync(line[7..]).AsTask().GetAwaiter().GetResult()));
+                        await Windows.Storage.StorageFile.GetFileFromPathAsync(line[7..])));
                     break;
                 case "format":
                     var stream    = new Windows.Storage.Streams.InMemoryRandomAccessStream();
@@ -326,7 +326,8 @@ internal static class TestHooks
 
     /// <summary>Always null in Release: a paste reads the real clipboard.</summary>
     /// <returns>Null.</returns>
-    public static Windows.ApplicationModel.DataTransfer.DataPackageView? PasteContent() => null;
+    public static Task<Windows.ApplicationModel.DataTransfer.DataPackageView?> PasteContentAsync() =>
+        Task.FromResult<Windows.ApplicationModel.DataTransfer.DataPackageView?>(null);
 
     /// <summary>Always null in Release: the real Save as dialog opens.</summary>
     /// <returns>Null.</returns>

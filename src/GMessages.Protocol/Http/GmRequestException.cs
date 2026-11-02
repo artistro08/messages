@@ -15,7 +15,7 @@ namespace GMessages.Protocol.Http;
 /// <param name="statusCode">The HTTP status code.</param>
 /// <param name="error">Google's decoded error, or null.</param>
 /// <param name="body">The raw response body.</param>
-public class GmRequestException(int statusCode, ErrorResponse? error, byte[] body)
+public sealed class GmRequestException(int statusCode, ErrorResponse? error, byte[] body)
     : Exception(error is { Message.Length: > 0 } ? $"HTTP {statusCode}: {error.Message}" : $"HTTP {statusCode}")
 {
     /// <summary>The HTTP status code.</summary>

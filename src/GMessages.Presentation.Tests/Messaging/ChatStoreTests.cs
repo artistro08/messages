@@ -380,7 +380,7 @@ public sealed class ChatStoreTests
         // A Fresh Store On The Same File (Nothing In Memory), Its Queue Held Up By A Slow Save
         using var reopened = new ChatStore(rig.Controller, () => rig.Client, NullLogger.Instance, rig.Database, rig.Time, rig.Media);
         using var gate     = new ManualResetEventSlim();
-        Task held          = reopened.Enqueue(_ => gate.Wait(TimeSpan.FromSeconds(10)));
+        Task held          = reopened.EnqueueAsync(_ => gate.Wait(TimeSpan.FromSeconds(10)));
 
         Task<IReadOnlyList<ChatMessage>?> read = reopened.CachedMessagesAsync("c1");
         Task first                             = await Task.WhenAny(read, Task.Delay(TimeSpan.FromSeconds(3)));

@@ -344,7 +344,13 @@ public sealed partial class LongPollLoop(
                     continue;
                 }
 
-                using (res)
+                // Open Without An Error Always Has A Response; This Guard Only Narrows The Type
+                if (res is not { } response)
+                {
+                    continue;
+                }
+
+                using (response)
                 {
                     // Go (longpoll.go:578-583): A Reconnect While Opening Closes This Stream And Starts Over
                     if (TakeReconnect())
@@ -363,7 +369,7 @@ public sealed partial class LongPollLoop(
                     Volatile.Write(ref _connected, 1);
                     if (loggedIn && disconnectedAt is { } since && time.GetUtcNow() - since > GapCatchUp)
                     {
-                        _ = _pinger!.RequestUpdatesAfterGapAsync("long polling was disconnected");
+                        _ = _pinger?.RequestUpdatesAfterGapAsync("long polling was disconnected");
                     }
 
                     if (firstConnect is not null)
@@ -377,7 +383,7 @@ public sealed partial class LongPollLoop(
                     {
                         // Reaching The Lifetime Ends The Read Like Any Stream End: No Error, Reopen After The Refresh Check
                         using var readCts = CancellationTokenSource.CreateLinkedTokenSource(attemptCts.Token, lifetimeCts.Token);
-                        await ReadAsync(res!, readCts.Token, stop).ConfigureAwait(false);
+                        await ReadAsync(response, readCts.Token, stop).ConfigureAwait(false);
                     }
                     finally
                     {

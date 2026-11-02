@@ -212,7 +212,7 @@ public sealed partial class ChatStore : IDisposable
         // Taken Now, Not When The Queue Gets To It: A Reset Meanwhile Means These Rows Are The Old Account's
         int generation = Generation;
 
-        return Enqueue(database =>
+        return EnqueueAsync(database =>
         {
             if (generation != Generation)
             {
@@ -367,12 +367,12 @@ public sealed partial class ChatStore : IDisposable
             return null;
         }
 
-        // Ahead Of Queued Saves (See ReadNow), Timed: How Long It Waited, Then Read
+        // Ahead Of Queued Saves (See ReadNowAsync), Timed: How Long It Waited, Then Read
         int generation               = Generation;
         IReadOnlyList<Message> saved = [];
         long asked                   = Stopwatch.GetTimestamp();
         long started                 = asked;
-        await ReadNow(database =>
+        await ReadNowAsync(database =>
         {
             started = Stopwatch.GetTimestamp();
             if (generation == Generation)
@@ -447,10 +447,10 @@ public sealed partial class ChatStore : IDisposable
             return null;
         }
 
-        // Ahead Of Queued Saves (See ReadNow)
+        // Ahead Of Queued Saves (See ReadNowAsync)
         int generation = Generation;
         Message? saved = null;
-        await ReadNow(database =>
+        await ReadNowAsync(database =>
         {
             if (generation == Generation)
             {
@@ -483,7 +483,7 @@ public sealed partial class ChatStore : IDisposable
         IMessagingClient client = RequireClient();
 
         int generation                = Generation;
-        ConversationInfo conversation = await RequireConversationAsync(client, conversationId, generation, ct);
+        ConversationInfo conversation = await RequireConversationAsync(client, conversationId, generation, ct).ConfigureAwait(false);
         string outgoingId             = conversation.DefaultOutgoingId;
 
         SendMessageRequest request = NewSendRequest(conversationId, conversation, tmpId);
@@ -595,7 +595,7 @@ public sealed partial class ChatStore : IDisposable
         IMessagingClient client = RequireClient();
 
         int generation                = Generation;
-        ConversationInfo conversation = await RequireConversationAsync(client, conversationId, generation, ct);
+        ConversationInfo conversation = await RequireConversationAsync(client, conversationId, generation, ct).ConfigureAwait(false);
         string text                   = caption ?? string.Empty;
         bool captionApart             = conversation.IsRcs && text.Length > 0;
 
@@ -663,7 +663,7 @@ public sealed partial class ChatStore : IDisposable
     {
         IMessagingClient client = RequireClient();
 
-        ConversationInfo conversation = await RequireConversationAsync(client, conversationId, Generation, ct);
+        ConversationInfo conversation = await RequireConversationAsync(client, conversationId, Generation, ct).ConfigureAwait(false);
 
         var request = new SendReactionRequest
         {
@@ -694,7 +694,7 @@ public sealed partial class ChatStore : IDisposable
     {
         IMessagingClient client = RequireClient();
 
-        ConversationInfo conversation = await RequireConversationAsync(client, conversationId, Generation, ct);
+        ConversationInfo conversation = await RequireConversationAsync(client, conversationId, Generation, ct).ConfigureAwait(false);
         await client.SetTypingAsync(conversationId, SimOf(conversation), ct).ConfigureAwait(false);
     }
 
@@ -918,7 +918,7 @@ public sealed partial class ChatStore : IDisposable
             _me = null;
         }
 
-        _ = Enqueue(database => database.Delete());
+        _ = EnqueueAsync(database => database.Delete());
         _sims = [];
         SetBatteryLow(false);
 
@@ -976,7 +976,7 @@ public sealed partial class ChatStore : IDisposable
                 break;
 
             case MessageReceived received:
-                await HandleMessageAsync(received);
+                await HandleMessageAsync(received).ConfigureAwait(false);
                 break;
 
             case SettingsChanged settings:
@@ -1324,7 +1324,7 @@ public sealed partial class ChatStore : IDisposable
     /// <remarks>Without a database nothing runs. A failure logs its error type only.</remarks>
     /// <param name="work">The call.</param>
     /// <returns>A task that completes when the call has run.</returns>
-    internal Task Enqueue(Action<MessageDatabase> work)
+    internal Task EnqueueAsync(Action<MessageDatabase> work)
     {
         if (_database is not { } database)
         {
@@ -1359,7 +1359,7 @@ public sealed partial class ChatStore : IDisposable
     // Call In At A Time, So It Waits For One Save At Most. A Read Just After A Reset Is Skipped By Its Generation Check
     // ponytail: the check and the read aren't atomic, so a read racing a Reset can recreate an empty file after its
     // delete; harmless (the next account's saves use it), add a reset gate in MessageDatabase if it ever matters
-    private Task ReadNow(Action<MessageDatabase> work)
+    private Task ReadNowAsync(Action<MessageDatabase> work)
     {
         if (_database is not { } database)
         {
@@ -1387,7 +1387,7 @@ public sealed partial class ChatStore : IDisposable
             return;
         }
 
-        _ = Enqueue(database =>
+        _ = EnqueueAsync(database =>
         {
             if (generation == Generation)
             {
@@ -1405,7 +1405,7 @@ public sealed partial class ChatStore : IDisposable
             return;
         }
 
-        _ = Enqueue(database =>
+        _ = EnqueueAsync(database =>
         {
             if (generation == Generation)
             {
@@ -1436,7 +1436,7 @@ public sealed partial class ChatStore : IDisposable
             _encryption.AddOrUpdate(conversationId, state, (_, old) => state.At > old.At ? state : old);
         }
 
-        _ = Enqueue(database =>
+        _ = EnqueueAsync(database =>
         {
             if (generation == Generation)
             {

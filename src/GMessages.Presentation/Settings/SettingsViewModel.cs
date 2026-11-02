@@ -320,7 +320,7 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged, IDisposa
     {
         try
         {
-            _startWithWindows = await _startup.IsEnabledAsync().ConfigureAwait(true);
+            _startWithWindows = await _startup.IsEnabledAsync();
             Raise(nameof(StartWithWindows));
         }
 #pragma warning disable CA1031 // The Switch Just Stays Off; The Failure Is Logged
@@ -339,7 +339,7 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged, IDisposa
         bool actual;
         try
         {
-            actual = await _startup.SetEnabledAsync(enabled).ConfigureAwait(true);
+            actual = await _startup.SetEnabledAsync(enabled);
             if (enabled && !actual)
             {
                 StartupMessage = ChatCopy.StartupRefused;
@@ -401,7 +401,7 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged, IDisposa
         IsUnpairing = true;
         try
         {
-            await _controller.UnpairAsync().ConfigureAwait(true);
+            await _controller.UnpairAsync();
         }
 #pragma warning disable CA1031 // Unpaired Locally Regardless; The Server Error Is Logged
         catch (Exception ex)

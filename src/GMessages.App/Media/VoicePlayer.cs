@@ -174,15 +174,20 @@ internal sealed class VoicePlayer : IDisposable
     // Plays Or Pauses The Loaded Message, Following It Ten Times A Second While It Plays
     private void Play(bool play)
     {
+        if (_player is not { } player)
+        {
+            return;
+        }
+
         _playing = play;
         if (play)
         {
-            _player!.Play();
+            player.Play();
             _timer.Start();
         }
         else
         {
-            _player!.Pause();
+            player.Pause();
             _timer.Stop();
         }
 

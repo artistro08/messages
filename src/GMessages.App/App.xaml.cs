@@ -29,7 +29,7 @@ namespace GMessages.App;
 /// <remarks>
 /// The tray wiring, quit/show event watching and memory trim are ported from Magic Buds' <c>App.xaml.cs</c>.
 /// </remarks>
-public partial class App : Application, IDisposable
+public sealed partial class App : Application, IDisposable
 {
     // =========================================================================
     // TRAY ICON GUIDS
@@ -296,7 +296,10 @@ public partial class App : Application, IDisposable
     {
         try
         {
-            await _connection!.StartAsync();
+            if (_connection is { } connection)
+            {
+                await connection.StartAsync();
+            }
         }
 #pragma warning disable CA1031 // Start-up must not take the tray down; the failure is logged
         catch (Exception ex)
@@ -755,6 +758,7 @@ public partial class App : Application, IDisposable
         _trayMenu?.Close();
         CloseWindows();
         _store?.Dispose();
+        _media?.Dispose();
         _logProvider?.Dispose();
         GC.SuppressFinalize(this);
     }
@@ -805,10 +809,11 @@ public partial class App : Application, IDisposable
             savesMs = (long)Stopwatch.GetElapsedTime(step).TotalMilliseconds;
         }
 #pragma warning disable CA1031 // Quitting regardless
-        catch (Exception)
+        catch (Exception ex)
 #pragma warning restore CA1031
         {
-            // Nothing left to do but exit
+            // Nothing Left To Do But Exit; Only The Type Is Logged
+            AppLog.QuitStepFailed(_logger, ex.GetType().Name);
         }
         finally
         {

@@ -107,6 +107,9 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 935, Level = LogLevel.Warning, Message = "Sign-in navigation blocked (scheme {Scheme})")]
     public static partial void SignInNavigationBlocked(ILogger logger, string scheme);
 
+    [LoggerMessage(EventId = 936, Level = LogLevel.Warning, Message = "Quit step failed ({ErrorType})")]
+    public static partial void QuitStepFailed(ILogger logger, string errorType);
+
     [LoggerMessage(EventId = 951,Level = LogLevel.Information, Message = "Test endpoint {Endpoint}, data folder {DataFolder}")]
     public static partial void TestEndpoint(ILogger logger, string endpoint, string dataFolder);
 }

@@ -1009,6 +1009,14 @@ public sealed partial class ChatPane : UserControl
     // Clipboard Pastes It As Chips (The Box Would Ignore A Picture)
     private void OnDraftKeyDown(object sender, KeyRoutedEventArgs e)
     {
+        // Test Run: Every Paste Is Ours At Once; The Hook's Clipboard Is Built After This Event
+        if (IsPasteKey(e.Key) && TestHooks.BlockLaunches)
+        {
+            e.Handled = true;
+            _ = PasteFromTestHookAsync();
+            return;
+        }
+
         if (IsPasteKey(e.Key) && ClipboardView() is { } view && OwnsPaste(view))
         {
             e.Handled = true;
@@ -1516,14 +1524,19 @@ public sealed partial class ChatPane : UserControl
     // PASTING
     // =========================================================================
 
-    // The Clipboard (The Test's Under The Test Hooks, When It Set One); Null When Windows Won't Hand It Over (Another App Holds It)
+    // The Test's Clipboard When It Set One, Else The Real One; Pasted As Owned (Under The Test Hooks Every Paste Is)
+    private async Task PasteFromTestHookAsync()
+    {
+        DataPackageView? view = await TestHooks.PasteContentAsync() ?? ClipboardView();
+        if (view is not null)
+        {
+            Paste(view, owned: true);
+        }
+    }
+
+    // The Clipboard; Null When Windows Won't Hand It Over (Another App Holds It)
     private static DataPackageView? ClipboardView()
     {
-        if (TestHooks.PasteContent() is { } test)
-        {
-            return test;
-        }
-
         try
         {
             return Clipboard.GetContent();
@@ -1550,6 +1563,14 @@ public sealed partial class ChatPane : UserControl
     // The Box's Own Paste (Its Menu's Paste, Or Any Paste The Keys Above Didn't Take): Media Becomes Chips, Text Is Left To It
     private void OnDraftPaste(object sender, TextControlPasteEventArgs e)
     {
+        // Test Run: Every Paste Is Ours At Once, As In OnDraftKeyDown
+        if (TestHooks.BlockLaunches)
+        {
+            e.Handled = true;
+            _ = PasteFromTestHookAsync();
+            return;
+        }
+
         if (ClipboardView() is not { } view)
         {
             return;
@@ -2063,7 +2084,11 @@ public sealed partial class ChatPane : UserControl
         long built     = System.Diagnostics.Stopwatch.GetTimestamp();
         int open       = ++_emojiOpens;
         _emojiTarget   = bubble;
-        _emojiSearch!.Text = string.Empty;
+        if (_emojiSearch is { } search)
+        {
+            search.Text = string.Empty;
+        }
+
         FilterEmoji();
 
         view.KeepShown(true);

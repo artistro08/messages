@@ -1585,7 +1585,7 @@ public sealed partial class MessageBubble : UserControl
     // Nothing; Otherwise Show It In The Window's Photo Viewer
     private void OnPhotoClick(object sender, RoutedEventArgs e)
     {
-        if (_photoPart is not { IsPending: false } part)
+        if (_photoPart is not { IsPending: false } part || sender is not Control photo)
         {
             return;
         }
@@ -1598,7 +1598,7 @@ public sealed partial class MessageBubble : UserControl
             return;
         }
 
-        ShowInViewer(part, Photo!);
+        ShowInViewer(part, photo);
     }
 
     // The Photo Over The Whole Window, Named As The Bubble's Photo Is; Focus Goes Back To The Part It Opened From
