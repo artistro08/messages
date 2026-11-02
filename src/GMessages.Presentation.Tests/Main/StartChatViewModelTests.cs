@@ -282,18 +282,18 @@ public sealed class StartChatViewModelTests
         using var rig = new MainRig();
         rig.Client.TopContactsAnswer.Contacts.Add(Person("c1", "Ann Lee", "+1 (555) 010-0001"));
         var vm                     = new StartChatViewModel(rig.Store, a => a());
-        var contacts_gate          = new TaskCompletionSource();
-        rig.Client.TopContactsGate  = contacts_gate;
+        var contactsGate           = new TaskCompletionSource();
+        rig.Client.TopContactsGate  = contactsGate;
 
         Task load = vm.LoadAsync();
         Assert.IsTrue(vm.IsLoading);
-        contacts_gate.SetResult();
+        contactsGate.SetResult();
         await load;
         Assert.IsFalse(vm.IsLoading);
 
         vm.Toggle(vm.Results[0]);
-        var create_gate       = new TaskCompletionSource();
-        rig.Client.CreateGate = create_gate;
+        var createGate        = new TaskCompletionSource();
+        rig.Client.CreateGate = createGate;
         rig.Client.CreateAnswers.Enqueue(new GetOrCreateConversationResponse
         {
             Status       = GetOrCreateConversationResponse.Types.Status.Success,
@@ -302,7 +302,7 @@ public sealed class StartChatViewModelTests
 
         Task<string?> start = vm.StartAsync();
         Assert.IsTrue(vm.IsLoading);
-        create_gate.SetResult();
+        createGate.SetResult();
         Assert.AreEqual("new-1", await start);
         Assert.IsFalse(vm.IsLoading);
     }

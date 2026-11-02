@@ -181,17 +181,17 @@ public sealed class ToastDriver
     private static void WaitUntilStill(AutomationElement part)
     {
         System.Drawing.Rectangle bounds = part.BoundingRectangle;
-        DateTime still_since            = DateTime.UtcNow;
+        DateTime stillSince             = DateTime.UtcNow;
         Wait.Until(() =>
         {
             System.Drawing.Rectangle now = part.BoundingRectangle;
             if (now != bounds)
             {
                 bounds      = now;
-                still_since = DateTime.UtcNow;
+                stillSince  = DateTime.UtcNow;
             }
 
-            return DateTime.UtcNow - still_since >= StillTime;
+            return DateTime.UtcNow - stillSince >= StillTime;
         }, AppDriver.DefaultTimeout, () => $"The toast never stopped moving; last at {bounds}.");
     }
 

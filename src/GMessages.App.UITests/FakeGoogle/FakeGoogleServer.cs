@@ -403,9 +403,9 @@ public sealed class FakeGoogleServer : IAsyncDisposable
                         break;
                     }
 
-                    string media_id = Phone.Chats.StoreUpload(await ReadBodyAsync(request));
+                    string mediaId = Phone.Chats.StoreUpload(await ReadBodyAsync(request));
                     await Task.Delay(UploadDelay, _stop.Token);
-                    var uploaded    = new UploadMediaResponse { Media = new UploadedMedia { MediaID = media_id, MediaNumber = 1 } };
+                    var uploaded    = new UploadMediaResponse { Media = new UploadedMedia { MediaID = mediaId, MediaNumber = 1 } };
                     await RespondAsync(context.Response, 200, "text/plain", Encoding.ASCII.GetBytes(Convert.ToBase64String(uploaded.ToByteArray())));
                     break;
 
@@ -461,7 +461,7 @@ public sealed class FakeGoogleServer : IAsyncDisposable
     {
         var channel = Channel.CreateUnbounded<byte[]>();
         int kill;
-        int catch_up_count = 0;
+        int catchUpCount = 0;
         lock (_lock)
         {
             kill = _killStatus;
@@ -482,12 +482,12 @@ public sealed class FakeGoogleServer : IAsyncDisposable
                 // Catch-Up Messages Wait For A Paired Client's Poll, Go First, And Are Counted By The Startup Ack
                 if (Phone.RequestCrypto is not null)
                 {
-                    foreach (byte[] catch_up in _catchUp)
+                    foreach (byte[] catchUp in _catchUp)
                     {
-                        channel.Writer.TryWrite(catch_up);
+                        channel.Writer.TryWrite(catchUp);
                     }
 
-                    catch_up_count = _catchUp.Count;
+                    catchUpCount = _catchUp.Count;
                     _catchUp.Clear();
                 }
 
@@ -512,7 +512,7 @@ public sealed class FakeGoogleServer : IAsyncDisposable
         Stream body          = response.OutputStream;
         try
         {
-            await WriteAsync(body, "[["u8.ToArray(), PbLiteSerializer.Serialize(new LongPollingPayload { Ack = new StartAckMessage { Count = catch_up_count } }));
+            await WriteAsync(body, "[["u8.ToArray(), PbLiteSerializer.Serialize(new LongPollingPayload { Ack = new StartAckMessage { Count = catchUpCount } }));
             byte[] heartbeat = PbLiteSerializer.Serialize(new LongPollingPayload { Heartbeat = new EmptyArr() });
             while (true)
             {
@@ -603,22 +603,22 @@ public sealed class FakeGoogleServer : IAsyncDisposable
     // Sign-In: A Token, The Browser Device, And One Phone Seen Just Now
     private SignInGaiaResponse SignIn()
     {
-        var device_data = new SignInGaiaResponse.Types.DeviceData
+        var deviceData = new SignInGaiaResponse.Types.DeviceData
         {
             DeviceWrapper = new SignInGaiaResponse.Types.DeviceData.Types.DeviceWrapper
             {
                 Device = new Device { UserID = 1, SourceID = "Fake-Browser-Source", Network = GmConstants.GoogleNetwork },
             },
         };
-        device_data.UnknownItems2.Add(new RPCGaiaData.Types.UnknownContainer.Types.Item2.Types.Item1 { DestOrSourceUUID = _phoneRegId, UnknownInt4 = 1, UnknownBigInt7 = 777 });
-        device_data.UnknownItems3.Add(new RPCGaiaData.Types.UnknownContainer.Types.Item4
+        deviceData.UnknownItems2.Add(new RPCGaiaData.Types.UnknownContainer.Types.Item2.Types.Item1 { DestOrSourceUUID = _phoneRegId, UnknownInt4 = 1, UnknownBigInt7 = 777 });
+        deviceData.UnknownItems3.Add(new RPCGaiaData.Types.UnknownContainer.Types.Item4
         {
             DestOrSourceUUID             = _phoneRegId,
             UnknownTimestampMicroseconds = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() * 1000,
             Item8                        = new RPCGaiaData.Types.UnknownContainer.Types.Item4.Types.Item8 { UnknownTimestamp = 5551 },
         });
 
-        return new SignInGaiaResponse { TokenData = Token(), DeviceData = device_data };
+        return new SignInGaiaResponse { TokenData = Token(), DeviceData = deviceData };
     }
 
     // A Token Valid For 24 Hours, Or 30 Minutes (Inside The Client's 1 Hour Refresh Window) For A Slow Start

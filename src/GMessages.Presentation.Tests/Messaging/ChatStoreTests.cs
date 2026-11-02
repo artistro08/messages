@@ -693,28 +693,28 @@ public sealed class ChatStoreTests
         rig.Store.MessageArrived      += (_, _) => raised++;
 
         // Messages
-        var fetch_gate          = new TaskCompletionSource();
+        var fetchGate           = new TaskCompletionSource();
         rig.Client.MessagesPage = PageOf(Msg("m1", "c1"));
-        rig.Client.FetchGate    = fetch_gate;
+        rig.Client.FetchGate    = fetchGate;
         Task<(IReadOnlyList<ChatMessage> Messages, Cursor? Older)> messages = rig.Store.LoadMessagesAsync("c1", null, Ct);
 
         // Conversations
-        var list_gate                = new TaskCompletionSource();
+        var listGate                 = new TaskCompletionSource();
         rig.Client.ConversationsPage = new ListConversationsResponse();
         rig.Client.ConversationsPage.Conversations.Add(Conv("c2", "Ann"));
-        rig.Client.ListGate = list_gate;
+        rig.Client.ListGate = listGate;
         Task<(IReadOnlyList<ConversationInfo> Conversations, Cursor? Next)> folder = rig.Store.LoadFolderAsync(ConversationFolder.Inbox, null, Ct);
 
         // A Live Message Whose Conversation Is Still Being Fetched
-        var conversation_gate          = new TaskCompletionSource();
+        var conversationGate           = new TaskCompletionSource();
         rig.Client.Conversations["c3"] = Conv("c3", "Bo");
-        rig.Client.GetConversationGate = conversation_gate;
+        rig.Client.GetConversationGate = conversationGate;
         Task live = rig.Store.HandleEventAsync(new MessageReceived(Msg("m3", "c3"), false));
 
         rig.Store.Reset();
-        fetch_gate.SetResult();
-        list_gate.SetResult();
-        conversation_gate.SetResult();
+        fetchGate.SetResult();
+        listGate.SetResult();
+        conversationGate.SetResult();
         await messages;
         await folder;
         await live;
@@ -741,8 +741,8 @@ public sealed class ChatStoreTests
         MessageArrivedEventArgs? got = null;
         rig.Store.MessageArrived += (_, e) => got = e;
 
-        long two_days_ago = Now.AddDays(-2).ToUnixTimeMilliseconds() * 1000;
-        await rig.Store.HandleEventAsync(new MessageReceived(Msg("m-old", "c1", ts: two_days_ago), false));
+        long twoDaysAgo = Now.AddDays(-2).ToUnixTimeMilliseconds() * 1000;
+        await rig.Store.HandleEventAsync(new MessageReceived(Msg("m-old", "c1", ts: twoDaysAgo), false));
 
         Assert.IsNotNull(got);
         Assert.IsFalse(got.IsNew);
@@ -1258,10 +1258,10 @@ public sealed class ChatStoreTests
         muted.Muted        = ConversationMuteStatus.Mute;
 
         await rig.Store.HandleEventAsync(new ConversationUpdated(muted));
-        bool after_mute = rig.Store.Find("c1")?.IsMuted == true;
+        bool afterMute = rig.Store.Find("c1")?.IsMuted == true;
         await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1")));
 
-        Assert.IsTrue(after_mute);
+        Assert.IsTrue(afterMute);
         Assert.IsFalse(rig.Store.Find("c1")?.IsMuted);
     }
 

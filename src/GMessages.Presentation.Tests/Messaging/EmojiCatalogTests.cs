@@ -49,7 +49,7 @@ public sealed class EmojiCatalogTests
         {
             foreach ((string e, string _) in emoji)
             {
-                Rune[] runes = e.EnumerateRunes().ToArray();
+                Rune[] runes = [.. e.EnumerateRunes()];
                 if (TextByDefault.Contains(runes[0].Value))
                 {
                     Assert.IsTrue(runes.Length > 1 && runes[1].Value == 0xFE0F, $"U+{runes[0].Value:X4} has no U+FE0F after it.");
@@ -60,5 +60,5 @@ public sealed class EmojiCatalogTests
 
     // The Emoji A Search Finds, In Order
     private static List<string> Found(string query) =>
-        EmojiCatalog.Search(query).SelectMany(c => c.Emoji).Select(e => e.Emoji).ToList();
+        [.. EmojiCatalog.Search(query).SelectMany(c => c.Emoji).Select(e => e.Emoji)];
 }

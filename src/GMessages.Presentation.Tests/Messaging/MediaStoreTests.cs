@@ -40,7 +40,7 @@ public sealed class MediaStoreTests
         new(mediaId, new byte[32], thumbnailId, new byte[32], inline ?? [], name, 0, 0, 0, MessageKind.Photo, "image/jpeg");
 
     private static ChatMessage Message(string id, MediaPart? media) =>
-        new ChatMessage(id, string.Empty, "c1", "p1", DateTimeOffset.UnixEpoch, false, MessageKind.Photo, string.Empty, MessageStatusType.IncomingComplete) { Media = media };
+        new(id, string.Empty, "c1", "p1", DateTimeOffset.UnixEpoch, false, MessageKind.Photo, string.Empty, MessageStatusType.IncomingComplete) { Media = media };
 
     /// <summary>
     /// Two callers asking for one media ID at once share one download, and a later ask comes from memory.

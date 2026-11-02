@@ -77,6 +77,9 @@ dotnet_naming_symbols.private_statics.required_modifiers         = static
 dotnet_naming_symbols.private_fields.applicable_kinds           = field
 dotnet_naming_symbols.private_fields.applicable_accessibilities = private
 
+dotnet_naming_symbols.local_consts.applicable_kinds   = local
+dotnet_naming_symbols.local_consts.required_modifiers = const
+
 dotnet_naming_symbols.locals_and_parameters.applicable_kinds = local, parameter
 
 # Naming Rules
@@ -113,6 +116,10 @@ dotnet_naming_rule.public_members_rule.symbols  = public_members
 dotnet_naming_rule.public_members_rule.style    = pascal_case
 dotnet_naming_rule.public_members_rule.severity = warning
 
+dotnet_naming_rule.local_consts_rule.symbols  = local_consts
+dotnet_naming_rule.local_consts_rule.style    = pascal_case
+dotnet_naming_rule.local_consts_rule.severity = warning
+
 dotnet_naming_rule.locals_and_parameters_rule.symbols  = locals_and_parameters
 dotnet_naming_rule.locals_and_parameters_rule.style    = camel_case
 dotnet_naming_rule.locals_and_parameters_rule.severity = warning
@@ -121,24 +128,12 @@ dotnet_naming_rule.locals_and_parameters_rule.severity = warning
 [GMessages.App/**.xaml.cs]
 dotnet_naming_rule.async_methods_rule.severity = none
 
+# Tests: Test Method Names Read As Sentences (Method_Condition_Result), So No Async Suffix
+[{GMessages.Protocol.Tests,GMessages.Presentation.Tests,GMessages.App.UITests}/**.cs]
+dotnet_naming_rule.async_methods_rule.severity = none
+
 # Win32 Interop: Struct Fields Keep Their Windows SDK Names (cbSize, hWnd)
 [GMessages.App/NativeMethods.cs]
-dotnet_diagnostic.IDE1006.severity = none
-
-# TEMPORARY: Projects Not Yet Brought In Line (Removed When Task 5.1 Finishes)
-[{GMessages.Protocol.Tests,GMessages.Presentation.Tests,GMessages.App.UITests}/**.cs]
-dotnet_diagnostic.IDE0028.severity = none
-dotnet_diagnostic.IDE0051.severity = none
-dotnet_diagnostic.IDE0052.severity = none
-dotnet_diagnostic.IDE0060.severity = none
-dotnet_diagnostic.IDE0090.severity = none
-dotnet_diagnostic.IDE0161.severity = none
-dotnet_diagnostic.IDE0300.severity = none
-dotnet_diagnostic.IDE0301.severity = none
-dotnet_diagnostic.IDE0302.severity = none
-dotnet_diagnostic.IDE0303.severity = none
-dotnet_diagnostic.IDE0304.severity = none
-dotnet_diagnostic.IDE0305.severity = none
 dotnet_diagnostic.IDE1006.severity = none
 
 # ConfigureAwait In The Protocol Library Only

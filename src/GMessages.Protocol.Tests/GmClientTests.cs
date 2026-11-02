@@ -110,8 +110,8 @@ public class GmClientTests
     {
         JsonElement go        = Golden.Load("connect");
         JsonElement responses = go.GetProperty("responses");
-        JsonElement[] go_reqs = [.. go.GetProperty("requests").EnumerateArray()];
-        string go_session     = go.GetProperty("sessionId").GetString()!;
+        JsonElement[] goReqs  = [.. go.GetProperty("requests").EnumerateArray()];
+        string goSession      = go.GetProperty("sessionId").GetString()!;
 
         AuthData auth = AuthDataGoldenTests.BuildGolden();
         await using Rig rig = CreateRig(auth);
@@ -148,39 +148,39 @@ public class GmClientTests
             sent = [.. rig.Handler.Requests];
         }
 
-        Assert.AreEqual(go_reqs.Length, sent.Length, "request count");
-        for (int i = 0; i < go_reqs.Length; i++)
+        Assert.AreEqual(goReqs.Length, sent.Length, "request count");
+        for (int i = 0; i < goReqs.Length; i++)
         {
-            Assert.AreEqual(go_reqs[i].GetProperty("url").GetString(), sent[i].Url, $"request {i} URL");
-            Assert.AreEqual(go_reqs[i].GetProperty("method").GetString(), sent[i].Method.Method, $"request {i} method");
+            Assert.AreEqual(goReqs[i].GetProperty("url").GetString(), sent[i].Url, $"request {i} URL");
+            Assert.AreEqual(goReqs[i].GetProperty("method").GetString(), sent[i].Method.Method, $"request {i} method");
         }
 
         // Refresh: Copy The Request ID, Timestamp And Signature (Signature Checks Live In The Refresh Tests)
-        string go_refresh_text  = go_reqs[0].GetProperty("bodyText").GetString()!;
-        var go_refresh          = PbLiteSerializer.Deserialize<RegisterRefreshRequest>(Encoding.UTF8.GetBytes(go_refresh_text));
-        var cs_refresh          = PbLiteSerializer.Deserialize<RegisterRefreshRequest>(sent[0].Body);
-        cs_refresh.MessageAuth.RequestID = go_refresh.MessageAuth.RequestID;
-        cs_refresh.UnixTimestamp         = go_refresh.UnixTimestamp;
-        cs_refresh.Signature             = go_refresh.Signature;
-        Assert.AreEqual(go_refresh_text, Text(cs_refresh), "refresh body");
+        string goRefreshText    = goReqs[0].GetProperty("bodyText").GetString()!;
+        var goRefresh           = PbLiteSerializer.Deserialize<RegisterRefreshRequest>(Encoding.UTF8.GetBytes(goRefreshText));
+        var csRefresh           = PbLiteSerializer.Deserialize<RegisterRefreshRequest>(sent[0].Body);
+        csRefresh.MessageAuth.RequestID = goRefresh.MessageAuth.RequestID;
+        csRefresh.UnixTimestamp         = goRefresh.UnixTimestamp;
+        csRefresh.Signature             = goRefresh.Signature;
+        Assert.AreEqual(goRefreshText, Text(csRefresh), "refresh body");
 
         // Long Poll: Copy The Listen Request ID
-        string go_receive_text = go_reqs[1].GetProperty("bodyText").GetString()!;
-        var go_receive         = PbLiteSerializer.Deserialize<ReceiveMessagesRequest>(Encoding.UTF8.GetBytes(go_receive_text));
-        var cs_receive         = PbLiteSerializer.Deserialize<ReceiveMessagesRequest>(sent[1].Body);
-        cs_receive.Auth.RequestID = go_receive.Auth.RequestID;
-        Assert.AreEqual(go_receive_text, Text(cs_receive), "long poll body (new token)");
+        string goReceiveText   = goReqs[1].GetProperty("bodyText").GetString()!;
+        var goReceive          = PbLiteSerializer.Deserialize<ReceiveMessagesRequest>(Encoding.UTF8.GetBytes(goReceiveText));
+        var csReceive          = PbLiteSerializer.Deserialize<ReceiveMessagesRequest>(sent[1].Body);
+        csReceive.Auth.RequestID = goReceive.Auth.RequestID;
+        Assert.AreEqual(goReceiveText, Text(csReceive), "long poll body (new token)");
 
         // GET_UPDATES: Copy The Session ID
-        var cs_send  = PbLiteSerializer.Deserialize<OutgoingRPCMessage>(sent[2].Body);
-        var inner    = OutgoingRPCData.Parser.ParseFrom(cs_send.Data.MessageData);
+        var csSend   = PbLiteSerializer.Deserialize<OutgoingRPCMessage>(sent[2].Body);
+        var inner    = OutgoingRPCData.Parser.ParseFrom(csSend.Data.MessageData);
         Assert.AreEqual(rig.Client.Rpc.SessionId, inner.RequestID, "request ID is the new session ID");
-        inner.RequestID           = go_session;
-        inner.SessionID           = go_session;
-        cs_send.Data.MessageData  = inner.ToByteString();
-        cs_send.Data.RequestID    = go_session;
-        cs_send.Auth.RequestID    = go_session;
-        Assert.AreEqual(go_reqs[2].GetProperty("bodyText").GetString(), Text(cs_send), "GET_UPDATES body");
+        inner.RequestID           = goSession;
+        inner.SessionID           = goSession;
+        csSend.Data.MessageData   = inner.ToByteString();
+        csSend.Data.RequestID     = goSession;
+        csSend.Auth.RequestID     = goSession;
+        Assert.AreEqual(goReqs[2].GetProperty("bodyText").GetString(), Text(csSend), "GET_UPDATES body");
 
         await rig.Client.DisconnectAsync().WaitAsync(HangGuard);
         Assert.IsFalse(rig.Client.IsConnected);
@@ -463,14 +463,14 @@ public class GmClientTests
     public async Task ChangeDuringInFlightSave_SavesAgain()
     {
         await using Rig rig = CreateRig();
-        bool changed_once   = false;
+        bool changedOnce    = false;
         int writes          = 0;
         rig.Client.OnWritingForTests = () =>
         {
             writes++;
-            if (!changed_once)
+            if (!changedOnce)
             {
-                changed_once = true;
+                changedOnce = true;
                 rig.Auth.Cookies.UpdateFrom(FakeHttpHandler.Response(HttpStatusCode.OK, setCookies: "SID=during-sid; Path=/"));
             }
         };
@@ -557,25 +557,25 @@ public class GmClientTests
     [TestMethod]
     public async Task Pair_FinishesSavesAndReconnects()
     {
-        JsonElement sign_in = Golden.Load("signin");
+        JsonElement signIn  = Golden.Load("signin");
         AuthData auth       = AuthDataGoldenTests.BuildGolden();
         auth.DestPhoneId    = 0;
         await using Rig rig = CreateRig(auth);
 
-        byte[] config_body  = Encoding.UTF8.GetBytes(sign_in.GetProperty("config").GetProperty("bodyText").GetString()!);
-        byte[] sign_in_body = Encoding.UTF8.GetBytes(sign_in.GetProperty("response").GetProperty("bodyText").GetString()!);
-        byte[] server_init  = GaiaPairingTests.ServerInit(1, 1);
+        byte[] configBody   = Encoding.UTF8.GetBytes(signIn.GetProperty("config").GetProperty("bodyText").GetString()!);
+        byte[] signInBody   = Encoding.UTF8.GetBytes(signIn.GetProperty("response").GetProperty("bodyText").GetString()!);
+        byte[] serverInit   = GaiaPairingTests.ServerInit(1, 1);
         byte[] finished     = new GaiaPairingResponseContainer().ToByteArray();
         rig.Respond = req =>
         {
             if (req.Url.EndsWith("/web/config", StringComparison.Ordinal))
             {
-                return FakeHttpHandler.Response(HttpStatusCode.OK, PbLiteMime, config_body);
+                return FakeHttpHandler.Response(HttpStatusCode.OK, PbLiteMime, configBody);
             }
 
             if (req.Url.EndsWith("/SignInGaia", StringComparison.Ordinal))
             {
-                return FakeHttpHandler.Response(HttpStatusCode.OK, PbLiteMime, sign_in_body);
+                return FakeHttpHandler.Response(HttpStatusCode.OK, PbLiteMime, signInBody);
             }
 
             if (req.Url.EndsWith("/SendMessage", StringComparison.Ordinal))
@@ -583,7 +583,7 @@ public class GmClientTests
                 ActionType action = ActionOf(req);
                 if (action == ActionType.CreateGaiaPairingClientInit)
                 {
-                    GaiaPairingTests.Deliver(rig.Client.Rpc, req, server_init);
+                    GaiaPairingTests.Deliver(rig.Client.Rpc, req, serverInit);
                 }
                 else if (action == ActionType.CreateGaiaPairingClientFinished)
                 {
@@ -618,25 +618,25 @@ public class GmClientTests
     [TestMethod]
     public async Task Pair_WrongEmoji_ClearsPairingAndSavesNothing()
     {
-        JsonElement sign_in = Golden.Load("signin");
+        JsonElement signIn  = Golden.Load("signin");
         AuthData auth       = AuthDataGoldenTests.BuildGolden();
         auth.DestPhoneId    = 0;
         await using Rig rig = CreateRig(auth);
 
-        byte[] config_body  = Encoding.UTF8.GetBytes(sign_in.GetProperty("config").GetProperty("bodyText").GetString()!);
-        byte[] sign_in_body = Encoding.UTF8.GetBytes(sign_in.GetProperty("response").GetProperty("bodyText").GetString()!);
-        byte[] server_init  = GaiaPairingTests.ServerInit(1, 1);
-        byte[] wrong_emoji  = new GaiaPairingResponseContainer { FinishErrorType = 1, FinishErrorCode = GaiaPairingErrorCode.WrongVerificationCodeSelected }.ToByteArray();
+        byte[] configBody   = Encoding.UTF8.GetBytes(signIn.GetProperty("config").GetProperty("bodyText").GetString()!);
+        byte[] signInBody   = Encoding.UTF8.GetBytes(signIn.GetProperty("response").GetProperty("bodyText").GetString()!);
+        byte[] serverInit   = GaiaPairingTests.ServerInit(1, 1);
+        byte[] wrongEmoji   = new GaiaPairingResponseContainer { FinishErrorType = 1, FinishErrorCode = GaiaPairingErrorCode.WrongVerificationCodeSelected }.ToByteArray();
         rig.Respond = req =>
         {
             if (req.Url.EndsWith("/web/config", StringComparison.Ordinal))
             {
-                return FakeHttpHandler.Response(HttpStatusCode.OK, PbLiteMime, config_body);
+                return FakeHttpHandler.Response(HttpStatusCode.OK, PbLiteMime, configBody);
             }
 
             if (req.Url.EndsWith("/SignInGaia", StringComparison.Ordinal))
             {
-                return FakeHttpHandler.Response(HttpStatusCode.OK, PbLiteMime, sign_in_body, "SID=pairing-sid; Path=/");
+                return FakeHttpHandler.Response(HttpStatusCode.OK, PbLiteMime, signInBody, "SID=pairing-sid; Path=/");
             }
 
             if (req.Url.EndsWith("/SendMessage", StringComparison.Ordinal))
@@ -644,11 +644,11 @@ public class GmClientTests
                 ActionType action = ActionOf(req);
                 if (action == ActionType.CreateGaiaPairingClientInit)
                 {
-                    GaiaPairingTests.Deliver(rig.Client.Rpc, req, server_init);
+                    GaiaPairingTests.Deliver(rig.Client.Rpc, req, serverInit);
                 }
                 else if (action == ActionType.CreateGaiaPairingClientFinished)
                 {
-                    GaiaPairingTests.Deliver(rig.Client.Rpc, req, wrong_emoji);
+                    GaiaPairingTests.Deliver(rig.Client.Rpc, req, wrongEmoji);
                 }
             }
 
@@ -676,30 +676,30 @@ public class GmClientTests
     [TestMethod]
     public async Task Disconnect_DuringEmojiWait_CancelsPairing()
     {
-        JsonElement sign_in = Golden.Load("signin");
+        JsonElement signIn  = Golden.Load("signin");
         AuthData auth       = AuthDataGoldenTests.BuildGolden();
         auth.DestPhoneId    = 0;
         await using Rig rig = CreateRig(auth);
 
-        byte[] config_body  = Encoding.UTF8.GetBytes(sign_in.GetProperty("config").GetProperty("bodyText").GetString()!);
-        byte[] sign_in_body = Encoding.UTF8.GetBytes(sign_in.GetProperty("response").GetProperty("bodyText").GetString()!);
-        byte[] server_init  = GaiaPairingTests.ServerInit(1, 1);
+        byte[] configBody   = Encoding.UTF8.GetBytes(signIn.GetProperty("config").GetProperty("bodyText").GetString()!);
+        byte[] signInBody   = Encoding.UTF8.GetBytes(signIn.GetProperty("response").GetProperty("bodyText").GetString()!);
+        byte[] serverInit   = GaiaPairingTests.ServerInit(1, 1);
         rig.Respond = req =>
         {
             if (req.Url.EndsWith("/web/config", StringComparison.Ordinal))
             {
-                return FakeHttpHandler.Response(HttpStatusCode.OK, PbLiteMime, config_body);
+                return FakeHttpHandler.Response(HttpStatusCode.OK, PbLiteMime, configBody);
             }
 
             if (req.Url.EndsWith("/SignInGaia", StringComparison.Ordinal))
             {
-                return FakeHttpHandler.Response(HttpStatusCode.OK, PbLiteMime, sign_in_body);
+                return FakeHttpHandler.Response(HttpStatusCode.OK, PbLiteMime, signInBody);
             }
 
             // The Phone Answers The Init, Then Stays Quiet (The User Never Taps)
             if (req.Url.EndsWith("/SendMessage", StringComparison.Ordinal) && ActionOf(req) == ActionType.CreateGaiaPairingClientInit)
             {
-                GaiaPairingTests.Deliver(rig.Client.Rpc, req, server_init);
+                GaiaPairingTests.Deliver(rig.Client.Rpc, req, serverInit);
             }
 
             return null;
@@ -729,15 +729,15 @@ public class GmClientTests
         AuthData auth       = AuthDataGoldenTests.BuildGolden();
         auth.DestPhoneId    = 0;
         await using Rig rig = CreateRig(auth);
-        var first_stream    = new OpenStream("[["u8.ToArray());
+        var firstStream     = new OpenStream("[["u8.ToArray());
         AnswerUntilEmoji(rig, receive: n => n == 1
-            ? new HttpResponseMessage(HttpStatusCode.OK) { Content = new StreamContent(first_stream) }
+            ? new HttpResponseMessage(HttpStatusCode.OK) { Content = new StreamContent(firstStream) }
             : FakeHttpHandler.Response(HttpStatusCode.Unauthorized));
 
         Task pair = rig.Client.PairAsync(_ => { }, CancellationToken.None);
         WaitUntil(() => rig.Requests("/SendMessage").Any(r => ActionOf(r) == ActionType.CreateGaiaPairingClientFinished), "waiting for the tap");
 
-        first_stream.End();
+        firstStream.End();
         WaitUntil(() => rig.Time.CountTimers(LongPollLoop.MinStreamLifetime) == 1, "5 s pause after the short stream");
         rig.Time.Advance(LongPollLoop.MinStreamLifetime);
 
@@ -769,21 +769,21 @@ public class GmClientTests
     // Config, Sign-In And The Init Answer; The Finish Gets No Answer (The User Never Taps)
     private static void AnswerUntilEmoji(Rig rig, Func<int, HttpResponseMessage>? receive = null)
     {
-        JsonElement sign_in = Golden.Load("signin");
-        byte[] config_body  = Encoding.UTF8.GetBytes(sign_in.GetProperty("config").GetProperty("bodyText").GetString()!);
-        byte[] sign_in_body = Encoding.UTF8.GetBytes(sign_in.GetProperty("response").GetProperty("bodyText").GetString()!);
-        byte[] server_init  = GaiaPairingTests.ServerInit(1, 1);
+        JsonElement signIn  = Golden.Load("signin");
+        byte[] configBody   = Encoding.UTF8.GetBytes(signIn.GetProperty("config").GetProperty("bodyText").GetString()!);
+        byte[] signInBody   = Encoding.UTF8.GetBytes(signIn.GetProperty("response").GetProperty("bodyText").GetString()!);
+        byte[] serverInit   = GaiaPairingTests.ServerInit(1, 1);
         int receives        = 0;
         rig.Respond = req =>
         {
             if (req.Url.EndsWith("/web/config", StringComparison.Ordinal))
             {
-                return FakeHttpHandler.Response(HttpStatusCode.OK, PbLiteMime, config_body);
+                return FakeHttpHandler.Response(HttpStatusCode.OK, PbLiteMime, configBody);
             }
 
             if (req.Url.EndsWith("/SignInGaia", StringComparison.Ordinal))
             {
-                return FakeHttpHandler.Response(HttpStatusCode.OK, PbLiteMime, sign_in_body);
+                return FakeHttpHandler.Response(HttpStatusCode.OK, PbLiteMime, signInBody);
             }
 
             if (req.Url.EndsWith("/ReceiveMessages", StringComparison.Ordinal) && receive is not null)
@@ -793,7 +793,7 @@ public class GmClientTests
 
             if (req.Url.EndsWith("/SendMessage", StringComparison.Ordinal) && ActionOf(req) == ActionType.CreateGaiaPairingClientInit)
             {
-                GaiaPairingTests.Deliver(rig.Client.Rpc, req, server_init);
+                GaiaPairingTests.Deliver(rig.Client.Rpc, req, serverInit);
             }
 
             return null;

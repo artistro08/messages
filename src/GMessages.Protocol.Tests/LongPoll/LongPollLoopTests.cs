@@ -131,10 +131,10 @@ public class LongPollLoopTests
         await rig.Loop.RunAsync(false, null, CancellationToken.None).WaitAsync(HangGuard);
 
         RecordedRequest sent = rig.Requests("/ReceiveMessages").Single();
-        var go_req = PbLiteSerializer.Deserialize<ReceiveMessagesRequest>(Encoding.UTF8.GetBytes(go.GetProperty("bodyText").GetString()!));
-        var cs_req = PbLiteSerializer.Deserialize<ReceiveMessagesRequest>(sent.Body);
-        cs_req.Auth.RequestID = go_req.Auth.RequestID;
-        Assert.AreEqual(go.GetProperty("bodyText").GetString(), Encoding.UTF8.GetString(PbLiteSerializer.Serialize(cs_req)));
+        var goReq  = PbLiteSerializer.Deserialize<ReceiveMessagesRequest>(Encoding.UTF8.GetBytes(go.GetProperty("bodyText").GetString()!));
+        var csReq  = PbLiteSerializer.Deserialize<ReceiveMessagesRequest>(sent.Body);
+        csReq.Auth.RequestID = goReq.Auth.RequestID;
+        Assert.AreEqual(go.GetProperty("bodyText").GetString(), Encoding.UTF8.GetString(PbLiteSerializer.Serialize(csReq)));
         Assert.AreEqual(go.GetProperty("url").GetString(), sent.Url);
     }
 
@@ -145,24 +145,24 @@ public class LongPollLoopTests
     public async Task GetUpdatesRequest_MatchesGo()
     {
         JsonElement go = Golden.Load("longpoll-request").GetProperty("setActiveSession");
-        string go_id   = go.GetProperty("sessionId").GetString()!;
+        string goId    = go.GetProperty("sessionId").GetString()!;
         Rig rig        = CreateRig();
 
         await rig.Loop.SetActiveSessionAsync(CancellationToken.None);
 
         RecordedRequest sent = rig.Requests("/SendMessage").Single();
-        var cs_req           = PbLiteSerializer.Deserialize<OutgoingRPCMessage>(sent.Body);
-        var inner            = OutgoingRPCData.Parser.ParseFrom(cs_req.Data.MessageData);
+        var csReq            = PbLiteSerializer.Deserialize<OutgoingRPCMessage>(sent.Body);
+        var inner            = OutgoingRPCData.Parser.ParseFrom(csReq.Data.MessageData);
         Assert.AreEqual(rig.Rpc.SessionId, inner.RequestID, "request ID is the new session ID");
         Assert.AreEqual(rig.Rpc.SessionId, inner.SessionID);
 
         // Normalize The Random Session ID
-        inner.RequestID           = go_id;
-        inner.SessionID           = go_id;
-        cs_req.Data.MessageData   = Google.Protobuf.ByteString.CopyFrom(Google.Protobuf.MessageExtensions.ToByteArray(inner));
-        cs_req.Data.RequestID     = go_id;
-        cs_req.Auth.RequestID     = go_id;
-        Assert.AreEqual(go.GetProperty("bodyText").GetString(), Encoding.UTF8.GetString(PbLiteSerializer.Serialize(cs_req)));
+        inner.RequestID           = goId;
+        inner.SessionID           = goId;
+        csReq.Data.MessageData    = Google.Protobuf.ByteString.CopyFrom(Google.Protobuf.MessageExtensions.ToByteArray(inner));
+        csReq.Data.RequestID      = goId;
+        csReq.Auth.RequestID     = goId;
+        Assert.AreEqual(go.GetProperty("bodyText").GetString(), Encoding.UTF8.GetString(PbLiteSerializer.Serialize(csReq)));
         Assert.AreEqual(go.GetProperty("url").GetString(), sent.Url);
     }
 
@@ -335,15 +335,15 @@ public class LongPollLoopTests
     {
         Rig rig        = CreateRig();
         using var cts  = new CancellationTokenSource();
-        Task old_run   = rig.Loop.RunAsync(false, null, cts.Token);
+        Task oldRun    = rig.Loop.RunAsync(false, null, cts.Token);
         WaitUntil(() => { lock (rig.Streams) { return rig.Streams.Count == 1; } }, "old run connected");
 
-        Task new_run = rig.Loop.RunAsync(false, null, CancellationToken.None);
+        Task newRun = rig.Loop.RunAsync(false, null, CancellationToken.None);
         await cts.CancelAsync();
-        await old_run.WaitAsync(HangGuard);
+        await oldRun.WaitAsync(HangGuard);
 
         rig.Loop.Stop();
-        await new_run.WaitAsync(HangGuard);
+        await newRun.WaitAsync(HangGuard);
     }
 
     /// <summary>
@@ -401,8 +401,8 @@ public class LongPollLoopTests
         }
 
         WaitUntil(() => rig.Requests("/SendMessage").Any(r => ActionOf(r) == ActionType.GetUpdates), "catch-up GET_UPDATES");
-        RecordedRequest get_updates = rig.Requests("/SendMessage").First(r => ActionOf(r) == ActionType.GetUpdates);
-        var outgoing = PbLiteSerializer.Deserialize<OutgoingRPCMessage>(get_updates.Body);
+        RecordedRequest getUpdates = rig.Requests("/SendMessage").First(r => ActionOf(r) == ActionType.GetUpdates);
+        var outgoing = PbLiteSerializer.Deserialize<OutgoingRPCMessage>(getUpdates.Body);
         Assert.AreEqual(rig.Rpc.SessionId, outgoing.Data.RequestID);
         Assert.AreEqual(0, outgoing.TTL, "TTL omitted");
         Assert.AreEqual(1, rig.Count<NoDataReceived>());

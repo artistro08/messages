@@ -18,7 +18,7 @@ public class AuthDataGoldenTests
 {
     private static readonly Guid DestRegId = Guid.Parse("ffeeddcc-bbaa-9988-7766-554433221100");
 
-    private static byte[] Seq(int start, int count) => Enumerable.Range(start, count).Select(i => (byte)i).ToArray();
+    private static byte[] Seq(int start, int count) => [.. Enumerable.Range(start, count).Select(i => (byte)i)];
 
     /// <summary>
     /// Builds the same fixed AuthData the Go exporter uses, plus the extra fields it sets before clearing.
@@ -120,13 +120,13 @@ public class AuthDataGoldenTests
 
         Check("withoutDestRegId", AuthData.CreateNew());
 
-        AuthData with_reg = AuthData.CreateNew();
-        with_reg.DestRegId = DestRegId;
-        Check("withDestRegIdNoCookies", with_reg);
+        AuthData withReg = AuthData.CreateNew();
+        withReg.DestRegId = DestRegId;
+        Check("withDestRegIdNoCookies", withReg);
 
-        AuthData with_empty = AuthData.CreateNew();
-        with_empty.DestRegId = DestRegId;
-        with_empty.Cookies.Set(new Dictionary<string, string>());
-        Check("withDestRegIdEmptyCookies", with_empty);
+        AuthData withEmpty = AuthData.CreateNew();
+        withEmpty.DestRegId = DestRegId;
+        withEmpty.Cookies.Set(new Dictionary<string, string>());
+        Check("withDestRegIdEmptyCookies", withEmpty);
     }
 }

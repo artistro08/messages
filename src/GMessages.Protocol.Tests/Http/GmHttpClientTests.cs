@@ -47,15 +47,15 @@ public class GmHttpClientTests
     {
         var time = new SignalingTimeProvider();
         var handler = new FakeHttpHandler { Time = time };
-        var long_poll_handler = new FakeHttpHandler { Time = time };
+        var longPollHandler = new FakeHttpHandler { Time = time };
         var jar = new CookieJar();
         if (cookies is not null)
         {
             jar.Set(cookies);
         }
 
-        var client = new GmHttpClient(new HttpClient(handler), new HttpClient(long_poll_handler), jar, time, log ?? NullLogger.Instance);
-        return new Rig(client, handler, long_poll_handler, jar, time);
+        var client = new GmHttpClient(new HttpClient(handler), new HttpClient(longPollHandler), jar, time, log ?? NullLogger.Instance);
+        return new Rig(client, handler, longPollHandler, jar, time);
     }
 
     /// <summary>
@@ -142,14 +142,14 @@ public class GmHttpClientTests
 
     private static AuthMessage RelayBody => new() { RequestID = "r1" };
 
-    private static void AssertHeadersMatchGo(JsonElement go_request, RecordedRequest actual)
+    private static void AssertHeadersMatchGo(JsonElement goRequest, RecordedRequest actual)
     {
-        Assert.AreEqual(go_request.GetProperty("method").GetString(), actual.Method.Method);
-        Assert.AreEqual(go_request.GetProperty("url").GetString(), actual.Url);
+        Assert.AreEqual(goRequest.GetProperty("method").GetString(), actual.Method.Method);
+        Assert.AreEqual(goRequest.GetProperty("url").GetString(), actual.Url);
 
-        var go_headers = go_request.GetProperty("headers").EnumerateObject().ToDictionary(p => p.Name, p => p.Value.GetString()!, StringComparer.OrdinalIgnoreCase);
-        CollectionAssert.AreEquivalent(go_headers.Keys.Select(k => k.ToLowerInvariant()).ToList(), actual.Headers.Keys.Select(k => k.ToLowerInvariant()).ToList(), "header names");
-        foreach (var (name, value) in go_headers)
+        var goHeaders = goRequest.GetProperty("headers").EnumerateObject().ToDictionary(p => p.Name, p => p.Value.GetString()!, StringComparer.OrdinalIgnoreCase);
+        CollectionAssert.AreEquivalent(goHeaders.Keys.Select(k => k.ToLowerInvariant()).ToList(), actual.Headers.Keys.Select(k => k.ToLowerInvariant()).ToList(), "header names");
+        foreach (var (name, value) in goHeaders)
         {
             if (name.Equals("Cookie", StringComparison.OrdinalIgnoreCase))
             {
@@ -161,7 +161,7 @@ public class GmHttpClientTests
             }
         }
 
-        CollectionAssert.AreEqual(Golden.Hex(go_request.GetProperty("bodyHex")), actual.Body);
+        CollectionAssert.AreEqual(Golden.Hex(goRequest.GetProperty("bodyHex")), actual.Body);
     }
 
     /// <summary>
@@ -315,11 +315,11 @@ public class GmHttpClientTests
     public async Task Retry_AttemptCountsMatchGo_DelaysAre1sThen2s()
     {
         using var guard = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-        int checked_cases = 0;
+        int checkedCases = 0;
         foreach (var go in Golden.Load("http").GetProperty("retry").EnumerateArray().Where(c => !c.GetProperty("longPoll").GetBoolean()))
         {
-            int[] statuses = go.GetProperty("statuses").EnumerateArray().Select(s => s.GetInt32()).ToArray();
-            int expected_attempts = go.GetProperty("attempts").GetInt32();
+            int[] statuses = [.. go.GetProperty("statuses").EnumerateArray().Select(s => s.GetInt32())];
+            int expectedAttempts = go.GetProperty("attempts").GetInt32();
             Rig rig = CreateRig(GoCookies);
             var responses = new List<TrackingResponse>();
             rig.Handler.Respond = (i, _) =>
@@ -332,7 +332,7 @@ public class GmHttpClientTests
             Task<HttpResponseMessage> task = rig.Client.PostAsync(GmEndpoints.Production.SignInGaia, RelayBody, GmContentType.PbLite, false, CancellationToken.None);
 
             // One Wait Per Retry: Timer Appears, Then Advance Exactly Attempt x 1 s
-            for (int attempt = 1; attempt < expected_attempts; attempt++)
+            for (int attempt = 1; attempt < expectedAttempts; attempt++)
             {
                 await rig.Time.TimerCreated.WaitAsync(guard.Token);
                 Assert.AreEqual(attempt, rig.Handler.Requests.Count, "no early retry");
@@ -341,7 +341,7 @@ public class GmHttpClientTests
 
             using HttpResponseMessage res = await task.WaitAsync(guard.Token);
 
-            Assert.AreEqual(expected_attempts, rig.Handler.Requests.Count);
+            Assert.AreEqual(expectedAttempts, rig.Handler.Requests.Count);
             Assert.AreEqual(go.GetProperty("finalStatus").GetInt32(), (int)res.StatusCode);
 
             // Exact Gaps Between Attempts
@@ -351,14 +351,14 @@ public class GmHttpClientTests
             }
 
             // Every Retried Response Was Disposed; The Returned One Was Not
-            Assert.AreEqual(expected_attempts, responses.Count);
-            Assert.IsTrue(responses.Take(expected_attempts - 1).All(r => r.IsDisposed), "retried responses disposed");
+            Assert.AreEqual(expectedAttempts, responses.Count);
+            Assert.IsTrue(responses.Take(expectedAttempts - 1).All(r => r.IsDisposed), "retried responses disposed");
             Assert.IsFalse(responses[^1].IsDisposed);
 
-            checked_cases++;
+            checkedCases++;
         }
 
-        Assert.AreEqual(3, checked_cases);
+        Assert.AreEqual(3, checkedCases);
     }
 
     /// <summary>
@@ -378,8 +378,8 @@ public class GmHttpClientTests
         Assert.AreEqual(go.GetProperty("finalStatus").GetInt32(), (int)res.StatusCode);
 
         // C#-only: the long-poll client has a 30 minute timeout
-        using HttpClient long_poll = GmHttpClient.CreateLongPollClient(new FakeHttpHandler());
-        Assert.AreEqual(TimeSpan.FromMinutes(30), long_poll.Timeout);
+        using HttpClient longPoll = GmHttpClient.CreateLongPollClient(new FakeHttpHandler());
+        Assert.AreEqual(TimeSpan.FromMinutes(30), longPoll.Timeout);
     }
 
     /// <summary>

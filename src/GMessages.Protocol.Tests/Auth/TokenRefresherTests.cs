@@ -67,17 +67,17 @@ public class TokenRefresherTests
 
         await rig.Refresher.RefreshIfNeededAsync(CancellationToken.None);
 
-        var go_req = PbLiteSerializer.Deserialize<RegisterRefreshRequest>(Encoding.UTF8.GetBytes(go.GetProperty("bodyText").GetString()!));
-        var cs_req = PbLiteSerializer.Deserialize<RegisterRefreshRequest>(rig.Handler.Requests[0].Body);
-        Assert.IsTrue(Verifies(rig.Auth, go_req), "Go signature");
-        Assert.IsTrue(Verifies(rig.Auth, cs_req), "C# signature");
-        Assert.AreEqual(rig.Time.GetUtcNow().ToUnixTimeMilliseconds() * 1000, cs_req.UnixTimestamp);
+        var goReq  = PbLiteSerializer.Deserialize<RegisterRefreshRequest>(Encoding.UTF8.GetBytes(go.GetProperty("bodyText").GetString()!));
+        var csReq  = PbLiteSerializer.Deserialize<RegisterRefreshRequest>(rig.Handler.Requests[0].Body);
+        Assert.IsTrue(Verifies(rig.Auth, goReq), "Go signature");
+        Assert.IsTrue(Verifies(rig.Auth, csReq), "C# signature");
+        Assert.AreEqual(rig.Time.GetUtcNow().ToUnixTimeMilliseconds() * 1000, csReq.UnixTimestamp);
 
         // Normalize Request ID, Timestamp And Signature
-        cs_req.MessageAuth.RequestID = go_req.MessageAuth.RequestID;
-        cs_req.UnixTimestamp         = go_req.UnixTimestamp;
-        cs_req.Signature             = go_req.Signature;
-        Assert.AreEqual(go.GetProperty("bodyText").GetString(), Encoding.UTF8.GetString(PbLiteSerializer.Serialize(cs_req)));
+        csReq.MessageAuth.RequestID = goReq.MessageAuth.RequestID;
+        csReq.UnixTimestamp         = goReq.UnixTimestamp;
+        csReq.Signature             = goReq.Signature;
+        Assert.AreEqual(go.GetProperty("bodyText").GetString(), Encoding.UTF8.GetString(PbLiteSerializer.Serialize(csReq)));
         Assert.AreEqual(go.GetProperty("url").GetString(), rig.Handler.Requests[0].Url);
     }
 

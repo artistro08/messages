@@ -121,12 +121,12 @@ public sealed class ChatViewModelTests
         rig.Client.MessagesPage.Cursor = new Cursor { LastItemID = "m3" };
         await chat.LoadAsync();
 
-        var with_bubble = new ListMessagesResponse { Cursor = new Cursor { LastItemID = "m2" } };
-        with_bubble.Messages.Add(Msg("m2", "two"));
-        var only_system = new ListMessagesResponse { Cursor = new Cursor { LastItemID = "m1" } };
-        only_system.Messages.Add(Msg("m1", "joined", status: (MessageStatusType)200));
-        rig.Client.MessagePages.Enqueue(with_bubble);
-        rig.Client.MessagePages.Enqueue(only_system);
+        var withBubble = new ListMessagesResponse { Cursor = new Cursor { LastItemID = "m2" } };
+        withBubble.Messages.Add(Msg("m2", "two"));
+        var onlySystem = new ListMessagesResponse { Cursor = new Cursor { LastItemID = "m1" } };
+        onlySystem.Messages.Add(Msg("m1", "joined", status: (MessageStatusType)200));
+        rig.Client.MessagePages.Enqueue(withBubble);
+        rig.Client.MessagePages.Enqueue(onlySystem);
 
         await chat.LoadOlderAsync();
         Assert.IsTrue(chat.CanFillOlder, "a bubble was added");
@@ -317,14 +317,14 @@ public sealed class ChatViewModelTests
         Assert.AreEqual("hello", chat.Messages[0].Text);
 
         // Retry Resends The Same Text With A New Temporary ID
-        string first_tmp = chat.Messages[0].TmpId;
+        string firstTmp  = chat.Messages[0].TmpId;
         rig.Connected    = true;
         await chat.RetryAsync(chat.Messages[0]);
 
         Assert.AreEqual(1, chat.Messages.Count);
         Assert.IsTrue(chat.Messages[0].IsSending);
         Assert.IsFalse(chat.Messages[0].IsFailed);
-        Assert.AreNotEqual(first_tmp, chat.Messages[0].TmpId);
+        Assert.AreNotEqual(firstTmp, chat.Messages[0].TmpId);
         Assert.AreEqual(1, rig.Client.Sent.Count);
         Assert.AreEqual("hello", rig.Client.Sent[0].MessagePayload.MessageInfo[0].MessageContent.Content);
         Assert.AreEqual(chat.Messages[0].TmpId, rig.Client.Sent[0].TmpID);
@@ -757,12 +757,12 @@ public sealed class ChatViewModelTests
         rig.Client.FetchGate = gate;
 
         Task load = chat.LoadAsync();
-        MessageBubbleViewModel cached_two = chat.Messages[1];
+        MessageBubbleViewModel cachedTwo = chat.Messages[1];
         gate.SetResult();
         await load;
 
         Assert.AreEqual("two edited,three", string.Join(",", chat.Messages.Select(b => b.Text)));
-        Assert.AreSame(cached_two, chat.Messages[0], "the shown bubble was updated, not replaced");
+        Assert.AreSame(cachedTwo, chat.Messages[0], "the shown bubble was updated, not replaced");
     }
 
     /// <summary>
@@ -1498,8 +1498,8 @@ public sealed class ChatViewModelTests
     {
         var time                        = new StrictTimeProvider(MainRig.Now);
         using var rig                   = new MainRig();
-        using ChatViewModel typing_chat = await TypingChat(rig, time);
-        typing_chat.Dispose();
+        using ChatViewModel typingChat  = await TypingChat(rig, time);
+        typingChat.Dispose();
 
         List<Action> posted = [];
         var chat            = new ChatViewModel(rig.Store, "a", time, posted.Add);
@@ -1567,11 +1567,11 @@ public sealed class ChatViewModelTests
         Assert.AreEqual(2, rig.Client.Typing.Count);
 
         // An SMS Chat Never Says It
-        using var sms_rig            = new MainRig();
-        using ChatViewModel sms_chat = NewChat(sms_rig, time);
-        await sms_chat.LoadAsync();
-        sms_chat.Draft = "h";
-        Assert.AreEqual(0, sms_rig.Client.Typing.Count);
+        using var smsRig             = new MainRig();
+        using ChatViewModel smsChat  = NewChat(smsRig, time);
+        await smsChat.LoadAsync();
+        smsChat.Draft = "h";
+        Assert.AreEqual(0, smsRig.Client.Typing.Count);
     }
 
     [TestMethod]

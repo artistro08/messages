@@ -62,13 +62,13 @@ public class GaiaSignInGoldenTests
 
         await rig.SignIn.GetPrimaryDevicesAsync(CancellationToken.None);
 
-        var go_req = PbLiteSerializer.Deserialize<SignInGaiaRequest>(Encoding.UTF8.GetBytes(go.GetProperty("bodyText").GetString()!));
-        var cs_req = PbLiteSerializer.Deserialize<SignInGaiaRequest>(rig.Handler.Requests[0].Body);
+        var goReq  = PbLiteSerializer.Deserialize<SignInGaiaRequest>(Encoding.UTF8.GetBytes(go.GetProperty("bodyText").GetString()!));
+        var csReq  = PbLiteSerializer.Deserialize<SignInGaiaRequest>(rig.Handler.Requests[0].Body);
 
         // Normalize Request ID
-        Assert.IsTrue(Guid.TryParse(cs_req.AuthMessage.RequestID, out _), "request ID is a UUID");
-        cs_req.AuthMessage.RequestID = go_req.AuthMessage.RequestID;
-        Assert.AreEqual(go.GetProperty("bodyText").GetString(), Encoding.UTF8.GetString(PbLiteSerializer.Serialize(cs_req)));
+        Assert.IsTrue(Guid.TryParse(csReq.AuthMessage.RequestID, out _), "request ID is a UUID");
+        csReq.AuthMessage.RequestID = goReq.AuthMessage.RequestID;
+        Assert.AreEqual(go.GetProperty("bodyText").GetString(), Encoding.UTF8.GetString(PbLiteSerializer.Serialize(csReq)));
         Assert.AreEqual(go.GetProperty("url").GetString(), rig.Handler.Requests[0].Url);
     }
 
@@ -84,14 +84,14 @@ public class GaiaSignInGoldenTests
 
         IReadOnlyList<PrimaryDevice> devices = await rig.SignIn.GetPrimaryDevicesAsync(CancellationToken.None);
 
-        JsonElement[] go_devices = [.. go.GetProperty("primaryDevices").EnumerateArray()];
-        Assert.AreEqual(go_devices.Length, devices.Count);
-        for (int i = 0; i < go_devices.Length; i++)
+        JsonElement[] goDevices = [.. go.GetProperty("primaryDevices").EnumerateArray()];
+        Assert.AreEqual(goDevices.Length, devices.Count);
+        for (int i = 0; i < goDevices.Length; i++)
         {
-            Assert.AreEqual(go_devices[i].GetProperty("regId").GetString(), devices[i].RegId);
-            Assert.AreEqual(go_devices[i].GetProperty("unknownInt").GetUInt64(), devices[i].UnknownInt);
-            Assert.AreEqual(go_devices[i].GetProperty("unknownTs").GetUInt64(), devices[i].UnknownTs);
-            Assert.AreEqual(DateTimeOffset.UnixEpoch.AddTicks(go_devices[i].GetProperty("lastSeenUs").GetInt64() * 10), devices[i].LastSeen);
+            Assert.AreEqual(goDevices[i].GetProperty("regId").GetString(), devices[i].RegId);
+            Assert.AreEqual(goDevices[i].GetProperty("unknownInt").GetUInt64(), devices[i].UnknownInt);
+            Assert.AreEqual(goDevices[i].GetProperty("unknownTs").GetUInt64(), devices[i].UnknownTs);
+            Assert.AreEqual(DateTimeOffset.UnixEpoch.AddTicks(goDevices[i].GetProperty("lastSeenUs").GetInt64() * 10), devices[i].LastSeen);
         }
 
         Assert.AreEqual(go.GetProperty("mobile").GetString(), Encoding.UTF8.GetString(PbLiteSerializer.Serialize(rig.Auth.Mobile!)));
@@ -132,12 +132,12 @@ public class GaiaSignInGoldenTests
     [TestMethod]
     public async Task FetchConfig_BadVersionThrows_BadDeviceIdKeepsSession()
     {
-        Rig bad_version = CreateRig(PbLiteSerializer.Serialize(new Config { ClientVersion = "abc" }));
-        await Assert.ThrowsExactlyAsync<InvalidDataException>(() => bad_version.SignIn.FetchConfigAsync(CancellationToken.None));
+        Rig badVersion = CreateRig(PbLiteSerializer.Serialize(new Config { ClientVersion = "abc" }));
+        await Assert.ThrowsExactlyAsync<InvalidDataException>(() => badVersion.SignIn.FetchConfigAsync(CancellationToken.None));
 
-        Rig bad_id  = CreateRig(PbLiteSerializer.Serialize(new Config { ClientVersion = "20260902", DeviceInfo = new Config.Types.DeviceInfo { DeviceID = "nope" } }));
-        Guid before = bad_id.Auth.SessionId;
-        await bad_id.SignIn.FetchConfigAsync(CancellationToken.None);
-        Assert.AreEqual(before, bad_id.Auth.SessionId);
+        Rig badId   = CreateRig(PbLiteSerializer.Serialize(new Config { ClientVersion = "20260902", DeviceInfo = new Config.Types.DeviceInfo { DeviceID = "nope" } }));
+        Guid before = badId.Auth.SessionId;
+        await badId.SignIn.FetchConfigAsync(CancellationToken.None);
+        Assert.AreEqual(before, badId.Auth.SessionId);
     }
 }

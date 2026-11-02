@@ -86,9 +86,9 @@ public class RpcGoldenTests
     {
         (RpcSession session, _) = CreateSession(BuildAuth());
 
-        OutgoingRPCMessage built = session.Build(ParamsFor("dontEncrypt"), out string request_id);
+        OutgoingRPCMessage built = session.Build(ParamsFor("dontEncrypt"), out string requestId);
 
-        Assert.AreEqual("golden-req-1", request_id);
+        Assert.AreEqual("golden-req-1", requestId);
         Assert.AreEqual(GoPbLite("build", "dontEncrypt"), Encoding.UTF8.GetString(PbLiteSerializer.Serialize(built)));
     }
 
@@ -104,18 +104,18 @@ public class RpcGoldenTests
         OutgoingRPCMessage built = session.Build(ParamsFor("encrypted"), out _);
         var go = PbLiteSerializer.Deserialize<OutgoingRPCMessage>(Encoding.UTF8.GetBytes(GoPbLite("build", "encrypted")));
 
-        OutgoingRPCData go_inner = OutgoingRPCData.Parser.ParseFrom(go.Data.MessageData);
-        OutgoingRPCData cs_inner = OutgoingRPCData.Parser.ParseFrom(built.Data.MessageData);
-        byte[] expected_plain = Data.ToByteArray();
-        CollectionAssert.AreEqual(expected_plain, auth.RequestCrypto.Decrypt(go_inner.EncryptedProtoData.Span), "Go plaintext");
-        CollectionAssert.AreEqual(expected_plain, auth.RequestCrypto.Decrypt(cs_inner.EncryptedProtoData.Span), "C# plaintext");
-        Assert.IsTrue(cs_inner.UnencryptedProtoData.IsEmpty);
+        OutgoingRPCData goInner  = OutgoingRPCData.Parser.ParseFrom(go.Data.MessageData);
+        OutgoingRPCData csInner  = OutgoingRPCData.Parser.ParseFrom(built.Data.MessageData);
+        byte[] expectedPlain = Data.ToByteArray();
+        CollectionAssert.AreEqual(expectedPlain, auth.RequestCrypto.Decrypt(goInner.EncryptedProtoData.Span), "Go plaintext");
+        CollectionAssert.AreEqual(expectedPlain, auth.RequestCrypto.Decrypt(csInner.EncryptedProtoData.Span), "C# plaintext");
+        Assert.IsTrue(csInner.UnencryptedProtoData.IsEmpty);
 
         // Normalize The Random Ciphertext, Then Everything Else Must Be Equal
-        go_inner.EncryptedProtoData = ByteString.Empty;
-        cs_inner.EncryptedProtoData = ByteString.Empty;
-        go.Data.MessageData         = go_inner.ToByteString();
-        built.Data.MessageData      = cs_inner.ToByteString();
+        goInner.EncryptedProtoData = ByteString.Empty;
+        csInner.EncryptedProtoData  = ByteString.Empty;
+        go.Data.MessageData         = goInner.ToByteString();
+        built.Data.MessageData      = csInner.ToByteString();
         Assert.AreEqual(go, built);
     }
 
@@ -174,14 +174,14 @@ public class RpcGoldenTests
 
         Assert.AreEqual(1, handler.Requests.Count);
         Assert.AreEqual(go.GetProperty("url").GetString(), handler.Requests[0].Url);
-        var go_body = PbLiteSerializer.Deserialize<AckMessageRequest>(Golden.Hex(go.GetProperty("bodyHex")));
-        var cs_body = PbLiteSerializer.Deserialize<AckMessageRequest>(handler.Requests[0].Body);
-        Assert.AreEqual(2, cs_body.Acks.Count);
-        Assert.IsTrue(Guid.TryParse(cs_body.AuthData.RequestID, out _));
+        var goBody  = PbLiteSerializer.Deserialize<AckMessageRequest>(Golden.Hex(go.GetProperty("bodyHex")));
+        var csBody  = PbLiteSerializer.Deserialize<AckMessageRequest>(handler.Requests[0].Body);
+        Assert.AreEqual(2, csBody.Acks.Count);
+        Assert.IsTrue(Guid.TryParse(csBody.AuthData.RequestID, out _));
 
         // Random Request ID Copied From Go
-        cs_body.AuthData.RequestID = go_body.AuthData.RequestID;
-        Assert.AreEqual(go_body, cs_body);
+        csBody.AuthData.RequestID = goBody.AuthData.RequestID;
+        Assert.AreEqual(goBody, csBody);
 
         // Queue Is Empty Afterwards
         await session.FlushAcksAsync(CancellationToken.None);

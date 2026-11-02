@@ -158,14 +158,14 @@ public sealed class FakeGoogleServerTests
     public async Task Pair_RetryAfterWrongTap_Pairs()
     {
         await using var rig = new Rig();
-        (Task first, Task<string> first_shown) = StartPairing(rig);
-        await first_shown.WaitAsync(HangGuard);
+        (Task first, Task<string> firstShown) = StartPairing(rig);
+        await firstShown.WaitAsync(HangGuard);
         await rig.Server.Phone.FinishReceived.WaitAsync(HangGuard);
         rig.Server.Phone.Tap(false);
         await Assert.ThrowsExactlyAsync<PairingException>(() => first.WaitAsync(HangGuard));
 
-        (Task second, Task<string> second_shown) = StartPairing(rig);
-        string emoji = await second_shown.WaitAsync(HangGuard);
+        (Task second, Task<string> secondShown) = StartPairing(rig);
+        string emoji = await secondShown.WaitAsync(HangGuard);
         await rig.Server.Phone.FinishReceived.WaitAsync(HangGuard);
         Assert.AreEqual(rig.Server.Phone.ShownEmoji, emoji);
         rig.Server.Phone.Tap(true);
@@ -233,18 +233,18 @@ public sealed class FakeGoogleServerTests
         string padding         = new('x', 64 * 1024);
 
         // Old Poll Open But Not Read, Payloads Pushed, New Poll Takes Over (Its Headers Come After The Takeover)
-        using HttpResponseMessage old_poll = await OpenPollAsync(http, url);
+        using HttpResponseMessage oldPoll = await OpenPollAsync(http, url);
         for (int i = 0; i < Total; i++)
         {
             server.Push(new LongPollingPayload { Data = new IncomingRPCMessage { ResponseID = i.ToString(CultureInfo.InvariantCulture), Mobile = new Device { SourceID = padding } } });
         }
 
-        using HttpResponseMessage new_poll = await OpenPollAsync(http, url);
+        using HttpResponseMessage newPoll = await OpenPollAsync(http, url);
         server.Push(new LongPollingPayload { Data = new IncomingRPCMessage { ResponseID = "end" } });
 
         // Read Both
-        List<string> first  = await ReadIdsAsync(old_poll).WaitAsync(HangGuard);
-        List<string> second = await ReadIdsAsync(new_poll).WaitAsync(HangGuard);
+        List<string> first  = await ReadIdsAsync(oldPoll).WaitAsync(HangGuard);
+        List<string> second = await ReadIdsAsync(newPoll).WaitAsync(HangGuard);
 
         string[] expected = [.. Enumerable.Range(0, Total).Select(i => i.ToString(CultureInfo.InvariantCulture)), "end"];
         CollectionAssert.AreEqual(expected, first.Concat(second).ToArray());
@@ -363,15 +363,15 @@ public sealed class FakeGoogleServerTests
     public async Task SendMessage_EchoesWithTmpId()
     {
         await using Rig rig = await PairedAsync();
-        string tmp_id     = GmClient.NewTmpId();
+        string tmpId      = GmClient.NewTmpId();
         var request       = new SendMessageRequest
         {
             ConversationID = "c-ann",
-            TmpID          = tmp_id,
+            TmpID          = tmpId,
             SIMPayload     = new SIMPayload { SIMNumber = 1 },
             MessagePayload = new MessagePayload
             {
-                TmpID          = tmp_id,
+                TmpID          = tmpId,
                 ConversationID = "c-ann",
                 ParticipantID  = "me-1",
             },
@@ -381,7 +381,7 @@ public sealed class FakeGoogleServerTests
         SendMessageResponse answer = await rig.Client.SendMessageAsync(request, CancellationToken.None).WaitAsync(HangGuard);
 
         Assert.AreEqual(SendMessageResponse.Types.Status.Success, answer.Status);
-        MessageReceived echo = WaitForEvent<MessageReceived>(rig.Events, e => e.Message.TmpID == tmp_id, "echo");
+        MessageReceived echo = WaitForEvent<MessageReceived>(rig.Events, e => e.Message.TmpID == tmpId, "echo");
         Assert.IsFalse(echo.IsOld);
         Assert.IsNotEmpty(echo.Message.MessageID);
         Assert.AreEqual(MessageStatusType.OutgoingComplete, echo.Message.MessageStatus.Status);
@@ -398,19 +398,19 @@ public sealed class FakeGoogleServerTests
     {
         await using Rig rig = await PairedAsync();
         ListMessagesResponse page = await rig.Client.FetchMessagesAsync("c-ann", 10, null, CancellationToken.None).WaitAsync(HangGuard);
-        string message_id         = page.Messages[0].MessageID;
+        string messageId          = page.Messages[0].MessageID;
 
         // Add A Thumbs Up
-        SendReactionResponse added = await rig.Client.SendReactionAsync(Reaction(message_id, "\U0001F44D", SendReactionRequest.Types.Action.Add), CancellationToken.None).WaitAsync(HangGuard);
+        SendReactionResponse added = await rig.Client.SendReactionAsync(Reaction(messageId, "\U0001F44D", SendReactionRequest.Types.Action.Add), CancellationToken.None).WaitAsync(HangGuard);
         Assert.IsTrue(added.Success);
-        MessageReceived like = WaitForEvent<MessageReceived>(rig.Events, e => e.Message.MessageID == message_id && e.Message.Reactions.Count > 0, "message with the like");
+        MessageReceived like = WaitForEvent<MessageReceived>(rig.Events, e => e.Message.MessageID == messageId && e.Message.Reactions.Count > 0, "message with the like");
         Assert.HasCount(1, like.Message.Reactions);
         Assert.AreEqual(EmojiType.Like, like.Message.Reactions[0].Data.Type);
         Assert.AreEqual("me-1", like.Message.Reactions[0].ParticipantIDs.Single());
 
         // Switch To A Heart
-        await rig.Client.SendReactionAsync(Reaction(message_id, "❤️", SendReactionRequest.Types.Action.Switch), CancellationToken.None).WaitAsync(HangGuard);
-        MessageReceived heart = WaitForEvent<MessageReceived>(rig.Events, e => e.Message.MessageID == message_id && e.Message.Reactions.Any(r => r.Data.Type == EmojiType.RedHeart), "message with the heart");
+        await rig.Client.SendReactionAsync(Reaction(messageId, "❤️", SendReactionRequest.Types.Action.Switch), CancellationToken.None).WaitAsync(HangGuard);
+        MessageReceived heart = WaitForEvent<MessageReceived>(rig.Events, e => e.Message.MessageID == messageId && e.Message.Reactions.Any(r => r.Data.Type == EmojiType.RedHeart), "message with the heart");
         Assert.HasCount(1, heart.Message.Reactions);
 
         // Remove It
@@ -419,8 +419,8 @@ public sealed class FakeGoogleServerTests
             rig.Events.Clear();
         }
 
-        await rig.Client.SendReactionAsync(Reaction(message_id, "❤️", SendReactionRequest.Types.Action.Remove), CancellationToken.None).WaitAsync(HangGuard);
-        MessageReceived removed = WaitForEvent<MessageReceived>(rig.Events, e => e.Message.MessageID == message_id, "message without reactions");
+        await rig.Client.SendReactionAsync(Reaction(messageId, "❤️", SendReactionRequest.Types.Action.Remove), CancellationToken.None).WaitAsync(HangGuard);
+        MessageReceived removed = WaitForEvent<MessageReceived>(rig.Events, e => e.Message.MessageID == messageId, "message without reactions");
         Assert.IsEmpty(removed.Message.Reactions);
         Assert.HasCount(3, rig.Server.Phone.Reactions);
 

@@ -96,8 +96,8 @@ public sealed class MessageDatabaseTests
     {
         var db            = Db();
         List<Message> all = Range(130);
-        db.SaveMessages("c-1", all.Take(70).ToList());
-        db.SaveMessages("c-1", all.Skip(70).ToList());
+        db.SaveMessages("c-1", [.. all.Take(70)]);
+        db.SaveMessages("c-1", [.. all.Skip(70)]);
         db.SaveMessages("c-2", [Msg("other", BaseTime)]);
 
         IReadOnlyList<Message> loaded = db.LoadMessages("c-1", 500);

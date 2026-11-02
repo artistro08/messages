@@ -271,8 +271,8 @@ public sealed partial class MediaTests : UiTest
         AutomationElement card = App.Find("Bubble.File." + file.MessageID);
         OpenMenu(card);
         App.Find("Bubble.Download").Patterns.Invoke.Pattern.Invoke();
-        string pdf_path = Path.Combine(downloads, "notes.pdf");
-        Wait.Until(() => File.Exists(pdf_path) && new FileInfo(pdf_path).Length == pdf.Length, AppDriver.DefaultTimeout, () => "Download didn't save the file.");
+        string pdfPath = Path.Combine(downloads, "notes.pdf");
+        Wait.Until(() => File.Exists(pdfPath) && new FileInfo(pdfPath).Length == pdf.Length, AppDriver.DefaultTimeout, () => "Download didn't save the file.");
     }
 
     /// <summary>
@@ -290,9 +290,9 @@ public sealed partial class MediaTests : UiTest
         WaitForStatus(photo, Full);
 
         OpenMenu(photo);
-        AutomationElement open_with = App.Find("Bubble.OpenWith");
-        Assert.AreEqual(ChatCopy.OpenWith, AppDriver.SafeName(open_with));
-        open_with.Patterns.Invoke.Pattern.Invoke();
+        AutomationElement openWith = App.Find("Bubble.OpenWith");
+        Assert.AreEqual(ChatCopy.OpenWith, AppDriver.SafeName(openWith));
+        openWith.Patterns.Invoke.Pattern.Invoke();
 
         string path = LaunchedWithPicker("Open with");
         Assert.AreEqual("pick.png", Path.GetFileName(path), "Open with launched another file.");
@@ -346,8 +346,8 @@ public sealed partial class MediaTests : UiTest
         Wait.Until(() => App.TryFind("Chat.Attachment.1") is null, AppDriver.DefaultTimeout, () => "The chip stayed after Send.");
 
         // The Photo's Echo (Before The Text's) Keeps Showing The Photo, In The Photo's Shape
-        string echo_id          = Server.Phone.Chats.Page("c-media", 2, null).Page[1].MessageID;
-        AutomationElement photo = App.Find("Bubble.Photo." + echo_id);
+        string echoId           = Server.Phone.Chats.Page("c-media", 2, null).Page[1].MessageID;
+        AutomationElement photo = App.Find("Bubble.Photo." + echoId);
         WaitForStatus(photo, Full);
         System.Drawing.Rectangle box = photo.BoundingRectangle;
         Assert.AreEqual(1.5, (double)box.Width / box.Height, 0.03, $"The sent photo's box {box} doesn't keep its 3:2 shape.");
@@ -375,8 +375,8 @@ public sealed partial class MediaTests : UiTest
         Wait.Until(() => (photo = SentPhoto(seeded)) is not null, AppDriver.DefaultTimeout, () => "The sent photo didn't show.");
         WaitForStatus(photo!, Full);
         Wait.Until(() => Server.Phone.Sent.Count == 1, AppDriver.DefaultTimeout, () => "The phone didn't get the photo.");
-        string media_id = Server.Phone.Sent[0].MessagePayload.MessageInfo.Single().MediaContent.MediaID;
-        string echo_id  = Server.Phone.Chats.Page("c-media", 1, null).Page[0].MessageID;
+        string mediaId  = Server.Phone.Sent[0].MessagePayload.MessageInfo.Single().MediaContent.MediaID;
+        string echoId   = Server.Phone.Chats.Page("c-media", 1, null).Page[0].MessageID;
 
         // Through The Echo And A Moment After, It Stays Full
         bool echoed    = false;
@@ -384,12 +384,12 @@ public sealed partial class MediaTests : UiTest
         while (DateTime.UtcNow < until)
         {
             Assert.AreEqual(Full, photo!.Properties.ItemStatus.ValueOrDefault, "The sent photo cleared when its echo arrived.");
-            echoed |= photo.Properties.AutomationId.ValueOrDefault == "Bubble.Photo." + echo_id;
+            echoed |= photo.Properties.AutomationId.ValueOrDefault == "Bubble.Photo." + echoId;
             Thread.Sleep(30);
         }
 
         Assert.IsTrue(echoed, "The sent photo's echo never arrived.");
-        CollectionAssert.DoesNotContain(Server.DownloadedMediaIds.ToList(), media_id, "The sent photo downloaded again after its echo.");
+        CollectionAssert.DoesNotContain(Server.DownloadedMediaIds.ToList(), mediaId, "The sent photo downloaded again after its echo.");
     }
 
     /// <summary>
@@ -822,7 +822,7 @@ public sealed partial class MediaTests : UiTest
 
         App.Find("Chat.Send").Patterns.Invoke.Pattern.Invoke();
         string[] mimes = [];
-        Wait.Until(() => (mimes = Server.Phone.Sent.SelectMany(s => s.MessagePayload.MessageInfo).Select(i => i.MediaContent?.MimeType ?? string.Empty).Where(m => m.Length > 0).ToArray()).Length == 2,
+        Wait.Until(() => (mimes = [.. Server.Phone.Sent.SelectMany(s => s.MessagePayload.MessageInfo).Select(i => i.MediaContent?.MimeType ?? string.Empty).Where(m => m.Length > 0)]).Length == 2,
             AppDriver.DefaultTimeout, () => $"The phone got {mimes.Length} attachments, not 2.");
         Array.Sort(mimes, StringComparer.Ordinal);
         Assert.AreEqual("image/png, video/mp4", string.Join(", ", mimes), "The screenshot and the video went with other types.");
@@ -905,11 +905,11 @@ public sealed partial class MediaTests : UiTest
         Wait.Until(() => VoiceTempFiles().Length == 1, AppDriver.DefaultTimeout, () => "Recording wrote no temp file.");
 
         // The Live Waveform Moves (The Fake Recorder's Level Follows A Wave) And The Timer Runs
-        string level_file    = Path.Combine(App.DataDir, "record-level.txt");
+        string levelFile     = Path.Combine(App.DataDir, "record-level.txt");
         HashSet<string> seen = [];
         Wait.Until(() =>
         {
-            string level = File.Exists(level_file) ? ReadShared(level_file) : string.Empty;
+            string level = File.Exists(levelFile) ? ReadShared(levelFile) : string.Empty;
             if (double.TryParse(level, System.Globalization.CultureInfo.InvariantCulture, out double value) && value > 0)
             {
                 seen.Add(level);
@@ -955,19 +955,19 @@ public sealed partial class MediaTests : UiTest
         AutomationElement wave = App.Find("Chat.RecordWave");
 
         // Watch The Levels Go By: The Wave's Bounds At A Quiet And A Loud One, And The Worst Drift Seen
-        string level_file               = Path.Combine(App.DataDir, "record-level.txt");
-        string drift_file               = Path.Combine(App.DataDir, "record-drift.txt");
+        string levelFile                = Path.Combine(App.DataDir, "record-level.txt");
+        string driftFile                = Path.Combine(App.DataDir, "record-drift.txt");
         System.Drawing.Rectangle? quiet = null;
         System.Drawing.Rectangle? loud  = null;
         double worst                    = 0;
         Wait.Until(() =>
         {
-            if (File.Exists(drift_file) && double.TryParse(ReadShared(drift_file), System.Globalization.CultureInfo.InvariantCulture, out double drift))
+            if (File.Exists(driftFile) && double.TryParse(ReadShared(driftFile), System.Globalization.CultureInfo.InvariantCulture, out double drift))
             {
                 worst = Math.Max(worst, drift);
             }
 
-            if (!File.Exists(level_file) || !double.TryParse(ReadShared(level_file), System.Globalization.CultureInfo.InvariantCulture, out double level))
+            if (!File.Exists(levelFile) || !double.TryParse(ReadShared(levelFile), System.Globalization.CultureInfo.InvariantCulture, out double level))
             {
                 return false;
             }
@@ -1024,8 +1024,8 @@ public sealed partial class MediaTests : UiTest
         System.Drawing.Rectangle box  = App.Find("Chat.Draft").BoundingRectangle;
         System.Drawing.Rectangle mic  = App.Find("Chat.Record").BoundingRectangle;
         System.Drawing.Rectangle send = App.Find("Chat.Send").BoundingRectangle;
-        int composer_gap              = send.Left - mic.Right;
-        int composer_edge             = box.Right - send.Right;
+        int composerGap               = send.Left - mic.Right;
+        int composerEdge              = box.Right - send.Right;
 
         // The Recording Bar's
         App.Find("Chat.Record").Patterns.Invoke.Pattern.Invoke();
@@ -1033,9 +1033,9 @@ public sealed partial class MediaTests : UiTest
         System.Drawing.Rectangle pause  = App.Find("Chat.RecordPause").BoundingRectangle;
         System.Drawing.Rectangle done   = App.Find("Chat.StopRecording").BoundingRectangle;
 
-        Assert.IsLessThanOrEqualTo(1, Math.Abs((pause.Left - cancel.Right) - composer_gap), $"Cancel to Pause is {pause.Left - cancel.Right} px, the mic to Send {composer_gap} px.");
-        Assert.IsLessThanOrEqualTo(1, Math.Abs((done.Left - pause.Right) - composer_gap), $"Pause to Done is {done.Left - pause.Right} px, the mic to Send {composer_gap} px.");
-        Assert.IsLessThanOrEqualTo(1, Math.Abs((box.Right - done.Right) - composer_edge), $"Done is {box.Right - done.Right} px from the edge, Send {composer_edge} px.");
+        Assert.IsLessThanOrEqualTo(1, Math.Abs((pause.Left - cancel.Right) - composerGap), $"Cancel to Pause is {pause.Left - cancel.Right} px, the mic to Send {composerGap} px.");
+        Assert.IsLessThanOrEqualTo(1, Math.Abs((done.Left - pause.Right) - composerGap), $"Pause to Done is {done.Left - pause.Right} px, the mic to Send {composerGap} px.");
+        Assert.IsLessThanOrEqualTo(1, Math.Abs((box.Right - done.Right) - composerEdge), $"Done is {box.Right - done.Right} px from the edge, Send {composerEdge} px.");
         Assert.AreEqual(send.Size, done.Size, "Done isn't the size of Send.");
     }
 
@@ -1055,7 +1055,7 @@ public sealed partial class MediaTests : UiTest
         AutomationElement pause = App.Find("Chat.RecordPause");
         Wait.Until(() => AppDriver.SafeName(timer) == "0:01", AppDriver.DefaultTimeout, () => $"The timer stayed '{AppDriver.SafeName(timer)}'.");
         Assert.AreEqual(ChatCopy.Pause, AppDriver.SafeName(pause), "The pause button has another name.");
-        System.Drawing.Rectangle timer_box = timer.BoundingRectangle;
+        System.Drawing.Rectangle timerBox = timer.BoundingRectangle;
 
         // Pause From The Keyboard: Focus Starts On Done, Pause Is Just Before It
         Wait.Until(() => App.Find("Chat.StopRecording").Properties.HasKeyboardFocus.ValueOrDefault, AppDriver.DefaultTimeout, () => "Done didn't get focus.");
@@ -1065,19 +1065,19 @@ public sealed partial class MediaTests : UiTest
         Wait.Until(() => AppDriver.SafeName(pause) == ChatCopy.Resume, AppDriver.DefaultTimeout, () => $"Pause didn't become Resume: '{AppDriver.SafeName(pause)}'.");
 
         // Paused: The Time And The Waveform Hold Still
-        string level_file = Path.Combine(App.DataDir, "record-level.txt");
-        string held_time  = AppDriver.SafeName(timer);
-        string held_level = ReadShared(level_file);
+        string levelFile  = Path.Combine(App.DataDir, "record-level.txt");
+        string heldTime   = AppDriver.SafeName(timer);
+        string heldLevel  = ReadShared(levelFile);
         Thread.Sleep(2500);
-        Assert.AreEqual(held_time, AppDriver.SafeName(timer), "The timer ran while paused.");
-        Assert.AreEqual(held_level, ReadShared(level_file), "The live waveform moved while paused.");
+        Assert.AreEqual(heldTime, AppDriver.SafeName(timer), "The timer ran while paused.");
+        Assert.AreEqual(heldLevel, ReadShared(levelFile), "The live waveform moved while paused.");
 
         // Resume: The Time Counts On From Where It Held
         pause.Patterns.Invoke.Pattern.Invoke();
         Wait.Until(() => AppDriver.SafeName(pause) == ChatCopy.Pause, AppDriver.DefaultTimeout, () => "Resume didn't become Pause.");
-        string next = held_time == "0:01" ? "0:02" : "0:03";
+        string next = heldTime == "0:01" ? "0:02" : "0:03";
         Wait.Until(() => AppDriver.SafeName(timer) == next, AppDriver.DefaultTimeout, () => $"The timer didn't count on to {next}: '{AppDriver.SafeName(timer)}'.");
-        Assert.AreEqual(timer_box, timer.BoundingRectangle, "The timer changed size as it counted, which moves the live waveform.");
+        Assert.AreEqual(timerBox, timer.BoundingRectangle, "The timer changed size as it counted, which moves the live waveform.");
 
         App.Find("Chat.StopRecording").Patterns.Invoke.Pattern.Invoke();
         AutomationElement length = App.Find("Chat.VoiceLength");
@@ -1443,11 +1443,11 @@ public sealed partial class MediaTests : UiTest
     {
         AutomationElement list = App.Find("Chat.Messages");
         var scroll             = list.Patterns.Scroll.Pattern;
-        double view_size       = scroll.VerticalViewSize.ValueOrDefault;
+        double viewSize        = scroll.VerticalViewSize.ValueOrDefault;
         double viewport        = list.BoundingRectangle.Height;
-        double scrollable      = view_size is > 0 and < 100 ? viewport * 100 / view_size - viewport : 0;
-        double short_by        = (100 - scroll.VerticalScrollPercent.ValueOrDefault) / 100 * scrollable;
-        Assert.IsTrue(short_by < 1, $"{what} left the list {short_by:0.0} px short of the newest message.");
+        double scrollable      = viewSize is > 0 and < 100 ? viewport * 100 / viewSize - viewport : 0;
+        double shortBy         = (100 - scroll.VerticalScrollPercent.ValueOrDefault) / 100 * scrollable;
+        Assert.IsTrue(shortBy < 1, $"{what} left the list {shortBy:0.0} px short of the newest message.");
     }
 
     /// <summary>

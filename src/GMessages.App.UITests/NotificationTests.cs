@@ -301,9 +301,9 @@ public sealed class NotificationTests : UiTest
         // Hands The Foreground Back, As A Person's Next Click Would
         Window pairing                  = WaitForPairing(TimeSpan.FromSeconds(30));
         System.Drawing.Rectangle bounds = pairing.BoundingRectangle;
-        int app_process                 = pairing.Properties.ProcessId.Value;
+        int appProcess                  = pairing.Properties.ProcessId.Value;
         FlaUI.Core.Input.Mouse.Click(new System.Drawing.Point(bounds.X + (bounds.Width / 2), bounds.Y + 16));
-        Wait.Until(() => App.Automation.FocusedElement()?.Properties.ProcessId.ValueOrDefault == app_process, AppDriver.DefaultTimeout,
+        Wait.Until(() => App.Automation.FocusedElement()?.Properties.ProcessId.ValueOrDefault == appProcess, AppDriver.DefaultTimeout,
             () => $"The click on the pairing window's title bar ({bounds}) didn't bring it forward.");
     }
 

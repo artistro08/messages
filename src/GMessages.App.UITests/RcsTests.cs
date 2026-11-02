@@ -192,10 +192,10 @@ public sealed class RcsTests : UiTest
         App.WaitForText("Preview." + link.MessageID, FakeGoogleServer.PreviewPageTitle + ", 127.0.0.1");
 
         App.Find("Preview." + link.MessageID).RightClick();
-        AutomationElement copy_link = App.Find("Preview.CopyLink");
-        Assert.AreEqual(ChatCopy.CopyLink, AppDriver.SafeName(copy_link));
+        AutomationElement copyLink = App.Find("Preview.CopyLink");
+        Assert.AreEqual(ChatCopy.CopyLink, AppDriver.SafeName(copyLink));
         Assert.IsNull(App.TryFind("Bubble.Copy"), "The bubble menu opened over the card's menu.");
-        copy_link.Patterns.Invoke.Pattern.Invoke();
+        copyLink.Patterns.Invoke.Pattern.Invoke();
 
         App.Find("Chat.Draft").Focus();
         Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_V);
@@ -318,19 +318,19 @@ public sealed class RcsTests : UiTest
         Keyboard.Type("Hi");
         Keyboard.Type(VirtualKeyShort.RETURN);
         Wait.Until(() => Server.Phone.Sent.Count == 1, AppDriver.DefaultTimeout, () => "The phone never got the message.");
-        string sent_id = Newest("c-ann").MessageID;
+        string sentId = Newest("c-ann").MessageID;
         App.Find("Bubble." + Server.Phone.PushIncoming("c-ann", "Another longer message after it").MessageID);
-        AutomationElement sent = App.Find("Bubble." + sent_id);
+        AutomationElement sent = App.Find("Bubble." + sentId);
         sent.RightClick();
         App.Find("Bubble.React").Patterns.Invoke.Pattern.Invoke();
         App.Find("ReactionPicker.1").Patterns.Invoke.Pattern.Invoke();
-        AutomationElement sent_pill = App.Find("Reactions." + sent_id);
+        AutomationElement sentPill = App.Find("Reactions." + sentId);
         WaitForGone("ReactionPicker.1");
         Thread.Sleep(500);
         sent.Click();
-        App.Find("Bubble." + sent_id + ".Time");
+        App.Find("Bubble." + sentId + ".Time");
         Thread.Sleep(500);
-        AssertPillOnLeftCorner(sent, sent_pill);
+        AssertPillOnLeftCorner(sent, sentPill);
     }
 
     // The Pill Crosses The Bubble's Bottom Edge At Its Bottom-Right Corner (Received). The Text Sits 12 px Inside The Back
@@ -927,31 +927,31 @@ public sealed class RcsTests : UiTest
 
         // A Second Message From Ann, A Second After Her Last: The Two Make One Group
         Message newest     = Server.Phone.PushIncoming("c-ann", "See you then");
-        string neighbor_id = Find("c-ann", AnnLast).MessageID;
-        string mine_id     = Find("c-ann", MyReply).MessageID;
+        string neighborId  = Find("c-ann", AnnLast).MessageID;
+        string mineId      = Find("c-ann", MyReply).MessageID;
         App.Find("Bubble." + newest.MessageID);
 
         // Settle Wait For The List To Finish Scrolling To The New Bubble
         Thread.Sleep(1000);
 
         // Mine: The Strip On The Left
-        System.Drawing.Rectangle mine_before = App.Find("Bubble." + mine_id).BoundingRectangle;
-        AutomationElement mine_react         = HoverStripButton(mine_id, "HoverReact.");
-        System.Drawing.Rectangle mine_after  = App.Find("Bubble." + mine_id).BoundingRectangle;
-        AssertSame(mine_before, mine_after, "My hovered bubble");
-        Assert.IsTrue(mine_react.BoundingRectangle.Right <= mine_after.Left,
-            $"The strip ({mine_react.BoundingRectangle}) isn't left of my bubble ({mine_after}).");
+        System.Drawing.Rectangle mineBefore  = App.Find("Bubble." + mineId).BoundingRectangle;
+        AutomationElement mineReact          = HoverStripButton(mineId, "HoverReact.");
+        System.Drawing.Rectangle mineAfter   = App.Find("Bubble." + mineId).BoundingRectangle;
+        AssertSame(mineBefore, mineAfter, "My hovered bubble");
+        Assert.IsTrue(mineReact.BoundingRectangle.Right <= mineAfter.Left,
+            $"The strip ({mineReact.BoundingRectangle}) isn't left of my bubble ({mineAfter}).");
 
         // Ann's: The Strip On The Right, And Her Grouped Bubble Above Stays Put
-        System.Drawing.Rectangle bubble_before   = App.Find("Bubble." + newest.MessageID).BoundingRectangle;
-        System.Drawing.Rectangle neighbor_before = App.Find("Bubble." + neighbor_id).BoundingRectangle;
+        System.Drawing.Rectangle bubbleBefore    = App.Find("Bubble." + newest.MessageID).BoundingRectangle;
+        System.Drawing.Rectangle neighborBefore  = App.Find("Bubble." + neighborId).BoundingRectangle;
         AutomationElement react                  = HoverStripButton(newest.MessageID, "HoverReact.");
-        System.Drawing.Rectangle bubble_after    = App.Find("Bubble." + newest.MessageID).BoundingRectangle;
-        System.Drawing.Rectangle neighbor_after  = App.Find("Bubble." + neighbor_id).BoundingRectangle;
-        AssertSame(bubble_before, bubble_after, "Ann's hovered bubble");
-        AssertSame(neighbor_before, neighbor_after, "The bubble above it in its group");
-        Assert.IsTrue(react.BoundingRectangle.Left >= bubble_after.Right,
-            $"The strip ({react.BoundingRectangle}) isn't right of Ann's bubble ({bubble_after}).");
+        System.Drawing.Rectangle bubbleAfter     = App.Find("Bubble." + newest.MessageID).BoundingRectangle;
+        System.Drawing.Rectangle neighborAfter   = App.Find("Bubble." + neighborId).BoundingRectangle;
+        AssertSame(bubbleBefore, bubbleAfter, "Ann's hovered bubble");
+        AssertSame(neighborBefore, neighborAfter, "The bubble above it in its group");
+        Assert.IsTrue(react.BoundingRectangle.Left >= bubbleAfter.Right,
+            $"The strip ({react.BoundingRectangle}) isn't right of Ann's bubble ({bubbleAfter}).");
 
         // The Hover Took Effect: The Strip Takes Clicks
         react.Click();
@@ -1167,23 +1167,23 @@ public sealed class RcsTests : UiTest
         Assert.IsTrue(on.Top < text.Bottom + 12 && on.Bottom > text.Bottom + 12, $"The pill {on} doesn't cross the bubble's bottom edge (text {text}).");
 
         // Mine On Another Bubble: In, Taken Back (The Same Emoji Again), Then In Again
-        string mine_id = Find("c-ann", AnnFirst).MessageID;
+        string mineId  = Find("c-ann", AnnFirst).MessageID;
         for (int round = 0; round < 3; round++)
         {
             // Settle Wait For The Last Picker To Close And The Pill To Settle
             Thread.Sleep(500);
-            App.Find("Bubble." + mine_id).RightClick();
+            App.Find("Bubble." + mineId).RightClick();
             App.Find("Bubble.React").Patterns.Invoke.Pattern.Invoke();
             App.Find("ReactionPicker.1").Patterns.Invoke.Pattern.Invoke();
             WaitForGone("ReactionPicker.1");
             Wait.Until(() => Server.Phone.Reactions.Count == round + 1, AppDriver.DefaultTimeout, () => $"The phone got {Server.Phone.Reactions.Count} reactions, not {round + 1}.");
             if (round == 1)
             {
-                WaitForGone("Reactions." + mine_id);
+                WaitForGone("Reactions." + mineId);
                 continue;
             }
 
-            Wait.Until(() => App.TryFind("Reactions." + mine_id)?.BoundingRectangle.Height > 0, AppDriver.DefaultTimeout, () => $"My pill never showed (round {round}).");
+            Wait.Until(() => App.TryFind("Reactions." + mineId)?.BoundingRectangle.Height > 0, AppDriver.DefaultTimeout, () => $"My pill never showed (round {round}).");
         }
 
         Assert.AreEqual(SendReactionRequest.Types.Action.Remove, Server.Phone.Reactions[1].Action, "The second pick didn't take my reaction back.");

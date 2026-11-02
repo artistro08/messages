@@ -144,16 +144,16 @@ public sealed class FakeChats
         Message Line(int i)
         {
             // Runs Of One To Three From Each Side; Every Fourth Message Wraps
-            bool from_me = (i / 3 + i / 5) % 2 == 0;
+            bool fromMe  = (i / 3 + i / 5) % 2 == 0;
             string text  = i % 4 == 0 ? $"long {i:000} " + string.Concat(Enumerable.Repeat("and a longer line that wraps ", 4)).TrimEnd() : $"long {i:000}";
             var message  = new Message
             {
                 MessageID      = $"{id}-{i:000}",
                 ConversationID = id,
-                ParticipantID  = from_me ? MyParticipantId : "p-bo",
+                ParticipantID  = fromMe ? MyParticipantId : "p-bo",
                 Timestamp      = start + ((i - 1) * 60_000_000L),
                 Type           = TextType(chat),
-                MessageStatus  = new MessageStatus { Status = from_me ? MessageStatusType.OutgoingComplete : MessageStatusType.IncomingComplete },
+                MessageStatus  = new MessageStatus { Status = fromMe ? MessageStatusType.OutgoingComplete : MessageStatusType.IncomingComplete },
             };
             message.MessageInfo.Add(new MessageInfo { MessageContent = new MessageContent { Content = text } });
             return message;
@@ -171,7 +171,7 @@ public sealed class FakeChats
     {
         lock (_lock)
         {
-            IEnumerable<Conversation> newest_first = _conversations
+            IEnumerable<Conversation> newestFirst = _conversations
                 .Where(c => folder switch
                 {
                     ListConversationsRequest.Types.Folder.Inbox       => c.Status == ConversationStatus.Active,
@@ -182,10 +182,10 @@ public sealed class FakeChats
                 .OrderByDescending(c => c.LastMessageTimestamp);
             if (cursor is { LastItemID.Length: > 0 })
             {
-                newest_first = newest_first.SkipWhile(c => c.ConversationID != cursor.LastItemID).Skip(1);
+                newestFirst = newestFirst.SkipWhile(c => c.ConversationID != cursor.LastItemID).Skip(1);
             }
 
-            List<Conversation> rest = [.. newest_first];
+            List<Conversation> rest = [.. newestFirst];
             List<Conversation> page = count > 0 ? [.. rest.Take((int)count)] : rest;
             return [.. page.Select(c => c.Clone())];
         }
@@ -205,13 +205,13 @@ public sealed class FakeChats
     {
         lock (_lock)
         {
-            IEnumerable<Message> newest_first = _messages.TryGetValue(conversationId, out List<Message>? all) ? all.AsEnumerable().Reverse() : [];
+            IEnumerable<Message> newestFirst = _messages.TryGetValue(conversationId, out List<Message>? all) ? all.AsEnumerable().Reverse() : [];
             if (cursor is { LastItemID.Length: > 0 })
             {
-                newest_first = newest_first.SkipWhile(m => m.MessageID != cursor.LastItemID).Skip(1);
+                newestFirst = newestFirst.SkipWhile(m => m.MessageID != cursor.LastItemID).Skip(1);
             }
 
-            List<Message> rest = [.. newest_first];
+            List<Message> rest = [.. newestFirst];
             List<Message> page = count > 0 ? [.. rest.Take((int)count)] : rest;
             return ([.. page.Select(m => m.Clone())], null);
         }
@@ -398,7 +398,7 @@ public sealed class FakeChats
                 return null;
             }
 
-            foreach ((EmojiType type, string participant_id) in reactions)
+            foreach ((EmojiType type, string participantId) in reactions)
             {
                 ReactionEntry? entry = message.Reactions.FirstOrDefault(e => e.Data?.Type == type);
                 if (entry is null)
@@ -407,7 +407,7 @@ public sealed class FakeChats
                     message.Reactions.Add(entry);
                 }
 
-                entry.ParticipantIDs.Add(participant_id);
+                entry.ParticipantIDs.Add(participantId);
             }
 
             return message.Clone();
@@ -441,14 +441,14 @@ public sealed class FakeChats
                 return null;
             }
 
-            if (status is { } new_status)
+            if (status is { } newStatus)
             {
-                conversation.Status = new_status;
+                conversation.Status = newStatus;
             }
 
-            if (muted is { } new_muted)
+            if (muted is { } newMuted)
             {
-                conversation.Muted = new_muted;
+                conversation.Muted = newMuted;
             }
 
             return conversation.Clone();
@@ -476,9 +476,9 @@ public sealed class FakeChats
                 return found.Clone();
             }
 
-            string number_text = string.Join(", ", wanted);
+            string numberText  = string.Join(", ", wanted);
             string id          = "c-new-" + ++_nextId;
-            Conversation fresh = NewConversation(id, number_text, wanted.Length > 1, ConversationStatus.Active, false, false, [.. wanted.Select(n => Person("p-" + n, n, n))]);
+            Conversation fresh = NewConversation(id, numberText, wanted.Length > 1, ConversationStatus.Active, false, false, [.. wanted.Select(n => Person("p-" + n, n, n))]);
             _conversations.Add(fresh);
             _messages[id] = [];
             return fresh.Clone();
@@ -522,7 +522,7 @@ public sealed class FakeChats
     // A Message A Little Later Than The Last One; From Me It Is Outgoing, Otherwise Incoming
     private Message NewMessage(Conversation conversation, string participantId, string text, string tmpId = "")
     {
-        bool from_me = participantId == MyParticipantId;
+        bool fromMe  = participantId == MyParticipantId;
         var message  = new Message
         {
             MessageID      = "m-" + ++_nextId,
@@ -531,7 +531,7 @@ public sealed class FakeChats
             Timestamp      = _clock += 1_000_000,
             TmpID          = tmpId,
             Type           = TextType(conversation),
-            MessageStatus  = new MessageStatus { Status = from_me ? MessageStatusType.OutgoingComplete : MessageStatusType.IncomingComplete },
+            MessageStatus  = new MessageStatus { Status = fromMe ? MessageStatusType.OutgoingComplete : MessageStatusType.IncomingComplete },
         };
         message.MessageInfo.Add(new MessageInfo { MessageContent = new MessageContent { Content = text } });
         return message;

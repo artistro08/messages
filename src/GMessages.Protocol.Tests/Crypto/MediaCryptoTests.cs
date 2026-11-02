@@ -117,13 +117,13 @@ public class MediaCryptoTests
         CollectionAssert.AreEqual(plain, MediaCrypto.Decrypt(small, key));
 
         // Too Large, Or A Bad Signature
-        byte[] too_large = [.. encrypted];
-        too_large[1]     = 23;
-        Assert.ThrowsExactly<CryptographicException>(() => MediaCrypto.Decrypt(too_large, key));
+        byte[] tooLarge  = [.. encrypted];
+        tooLarge[1]      = 23;
+        Assert.ThrowsExactly<CryptographicException>(() => MediaCrypto.Decrypt(tooLarge, key));
 
-        byte[] bad_signature = [.. encrypted];
-        bad_signature[0]     = 1;
-        Assert.ThrowsExactly<CryptographicException>(() => MediaCrypto.Decrypt(bad_signature, key));
+        byte[] badSignature  = [.. encrypted];
+        badSignature[0]      = 1;
+        Assert.ThrowsExactly<CryptographicException>(() => MediaCrypto.Decrypt(badSignature, key));
     }
 
     /// <summary>

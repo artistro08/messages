@@ -186,12 +186,12 @@ public class RpcSessionTimingTests
         Rig rig = CreateRig();
         Task<IncomingRpc> send = rig.Session.SendAsync(new SendParams(ActionType.GetUpdates, RequestId: "req-1"), CancellationToken.None);
         await WaitForTimersAsync(rig.Time, 1);
-        Task<IncomingRpc> no_wait = await rig.Session.SendNoWaitAsync(new SendParams(ActionType.GetUpdates, RequestId: "req-2"), CancellationToken.None);
+        Task<IncomingRpc> noWait = await rig.Session.SendNoWaitAsync(new SendParams(ActionType.GetUpdates, RequestId: "req-2"), CancellationToken.None);
 
         rig.Session.FailAllWaiters();
 
         await Assert.ThrowsExactlyAsync<ConnectionClosedException>(() => send.WaitAsync(TimeSpan.FromSeconds(10)));
-        await Assert.ThrowsExactlyAsync<ConnectionClosedException>(() => no_wait.WaitAsync(TimeSpan.FromSeconds(10)));
+        await Assert.ThrowsExactlyAsync<ConnectionClosedException>(() => noWait.WaitAsync(TimeSpan.FromSeconds(10)));
     }
 
     /// <summary>

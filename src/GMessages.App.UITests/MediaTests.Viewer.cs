@@ -291,28 +291,28 @@ public sealed partial class MediaTests
         AutomationElement photo      = ViewerPhoto(null);
         System.Drawing.Rectangle bar = App.Find("Main.TitleBar").BoundingRectangle;
         AutomationElement profile    = App.Find("Main.ProfileButton");
-        double title_before          = Luma(PixelAt(new System.Drawing.Point(bar.Left + 240, bar.Top + (bar.Height / 2))));
+        double titleBefore           = Luma(PixelAt(new System.Drawing.Point(bar.Left + 240, bar.Top + (bar.Height / 2))));
 
         photo.Click();
         App.Find("PhotoViewer.Photo");
         System.Drawing.Rectangle window = App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).BoundingRectangle;
-        int left_edge                   = window.Left;
+        int leftEdge                    = window.Left;
         foreach (string id in (ReadOnlySpan<string>)["PhotoViewer.Close", "PhotoViewer.OpenInPhotos", "PhotoViewer.OpenWith", "PhotoViewer.Download", "PhotoViewer.SaveAs"])
         {
             System.Drawing.Rectangle button = App.Find(id).BoundingRectangle;
             Assert.IsTrue(button.Top >= bar.Top && button.Bottom <= bar.Bottom, $"{id} ({button}) isn't in the title bar row ({bar}).");
-            Assert.IsTrue(button.Left >= left_edge, $"{id} ({button}) is out of order (Close, Open, Open with, Download, Save as from the left).");
+            Assert.IsTrue(button.Left >= leftEdge, $"{id} ({button}) is out of order (Close, Open, Open with, Download, Save as from the left).");
             // Five Buttons End 289 px In At The Test Machine's 125% (224 epx Plus The Window's Edge)
             Assert.IsTrue(button.Right <= window.Left + 295, $"{id} ({button}) isn't in the top-left corner (window {window}).");
-            left_edge = button.Right;
+            leftEdge = button.Right;
         }
 
         // The Title Bar Row Is Under The Scrim: Its Title And The Profile Picture Read Near Black
         Thread.Sleep(300);
-        double title_after   = Luma(PixelAt(new System.Drawing.Point(bar.Left + 240, bar.Top + (bar.Height / 2))));
-        double profile_after = Luma(CenterPixel(profile));
-        Assert.IsTrue(title_after < 40 && title_after <= title_before, $"The title bar row isn't tinted (luma {title_before:F0} before, {title_after:F0} after).");
-        Assert.IsTrue(profile_after < 40, $"The profile picture isn't tinted (luma {profile_after:F0}).");
+        double titleAfter    = Luma(PixelAt(new System.Drawing.Point(bar.Left + 240, bar.Top + (bar.Height / 2))));
+        double profileAfter  = Luma(CenterPixel(profile));
+        Assert.IsTrue(titleAfter < 40 && titleAfter <= titleBefore, $"The title bar row isn't tinted (luma {titleBefore:F0} before, {titleAfter:F0} after).");
+        Assert.IsTrue(profileAfter < 40, $"The profile picture isn't tinted (luma {profileAfter:F0}).");
 
         // A Real Click On Close (Not UI Automation) Reaches It In The Title Bar Row
         System.Drawing.Rectangle close = App.Find("PhotoViewer.Close").BoundingRectangle;

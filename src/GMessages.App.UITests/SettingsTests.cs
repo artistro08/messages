@@ -134,7 +134,7 @@ public sealed class SettingsTests : UiTest
     public void Settings_Back_ReturnsToPairing()
     {
         WaitForSignInButton();
-        int page_loads = Server.RequestedPaths.Count(p => p == "/web/authentication");
+        int pageLoads = Server.RequestedPaths.Count(p => p == "/web/authentication");
 
         // Settings Over Pairing
         OpenSettings();
@@ -145,7 +145,7 @@ public sealed class SettingsTests : UiTest
         WaitForGone("Settings.Back");
         WaitForPairing();
         WaitForSignInButton();
-        Assert.AreEqual(page_loads, Server.RequestedPaths.Count(p => p == "/web/authentication"), "Back started a new sign-in.");
+        Assert.AreEqual(pageLoads, Server.RequestedPaths.Count(p => p == "/web/authentication"), "Back started a new sign-in.");
     }
 
     /// <summary>

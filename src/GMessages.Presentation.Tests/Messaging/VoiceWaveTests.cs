@@ -35,8 +35,8 @@ public sealed class VoiceWaveTests
         CollectionAssert.AreEqual(new float[4], VoiceWave.PeaksOf(Pcm(0, 0, 0, 0), 1, 4));
         CollectionAssert.AreEqual(new float[3], VoiceWave.PeaksOf([], 1, 3));
 
-        float[] short_audio = VoiceWave.PeaksOf(Pcm(1000), 1, 3);
-        CollectionAssert.AreEqual(LoudThenFlat, short_audio);
+        float[] shortAudio = VoiceWave.PeaksOf(Pcm(1000), 1, 3);
+        CollectionAssert.AreEqual(LoudThenFlat, shortAudio);
     }
 
     /// <summary>
@@ -85,9 +85,9 @@ public sealed class VoiceWaveTests
     public void FromWav_NotWav_Throws()
     {
         Assert.ThrowsExactly<InvalidDataException>(() => VoiceWave.FromWav("not a wav file"u8));
-        byte[] eight_bit = Wav([1, 2], 8000, 2);
-        eight_bit[34]    = 8;
-        Assert.ThrowsExactly<InvalidDataException>(() => VoiceWave.FromWav(eight_bit));
+        byte[] eightBit  = Wav([1, 2], 8000, 2);
+        eightBit[34]     = 8;
+        Assert.ThrowsExactly<InvalidDataException>(() => VoiceWave.FromWav(eightBit));
     }
 
     /// <summary>

@@ -210,10 +210,10 @@ public sealed class FakePhone
     /// <exception cref="InvalidOperationException">No client finished message is waiting.</exception>
     public void Tap(bool correct)
     {
-        string request_id;
+        string requestId;
         lock (_lock)
         {
-            request_id  = _heldFinish ?? throw new InvalidOperationException("No pairing is waiting for a tap.");
+            requestId   = _heldFinish ?? throw new InvalidOperationException("No pairing is waiting for a tap.");
             _heldFinish = null;
             if (correct)
             {
@@ -225,7 +225,7 @@ public sealed class FakePhone
         GaiaPairingResponseContainer answer = correct
             ? new GaiaPairingResponseContainer()
             : new GaiaPairingResponseContainer { FinishErrorType = 1, FinishErrorCode = GaiaPairingErrorCode.WrongVerificationCodeSelected };
-        Reply(request_id, ActionType.CreateGaiaPairingClientFinished, answer, encrypt: false);
+        Reply(requestId, ActionType.CreateGaiaPairingClientFinished, answer, encrypt: false);
     }
 
     /// <summary>
@@ -273,8 +273,8 @@ public sealed class FakePhone
                 }
 
                 // Held Off The Request's Thread, So Other Requests Are Answered Meanwhile
-                string request_id = data.RequestID;
-                _ = Task.Delay(delay).ContinueWith(_ => Reply(request_id, ActionType.ListMessages, answer, encrypt: true), TaskScheduler.Default);
+                string requestId = data.RequestID;
+                _ = Task.Delay(delay).ContinueWith(_ => Reply(requestId, ActionType.ListMessages, answer, encrypt: true), TaskScheduler.Default);
                 break;
 
             case ActionType.SendMessage when RequestCrypto is not null:
@@ -332,11 +332,11 @@ public sealed class FakePhone
             case ActionType.GetParticipantsThumbnail when RequestCrypto is not null:
                 var thumbnails = Open(data, GetThumbnailRequest.Parser);
                 var photos     = new GetThumbnailResponse();
-                foreach (string with_photo in (string[])["p-ann", FakeChats.MyParticipantId])
+                foreach (string withPhoto in (string[])["p-ann", FakeChats.MyParticipantId])
                 {
-                    if (thumbnails.Identifiers.Contains(with_photo))
+                    if (thumbnails.Identifiers.Contains(withPhoto))
                     {
-                        photos.Thumbnail.Add(new GetThumbnailResponse.Types.Thumbnail { Identifier = with_photo, Data = new ThumbnailData { ImageBuffer = ByteString.FromBase64(FakeChats.BluePng) } });
+                        photos.Thumbnail.Add(new GetThumbnailResponse.Types.Thumbnail { Identifier = withPhoto, Data = new ThumbnailData { ImageBuffer = ByteString.FromBase64(FakeChats.BluePng) } });
                     }
                 }
 
@@ -345,13 +345,13 @@ public sealed class FakePhone
 
             // A Thumbnail-Only Photo: Answered, Then Sent Again With Its Full Media ID
             case ActionType.GetFullSizeImage when RequestCrypto is not null:
-                var full_size = Open(data, GetFullSizeImageRequest.Parser);
-                Message? full = Chats.ReleaseFullSize(full_size.MessageID);
+                var fullSize  = Open(data, GetFullSizeImageRequest.Parser);
+                Message? full = Chats.ReleaseFullSize(fullSize.MessageID);
                 Reply(data.RequestID, data.Action, new GetFullSizeImageResponse(), encrypt: true);
                 if (full is not null)
                 {
-                    TimeSpan full_delay = FullSizeDelay;
-                    _ = Task.Delay(full_delay).ContinueWith(_ => PushUpdate(new UpdateEvents { MessageEvent = new MessageEvent { Data = { full } } }, _push), TaskScheduler.Default);
+                    TimeSpan fullDelay = FullSizeDelay;
+                    _ = Task.Delay(fullDelay).ContinueWith(_ => PushUpdate(new UpdateEvents { MessageEvent = new MessageEvent { Data = { full } } }, _push), TaskScheduler.Default);
                 }
 
                 break;
@@ -602,15 +602,15 @@ public sealed class FakePhone
     // Keeps The Client Init And Its Commitment, Answers With A Server Init Using A Fresh Key
     private GaiaPairingResponseContainer OnClientInit(OutgoingRPCData data)
     {
-        byte[] client_init     = GaiaPairingRequestContainer.Parser.ParseFrom(data.UnencryptedProtoData).Data.ToByteArray();
-        Ukey2ClientInit parsed = Ukey2ClientInit.Parser.ParseFrom(Ukey2Message.Parser.ParseFrom(client_init).MessageData);
+        byte[] clientInit      = GaiaPairingRequestContainer.Parser.ParseFrom(data.UnencryptedProtoData).Data.ToByteArray();
+        Ukey2ClientInit parsed = Ukey2ClientInit.Parser.ParseFrom(Ukey2Message.Parser.ParseFrom(clientInit).MessageData);
         byte[] commitment      = parsed.CipherCommitments.FirstOrDefault(c => c.HandshakeCipher == Ukey2HandshakeCipher.P256Sha512)?.Commitment.ToByteArray()
             ?? throw new InvalidDataException("No P-256/SHA-512 commitment in the client init.");
 
         // Server Init: Own Key, X/Y With A Leading Zero Byte Like Go
         using var ecdh = ECDiffieHellman.Create(ECCurve.NamedCurves.nistP256);
         ECParameters key = ecdh.ExportParameters(true);
-        var server_init  = new Ukey2ServerInit
+        var serverInit   = new Ukey2ServerInit
         {
             Version         = 1,
             Random          = ByteString.CopyFrom(RandomNumberGenerator.GetBytes(32)),
@@ -621,13 +621,13 @@ public sealed class FakePhone
                 EcP256PublicKey = new EcP256PublicKey { X = ByteString.CopyFrom([0, .. key.Q.X!]), Y = ByteString.CopyFrom([0, .. key.Q.Y!]) },
             },
         };
-        byte[] message = new Ukey2Message { MessageType = Ukey2Message.Types.Type.ServerInit, MessageData = server_init.ToByteString() }.ToByteArray();
+        byte[] message = new Ukey2Message { MessageType = Ukey2Message.Types.Type.ServerInit, MessageData = serverInit.ToByteString() }.ToByteArray();
 
         // A New Attempt Forgets The Last One's Emoji, Held Answer And Signal
         lock (_lock)
         {
             _key        = key;
-            _clientInit = client_init;
+            _clientInit = clientInit;
             _serverInit = message;
             _commitment = commitment;
             _heldFinish = null;
@@ -659,22 +659,22 @@ public sealed class FakePhone
 
             // Client Public Key
             EcP256PublicKey client = Ukey2ClientFinished.Parser.ParseFrom(Ukey2Message.Parser.ParseFrom(finish).MessageData).PublicKey.EcP256PublicKey;
-            var client_point       = new ECPoint { X = StripPrefix(client.X), Y = StripPrefix(client.Y) };
+            var clientPoint        = new ECPoint { X = StripPrefix(client.X), Y = StripPrefix(client.Y) };
 
             // Shared Secret: SHA-256 Of The Raw ECDH X Coordinate, From The Phone's Own Key
-            byte[] shared_secret;
+            byte[] sharedSecret;
             using (var server = ECDiffieHellman.Create(_key))
-            using (var peer = ECDiffieHellman.Create(new ECParameters { Curve = ECCurve.NamedCurves.nistP256, Q = client_point }))
-            using (ECDiffieHellmanPublicKey peer_public = peer.PublicKey)
+            using (var peer = ECDiffieHellman.Create(new ECParameters { Curve = ECCurve.NamedCurves.nistP256, Q = clientPoint }))
+            using (ECDiffieHellmanPublicKey peerPublic = peer.PublicKey)
             {
-                shared_secret = SHA256.HashData(server.DeriveRawSecretAgreement(peer_public));
+                sharedSecret = SHA256.HashData(server.DeriveRawSecretAgreement(peerPublic));
             }
 
             // Auth Key Picks The Emoji, Next Key Waits For The Tap
             byte[] info     = [.. _clientInit, .. _serverInit];
-            byte[] auth_key = Hkdf(shared_secret, "UKEY2 v1 auth"u8.ToArray(), info);
-            _nextKey        = Hkdf(shared_secret, "UKEY2 v1 next"u8.ToArray(), info);
-            ShownEmoji      = PairingEmojis.Pick(BinaryPrimitives.ReadUInt32BigEndian(auth_key), 1);
+            byte[] authKey  = Hkdf(sharedSecret, "UKEY2 v1 auth"u8.ToArray(), info);
+            _nextKey        = Hkdf(sharedSecret, "UKEY2 v1 next"u8.ToArray(), info);
+            ShownEmoji      = PairingEmojis.Pick(BinaryPrimitives.ReadUInt32BigEndian(authKey), 1);
             _heldFinish     = data.RequestID;
 
             // Derived Now, So A Catch-Up Message Can Be Encrypted Before The Tap
@@ -688,10 +688,10 @@ public sealed class FakePhone
     // Key Derivation Version 1: Order Client And Server Keys By Java Hash, Then The "Ditto" HKDFs
     private static AesCtrHelper DeriveRequestKeys(byte[] nextKey)
     {
-        byte[] client_key   = Hkdf(nextKey, EncryptionKeyInfo, "client"u8.ToArray());
-        byte[] server_key   = Hkdf(nextKey, EncryptionKeyInfo, "server"u8.ToArray());
-        bool client_first   = JavaHash.ByteHash(client_key) < JavaHash.ByteHash(server_key);
-        byte[] concatenated = client_first ? [.. EncryptionKeyInfo, .. client_key, .. server_key] : [.. EncryptionKeyInfo, .. server_key, .. client_key];
+        byte[] clientKey    = Hkdf(nextKey, EncryptionKeyInfo, "client"u8.ToArray());
+        byte[] serverKey    = Hkdf(nextKey, EncryptionKeyInfo, "server"u8.ToArray());
+        bool clientFirst    = JavaHash.ByteHash(clientKey) < JavaHash.ByteHash(serverKey);
+        byte[] concatenated = clientFirst ? [.. EncryptionKeyInfo, .. clientKey, .. serverKey] : [.. EncryptionKeyInfo, .. serverKey, .. clientKey];
         byte[] hash         = SHA256.HashData(concatenated);
         return new AesCtrHelper(Hkdf(hash, "Ditto salt 1"u8.ToArray(), "Ditto info 1"u8.ToArray()), Hkdf(hash, "Ditto salt 2"u8.ToArray(), "Ditto info 2"u8.ToArray()));
     }

@@ -87,11 +87,11 @@ public sealed class AppDriver : IAsyncDisposable
     {
         ArgumentNullException.ThrowIfNull(server);
 
-        string data_dir = Path.Combine(Path.GetTempPath(), "Messages-uitest-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(data_dir);
+        string dataDir = Path.Combine(Path.GetTempPath(), "Messages-uitest-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dataDir);
 
         // A Refused Start Leaves Nothing Behind: No UIA Client, No Temp Folder
-        var driver = new AppDriver(server, data_dir);
+        var driver = new AppDriver(server, dataDir);
         try
         {
             driver._process = driver.Launch();
@@ -100,7 +100,7 @@ public sealed class AppDriver : IAsyncDisposable
         catch (Exception)
         {
             driver.Automation.Dispose();
-            Directory.Delete(data_dir, recursive: true);
+            Directory.Delete(dataDir, recursive: true);
             throw;
         }
     }
@@ -490,8 +490,8 @@ public sealed class AppDriver : IAsyncDisposable
     // The Reason The App Wrote When It Refused Its Test Flags
     private static string TestHookError()
     {
-        string error_file = Path.Combine(Path.GetTempPath(), $"{AppInfo.DisplayName}-testhooks-error.txt");
-        return File.Exists(error_file) ? File.ReadAllText(error_file) : "(no error file)";
+        string errorFile = Path.Combine(Path.GetTempPath(), $"{AppInfo.DisplayName}-testhooks-error.txt");
+        return File.Exists(errorFile) ? File.ReadAllText(errorFile) : "(no error file)";
     }
 
     // Sign-In Profiles Made During This Test That The App Couldn't Delete (A Quit Mid-Sign-In, A Kill); Older Ones

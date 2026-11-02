@@ -102,11 +102,11 @@ public class GmClientMediaTests
         Assert.AreEqual(GmConstants.UserAgent, start.Headers["user-agent"]);
         Assert.AreEqual("https://messages.google.com", start.Headers["origin"]);
         Assert.IsFalse(start.Headers.ContainsKey("x-goog-upload-offset"));
-        var start_request = StartMediaUploadRequest.Parser.ParseFrom(Convert.FromBase64String(Encoding.ASCII.GetString(start.Body)));
-        Assert.AreEqual(1, start_request.AttachmentType);
-        Assert.AreEqual("fake-tachyon", start_request.AuthData.TachyonAuthToken.ToStringUtf8());
-        Assert.AreEqual(GmConstants.ConfigVersion, start_request.AuthData.ConfigVersion);
-        Assert.AreEqual("golden-src", start_request.Mobile.SourceID);
+        var startRequest = StartMediaUploadRequest.Parser.ParseFrom(Convert.FromBase64String(Encoding.ASCII.GetString(start.Body)));
+        Assert.AreEqual(1, startRequest.AttachmentType);
+        Assert.AreEqual("fake-tachyon", startRequest.AuthData.TachyonAuthToken.ToStringUtf8());
+        Assert.AreEqual(GmConstants.ConfigVersion, startRequest.AuthData.ConfigVersion);
+        Assert.AreEqual("golden-src", startRequest.Mobile.SourceID);
         AssertNoCredentials(start);
 
         // Finalize

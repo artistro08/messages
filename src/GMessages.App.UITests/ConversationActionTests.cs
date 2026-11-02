@@ -126,9 +126,9 @@ public sealed class ConversationActionTests : UiTest
         // Name, Then Blank Space Left Of The ⋮ On The Lower Line (Under The Time, Where No Icon Shows)
         PointerInput.Hover(name!.BoundingRectangle);
         AutomationElement more             = ShownMore("Row.More.c-ann");
-        System.Drawing.Rectangle more_rect = more.BoundingRectangle;
-        System.Drawing.Rectangle row_rect  = row.BoundingRectangle;
-        PointerInput.Hover(new System.Drawing.Rectangle(more_rect.Left - 20, row_rect.Bottom - 16, 2, 2));
+        System.Drawing.Rectangle moreRect  = more.BoundingRectangle;
+        System.Drawing.Rectangle rowRect   = row.BoundingRectangle;
+        PointerInput.Hover(new System.Drawing.Rectangle(moreRect.Left - 20, rowRect.Bottom - 16, 2, 2));
 
         // Settle Wait For Any Fade (167 ms) Before The Click
         Thread.Sleep(500);
@@ -152,13 +152,13 @@ public sealed class ConversationActionTests : UiTest
         System.Drawing.Rectangle row = App.Find("Row.c-ann").BoundingRectangle;
         System.Drawing.Rectangle win = App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).BoundingRectangle;
         PointerInput.Hover(row);
-        System.Drawing.Rectangle more_rect = ShownMore("Row.More.c-ann").BoundingRectangle;
+        System.Drawing.Rectangle moreRect = ShownMore("Row.More.c-ann").BoundingRectangle;
 
         PointerInput.LeaveLeft(win);
 
         // A Click Where The ⋮ Was, Once It Has Collapsed
         WaitForGone("Row.More.c-ann");
-        FlaUI.Core.Input.Mouse.Click(new System.Drawing.Point(more_rect.X + (more_rect.Width / 2), more_rect.Y + (more_rect.Height / 2)));
+        FlaUI.Core.Input.Mouse.Click(new System.Drawing.Point(moreRect.X + (moreRect.Width / 2), moreRect.Y + (moreRect.Height / 2)));
 
         App.Find("Chat.Draft");
         Assert.IsNull(App.TryFind("Conversation.Mute"), "The ⋮ stayed after the pointer left the window.");
@@ -210,24 +210,24 @@ public sealed class ConversationActionTests : UiTest
 
         System.Drawing.Rectangle row  = App.Find("Row.c-ann").BoundingRectangle;
         System.Drawing.Rectangle win  = App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).BoundingRectangle;
-        AutomationElement ann_time    = App.Find("Row.Time.c-ann");
-        AutomationElement team_time   = App.Find("Row.Time.c-team");
-        int ann_right                 = ann_time.BoundingRectangle.Right;
-        int team_right                = team_time.BoundingRectangle.Right;
+        AutomationElement annTime     = App.Find("Row.Time.c-ann");
+        AutomationElement teamTime    = App.Find("Row.Time.c-team");
+        int annRight                  = annTime.BoundingRectangle.Right;
+        int teamRight                 = teamTime.BoundingRectangle.Right;
 
         // Hovered: Only Ann's Time Slides Left, Until It Ends Where The ⋮ Starts
         PointerInput.Hover(row);
-        System.Drawing.Rectangle hovered_more = ShownMore("Row.More.c-ann").BoundingRectangle;
-        Wait.Until(() => ann_time.BoundingRectangle.Right <= hovered_more.Left, AppDriver.DefaultTimeout,
-            () => $"Ann's time ({ann_time.BoundingRectangle}) still overlaps the ⋮ ({hovered_more}).");
-        int hovered_right = ann_time.BoundingRectangle.Right;
-        Assert.IsGreaterThanOrEqualTo(32, ann_right - hovered_right, $"Ann's time only moved from {ann_right} to {hovered_right}.");
-        Assert.IsLessThanOrEqualTo(1, Math.Abs(team_time.BoundingRectangle.Right - team_right), "Team's time moved while Ann's row was hovered.");
+        System.Drawing.Rectangle hoveredMore = ShownMore("Row.More.c-ann").BoundingRectangle;
+        Wait.Until(() => annTime.BoundingRectangle.Right <= hoveredMore.Left, AppDriver.DefaultTimeout,
+            () => $"Ann's time ({annTime.BoundingRectangle}) still overlaps the ⋮ ({hoveredMore}).");
+        int hoveredRight = annTime.BoundingRectangle.Right;
+        Assert.IsGreaterThanOrEqualTo(32, annRight - hoveredRight, $"Ann's time only moved from {annRight} to {hoveredRight}.");
+        Assert.IsLessThanOrEqualTo(1, Math.Abs(teamTime.BoundingRectangle.Right - teamRight), "Team's time moved while Ann's row was hovered.");
 
         // Left: The ⋮ Collapses Once The Time Is Back At The Right Edge
         PointerInput.LeaveLeft(win);
         WaitForGone("Row.More.c-ann");
-        Assert.IsLessThanOrEqualTo(1, Math.Abs(ann_time.BoundingRectangle.Right - ann_right), "Ann's time didn't slide back.");
+        Assert.IsLessThanOrEqualTo(1, Math.Abs(annTime.BoundingRectangle.Right - annRight), "Ann's time didn't slide back.");
     }
 
     /// <summary>
@@ -469,9 +469,9 @@ public sealed class ConversationActionTests : UiTest
         // A Row's ⋮, Shown On Hover
         AutomationElement row = App.Find("Row.c-team");
         PointerInput.Hover(row.BoundingRectangle);
-        AutomationElement row_more      = App.Find("Row.More.c-team");
-        System.Drawing.Rectangle button = row_more.BoundingRectangle;
-        row_more.Patterns.Invoke.Pattern.Invoke();
+        AutomationElement rowMore       = App.Find("Row.More.c-team");
+        System.Drawing.Rectangle button = rowMore.BoundingRectangle;
+        rowMore.Patterns.Invoke.Pattern.Invoke();
         System.Drawing.Rectangle item = App.Find("Conversation.Archive").BoundingRectangle;
         Assert.IsTrue(item.Top >= button.Bottom, $"The row menu's top ({item.Top}) isn't below its ⋮'s bottom ({button.Bottom}).");
         Keyboard.Type(VirtualKeyShort.ESCAPE);

@@ -186,14 +186,14 @@ public sealed partial class MediaTests
         WaitForStatus(viewer, "Playing");
         Wait.Until(() => SeekValue(viewer) >= 10, AppDriver.DefaultTimeout, () => $"The viewer is at {SeekValue(viewer):0}%, not where the bubble got to.");
         Thread.Sleep(2000);
-        double viewer_end = SeekValue(viewer);
+        double viewerEnd = SeekValue(viewer);
 
         App.Find("PhotoViewer.Close").Patterns.Invoke.Pattern.Invoke();
         WaitForGone("PhotoViewer.Video");
         inline = App.Find("Video.Player." + message.MessageID);
         WaitForStatus(inline, "Playing");
         double back = SeekValue(inline);
-        Assert.IsTrue(back >= viewer_end - 1, $"The bubble carried on at {back:0}%, not where the viewer got to ({viewer_end:0}%).");
+        Assert.IsTrue(back >= viewerEnd - 1, $"The bubble carried on at {back:0}%, not where the viewer got to ({viewerEnd:0}%).");
     }
 
     // The Seek Bar's Value (Percent Of The Clip)
@@ -214,8 +214,8 @@ public sealed partial class MediaTests
         AutomationElement seek   = Part("ProgressSlider") ?? throw new AssertFailedException("The bar has no seek bar.");
         AutomationElement volume = Part("VolumeMuteButton") ?? throw new AssertFailedException("The bar has no volume button.");
         // A Narrow Bubble's Bar Drops Volume (Windows' Controls Do That Below Their Width)
-        bool volume_shown = volume.BoundingRectangle.Width > 0;
-        Assert.IsTrue(play.BoundingRectangle.Right <= seek.BoundingRectangle.Left && (!volume_shown || seek.BoundingRectangle.Right <= volume.BoundingRectangle.Left),
+        bool volumeShown = volume.BoundingRectangle.Width > 0;
+        Assert.IsTrue(play.BoundingRectangle.Right <= seek.BoundingRectangle.Left && (!volumeShown || seek.BoundingRectangle.Right <= volume.BoundingRectangle.Left),
             $"The bar isn't play, seek, volume: {play.BoundingRectangle} {seek.BoundingRectangle} {volume.BoundingRectangle}.");
         Assert.IsNull(Part("CastButton"), "The bar offers a cast button.");
         Assert.IsNull(Part("FullWindowButton"), "The bar offers a full window button.");
@@ -228,12 +228,12 @@ public sealed partial class MediaTests
         AssertCompactBar(player);
         AutomationElement slider = AppDriver.Search(player, e => e.Properties.AutomationId.ValueOrDefault == "ProgressSlider")
             ?? throw new AssertFailedException("The player has no seek bar.");
-        double paused_at = slider.Patterns.RangeValue.Pattern.Value.Value;
+        double pausedAt = slider.Patterns.RangeValue.Pattern.Value.Value;
         Thread.Sleep(1500);
-        Assert.AreEqual(paused_at, slider.Patterns.RangeValue.Pattern.Value.Value, "The video played on after the pause button.");
+        Assert.AreEqual(pausedAt, slider.Patterns.RangeValue.Pattern.Value.Value, "The video played on after the pause button.");
 
         PressPlayPause(player, "Playing");
-        Wait.Until(() => slider.Patterns.RangeValue.Pattern.Value.Value > paused_at, AppDriver.DefaultTimeout,
+        Wait.Until(() => slider.Patterns.RangeValue.Pattern.Value.Value > pausedAt, AppDriver.DefaultTimeout,
             () => "The video didn't move on after the play button.");
         Assert.IsNull(AppDriver.Search(player, e => e.Properties.AutomationId.ValueOrDefault == "CastButton"), "The player offers a cast button.");
     }

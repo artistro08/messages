@@ -93,10 +93,10 @@ public class PairingGoldenTests
         (byte[] init, _) = session.PreparePayloads();
 
         var message     = Ukey2Message.Parser.ParseFrom(init);
-        var client_init = Ukey2ClientInit.Parser.ParseFrom(message.MessageData);
-        Assert.AreEqual(32, client_init.Random.Length);
-        client_init.Random  = ByteString.CopyFrom(Golden.Hex(s.GetProperty("initRandomHex")));
-        message.MessageData = client_init.ToByteString();
+        var clientInit  = Ukey2ClientInit.Parser.ParseFrom(message.MessageData);
+        Assert.AreEqual(32, clientInit.Random.Length);
+        clientInit.Random   = ByteString.CopyFrom(Golden.Hex(s.GetProperty("initRandomHex")));
+        message.MessageData = clientInit.ToByteString();
         Assert.AreEqual(s.GetProperty("initPayloadHex").GetString(), Convert.ToHexStringLower(message.ToByteArray()));
         CollectionAssert.AreEqual(init, session.InitPayload);
     }
@@ -161,9 +161,9 @@ public class PairingGoldenTests
             PairingSession session   = SessionWithGoInit();
             session.ProcessServerInit(Container(c));
 
-            string phone_id = await pairing.FinishAsync(session, CancellationToken.None);
+            string phoneId = await pairing.FinishAsync(session, CancellationToken.None);
 
-            Assert.AreEqual(c.GetProperty("phoneId").GetString(), phone_id);
+            Assert.AreEqual(c.GetProperty("phoneId").GetString(), phoneId);
             Assert.AreEqual(Guid.Parse(c.GetProperty("pairingId").GetString()!), auth.PairingId);
             Assert.AreEqual(c.GetProperty("destPhoneId").GetUInt64(), auth.DestPhoneId);
             Assert.AreEqual(c.GetProperty("aesKeyHex").GetString(), Convert.ToHexStringLower(auth.RequestCrypto.AesKey));
@@ -222,29 +222,29 @@ public class PairingGoldenTests
         for (int i = 0; i < names.Length; i++)
         {
             JsonElement g = go.GetProperty(names[i]);
-            var go_msg    = PbLiteSerializer.Deserialize<OutgoingRPCMessage>(Encoding.UTF8.GetBytes(g.GetProperty("bodyText").GetString()!));
-            var cs_msg    = PbLiteSerializer.Deserialize<OutgoingRPCMessage>(handler.Requests[i].Body);
-            var go_data   = OutgoingRPCData.Parser.ParseFrom(go_msg.Data.MessageData);
-            var cs_data   = OutgoingRPCData.Parser.ParseFrom(cs_msg.Data.MessageData);
+            var goMsg     = PbLiteSerializer.Deserialize<OutgoingRPCMessage>(Encoding.UTF8.GetBytes(g.GetProperty("bodyText").GetString()!));
+            var csMsg     = PbLiteSerializer.Deserialize<OutgoingRPCMessage>(handler.Requests[i].Body);
+            var goData    = OutgoingRPCData.Parser.ParseFrom(goMsg.Data.MessageData);
+            var csData    = OutgoingRPCData.Parser.ParseFrom(csMsg.Data.MessageData);
 
             // Normalize Random Request IDs (Cancel Uses The Fixed Session UUID)
             if (names[i] != "cancel")
             {
-                Assert.IsTrue(Guid.TryParse(cs_data.RequestID, out _), names[i]);
-                cs_data.RequestID     = go_data.RequestID;
-                cs_msg.Data.RequestID = go_msg.Data.RequestID;
-                cs_msg.Auth.RequestID = go_msg.Auth.RequestID;
+                Assert.IsTrue(Guid.TryParse(csData.RequestID, out _), names[i]);
+                csData.RequestID     = goData.RequestID;
+                csMsg.Data.RequestID = goMsg.Data.RequestID;
+                csMsg.Auth.RequestID = goMsg.Auth.RequestID;
             }
 
             // Normalize The Random IV: Plaintexts Must Match
-            if (go_data.EncryptedProtoData.Length > 0)
+            if (goData.EncryptedProtoData.Length > 0)
             {
-                CollectionAssert.AreEqual(auth.RequestCrypto.Decrypt(go_data.EncryptedProtoData.Span), auth.RequestCrypto.Decrypt(cs_data.EncryptedProtoData.Span), names[i]);
-                cs_data.EncryptedProtoData = go_data.EncryptedProtoData;
+                CollectionAssert.AreEqual(auth.RequestCrypto.Decrypt(goData.EncryptedProtoData.Span), auth.RequestCrypto.Decrypt(csData.EncryptedProtoData.Span), names[i]);
+                csData.EncryptedProtoData = goData.EncryptedProtoData;
             }
 
-            cs_msg.Data.MessageData = cs_data.ToByteString();
-            Assert.AreEqual(g.GetProperty("bodyText").GetString(), Encoding.UTF8.GetString(PbLiteSerializer.Serialize(cs_msg)), names[i]);
+            csMsg.Data.MessageData = csData.ToByteString();
+            Assert.AreEqual(g.GetProperty("bodyText").GetString(), Encoding.UTF8.GetString(PbLiteSerializer.Serialize(csMsg)), names[i]);
             Assert.AreEqual(g.GetProperty("url").GetString(), handler.Requests[i].Url, names[i]);
         }
     }

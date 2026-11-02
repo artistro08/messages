@@ -266,10 +266,10 @@ public sealed class PairingViewModelTests
         rig.Respond = req => req.Url.EndsWith("/RegisterRefresh", StringComparison.Ordinal) ? FakeHttpHandler.Response(HttpStatusCode.Unauthorized) : null;
         await rig.Controller.StartAsync().WaitAsync(Shared.HangGuard);
 
-        var view_model = new PairingViewModel(rig.Controller, a => a());
+        var viewModel = new PairingViewModel(rig.Controller, a => a());
 
-        Assert.AreEqual("You were signed out. Sign in again to keep getting texts.", view_model.SignedOutReason);
-        Assert.IsTrue(view_model.ShowSignedOutReason);
+        Assert.AreEqual("You were signed out. Sign in again to keep getting texts.", viewModel.SignedOutReason);
+        Assert.IsTrue(viewModel.ShowSignedOutReason);
     }
 
     /// <summary>
@@ -281,10 +281,10 @@ public sealed class PairingViewModelTests
         await using var rig = new Rig();
         await rig.Controller.StartAsync().WaitAsync(Shared.HangGuard);
 
-        var view_model = new PairingViewModel(rig.Controller, a => a());
+        var viewModel = new PairingViewModel(rig.Controller, a => a());
 
-        Assert.IsNull(view_model.SignedOutReason);
-        Assert.IsFalse(view_model.ShowSignedOutReason);
+        Assert.IsNull(viewModel.SignedOutReason);
+        Assert.IsFalse(viewModel.ShowSignedOutReason);
     }
 
     /// <summary>

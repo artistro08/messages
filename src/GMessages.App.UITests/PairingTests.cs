@@ -33,8 +33,8 @@ public sealed class PairingTests : UiTest
         Assert.IsNull(App.TryFind("Main.ProfileButton"), "The profile button shows while pairing.");
         WaitForSignInButton();
         CollectionAssert.Contains(Server.RequestedPaths.ToList(), "/web/authentication", "The WebView2 never asked the fake server for the sign-in page.");
-        Rectangle sign_in = App.Find("Pairing.SignIn").BoundingRectangle;
-        Assert.IsTrue(sign_in.Width >= window.BoundingRectangle.Width - 40, $"The sign-in is {sign_in.Width} px wide in a {window.BoundingRectangle.Width} px window.");
+        Rectangle signIn = App.Find("Pairing.SignIn").BoundingRectangle;
+        Assert.IsTrue(signIn.Width >= window.BoundingRectangle.Width - 40, $"The sign-in is {signIn.Width} px wide in a {window.BoundingRectangle.Width} px window.");
 
         // Emoji Matches The Phone
         string emoji = await SignInAndWaitForEmojiAsync();
@@ -72,9 +72,9 @@ public sealed class PairingTests : UiTest
 
         // Try Again: A New Browser Loads The Sign-In Page Again. UI Automation Waits For The Load: A WebView2 Asked
         // While Its Browser Is Still Starting Stays An Empty Pane For Good
-        int page_loads = Server.RequestedPaths.Count(p => p == "/web/authentication");
+        int pageLoads = Server.RequestedPaths.Count(p => p == "/web/authentication");
         App.Find("Pairing.TryAgain").Patterns.Invoke.Pattern.Invoke();
-        Wait.Until(() => Server.RequestedPaths.Count(p => p == "/web/authentication") > page_loads, AppDriver.DefaultTimeout,
+        Wait.Until(() => Server.RequestedPaths.Count(p => p == "/web/authentication") > pageLoads, AppDriver.DefaultTimeout,
             () => "Try again did not load the sign-in page again.");
         WaitForSignInButton();
         Assert.IsFalse(File.Exists(SessionFile), "A failed pairing saved a session.");

@@ -146,9 +146,9 @@ public sealed class TrayDriver
                 continue;
             }
 
-            string[] icon_names = [.. icons.Select(AppDriver.SafeName)];
-            names.AddRange(icon_names);
-            AutomationElement[] matches = [.. icons.Where((_, i) => icon_names[i] == AppInfo.DisplayName)];
+            string[] iconNames = [.. icons.Select(AppDriver.SafeName)];
+            names.AddRange(iconNames);
+            AutomationElement[] matches = [.. icons.Where((_, i) => iconNames[i] == AppInfo.DisplayName)];
             if (matches.Length > 1)
             {
                 Assert.Fail($"{matches.Length} tray icons are named '{AppInfo.DisplayName}'. Quit any other copy of the app before running the UI tests.");

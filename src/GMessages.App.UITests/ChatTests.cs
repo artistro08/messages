@@ -96,9 +96,9 @@ public sealed class ChatTests : UiTest
         Assert.IsTrue(sent.Contains('\r', StringComparison.Ordinal) || sent.Contains('\n', StringComparison.Ordinal), "Shift + Enter didn't make a new line.");
 
         // The Echo Gives The Bubble The Phone's Message ID
-        string echo_id = Server.Phone.Chats.Page("c-ann", 1, null).Page[0].MessageID;
-        Wait.Until(() => Bubbles().Any(b => b.Id == "Bubble." + echo_id), AppDriver.DefaultTimeout,
-            () => $"No bubble Bubble.{echo_id}; bubbles: [{string.Join(", ", Bubbles().Select(b => b.Id))}].");
+        string echoId = Server.Phone.Chats.Page("c-ann", 1, null).Page[0].MessageID;
+        Wait.Until(() => Bubbles().Any(b => b.Id == "Bubble." + echoId), AppDriver.DefaultTimeout,
+            () => $"No bubble Bubble.{echoId}; bubbles: [{string.Join(", ", Bubbles().Select(b => b.Id))}].");
         Assert.AreEqual(4, Bubbles().Count, "The echo added a second bubble instead of updating the sent one.");
     }
 
@@ -500,18 +500,18 @@ public sealed class ChatTests : UiTest
         Thread.Sleep(1000);
         AssertAtNewest("Back at the newest message");
 
-        int kept_oldest = Count - 200 + 1;
+        int keptOldest = Count - 200 + 1;
         Wait.Until(() =>
         {
             scroll.SetScrollPercent(-1, 0);
-            return OldestShown("t-") == kept_oldest;
-        }, AppDriver.DefaultTimeout, () => $"At the top after the trim, the oldest line was {OldestShown("t-")}, not {kept_oldest}.");
+            return OldestShown("t-") == keptOldest;
+        }, AppDriver.DefaultTimeout, () => $"At the top after the trim, the oldest line was {OldestShown("t-")}, not {keptOldest}.");
 
         // The Dropped Lines Come Back From The Phone
         Wait.Until(() =>
         {
             scroll.SetScrollPercent(-1, 0);
-            return OldestShown("t-") < kept_oldest;
+            return OldestShown("t-") < keptOldest;
         }, AppDriver.DefaultTimeout, () => $"Scrolling up after the trim stayed at line {OldestShown("t-")}.");
 
         Message Line(int i)
@@ -729,7 +729,7 @@ public sealed class ChatTests : UiTest
 
         Message Line(int i)
         {
-            bool from_me = (i / 2 + i / 7) % 2 == 0;
+            bool fromMe  = (i / 2 + i / 7) % 2 == 0;
             string text  = (i % 11, i % 4) switch
             {
                 (0, _) => $"Mixed {i} " + string.Concat(Enumerable.Repeat("a very tall message ", 30)),
@@ -740,9 +740,9 @@ public sealed class ChatTests : UiTest
             {
                 MessageID      = $"m-{i:000}",
                 ConversationID = "c-mixed",
-                ParticipantID  = from_me ? FakeChats.MyParticipantId : "p-mixed",
+                ParticipantID  = fromMe ? FakeChats.MyParticipantId : "p-mixed",
                 Timestamp      = time += 1_000_000,
-                MessageStatus  = new MessageStatus { Status = from_me ? MessageStatusType.OutgoingComplete : MessageStatusType.IncomingComplete },
+                MessageStatus  = new MessageStatus { Status = fromMe ? MessageStatusType.OutgoingComplete : MessageStatusType.IncomingComplete },
             };
             message.MessageInfo.Add(new MessageInfo { MessageContent = new MessageContent { Content = text } });
             return message;
@@ -911,7 +911,7 @@ public sealed class ChatTests : UiTest
         {
             using FlaUI.Core.Capturing.CaptureImage capture = FlaUI.Core.Capturing.Capture.Rectangle(strip);
             System.Drawing.Bitmap bitmap = capture.Bitmap;
-            double draft_luma            = Luma(bitmap.GetPixel(draft.Left + 120 - strip.Left, draft.Top + (draft.Height / 2) - strip.Top));
+            double draftLuma             = Luma(bitmap.GetPixel(draft.Left + 120 - strip.Left, draft.Top + (draft.Height / 2) - strip.Top));
             double lighter               = 0;
             int rows                     = 0;
             for (int y = 40; y < view.Height - 40; y += 40, rows++)
@@ -919,12 +919,12 @@ public sealed class ChatTests : UiTest
                 lighter += Luma(bitmap.GetPixel(view.Width / 2, y)) - Luma(bitmap.GetPixel(5, y));
             }
 
-            return (draft_luma, lighter / rows);
+            return (draftLuma, lighter / rows);
         }
 
         // Before: The Focused Message Box, And The List's Middle As Dark As Its Padding
-        (double draft_before, double lighter_before) = Read();
-        Assert.IsTrue(Math.Abs(lighter_before) < 1, $"Before opening {id}, the list's middle read {lighter_before:0.0} off its padding; the check needs it empty.");
+        (double draftBefore, double lighterBefore) = Read();
+        Assert.IsTrue(Math.Abs(lighterBefore) < 1, $"Before opening {id}, the list's middle read {lighterBefore:0.0} off its padding; the check needs it empty.");
 
         // Click, Then Sample On A Second Thread So The Readings Keep Their Pace. A Failed Reading Is Kept And Thrown Here
         // Once The Thread Ends, So It Fails The Test Instead Of The Test Host
@@ -955,11 +955,11 @@ public sealed class ChatTests : UiTest
             System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
         }
 
-        string trace = string.Join(" ", samples.Select(s => $"{s.Ms:0}:{s.Draft - draft_before:0}/{s.Lighter:0.0}"));
+        string trace = string.Join(" ", samples.Select(s => $"{s.Ms:0}:{s.Draft - draftBefore:0}/{s.Lighter:0.0}"));
         TestContext.WriteLine($"{id}: {samples.Count} readings (ms:box/list) {trace}");
         WaitForNewest(id);
         Assert.IsTrue(samples.Count >= 40, $"Only {samples.Count} readings in 800 ms; too slow to catch a one-frame flash.");
-        Assert.IsFalse(samples.Any(s => Math.Abs(s.Draft - draft_before) > 8), $"Opening {id}, the message box lost its focused look for a moment. Readings: {trace}");
+        Assert.IsFalse(samples.Any(s => Math.Abs(s.Draft - draftBefore) > 8), $"Opening {id}, the message box lost its focused look for a moment. Readings: {trace}");
         Assert.IsFalse(samples.Any(s => Math.Abs(s.Lighter) >= 1.5), $"Opening {id}, the list's rows flashed gray. Readings: {trace}");
         Thread.Sleep(1000);
     }
@@ -998,7 +998,7 @@ public sealed class ChatTests : UiTest
 
         // Every 50 ms Until The Page Lands, Then A Second More: It Stays Put
         var samples         = new List<string>();
-        DateTime landed_cap = DateTime.UtcNow + AppDriver.DefaultTimeout;
+        DateTime landedCap  = DateTime.UtcNow + AppDriver.DefaultTimeout;
         DateTime? until     = null;
         while (until is null || DateTime.UtcNow < until)
         {
@@ -1025,7 +1025,7 @@ public sealed class ChatTests : UiTest
                 until = DateTime.UtcNow.AddSeconds(1);
             }
 
-            Assert.IsTrue(DateTime.UtcNow < landed_cap, $"The older page never landed. Samples: {string.Join(" ", samples)}.");
+            Assert.IsTrue(DateTime.UtcNow < landedCap, $"The older page never landed. Samples: {string.Join(" ", samples)}.");
             Thread.Sleep(50);
         }
 
@@ -1089,11 +1089,11 @@ public sealed class ChatTests : UiTest
     {
         AutomationElement list = App.Find("Chat.Messages");
         var scroll             = list.Patterns.Scroll.Pattern;
-        double view_size       = scroll.VerticalViewSize.ValueOrDefault;
+        double viewSize        = scroll.VerticalViewSize.ValueOrDefault;
         double viewport        = list.BoundingRectangle.Height;
-        double scrollable      = view_size is > 0 and < 100 ? viewport * 100 / view_size - viewport : 0;
-        double short_by        = (100 - scroll.VerticalScrollPercent.ValueOrDefault) / 100 * scrollable;
-        Assert.IsTrue(short_by < 1, $"{what} left the list {short_by:0.0} px short of the newest message.");
+        double scrollable      = viewSize is > 0 and < 100 ? viewport * 100 / viewSize - viewport : 0;
+        double shortBy         = (100 - scroll.VerticalScrollPercent.ValueOrDefault) / 100 * scrollable;
+        Assert.IsTrue(shortBy < 1, $"{what} left the list {shortBy:0.0} px short of the newest message.");
     }
 
     // Opens The Main Window, Then Ann's Chat, And Waits For Her Three Messages

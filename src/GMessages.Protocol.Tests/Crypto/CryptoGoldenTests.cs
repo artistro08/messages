@@ -163,7 +163,7 @@ public class CryptoGoldenTests
     [TestMethod]
     public void FromJwk_ShortParts_AreLeftPaddedTo32()
     {
-        byte[] full = Enumerable.Range(1, 32).Select(i => (byte)i).ToArray();
+        byte[] full = [.. Enumerable.Range(1, 32).Select(i => (byte)i)];
         byte[] shortPart = full[1..];
 
         var key = RefreshKey.FromJwk(shortPart, shortPart, shortPart);

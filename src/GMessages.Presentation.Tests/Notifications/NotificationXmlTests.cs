@@ -14,13 +14,13 @@ public sealed class NotificationXmlTests
     [TestMethod]
     public void Build_EscapesMarkupInTitleAndBody()
     {
-        const string body = "a <b> & \"c\"";
-        var texts = Doc("<t>&", body).Descendants("text").ToList();
+        const string Body = "a <b> & \"c\"";
+        var texts = Doc("<t>&", Body).Descendants("text").ToList();
 
         Assert.AreEqual(2, texts.Count);
         Assert.AreEqual("<t>&", texts[0].Value);
-        Assert.AreEqual(body, texts[1].Value);
-        Assert.IsFalse(Doc(body: body).Descendants("b").Any());
+        Assert.AreEqual(Body, texts[1].Value);
+        Assert.IsFalse(Doc(body: Body).Descendants("b").Any());
     }
 
     [TestMethod]

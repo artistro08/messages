@@ -214,21 +214,21 @@ public sealed class ConnectionControllerTests
     internal static void ScriptPairing(Rig rig, byte[]? finished)
     {
         using JsonDocument doc = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Golden", "signin.json")));
-        JsonElement sign_in    = doc.RootElement;
-        byte[] config_body     = Encoding.UTF8.GetBytes(sign_in.GetProperty("config").GetProperty("bodyText").GetString()!);
-        byte[] sign_in_body    = Encoding.UTF8.GetBytes(sign_in.GetProperty("response").GetProperty("bodyText").GetString()!);
-        byte[] server_init     = ServerInit();
+        JsonElement signIn     = doc.RootElement;
+        byte[] configBody      = Encoding.UTF8.GetBytes(signIn.GetProperty("config").GetProperty("bodyText").GetString()!);
+        byte[] signInBody      = Encoding.UTF8.GetBytes(signIn.GetProperty("response").GetProperty("bodyText").GetString()!);
+        byte[] serverInit      = ServerInit();
 
         rig.Respond = req =>
         {
             if (req.Url.EndsWith("/web/config", StringComparison.Ordinal))
             {
-                return FakeHttpHandler.Response(HttpStatusCode.OK, PbLiteMime, config_body);
+                return FakeHttpHandler.Response(HttpStatusCode.OK, PbLiteMime, configBody);
             }
 
             if (req.Url.EndsWith("/SignInGaia", StringComparison.Ordinal))
             {
-                return FakeHttpHandler.Response(HttpStatusCode.OK, PbLiteMime, sign_in_body, "SID=pairing-sid; Path=/");
+                return FakeHttpHandler.Response(HttpStatusCode.OK, PbLiteMime, signInBody, "SID=pairing-sid; Path=/");
             }
 
             if (req.Url.EndsWith("/SendMessage", StringComparison.Ordinal))
@@ -237,7 +237,7 @@ public sealed class ConnectionControllerTests
                 ActionType action = ActionOf(req);
                 if (action == ActionType.CreateGaiaPairingClientInit)
                 {
-                    Deliver(rpc, req, server_init);
+                    Deliver(rpc, req, serverInit);
                 }
                 else if (action == ActionType.CreateGaiaPairingClientFinished && finished is not null)
                 {
@@ -478,7 +478,7 @@ public sealed class ConnectionControllerTests
     /// Resume while connected makes the long poll reconnect once (Plan 1 R24): exactly one more /ReceiveMessages.
     /// </summary>
     [TestMethod]
-    public async Task NotifyResumed_WhileConnected_ReconnectsOnce()
+    public async Task ReconnectAsync_WhileConnected_ReconnectsOnce()
     {
         await using var rig = new Rig();
         rig.SaveSession(TimeSpan.FromDays(1));
@@ -494,15 +494,14 @@ public sealed class ConnectionControllerTests
     }
 
     /// <summary>
-    /// Resume and network-back do nothing while not paired.
+    /// Reconnecting does nothing while not paired.
     /// </summary>
     [TestMethod]
-    public async Task Notify_WhileNotPaired_DoesNothing()
+    public async Task ReconnectAsync_WhileNotPaired_DoesNothing()
     {
         await using var rig = new Rig();
         await rig.Controller.StartAsync().WaitAsync(HangGuard);
 
-        await rig.Controller.ReconnectAsync().WaitAsync(HangGuard);
         await rig.Controller.ReconnectAsync().WaitAsync(HangGuard);
 
         Assert.AreEqual(ConnectionState.NotPaired, rig.Controller.State);

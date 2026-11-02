@@ -71,8 +71,8 @@ public class GaiaPairingTests
     {
         var refresher = new TokenRefresher(http, auth, GmEndpoints.Production, time, NullLogger.Instance);
         var loop      = new LongPollLoop(http, rpc, auth, GmEndpoints.Production, refresher, new UpdateDispatcher(rpc, NullLogger.Instance), time, NullLogger.Instance);
-        var sign_in   = new GaiaSignIn(http, auth, GmEndpoints.Production, time, NullLogger.Instance);
-        return (new GaiaPairing(sign_in, rpc, loop, auth, time, NullLogger.Instance), loop);
+        var signIn    = new GaiaSignIn(http, auth, GmEndpoints.Production, time, NullLogger.Instance);
+        return (new GaiaPairing(signIn, rpc, loop, auth, time, NullLogger.Instance), loop);
     }
 
     /// <summary>
@@ -106,12 +106,12 @@ public class GaiaPairingTests
         (GaiaPairing pairing, LongPollLoop loop) = CreatePairing(http, rpc, auth, time);
         var rig = new Rig { Pairing = pairing, Loop = loop, Auth = auth, Handler = handler, Time = time };
 
-        byte[] sign_in_body = Encoding.UTF8.GetBytes(Golden.Load("signin").GetProperty("response").GetProperty("bodyText").GetString()!);
+        byte[] signInBody = Encoding.UTF8.GetBytes(Golden.Load("signin").GetProperty("response").GetProperty("bodyText").GetString()!);
         handler.Respond = (_, req) =>
         {
             if (req.Url.EndsWith("/SignInGaia", StringComparison.Ordinal))
             {
-                return FakeHttpHandler.Response(HttpStatusCode.OK, "application/json+protobuf", sign_in_body);
+                return FakeHttpHandler.Response(HttpStatusCode.OK, "application/json+protobuf", signInBody);
             }
 
             if (req.Url.EndsWith("/ReceiveMessages", StringComparison.Ordinal))
@@ -184,12 +184,12 @@ public class GaiaPairingTests
     {
         Rig rig              = CreateRig();
         rig.Auth.DestPhoneId = 0;
-        byte[] old_aes       = rig.Auth.RequestCrypto.AesKey;
+        byte[] oldAes        = rig.Auth.RequestCrypto.AesKey;
         rig.Responses[ActionType.CreateGaiaPairingClientInit]     = ServerInit(1, 1);
         rig.Responses[ActionType.CreateGaiaPairingClientFinished] = new GaiaPairingResponseContainer().ToByteArray();
 
         (string emoji, PairingSession session) = await rig.Pairing.StartAsync(CancellationToken.None).WaitAsync(HangGuard);
-        string phone_id                        = await rig.Pairing.FinishAsync(session, CancellationToken.None).WaitAsync(HangGuard);
+        string phoneId                         = await rig.Pairing.FinishAsync(session, CancellationToken.None).WaitAsync(HangGuard);
         rig.Loop.Stop();
 
         Assert.AreEqual(PhoneC, session.DestRegDevice.RegId);
@@ -197,8 +197,8 @@ public class GaiaPairingTests
         CollectionAssert.Contains(PairingEmojis.V1.ToArray(), emoji);
         Assert.AreEqual(session.Id, rig.Auth.PairingId);
         Assert.AreEqual(0UL, rig.Auth.DestPhoneId);
-        Assert.AreEqual("mixed-case-src/999", phone_id);
-        CollectionAssert.AreNotEqual(old_aes, rig.Auth.RequestCrypto.AesKey);
+        Assert.AreEqual("mixed-case-src/999", phoneId);
+        CollectionAssert.AreNotEqual(oldAes, rig.Auth.RequestCrypto.AesKey);
         (byte[] aes, byte[] hmac) = session.DeriveRequestKeys();
         CollectionAssert.AreEqual(aes, rig.Auth.RequestCrypto.AesKey);
         CollectionAssert.AreEqual(hmac, rig.Auth.RequestCrypto.HmacKey);

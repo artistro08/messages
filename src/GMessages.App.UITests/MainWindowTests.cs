@@ -539,9 +539,9 @@ public sealed class MainWindowTests : UiTest
         App.Find("Row.c-ann").Patterns.SelectionItem.Pattern.Select();
         App.WaitForText("Chat.Header", "Ann Lee");
 
-        int card_top = App.Find("Chat.Pane").BoundingRectangle.Top;
-        int row_top  = App.Find("Row.c-team").BoundingRectangle.Top;
-        Assert.IsTrue(Math.Abs(row_top - card_top) <= 2, $"The first row starts at y {row_top}, the chat card at y {card_top}.");
+        int cardTop  = App.Find("Chat.Pane").BoundingRectangle.Top;
+        int rowTop   = App.Find("Row.c-team").BoundingRectangle.Top;
+        Assert.IsTrue(Math.Abs(rowTop - cardTop) <= 2, $"The first row starts at y {rowTop}, the chat card at y {cardTop}.");
     }
 
     // =========================================================================
@@ -554,8 +554,8 @@ public sealed class MainWindowTests : UiTest
     private void AssertBackInTitleBar(string automationId)
     {
         System.Drawing.Rectangle back      = App.Find(automationId).BoundingRectangle;
-        System.Drawing.Rectangle title_bar = App.Find("Main.TitleBar").BoundingRectangle;
-        Assert.IsTrue(title_bar.Contains(back), $"Back ({back}) isn't in the title bar ({title_bar}).");
+        System.Drawing.Rectangle titleBar  = App.Find("Main.TitleBar").BoundingRectangle;
+        Assert.IsTrue(titleBar.Contains(back), $"Back ({back}) isn't in the title bar ({titleBar}).");
         WaitForGone("Main.MenuButton");
     }
 

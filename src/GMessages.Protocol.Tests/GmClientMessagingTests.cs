@@ -113,20 +113,20 @@ public class GmClientMessagingTests
 
         // First Call
         Task<ListConversationsResponse> first = rig.Client.ListConversationsAsync(ListConversationsRequest.Types.Folder.Inbox, 25, null, CancellationToken.None);
-        Sent sent_first = Captured(rig, 0);
-        Answer(rig, sent_first, new ListConversationsResponse());
+        Sent sentFirst = Captured(rig, 0);
+        Answer(rig, sentFirst, new ListConversationsResponse());
         await first.WaitAsync(HangGuard);
 
         // Second Call
         Task<ListConversationsResponse> second = rig.Client.ListConversationsAsync(ListConversationsRequest.Types.Folder.Inbox, 25, null, CancellationToken.None);
-        Sent sent_second = Captured(rig, 1);
-        Answer(rig, sent_second, new ListConversationsResponse());
+        Sent sentSecond = Captured(rig, 1);
+        Answer(rig, sentSecond, new ListConversationsResponse());
         await second.WaitAsync(HangGuard);
 
-        Assert.AreEqual(ActionType.ListConversations, sent_first.Data.Action);
-        Assert.AreEqual(MessageType.BugleAnnotation, sent_first.Message.Data.MessageTypeData.MessageType);
-        Assert.AreEqual(MessageType.BugleMessage, sent_second.Message.Data.MessageTypeData.MessageType);
-        foreach (Sent sent in new[] { sent_first, sent_second })
+        Assert.AreEqual(ActionType.ListConversations, sentFirst.Data.Action);
+        Assert.AreEqual(MessageType.BugleAnnotation, sentFirst.Message.Data.MessageTypeData.MessageType);
+        Assert.AreEqual(MessageType.BugleMessage, sentSecond.Message.Data.MessageTypeData.MessageType);
+        foreach (Sent sent in new[] { sentFirst, sentSecond })
         {
             ListConversationsRequest request = sent.Payload(ListConversationsRequest.Parser);
             Assert.AreEqual(ListConversationsRequest.Types.Folder.Inbox, request.Folder);
@@ -165,8 +165,8 @@ public class GmClientMessagingTests
     public async Task SendMessage_IsUserInitiated_ReturnsStatus()
     {
         await using Rig rig = CreateRig();
-        int slow_count = 0;
-        rig.Client.Rpc.PhoneSlow += (_, _) => Interlocked.Increment(ref slow_count);
+        int slowCount = 0;
+        rig.Client.Rpc.PhoneSlow += (_, _) => Interlocked.Increment(ref slowCount);
 
         Task<SendMessageResponse> call = rig.Client.SendMessageAsync(new SendMessageRequest { ConversationID = "c-1", TmpID = "tmp-1" }, CancellationToken.None);
         Sent sent = Captured(rig, 0);
@@ -174,7 +174,7 @@ public class GmClientMessagingTests
         // Five Seconds With No Answer
         Assert.IsTrue(SpinWait.SpinUntil(() => rig.Time.CountTimers(RpcSession.PhoneSlowTimeout) > 0, HangGuard), "slow timer");
         rig.Time.Advance(RpcSession.PhoneSlowTimeout);
-        Assert.IsTrue(SpinWait.SpinUntil(() => Volatile.Read(ref slow_count) > 0, HangGuard), "PhoneSlow raised");
+        Assert.IsTrue(SpinWait.SpinUntil(() => Volatile.Read(ref slowCount) > 0, HangGuard), "PhoneSlow raised");
         Assert.IsFalse(call.IsCompleted);
 
         Answer(rig, sent, new SendMessageResponse { Status = SendMessageResponse.Types.Status.Success });
@@ -185,7 +185,7 @@ public class GmClientMessagingTests
         Assert.AreEqual("c-1", request.ConversationID);
         Assert.AreEqual("tmp-1", request.TmpID);
         Assert.AreEqual(SendMessageResponse.Types.Status.Success, result.Status);
-        Assert.AreEqual(1, Volatile.Read(ref slow_count), "raised once");
+        Assert.AreEqual(1, Volatile.Read(ref slowCount), "raised once");
     }
 
     /// <summary>
@@ -196,8 +196,8 @@ public class GmClientMessagingTests
     public async Task SendReaction_IsUserInitiated_SendsRequest()
     {
         await using Rig rig = CreateRig();
-        int slow_count = 0;
-        rig.Client.Rpc.PhoneSlow += (_, _) => Interlocked.Increment(ref slow_count);
+        int slowCount = 0;
+        rig.Client.Rpc.PhoneSlow += (_, _) => Interlocked.Increment(ref slowCount);
         var request = new SendReactionRequest
         {
             MessageID    = "m-5",
@@ -212,15 +212,15 @@ public class GmClientMessagingTests
         // Five Seconds With No Answer
         Assert.IsTrue(SpinWait.SpinUntil(() => rig.Time.CountTimers(RpcSession.PhoneSlowTimeout) > 0, HangGuard), "slow timer");
         rig.Time.Advance(RpcSession.PhoneSlowTimeout);
-        Assert.IsTrue(SpinWait.SpinUntil(() => Volatile.Read(ref slow_count) > 0, HangGuard), "PhoneSlow raised");
+        Assert.IsTrue(SpinWait.SpinUntil(() => Volatile.Read(ref slowCount) > 0, HangGuard), "PhoneSlow raised");
 
         Answer(rig, sent, new SendReactionResponse { Success = true });
         SendReactionResponse result = await call.WaitAsync(HangGuard);
 
         Assert.AreEqual(ActionType.SendReaction, sent.Data.Action);
-        SendReactionRequest sent_request = sent.Payload(SendReactionRequest.Parser);
-        Assert.AreEqual(request, sent_request);
-        Assert.AreEqual(EmojiType.Like, sent_request.ReactionData.Type);
+        SendReactionRequest sentRequest = sent.Payload(SendReactionRequest.Parser);
+        Assert.AreEqual(request, sentRequest);
+        Assert.AreEqual(EmojiType.Like, sentRequest.ReactionData.Type);
         Assert.IsTrue(result.Success);
     }
 
@@ -232,8 +232,8 @@ public class GmClientMessagingTests
     public async Task GetFullSizeImage_IsUserInitiated()
     {
         await using Rig rig = CreateRig();
-        int slow_count = 0;
-        rig.Client.Rpc.PhoneSlow += (_, _) => Interlocked.Increment(ref slow_count);
+        int slowCount = 0;
+        rig.Client.Rpc.PhoneSlow += (_, _) => Interlocked.Increment(ref slowCount);
 
         Task call = rig.Client.GetFullSizeImageAsync("m-7", "a-7", CancellationToken.None);
         Sent sent = Captured(rig, 0);
@@ -241,7 +241,7 @@ public class GmClientMessagingTests
         // Five Seconds With No Answer
         Assert.IsTrue(SpinWait.SpinUntil(() => rig.Time.CountTimers(RpcSession.PhoneSlowTimeout) > 0, HangGuard), "slow timer");
         rig.Time.Advance(RpcSession.PhoneSlowTimeout);
-        Assert.IsTrue(SpinWait.SpinUntil(() => Volatile.Read(ref slow_count) > 0, HangGuard), "PhoneSlow raised");
+        Assert.IsTrue(SpinWait.SpinUntil(() => Volatile.Read(ref slowCount) > 0, HangGuard), "PhoneSlow raised");
 
         Answer(rig, sent, new GetFullSizeImageResponse());
         await call.WaitAsync(HangGuard);
@@ -259,8 +259,8 @@ public class GmClientMessagingTests
     public async Task UpdateConversation_IsUserInitiated_SendsRequest()
     {
         await using Rig rig = CreateRig();
-        int slow_count = 0;
-        rig.Client.Rpc.PhoneSlow += (_, _) => Interlocked.Increment(ref slow_count);
+        int slowCount = 0;
+        rig.Client.Rpc.PhoneSlow += (_, _) => Interlocked.Increment(ref slowCount);
         var request = new UpdateConversationRequest
         {
             ConversationID = "c-1",
@@ -273,15 +273,15 @@ public class GmClientMessagingTests
         // Five Seconds With No Answer
         Assert.IsTrue(SpinWait.SpinUntil(() => rig.Time.CountTimers(RpcSession.PhoneSlowTimeout) > 0, HangGuard), "slow timer");
         rig.Time.Advance(RpcSession.PhoneSlowTimeout);
-        Assert.IsTrue(SpinWait.SpinUntil(() => Volatile.Read(ref slow_count) > 0, HangGuard), "PhoneSlow raised");
+        Assert.IsTrue(SpinWait.SpinUntil(() => Volatile.Read(ref slowCount) > 0, HangGuard), "PhoneSlow raised");
 
         Answer(rig, sent, new UpdateConversationResponse { Success = true });
         UpdateConversationResponse result = await call.WaitAsync(HangGuard);
 
         Assert.AreEqual(ActionType.UpdateConversation, sent.Data.Action);
-        UpdateConversationRequest sent_request = sent.Payload(UpdateConversationRequest.Parser);
-        Assert.AreEqual(request, sent_request);
-        Assert.AreEqual(ConversationStatus.Archived, sent_request.UpdateData.Status);
+        UpdateConversationRequest sentRequest = sent.Payload(UpdateConversationRequest.Parser);
+        Assert.AreEqual(request, sentRequest);
+        Assert.AreEqual(ConversationStatus.Archived, sentRequest.UpdateData.Status);
         Assert.IsTrue(result.Success);
     }
 
@@ -395,10 +395,10 @@ public class GmClientMessagingTests
         GetOrCreateConversationResponse result = await call.WaitAsync(HangGuard);
 
         Assert.AreEqual(ActionType.GetOrCreateConversation, sent.Data.Action);
-        GetOrCreateConversationRequest sent_request = sent.Payload(GetOrCreateConversationRequest.Parser);
-        Assert.AreEqual("Friends", sent_request.RCSGroupName);
-        Assert.IsTrue(sent_request.CreateRCSGroup);
-        CollectionAssert.AreEqual(ExpectedNumbers, sent_request.Numbers.Select(n => n.Number).ToArray());
+        GetOrCreateConversationRequest sentRequest = sent.Payload(GetOrCreateConversationRequest.Parser);
+        Assert.AreEqual("Friends", sentRequest.RCSGroupName);
+        Assert.IsTrue(sentRequest.CreateRCSGroup);
+        CollectionAssert.AreEqual(ExpectedNumbers, sentRequest.Numbers.Select(n => n.Number).ToArray());
         Assert.AreEqual(GetOrCreateConversationResponse.Types.Status.Success, result.Status);
     }
 

@@ -105,10 +105,10 @@ public sealed class LifecycleTests : UiTest
 
         // The Click Really Came Before Start-Up Ended (The Restarted Run's First State Line), Or This Proved Nothing
         string log        = ReadLog();
-        string second_run = log[log.LastIndexOf(" started (", StringComparison.Ordinal)..];
-        int clicked_at    = second_run.IndexOf("Open requested (tray)", StringComparison.Ordinal);
-        int started_at    = second_run.IndexOf("Connection state:", StringComparison.Ordinal);
-        Assert.IsTrue(clicked_at >= 0 && started_at > clicked_at, $"The tray click wasn't logged before start-up ended:\n{second_run}");
+        string secondRun  = log[log.LastIndexOf(" started (", StringComparison.Ordinal)..];
+        int clickedAt     = secondRun.IndexOf("Open requested (tray)", StringComparison.Ordinal);
+        int startedAt     = secondRun.IndexOf("Connection state:", StringComparison.Ordinal);
+        Assert.IsTrue(clickedAt >= 0 && startedAt > clickedAt, $"The tray click wasn't logged before start-up ended:\n{secondRun}");
 
         int Refreshes() => Server.RequestedPaths.Count(p => p.EndsWith("Registration/RegisterRefresh", StringComparison.Ordinal));
     }
@@ -173,14 +173,14 @@ public sealed class LifecycleTests : UiTest
         CloseMainWindow();
 
         App.Process.Refresh();
-        long after_close = App.Process.PrivateMemorySize64;
+        long afterClose = App.Process.PrivateMemorySize64;
 
         Wait.Until(() => File.Exists(done), TimeSpan.FromSeconds(30), () => "The tray never trimmed after the window closed.");
 
         App.Process.Refresh();
-        long after_trim = App.Process.PrivateMemorySize64;
-        Console.WriteLine($"Private bytes: {after_close} after the close, {after_trim} after the trim.");
-        Assert.IsLessThanOrEqualTo(after_close + 2L * 1024 * 1024, after_trim, "The trim raised the private bytes.");
+        long afterTrim = App.Process.PrivateMemorySize64;
+        Console.WriteLine($"Private bytes: {afterClose} after the close, {afterTrim} after the trim.");
+        Assert.IsLessThanOrEqualTo(afterClose + 2L * 1024 * 1024, afterTrim, "The trim raised the private bytes.");
     }
 
     private void AssertStillRunning()

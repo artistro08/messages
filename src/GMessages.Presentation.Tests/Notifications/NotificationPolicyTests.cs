@@ -111,9 +111,9 @@ public sealed class NotificationPolicyTests
     [TestMethod]
     public void Body_EmojiAtCut_NotSplit()
     {
-        const string family = "\U0001F468‍\U0001F469‍\U0001F467";
+        const string Family = "\U0001F468‍\U0001F469‍\U0001F467";
 
-        Assert.AreEqual(new string('x', 99) + family + "…", NotificationContent.Shorten(new string('x', 99) + family + "yyy"));
+        Assert.AreEqual(new string('x', 99) + Family + "…", NotificationContent.Shorten(new string('x', 99) + Family + "yyy"));
     }
 
     [TestMethod]

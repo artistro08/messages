@@ -304,17 +304,17 @@ public sealed class SettingsViewModelTests
         Assert.IsFalse(vm.IsUnpairing);
 
         // Busy Seen From Inside The Call; Both Flags Raised
-        var busy_seen = new List<bool>();
+        var busySeen  = new List<bool>();
         var raised    = new List<string?>();
         vm.PropertyChanged += (_, e) =>
         {
             raised.Add(e.PropertyName);
-            busy_seen.Add(vm.IsUnpairing);
+            busySeen.Add(vm.IsUnpairing);
         };
 
         await vm.UnpairAsync().WaitAsync(ConnectionControllerTests.HangGuard);
 
-        Assert.IsTrue(busy_seen.Contains(true), "busy while unpairing");
+        Assert.IsTrue(busySeen.Contains(true), "busy while unpairing");
         Assert.IsFalse(vm.IsUnpairing);
         Assert.IsFalse(vm.CanUnpair);
         CollectionAssert.Contains(raised, nameof(SettingsViewModel.IsUnpairing));

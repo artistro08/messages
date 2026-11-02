@@ -47,13 +47,13 @@ public sealed class ConversationListViewModelTests
     {
         ConversationInfo c = ConversationInfo.From(MainRig.Conv("a", "Ann"));
         var row            = new ConversationRowViewModel(c with { IsMuted = true }, MainRig.Now);
-        bool created_muted = row.IsMuted;
+        bool createdMuted  = row.IsMuted;
         int raised         = 0;
         row.PropertyChanged += (_, _) => raised++;
 
         row.Update(c, MainRig.Now);
 
-        Assert.IsTrue(created_muted);
+        Assert.IsTrue(createdMuted);
         Assert.IsFalse(row.IsMuted);
         Assert.AreEqual(1, raised);
     }
@@ -101,15 +101,15 @@ public sealed class ConversationListViewModelTests
         rig.Page(MainRig.Conv("a", "Ann", minutesAgo: 5), MainRig.Conv("b", "Bo", minutesAgo: 10), MainRig.Conv("c", "Cy", minutesAgo: 20));
         using var list = NewList(rig);
         await list.LoadAsync();
-        ConversationRowViewModel row_c = list.Rows[2];
+        ConversationRowViewModel rowC = list.Rows[2];
         var changed                   = 0;
-        row_c.PropertyChanged         += (_, _) => changed++;
+        rowC.PropertyChanged         += (_, _) => changed++;
 
         await rig.Live(MainRig.Conv("c", "Cy", minutesAgo: 0, snippet: "fresh"));
 
         Assert.AreEqual("c,a,b", Ids(list));
-        Assert.AreSame(row_c, list.Rows[0]);
-        Assert.AreEqual("fresh", row_c.Snippet);
+        Assert.AreSame(rowC, list.Rows[0]);
+        Assert.AreEqual("fresh", rowC.Snippet);
         Assert.AreEqual(1, changed);
 
         // A Brand New Conversation Is Inserted In Order

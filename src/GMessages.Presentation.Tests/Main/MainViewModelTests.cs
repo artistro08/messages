@@ -417,7 +417,7 @@ public sealed class MainViewModelTests
         using var rig = new MainRig();
         MainViewModel vm = await NewMainAsync(rig);
         vm.OpenStartChat();
-        int list_calls = rig.Client.ListCalls.Count;
+        int listCalls = rig.Client.ListCalls.Count;
         vm.Dispose();
 
         vm.Select("new-1");
@@ -435,7 +435,7 @@ public sealed class MainViewModelTests
         Assert.IsNull(vm.SelectedConversationId);
         Assert.IsNull(vm.SpamBlocked);
         Assert.AreEqual(0, rig.Client.FetchCount, "no messages fetched for a chat nobody sees");
-        Assert.AreEqual(list_calls, rig.Client.ListCalls.Count, "no list reloads after closing");
+        Assert.AreEqual(listCalls, rig.Client.ListCalls.Count, "no list reloads after closing");
     }
 
     [TestMethod]

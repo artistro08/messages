@@ -186,7 +186,7 @@ public sealed class LinkPreviewerTests
     [TestMethod]
     public void ParseHead_OgTags_EitherAttributeOrder()
     {
-        const string html =
+        const string Html =
             """
             <head>
             <title>Fallback</title>
@@ -196,7 +196,7 @@ public sealed class LinkPreviewerTests
             </head>
             """;
 
-        (string title, string site, Uri? image) = LinkPreviewer.ParseHead(html, Page)!.Value;
+        (string title, string site, Uri? image) = LinkPreviewer.ParseHead(Html, Page)!.Value;
 
         Assert.AreEqual("Og Title", title);
         Assert.AreEqual("example.com", site, "the site is the real host, never og:site_name");
@@ -236,8 +236,8 @@ public sealed class LinkPreviewerTests
     [TestMethod]
     public void ParseHead_StripsBidiControls_CapsLength()
     {
-        string long_title    = new('a', 500);
-        (string title, _, _) = LinkPreviewer.ParseHead($"<title>Pay\u202Egnp.exe {long_title}</title>", Page)!.Value;
+        string longTitle     = new('a', 500);
+        (string title, _, _) = LinkPreviewer.ParseHead($"<title>Pay\u202Egnp.exe {longTitle}</title>", Page)!.Value;
 
         Assert.IsFalse(title.Contains('\u202E', StringComparison.Ordinal), title);
         StringAssert.StartsWith(title, "Paygnp.exe aaa");

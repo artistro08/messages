@@ -202,8 +202,8 @@ public abstract class UiTest
                 // The Page Changed Under The Click; Try Again
             }
 
-            DateTime posted_by = DateTime.UtcNow.AddSeconds(2);
-            while (DateTime.UtcNow < posted_by && LoginPosts() == before)
+            DateTime postedBy = DateTime.UtcNow.AddSeconds(2);
+            while (DateTime.UtcNow < postedBy && LoginPosts() == before)
             {
                 // Short Settle Wait For The Form Post To Reach The Fake Server
                 Thread.Sleep(100);
