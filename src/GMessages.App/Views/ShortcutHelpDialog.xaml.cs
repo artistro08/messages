@@ -27,10 +27,6 @@ public sealed partial class ShortcutHelpDialog : ContentDialog
 {
     // The Dialog Stays This Far From The Window's Edges, However Small The Window
     private const double WindowGap = 32;
-
-    // The Empty Space Above The 20 px Heading's Letters Within Its Line, Taken Off The Title's Top
-    private const double TitleRaise = 7;
-
     // The Dim Over The Window (A Click On It Closes The Dialog) And The Dialog's Card (Kept Clear Of The Window's Edges)
     private UIElement? _smoke;
     private FrameworkElement? _card;
@@ -71,13 +67,11 @@ public sealed partial class ShortcutHelpDialog : ContentDialog
             {
                 _card = card;
 
-                // The Template Holds The Title To Its Width At The Left; Stretched, The X Reaches The Right Corner. Raised
-                // By The Space Above The Heading's Letters In Its Line, So The Gap Over Them Matches The Gap Beside Them
+                // The Template Holds The Title To Its Width At The Left; Stretched, The X Reaches The Right Corner
                 if (UiHelpers.FindPart<Control>(card, "Title") is { } title)
                 {
                     title.HorizontalAlignment        = HorizontalAlignment.Stretch;
                     title.HorizontalContentAlignment = HorizontalAlignment.Stretch;
-                    title.Margin                     = new Thickness(title.Margin.Left, title.Margin.Top - TitleRaise, title.Margin.Right, title.Margin.Bottom);
                 }
             }
             else if (VisualTreeHelper.GetChildrenCount(child) == 0)

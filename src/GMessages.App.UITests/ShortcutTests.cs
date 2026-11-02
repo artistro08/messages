@@ -195,12 +195,18 @@ public sealed class ShortcutTests : UiTest
 
         // The X
         Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.SHIFT, VirtualKeyShort.OEM_2);
+        Thread.Sleep(500);
+        System.Drawing.Rectangle first = App.Find("Shortcuts.Close").BoundingRectangle;
         App.Find("Shortcuts.Close").Patterns.Invoke.Pattern.Invoke();
         WaitForGone("Shortcuts.Close");
 
-        // A Click On The Card's Heading Leaves It Open; One On The Dim (The Window's Left Edge, Beside The Card) Closes It
+        // Opened Again, The Title Row Sits Where It Did (It Once Rose Further On Each Open)
         Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.SHIFT, VirtualKeyShort.OEM_2);
+        Thread.Sleep(500);
         System.Drawing.Rectangle close = App.Find("Shortcuts.Close").BoundingRectangle;
+        Assert.AreEqual(first.Y, close.Y, "The X moved between opens.");
+
+        // A Click On The Card's Heading Leaves It Open; One On The Dim (The Window's Left Edge, Beside The Card) Closes It
         System.Drawing.Rectangle win   = window.BoundingRectangle;
         FlaUI.Core.Input.Mouse.Click(new System.Drawing.Point(close.X - 120, close.Y + (close.Height / 2)));
         Thread.Sleep(500);
