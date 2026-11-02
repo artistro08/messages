@@ -12,9 +12,9 @@
 
 ![Kaituro showing a chat with a photo, reactions and a reply, in dark mode](docs/screenshots/01-chat-dark.png)
 
-## What It Adds
+## Features
 
-Kaituro does everything Google Messages for Web does, as a real Windows app. On top of that, you get:
+Everything from Google Messages for Web, plus:
 
 - **Lives in the tray.** Close the window and Kaituro keeps running, so new messages still come in. Turn on Start with Windows and it's there when you sign in.
 - **Windows notifications you can answer.** Reply right from the notification, snooze it, or mute the chat, without opening anything.
