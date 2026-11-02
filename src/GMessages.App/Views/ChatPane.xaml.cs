@@ -1527,10 +1527,17 @@ public sealed partial class ChatPane : UserControl
     // The Test's Clipboard When It Set One, Else The Real One; Pasted As Owned (Under The Test Hooks Every Paste Is)
     private async Task PasteFromTestHookAsync()
     {
-        DataPackageView? view = await TestHooks.PasteContentAsync() ?? ClipboardView();
-        if (view is not null)
+        try
         {
-            Paste(view, owned: true);
+            DataPackageView? view = await TestHooks.PasteContentAsync() ?? ClipboardView();
+            if (view is not null)
+            {
+                Paste(view, owned: true);
+            }
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            AppLog.MediaFailed(App.ShellLog, "paste", Chat?.ConversationId ?? string.Empty, ex.GetType().Name);
         }
     }
 
@@ -1553,8 +1560,8 @@ public sealed partial class ChatPane : UserControl
         view.Contains(StandardDataFormats.StorageItems)
         || (!view.Contains(StandardDataFormats.Text) && (view.Contains(StandardDataFormats.Bitmap) || PastedPictures.Any(p => view.Contains(p.Format))));
 
-    // The Paste Is Ours When It Carries Media; Under The Test Hooks Every Paste Is (The Box Would Read The Real Clipboard)
-    private static bool OwnsPaste(DataPackageView view) => CarriesMedia(view) || TestHooks.BlockLaunches;
+    // The Paste Is Ours When It Carries Media (Under The Test Hooks Every Paste Is Ours Before This Is Asked)
+    private static bool OwnsPaste(DataPackageView view) => CarriesMedia(view);
 
     // Ctrl + V And Shift + Insert
     private static bool IsPasteKey(VirtualKey key) =>

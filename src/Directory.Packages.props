@@ -1,5 +1,5 @@
 <Project>
-  <!-- Every NuGet package version for src/ lives here; the project files name packages without versions -->
+  <!-- Every NuGet Package Version For src/ Lives Here; The Project Files Name Packages Without Versions -->
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
   </PropertyGroup>
