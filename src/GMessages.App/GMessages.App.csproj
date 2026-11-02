@@ -17,7 +17,7 @@
     <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
     <!-- LibraryImport And Generated COM (Microphone Consent) Generate Unsafe Code -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <!-- Exe icon, drawn by scripts/New-AppAssets.ps1 -->
+    <!-- Exe icon, drawn by scripts/Make-Icons.ps1 -->
     <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
   </PropertyGroup>
 
