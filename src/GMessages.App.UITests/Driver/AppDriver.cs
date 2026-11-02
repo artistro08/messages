@@ -25,9 +25,12 @@ public sealed class AppDriver : IAsyncDisposable
     // Types, So Only It Catches A Type Test That Fails In The Shipped App
     private static readonly bool Aot = Environment.GetEnvironmentVariable("GMESSAGES_UITEST_AOT") == "1";
 
+    // The Exe Is Named After AppDisplayName In src/Directory.Build.props; Change Both Together
+    private const string ExeName = "Tekisuto.exe";
+
     private static readonly string ExeRelativePath = Aot
-        ? @"GMessages.App\bin\x64\Debug\net10.0-windows10.0.26100.0\win-x64\publish\Messages.exe"
-        : @"GMessages.App\bin\x64\Debug\net10.0-windows10.0.26100.0\win-x64\Messages.exe";
+        ? @"GMessages.App\bin\x64\Debug\net10.0-windows10.0.26100.0\win-x64\publish\" + ExeName
+        : @"GMessages.App\bin\x64\Debug\net10.0-windows10.0.26100.0\win-x64\" + ExeName;
 
     private static readonly string BuildCommand = Aot
         ? "dotnet publish src/GMessages.App -c Debug -p:Platform=x64 -p:Optimize=true"
@@ -55,7 +58,7 @@ public sealed class AppDriver : IAsyncDisposable
     /// </summary>
     /// <exception cref="AssertFailedException">The exe isn't built.</exception>
     public static string ExePath => FoundExe ?? throw new AssertFailedException(
-        $"Messages.exe is not built. Run '{BuildCommand}' first. Looked for src\\{ExeRelativePath} in every folder above {AppContext.BaseDirectory}.");
+        $"{ExeName} is not built. Run '{BuildCommand}' first. Looked for src\\{ExeRelativePath} in every folder above {AppContext.BaseDirectory}.");
 
     /// <summary>
     /// Gets the UI Automation client.
@@ -327,7 +330,7 @@ public sealed class AppDriver : IAsyncDisposable
                 await quit.WaitForExitAsync().WaitAsync(QuitTimeout);
                 if (quit.ExitCode == 2)
                 {
-                    Assert.Fail($"Messages.exe --quit refused its flags: {TestHookError()}");
+                    Assert.Fail($"{ExeName} --quit refused its flags: {TestHookError()}");
                 }
             }
             finally
@@ -481,7 +484,7 @@ public sealed class AppDriver : IAsyncDisposable
         {
             int code = process.ExitCode;
             process.Dispose();
-            Assert.Fail($"Messages.exe exited at once with code {code}: {TestHookError()}");
+            Assert.Fail($"{ExeName} exited at once with code {code}: {TestHookError()}");
         }
 
         return process;

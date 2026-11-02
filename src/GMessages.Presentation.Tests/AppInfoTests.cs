@@ -10,7 +10,7 @@ public sealed class AppInfoTests
     private static readonly string[] ScannedPatterns = ["*.cs", "*.xaml", "*.appxmanifest"];
 
     [TestMethod]
-    public void DisplayName_ComesFromTheSingleBuildProperty() => Assert.AreEqual("Messages", AppInfo.DisplayName);
+    public void DisplayName_ComesFromTheSingleBuildProperty() => Assert.AreEqual("Tekisuto", AppInfo.DisplayName);
 
     [TestMethod]
     public void Version_IsNotEmpty() => Assert.IsFalse(string.IsNullOrWhiteSpace(AppInfo.Version));

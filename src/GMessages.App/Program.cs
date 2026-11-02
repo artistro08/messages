@@ -9,7 +9,7 @@ namespace GMessages.App;
 /// Entry point. Replaces the XAML-generated Main so only one copy of the tray app runs.
 /// </summary>
 /// <remarks>
-/// Ported from Magic Buds' <c>Program.cs</c>. <c>Messages.exe --quit</c> asks the running copy to quit the
+/// Ported from Magic Buds' <c>Program.cs</c>. <c>Tekisuto.exe --quit</c> asks the running copy to quit the
 /// same way the tray menu's Quit does. A second launch tells the running copy to open its main window, then
 /// exits. Names come from <see cref="AppInfo.DisplayName"/>, with a <c>.Test</c> suffix under test so UI test
 /// runs never collide with a real copy.
