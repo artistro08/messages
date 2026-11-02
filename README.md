@@ -10,10 +10,10 @@
    Google messages but Native. 
 </p>
 
+![Kaituro showing a chat with a photo, reactions and a reply, in dark mode](docs/screenshots/01-chat-dark.png)
+
 ## Why? 
 I'm literally sick and tired of web apps. They are bloated. they take up memory. they literally run a web browser. The idea here was to create something that was light on memory when using it and have an app that doesn't take up much resources when running in the background.
-
-![Kaituro showing a chat with a photo, reactions and a reply, in dark mode](docs/screenshots/01-chat-dark.png)
 
 ## Features
 
