@@ -7,22 +7,23 @@
 </h1>
 
 <p align="center">
-    Google Messages for Windows: text, share photos and reply to notifications from your PC, right from the tray.
+   Google messages but Native. 
 </p>
+
+## Why? 
+I'm literally sick and tired of web apps. They are bloated. they take up memory. they literally run a web browser. The idea here was to create something that was light on memory when using it and have an app that doesn't take up much resources when running in the background.
 
 ![Kaituro showing a chat with a photo, reactions and a reply, in dark mode](docs/screenshots/01-chat-dark.png)
 
 ## Features
 
-Everything from Google Messages for Web, plus:
-
-- **Lives in the tray.** Close the window and Kaituro keeps running, so new messages still come in. Turn on Start with Windows and it's there when you sign in.
-- **Windows notifications you can answer.** Reply right from the notification, snooze it, or mute the chat, without opening anything.
-- **A mute bell in the chat header.** Mute or unmute a chat in one click.
-- **Pick your microphone.** Choose which mic records your voice messages in Settings.
-- **Undo archive.** Ctrl + Z puts back the last chat you archived.
-- **More shortcuts.** Ctrl + S shows or hides the sidebar, and Ctrl + , opens Settings. Press Ctrl + ? to see them all.
-- **Fits in on Windows 11.** Follows your light or dark theme, and the window opens where and how big you left it.
+- Everything Google Messages for Web does
+- Runs in the background
+- Native Notifications
+- Undo Archived messages you've accidentally archived
+- Shortcuts, Press Ctrl + ? to see them all.
+- Native, Uses WinUI 3.
+- Looks beautiful. 
 
 ## Building
 
