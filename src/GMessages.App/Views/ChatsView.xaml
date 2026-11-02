@@ -102,21 +102,28 @@
                         </DataTemplate>
                     </ListView.ItemTemplate>
 
-                    <!-- Loading More: a small ring below the last row while the next page loads (scrolling near the
-                         bottom asks for it, see the code). 24 px, not 20: the ring's animation is drawn for 32 px with a
-                         4 px stroke and stretched, so 20 px gave a 2.5 px stroke whose edges never land on whole pixels
-                         and look jagged as it turns; 24 px gives a whole 3 px -->
+                    <!-- Loading More Room: below the last row while the next page loads, where the ring below shows once
+                         the list is scrolled to its end -->
                     <ListView.Footer>
-                        <ProgressRing
-                            Width="24"
-                            Height="24"
-                            Margin="0,8"
-                            HorizontalAlignment="Center"
-                            AutomationProperties.AutomationId="Main.ListLoadingMore"
-                            IsActive="{x:Bind ViewModel.CurrentList.IsLoadingMore, Mode=OneWay, FallbackValue=False}"
-                            Visibility="{x:Bind ViewModel.CurrentList.IsLoadingMore, Mode=OneWay, FallbackValue=Collapsed}" />
+                        <Border Height="40" Visibility="{x:Bind ViewModel.CurrentList.IsLoadingMore, Mode=OneWay, FallbackValue=Collapsed}" />
                     </ListView.Footer>
                 </ListView>
+
+                <!-- Loading More: a small ring near the list's bottom while the next page loads (scrolling near the bottom
+                     asks for it, see the code), in the room the footer keeps at the end. Outside the list: the list's
+                     edge fade redraws its content through a copy, which drew the ring with no smoothing (jagged). 24 px,
+                     not 20: the ring's animation is drawn for 32 px with a 4 px stroke and stretched, so 20 px gave a
+                     2.5 px stroke whose edges never land on whole pixels; 24 px gives a whole 3 px -->
+                <ProgressRing
+                    Grid.Row="4"
+                    Width="24"
+                    Height="24"
+                    Margin="0,0,8,72"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Bottom"
+                    AutomationProperties.AutomationId="Main.ListLoadingMore"
+                    IsActive="{x:Bind ViewModel.CurrentList.IsLoadingMore, Mode=OneWay, FallbackValue=False}"
+                    Visibility="{x:Bind ViewModel.CurrentList.IsLoadingMore, Mode=OneWay, FallbackValue=Collapsed}" />
 
                 <!-- Loading: while an empty list (the inbox, Archived or Spam & blocked) loads; the standard 32 px (a whole
                      4 px stroke), stated so a style change can't make it fractional -->
@@ -129,70 +136,106 @@
                     AutomationProperties.AutomationId="Main.ListLoading"
                     IsActive="{x:Bind ViewModel.CurrentList.IsLoadingFirstPage, Mode=OneWay}" />
 
-                <!-- Undo: after an archive (only: owner), for a few seconds (the view model hides it), above Start chat; Undo puts
-                     the conversation back. It never takes the focus (Tab reaches it), and Narrator announces it. It floats over
-                     the rows, so it is solid: the informational tint alone is see-through, and the rows showed through it.
-                     InfoBar draws its Background over that tint -->
-                <InfoBar
-                    x:Name="UndoBar"
+                <!-- Bottom Row: the Undo bar and Start chat side by side, floating over the rows. The row has no background, so
+                     clicks between them still reach the rows -->
+                <Grid
                     Grid.Row="4"
-                    Margin="16,0,16,64"
+                    Margin="16,0,16,16"
                     VerticalAlignment="Bottom"
-                    AutomationProperties.AutomationId="Main.Undo"
-                    AutomationProperties.LiveSetting="Polite"
-                    AutomationProperties.Name="{x:Bind ViewModel.UndoNotice, Mode=OneWay, FallbackValue=''}"
-                    Background="{ThemeResource SolidBackgroundFillColorTertiaryBrush}"
-                    CloseButtonClick="OnUndoClosed"
-                    IsClosable="True"
-                    IsOpen="{x:Bind ViewModel.HasUndo, Mode=OneWay}"
-                    Message="{x:Bind ViewModel.UndoNotice, Mode=OneWay, FallbackValue=''}"
-                    Severity="Informational"
-                    Visibility="{x:Bind ViewModel.HasUndo, Mode=OneWay, FallbackValue=Collapsed}">
-                    <InfoBar.ActionButton>
+                    ColumnDefinitions="*,Auto"
+                    ColumnSpacing="8">
+
+                    <!-- Undo: after an archive (only: owner), for a few seconds (the view model hides it), left of Start chat;
+                         Undo puts the conversation back, the X hides it. The same height as Start chat, solid and lifted like
+                         it; a narrow list cuts the notice short with "…". It never takes the focus (Tab reaches it), and
+                         Narrator announces the notice (see AnnounceUndo) -->
+                    <Grid
+                        x:Name="UndoBar"
+                        Height="32"
+                        Padding="12,0,4,0"
+                        Background="{ThemeResource SolidBackgroundFillColorTertiaryBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1"
+                        ColumnDefinitions="*,Auto,Auto"
+                        CornerRadius="{ThemeResource ControlCornerRadius}"
+                        Translation="0,0,16"
+                        Visibility="{x:Bind ViewModel.HasUndo, Mode=OneWay, FallbackValue=Collapsed}">
+                        <Grid.Shadow>
+                            <ThemeShadow />
+                        </Grid.Shadow>
+                        <TextBlock
+                            x:Name="UndoNoticeText"
+                            VerticalAlignment="Center"
+                            AutomationProperties.AutomationId="Main.Undo"
+                            AutomationProperties.LiveSetting="Polite"
+                            Text="{x:Bind ViewModel.UndoNotice, Mode=OneWay, FallbackValue=''}"
+                            TextTrimming="CharacterEllipsis"
+                            ToolTipService.ToolTip="{x:Bind ViewModel.UndoNotice, Mode=OneWay, FallbackValue=''}" />
                         <Button
                             x:Name="UndoButton"
+                            Grid.Column="1"
+                            MinHeight="24"
+                            Margin="8,0,0,0"
+                            Padding="8,1,8,2"
+                            VerticalAlignment="Center"
                             AutomationProperties.AutomationId="Main.Undo.Button"
                             Click="OnUndoClick"
-                            GettingFocus="OnUndoGettingFocus"
-                            Content="{x:Bind local:ChatsView.UndoText}" />
-                    </InfoBar.ActionButton>
-                </InfoBar>
+                            Content="{x:Bind local:ChatsView.UndoText}"
+                            GettingFocus="OnUndoGettingFocus" />
 
-                <!-- Start Chat: floats at the bottom right over the inbox, the standard accent button's size; scrolling down
-                     slides it away, scrolling up brings it back (set from code on the backing, animated by its transitions).
-                     The backing is solid: Windows' hover, pressed and disabled accent fills are see-through, and the rows
-                     showed through the button -->
-                <Grid
-                    x:Name="StartChatHost"
-                    Grid.Row="4"
-                    Margin="0,0,16,16"
-                    HorizontalAlignment="Right"
-                    VerticalAlignment="Bottom"
-                    Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
-                    CornerRadius="{ThemeResource ControlCornerRadius}"
-                    Translation="0,0,16"
-                    Visibility="{x:Bind local:MainWindow.HiddenIf(ViewModel.IsFolderView), Mode=OneWay}">
-                    <Grid.Shadow>
-                        <ThemeShadow />
-                    </Grid.Shadow>
-                    <Grid.OpacityTransition>
-                        <ScalarTransition />
-                    </Grid.OpacityTransition>
-                    <Grid.TranslationTransition>
-                        <Vector3Transition />
-                    </Grid.TranslationTransition>
-                    <Button
-                        x:Name="StartChatButton"
-                        AutomationProperties.AutomationId="Main.StartChat"
-                        Click="OnStartChatClick"
-                        Style="{StaticResource AccentButtonStyle}">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <FontIcon FontSize="16" Glyph="&#xE8BD;" />
-                            <TextBlock x:Name="StartChatText" />
-                        </StackPanel>
-                    </Button>
+                        <!-- Close: a bare X right by Undo -->
+                        <Button
+                            Grid.Column="2"
+                            Width="24"
+                            Height="24"
+                            Margin="2,0,0,0"
+                            VerticalAlignment="Center"
+                            AutomationProperties.AutomationId="Main.Undo.Close"
+                            AutomationProperties.Name="{x:Bind local:ChatsView.CloseText}"
+                            Click="OnUndoClosed"
+                            GettingFocus="OnUndoGettingFocus"
+                            Style="{StaticResource IconButtonStyle}"
+                            ToolTipService.ToolTip="{x:Bind local:ChatsView.CloseText}">
+                            <FontIcon FontSize="10" Glyph="&#xE8BB;" />
+                        </Button>
+                    </Grid>
+                    <!-- /Undo -->
+
+                    <!-- Start Chat: floats at the bottom right over the inbox, the standard accent button's size; scrolling
+                         down slides it away, scrolling up brings it back (set from code on the backing, animated by its
+                         transitions). The backing is solid: Windows' hover, pressed and disabled accent fills are
+                         see-through, and the rows showed through the button -->
+                    <Grid
+                        x:Name="StartChatHost"
+                        Grid.Column="1"
+                        VerticalAlignment="Bottom"
+                        Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+                        CornerRadius="{ThemeResource ControlCornerRadius}"
+                        Translation="0,0,16"
+                        Visibility="{x:Bind local:MainWindow.HiddenIf(ViewModel.IsFolderView), Mode=OneWay}">
+                        <Grid.Shadow>
+                            <ThemeShadow />
+                        </Grid.Shadow>
+                        <Grid.OpacityTransition>
+                            <ScalarTransition />
+                        </Grid.OpacityTransition>
+                        <Grid.TranslationTransition>
+                            <Vector3Transition />
+                        </Grid.TranslationTransition>
+                        <Button
+                            x:Name="StartChatButton"
+                            AutomationProperties.AutomationId="Main.StartChat"
+                            Click="OnStartChatClick"
+                            Style="{StaticResource AccentButtonStyle}">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon FontSize="16" Glyph="&#xE8BD;" />
+                                <TextBlock x:Name="StartChatText" />
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+                    <!-- /Start Chat -->
                 </Grid>
-                <!-- /Start Chat -->
+                <!-- /Bottom Row -->
             </Grid>
         </SplitView.Pane>
         <!-- /List Pane -->

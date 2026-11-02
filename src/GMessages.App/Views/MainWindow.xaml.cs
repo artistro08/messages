@@ -54,9 +54,6 @@ public sealed partial class MainWindow : Window
     private Button? _backButton;
     private bool _isActive;
 
-    // Dims The Window's Content While It Is Inactive, Like The Title Bar
-    private readonly WindowTextDimmer _textDimmer;
-
     // The Caption Buttons' Theme For The App Theme (Dark Instead While The Photo Viewer Is Open)
     private TitleBarTheme _captionTheme = TitleBarTheme.UseDefaultAppMode;
 
@@ -83,7 +80,6 @@ public sealed partial class MainWindow : Window
         _avatars     = avatars;
         Avatar.Cache = avatars;
         InitializeComponent();
-        _textDimmer = new WindowTextDimmer(BodyHost, SettingsHost);
 
         // Window
         Title                      = AppInfo.DisplayName;
@@ -122,12 +118,13 @@ public sealed partial class MainWindow : Window
                 DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, PunchViewerToolbar);
             }
         };
+        // Inactive, Only The Title Bar Dims, As In Windows' Own Apps: Fading The Content Faded Each Element On Its Own, So
+        // Overlapping Ones (A Photo Over Its Letter, Start Chat Over The Rows) Showed Through Each Other
         Activated       += (_, e) =>
         {
             _isActive = e.WindowActivationState != WindowActivationState.Deactivated;
             ShowChatFocus();
             PhotoViewer.ShowActive(_isActive);
-            _textDimmer.Show(_isActive);
         };
         Closed += (_, _) =>
         {

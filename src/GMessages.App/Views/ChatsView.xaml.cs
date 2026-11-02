@@ -9,6 +9,7 @@ using GMessages.Presentation.Settings;
 using GMessages.Presentation.Shortcuts;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
+using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
@@ -212,6 +213,9 @@ public sealed partial class ChatsView : UserControl
     /// <summary>Gets the Undo bar's button text (for bindings).</summary>
     public static string UndoText => ChatCopy.Undo;
 
+    /// <summary>Gets the Undo bar's close button name (for bindings).</summary>
+    public static string CloseText => ChatCopy.Close;
+
     // =========================================================================
     // EVENT HANDLERS
     // =========================================================================
@@ -220,7 +224,21 @@ public sealed partial class ChatsView : UserControl
     {
         ShowCurrentList();
         ShowSelection();
+
+        if (e.PropertyName is nameof(MainViewModel.HasUndo) or nameof(MainViewModel.UndoNotice))
+        {
+            AnnounceUndo();
+        }
     }
+
+    // Narrator Reads The Undo Bar's Notice As It Shows (A Live Region, Polite). After The Bindings Show It (A Turn Later)
+    private void AnnounceUndo() => DispatcherQueue.TryEnqueue(() =>
+    {
+        if (ViewModel.HasUndo && FrameworkElementAutomationPeer.CreatePeerForElement(UndoNoticeText) is { } peer)
+        {
+            peer.RaiseAutomationEvent(AutomationEvents.LiveRegionChanged);
+        }
+    });
 
     // Inbox Or Spam & Blocked: Rewrapped Only When The List Itself Changes, So Other Changes Keep The Selection
     // (See BindableList For Why The Rows Aren't Bound Directly)
@@ -397,7 +415,7 @@ public sealed partial class ChatsView : UserControl
     // The Undo Bar: Undo Puts The Conversation Back; Its Close Button Hides It
     private void OnUndoClick(object sender, RoutedEventArgs e) => _ = ViewModel.UndoAsync();
 
-    private void OnUndoClosed(InfoBar sender, object args) => ViewModel.DismissUndo();
+    private void OnUndoClosed(object sender, RoutedEventArgs e) => ViewModel.DismissUndo();
 
     // The Bar Never Takes The Focus: When The Archived Row Had It, Windows Hands It On To The Next Tab Stop, Undo, As A
     // Move From The Last Input Device (The Mouse After The Row's Menu). Any Move That Isn't The Keyboard's (Tab, Arrows) Or

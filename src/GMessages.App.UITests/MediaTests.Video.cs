@@ -196,13 +196,23 @@ public sealed partial class MediaTests
         Assert.IsTrue(back >= viewerEnd - 1, $"The bubble carried on at {back:0}%, not where the viewer got to ({viewerEnd:0}%).");
     }
 
-    // The Seek Bar's Value (Percent Of The Clip)
+    // The Seek Bar's Value (Percent Of The Clip), Read The Way A Person Sees It: The Pointer Moves Over The Video First,
+    // Which Shows The Bar. The Bar Hides 1 s After The Pointer Rests While Playing, And Hidden, Windows Stops Moving
+    // Its Seek Bar
     private static double SeekValue(AutomationElement player)
     {
+        System.Drawing.Rectangle box = player.BoundingRectangle;
+        s_nudge                      = -s_nudge;
+        FlaUI.Core.Input.Mouse.MoveTo(box.X + (box.Width / 2) + s_nudge, box.Y + (box.Height / 3));
+        Thread.Sleep(100);
+
         AutomationElement slider = AppDriver.Search(player, e => e.Properties.AutomationId.ValueOrDefault == "ProgressSlider")
             ?? throw new AssertFailedException("The player has no seek bar.");
         return slider.Patterns.RangeValue.Pattern.Value.Value;
     }
+
+    // Each Read Moves The Pointer A Pixel The Other Way, So It Is Always A Real Move
+    private static int s_nudge = 1;
 
     // The Bar Is The Same In The Bubble And The Viewer: Play Or Pause On The Left, The Seek Bar, Volume On The Right,
     // Nothing Else (No Cast Or Full Window)
@@ -226,14 +236,12 @@ public sealed partial class MediaTests
     {
         PressPlayPause(player, "Paused");
         AssertCompactBar(player);
-        AutomationElement slider = AppDriver.Search(player, e => e.Properties.AutomationId.ValueOrDefault == "ProgressSlider")
-            ?? throw new AssertFailedException("The player has no seek bar.");
-        double pausedAt = slider.Patterns.RangeValue.Pattern.Value.Value;
+        double pausedAt = SeekValue(player);
         Thread.Sleep(1500);
-        Assert.AreEqual(pausedAt, slider.Patterns.RangeValue.Pattern.Value.Value, "The video played on after the pause button.");
+        Assert.AreEqual(pausedAt, SeekValue(player), "The video played on after the pause button.");
 
         PressPlayPause(player, "Playing");
-        Wait.Until(() => slider.Patterns.RangeValue.Pattern.Value.Value > pausedAt, AppDriver.DefaultTimeout,
+        Wait.Until(() => SeekValue(player) > pausedAt, AppDriver.DefaultTimeout,
             () => "The video didn't move on after the play button.");
         Assert.IsNull(AppDriver.Search(player, e => e.Properties.AutomationId.ValueOrDefault == "CastButton"), "The player offers a cast button.");
     }

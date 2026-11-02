@@ -242,12 +242,14 @@ public sealed partial class MessageBubble : UserControl
     private static MessageBubble? s_playingVideo;
 
     // The Video Shown, Its Bubble, Its Load Number (Bumped When It Stops Or Another Message Shows, So A Late Download
-    // Stops), The Inline Player While It Plays, And The Player Host's Visual (For Its Rounded Clip; Taken Once)
+    // Stops), The Inline Player While It Plays, And The Player Host's Visual (For Its Rounded Clip; Taken Once Per Host,
+    // With The Host It Came From: The Video Part Unloads And Loads Again As A Recycled Row Changes Message)
     private MediaPart? _videoPart;
     private MessageBubbleViewModel? _videoBubble;
     private int _videoLoad;
     private VideoPlayback? _video;
     private Visual? _videoHostVisual;
+    private Grid? _videoHostVisualOf;
 
     // The Video's Still Frame Once It Shows, Which The Viewer Grows Out Of The Bubble Before Its Player Takes Over
     private ImageSource? _videoFrameImage;
@@ -1180,7 +1182,7 @@ public sealed partial class MessageBubble : UserControl
 
     /// <summary>
     /// Lets go of the media a list row holds while it waits to be used again: the inline video's player, the voice
-    /// message's waveform, and every decoded image (preview card, photo, file thumbnail, video frame).
+    /// message's waveform, and the decoded photo, file thumbnail and video frame (a preview card's small image stays).
     /// </summary>
     /// <remarks>
     /// Loads still running stop, and the media shown is forgotten, so <see cref="LoadMedia"/> loads it again. The bubble
@@ -1228,13 +1230,8 @@ public sealed partial class MessageBubble : UserControl
             FileThumb.Background = null;
         }
 
-        // Preview Card: Its Image
-        _previewShown = null;
-        if (PreviewImage is not null)
-        {
-            PreviewImage.Source     = null;
-            PreviewImage.Visibility = Visibility.Collapsed;
-        }
+        // The Preview Card Keeps Its Small Image: Dropped, The Card Shrank And Grew Back As It Decoded Again, Moving The
+        // Chat While It Scrolled
     }
 
     private void ShowStates()

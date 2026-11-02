@@ -57,12 +57,13 @@ public sealed class MainWindowTests : UiTest
     }
 
     /// <summary>
-    /// The window's text dims while the window is inactive (the tray menu takes activation), like the title bar, and comes
-    /// back when it is active again.
+    /// The window's content stays as it is while the window is inactive (the tray menu takes activation): only the title
+    /// bar dims, as in Windows' own apps. Fading the content faded each element on its own, so overlapping ones (a photo
+    /// over its letter, Start chat over the rows) showed through each other (owner).
     /// </summary>
     /// <returns>A task for the test.</returns>
     [TestMethod]
-    public async Task Inactive_TextDims_ActiveBrightAgain()
+    public async Task Inactive_ContentDoesNotDim()
     {
         await OpenMainAsync();
         WaitForRows(InboxRows);
@@ -74,12 +75,10 @@ public sealed class MainWindowTests : UiTest
         App.Find("TrayMenu.Open");
         Thread.Sleep(500);
         double inactive = Contrast(time);
-        Assert.IsTrue(inactive < active * 0.8, $"The text didn't dim while inactive (contrast {active:F0} active, {inactive:F0} inactive).");
+        Assert.IsTrue(inactive > active * 0.9, $"The content dimmed while inactive (contrast {active:F0} active, {inactive:F0} inactive).");
 
         FlaUI.Core.Input.Keyboard.Type(FlaUI.Core.WindowsAPI.VirtualKeyShort.ESCAPE);
         Tray.CloseOverflow();
-        App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).SetForeground();
-        Wait.Until(() => Contrast(time) > active * 0.9, AppDriver.DefaultTimeout, () => $"The text stayed dim once active again (contrast {Contrast(time):F0}, was {active:F0}).");
     }
 
     // How Far A Text's Strongest Pixel Stands From The Background (Its Corner Pixel), 0 To 255
