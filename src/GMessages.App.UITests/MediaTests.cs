@@ -1333,7 +1333,7 @@ public sealed partial class MediaTests : UiTest
     private static partial bool UnregisterHotKey(IntPtr window, int id);
 
     // Writes Files For The App's Next Pick (The Test Hook Answers The Picker With Them)
-    // The Test Hook's Clipboard (See TestHooks.PasteContent), Then Ctrl + V In The Message Box
+    // The Test Hook's Clipboard (See TestHooks.PasteContentAsync), Then Ctrl + V In The Message Box
     private void PasteIntoDraft(params string[] clipboard)
     {
         File.WriteAllLines(Path.Combine(App.DataDir, "paste.txt"), clipboard);
