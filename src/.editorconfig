@@ -124,8 +124,8 @@ dotnet_naming_rule.locals_and_parameters_rule.symbols  = locals_and_parameters
 dotnet_naming_rule.locals_and_parameters_rule.style    = camel_case
 dotnet_naming_rule.locals_and_parameters_rule.severity = warning
 
-# Code-Behind: async void Event Handlers (And Fire-And-Forget UI Helpers) Can't Be Awaited, So They Take No Async Suffix
-[GMessages.App/**.xaml.cs]
+# Code-Behind (Its Partials Too): async void Event Handlers (And Fire-And-Forget UI Helpers) Can't Be Awaited, So They Take No Async Suffix
+[{GMessages.App/**.xaml.cs,GMessages.App/**/ChatPane.*.cs,GMessages.App/**/MessageBubble.*.cs,GMessages.App/App.*.cs}]
 dotnet_naming_rule.async_methods_rule.severity = none
 
 # Tests: Test Method Names Read As Sentences (Method_Condition_Result), So No Async Suffix
