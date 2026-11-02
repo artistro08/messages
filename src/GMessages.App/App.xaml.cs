@@ -461,10 +461,7 @@ public sealed partial class App : Application, IDisposable
                 _linkPreviewer?.Dispose();
                 _linkPreviewer = null;
 
-                // Drop What Only The Window Needed: Decrypted Media In Memory, And The Message Pages (Re-read From The Database)
-                _media?.ClearMemory();
-                _ = _store?.DropPagesAsync();
-                ScheduleTrim();
+                _ = DropThenTrimAsync();
             };
         }
 
@@ -573,6 +570,20 @@ public sealed partial class App : Application, IDisposable
         }
 
         RefreshTrayMenu(settings.Theme);
+    }
+
+    // Drop What Only The Window Needed: Decrypted Media In Memory, And The Message Pages (Re-read From The Database). The
+    // Pages Drop Once The Queued Saves Are Written, So The Trim Waits For That; DropPagesAsync Logs Its Own Failure. The
+    // Await Comes Back On The UI Thread
+    private async Task DropThenTrimAsync()
+    {
+        _media?.ClearMemory();
+        if (_store is not null)
+        {
+            await _store.DropPagesAsync();
+        }
+
+        ScheduleTrim();
     }
 
     private void ScheduleTrim()
