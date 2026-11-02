@@ -42,6 +42,7 @@ namespace GMessages.App.Views;
 public sealed partial class MainWindow : Window
 {
     private readonly SettingsViewModel _settings;
+    private readonly AppSettings _appSettings;
     private readonly AvatarCache _avatars;
 
     // The Body (Pairing Or Chats, Never Both) And The Settings Page Over It While Open
@@ -74,10 +75,12 @@ public sealed partial class MainWindow : Window
     /// </summary>
     /// <param name="settings">The settings page's state, also doing the profile menu's Unpair; the window disposes it on close.</param>
     /// <param name="avatars">The window's photo cache; the window clears it on close and on going back to pairing.</param>
-    public MainWindow(SettingsViewModel settings, AvatarCache avatars)
+    /// <param name="appSettings">The stored settings, where the window keeps its place and size.</param>
+    public MainWindow(SettingsViewModel settings, AvatarCache avatars, AppSettings appSettings)
     {
         _settings    = settings;
         _avatars     = avatars;
+        _appSettings = appSettings;
         Avatar.Cache = avatars;
         InitializeComponent();
 
@@ -91,6 +94,8 @@ public sealed partial class MainWindow : Window
         AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Tall;
         AppWindow.Resize(new Windows.Graphics.SizeInt32(1100, 760));
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"));
+        RestoreWindowBounds();
+        AppWindow.Changed += OnAppWindowChanged;
 
         // Copy
         ProfileArchived.Text    = ChatCopy.Archived;
@@ -518,6 +523,48 @@ public sealed partial class MainWindow : Window
     // =========================================================================
 
     private void OnTitleBarContentSizeChanged(object sender, SizeChangedEventArgs e) => PlaceProfilePicture();
+
+    // Where The Window Was Last Left (Owner): Its Place And Size Go Back, When They Still Land On A Display (A Monitor
+    // Unplugged Since Leaves The Default), And Maximized Again If It Was
+    private void RestoreWindowBounds()
+    {
+        // Bounds Only Once Moved Or Sized Restored (Maximized Straight Away, There Are None, But It Still Maximizes)
+        if (_appSettings.WindowBounds is { } saved)
+        {
+            var bounds = new Windows.Graphics.RectInt32(saved.Left, saved.Top, saved.Width, saved.Height);
+            if (DisplayArea.GetFromRect(bounds, DisplayAreaFallback.None) is null)
+            {
+                return;
+            }
+
+            AppWindow.MoveAndResize(bounds);
+        }
+
+        if (_appSettings.WindowMaximized && AppWindow.Presenter is OverlappedPresenter presenter)
+        {
+            presenter.Maximize();
+        }
+    }
+
+    // Every Move Or Resize Of The Shown Window Is Kept; Maximized Or Minimized, Only That State Is (The Bounds Stay Those
+    // Of The Restored Window)
+    private void OnAppWindowChanged(AppWindow sender, AppWindowChangedEventArgs e)
+    {
+        if (!sender.IsVisible || (!e.DidPositionChange && !e.DidSizeChange && !e.DidPresenterChange) || sender.Presenter is not OverlappedPresenter presenter)
+        {
+            return;
+        }
+
+        if (presenter.State == OverlappedPresenterState.Restored)
+        {
+            _appSettings.WindowBounds = (sender.Position.X, sender.Position.Y, sender.Size.Width, sender.Size.Height);
+        }
+
+        if (presenter.State != OverlappedPresenterState.Minimized)
+        {
+            _appSettings.WindowMaximized = presenter.State == OverlappedPresenterState.Maximized;
+        }
+    }
 
     // The Window Never Shrinks Below The Chat List's Narrowest Layout (Its Least Width, Shown Alone In A Narrow Window)
     // Or Below Room For The Title Bar, A Few Rows And The Message Box. The Presenter Takes Physical Pixels Of The Whole

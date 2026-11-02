@@ -409,11 +409,12 @@ public sealed class FakePhone
     /// <param name="fileName">The file name.</param>
     /// <param name="withThumbnail">True to send a thumbnail only and hold the full media ID until it is asked for.</param>
     /// <param name="caption">A caption sent with it, or null for none.</param>
+    /// <param name="dimensions">The media's width and height as the phone reports them, or null for a PNG's own (none for the rest).</param>
     /// <returns>The message as pushed.</returns>
     /// <exception cref="InvalidOperationException">Pairing has not reached the client finished message.</exception>
-    public Message PushIncomingMedia(string conversationId, string mime, byte[] bytes, string fileName, bool withThumbnail = false, string? caption = null)
+    public Message PushIncomingMedia(string conversationId, string mime, byte[] bytes, string fileName, bool withThumbnail = false, string? caption = null, Dimensions? dimensions = null)
     {
-        (Conversation conversation, Message message) = Chats.AddIncomingMedia(conversationId, mime, bytes, fileName, withThumbnail, caption);
+        (Conversation conversation, Message message) = Chats.AddIncomingMedia(conversationId, mime, bytes, fileName, withThumbnail, caption, dimensions);
         PushUpdate(new UpdateEvents { ConversationEvent = new ConversationEvent { Data = { conversation } } }, _push);
         PushUpdate(new UpdateEvents { MessageEvent = new MessageEvent { Data = { message } } }, _push);
         return message;

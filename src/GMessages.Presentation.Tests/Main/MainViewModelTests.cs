@@ -235,6 +235,38 @@ public sealed class MainViewModelTests
     }
 
     /// <summary>
+    /// Undo (Ctrl + Z) works any time in the session, bar or no bar: each one puts back the latest archive left, newest
+    /// first; a conversation unarchived another way is no longer offered.
+    /// </summary>
+    [TestMethod]
+    public async Task Undo_PutsBackEachArchiveOfTheSession_AfterTheBarHid()
+    {
+        using var rig = new MainRig();
+        var time      = new Microsoft.Extensions.Time.Testing.FakeTimeProvider(MainRig.Now);
+        rig.Page(MainRig.Conv("a", "Ann", 1), MainRig.Conv("b", "Bo", 2), MainRig.Conv("c", "Cy", 3));
+        using var vm = new MainViewModel(rig.Controller, rig.Store, time, a => a());
+        await vm.Inbox.LoadAsync();
+        Assert.IsFalse(vm.CanUndo);
+
+        Assert.IsTrue(await vm.RunAsync("a", ConversationAction.Archive));
+        Assert.IsTrue(await vm.RunAsync("b", ConversationAction.Archive));
+        Assert.IsTrue(await vm.RunAsync("c", ConversationAction.Archive));
+        time.Advance(MainViewModel.UndoTime);
+        Assert.IsFalse(vm.HasUndo);
+        Assert.IsTrue(vm.CanUndo);
+
+        // Bo Put Back By Hand: Not Offered Again
+        Assert.IsTrue(await vm.RunAsync("b", ConversationAction.Unarchive));
+
+        Assert.IsTrue(await vm.UndoAsync());
+        Assert.AreEqual("b,c", string.Join(",", vm.Inbox.Rows.Select(r => r.Id)));
+        Assert.IsTrue(await vm.UndoAsync());
+        Assert.AreEqual("a,b,c", string.Join(",", vm.Inbox.Rows.Select(r => r.Id)));
+        Assert.IsFalse(vm.CanUndo);
+        Assert.IsFalse(await vm.UndoAsync());
+    }
+
+    /// <summary>
     /// Mute and unmute keep the open chat, whose mute state follows.
     /// </summary>
     [TestMethod]

@@ -39,6 +39,7 @@ public static class ShortcutMap
         ("Ctrl + Shift + o", "Show Details"),
         ("Ctrl + Enter", "Reply to message"),
         ("Ctrl + ?", "Open keyboard shortcut help"),
+        ("Ctrl + z", "Undo archive"),
     ];
 
     /// <summary>
@@ -47,7 +48,8 @@ public static class ShortcutMap
     /// <remarks>
     /// Chords must match their modifiers exactly, so Ctrl + Alt + k is not a shortcut. The bare "r", Shift + + and
     /// Ctrl + Enter depend on <paramref name="focusInTextBox"/>; they are ignored while typing. The conversation
-    /// shortcuts (Ctrl + d, Ctrl + Alt + h, Ctrl + Shift + o) work while typing too. Ctrl + / opens the help like
+    /// shortcuts (Ctrl + d, Ctrl + Alt + h, Ctrl + Shift + o) work while typing too. Ctrl + z (the app's own: undo an
+    /// archive) is left to the text box while typing, where it undoes typing. Ctrl + / opens the help like
     /// Ctrl + ? (Ctrl + Shift + /) and has no help row of its own. Ctrl + Alt + h is not a shortcut
     /// while Right Alt is down: Windows reports AltGr as Left Ctrl + Right Alt, and AltGr + h types on some layouts.
     /// </remarks>
@@ -89,6 +91,7 @@ public static class ShortcutMap
             return key switch
             {
                 VirtualKey.Enter when !focusInTextBox => ShortcutCommand.ReplyToMessage,
+                VirtualKey.Z when !focusInTextBox => ShortcutCommand.UndoArchive,
                 VirtualKey.K => ShortcutCommand.StartChat,
                 VirtualKey.J => ShortcutCommand.FocusMessages,
                 VirtualKey.S => ShortcutCommand.OpenSettings,

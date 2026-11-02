@@ -54,10 +54,9 @@ public sealed partial class MessageBubble
         _videoBubble     = Bubble;
         _videoFrameImage = null;
 
-        // No Video: Its Part Unloads (x:Load), The Player Host's Visual With It
+        // No Video: Its Part Unloads (x:Load)
         if (part is null)
         {
-            _videoHostVisual = null;
             return;
         }
 
@@ -130,14 +129,22 @@ public sealed partial class MessageBubble
             }
 
             string id = PartIdOf("Video.Player.", Bubble?.PartKey ?? string.Empty);
-            _video         = new VideoPlayback(DispatcherQueue, bytes, part.Mime, start, id, Bubble?.VideoName ?? ChatCopy.Video);
+            _video         = new VideoPlayback(DispatcherQueue, bytes, part.Mime, start, id, Bubble?.VideoName ?? ChatCopy.Video, drawFrames: true);
             _video.Failed += OnVideoFailed;
+
+            // The Frames Fit The Box At The Display's Scale, Shown As Its Picture (Rounded, See ClipVideoPicture) Under The
+            // Controls; The Host Takes The Bubble's Plain Fill, So A Video Of Another Shape Than Its Box Plays On It, Not
+            // On The Still Frame
+            double scale = XamlRoot?.RasterizationScale ?? 1;
+            _video.SizeFrames((int)Math.Round(VideoHost.ActualWidth * scale), (int)Math.Round(VideoHost.ActualHeight * scale));
+            VideoPicture.Source  = _video.Frames;
+            VideoHost.Background = Video.Background;
             VideoHost.Children.Add(_video.Element);
+            ClipVideoPicture();
             VideoPlay.Visibility   = Visibility.Collapsed;
             VideoExpand.Visibility = Visibility.Visible;
             ShowVideoNote(null, "Playing");
             EffectiveViewportChanged += OnVideoViewportChanged;
-            ClipVideoHost(mayTake: true);
             if (play)
             {
                 _video.Player.Play();
@@ -233,7 +240,9 @@ public sealed partial class MessageBubble
             return;
         }
 
-        VideoHost.Children.Clear();
+        VideoHost.Children.Remove(video.Element);
+        VideoHost.Background   = null;
+        VideoPicture.Source    = null;
         VideoPlay.Visibility   = Visibility.Visible;
         VideoExpand.Visibility = Visibility.Collapsed;
         TestHooks.ShowState(VideoFrame, "Stopped");
@@ -247,19 +256,18 @@ public sealed partial class MessageBubble
         TestHooks.ShowState(VideoFrame, state);
     }
 
-    // The Player's Host Rounded To The Bubble's Corners (The Video's Swap Chain Isn't Clipped By The Grid's Corners). The
-    // Host Uses No Implicit Transitions, So Windows Hands Out Its Visual; It Is Taken Once, When A Video Starts
-    private void ClipVideoHost(bool mayTake = false)
+    // The Playing Video's Picture Rounded To The Bubble's Corners (An Image Isn't Clipped By A Border's Corners), Reshaped
+    // With Its Size And The Corners. The Image Uses No Implicit Transitions, So Windows Hands Out Its Visual
+    private void ClipVideoPicture()
     {
-        if (VideoHost is null || (_videoHostVisual is null && (!mayTake || !VideoHost.IsLoaded)))
+        if (VideoPicture is null)
         {
             return;
         }
 
         try
         {
-            _videoHostVisual ??= ElementCompositionPreview.GetElementVisual(VideoHost);
-            ClipRounded(_videoHostVisual, VideoHost, Video.CornerRadius);
+            ClipRounded(ElementCompositionPreview.GetElementVisual(VideoPicture), VideoPicture, Video.CornerRadius);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {

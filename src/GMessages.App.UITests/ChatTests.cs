@@ -750,6 +750,122 @@ public sealed class ChatTests : UiTest
     }
 
     /// <summary>
+    /// The same in a chat where every third message is a photo (tall and flat by turns): the shown bubbles stay put
+    /// while the older page lands, and wheeling on up through the pictures only ever moves up, never back down.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task OlderPage_WheelThroughPhotos_KeepsPlaceAndNeverJumpsBack()
+    {
+        const int Count = ChatStore.PageSize * 4;
+        Server.Phone.Chats.AddPhotoPagesChat("c-pics", Count, MediaTests.Png(200, 600, MediaTests.SplitColors), MediaTests.Png(600, 60, MediaTests.SplitColors));
+        Server.Phone.OlderPagesDelay = TimeSpan.FromMilliseconds(700);
+
+        await OpenMainAsync();
+        App.Find("Row.c-pics").Patterns.SelectionItem.Pattern.Select();
+        Wait.Until(() => Bubbles().Any(b => b.Id == $"Bubble.c-pics-{Count:000}"), AppDriver.DefaultTimeout, () => "The picture chat didn't show its newest bubble.");
+        Thread.Sleep(2000);
+
+        AutomationElement list        = App.Find("Chat.Messages");
+        System.Drawing.Rectangle over = list.BoundingRectangle;
+        FlaUI.Core.Input.Mouse.MoveTo(over.X + (over.Width / 2), over.Y + (over.Height / 2));
+        AssertOlderPageKeepsInPlace(list, null, () => FlaUI.Core.Input.Mouse.Scroll(5));
+
+        // On Up Through The Pictures, Notch By Notch: A Bubble On Screen Only Ever Moves Down The Screen, And Never By
+        // More Than A Notch Could Move It (Pages Landing Above Included)
+        var trace = new List<string>();
+        for (int i = 0; i < 60; i++)
+        {
+            (string? Id, int? Top) top = TopmostWholeBubble(list);
+            if (top.Id is null)
+            {
+                trace.Add("none");
+                FlaUI.Core.Input.Mouse.Scroll(1);
+                Thread.Sleep(150);
+                continue;
+            }
+
+            FlaUI.Core.Input.Mouse.Scroll(1);
+            Thread.Sleep(150);
+            int? after = BubbleTop(list, top.Id);
+            trace.Add($"{top.Id[7..]}:{top.Top}>{after?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "off"}");
+            AssertNotchKeptPlace(list, top, after, i + 1, trace);
+        }
+
+        TestContext.WriteLine($"Notches: {string.Join(" ", trace)}");
+    }
+
+    /// <summary>
+    /// An older page of short texts landing above a screen of tall photos keeps the shown photo in place: the list guesses
+    /// the new rows' heights from the tall shown ones, far too high, and the view used to land a screen too far down
+    /// (owner's recording).
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task OlderPage_TextsUnderTallPhotos_KeepsVisibleBubblesInPlace()
+    {
+        const int Count = ChatStore.PageSize * 3;
+        Server.Phone.Chats.AddPhotoPagesChat("c-pics", Count, MediaTests.Png(200, 600, MediaTests.SplitColors), MediaTests.Png(200, 600, MediaTests.SplitColors), i => i > Count - ChatStore.PageSize);
+        Server.Phone.OlderPagesDelay = TimeSpan.FromMilliseconds(700);
+
+        await OpenMainAsync();
+        App.Find("Row.c-pics").Patterns.SelectionItem.Pattern.Select();
+        Wait.Until(() => Bubbles().Any(b => b.Id == $"Bubble.Photo.c-pics-{Count:000}"), AppDriver.DefaultTimeout, () => "The picture chat didn't show its newest bubble.");
+        Thread.Sleep(2000);
+
+        AutomationElement list        = App.Find("Chat.Messages");
+        System.Drawing.Rectangle over = list.BoundingRectangle;
+        FlaUI.Core.Input.Mouse.MoveTo(over.X + (over.Width / 2), over.Y + (over.Height / 2));
+        AssertOlderPageKeepsInPlace(list, null, () => FlaUI.Core.Input.Mouse.Scroll(5));
+    }
+
+    /// <summary>
+    /// Wheeling up without a pause through the picture chat, so older pages land mid-scroll: no reading ever shows the
+    /// list moved back down (a bubble on screen moving up the screen).
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task OlderPages_ContinuousWheelThroughPhotos_NeverJumpsBack()
+    {
+        const int Count = ChatStore.PageSize * 5;
+        Server.Phone.Chats.AddPhotoPagesChat("c-pics", Count, MediaTests.Png(200, 600, MediaTests.SplitColors), MediaTests.Png(600, 60, MediaTests.SplitColors));
+        Server.Phone.OlderPagesDelay = TimeSpan.FromMilliseconds(700);
+
+        await OpenMainAsync();
+        App.Find("Row.c-pics").Patterns.SelectionItem.Pattern.Select();
+        Wait.Until(() => Bubbles().Any(b => b.Id == $"Bubble.c-pics-{Count:000}"), AppDriver.DefaultTimeout, () => "The picture chat didn't show its newest bubble.");
+        Thread.Sleep(2000);
+
+        AutomationElement list        = App.Find("Chat.Messages");
+        System.Drawing.Rectangle over = list.BoundingRectangle;
+        FlaUI.Core.Input.Mouse.MoveTo(over.X + (over.Width / 2), over.Y + (over.Height / 2));
+
+        var trace = new List<string>();
+        try
+        {
+            for (int i = 0; i < 150; i++)
+            {
+                (string? Id, int? Top) top = TopmostWholeBubble(list);
+                FlaUI.Core.Input.Mouse.Scroll(1);
+                Thread.Sleep(40);
+                if (top.Id is null)
+                {
+                    trace.Add("none");
+                    continue;
+                }
+
+                int? after = BubbleTop(list, top.Id);
+                trace.Add($"{top.Id[7..]}:{top.Top}>{after?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "off"}");
+                AssertNotchKeptPlace(list, top, after, i + 1, trace);
+            }
+        }
+        finally
+        {
+            TestContext.WriteLine($"Notches: {string.Join(" ", trace)}");
+        }
+    }
+
+    /// <summary>
     /// Scroll to bottom, pressed while an older page is still on its way, ends on the newest message and stays there
     /// once the page lands (the older page's anchoring doesn't pull the list back up).
     /// </summary>
@@ -978,13 +1094,16 @@ public sealed class ChatTests : UiTest
     // Scrolls Up Until The Loading Ring Shows, Then Checks The Bubble Stays Put (Within 4 px) Every 50 ms From Its Settled
     // Place Until The Ring Has Been Gone A Second: The Page Lands Above Without Moving It, Blanking The List Or Asking
     // For Another Page Before The View Is Put Back
-    private void AssertOlderPageKeepsInPlace(AutomationElement list, string watched, Action scrollUp)
+    private void AssertOlderPageKeepsInPlace(AutomationElement list, string? watched, Action scrollUp)
     {
         Wait.Until(() =>
         {
             scrollUp();
             return App.TryFind("Chat.LoadingOlder") is not null;
         }, AppDriver.DefaultTimeout, () => "Scrolling up never showed the loading ring.");
+
+        // No Bubble Named: The Topmost One Wholly On Screen As The Ring Shows
+        watched ??= TopmostWholeBubble(list).Id ?? throw new AssertFailedException("No bubble was wholly on screen as the ring showed.");
 
         // Where The Bubble Sits Once The Scroll Settled
         int? recorded = null;
@@ -1047,6 +1166,30 @@ public sealed class ChatTests : UiTest
         }
 
         return last;
+    }
+
+    // One Wheel Notch Up Moved The Bubble Down The Screen A Little, Or Off Its Bottom From Near It: Never Up (The List
+    // Moved Back Down), Never By Hundreds Of Pixels, And Never Off The Bottom From Its Upper Half (An Older Page Took
+    // The View And Pushed The Bubbles Off)
+    private static void AssertNotchKeptPlace(AutomationElement list, (string? Id, int? Top) before, int? after, int notch, List<string> trace)
+    {
+        System.Drawing.Rectangle view = list.BoundingRectangle;
+        if (after is { } y)
+        {
+            Assert.IsTrue(y >= before.Top - 4, $"Notch {notch} up moved the list back down ({before.Id} from y={before.Top} to y={y}). Trace: {string.Join(" ", trace)}");
+            Assert.IsTrue(y - before.Top <= 400, $"Notch {notch} up leaped ({before.Id} from y={before.Top} to y={y}). Trace: {string.Join(" ", trace)}");
+            return;
+        }
+
+        Assert.IsTrue(before.Top > view.Top + (view.Height / 2), $"Notch {notch} up pushed {before.Id} off the screen from y={before.Top} (the list's top is {view.Top}, its bottom {view.Bottom}). Trace: {string.Join(" ", trace)}");
+    }
+
+    // The Topmost Bubble Whose Top Edge Is On Screen (UI Automation Cuts A Bubble's Rectangle To The List, So One Cut By The
+    // List's Top Reads The List's Top Wherever It Scrolls), With Its Top; Null When None
+    private (string? Id, int? Top) TopmostWholeBubble(AutomationElement list)
+    {
+        int listTop = list.BoundingRectangle.Top;
+        return Bubbles().Select(b => (Id: (string?)b.Id, Top: BubbleTop(list, b.Id))).Where(b => b.Top > listTop + 1).OrderBy(b => b.Top).FirstOrDefault();
     }
 
     // A Bubble's Screen Top, Or Null When It Is Gone, Off Screen Or Outside The List

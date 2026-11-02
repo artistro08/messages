@@ -386,8 +386,18 @@
                                 </Grid>
                             </Button>
 
-                            <!-- Player: the playing video and its compact controls, added and removed from code -->
-                            <Grid x:Name="VideoHost" SizeChanged="OnVideoHostSizeChanged" />
+                            <!-- Player: the playing video's frames, drawn here as the picture of a box rounded to the bubble's
+                                 corners (the player's own picture is drawn on a layer of its own, above everything the chat
+                                 draws and clear of any clip, so it played square: owner's install), under the player's
+                                 compact controls, added and removed from code -->
+                            <Grid
+                                x:Name="VideoHost"
+                                CornerRadius="{x:Bind local:MessageBubble.PhotoCorners(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup, Bubble.HasBodyText), Mode=OneWay}">
+                                <Image
+                                    x:Name="VideoPicture"
+                                    SizeChanged="OnVideoPictureSizeChanged"
+                                    Stretch="Uniform" />
+                            </Grid>
 
                             <!-- Expand: while it plays, opens it in the viewer where it got to -->
                             <Button

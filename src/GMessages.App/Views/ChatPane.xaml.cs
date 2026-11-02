@@ -175,6 +175,11 @@ public sealed partial class ChatPane : UserControl
 
     private ScrollViewer? _scroller;
 
+    // The List's Bottom Fade (Behind The Message Box), And How Much Of The List The Typing Bubble, The Chips And The
+    // Message Box Cover
+    private ScrollFade? _fade;
+    private double _composerHeight = -1;
+
     // The Rows' Panel Hands Focus Scrolls To OnBubbleBringIntoView (Hooked Once), Which Keeps A Shown Bubble This Far
     // From The View's Edge
     private const double BringMargin = 8;
@@ -222,14 +227,6 @@ public sealed partial class ChatPane : UserControl
 
     // A File Picker Is Open (Or Its Files Are Being Added): Another Ask Waits For It To Finish
     private bool _picking;
-
-    // An Older Page Going In Above (See KeepOlderAnchor): How Far The View's Top Sat From The Content's End Before It (Null
-    // Once Used), The Bubble At The View's Top Then (Null When Done), Every Shown Bubble Then With Its Top In The View, And
-    // The Corrections Left
-    private double? _olderFromEnd;
-    private MessageBubbleViewModel? _olderBubble;
-    private List<(MessageBubbleViewModel Bubble, double Top)> _olderRows = [];
-    private int _olderTries;
 
     // Plays The Chat's Voice Messages, One At A Time; Made On The First Play, Let Go On A Chat Switch Or Unload
     private VoicePlayer? _voice;
@@ -651,7 +648,6 @@ public sealed partial class ChatPane : UserControl
         pane.ShowScrollToBottom(false);
         pane._pinned       = true;
         pane._toNewest     = false;
-        pane.EndOlderAnchor();
 
         // The Last Chat's Content Height Means Nothing Here: Unset, The First Look Counts As A Content Change, Not As The
         // Person Scrolling (Two Chats Of The Same Height Would Otherwise Unpin On The Offset Reset To The Top)
@@ -777,14 +773,6 @@ public sealed partial class ChatPane : UserControl
     {
         LogFirstDraw();
 
-        // An Older Page's First Bubble: Note Where The View Sits, Before The Page Moves It (Pinned, Or On The Way To The
-        // Newest Message, The Newest Bubbles Are Where The View Belongs Instead)
-        if (e is { Action: NotifyCollectionChangedAction.Add, NewStartingIndex: 0 } && Chat is { IsLoadingOlder: true } chat
-            && !_pinned && !_toNewest && _olderBubble is null && _scroller is { } anchored)
-        {
-            NoteOlderAnchor(anchored, chat);
-        }
-
         if (e.Action != NotifyCollectionChangedAction.Add || sender is not ICollection<MessageBubbleViewModel> messages
             || e.NewStartingIndex + e.NewItems!.Count != messages.Count)
         {
@@ -810,9 +798,8 @@ public sealed partial class ChatPane : UserControl
     }
 
     // The List's Own Scroller Tells When The Top Is Reached. Found On First Need: While The Pane Is Still Collapsed At
-    // Load, The List Has No Template Yet, So There Is No Scroller To Find. No Edge Fade Here (Unlike The Chat List): Its
-    // Gradient Fades Each Pixel By Its Distance From The Edge, So A Bubble Cut By The Top Edge Showed Its Lower Fill
-    // Strong While Its Text Above Faded Out (Owner Report). The Scroller's Plain Clip Cuts Text And Fill On One Line
+    // Load, The List Has No Template Yet, So There Is No Scroller To Find. The List's Edges Fade Like The Chat List's,
+    // The Bottom Always, Behind The Message Box (Owner)
     private ScrollViewer? Scroller()
     {
         if (_scroller is null && UiHelpers.FindScroller(MessageList) is { } found)
@@ -820,6 +807,15 @@ public sealed partial class ChatPane : UserControl
             _scroller                  = found;
             _scroller.ViewChanged     += OnScrolled;
             MessageList.LayoutUpdated += OnMessageListLayoutUpdated;
+            PaneGrid.LayoutUpdated    += (_, _) => KeepComposerClear();
+        }
+
+        // The Fade Needs The Scroller's Own Template, Which Can Come After The Scroller Itself: Tried Until It Takes
+        if (_scroller is not null && _fade is null && ScrollFade.Attach(_scroller, bottomAlways: true) is { } fade)
+        {
+            _fade           = fade;
+            _composerHeight = -1;
+            KeepComposerClear();
         }
 
         // Bubbles Brought Into View By Focus (Moving Between Messages With The Keyboard) Scroll Smoothly. Hooked On The
@@ -874,6 +870,19 @@ public sealed partial class ChatPane : UserControl
             DispatcherQueue.TryEnqueue(FillWithOlder);
         }
 
+        // An Older Page Goes In Above: The Last Shown Bubble Holds Its Place While It Does (See The Rows' Panel In The
+        // XAML), And The First Shown One Again Once The List Has Laid The Page Out (Measured Here, Before The Mode Goes Back)
+        if (e.PropertyName == nameof(ChatViewModel.IsLoadingOlder) && sender == Chat && Chat is { } loading
+            && MessageList.ItemsPanelRoot?.As<ItemsStackPanel>() is { } panel)
+        {
+            if (!loading.IsLoadingOlder)
+            {
+                MessageList.UpdateLayout();
+            }
+
+            panel.ItemsUpdatingScrollMode = loading.IsLoadingOlder ? ItemsUpdatingScrollMode.KeepLastItemInView : ItemsUpdatingScrollMode.KeepItemsInView;
+        }
+
         // The Recording Moved On: The Preview Chip Shows Its Waveform, And Stops Playing Once Sent Or Removed
         if (e.PropertyName == nameof(ChatViewModel.Voice) && sender == Chat && Chat is { } chat)
         {
@@ -890,7 +899,7 @@ public sealed partial class ChatPane : UserControl
     // Near Its Top, Until No Pages Are Left, A Page Adds Nothing Or A Load Fails (See ChatViewModel.CanFillOlder)
     private void FillWithOlder()
     {
-        if (Chat is not { IsLoading: false, CanFillOlder: true } chat || _olderFromEnd is not null)
+        if (Chat is not { IsLoading: false, CanFillOlder: true } chat)
         {
             return;
         }
@@ -917,11 +926,6 @@ public sealed partial class ChatPane : UserControl
         bool wasPinned       = _pinned;
         _pinned              = ChatScroll.StaysPinned(_pinned, contentChanged, scroller.VerticalOffset, scroller.ScrollableHeight);
 
-        // The Person Is Scrolling: An Older Page's Corrections Would Snap Them Back, So They End
-        if (e.IsIntermediate && !contentChanged)
-        {
-            EndOlderAnchor();
-        }
         if (contentChanged)
         {
             KeepPinned(scroller);
@@ -944,9 +948,7 @@ public sealed partial class ChatPane : UserControl
         }
 
         bool showArrow = ChatScroll.ShowScrollToBottom(scroller.VerticalOffset, scroller.ScrollableHeight, scroller.ViewportHeight);
-        // Not While An Older Page's Corrections Are Pending: One Passing Near The Top Would Ask For Another Page, And They
-        // Wait While It Loads
-        bool loadOlder = scroller.ScrollableHeight > 0 && _olderBubble is null
+        bool loadOlder = scroller.ScrollableHeight > 0
             && ChatScroll.ShouldLoadOlder(scroller.VerticalOffset, scroller.ScrollableHeight, scroller.ViewportHeight);
 
         ShowScrollToBottom(showArrow);
@@ -974,7 +976,11 @@ public sealed partial class ChatPane : UserControl
             return;
         }
 
-        KeepOlderAnchor(scroller);
+        if (_fade is null)
+        {
+            _ = Scroller();
+        }
+
         if (ContentChanged(scroller))
         {
             KeepPinned(scroller);
@@ -996,6 +1002,16 @@ public sealed partial class ChatPane : UserControl
     }
 
     private void OnSendClick(object sender, RoutedEventArgs e) => _ = Chat?.SendAsync();
+
+    // The Box Emptied (Sent, Or Cleared): Its Text's Own Scroller Goes Back To The Top. Left Scrolled Down From Lines Since
+    // Gone, It Showed Only The Top Of The Cursor (Owner Report)
+    private void OnDraftTextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (DraftBox.Text.Length == 0 && UiHelpers.FindPart<ScrollViewer>(DraftBox, "ContentElement") is { } text)
+        {
+            text.ChangeView(null, 0, null, disableAnimation: true);
+        }
+    }
 
     // Enter Sends; Shift + Enter Is Left To The Box, Which Adds A Line. Ctrl + V Or Shift + Insert With Media On The
     // Clipboard Pastes It As Chips (The Box Would Ignore A Picture)
@@ -1081,9 +1097,8 @@ public sealed partial class ChatPane : UserControl
             return;
         }
 
-        // Off The Newest Messages: Nothing Pins The View Back Down, And No Older Page's Anchoring Pulls It
+        // Off The Newest Messages: Nothing Pins The View Back Down
         _pinned = false;
-        EndOlderAnchor();
 
         // Where It Sits Centered In The View (Where It Fits): Found By Bringing Its Row In, Then The View Goes Back Where
         // The Person Was Before Anything Draws, And Scrolls There Smoothly
@@ -1568,105 +1583,25 @@ public sealed partial class ChatPane : UserControl
         DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => DraftBox.Focus(FocusState.Keyboard));
     }
 
-    // Notes, Before An Older Page Goes In Above, How Far The View's Top Sits From The Content's End And Each Shown Bubble
-    // With Its Top In The View (Their Rows Are Still Where The Last Layout Put Them). The Panel's Shown Rows As Of That
-    // Layout Sit One Index Lower Now That The New Bubble Is At 0
-    private void NoteOlderAnchor(ScrollViewer scroller, ChatViewModel chat)
-    {
-        if (MessageList.ItemsPanelRoot?.As<ItemsStackPanel>() is not { } panel)
-        {
-            return;
-        }
-
-        int first  = Math.Max(1, panel.FirstVisibleIndex + 1);
-        int last   = Math.Min(chat.Messages.Count - 1, panel.LastVisibleIndex + 1);
-        _olderRows = [.. Enumerable.Range(first, Math.Max(0, last - first + 1))
-            .Select(i => (Bubble: chat.Messages[i], Top: RowTop(scroller, chat.Messages[i])))
-            .Where(row => row.Top + 1 >= 0)
-            .Select(row => (row.Bubble, row.Top!.Value))];
-        if (_olderRows.Count == 0)
-        {
-            return;
-        }
-
-        _olderFromEnd = scroller.ExtentHeight - scroller.VerticalOffset;
-        _olderBubble  = _olderRows[0].Bubble;
-        _olderTries   = 10;
-    }
-
-    // The Older Page Went In Above: Puts The View Back (No Animation) So The Shown Bubbles Stay Put. The List's Own
-    // KeepItemsInView Does Nothing At The Very Top, Where The Page Is Asked For: There The Offset Stayed 0 And The New
-    // Page Took The View, Pushing The Shown Bubbles Below It. The First Layout Has Only The New Page's Rows Realized, So
-    // The View First Goes Back The Same Distance From The Content's End; Moving Re-Estimates The Heights Of The Rows Not
-    // Shown, So Each Layout After Puts The Noted Bubble Back At Its Top Until It Is There (A Few Tries At Most)
-    private void KeepOlderAnchor(ScrollViewer scroller)
-    {
-        if (_olderBubble is null || Chat is null || Chat.IsLoadingOlder)
-        {
-            return;
-        }
-
-        // Pinned Or On The Way To The Newest Message Since: That Wins
-        if (_pinned || _toNewest)
-        {
-            EndOlderAnchor();
-            return;
-        }
-
-        if (_olderFromEnd is { } fromEnd)
-        {
-            _olderFromEnd = null;
-            scroller.ChangeView(null, Math.Max(0, scroller.ExtentHeight - fromEnd), null, true);
-            return;
-        }
-
-        // The First Noted Bubble Still Shown Says How Far Off The View Is (The Jump Can Land A Few Rows Off). Only A Shown
-        // Row's Top Counts: A Row Outside The Panel's Shown Range Can Still Have A Container Parked Thousands Of Pixels Off
-        // (Traced At -16,544), And Correcting By That Threw The View To The Top, Which Asked For The Next Page And Held The
-        // View There Until It Landed
-        var panel                       = MessageList.ItemsPanelRoot?.As<ItemsStackPanel>();
-        (double Now, double Then)? mark = null;
-        foreach ((MessageBubbleViewModel row, double then) in _olderRows)
-        {
-            int index = Chat.Messages.IndexOf(row);
-            if (panel is not null && index >= panel.FirstVisibleIndex && index <= panel.LastVisibleIndex && RowTop(scroller, row) is { } now)
-            {
-                mark = (now, then);
-                break;
-            }
-        }
-
-        // None Shown Yet (The Jump Can Still Be On Its Way When A Layout Runs): Wait For The Next Layout, Within The Tries
-        if (mark is not { } shown)
-        {
-            if (--_olderTries <= 0)
-            {
-                EndOlderAnchor();
-            }
-
-            return;
-        }
-
-        if (Math.Abs(shown.Now - shown.Then) < 0.5 || --_olderTries <= 0)
-        {
-            EndOlderAnchor();
-            return;
-        }
-
-        scroller.ChangeView(null, scroller.VerticalOffset + shown.Now - shown.Then, null, true);
-    }
-
-    // An Older Page's Anchoring Is Done, Given Up Or Overruled: No Jump Or Correction Is Left
-    private void EndOlderAnchor()
-    {
-        _olderFromEnd = null;
-        _olderBubble  = null;
-        _olderRows    = [];
-    }
-
     // A Bubble's Row Top In The View, Or Null While Its Row Isn't Realized
     private double? RowTop(ScrollViewer scroller, MessageBubbleViewModel bubble) =>
         MessageList.ContainerFromItem(bubble)?.As<UIElement>().TransformToVisual(scroller).TransformPoint(default).Y;
+
+    // The List's Bottom Padding Keeps The Newest Bubble Above What Floats Over It (The Typing Bubble, The Chips, The Message
+    // Box: The Pane's Last Three Rows), And The Bottom Fade Covers Just That. Runs After Every Layout, So Only A Change
+    // Sets Anything (Padding Changes The Content Height, Which KeepPinned Follows)
+    private void KeepComposerClear()
+    {
+        double below = PaneGrid.RowDefinitions[2].ActualHeight + PaneGrid.RowDefinitions[3].ActualHeight + PaneGrid.RowDefinitions[4].ActualHeight;
+        if (Math.Abs(below - _composerHeight) < 0.5)
+        {
+            return;
+        }
+
+        _composerHeight     = below;
+        MessageList.Padding = new Thickness(12, 8, 12, 8 + below);
+        _fade?.SetBottomFade(below + 8);
+    }
 
     // Back To The Newest Message At Once (No Animation) While Pinned And Short Of It
     private void KeepPinned(ScrollViewer scroller)
@@ -1688,7 +1623,7 @@ public sealed partial class ChatPane : UserControl
     // Every Jump The Chat Makes On Its Own (To The Newest Message, To A Reply's Original) Goes Through Here: A Smooth
     // Scroll, Like CSS's scroll-behavior: smooth, Or At Once With Windows' Animation Effects Off. The Task Ends When The
     // View Comes To Rest (At Most 1.5 s). Not For The Chat's First Place At The Bottom Or The Quiet Corrections That Keep
-    // The View Still (KeepPinned, KeepOlderAnchor), Which Stay Instant
+    // The View Still (KeepPinned), Which Stays Instant
     private static async Task ScrollSmoothlyAsync(ScrollViewer scroller, double offset)
     {
         offset = Math.Clamp(offset, 0, scroller.ScrollableHeight);

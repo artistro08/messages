@@ -157,9 +157,6 @@ public sealed partial class MessageBubble : UserControl
     // The File Card's Thumbnail Width: Its 40 px Square, In Logical Pixels (The Display Scale Is Already In Them)
     private const int FileThumbWidth = 40;
 
-    // A New Bubble's Entrance Rises From This Far Below (Over EntranceTime)
-    private const float EntranceRise = 12;
-
     // A Photo's Caption Sits This Far Inside The Bubble; The Back's Usual Padding Otherwise
     private static readonly Thickness CaptionInset = new(12, 6, 12, 8);
     private static readonly Thickness TextPadding  = new(12, 8, 12, 8);
@@ -167,7 +164,7 @@ public sealed partial class MessageBubble : UserControl
     // How Long A Thumbnail-Only Photo Waits For The Phone's Full Size Before It Offers To Try Again
     private static readonly TimeSpan FullSizeWait = TimeSpan.FromSeconds(30);
 
-    // A New Bubble's Entrance: A Fade And A Rise (EntranceRise), Over WinUI's Normal Control Animation Time
+    // A New Bubble's Entrance: A Fade, Over WinUI's Normal Control Animation Time
     private static readonly TimeSpan EntranceTime = TimeSpan.FromMilliseconds(250);
 
     // A Reaction Pill's Pop: From Half Size, A Touch Over Full Size, Then Settling
@@ -242,12 +239,11 @@ public sealed partial class MessageBubble : UserControl
     private static MessageBubble? s_playingVideo;
 
     // The Video Shown, Its Bubble, Its Load Number (Bumped When It Stops Or Another Message Shows, So A Late Download
-    // Stops), The Inline Player While It Plays, And The Player Host's Visual (For Its Rounded Clip; Taken Once)
+    // Stops), And The Inline Player While It Plays
     private MediaPart? _videoPart;
     private MessageBubbleViewModel? _videoBubble;
     private int _videoLoad;
     private VideoPlayback? _video;
-    private Visual? _videoHostVisual;
 
     // The Video's Still Frame Once It Shows, Which The Viewer Grows Out Of The Bubble Before Its Player Takes Over
     private ImageSource? _videoFrameImage;
@@ -785,8 +781,8 @@ public sealed partial class MessageBubble : UserControl
 
     private void OnPhotoFullSizeChanged(object sender, SizeChangedEventArgs e) => ClipPhotoFull();
 
-    // The Playing Video Keeps The Bubble's Corners
-    private void OnVideoHostSizeChanged(object sender, SizeChangedEventArgs e) => ClipVideoHost();
+    // The Playing Video's Picture Keeps The Bubble's Corners
+    private void OnVideoPictureSizeChanged(object sender, SizeChangedEventArgs e) => ClipVideoPicture();
 
     // A Pill That Just Appeared Pops In Once It Is In The Tree With Its Size (Its Middle Is Where It Grows From)
     private void OnPillHostLoaded(object sender, RoutedEventArgs e)
@@ -821,9 +817,7 @@ public sealed partial class MessageBubble : UserControl
             {
                 Visual row = ElementCompositionPreview.GetElementVisual(view.Row);
                 row.StopAnimation(nameof(Visual.Opacity));
-                row.StopAnimation("Translation");
                 row.Opacity = 1;
-                row.Properties.InsertVector3("Translation", Vector3.Zero);
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
@@ -869,27 +863,20 @@ public sealed partial class MessageBubble : UserControl
         }
     }
 
-    // Fades In And Rises Into Place On The Row's Composition Visual (Opacity And Translation), Easing Like WinUI's Own
-    // Controls (ControlFastOutSlowInKeySpline: 0,0,0,1). Layout Never Moves, So The Scroll Pin Is Unaffected
+    // Fades In On The Row's Composition Visual (Opacity Only: It Rose Into Place Too, Which The Owner Didn't Want), Easing
+    // Like WinUI's Own Controls (ControlFastOutSlowInKeySpline: 0,0,0,1). Layout Never Moves, So The Scroll Pin Is Unaffected
     private void AnimateIn()
     {
         Visual visual                  = ElementCompositionPreview.GetElementVisual(Row);
         Compositor compositor          = visual.Compositor;
         CubicBezierEasingFunction ease = compositor.CreateCubicBezierEasingFunction(new Vector2(0, 0), new Vector2(0, 1));
-        ElementCompositionPreview.SetIsTranslationEnabled(Row, true);
 
         ScalarKeyFrameAnimation fade = compositor.CreateScalarKeyFrameAnimation();
         fade.InsertKeyFrame(0, 0);
         fade.InsertKeyFrame(1, 1, ease);
         fade.Duration = EntranceTime;
 
-        Vector3KeyFrameAnimation rise = compositor.CreateVector3KeyFrameAnimation();
-        rise.InsertKeyFrame(0, new Vector3(0, EntranceRise, 0));
-        rise.InsertKeyFrame(1, Vector3.Zero, ease);
-        rise.Duration = EntranceTime;
-
         visual.StartAnimation(nameof(Visual.Opacity), fade);
-        visual.StartAnimation("Translation", rise);
         _animatedIn = true;
 
         AppLog.BubbleAnimatedIn(App.ShellLog, Bubble?.PartKey ?? string.Empty);
@@ -906,11 +893,14 @@ public sealed partial class MessageBubble : UserControl
                 ShowText();
                 break;
 
-            // The Side, My Reaction's Fill, And Where The Pill Sits; The Photo's Corners Follow The Side
+            // The Side, My Reaction's Fill, And Where The Pill Sits; The Photo's And The Playing Video's Corners Follow The
+            // Side And The Bubble's Place In Its Group (Which A Newer Message From The Same Sender Changes)
             case nameof(MessageBubbleViewModel.FromMe) or nameof(MessageBubbleViewModel.IsRcs)
-                or nameof(MessageBubbleViewModel.HasMyReaction) or nameof(MessageBubbleViewModel.HasReactions):
+                or nameof(MessageBubbleViewModel.HasMyReaction) or nameof(MessageBubbleViewModel.HasReactions)
+                or nameof(MessageBubbleViewModel.IsFirstInGroup) or nameof(MessageBubbleViewModel.IsLastInGroup):
                 ShowStates();
                 ClipPhotoFull();
+                ClipVideoPicture();
                 break;
 
             // The Media Or The Preview Card Changed: Loaded, Unless The Row Let Go Of Its Media While Waiting To Be Used Again

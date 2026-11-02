@@ -81,7 +81,15 @@ public sealed class ShortcutMapTests
     public void CtrlH_WithoutAlt_IsNull() => Assert.IsNull(ShortcutMap.Resolve(VirtualKey.H, true, false, false, false, false));
 
     [TestMethod]
-    public void Unmapped_IsNull() => Assert.IsNull(ShortcutMap.Resolve(VirtualKey.Z, true, false, false, false, false));
+    public void Unmapped_IsNull() => Assert.IsNull(ShortcutMap.Resolve(VirtualKey.Y, true, false, false, false, false));
+
+    [TestMethod]
+    public void CtrlZ_UndoesArchive_NotWhileTyping()
+    {
+        Assert.AreEqual(ShortcutCommand.UndoArchive, ShortcutMap.Resolve(VirtualKey.Z, true, false, false, false, false));
+        Assert.IsNull(ShortcutMap.Resolve(VirtualKey.Z, true, false, false, true, false));
+        Assert.IsNull(ShortcutMap.Resolve(VirtualKey.Z, true, true, false, false, false));
+    }
 
     [TestMethod]
     public void HelpRows_AreVerbatimSpecText()
@@ -105,9 +113,10 @@ public sealed class ShortcutMapTests
             ("Ctrl + Shift + o", "Show Details"),
             ("Ctrl + Enter", "Reply to message"),
             ("Ctrl + ?", "Open keyboard shortcut help"),
+            ("Ctrl + z", "Undo archive"),
         ];
 
-        Assert.HasCount(17, expected);
+        Assert.HasCount(18, expected);
         CollectionAssert.AreEqual(expected, ShortcutMap.HelpRows.ToArray());
     }
 }

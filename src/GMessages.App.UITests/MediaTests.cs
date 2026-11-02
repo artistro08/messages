@@ -1408,7 +1408,7 @@ public sealed partial class MediaTests : UiTest
     }
 
     // Two Halves: Red Left, Blue Right
-    private static (byte R, byte G, byte B) SplitColors(int x, int y, int width) => x < width / 2 ? ((byte)220, (byte)40, (byte)40) : ((byte)40, (byte)60, (byte)220);
+    internal static (byte R, byte G, byte B) SplitColors(int x, int y, int width) => x < width / 2 ? ((byte)220, (byte)40, (byte)40) : ((byte)40, (byte)60, (byte)220);
 
     // Seeds Mia's Photo Chat, Pairs, Opens The Main Window And Then Her Chat
     private async Task OpenMediaChatAsync()

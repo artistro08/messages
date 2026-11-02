@@ -20,6 +20,8 @@ public sealed class AppSettings : INotifyPropertyChanged
     private const string LogLevelKey                 = "LogLevel";
     private const string SnoozeMinutesKey            = "SnoozeMinutes";
     private const string ListWidthKey                = "ListWidth";
+    private const string WindowBoundsKey             = "WindowBounds";
+    private const string WindowMaximizedKey          = "WindowMaximized";
     private const string MicrophoneIdKey             = "MicrophoneId";
     private const string ShowReceivedLinkPreviewsKey = "ShowReceivedLinkPreviews";
 
@@ -104,6 +106,37 @@ public sealed class AppSettings : INotifyPropertyChanged
     {
         get => double.TryParse(_store.GetString(ListWidthKey), NumberStyles.Float, CultureInfo.InvariantCulture, out double width) && double.IsFinite(width) ? width : null;
         set => Set(ListWidthKey, value?.ToString(CultureInfo.InvariantCulture) ?? string.Empty);
+    }
+
+    /// <summary>
+    /// The main window's last place and size on screen, in physical pixels (left, top, width, height), as the user last
+    /// moved or sized it; null until they do. The window checks it still lands on a display.
+    /// </summary>
+    public (int Left, int Top, int Width, int Height)? WindowBounds
+    {
+        get
+        {
+            string[] parts = (_store.GetString(WindowBoundsKey) ?? string.Empty).Split(',');
+            return parts.Length == 4
+                && int.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out int left)
+                && int.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int top)
+                && int.TryParse(parts[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out int width)
+                && int.TryParse(parts[3], NumberStyles.Integer, CultureInfo.InvariantCulture, out int height)
+                && width > 0 && height > 0
+                ? (left, top, width, height)
+                : null;
+        }
+        set => Set(WindowBoundsKey, value is { } b ? string.Create(CultureInfo.InvariantCulture, $"{b.Left},{b.Top},{b.Width},{b.Height}") : string.Empty);
+    }
+
+    /// <summary>
+    /// Whether the main window was maximized when last closed (its <see cref="WindowBounds"/> are then where it goes back
+    /// to when restored). Defaults to false.
+    /// </summary>
+    public bool WindowMaximized
+    {
+        get => GetBool(WindowMaximizedKey, false);
+        set => Set(WindowMaximizedKey, value.ToString(CultureInfo.InvariantCulture));
     }
 
     /// <summary>

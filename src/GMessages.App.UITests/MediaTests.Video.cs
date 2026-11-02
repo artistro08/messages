@@ -162,6 +162,67 @@ public sealed partial class MediaTests
     }
 
     // Mia Sends A Test Clip (The 2 s One Unless Named)
+    /// <summary>
+    /// A portrait video's narrow bubble still gets the whole compact bar in order: the seek bar shrinks to the room left
+    /// between play and volume instead of running under volume with its thumb cut off (owner report).
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Video_NarrowBubble_KeepsTheCompactBarInOrder()
+    {
+        await OpenMediaChatAsync();
+
+        // The Clip Is Small; Its Reported Dimensions Shape The Bubble, As A Phone's Portrait Video Would
+        Message message = Server.Phone.PushIncomingMedia("c-media", "video/mp4", File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Fixtures", "clip-long.mp4")), "portrait.mp4",
+            dimensions: new Dimensions { Width = 720, Height = 1280 });
+
+        App.Find("Video.Play." + message.MessageID).Patterns.Invoke.Pattern.Invoke();
+        AutomationElement player = App.Find("Video.Player." + message.MessageID);
+        WaitForStatus(player, "Playing");
+
+        // The Pointer Over The Video Shows The Bar
+        App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).SetForeground();
+        System.Drawing.Rectangle box = player.BoundingRectangle;
+        FlaUI.Core.Input.Mouse.MoveTo(box.X + (box.Width / 2), box.Y + (box.Height / 2));
+        Wait.Until(() => AppDriver.Search(player, e => e.Properties.AutomationId.ValueOrDefault == "ProgressSlider") is { IsOffscreen: false },
+            AppDriver.DefaultTimeout, () => "The seek bar didn't show.");
+        AssertCompactBar(player);
+    }
+
+    /// <summary>
+    /// A video playing in its bubble shows its frames (the app draws them: the player's own picture ignored the bubble's
+    /// corners on the owner's install) with the bubble's rounded corners: the middle of the box shows the clip, and the
+    /// box's bottom right corner shows the chat behind it.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Video_InlinePlay_ShowsFramesWithRoundedCorners()
+    {
+        await OpenMediaChatAsync();
+
+        // The Clip's Own Shape, So Its Picture Fills The Box To The Corners
+        Message message = Server.Phone.PushIncomingMedia("c-media", "video/mp4", File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Fixtures", "clip-long.mp4")), "clip-long.mp4",
+            dimensions: new Dimensions { Width = 160, Height = 120 });
+        App.Find("Video.Play." + message.MessageID).Patterns.Invoke.Pattern.Invoke();
+        AutomationElement player = App.Find("Video.Player." + message.MessageID);
+        WaitForStatus(player, "Playing");
+
+        // The Pointer Away, So The Bar Hides; A Moment For Frames To Draw
+        App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).SetForeground();
+        System.Drawing.Rectangle box = player.BoundingRectangle;
+        FlaUI.Core.Input.Mouse.MoveTo(box.X - 60, box.Y - 60);
+        Thread.Sleep(2500);
+
+        using FlaUI.Core.Capturing.CaptureImage capture = FlaUI.Core.Capturing.Capture.Rectangle(box);
+        System.Drawing.Color middle = capture.Bitmap.GetPixel(box.Width / 2, box.Height / 2);
+        System.Drawing.Color corner = capture.Bitmap.GetPixel(box.Width - 2, box.Height - 2);
+        System.Drawing.Color beside = FlaUI.Core.Capturing.Capture.Rectangle(new System.Drawing.Rectangle(box.Right + 8, box.Bottom - 2, 1, 1)).Bitmap.GetPixel(0, 0);
+        Assert.IsTrue(Math.Max(Math.Abs(middle.R - corner.R), Math.Max(Math.Abs(middle.G - corner.G), Math.Abs(middle.B - corner.B))) > 60,
+            $"The video's middle ({middle}) looks like its corner ({corner}): no frames drawn.");
+        Assert.IsTrue(Math.Abs(corner.R - beside.R) + Math.Abs(corner.G - beside.G) + Math.Abs(corner.B - beside.B) < 30,
+            $"The video's bottom right corner ({corner}) isn't the chat behind it ({beside}): the corner isn't rounded.");
+    }
+
     private Message PushVideo(string file = "clip.mp4") =>
         Server.Phone.PushIncomingMedia("c-media", "video/mp4", File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Fixtures", file)), file);
 

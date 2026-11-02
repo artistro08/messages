@@ -27,8 +27,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     private readonly ChatStore _store;
     private readonly TimeProvider _time;
 
-    // The Archived Conversation The Undo Bar Offers To Unarchive, And The Timer That Hides It
-    private string? _undo;
+    // The Conversations Archived This Session That Undo (The Bar's Button, Or Ctrl + Z Any Time) Puts Back, Latest Last,
+    // And The Timer That Hides The Bar. One Unarchived, Trashed Or Blocked Another Way Leaves The List
+    private readonly List<string> _archived = [];
     private ITimer? _undoTimer;
     private readonly Action<Action> _post;
 
@@ -475,7 +476,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
         ActionError = null;
 
-        // An Archive Offers Undo For A Few Seconds; Another Action Replaces The Offer
+        // An Archive Offers Undo For A Few Seconds On The Bar, And Any Time By Ctrl + Z; Another Action Replaces The Offer
+        _archived.Remove(conversationId);
         if (offerUndo)
         {
             ShowUndo(conversationId, action);
@@ -510,18 +512,23 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// <summary>Gets whether the Undo bar shows.</summary>
     public bool HasUndo => UndoNotice is not null;
 
+    /// <summary>Gets whether a conversation archived this session is left to put back (Ctrl + Z).</summary>
+    public bool CanUndo => _archived.Count > 0;
+
     /// <summary>
-    /// Undoes the archive the Undo bar offers: an unarchive, through <see cref="RunAsync"/>, so the row goes back to its
-    /// place in the inbox. The bar hides at once.
+    /// Undoes the latest archive of this session (the Undo bar's, or an earlier one once the bar has hidden): an
+    /// unarchive, through <see cref="RunAsync"/>, so the row goes back to its place in the inbox. The bar hides at once.
     /// </summary>
     /// <returns>True when the phone made the change.</returns>
     public Task<bool> UndoAsync()
     {
-        if (_undo is not { } id)
+        if (_archived.Count == 0)
         {
             return Task.FromResult(false);
         }
 
+        string id = _archived[^1];
+        _archived.RemoveAt(_archived.Count - 1);
         HideUndo();
         return RunAsync(id, ConversationAction.Unarchive, offerUndo: false);
     }
@@ -540,22 +547,22 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
-        _undo      = conversationId;
+        _archived.Add(conversationId);
         UndoNotice = ChatCopy.ConversationArchived;
         _undoTimer = _time.CreateTimer(_ => _post(() =>
         {
-            if (_undo == conversationId)
+            if (_archived.Count > 0 && _archived[^1] == conversationId)
             {
                 HideUndo();
             }
         }), null, UndoTime, Timeout.InfiniteTimeSpan);
     }
 
+    // Hides The Bar; The Archives Stay Undoable By Ctrl + Z
     private void HideUndo()
     {
         _undoTimer?.Dispose();
         _undoTimer = null;
-        _undo      = null;
         if (UndoNotice is null || _disposed)
         {
             return;

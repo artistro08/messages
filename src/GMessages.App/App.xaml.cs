@@ -447,7 +447,7 @@ public sealed partial class App : Application, IDisposable
         if (_mainWindow is null)
         {
             var settings   = new SettingsViewModel(_settings, _startup, _connection, OpenFolder, _paths.LogsFolder, _logger);
-            _mainWindow    = new MainWindow(settings, new AvatarCache(_store, _paths.AvatarsFolder));
+            _mainWindow    = new MainWindow(settings, new AvatarCache(_store, _paths.AvatarsFolder), _settings);
             _linkPreviewer = new LinkPreviewer(TestHooks.AllowLoopbackPreviews, _logger);
             _mainWindow.ApplyTheme(_settings.Theme);
             _mainWindow.SettingsRequested += (_, _) => ShowSettings();

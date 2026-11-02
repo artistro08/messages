@@ -55,4 +55,7 @@ public enum ShortcutCommand
 
     /// <summary>Opens the file picker filtered to photos.</summary>
     AttachPhotos,
+
+    /// <summary>Puts back the conversation archived last in this session.</summary>
+    UndoArchive,
 }

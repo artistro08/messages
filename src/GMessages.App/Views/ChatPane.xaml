@@ -93,7 +93,7 @@
         </MenuFlyout>
     </UserControl.Resources>
 
-    <Grid RowDefinitions="Auto,*,Auto,Auto,Auto">
+    <Grid x:Name="PaneGrid" RowDefinitions="Auto,*,Auto,Auto,Auto">
 
         <!-- Header: avatar and name, with the lock after it in an encrypted chat (a narrow window's back is the title bar's),
              and the ⋮ at the right edge. Transparent, so a right-click anywhere on it opens the same menu -->
@@ -156,10 +156,13 @@
         </Grid>
         <!-- /Header -->
 
-        <!-- Messages: oldest at the top, kept scrolled to the newest; reaching the top loads older ones -->
+        <!-- Messages: oldest at the top, kept scrolled to the newest; reaching the top loads older ones. The list runs down
+             under the typing bubble, the chips and the message box, which float over it (owner): its bottom padding keeps the
+             newest bubble clear of them (set from code, see KeepComposerClear), and its bottom fades out behind them -->
         <ListView
             x:Name="MessageList"
             Grid.Row="1"
+            Grid.RowSpan="4"
             Padding="12,8"
             AutomationProperties.AutomationId="Chat.Messages"
             ContextRequested="OnMessageListContextRequested"
@@ -228,6 +231,10 @@
             </ListView.ItemContainerTransitions>
             <ListView.ItemsPanel>
                 <ItemsPanelTemplate>
+                    <!-- KeepItemsInView: the first shown bubble stays put as rows measure. While an older page goes in above,
+                         the code switches to KeepLastItemInView: at the list's top, KeepItemsInView let the page take the
+                         view (it anchored the first row, which the page's first row became), and the chat jumped to the
+                         page's top -->
                     <ItemsStackPanel
                         VerticalAlignment="Bottom"
                         CacheLength="1"
@@ -410,7 +417,7 @@
             <Grid
                 Margin="12,8,12,0"
                 Padding="8,6,4,6"
-                Background="{ThemeResource ControlFillColorDefaultBrush}"
+                Background="{ThemeResource SolidBackgroundFillColorTertiaryBrush}"
                 BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
                 BorderThickness="1,1,1,0"
                 ColumnDefinitions="Auto,*,Auto"
@@ -461,7 +468,7 @@
                  has one) or file (its icon and name), in send order, each with a button to drop it -->
             <Border
                 Margin="{x:Bind local:ChatPane.StripMargin(Chat.IsReplying), Mode=OneWay}"
-                Background="{ThemeResource ControlFillColorDefaultBrush}"
+                Background="{ThemeResource SolidBackgroundFillColorTertiaryBrush}"
                 BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
                 BorderThickness="1,1,1,0"
                 CornerRadius="{x:Bind local:ChatPane.StripCorners(Chat.IsReplying), Mode=OneWay}"
@@ -627,21 +634,26 @@
                 Paste="OnDraftPaste"
                 PreviewKeyDown="OnDraftKeyDown"
                 Text="{x:Bind Chat.Draft, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, FallbackValue=''}"
+                TextChanged="OnDraftTextChanged"
                 TextWrapping="Wrap">
 
-                <!-- One Color: the box keeps its focused (active) fill at rest and on hover too, so it never changes color.
-                     The border and the bottom accent line keep their normal Fluent focus look. High contrast keeps the
-                     system's own TextBox colors -->
+                <!-- One Solid Color: the box keeps one fill at rest, on hover and focused, so it never changes color, and a
+                     solid one, so the list fading out behind it never shows through (owner): Windows' dark input fill is
+                     see-through, so the dark box takes the solid base instead (its light one is already solid white). The
+                     border and the bottom accent line keep their normal Fluent focus look. High contrast keeps the system's
+                     own TextBox colors -->
                 <TextBox.Resources>
                     <ResourceDictionary>
                         <ResourceDictionary.ThemeDictionaries>
                             <ResourceDictionary x:Key="Default">
-                                <StaticResource x:Key="TextControlBackground" ResourceKey="ControlFillColorInputActiveBrush" />
-                                <StaticResource x:Key="TextControlBackgroundPointerOver" ResourceKey="ControlFillColorInputActiveBrush" />
+                                <StaticResource x:Key="TextControlBackground" ResourceKey="SolidBackgroundFillColorBaseBrush" />
+                                <StaticResource x:Key="TextControlBackgroundPointerOver" ResourceKey="SolidBackgroundFillColorBaseBrush" />
+                                <StaticResource x:Key="TextControlBackgroundFocused" ResourceKey="SolidBackgroundFillColorBaseBrush" />
                             </ResourceDictionary>
                             <ResourceDictionary x:Key="Light">
                                 <StaticResource x:Key="TextControlBackground" ResourceKey="ControlFillColorInputActiveBrush" />
                                 <StaticResource x:Key="TextControlBackgroundPointerOver" ResourceKey="ControlFillColorInputActiveBrush" />
+                                <StaticResource x:Key="TextControlBackgroundFocused" ResourceKey="ControlFillColorInputActiveBrush" />
                             </ResourceDictionary>
                             <ResourceDictionary x:Key="HighContrast">
                                 <StaticResource x:Key="TextControlBackground" ResourceKey="SystemControlBackgroundAltMediumLowBrush" />

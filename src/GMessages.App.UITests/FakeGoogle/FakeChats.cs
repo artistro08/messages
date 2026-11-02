@@ -124,6 +124,37 @@ public sealed class FakeChats
     }
 
     /// <summary>
+    /// Adds a long chat with Mia where every third message is a received photo (tall and flat ones by turns, sized as
+    /// the phone would report them), the rest texts, for tests that page up through pictures.
+    /// </summary>
+    /// <remarks>
+    /// The texts read <c>mixed {i}</c>; message IDs are <c>{id}-{i:000}</c>, oldest first, so a test can find
+    /// <c>Bubble.{id}-096</c>.
+    /// </remarks>
+    /// <param name="id">The conversation ID.</param>
+    /// <param name="count">How many messages.</param>
+    /// <param name="tall">A tall PNG's bytes.</param>
+    /// <param name="flat">A flat PNG's bytes.</param>
+    /// <param name="isPhoto">Which message numbers (1 to count) are photos; null for every third.</param>
+    public void AddPhotoPagesChat(string id, int count, byte[] tall, byte[] flat, Func<int, bool>? isPhoto = null)
+    {
+        Conversation chat = NewConversation(id, "Mia Media", false, ConversationStatus.Active, false, false, Person("p-mia", "Mia Media", "+15550000004"));
+        var messages      = new List<Message>();
+        for (int i = 1; i <= count; i++)
+        {
+            bool fromMe     = (i / 3 + i / 5) % 2 == 0;
+            string sender   = fromMe ? MyParticipantId : "p-mia";
+            Message message = (isPhoto?.Invoke(i) ?? i % 3 == 0)
+                ? NewMediaMessage(chat, sender, StoreMedia(i % 2 == 0 ? tall : flat, $"p{i}.png", "image/png"))
+                : NewMessage(chat, sender, i % 4 == 0 ? $"mixed {i} " + string.Concat(Enumerable.Repeat("and a longer line that wraps ", 4)).TrimEnd() : $"mixed {i}");
+            message.MessageID = $"{id}-{i:000}";
+            messages.Add(message);
+        }
+
+        Add(chat, [.. messages]);
+    }
+
+    /// <summary>
     /// Adds a long one-on-one chat with Bo, for tests that scroll through older pages.
     /// </summary>
     /// <remarks>
@@ -256,13 +287,18 @@ public sealed class FakeChats
 
     // An Attachment From The Other Side, Which Leaves The Conversation Unread. With A Thumbnail, Only The Thumbnail Is
     // Sent; The Full Media ID Is Held Until The App Asks For It (ReleaseFullSize)
-    internal (Conversation Conversation, Message Message) AddIncomingMedia(string conversationId, string mime, byte[] bytes, string fileName, bool withThumbnail, string? caption = null)
+    internal (Conversation Conversation, Message Message) AddIncomingMedia(string conversationId, string mime, byte[] bytes, string fileName, bool withThumbnail, string? caption = null, Dimensions? dimensions = null)
     {
         lock (_lock)
         {
             Conversation conversation = Find(conversationId);
             string sender             = conversation.OtherParticipants.FirstOrDefault() ?? "p-unknown";
             MediaContent content      = StoreMedia(bytes, fileName, mime);
+            if (dimensions is not null)
+            {
+                content.Dimensions = dimensions;
+            }
+
             Message message           = NewMediaMessage(conversation, sender, content);
             if (withThumbnail)
             {

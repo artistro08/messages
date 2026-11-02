@@ -48,14 +48,19 @@ internal sealed class ScrollFade
     private readonly CompositionColorGradientStop _bottomInner;
     private readonly CompositionColorGradientStop _bottomEdge;
 
+    // Whether The Bottom Fades Whatever The Scroll, And The Bottom Fade's Height
+    private readonly bool _bottomAlways;
+    private double _bottomFade = ScrollEdges.FadeHeight;
+
     private bool _topFaded;
     private bool _bottomFaded;
 
-    private ScrollFade(ScrollViewer scroller, FrameworkElement content, UIElement layer)
+    private ScrollFade(ScrollViewer scroller, FrameworkElement content, UIElement layer, bool bottomAlways)
     {
-        _scroller = scroller;
-        _content  = content;
-        _layer    = layer;
+        _scroller     = scroller;
+        _content      = content;
+        _layer        = layer;
+        _bottomAlways = bottomAlways;
 
         // The Content's Copy
         Visual contentVisual  =ElementCompositionPreview.GetElementVisual(content);
@@ -101,8 +106,9 @@ internal sealed class ScrollFade
     /// </summary>
     /// <remarks>Call once per scroller, after its template is applied.</remarks>
     /// <param name="scroller">The list's scroller.</param>
+    /// <param name="bottomAlways">True to fade the bottom edge whatever the scroll (behind something floating over it).</param>
     /// <returns>The fade, or null when the scroller has no content presenter yet.</returns>
-    public static ScrollFade? Attach(ScrollViewer scroller)
+    public static ScrollFade? Attach(ScrollViewer scroller, bool bottomAlways = false)
     {
         if (UiHelpers.FindPart<ScrollContentPresenter>(scroller, "ScrollContentPresenter") is not { } content
             || VisualTreeHelper.GetParent(content) is not { } parentObject)
@@ -120,7 +126,17 @@ internal sealed class ScrollFade
             ? parent.Children[at + 1]
             : scroller;
 
-        return new ScrollFade(scroller, content, layer);
+        return new ScrollFade(scroller, content, layer, bottomAlways);
+    }
+
+    /// <summary>
+    /// Sets the bottom fade's height (what floats over the list's bottom, say), in effective pixels.
+    /// </summary>
+    /// <param name="height">The height; the standard edge fade's by default.</param>
+    public void SetBottomFade(double height)
+    {
+        _bottomFade = Math.Max(0, height);
+        Resize();
     }
 
     // The Copy Matches The Content's Size And Place, And The Fades Keep Their Height
@@ -133,17 +149,19 @@ internal sealed class ScrollFade
         _sprite.Size        = size;
         _sprite.Offset      = new Vector3((float)at.X, (float)at.Y, 0);
 
-        float fade = size.Y > 0 ? Math.Min(0.5f, (float)ScrollEdges.FadeHeight / size.Y) : 0;
-        _topInner.Offset    = fade;
-        _bottomInner.Offset = 1 - fade;
+        float top    = size.Y > 0 ? Math.Min(0.5f, (float)ScrollEdges.FadeHeight / size.Y) : 0;
+        float bottom = size.Y > 0 ? Math.Min(0.5f, (float)_bottomFade / size.Y) : 0;
+        _topInner.Offset    = top;
+        _bottomInner.Offset = 1 - bottom;
 
         Apply(false);
     }
 
-    // Each Edge Fades While There Is More To Scroll To Past It
+    // Each Edge Fades While There Is More To Scroll To Past It (The Bottom Always When Asked)
     private void Apply(bool animate)
     {
         (bool top, bool bottom) = ScrollEdges.Fades(_scroller.VerticalOffset, _scroller.ScrollableHeight);
+        bottom |= _bottomAlways;
 
         if (top != _topFaded || !animate)
         {

@@ -3,6 +3,7 @@ using FlaUI.Core.Definitions;
 using FlaUI.Core.WindowsAPI;
 using GMessages.App.UITests.Driver;
 using GMessages.Presentation;
+using GMessages.Presentation.Main;
 using GMessages.Presentation.Messaging;
 using GMessages.Protocol.Proto;
 using Keyboard = FlaUI.Core.Input.Keyboard;
@@ -662,6 +663,29 @@ public sealed class ConversationActionTests : UiTest
         Assert.AreEqual(ConversationStatus.Archived, Server.Phone.ConversationUpdates[0].UpdateData.Status);
         App.Find("Main.EmptyState");
         WaitForGone("Row.c-ann");
+    }
+
+    /// <summary>
+    /// Ctrl + Z, once the Undo bar has long gone, still puts the archived chat back in the inbox (any time in the session).
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task CtrlZ_AfterTheBarHid_UnarchivesAgain()
+    {
+        await OpenChatAsync("Row.c-ann");
+
+        Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.ALT, VirtualKeyShort.KEY_H);
+        WaitForUpdates(1);
+        WaitForGone("Row.c-ann");
+        Wait.Until(() => App.TryFind("Main.Undo") is null, MainViewModel.UndoTime + AppDriver.DefaultTimeout, () => "The Undo bar never hid.");
+
+        // From The List (Not The Message Box, Where Ctrl + Z Undoes Typing)
+        App.Find("Main.ConversationList").Focus();
+        Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_Z);
+
+        WaitForUpdates(2);
+        Assert.AreEqual(ConversationStatus.Active, Server.Phone.ConversationUpdates[1].UpdateData.Status);
+        App.Find("Row.c-ann");
     }
 
     /// <summary>

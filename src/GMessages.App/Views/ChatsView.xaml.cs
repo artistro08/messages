@@ -74,8 +74,9 @@ public sealed partial class ChatsView : UserControl
     private readonly SettingsViewModel _settings;
     private readonly ScrollHider _startChatHider = new(StartChatNudge);
 
-    // The List's Scroller, Found Once The List Has Its Template
+    // The List's Scroller, Found Once The List Has Its Template, And Where It Was Last Seen Scrolled To
     private ScrollViewer? _listScroller;
+    private double _listOffset;
 
     // Reads The Windows Animation Setting Live (Settings > Accessibility > Visual Effects)
     private static readonly UISettings Ui = new();
@@ -388,7 +389,11 @@ public sealed partial class ChatsView : UserControl
             return;
         }
 
-        if (!ViewModel.CurrentList.IsLoading && scroller.VerticalOffset >= scroller.ScrollableHeight - scroller.ViewportHeight)
+        // Only The Person Scrolling Down Asks (The Last Row Realizing Asks Otherwise): A List That Can't Scroll, Or Whose
+        // Rows Just Moved, Also Raises This, And Asked For A Page With No Scrolling At All (Owner Report)
+        bool scrolledDown = scroller.ScrollableHeight > 0 && scroller.VerticalOffset > _listOffset;
+        _listOffset       = scroller.VerticalOffset;
+        if (scrolledDown && !ViewModel.CurrentList.IsLoading && scroller.VerticalOffset >= scroller.ScrollableHeight - scroller.ViewportHeight)
         {
             _ = ViewModel.CurrentList.LoadMoreAsync();
         }
@@ -736,6 +741,16 @@ public sealed partial class ChatsView : UserControl
 
             case ShortcutCommand.ArchiveConversation:
                 return RunOnOpenChat(ConversationMenuItem.Archive);
+
+            // Ctrl + Z: The Latest Archive Of This Session Goes Back, Bar Or No Bar
+            case ShortcutCommand.UndoArchive:
+                if (!ViewModel.CanUndo)
+                {
+                    return false;
+                }
+
+                _ = ViewModel.UndoAsync();
+                return true;
 
             default:
                 return false;
