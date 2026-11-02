@@ -67,11 +67,10 @@ public sealed partial class ShortcutHelpDialog : ContentDialog
             {
                 _card = card;
 
-                // The Template Holds The Title To Its Width At The Left; Stretched, The X Reaches The Right Corner
-                if (UiHelpers.FindPart<Control>(card, "Title") is { } title)
+                // The First Open Builds The Title's Part After This: Tried Again After Each Layout Until It Takes
+                if (!StretchTitle())
                 {
-                    title.HorizontalAlignment        = HorizontalAlignment.Stretch;
-                    title.HorizontalContentAlignment = HorizontalAlignment.Stretch;
+                    card.LayoutUpdated += OnCardLayoutUpdated;
                 }
             }
             else if (VisualTreeHelper.GetChildrenCount(child) == 0)
@@ -92,11 +91,38 @@ public sealed partial class ShortcutHelpDialog : ContentDialog
         }
     }
 
+    // The Template Holds The Title To Its Width At The Left; Stretched, The X Reaches The Right Corner. False While The
+    // Title's Part Isn't Made Yet
+    private bool StretchTitle()
+    {
+        if (_card is null || UiHelpers.FindPart<Control>(_card, "Title") is not { } title)
+        {
+            return false;
+        }
+
+        title.HorizontalAlignment        = HorizontalAlignment.Stretch;
+        title.HorizontalContentAlignment = HorizontalAlignment.Stretch;
+        return true;
+    }
+
+    private void OnCardLayoutUpdated(object? sender, object e)
+    {
+        if (StretchTitle() && _card is not null)
+        {
+            _card.LayoutUpdated -= OnCardLayoutUpdated;
+        }
+    }
+
     private void OnClosed(ContentDialog sender, ContentDialogClosedEventArgs args)
     {
         if (_smoke is not null)
         {
             _smoke.Tapped -= OnSmokeTapped;
+        }
+
+        if (_card is not null)
+        {
+            _card.LayoutUpdated -= OnCardLayoutUpdated;
         }
 
         if (XamlRoot is { } root)

@@ -197,6 +197,11 @@ public sealed class ShortcutTests : UiTest
         Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.SHIFT, VirtualKeyShort.OEM_2);
         Thread.Sleep(500);
         System.Drawing.Rectangle first = App.Find("Shortcuts.Close").BoundingRectangle;
+
+        // From The First Open, The X Sits In The Corner, Its Right Edge Past The First Row's Last Key Cap (It Once Sat
+        // Beside The Heading Until The Dialog Had Opened Before)
+        System.Drawing.Rectangle lastCap = App.Find("Shortcuts.Key.0.1").BoundingRectangle;
+        Assert.IsGreaterThanOrEqualTo(lastCap.Right - 4, first.Right, $"The X sat at {first.Right}, short of the corner ({lastCap.Right}).");
         App.Find("Shortcuts.Close").Patterns.Invoke.Pattern.Invoke();
         WaitForGone("Shortcuts.Close");
 
