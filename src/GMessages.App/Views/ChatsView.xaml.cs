@@ -117,6 +117,7 @@ public sealed partial class ChatsView : UserControl
         ConversationList.AddHandler(KeyDownEvent, new KeyEventHandler(OnListKeyDown), handledEventsToo: true);
         ConversationList.PreviewKeyDown += OnListPreviewKeyDown;
         ChatView.MenuRequested          += OnChatMenuRequested;
+        ChatView.MuteRequested          += (_, _) => RunOnOpenChat(ViewModel.Chat?.IsMuted == true ? ConversationMenuItem.Unmute : ConversationMenuItem.Mute);
         ShowCurrentList();
         _ = ViewModel.Inbox.LoadAsync();
     }
@@ -741,6 +742,16 @@ public sealed partial class ChatsView : UserControl
 
             case ShortcutCommand.ArchiveConversation:
                 return RunOnOpenChat(ConversationMenuItem.Archive);
+
+            // Ctrl + S: The ☰'s Collapse Or Expand, Only Where The ☰ Shows (A Wide Window)
+            case ShortcutCommand.ToggleSidebar:
+                if (ViewModel.IsNarrow)
+                {
+                    return false;
+                }
+
+                ViewModel.ToggleList();
+                return true;
 
             // Ctrl + Z: The Latest Archive Of This Session Goes Back, Bar Or No Bar
             case ShortcutCommand.UndoArchive:

@@ -2,6 +2,7 @@ using FlaUI.Core.AutomationElements;
 using FlaUI.Core.WindowsAPI;
 using GMessages.App.UITests.Driver;
 using GMessages.Presentation;
+using GMessages.Presentation.Shortcuts;
 using Keyboard = FlaUI.Core.Input.Keyboard;
 
 namespace GMessages.App.UITests;
@@ -52,11 +53,11 @@ public sealed class ShortcutTests : UiTest
     }
 
     /// <summary>
-    /// Ctrl + . opens the next conversation and Ctrl + , the previous one, and the list's highlight follows.
+    /// Ctrl + . opens the next conversation and Ctrl + Shift + , the previous one, and the list's highlight follows.
     /// </summary>
     /// <returns>A task for the test.</returns>
     [TestMethod]
-    public async Task CtrlPeriod_And_CtrlComma_MoveSelection()
+    public async Task CtrlPeriod_And_CtrlShiftComma_MoveSelection()
     {
         await OpenChatAsync("Row.c-team");
 
@@ -66,7 +67,7 @@ public sealed class ShortcutTests : UiTest
         WaitForSelected("Row.c-ann");
 
         // Previous: Back To Team
-        Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.OEM_COMMA);
+        Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.SHIFT, VirtualKeyShort.OEM_COMMA);
         WaitForSelected("Row.c-team");
         Wait.Until(() => !IsSelected("Row.c-ann"), AppDriver.DefaultTimeout, () => "Ann's row stayed highlighted.");
     }
@@ -130,21 +131,38 @@ public sealed class ShortcutTests : UiTest
     }
 
     /// <summary>
-    /// Ctrl + s opens the settings page.
+    /// Ctrl + , opens the settings page.
     /// </summary>
     /// <returns>A task for the test.</returns>
     [TestMethod]
-    public async Task CtrlS_OpensSettings()
+    public async Task CtrlComma_OpensSettings()
     {
         await OpenChatAsync("Row.c-team");
 
-        Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_S);
+        Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.OEM_COMMA);
 
         WaitForSettings();
     }
 
     /// <summary>
-    /// Ctrl + ? (Ctrl + Shift + /) opens the help dialog listing the seventeen wired shortcuts, Ctrl + k first.
+    /// Ctrl + s collapses the conversation list to avatars and expands it again, as the ☰ does.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task CtrlS_TogglesSidebar()
+    {
+        await OpenChatAsync("Row.c-team");
+
+        Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_S);
+        Wait.Until(() => App.TryFind("Main.ConversationList") is null, AppDriver.DefaultTimeout, () => "Ctrl + s didn't collapse the list.");
+
+        Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_S);
+        App.Find("Main.ConversationList");
+    }
+
+    /// <summary>
+    /// Ctrl + ? (Ctrl + Shift + /) opens the help dialog listing every wired shortcut, Start new conversation first with
+    /// its keys as caps (Ctrl, K).
     /// </summary>
     /// <returns>A task for the test.</returns>
     [TestMethod]
@@ -156,10 +174,12 @@ public sealed class ShortcutTests : UiTest
 
         AutomationElement dialog = App.Find("Shortcuts.Dialog");
         int rows = 0;
-        Wait.Until(() => (rows = dialog.FindAllDescendants().Count(e => (e.Properties.AutomationId.ValueOrDefault ?? "").StartsWith("Shortcuts.Keys.", StringComparison.Ordinal))) == 17,
-            AppDriver.DefaultTimeout, () => $"The dialog listed {rows} shortcuts, not 17.");
-        App.WaitForText("Shortcuts.Keys.0", "Ctrl + k");
+        int expected = ShortcutMap.HelpRows.Count;
+        Wait.Until(() => (rows = dialog.FindAllDescendants().Count(e => (e.Properties.AutomationId.ValueOrDefault ?? "").StartsWith("Shortcuts.Action.", StringComparison.Ordinal))) == expected,
+            AppDriver.DefaultTimeout, () => $"The dialog listed {rows} shortcuts, not {expected}.");
         App.WaitForText("Shortcuts.Action.0", "Start new conversation");
+        App.WaitForText("Shortcuts.Key.0.0", "Ctrl");
+        App.WaitForText("Shortcuts.Key.0.1", "K");
     }
 
     /// <summary>
@@ -203,7 +223,7 @@ public sealed class ShortcutTests : UiTest
         await OpenMainAsync();
         App.Find(rowId).Patterns.SelectionItem.Pattern.Select();
         App.Find("Chat.Draft");
-        App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).SetForeground();
+        App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout).SetForeground();
         WaitForFocusIn("Chat.Draft");
         App.Find(rowId).Focus();
         WaitForFocusIn(rowId);

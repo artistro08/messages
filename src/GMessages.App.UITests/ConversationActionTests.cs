@@ -151,7 +151,7 @@ public sealed class ConversationActionTests : UiTest
         await OpenListAsync();
 
         System.Drawing.Rectangle row = App.Find("Row.c-ann").BoundingRectangle;
-        System.Drawing.Rectangle win = App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).BoundingRectangle;
+        System.Drawing.Rectangle win = App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout).BoundingRectangle;
         PointerInput.Hover(row);
         System.Drawing.Rectangle moreRect = ShownMore("Row.More.c-ann").BoundingRectangle;
 
@@ -210,7 +210,7 @@ public sealed class ConversationActionTests : UiTest
         await OpenListAsync();
 
         System.Drawing.Rectangle row  = App.Find("Row.c-ann").BoundingRectangle;
-        System.Drawing.Rectangle win  = App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).BoundingRectangle;
+        System.Drawing.Rectangle win  = App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout).BoundingRectangle;
         AutomationElement annTime     = App.Find("Row.Time.c-ann");
         AutomationElement teamTime    = App.Find("Row.Time.c-team");
         int annRight                  = annTime.BoundingRectangle.Right;
@@ -249,6 +249,28 @@ public sealed class ConversationActionTests : UiTest
         App.Find("Conversation.Unmute");
         Assert.IsNull(App.TryFind("Conversation.Mute"), "The menu still offered Mute for a muted chat.");
         Keyboard.Type(VirtualKeyShort.ESCAPE);
+    }
+
+    /// <summary>
+    /// The chat header's bell mutes the chat (the phone gets a mute, the row shows the muted icon), then reads Unmute and
+    /// unmutes it again.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task HeaderBell_MutesThenUnmutes()
+    {
+        await OpenChatAsync("Row.c-ann");
+        Assert.AreEqual(ChatCopy.Mute, AppDriver.SafeName(App.Find("Chat.Mute")));
+
+        Invoke("Chat.Mute");
+        WaitForUpdates(1);
+        Assert.AreEqual(ConversationMuteStatus.Mute, Server.Phone.ConversationUpdates[0].UpdateData.Mute);
+        App.Find("Row.Muted.c-ann");
+        Wait.Until(() => AppDriver.SafeName(App.Find("Chat.Mute")) == ChatCopy.Unmute, AppDriver.DefaultTimeout, () => "The bell didn't change to Unmute.");
+
+        Invoke("Chat.Mute");
+        WaitForUpdates(2);
+        Assert.AreEqual(ConversationMuteStatus.Unmute, Server.Phone.ConversationUpdates[1].UpdateData.Mute);
     }
 
     /// <summary>
@@ -730,7 +752,7 @@ public sealed class ConversationActionTests : UiTest
     {
         await OpenMainAsync();
         App.Find("Row.c-ann");
-        App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).SetForeground();
+        App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout).SetForeground();
     }
 
     // Right-Clicks A Row, Then Picks One Of Its Menu Items

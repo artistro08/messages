@@ -22,7 +22,7 @@ public sealed class TrayTests : UiTest
         // Unpaired, So Open Brings Back The Window On Pairing Once It's Closed
         WaitForPairing();
         App.Find("Pairing.Cancel").Patterns.Invoke.Pattern.Invoke();
-        App.WaitForNoWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout);
+        App.WaitForNoWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout);
 
         // The Menu Shows All Three Items
         Tray.RightClick();
@@ -56,7 +56,7 @@ public sealed class TrayTests : UiTest
 
         Tray.LeftClick();
         App.Find("Main.ConversationList");
-        Assert.AreEqual(AppInfo.DisplayName, AppDriver.SafeName(App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout)));
-        AssertTitleBar("Main.TitleBar", AppInfo.DisplayName);
+        Assert.AreEqual(AppInfo.WindowTitle, AppDriver.SafeName(App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout)));
+        AssertTitleBar("Main.TitleBar", AppInfo.WindowTitle);
     }
 }

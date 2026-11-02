@@ -103,7 +103,7 @@
             Background="Transparent"
             BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
             BorderThickness="0,0,0,1"
-            ColumnDefinitions="Auto,*,Auto"
+            ColumnDefinitions="Auto,*,Auto,Auto"
             ColumnSpacing="12"
             ContextRequested="OnHeaderContextRequested">
             <controls:Avatar
@@ -139,10 +139,28 @@
                     Visibility="{x:Bind Chat.IsEncrypted, Mode=OneWay, FallbackValue=Collapsed}" />
             </Grid>
 
+            <!-- Mute: the bell shows the chat's state (crossed out while muted) and flips it, as the ⋮ menu's Mute or
+                 Unmute does; hidden where the menu has neither (spam and blocked) -->
+            <Button
+                x:Name="MuteButton"
+                Grid.Column="2"
+                Width="32"
+                Height="32"
+                Margin="0,0,-8,0"
+                VerticalAlignment="Center"
+                AutomationProperties.AutomationId="Chat.Mute"
+                AutomationProperties.Name="{x:Bind local:ChatPane.MuteText(Chat.IsMuted), Mode=OneWay, FallbackValue=''}"
+                Click="OnMuteClick"
+                Style="{StaticResource IconButtonStyle}"
+                ToolTipService.ToolTip="{x:Bind local:ChatPane.MuteText(Chat.IsMuted), Mode=OneWay, FallbackValue=''}"
+                Visibility="{x:Bind Chat.CanMute, Mode=OneWay, FallbackValue=Collapsed}">
+                <FontIcon FontSize="16" Glyph="{x:Bind local:ChatPane.MuteGlyph(Chat.IsMuted), Mode=OneWay, FallbackValue=''}" />
+            </Button>
+
             <!-- More Options: the ⋮, styled like a list row's -->
             <Button
                 x:Name="MoreButton"
-                Grid.Column="2"
+                Grid.Column="3"
                 Width="32"
                 Height="32"
                 VerticalAlignment="Center"

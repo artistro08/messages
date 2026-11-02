@@ -103,7 +103,7 @@ public sealed partial class MediaTests
         Message message         = Server.Phone.PushIncomingMedia("c-media", "image/png", Png(6000, 600, SplitColors), "huge.png");
         AutomationElement photo = App.Find("Bubble.Photo." + message.MessageID);
         WaitForStatus(photo, Full);
-        App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).SetForeground();
+        App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout).SetForeground();
 
         // Opened: Decoded At Twice The Window, Not Its Own 6000 px
         photo.Click();
@@ -141,7 +141,7 @@ public sealed partial class MediaTests
         Message message         = Server.Phone.PushIncomingMedia("c-media", "image/png", Png(100, 20000, SplitColors), "tall.png");
         AutomationElement photo = App.Find("Bubble.Photo." + message.MessageID);
         WaitForStatus(photo, Full);
-        App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).SetForeground();
+        App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout).SetForeground();
 
         // Invoked: Its Bubble Is Only A Few Pixels Wide, Too Narrow To Click Reliably
         photo.Patterns.Invoke.Pattern.Invoke();
@@ -295,7 +295,7 @@ public sealed partial class MediaTests
 
         photo.Click();
         App.Find("PhotoViewer.Photo");
-        System.Drawing.Rectangle window = App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).BoundingRectangle;
+        System.Drawing.Rectangle window = App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout).BoundingRectangle;
         int leftEdge                    = window.Left;
         foreach (string id in (ReadOnlySpan<string>)["PhotoViewer.Close", "PhotoViewer.OpenInPhotos", "PhotoViewer.OpenWith", "PhotoViewer.Download", "PhotoViewer.SaveAs"])
         {
@@ -343,7 +343,7 @@ public sealed partial class MediaTests
 
         Keyboard.Type(VirtualKeyShort.ESCAPE);
         Tray.CloseOverflow();
-        App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).SetForeground();
+        App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout).SetForeground();
         WaitForStatus(close, "Active");
         Assert.IsNotNull(App.TryFind("PhotoViewer.Photo"), "Leaving the window closed the viewer.");
     }
@@ -406,7 +406,7 @@ public sealed partial class MediaTests
         Message message         = Server.Phone.PushIncomingMedia("c-media", "image/png", Png(400, 300, SplitColors), "view.png", caption: caption);
         AutomationElement photo = App.Find("Bubble.Photo." + message.MessageID);
         WaitForStatus(photo, Full);
-        App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).SetForeground();
+        App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout).SetForeground();
         return photo;
     }
 }

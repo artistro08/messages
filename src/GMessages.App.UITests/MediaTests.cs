@@ -1021,7 +1021,7 @@ public sealed partial class MediaTests : UiTest
         int before = wave.BoundingRectangle.Width;
 
         // Widen The Window
-        Window window                = App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout);
+        Window window                = App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout);
         System.Drawing.Rectangle box = window.BoundingRectangle;
         window.Patterns.Transform.Pattern.Resize(box.Width + 300, box.Height);
 
@@ -1391,7 +1391,7 @@ public sealed partial class MediaTests : UiTest
     // A Photo's Or File Card's Bubble Menu, From The Keyboard (Shift + F10 On It, Focused)
     private void OpenMenu(AutomationElement part)
     {
-        App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).SetForeground();
+        App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout).SetForeground();
         part.Focus();
         Keyboard.TypeSimultaneously(VirtualKeyShort.SHIFT, VirtualKeyShort.F10);
     }
@@ -1417,7 +1417,7 @@ public sealed partial class MediaTests : UiTest
         await OpenMainAsync();
         App.Find("Row.c-media").Patterns.SelectionItem.Pattern.Select();
         App.Find("Chat.Draft");
-        App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).SetForeground();
+        App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout).SetForeground();
     }
 
     // A Strip Over The Message Box Meets It: Its Bottom Is The Box's Top
@@ -1452,7 +1452,7 @@ public sealed partial class MediaTests : UiTest
     // The Screen Pixel In The Middle Of An Element, Read Once Its Fade Has Finished
     private System.Drawing.Color CenterPixel(AutomationElement element)
     {
-        App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).SetForeground();
+        App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout).SetForeground();
         Thread.Sleep(500);
         System.Drawing.Rectangle box = element.BoundingRectangle;
         using FlaUI.Core.Capturing.CaptureImage capture = FlaUI.Core.Capturing.Capture.Rectangle(new System.Drawing.Rectangle(box.X + (box.Width / 2), box.Y + (box.Height / 2), 1, 1));

@@ -21,7 +21,7 @@ public sealed class LifecycleTests : UiTest
     public async Task SecondLaunch_OpensExistingWindow_NoSecondProcess()
     {
         await PairAsync();
-        Assert.IsNull(App.FindWindow(AppInfo.DisplayName), "A window was already open before the second launch.");
+        Assert.IsNull(App.FindWindow(AppInfo.WindowTitle), "A window was already open before the second launch.");
 
         // Second Copy Hands Over And Exits
         using (Process second = AppDriver.StartExe(App.TestArguments))
@@ -141,19 +141,19 @@ public sealed class LifecycleTests : UiTest
         // Cancel Pairing: The Window Closes
         WaitForPairing();
         App.Find("Pairing.Cancel").Patterns.Invoke.Pattern.Invoke();
-        App.WaitForNoWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout);
+        App.WaitForNoWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout);
         AssertStillRunning();
 
         // Close The Window On Settings With Its Close Button
         InvokeTrayMenu("TrayMenu.Settings");
         WaitForSettings().Close();
-        App.WaitForNoWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout);
+        App.WaitForNoWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout);
         AssertStillRunning();
 
         // The Icon Still Answers: Unpaired, A Left-Click Brings Pairing Back; Close It Too
         Tray.LeftClick();
         WaitForPairing().Close();
-        App.WaitForNoWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout);
+        App.WaitForNoWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout);
         AssertStillRunning();
     }
 

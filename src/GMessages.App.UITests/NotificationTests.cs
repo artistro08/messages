@@ -111,7 +111,7 @@ public sealed class NotificationTests : UiTest
         Assert.AreEqual("on my way", FakePhone.SentText(Server.Phone.Sent[0]), "The phone got other text.");
         Assert.AreEqual("c-ann", Server.Phone.Sent[0].ConversationID, "The reply went to another conversation.");
         Wait.Until(() => Server.Phone.Reads.Any(r => r.ConversationID == "c-ann"), AppDriver.DefaultTimeout, () => "The phone never got a read mark for c-ann.");
-        Assert.IsNull(App.FindWindow(AppInfo.DisplayName), "Replying opened a window.");
+        Assert.IsNull(App.FindWindow(AppInfo.WindowTitle), "Replying opened a window.");
     }
 
     /// <summary>
@@ -341,7 +341,7 @@ public sealed class NotificationTests : UiTest
     // The Main Window Takes The Foreground, So The App Sees It Focused
     private void FocusMainWindow()
     {
-        App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).SetForeground();
+        App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout).SetForeground();
     }
 }
 

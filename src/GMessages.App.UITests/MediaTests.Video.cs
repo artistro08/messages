@@ -181,7 +181,7 @@ public sealed partial class MediaTests
         WaitForStatus(player, "Playing");
 
         // The Pointer Over The Video Shows The Bar
-        App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).SetForeground();
+        App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout).SetForeground();
         System.Drawing.Rectangle box = player.BoundingRectangle;
         FlaUI.Core.Input.Mouse.MoveTo(box.X + (box.Width / 2), box.Y + (box.Height / 2));
         Wait.Until(() => AppDriver.Search(player, e => e.Properties.AutomationId.ValueOrDefault == "ProgressSlider") is { IsOffscreen: false },
@@ -208,7 +208,7 @@ public sealed partial class MediaTests
         WaitForStatus(player, "Playing");
 
         // The Pointer Away, So The Bar Hides; A Moment For Frames To Draw
-        App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).SetForeground();
+        App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout).SetForeground();
         System.Drawing.Rectangle box = player.BoundingRectangle;
         FlaUI.Core.Input.Mouse.MoveTo(box.X - 60, box.Y - 60);
         Thread.Sleep(2500);
@@ -311,7 +311,7 @@ public sealed partial class MediaTests
     // Controls First), Then The Player's State It Should Bring
     private void PressPlayPause(AutomationElement player, string expected)
     {
-        App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).SetForeground();
+        App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout).SetForeground();
         System.Drawing.Rectangle box = player.BoundingRectangle;
         FlaUI.Core.Input.Mouse.MoveTo(box.X + (box.Width / 2), box.Y + (box.Height / 2));
         AutomationElement? button = null;

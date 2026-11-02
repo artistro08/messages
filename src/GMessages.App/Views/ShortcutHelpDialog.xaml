@@ -1,4 +1,4 @@
-<!-- Shortcut Help: the wired shortcuts, keys left and action right, like Google's dialog -->
+<!-- Shortcut Help: the wired shortcuts, action left and its keys right as key caps (Layers' shortcut sheet look) -->
 <ContentDialog
     x:Class="GMessages.App.Views.ShortcutHelpDialog"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -8,12 +8,34 @@
     CloseButtonText="Close"
     DefaultButton="Close">
 
-    <!-- Rows: filled from ShortcutMap.HelpRows in code -->
-    <ScrollViewer>
-        <Grid
-            x:Name="RowsGrid"
-            ColumnDefinitions="Auto,*"
-            ColumnSpacing="32"
-            RowSpacing="12" />
+    <ContentDialog.Resources>
+        <!-- Key Cap: Layers' key chip (a quiet control fill, a 1 px divider stroke, radius 4) -->
+        <Style x:Key="KeyCapStyle" TargetType="Border">
+            <Setter Property="MinWidth" Value="28" />
+            <Setter Property="Padding" Value="8,4" />
+            <Setter Property="Background" Value="{ThemeResource ControlFillColorSecondaryBrush}" />
+            <Setter Property="BorderBrush" Value="{ThemeResource DividerStrokeColorDefaultBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="4" />
+        </Style>
+
+        <!-- Row: a divider line above it (the first row's is turned off in code) -->
+        <Style x:Key="ShortcutRowStyle" TargetType="Grid">
+            <Setter Property="Padding" Value="0,8" />
+            <Setter Property="ColumnSpacing" Value="16" />
+            <Setter Property="BorderBrush" Value="{ThemeResource DividerStrokeColorDefaultBrush}" />
+            <Setter Property="BorderThickness" Value="0,1,0,0" />
+        </Style>
+
+        <!-- Joiner: the "+" between key caps -->
+        <Style x:Key="KeyJoinerStyle" TargetType="TextBlock">
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+        </Style>
+    </ContentDialog.Resources>
+
+    <!-- Rows: filled from ShortcutMap.HelpRows in code, a divider between each -->
+    <ScrollViewer Padding="0,0,16,0">
+        <StackPanel x:Name="RowsPanel" />
     </ScrollViewer>
 </ContentDialog>

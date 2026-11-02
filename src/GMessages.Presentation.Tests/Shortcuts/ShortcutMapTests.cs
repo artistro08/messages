@@ -17,8 +17,9 @@ public sealed class ShortcutMapTests
     [DataRow(VirtualKey.J, true, false, ShortcutCommand.FocusMessages)]
     [DataRow(VirtualKey.Escape, false, false, ShortcutCommand.ExitConversation)]
     [DataRow((VirtualKey)190, true, false, ShortcutCommand.NextConversation)]
-    [DataRow((VirtualKey)188, true, false, ShortcutCommand.PreviousConversation)]
-    [DataRow(VirtualKey.S, true, false, ShortcutCommand.OpenSettings)]
+    [DataRow((VirtualKey)188, true, true, ShortcutCommand.PreviousConversation)]
+    [DataRow((VirtualKey)188, true, false, ShortcutCommand.OpenSettings)]
+    [DataRow(VirtualKey.S, true, false, ShortcutCommand.ToggleSidebar)]
     [DataRow((VirtualKey)191, true, true, ShortcutCommand.ShowHelp)]
     [DataRow((VirtualKey)191, true, false, ShortcutCommand.ShowHelp)]
     [DataRow((VirtualKey)187, false, true, ShortcutCommand.OpenReactions)]
@@ -106,17 +107,18 @@ public sealed class ShortcutMapTests
             ("Ctrl + j", "Focus on messages in conversation"),
             ("Escape", "Exit current conversation"),
             ("Ctrl + .", "Next conversation"),
-            ("Ctrl + ,", "Previous conversation"),
+            ("Ctrl + Shift + ,", "Previous conversation"),
             ("Ctrl + d", "Delete conversation"),
             ("Ctrl + Alt + h", "Archive conversation"),
-            ("Ctrl + s", "Open Settings"),
+            ("Ctrl + ,", "Open Settings"),
+            ("Ctrl + s", "Show/hide sidebar"),
             ("Ctrl + Shift + o", "Show Details"),
             ("Ctrl + Enter", "Reply to message"),
             ("Ctrl + ?", "Open keyboard shortcut help"),
             ("Ctrl + z", "Undo archive"),
         ];
 
-        Assert.HasCount(18, expected);
+        Assert.HasCount(19, expected);
         CollectionAssert.AreEqual(expected, ShortcutMap.HelpRows.ToArray());
     }
 }

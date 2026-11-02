@@ -10,7 +10,7 @@ public sealed class AppInfoTests
     private static readonly string[] ScannedPatterns = ["*.cs", "*.xaml", "*.appxmanifest"];
 
     [TestMethod]
-    public void DisplayName_ComesFromTheSingleBuildProperty() => Assert.AreEqual("Tekisuto", AppInfo.DisplayName);
+    public void DisplayName_ComesFromTheSingleBuildProperty() => Assert.AreEqual("Kaituro", AppInfo.DisplayName);
 
     [TestMethod]
     public void Version_IsNotEmpty() => Assert.IsFalse(string.IsNullOrWhiteSpace(AppInfo.Version));
@@ -18,7 +18,7 @@ public sealed class AppInfoTests
     [TestMethod]
     public void NoSourceFileHardCodesTheDisplayName()
     {
-        // Scans the app and presentation sources for a quoted "Messages" or >Messages<; Directory.Build.props isn't scanned
+        // Scans the app and presentation sources for the name quoted or as element text; Directory.Build.props isn't scanned
         var src = Path.Combine(FindRepoRoot(), "src");
         var self = Path.GetFullPath(Path.Combine(src, "GMessages.Presentation.Tests", "AppInfoTests.cs"));
         var offenders = new List<string>();
@@ -37,7 +37,7 @@ public sealed class AppInfoTests
                 }
 
                 var text = File.ReadAllText(file);
-                if (text.Contains("\"Messages\"", StringComparison.Ordinal) || text.Contains(">Messages<", StringComparison.Ordinal))
+                if (text.Contains($"\"{AppInfo.DisplayName}\"", StringComparison.Ordinal) || text.Contains($">{AppInfo.DisplayName}<", StringComparison.Ordinal))
                 {
                     offenders.Add(relative);
                 }

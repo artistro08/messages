@@ -97,11 +97,18 @@ public sealed partial class ChatViewModel
             return;
         }
 
-        Conversation = c;
+        bool couldMute = CanMute;
+        Conversation   = c;
         if (IsMuted != c.IsMuted)
         {
             IsMuted = c.IsMuted;
             Raise(nameof(IsMuted));
+        }
+
+        // Moved Into Or Out Of Spam & Blocked: The Mute Button Follows
+        if (couldMute != CanMute)
+        {
+            Raise(nameof(CanMute));
         }
 
         // Someone Joined, Left Or Was Renamed: Every Bubble's Sender, Avatar And Reactions Follow

@@ -218,6 +218,11 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
     /// <summary>Gets whether the conversation is muted on the phone.</summary>
     public bool IsMuted { get; private set; }
 
+    /// <summary>
+    /// Gets whether the header's mute button shows: as the menu's Mute or Unmute, not in the spam and blocked folders.
+    /// </summary>
+    public bool CanMute => Conversation is { Status: not (ConversationStatus.SpamFolder or ConversationStatus.BlockedFolder) };
+
     /// <summary>Gets the bubbles, oldest first.</summary>
     public ObservableCollection<MessageBubbleViewModel> Messages { get; } = [];
 

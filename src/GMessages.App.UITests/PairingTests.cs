@@ -28,7 +28,7 @@ public sealed class PairingTests : UiTest
     {
         // Main Window On Pairing With The Fake Sign-In Page, Nearly As Wide As The Window
         Window window = WaitForPairing();
-        AssertTitleBar("Main.TitleBar", AppInfo.DisplayName);
+        AssertTitleBar("Main.TitleBar", AppInfo.WindowTitle);
         Assert.IsNull(App.TryFind("Main.MenuButton"), "☰ shows while pairing.");
         Assert.IsNull(App.TryFind("Main.ProfileButton"), "The profile button shows while pairing.");
         WaitForSignInButton();
@@ -46,7 +46,7 @@ public sealed class PairingTests : UiTest
         WaitForGone("Pairing.Cancel");
         App.Find("Main.MenuButton");
         App.Find("Main.ProfileButton");
-        Assert.AreEqual(window.Properties.NativeWindowHandle.Value, App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).Properties.NativeWindowHandle.Value, "Pairing opened another window for the chats.");
+        Assert.AreEqual(window.Properties.NativeWindowHandle.Value, App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout).Properties.NativeWindowHandle.Value, "Pairing opened another window for the chats.");
         Wait.Until(() => File.Exists(SessionFile), AppDriver.DefaultTimeout, () => $"No session.bin in {App.DataDir}.");
         Tray.FindIcon(AppDriver.DefaultTimeout);
         Tray.CloseOverflow();

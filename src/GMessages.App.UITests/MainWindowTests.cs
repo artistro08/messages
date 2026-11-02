@@ -300,7 +300,7 @@ public sealed class MainWindowTests : UiTest
         App.Find("Main.ListSplitter").Focus();
         FlaUI.Core.Input.Keyboard.Type(FlaUI.Core.WindowsAPI.VirtualKeyShort.RIGHT);
         FlaUI.Core.Input.Keyboard.Type(FlaUI.Core.WindowsAPI.VirtualKeyShort.RIGHT);
-        double scale = DpiSetup.ScaleOf(App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout));
+        double scale = DpiSetup.ScaleOf(App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout));
         Wait.Until(() => Math.Abs(ListWidth() - before - (32 * scale)) <= 2, AppDriver.DefaultTimeout, () => $"The list is {ListWidth()} px wide, not {before} + 32 effective px.");
         int widened = ListWidth();
 
@@ -362,7 +362,7 @@ public sealed class MainWindowTests : UiTest
         Assert.IsTrue(over.Right - button.Right < 40 && over.Bottom - button.Bottom < 40, $"Start chat ({button}) isn't at the list's bottom right ({over}).");
 
         // The Standard Accent Button's Size (About 32 Effective Pixels Tall), Not The Old 48 Pixel Pill
-        double scale = DpiSetup.ScaleOf(App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout));
+        double scale = DpiSetup.ScaleOf(App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout));
         Assert.IsTrue(button.Height / scale < 40, $"Start chat is {button.Height / scale:0} effective pixels tall, not the standard button's size.");
 
         // Down Hides It, Up Shows It
@@ -475,7 +475,7 @@ public sealed class MainWindowTests : UiTest
     {
         await OpenMainAsync();
         WaitForRows(InboxRows);
-        Window window = App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout);
+        Window window = App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout);
         double scale  = App.Find("Main.TitleBar").BoundingRectangle.Height / 48.0;
 
         window.Patterns.Transform.Pattern.Resize(100, 100);
@@ -498,7 +498,7 @@ public sealed class MainWindowTests : UiTest
         WaitForRows(InboxRows);
 
         // Narrow
-        Window window = App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout);
+        Window window = App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout);
         window.Patterns.Transform.Pattern.Resize(600, 700);
 
         // No ☰: There Is No List To Hide While One Pane Shows

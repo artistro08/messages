@@ -58,4 +58,7 @@ public enum ShortcutCommand
 
     /// <summary>Puts back the conversation archived last in this session.</summary>
     UndoArchive,
+
+    /// <summary>Collapses the conversation list to avatars, or expands it again (the title bar's ☰).</summary>
+    ToggleSidebar,
 }

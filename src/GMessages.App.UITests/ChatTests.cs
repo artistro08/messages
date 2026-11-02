@@ -221,7 +221,7 @@ public sealed class ChatTests : UiTest
             AppDriver.DefaultTimeout, () => $"Contact.0 was '{AppDriver.SafeName(App.TryFind("Contact.0"))}', Contact.1 was '{AppDriver.SafeName(App.TryFind("Contact.1"))}'.");
         // The Real Mouse Clicks Whatever Window Is On Top There. A Window Opened Through UI Automation (No Real Input)
         // Isn't Allowed The Foreground, So It Can Sit Behind Another Window And The Click Misses It: Bring It Up First
-        App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).SetForeground();
+        App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout).SetForeground();
         App.Find("Contact.0").Click();
 
         // Go Opens Her Conversation
@@ -278,7 +278,7 @@ public sealed class ChatTests : UiTest
         Assert.AreEqual(ChatCopy.StartChatGo, AppDriver.SafeName(App.Find("StartChat.Go")), "Go doesn't read Start Chat.");
         Assert.IsNull(App.TryFind("StartChat.Chip.0"), "A chip showed before anyone was picked.");
 
-        App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).SetForeground();
+        App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout).SetForeground();
         App.Find("Contact.0").Click();
 
         // Her Chip Shows, With Its Own Fill, And She Left The List
@@ -606,7 +606,7 @@ public sealed class ChatTests : UiTest
         AddTwoPageChats("fa", "fb", "fc");
 
         await OpenMainAsync();
-        App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).SetForeground();
+        App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout).SetForeground();
         App.Find("Row.c-fa").Click();
         WaitForNewest("fa");
         Wait.Until(() => App.Find("Chat.Draft").Properties.HasKeyboardFocus.ValueOrDefault, AppDriver.DefaultTimeout, () => "Opening fa didn't focus the message box.");
@@ -1015,7 +1015,7 @@ public sealed class ChatTests : UiTest
     // (Received Ones Sit Left, Sent Ones Right), So Before The Click Both Read The Same
     private void AssertNoFlash(string id)
     {
-        App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).SetForeground();
+        App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout).SetForeground();
         System.Drawing.Rectangle view  = App.Find("Chat.Messages").BoundingRectangle;
         System.Drawing.Rectangle draft = App.Find("Chat.Draft").BoundingRectangle;
         System.Drawing.Rectangle row   = App.Find("Row.c-" + id).BoundingRectangle;
@@ -1085,7 +1085,7 @@ public sealed class ChatTests : UiTest
     // One Screen Pixel, Read After The Control's Brush Transitions Have Had Time To Finish
     private System.Drawing.Color SettledPixel(System.Drawing.Rectangle spot)
     {
-        App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).SetForeground();
+        App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout).SetForeground();
         Thread.Sleep(500);
         using FlaUI.Core.Capturing.CaptureImage capture = FlaUI.Core.Capturing.Capture.Rectangle(spot);
         return capture.Bitmap.GetPixel(0, 0);
@@ -1248,7 +1248,7 @@ public sealed class ChatTests : UiTest
 
         // Opening The Chat Puts The Cursor In The Message Box; Waited For (Window In Front), So It Can't Take Focus From A
         // Row Later
-        App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).SetForeground();
+        App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout).SetForeground();
         Wait.Until(() => App.Find("Chat.Draft").Properties.HasKeyboardFocus.ValueOrDefault, AppDriver.DefaultTimeout, () => "Opening Ann's chat didn't focus the message box.");
     }
 

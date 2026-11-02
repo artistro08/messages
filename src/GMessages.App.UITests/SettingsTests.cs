@@ -34,7 +34,7 @@ public sealed class SettingsTests : UiTest
     {
         string marker = Path.Combine(App.DataDir, "startup-enabled");
         OpenSettings();
-        AssertTitleBar("Main.TitleBar", AppInfo.DisplayName);
+        AssertTitleBar("Main.TitleBar", AppInfo.WindowTitle);
 
         // Defaults
         Assert.AreEqual(0, ThemeIndex(), "Theme should start at 'Use system setting'.");
@@ -267,7 +267,7 @@ public sealed class SettingsTests : UiTest
     // Since UIA Gives Pixels No Theme: A Strip Inside The Window's Top-Right, Clear Of The Invisible Resize Border
     private void AssertCloseGlyph(bool light)
     {
-        Window window = App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout);
+        Window window = App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout);
         window.Focus();
         double background = 0;
         double glyph      = 0;
@@ -283,7 +283,7 @@ public sealed class SettingsTests : UiTest
     // The Title Bar Icon Area Must Show An Icon: Its Brightness Varies Instead Of Being One Flat Background
     private void AssertTitleBarIcon()
     {
-        Window window = App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout);
+        Window window = App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout);
         double spread = 0;
         Wait.Until(() =>
         {

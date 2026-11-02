@@ -365,6 +365,19 @@ public sealed partial class ChatPane : UserControl
     /// <summary>Gets the header ⋮'s tooltip and name.</summary>
     public static string MoreOptionsText => ChatCopy.MoreOptions;
 
+    /// <summary>Gets the header mute button's tooltip and name: what a click does.</summary>
+    /// <param name="isMuted">Whether the chat is muted.</param>
+    /// <returns>Unmute while muted, else Mute.</returns>
+    public static string MuteText(bool isMuted) => isMuted ? ChatCopy.Unmute : ChatCopy.Mute;
+
+    /// <summary>Gets the header mute button's icon: the chat's state, as the ⋮ menu's icons.</summary>
+    /// <param name="isMuted">Whether the chat is muted.</param>
+    /// <returns>The crossed-out bell while muted, else the bell.</returns>
+    public static string MuteGlyph(bool isMuted) => isMuted ? "" : "";
+
+    /// <summary>Raised when the header's mute button is clicked; the chats mute or unmute the open chat.</summary>
+    public event EventHandler? MuteRequested;
+
     /// <summary>Gets the mic button's tooltip and name.</summary>
     public static string RecordText => ChatCopy.RecordVoiceMessage;
 
@@ -1264,6 +1277,8 @@ public sealed partial class ChatPane : UserControl
 
     // The Header's ⋮: The Menu Opens Below It
     private void OnMoreClick(object sender, RoutedEventArgs e) => MenuRequested?.Invoke(this, (MoreButton, null));
+
+    private void OnMuteClick(object sender, RoutedEventArgs e) => MuteRequested?.Invoke(this, EventArgs.Empty);
 
     // Right-Click On The Header Opens The Menu At The Pointer; From The Keyboard (The ⋮ Focused) It Opens Below The ⋮
     private void OnHeaderContextRequested(UIElement sender, ContextRequestedEventArgs e)

@@ -19,8 +19,8 @@ public sealed class PackagingTests
         var text = File.ReadAllText(FindGeneratedManifest());
 
         Assert.IsFalse(text.Contains("$AppDisplayName$", StringComparison.Ordinal), "The generated manifest still holds the $AppDisplayName$ placeholder.");
-        StringAssert.Contains(text, "DisplayName=\"Messages\"");
-        StringAssert.Contains(text, "<DisplayName>Messages</DisplayName>");
+        StringAssert.Contains(text, $"DisplayName=\"{AppInfo.DisplayName}\"");
+        StringAssert.Contains(text, $"<DisplayName>{AppInfo.DisplayName}</DisplayName>");
     }
 
     [TestMethod]

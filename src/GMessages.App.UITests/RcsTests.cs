@@ -1007,7 +1007,7 @@ public sealed class RcsTests : UiTest
     {
         await OpenChatAsync("Row.c-ann");
         string id                    = Find("c-ann", AnnLast).MessageID;
-        System.Drawing.Rectangle win = App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).BoundingRectangle;
+        System.Drawing.Rectangle win = App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout).BoundingRectangle;
         PointerInput.Hover(App.Find("Bubble." + id).BoundingRectangle);
         AutomationElement more = App.Find("HoverMore." + id);
 
@@ -1241,7 +1241,7 @@ public sealed class RcsTests : UiTest
         App.Find(rowId).Patterns.SelectionItem.Pattern.Select();
         App.Find("Chat.Draft");
         Wait.Until(() => RowCount() > 0, AppDriver.DefaultTimeout, () => $"{rowId}'s chat showed no bubbles.");
-        App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).SetForeground();
+        App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout).SetForeground();
 
         // Opening The Chat Puts The Cursor In The Message Box; Waited For, So It Can't Take Focus From A Row Later
         WaitForFocus("Chat.Draft");

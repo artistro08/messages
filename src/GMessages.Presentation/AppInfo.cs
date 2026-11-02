@@ -14,7 +14,12 @@ public static class AppInfo
     private const string DisplayNameKey = "AppDisplayName";
 
     /// <summary>
-    /// The name people see: tray tooltip, window titles, settings page and startup task.
+    /// The main window's title, which the taskbar button shows too (owner): what the app is for, not its name.
+    /// </summary>
+    public const string WindowTitle = "Messages";
+
+    /// <summary>
+    /// The app's name: tray tooltip, Start menu, settings page and startup task (the window says <see cref="WindowTitle"/>).
     /// </summary>
     public static string DisplayName { get; } = typeof(AppInfo).Assembly
         .GetCustomAttributes<AssemblyMetadataAttribute>()

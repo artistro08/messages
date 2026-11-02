@@ -98,7 +98,7 @@ public abstract class UiTest
     /// <returns>The main window.</returns>
     protected Window WaitForPairing(TimeSpan? timeout = null)
     {
-        Window window = App.WaitForWindow(AppInfo.DisplayName, timeout ?? AppDriver.DefaultTimeout);
+        Window window = App.WaitForWindow(AppInfo.WindowTitle, timeout ?? AppDriver.DefaultTimeout);
         App.Find("Pairing.Cancel", timeout ?? AppDriver.DefaultTimeout);
         return window;
     }
@@ -110,7 +110,7 @@ public abstract class UiTest
     /// <returns>The main window.</returns>
     protected Window WaitForSettings()
     {
-        Window window = App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout);
+        Window window = App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout);
         App.Find("Settings.Back");
         return window;
     }
@@ -159,8 +159,8 @@ public abstract class UiTest
     /// </summary>
     protected void CloseMainWindow()
     {
-        App.WaitForWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout).Close();
-        App.WaitForNoWindow(AppInfo.DisplayName, AppDriver.DefaultTimeout);
+        App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout).Close();
+        App.WaitForNoWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout);
     }
 
     /// <summary>

@@ -85,7 +85,7 @@ public sealed partial class MainWindow : Window
         InitializeComponent();
 
         // Window
-        Title                      = AppInfo.DisplayName;
+        Title                      = AppInfo.WindowTitle;
         AppTitleBar.Title          = Title;
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
@@ -720,8 +720,7 @@ public sealed partial class MainWindow : Window
     // And Skipped While A Dialog Or Menu Is Open. An Open Tooltip Doesn't Count; It Is Told Apart By Its Automation Type,
     // Not A Type Test (The Native AOT Build Can Hand A Popup's Child Back As A Base Type)
     private void OnRootPreviewKeyDown(object sender, KeyRoutedEventArgs e)
-    {
-        // The Photo Viewer Takes Escape (So The Chat Stays Open), And No Shortcut Runs Under It
+    {        // The Photo Viewer Takes Escape (So The Chat Stays Open), And No Shortcut Runs Under It
         if (PhotoViewer.IsOpen)
         {
             if (e.Key == VirtualKey.Escape)
