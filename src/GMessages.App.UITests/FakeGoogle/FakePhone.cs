@@ -76,6 +76,16 @@ public sealed class FakePhone
     public FakeChats Chats { get; } = new();
 
     /// <summary>
+    /// Gets the contact photos the phone answers with, by participant ID: Ann and the phone's owner have a 1x1 PNG
+    /// (<see cref="FakeChats.BluePng"/>) unless changed. Change it before the app asks (before pairing).
+    /// </summary>
+    public Dictionary<string, byte[]> ParticipantPhotos { get; } = new()
+    {
+        ["p-ann"]                  = Convert.FromBase64String(FakeChats.BluePng),
+        [FakeChats.MyParticipantId] = Convert.FromBase64String(FakeChats.BluePng),
+    };
+
+    /// <summary>
     /// Gets or sets whether sends are answered with <c>FAILURE_2</c> and no echo, to test failures without the 60 second timeout.
     /// </summary>
     public bool FailSends { get; set; }
@@ -328,15 +338,15 @@ public sealed class FakePhone
                 Reply(data.RequestID, data.Action, new GetOrCreateConversationResponse { Conversation = Chats.FindOrCreate(create.Numbers), Status = GetOrCreateConversationResponse.Types.Status.Success }, encrypt: true);
                 break;
 
-            // Photos: Ann And The Phone's Owner Have A 1x1 PNG, Everyone Else None
+            // Photos: Those In ParticipantPhotos (Ann And The Phone's Owner Unless Changed), Everyone Else None
             case ActionType.GetParticipantsThumbnail when RequestCrypto is not null:
                 var thumbnails = Open(data, GetThumbnailRequest.Parser);
                 var photos     = new GetThumbnailResponse();
-                foreach (string withPhoto in (string[])["p-ann", FakeChats.MyParticipantId])
+                foreach ((string withPhoto, byte[] image) in ParticipantPhotos)
                 {
                     if (thumbnails.Identifiers.Contains(withPhoto))
                     {
-                        photos.Thumbnail.Add(new GetThumbnailResponse.Types.Thumbnail { Identifier = withPhoto, Data = new ThumbnailData { ImageBuffer = ByteString.FromBase64(FakeChats.BluePng) } });
+                        photos.Thumbnail.Add(new GetThumbnailResponse.Types.Thumbnail { Identifier = withPhoto, Data = new ThumbnailData { ImageBuffer = ByteString.CopyFrom(image) } });
                     }
                 }
 

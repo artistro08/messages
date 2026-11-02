@@ -17,7 +17,7 @@ namespace GMessages.App.UITests.FakeGoogle;
 /// has the phone's own participant (<see cref="MyParticipantId"/>, <c>IsMe</c>) and that ID as its default outgoing
 /// ID. Timestamps are microseconds since the epoch. Safe to use from any thread; everything handed out is a copy.
 /// </remarks>
-public sealed class FakeChats
+public sealed partial class FakeChats
 {
     /// <summary>The phone's own participant ID, also the ID of its one SIM.</summary>
     public const string MyParticipantId = "me-1";
