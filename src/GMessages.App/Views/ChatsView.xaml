@@ -146,13 +146,13 @@
                     ColumnSpacing="8">
 
                     <!-- Undo: after an archive (only: owner), for a few seconds (the view model hides it), left of Start chat;
-                         Undo puts the conversation back, the X hides it. The same height as Start chat, solid and lifted like
-                         it; a narrow list cuts the notice short with "…". It never takes the focus (Tab reaches it), and
+                         Undo puts the conversation back, the X hides it. Solid and lifted like Start chat, with room above
+                         and below its text, bottoms lined up; a narrow list cuts the notice short with "…". It never takes the focus (Tab reaches it), and
                          Narrator announces the notice (see AnnounceUndo) -->
                     <Grid
                         x:Name="UndoBar"
-                        Height="32"
-                        Padding="12,0,4,0"
+                        Padding="12,8,8,8"
+                        VerticalAlignment="Bottom"
                         Background="{ThemeResource SolidBackgroundFillColorTertiaryBrush}"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                         BorderThickness="1"

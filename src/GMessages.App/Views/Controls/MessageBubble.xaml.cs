@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using GMessages.App.Media;
 using GMessages.Presentation.Main;
@@ -188,6 +189,9 @@ public sealed partial class MessageBubble : UserControl
 
     // The Preview The Card Shows (Or Is Decoding), So A Change Decodes Once; Only Its Decoded Image Is Held Here
     private LinkPreview? _previewShown;
+
+    // Each Preview Image's Shown Height, By Its Bytes: One Number Per Preview, Kept Only While The Message Keeps Its Bytes
+    private static readonly ConditionalWeakTable<byte[], StrongBox<double>> PreviewHeights = [];
 
     // A Click On A Link In The Text Also Reaches The Bubble's Back, Which Must Not Toggle The Time For It. Its Click And
     // The Back's Tap Come In Either Order, So The Tap Waits A Turn
@@ -1136,8 +1140,21 @@ public sealed partial class MessageBubble : UserControl
         }
 
         FindName(nameof(Preview));
-        PreviewImage.Source     = null;
-        PreviewImage.Visibility = Visibility.Collapsed;
+        PreviewImage.Source = null;
+
+        // Shown Before: The Image Keeps Its Height While It Decodes Again (Only The Height Is Kept, Not The Image), So The
+        // Card Doesn't Shrink And Grow Back As It Comes Into View, Which Moved The Chat Mid-Scroll
+        if (preview.Image is { } seen && PreviewHeights.TryGetValue(seen, out StrongBox<double>? kept))
+        {
+            PreviewImage.Height     = kept.Value;
+            PreviewImage.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            PreviewImage.Height     = double.NaN;
+            PreviewImage.Visibility = Visibility.Collapsed;
+        }
+
         if (preview.Image is not { } bytes)
         {
             return;
@@ -1145,13 +1162,30 @@ public sealed partial class MessageBubble : UserControl
 
         // A Recycled Container May Have Moved On While Decoding
         ImageSource? image = await Avatar.ToImageAsync(bytes, PreviewImageWidth);
-        if (image is null || !ReferenceEquals(preview, _previewShown))
+        if (!ReferenceEquals(preview, _previewShown))
         {
             return;
         }
 
+        if (image is null)
+        {
+            PreviewImage.Height     = double.NaN;
+            PreviewImage.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        PreviewImage.Height     = double.NaN;
         PreviewImage.Source     = image;
         PreviewImage.Visibility = Visibility.Visible;
+    }
+
+    // Remembers The Preview Image's Shown Height Once It Has One, By Its Bytes (See ShowPreviewImage)
+    private void OnPreviewImageSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (e.NewSize.Height > 0 && PreviewImage.Source is not null && _previewShown?.Image is { } bytes)
+        {
+            PreviewHeights.AddOrUpdate(bytes, new StrongBox<double>(e.NewSize.Height));
+        }
     }
 
     // =========================================================================
@@ -1182,7 +1216,7 @@ public sealed partial class MessageBubble : UserControl
 
     /// <summary>
     /// Lets go of the media a list row holds while it waits to be used again: the inline video's player, the voice
-    /// message's waveform, and the decoded photo, file thumbnail and video frame (a preview card's small image stays).
+    /// message's waveform, and every decoded image (preview card, photo, file thumbnail, video frame).
     /// </summary>
     /// <remarks>
     /// Loads still running stop, and the media shown is forgotten, so <see cref="LoadMedia"/> loads it again. The bubble
@@ -1230,8 +1264,13 @@ public sealed partial class MessageBubble : UserControl
             FileThumb.Background = null;
         }
 
-        // The Preview Card Keeps Its Small Image: Dropped, The Card Shrank And Grew Back As It Decoded Again, Moving The
-        // Chat While It Scrolled
+        // Preview Card: Its Image (Its Height Is Remembered, See ShowPreviewImage)
+        _previewShown = null;
+        if (PreviewImage is not null)
+        {
+            PreviewImage.Source     = null;
+            PreviewImage.Visibility = Visibility.Collapsed;
+        }
     }
 
     private void ShowStates()

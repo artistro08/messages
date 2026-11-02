@@ -183,6 +183,13 @@ public sealed partial class ChatPane : UserControl
     // Pinned To The Newest Message (See ChatScroll.StaysPinned), And The Content And View Heights Last Seen
     private bool _pinned = true;
 
+    // The Person Scrolling: When The Wheel Or A Key Last Moved The List (Counted For A Short While After), And Whether A
+    // Touch Or Touchpad Pan Or A Scroll Bar Drag Is Under Way. Their Scrolling Wins Over Keeping The List At The Bottom
+    // Or Holding An Older Page's Place (See ChatScroll.StaysPinned)
+    private const long PersonScrollMs = 400;
+    private long _personScrolledAt    = long.MinValue / 2;
+    private bool _personDragging;
+
     // The Opened Chat Whose First Drawn Bubbles Are Still To Be Logged, Or Null
     private ChatViewModel? _firstDrawFor;
     private double _lastExtent;
@@ -820,6 +827,16 @@ public sealed partial class ChatPane : UserControl
             _scroller                  = found;
             _scroller.ViewChanged     += OnScrolled;
             MessageList.LayoutUpdated += OnMessageListLayoutUpdated;
+
+            // The Person Scrolling: The Wheel (Taken Even Once The Scroller Handled It), A Touch Or Touchpad Pan, The
+            // Scroll Bar Held, And The Keys That Move Up The List
+            _scroller.AddHandler(PointerWheelChangedEvent, new PointerEventHandler(OnPersonWheel), handledEventsToo: true);
+            _scroller.AddHandler(PointerPressedEvent, new PointerEventHandler(OnPersonPressed), handledEventsToo: true);
+            _scroller.AddHandler(PointerReleasedEvent, new PointerEventHandler(OnPersonReleased), handledEventsToo: true);
+            _scroller.AddHandler(PointerCaptureLostEvent, new PointerEventHandler(OnPersonReleased), handledEventsToo: true);
+            _scroller.AddHandler(PreviewKeyDownEvent, new KeyEventHandler(OnPersonKey), handledEventsToo: true);
+            _scroller.DirectManipulationStarted   += OnPanStarted;
+            _scroller.DirectManipulationCompleted += OnPanCompleted;
         }
 
         // Bubbles Brought Into View By Focus (Moving Between Messages With The Keyboard) Scroll Smoothly. Hooked On The
@@ -912,17 +929,19 @@ public sealed partial class ChatPane : UserControl
             return;
         }
 
-        // The Same Content Height Means The Person (Or The Arrow) Moved The List; A New One Is Bubbles Measuring Or A Page
+        // The Same Content Height Means The Person (Or The Arrow) Moved The List; A New One Is Bubbles Measuring Or A Page,
+        // Unless The Person Is Scrolling Right Now (Rows Measure As They Come Into View Then)
         bool contentChanged  = ContentChanged(scroller);
+        bool person          = IsPersonScrolling();
         bool wasPinned       = _pinned;
-        _pinned              = ChatScroll.StaysPinned(_pinned, contentChanged, scroller.VerticalOffset, scroller.ScrollableHeight);
+        _pinned              = ChatScroll.StaysPinned(_pinned, contentChanged, person, scroller.VerticalOffset, scroller.ScrollableHeight);
 
         // The Person Is Scrolling: An Older Page's Corrections Would Snap Them Back, So They End
-        if (e.IsIntermediate && !contentChanged)
+        if (person || (e.IsIntermediate && !contentChanged))
         {
             EndOlderAnchor();
         }
-        if (contentChanged)
+        if (contentChanged && !person)
         {
             KeepPinned(scroller);
         }
@@ -954,6 +973,106 @@ public sealed partial class ChatPane : UserControl
         {
             _ = Chat.LoadOlderAsync();
         }
+    }
+
+    // =========================================================================
+    // THE PERSON SCROLLING
+    // =========================================================================
+
+    // Scrolling Now, Or A Moment Ago (The Wheel's And The Keys' Glide Runs On After The Input)
+    private bool IsPersonScrolling() => _personDragging || Environment.TickCount64 - _personScrolledAt < PersonScrollMs;
+
+    // The Person Moves Up The List: It Lets Go Of The Newest Message At Once, So Rows Measuring Under Them Can't Pull It
+    // Back, And An Older Page's Place Is No Longer Held
+    private void PersonScrollsUp()
+    {
+        _personScrolledAt = Environment.TickCount64;
+        _pinned           = false;
+        _toNewest         = false;
+        EndOlderAnchor();
+    }
+
+    // The Wheel Up (Toward Older Messages); Down Only Counts As Scrolling, So The Bottom Can Pin Again
+    private void OnPersonWheel(object sender, PointerRoutedEventArgs e)
+    {
+        if (e.GetCurrentPoint(null).Properties.MouseWheelDelta > 0)
+        {
+            PersonScrollsUp();
+            return;
+        }
+
+        _personScrolledAt = Environment.TickCount64;
+    }
+
+    // Held On The Scroll Bar: A Drag Until It Is Let Go
+    private void OnPersonPressed(object sender, PointerRoutedEventArgs e)
+    {
+        if (e.OriginalSource is not null && IsOnScrollBar(e.OriginalSource.As<DependencyObject>()))
+        {
+            _personDragging = true;
+            PersonScrollsUp();
+        }
+    }
+
+    private void OnPersonReleased(object sender, PointerRoutedEventArgs e)
+    {
+        if (_personDragging)
+        {
+            _personDragging   = false;
+            _personScrolledAt = Environment.TickCount64;
+        }
+    }
+
+    // The Keys That Move Up The List (Or Along It)
+    private void OnPersonKey(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.Key is VirtualKey.Up or VirtualKey.PageUp or VirtualKey.Home or VirtualKey.GamepadDPadUp)
+        {
+            PersonScrollsUp();
+        }
+        else if (e.Key is VirtualKey.Down or VirtualKey.PageDown or VirtualKey.End or VirtualKey.GamepadDPadDown)
+        {
+            _personScrolledAt = Environment.TickCount64;
+        }
+    }
+
+    // A Touch Or Touchpad Pan (Not The Chat's Own Glide To The Newest Message)
+    private void OnPanStarted(object? sender, object e)
+    {
+        if (_toNewest)
+        {
+            return;
+        }
+
+        _personDragging   = true;
+        _personScrolledAt = Environment.TickCount64;
+        EndOlderAnchor();
+    }
+
+    private void OnPanCompleted(object? sender, object e)
+    {
+        _personDragging   = false;
+        _personScrolledAt = Environment.TickCount64;
+    }
+
+    // The Element Is Part Of The Scroller's Vertical Scroll Bar. Matched By Reference Going Up, Never By A Type Test (See
+    // UiHelpers.FindPart)
+    private bool IsOnScrollBar(DependencyObject? element)
+    {
+        if (_scroller is null || UiHelpers.FindPart<FrameworkElement>(_scroller, "VerticalScrollBar") is not { } bar)
+        {
+            return false;
+        }
+
+        for (; element is not null && !ReferenceEquals(element, _scroller); element = VisualTreeHelper.GetParent(element))
+        {
+            if (ReferenceEquals(element, bar))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void OnScrollToBottomClick(object sender, RoutedEventArgs e)

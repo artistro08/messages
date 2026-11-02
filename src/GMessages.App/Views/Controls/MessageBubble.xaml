@@ -389,7 +389,9 @@
                             <!-- Player: the playing video and its compact controls, added and removed from code -->
                             <Grid x:Name="VideoHost" SizeChanged="OnVideoHostSizeChanged" />
 
-                            <!-- Expand: while it plays, opens it in the viewer where it got to -->
+                            <!-- Expand: while it plays, opens it in the viewer where it got to. Its plate is a plain see-through
+                                 fill, not acrylic: acrylic over the playing video redrew the video behind it without the
+                                 rounded clip, so the bubble's top right corner played square -->
                             <Button
                                 x:Name="VideoExpand"
                                 Width="32"
@@ -405,10 +407,11 @@
                                 ToolTipService.ToolTip="{x:Bind local:MessageBubble.OpenVideoText}"
                                 Visibility="Collapsed">
                                 <Grid>
-                                    <Ellipse
-                                        Width="32"
-                                        Height="32"
-                                        Fill="{ThemeResource AcrylicInAppFillColorDefaultBrush}" />
+                                    <Ellipse Width="32" Height="32">
+                                        <Ellipse.Fill>
+                                            <SolidColorBrush Opacity="0.85" Color="{ThemeResource SolidBackgroundFillColorBase}" />
+                                        </Ellipse.Fill>
+                                    </Ellipse>
                                     <FontIcon FontSize="14" Glyph="&#xE740;" />
                                 </Grid>
                             </Button>
@@ -565,6 +568,7 @@
                                     <Image
                                         x:Name="PreviewImage"
                                         MaxWidth="240"
+                                        SizeChanged="OnPreviewImageSizeChanged"
                                         Stretch="Uniform"
                                         Visibility="Collapsed" />
                                     <StackPanel Padding="10,6,10,8" Spacing="2">
