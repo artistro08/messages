@@ -276,6 +276,9 @@ internal static class TestHooks
     }
 }
 #else
+// Release Stub: Parameters Mirror The Debug Signatures And Go Unused
+#pragma warning disable IDE0060
+
 /// <summary>
 /// Release stub: the test hooks do not exist, so every flag is ignored.
 /// </summary>
@@ -346,4 +349,6 @@ internal static class TestHooks
     /// <returns>Null.</returns>
     public static TimeSpan? ShortWait(string name) => null;
 }
+
+#pragma warning restore IDE0060
 #endif
