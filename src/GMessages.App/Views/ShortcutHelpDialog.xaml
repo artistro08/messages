@@ -1,12 +1,13 @@
-<!-- Shortcut Help: the wired shortcuts, action left and its keys right as key caps (Layers' shortcut sheet look) -->
+<!-- Shortcut Help: the wired shortcuts, action left and its keys right as key caps (Layers' shortcut sheet look). No
+     button row: the X beside the title, Escape, or a click on the dimmed window around it closes it -->
 <ContentDialog
     x:Class="GMessages.App.Views.ShortcutHelpDialog"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    Title="Keyboard shortcuts"
     AutomationProperties.AutomationId="Shortcuts.Dialog"
-    CloseButtonText="Close"
-    DefaultButton="Close">
+    AutomationProperties.Name="Keyboard shortcuts"
+    Closed="OnClosed"
+    Opened="OnOpened">
 
     <ContentDialog.Resources>
         <!-- Key Cap: Layers' key chip (a quiet control fill, a 1 px divider stroke, radius 4) -->
@@ -34,8 +35,29 @@
         </Style>
     </ContentDialog.Resources>
 
-    <!-- Rows: filled from ShortcutMap.HelpRows in code, a divider between each -->
-    <ScrollViewer Padding="0,0,16,0">
+    <!-- Title: the heading, and the X in the top right corner, its top lined up with the heading's. The X's negative
+         right margin puts its glyph as far in from the right edge as the heading is from the left -->
+    <ContentDialog.Title>
+        <Grid ColumnDefinitions="*,Auto">
+            <TextBlock VerticalAlignment="Top" Text="Keyboard shortcuts" />
+            <Button
+                Grid.Column="1"
+                Width="32"
+                Height="32"
+                Margin="0,-2,-8,0"
+                VerticalAlignment="Top"
+                AutomationProperties.AutomationId="Shortcuts.Close"
+                AutomationProperties.Name="Close"
+                Click="OnCloseClick"
+                Style="{StaticResource IconButtonStyle}"
+                ToolTipService.ToolTip="Close">
+                <FontIcon FontSize="16" Glyph="&#xE711;" />
+            </Button>
+        </Grid>
+    </ContentDialog.Title>
+
+    <!-- Rows: filled from ShortcutMap.HelpRows in code, a divider between each, reaching both edges -->
+    <ScrollViewer>
         <StackPanel x:Name="RowsPanel" />
     </ScrollViewer>
 </ContentDialog>

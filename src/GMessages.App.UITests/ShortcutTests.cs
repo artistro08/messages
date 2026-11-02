@@ -183,6 +183,34 @@ public sealed class ShortcutTests : UiTest
     }
 
     /// <summary>
+    /// The help dialog has no button row: its X closes it, and so does a click on the dimmed window around it, but not a
+    /// click on the dialog itself.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task HelpDialog_ClosesByXOrDim_NotByCard()
+    {
+        await OpenChatAsync("Row.c-team");
+        Window window = App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout);
+
+        // The X
+        Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.SHIFT, VirtualKeyShort.OEM_2);
+        App.Find("Shortcuts.Close").Patterns.Invoke.Pattern.Invoke();
+        WaitForGone("Shortcuts.Close");
+
+        // A Click On The Card's Heading Leaves It Open; One On The Dim (The Window's Left Edge, Beside The Card) Closes It
+        Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.SHIFT, VirtualKeyShort.OEM_2);
+        System.Drawing.Rectangle close = App.Find("Shortcuts.Close").BoundingRectangle;
+        System.Drawing.Rectangle win   = window.BoundingRectangle;
+        FlaUI.Core.Input.Mouse.Click(new System.Drawing.Point(close.X - 120, close.Y + (close.Height / 2)));
+        Thread.Sleep(500);
+        App.Find("Shortcuts.Close");
+
+        FlaUI.Core.Input.Mouse.Click(new System.Drawing.Point(win.X + 40, win.Y + (win.Height / 2)));
+        WaitForGone("Shortcuts.Close");
+    }
+
+    /// <summary>
     /// Ctrl + j moves focus to the messages in the open conversation.
     /// </summary>
     /// <returns>A task for the test.</returns>

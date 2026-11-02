@@ -2,13 +2,15 @@ using GMessages.Presentation.Shortcuts;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Media;
 
 namespace GMessages.App.Views;
 
 /// <summary>
 /// The Ctrl + ? dialog: the wired shortcuts from <see cref="ShortcutMap.HelpRows"/>, each action with its keys as key
-/// caps joined by "+", as Layers' shortcut sheet shows them.
+/// caps joined by "+", as Layers' shortcut sheet shows them. Closed by the X beside the title, Escape, or a click on
+/// the dimmed window around it (not on the dialog itself); it keeps a gap from the window's top and bottom.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -23,6 +25,16 @@ namespace GMessages.App.Views;
 /// </remarks>
 public sealed partial class ShortcutHelpDialog : ContentDialog
 {
+    // The Dialog Stays This Far From The Window's Edges, However Small The Window
+    private const double WindowGap = 32;
+
+    // The Empty Space Above The 20 px Heading's Letters Within Its Line, Taken Off The Title's Top
+    private const double TitleRaise = 7;
+
+    // The Dim Over The Window (A Click On It Closes The Dialog) And The Dialog's Card (Kept Clear Of The Window's Edges)
+    private UIElement? _smoke;
+    private FrameworkElement? _card;
+
     /// <summary>
     /// Creates the dialog with its rows.
     /// </summary>
@@ -37,6 +49,90 @@ public sealed partial class ShortcutHelpDialog : ContentDialog
             RowsPanel.Children.Add(Row(i, keys, action));
         }
     }
+
+    // =========================================================================
+    // OPEN AND CLOSE
+    // =========================================================================
+
+    // Once Open: The Dim Takes Clicks (The Card Sits Above It, So Clicks On The Card Never Reach It), And The Card's Size
+    // Follows The Window
+    private void OnOpened(ContentDialog sender, ContentDialogOpenedEventArgs args)
+    {
+        // Shown, The Dialog Draws In Two Popups Of Its Own: One Holds Its Template (The Card), The Other Just The Dim, A
+        // Lone Rectangle Over The Window (Told Apart By Having No Children; Not A Type Test, See UiHelpers.FindPart)
+        foreach (Popup popup in VisualTreeHelper.GetOpenPopupsForXamlRoot(XamlRoot))
+        {
+            if (popup.Child is not { } child)
+            {
+                continue;
+            }
+
+            if (UiHelpers.FindPart<FrameworkElement>(child, "BackgroundElement") is { } card)
+            {
+                _card = card;
+
+                // The Template Holds The Title To Its Width At The Left; Stretched, The X Reaches The Right Corner. Raised
+                // By The Space Above The Heading's Letters In Its Line, So The Gap Over Them Matches The Gap Beside Them
+                if (UiHelpers.FindPart<Control>(card, "Title") is { } title)
+                {
+                    title.HorizontalAlignment        = HorizontalAlignment.Stretch;
+                    title.HorizontalContentAlignment = HorizontalAlignment.Stretch;
+                    title.Margin                     = new Thickness(title.Margin.Left, title.Margin.Top - TitleRaise, title.Margin.Right, title.Margin.Bottom);
+                }
+            }
+            else if (VisualTreeHelper.GetChildrenCount(child) == 0)
+            {
+                _smoke = child;
+            }
+        }
+
+        if (_smoke is not null)
+        {
+            _smoke.Tapped += OnSmokeTapped;
+        }
+
+        if (XamlRoot is { } root)
+        {
+            root.Changed += OnRootChanged;
+            FitCard(root);
+        }
+    }
+
+    private void OnClosed(ContentDialog sender, ContentDialogClosedEventArgs args)
+    {
+        if (_smoke is not null)
+        {
+            _smoke.Tapped -= OnSmokeTapped;
+        }
+
+        if (XamlRoot is { } root)
+        {
+            root.Changed -= OnRootChanged;
+        }
+
+        _smoke = null;
+        _card  = null;
+    }
+
+    private void OnSmokeTapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e) => Hide();
+
+    private void OnCloseClick(object sender, RoutedEventArgs e) => Hide();
+
+    private void OnRootChanged(XamlRoot sender, XamlRootChangedEventArgs args) => FitCard(sender);
+
+    // The Card Never Bigger Than The Window Less A Gap On Every Side; Its Rows Scroll Inside
+    private void FitCard(XamlRoot root)
+    {
+        if (_card is not null)
+        {
+            _card.MaxHeight = Math.Max(0, root.Size.Height - (WindowGap * 2));
+            _card.MaxWidth  = Math.Max(0, root.Size.Width - (WindowGap * 2));
+        }
+    }
+
+    // =========================================================================
+    // ROWS
+    // =========================================================================
 
     // One Row: The Action Left, Its Key Caps Right; A Divider Above Every Row But The First
     private Grid Row(int index, string keys, string action)
