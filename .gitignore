@@ -5,6 +5,7 @@ docs/superpowers/
 # Build Output
 bin/
 obj/
+**/TestResults/
 AppPackages/
 BundleArtifacts/
 *.msix

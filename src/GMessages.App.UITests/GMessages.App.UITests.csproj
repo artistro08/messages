@@ -15,8 +15,8 @@
 
   <ItemGroup>
     <!-- FlaUI Drives The Real Exe In The UI Tests (Task 10) -->
-    <PackageReference Include="FlaUI.UIA3" Version="5.0.0" />
-    <PackageReference Include="MSTest" Version="3.11.1" />
+    <PackageReference Include="FlaUI.UIA3" />
+    <PackageReference Include="MSTest" />
   </ItemGroup>
 
   <ItemGroup>
