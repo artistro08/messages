@@ -502,7 +502,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     public static readonly TimeSpan UndoTime = TimeSpan.FromSeconds(5);
 
     /// <summary>
-    /// Gets what the Undo bar says ("Conversation archived"), or null while it is hidden. Only archiving offers Undo
+    /// Gets what the Undo bar says ("Chat archived"), or null while it is hidden. Only archiving offers Undo
     /// (owner: one way only).
     /// </summary>
     public string? UndoNotice { get; private set; }

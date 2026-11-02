@@ -63,7 +63,7 @@ public static class ChatCopy
     public const string MoreReactions = "More reactions";
 
     // The Undo Bar After Archiving A Conversation (Controller Copy, Plan 7 Fixes; Owner Signs Off)
-    public const string ConversationArchived = "Conversation archived";
+    public const string ConversationArchived = "Chat archived";
     public const string Undo                 = "Undo";
 
     // The Emoji Picker More Reactions Opens: Its Name, Search Box, Empty Search And Categories (Controller Copy, Plan 7

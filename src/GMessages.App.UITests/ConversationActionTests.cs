@@ -60,7 +60,7 @@ public sealed class ConversationActionTests : UiTest
     }
 
     /// <summary>
-    /// Archiving Ann shows "Conversation archived" with Undo (the focus stays where it was); Undo unarchives her on the
+    /// Archiving Ann shows "Chat archived" with Undo (the focus stays where it was); Undo unarchives her on the
     /// phone, her row is back in the inbox, and the bar goes.
     /// </summary>
     /// <returns>A task for the test.</returns>

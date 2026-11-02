@@ -198,7 +198,7 @@ public sealed class MainViewModelTests
     }
 
     /// <summary>
-    /// Archiving shows the Undo bar ("Conversation archived"); Undo unarchives it, its row goes back in its place, and no
+    /// Archiving shows the Undo bar ("Chat archived"); Undo unarchives it, its row goes back in its place, and no
     /// second offer shows. A second archive replaces the bar, which hides after five seconds; mute and unarchive show none.
     /// </summary>
     [TestMethod]

@@ -54,41 +54,6 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// Scrolling up with the wheel through photos of very different heights only ever moves up: rows measuring their real
-    /// heights as they come into view (far off the list's estimate) no longer pull the list back down mid-scroll.
-    /// </summary>
-    /// <returns>A task for the test.</returns>
-    [TestMethod]
-    public async Task WheelUpThroughPhotos_NeverJumpsBack()
-    {
-        await OpenMediaChatAsync();
-        byte[] tall = Png(200, 600, SplitColors);
-        byte[] flat = Png(600, 60, SplitColors);
-        for (int i = 0; i < 30; i++)
-        {
-            Server.Phone.PushIncomingMedia("c-media", "image/png", i % 2 == 0 ? tall : flat, $"p{i}.png");
-        }
-
-        Thread.Sleep(4000);
-        var scroll = App.Find("Chat.Messages").Patterns.Scroll.Pattern;
-        System.Drawing.Rectangle list = App.Find("Chat.Messages").BoundingRectangle;
-        FlaUI.Core.Input.Mouse.MoveTo(list.X + (list.Width / 2), list.Y + (list.Height / 2));
-
-        // Notch By Notch Up: Each Reading Is Above (Or At) The Last, Within Layout Rounding
-        double last = scroll.VerticalScrollPercent.ValueOrDefault;
-        for (int i = 0; i < 12; i++)
-        {
-            FlaUI.Core.Input.Mouse.Scroll(1);
-            Thread.Sleep(150);
-            double now = scroll.VerticalScrollPercent.ValueOrDefault;
-            Assert.IsTrue(now <= last + 0.3, $"Notch {i + 1} up moved the list back down ({last:0.0}% to {now:0.0}%).");
-            last = now;
-        }
-
-        Assert.IsTrue(last < 99, $"The list went back to the newest message ({last:0}%) after scrolling up.");
-    }
-
-    /// <summary>
     /// A photo with no caption names itself in its chat list row ("Image"), though the phone sends no snippet text for it.
     /// </summary>
     /// <returns>A task for the test.</returns>

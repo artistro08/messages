@@ -57,8 +57,7 @@ public sealed partial class MessageBubble
         // No Video: Its Part Unloads (x:Load), The Player Host's Visual With It
         if (part is null)
         {
-            _videoHostVisual   = null;
-            _videoHostVisualOf = null;
+            _videoHostVisual = null;
             return;
         }
 
@@ -249,26 +248,18 @@ public sealed partial class MessageBubble
     }
 
     // The Player's Host Rounded To The Bubble's Corners (The Video's Swap Chain Isn't Clipped By The Grid's Corners). The
-    // Host Uses No Implicit Transitions, So Windows Hands Out Its Visual; It Is Taken Once Per Host, When A Video Starts.
-    // A Visual Kept From A Host Since Unloaded (The Row Showed A Message Without A Video) Is Taken Again, Or The Clip
-    // Landed On The Old Host And The New One Played Square
+    // Host Uses No Implicit Transitions, So Windows Hands Out Its Visual; It Is Taken Once, When A Video Starts
     private void ClipVideoHost(bool mayTake = false)
     {
-        bool current = _videoHostVisual is not null && ReferenceEquals(_videoHostVisualOf, VideoHost);
-        if (VideoHost is null || (!current && (!mayTake || !VideoHost.IsLoaded)))
+        if (VideoHost is null || (_videoHostVisual is null && (!mayTake || !VideoHost.IsLoaded)))
         {
             return;
         }
 
         try
         {
-            if (!current)
-            {
-                _videoHostVisual   = ElementCompositionPreview.GetElementVisual(VideoHost);
-                _videoHostVisualOf = VideoHost;
-            }
-
-            ClipRounded(_videoHostVisual!, VideoHost, Video.CornerRadius);
+            _videoHostVisual ??= ElementCompositionPreview.GetElementVisual(VideoHost);
+            ClipRounded(_videoHostVisual, VideoHost, Video.CornerRadius);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {

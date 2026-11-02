@@ -1,6 +1,5 @@
 using System.ComponentModel;
 using System.Numerics;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using GMessages.App.Media;
 using GMessages.Presentation.Main;
@@ -190,9 +189,6 @@ public sealed partial class MessageBubble : UserControl
     // The Preview The Card Shows (Or Is Decoding), So A Change Decodes Once; Only Its Decoded Image Is Held Here
     private LinkPreview? _previewShown;
 
-    // Each Preview Image's Shown Height, By Its Bytes: One Number Per Preview, Kept Only While The Message Keeps Its Bytes
-    private static readonly ConditionalWeakTable<byte[], StrongBox<double>> PreviewHeights = [];
-
     // A Click On A Link In The Text Also Reaches The Bubble's Back, Which Must Not Toggle The Time For It. Its Click And
     // The Back's Tap Come In Either Order, So The Tap Waits A Turn
     private bool _linkClicked;
@@ -246,14 +242,12 @@ public sealed partial class MessageBubble : UserControl
     private static MessageBubble? s_playingVideo;
 
     // The Video Shown, Its Bubble, Its Load Number (Bumped When It Stops Or Another Message Shows, So A Late Download
-    // Stops), The Inline Player While It Plays, And The Player Host's Visual (For Its Rounded Clip; Taken Once Per Host,
-    // With The Host It Came From: The Video Part Unloads And Loads Again As A Recycled Row Changes Message)
+    // Stops), The Inline Player While It Plays, And The Player Host's Visual (For Its Rounded Clip; Taken Once)
     private MediaPart? _videoPart;
     private MessageBubbleViewModel? _videoBubble;
     private int _videoLoad;
     private VideoPlayback? _video;
     private Visual? _videoHostVisual;
-    private Grid? _videoHostVisualOf;
 
     // The Video's Still Frame Once It Shows, Which The Viewer Grows Out Of The Bubble Before Its Player Takes Over
     private ImageSource? _videoFrameImage;
@@ -1140,21 +1134,8 @@ public sealed partial class MessageBubble : UserControl
         }
 
         FindName(nameof(Preview));
-        PreviewImage.Source = null;
-
-        // Shown Before: The Image Keeps Its Height While It Decodes Again (Only The Height Is Kept, Not The Image), So The
-        // Card Doesn't Shrink And Grow Back As It Comes Into View, Which Moved The Chat Mid-Scroll
-        if (preview.Image is { } seen && PreviewHeights.TryGetValue(seen, out StrongBox<double>? kept))
-        {
-            PreviewImage.Height     = kept.Value;
-            PreviewImage.Visibility = Visibility.Visible;
-        }
-        else
-        {
-            PreviewImage.Height     = double.NaN;
-            PreviewImage.Visibility = Visibility.Collapsed;
-        }
-
+        PreviewImage.Source     = null;
+        PreviewImage.Visibility = Visibility.Collapsed;
         if (preview.Image is not { } bytes)
         {
             return;
@@ -1162,30 +1143,13 @@ public sealed partial class MessageBubble : UserControl
 
         // A Recycled Container May Have Moved On While Decoding
         ImageSource? image = await Avatar.ToImageAsync(bytes, PreviewImageWidth);
-        if (!ReferenceEquals(preview, _previewShown))
+        if (image is null || !ReferenceEquals(preview, _previewShown))
         {
             return;
         }
 
-        if (image is null)
-        {
-            PreviewImage.Height     = double.NaN;
-            PreviewImage.Visibility = Visibility.Collapsed;
-            return;
-        }
-
-        PreviewImage.Height     = double.NaN;
         PreviewImage.Source     = image;
         PreviewImage.Visibility = Visibility.Visible;
-    }
-
-    // Remembers The Preview Image's Shown Height Once It Has One, By Its Bytes (See ShowPreviewImage)
-    private void OnPreviewImageSizeChanged(object sender, SizeChangedEventArgs e)
-    {
-        if (e.NewSize.Height > 0 && PreviewImage.Source is not null && _previewShown?.Image is { } bytes)
-        {
-            PreviewHeights.AddOrUpdate(bytes, new StrongBox<double>(e.NewSize.Height));
-        }
     }
 
     // =========================================================================
@@ -1264,7 +1228,7 @@ public sealed partial class MessageBubble : UserControl
             FileThumb.Background = null;
         }
 
-        // Preview Card: Its Image (Its Height Is Remembered, See ShowPreviewImage)
+        // Preview Card: Its Image
         _previewShown = null;
         if (PreviewImage is not null)
         {
