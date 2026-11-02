@@ -1184,8 +1184,11 @@ public sealed partial class ChatPane : UserControl
         _menuView = view;
         view.KeepShown(true);
 
+        // Open On A Photo, Video Or Voice Message Is The App's Own Viewer Or Player; On A File, Only A Type Safe To Launch
+        bool canOpen = bubble.HasPhoto || bubble.HasVideo || bubble.HasVoice || bubble.CanOpenMedia;
+
         BubbleMenuCopy.Visibility     = bubble.HasCopyText ? Visibility.Visible : Visibility.Collapsed;
-        BubbleMenuOpen.Visibility     = bubble.CanOpenMedia ? Visibility.Visible : Visibility.Collapsed;
+        BubbleMenuOpen.Visibility     = canOpen ? Visibility.Visible : Visibility.Collapsed;
         BubbleMenuOpenWith.Visibility = bubble.HasMediaFile ? Visibility.Visible : Visibility.Collapsed;
         BubbleMenuSaveAs.Visibility   = bubble.HasMediaFile ? Visibility.Visible : Visibility.Collapsed;
         BubbleMenuDownload.Visibility = bubble.HasMediaFile ? Visibility.Visible : Visibility.Collapsed;

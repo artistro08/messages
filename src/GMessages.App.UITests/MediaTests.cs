@@ -320,6 +320,27 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
+    /// A photo whose name isn't an openable type still offers Open, and Open shows it in the app's viewer, launching nothing.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Open_PhotoOutsideAllowlist_OpensViewer()
+    {
+        await OpenMediaChatAsync();
+        Message message         = Server.Phone.PushIncomingMedia("c-media", "image/png", Png(64, 64, SplitColors), "snap.img");
+        AutomationElement photo = App.Find("Bubble.Photo." + message.MessageID);
+        WaitForStatus(photo, Full);
+
+        OpenMenu(photo);
+        App.Find("Bubble.Open").Patterns.Invoke.Pattern.Invoke();
+
+        App.Find("PhotoViewer.Photo");
+        Assert.IsFalse(File.Exists(Path.Combine(App.DataDir, "launched.txt")), "Open launched the photo outside the app.");
+        Keyboard.Type(VirtualKeyShort.ESCAPE);
+        WaitForGone("PhotoViewer.Photo");
+    }
+
+    /// <summary>
     /// A picked photo shows as a chip; Send uploads it, the phone gets it as a media message and then the text as its own
     /// message (Mia's chat is RCS, which refuses captions), the bubble shows the photo in its shape, and the chip is gone.
     /// </summary>
