@@ -111,9 +111,9 @@ public sealed partial class ChatViewModel
 
             _older = older;
 
-            // The Page Is Oldest First, So Each Bubble Goes In Above The Ones Already Placed
+            // The Page Is Oldest First, So Each Bubble Goes In Above The Ones Already Placed; One Already Shown Is Skipped
             int at = 0;
-            foreach (ChatMessage m in page.Where(m => m.Kind != MessageKind.Tombstone))
+            foreach (ChatMessage m in page.Where(m => m.Kind != MessageKind.Tombstone && ById(m.Id) is null))
             {
                 Messages.Insert(at++, NewBubble(m));
             }
@@ -198,6 +198,7 @@ public sealed partial class ChatViewModel
         MessageBubbleViewModel oldest = Messages[0];
         _older     = new Cursor { LastItemID = oldest.Id, LastItemTimestamp = oldest.SentAt.ToUnixTimeMilliseconds() };
         _fillOlder = true;
+        _trimmed   = true;
         RefreshBubbles();
     }
 

@@ -1091,6 +1091,42 @@ public sealed class ChatViewModelTests
     }
 
     /// <summary>
+    /// A live update (a reaction, a status) for a message trimmed away adds no bubble at the top; the older page brings it back.
+    /// </summary>
+    [TestMethod]
+    public async Task LiveUpdate_ForTrimmedMessage_NotInsertedAtTop()
+    {
+        using var rig            = new MainRig();
+        using ChatViewModel chat = await LoadAll(rig, 400);
+        chat.TrimToNewest();
+
+        await rig.LiveMessage(Msg("m100", "text 100", ts: 1_761_000_000_000_000 + (100 * 1_000_000L)));
+
+        Assert.AreEqual(ChatViewModel.MaxLoaded, chat.Messages.Count);
+        Assert.AreEqual("m201", chat.Messages[0].Id);
+    }
+
+    /// <summary>
+    /// An older page skips a message that already has a bubble: no second bubble for it.
+    /// </summary>
+    [TestMethod]
+    public async Task LoadOlder_SkipsAlreadyShownMessage()
+    {
+        using var rig            = new MainRig();
+        using ChatViewModel chat = await LoadAll(rig, 400);
+        chat.TrimToNewest();
+
+        // m200 Lands With m201's Time, So It Shows; The Older Page Holds m200 Too
+        await rig.LiveMessage(Msg("m200", "text 200", ts: 1_761_000_000_000_000 + (201 * 1_000_000L)));
+        Assert.AreEqual(ChatViewModel.MaxLoaded + 1, chat.Messages.Count);
+
+        await chat.LoadOlderAsync();
+
+        Assert.AreEqual(1, chat.Messages.Count(b => b.Id == "m200"));
+        Assert.AreEqual(225, chat.Messages.Count);
+    }
+
+    /// <summary>
     /// A bubble's time is hidden until the bubble is clicked, and a second click hides it again.
     /// </summary>
     [TestMethod]

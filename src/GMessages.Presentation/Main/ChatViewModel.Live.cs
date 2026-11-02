@@ -46,6 +46,13 @@ public sealed partial class ChatViewModel
         }
         else
         {
+            // Older Than The Oldest Bubble After A Trim (A Reaction Or Status On A Trimmed Message): The Store Saved It, And
+            // The Older Page Brings It Back In Place. Catch-Up History Before Any Trim Still Goes In Above
+            if (_trimmed && _older is not null && Messages.Count > 0 && m.Time < Messages[0].SentAt)
+            {
+                return;
+            }
+
             bubble = NewBubble(m);
             if (e.IsNew && !e.IsOld)
             {

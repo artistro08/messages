@@ -76,6 +76,9 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
     // Where The Last Older Page Ended; Null Means No More Pages
     private Cursor? _older;
 
+    // Whether Older Bubbles Were Trimmed Away: A Live Update For One Then Waits For The Older Page (See OnMessageArrived)
+    private bool _trimmed;
+
     // Whether A Too-Short List May Load The Next Older Page On Its Own: Once After The Newest Page, Then Only After An
     // Older Page That Added Bubbles. A Failed Load Stops It Until The Next Good Load (The Resync After Reconnecting)
     private bool _fillOlder;
