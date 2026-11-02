@@ -1,20 +1,7 @@
-using System.Numerics;
-using System.Runtime.InteropServices;
-using GMessages.App.Media;
 using GMessages.Presentation.Main;
 using GMessages.Presentation.Messaging;
-using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Documents;
-using Microsoft.UI.Xaml.Hosting;
-using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
-using Windows.ApplicationModel.DataTransfer;
-using Windows.Foundation;
-using Windows.System;
-using Windows.UI.ViewManagement;
-using WinRT;
 
 namespace GMessages.App.Views.Controls;
 

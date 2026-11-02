@@ -1,5 +1,4 @@
 using System.Numerics;
-using GMessages.App.Media;
 using GMessages.Presentation.Main;
 using GMessages.Presentation.Messaging;
 using Microsoft.UI.Composition;
@@ -8,9 +7,6 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
-using Windows.Foundation;
-using Windows.System;
-using Windows.UI.ViewManagement;
 using WinRT;
 
 namespace GMessages.App.Views.Controls;

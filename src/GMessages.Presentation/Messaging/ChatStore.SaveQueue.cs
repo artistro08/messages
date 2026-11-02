@@ -1,7 +1,3 @@
-using System.Diagnostics;
-using GMessages.Presentation.Connection;
-using GMessages.Protocol;
-using GMessages.Protocol.Events;
 using GMessages.Protocol.Proto;
 
 namespace GMessages.Presentation.Messaging;

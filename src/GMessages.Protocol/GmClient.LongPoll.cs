@@ -1,12 +1,4 @@
-using System.Security.Cryptography;
-using System.Text;
-using GMessages.Protocol.Auth;
 using GMessages.Protocol.Events;
-using GMessages.Protocol.LongPoll;
-using GMessages.Protocol.Pairing;
-using GMessages.Protocol.Rpc;
-using GMessages.Protocol.Session;
-using Microsoft.Extensions.Logging;
 
 namespace GMessages.Protocol;
 

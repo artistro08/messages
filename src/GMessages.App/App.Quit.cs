@@ -1,20 +1,4 @@
 using System.Diagnostics;
-using GMessages.App.Views;
-using GMessages.Presentation;
-using GMessages.Presentation.Connection;
-using GMessages.Presentation.Logging;
-using GMessages.Presentation.Main;
-using GMessages.Presentation.Messaging;
-using GMessages.Presentation.Notifications;
-using GMessages.Presentation.Pairing;
-using GMessages.Presentation.Settings;
-using GMessages.Protocol;
-using GMessages.Protocol.Http;
-using Microsoft.Extensions.Logging;
-using Microsoft.UI.Dispatching;
-using Microsoft.UI.Xaml;
-using Microsoft.Windows.AppLifecycle;
-using Microsoft.Windows.AppNotifications;
 using Microsoft.Windows.System.Power;
 using Windows.Networking.Connectivity;
 

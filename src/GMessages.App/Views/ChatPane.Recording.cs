@@ -1,30 +1,11 @@
-using System.ComponentModel;
-using System.Numerics;
-using System.Runtime.InteropServices;
-using System.Runtime.InteropServices.WindowsRuntime;
 using GMessages.App.Media;
 using GMessages.App.Views.Controls;
 using GMessages.Presentation.Main;
 using GMessages.Presentation.Messaging;
-using GMessages.Protocol.Proto;
-using Microsoft.UI.Composition;
-using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Hosting;
-using Microsoft.UI.Xaml.Input;
-using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml.Media.Imaging;
-using Microsoft.UI.Xaml.Shapes;
-using Windows.ApplicationModel.DataTransfer;
-using Windows.Graphics.Imaging;
-using Windows.Storage;
-using Windows.Storage.Pickers;
-using Windows.Storage.Streams;
 using Windows.System;
-using Windows.UI.ViewManagement;
-using WinRT;
 
 namespace GMessages.App.Views;
 

@@ -1,5 +1,4 @@
 using System.Net;
-using System.Text;
 using GMessages.Protocol.Auth;
 using GMessages.Protocol.Events;
 using GMessages.Protocol.Http;
