@@ -559,17 +559,43 @@ public sealed partial class ChatsView : UserControl
     }
 
     // Async Void Like A Click Handler, So A Failure Reaches The App's Unhandled Error Log (The Action's Own Failures Show
-    // The Banner). An Action That Closed The Open Chat Takes The Message Box With It, So Focus Goes Back To The List As
-    // Escape Does
+    // The Banner). An Action That Closed The Open Chat Takes The Message Box With It, And One That Moved The Row Out Of
+    // The List (Archive, Block, Trash) Takes The Focus The Menu Gave Back To That Row: Either Way Focus Goes Back To The
+    // List, As Escape Does. Left On The Removed Row, Focus Was Nowhere (Keys Did Nothing, UI Automation Lost It)
     private async void RunMenuItem(XamlRoot root, ConversationInfo c, ConversationMenuItem item)
     {
         bool wasOpen = ViewModel.SelectedConversationId == c.Id;
         await ConversationMenuFlyout.RunAsync(ViewModel, root, c, item, () => ShowDetailsAsync(root, c.Id));
 
-        if (wasOpen && !ViewModel.IsChatOpen)
+        DispatcherQueue.TryEnqueue(() =>
         {
-            DispatcherQueue.TryEnqueue(() => ConversationList.Focus(FocusState.Programmatic));
+            if ((wasOpen && !ViewModel.IsChatOpen) || FocusIsOnRemovedRow(root, c.Id))
+            {
+                ConversationList.Focus(FocusState.Programmatic);
+            }
+        });
+    }
+
+    // Focus Sits In A Conversation's Row (The Row Or Its ⋮) That Has Left The List: Found Going Up By The Row's
+    // AutomationId (Row.{id}, Set In OnContainerContentChanging), As BubbleViewAround Does, Never By A Type Test
+    private bool FocusIsOnRemovedRow(XamlRoot root, string conversationId)
+    {
+        if (ConversationList.Items.Any(i => i is ConversationRowViewModel r && r.Id == conversationId)
+            || FocusManager.GetFocusedElement(root) is not { } focused)
+        {
+            return false;
         }
+
+        string rowId = "Row." + conversationId;
+        for (DependencyObject? at = focused.As<DependencyObject>(); at is not null; at = VisualTreeHelper.GetParent(at))
+        {
+            if (AutomationProperties.GetAutomationId(at) == rowId)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     // Details, Read Fresh From The Store (One Dialog At A Time, As The Menu's). Its Block & Report Spam Closes It, Then
