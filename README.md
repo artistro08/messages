@@ -12,19 +12,17 @@
 
 ![Kaituro showing a chat with a photo, reactions and a reply, in dark mode](docs/screenshots/01-chat-dark.png)
 
-## Features
+## What It Adds
 
-- **Pair with your Google account.** Sign in, match the emoji on your phone, and your chats show up.
+Kaituro does everything Google Messages for Web does, as a real Windows app. On top of that, you get:
+
 - **Lives in the tray.** Close the window and Kaituro keeps running, so new messages still come in. Turn on Start with Windows and it's there when you sign in.
-- **Notifications you can answer.** Reply right from the notification, snooze it, or mute a chat you don't want to hear from.
-- **RCS and SMS chats.** One-on-one and group chats, with a lock on end-to-end encrypted ones and read receipts on what you send.
-- **Photos, videos and files.** Send and receive them, play videos right in the chat, and open photos full screen to zoom in.
-- **Voice messages.** Record one with your microphone of choice and play the ones you get.
-- **Reactions and replies.** React to any message, reply to a specific one, and jump back to what it quoted.
-- **Link previews.** Links show a preview card, and you can turn them off for links you receive.
-- **Keep your inbox tidy.** Archive, mute, block and report spam, or move chats to the trash. Chats pinned on your phone stay at the top, and Ctrl + Z puts back the last chat you archived.
-- **Keyboard shortcuts.** Google Messages' own shortcuts, plus Ctrl + S to show or hide the sidebar and Ctrl + , for Settings. Press Ctrl + ? to see them all.
-- **Fits in on Windows 11.** Light and dark themes, a window that remembers where you left it, and a layout that works down to a narrow window.
+- **Windows notifications you can answer.** Reply right from the notification, snooze it, or mute the chat, without opening anything.
+- **A mute bell in the chat header.** Mute or unmute a chat in one click.
+- **Pick your microphone.** Choose which mic records your voice messages in Settings.
+- **Undo archive.** Ctrl + Z puts back the last chat you archived.
+- **More shortcuts.** Ctrl + S shows or hides the sidebar, and Ctrl + , opens Settings. Press Ctrl + ? to see them all.
+- **Fits in on Windows 11.** Follows your light or dark theme, and the window opens where and how big you left it.
 
 ## Building
 
