@@ -56,8 +56,10 @@
         </Grid>
     </ContentDialog.Title>
 
-    <!-- Rows: filled from ShortcutMap.HelpRows in code, a divider between each, reaching both edges -->
-    <ScrollViewer>
-        <StackPanel x:Name="RowsPanel" />
+    <!-- Rows: filled from ShortcutMap.HelpRows in code, a divider between each, reaching both edges. The scroller runs out
+         into the dialog's 24 px right padding and the rows keep clear of it, so the scroll bar sits in that gutter, never
+         over the keys -->
+    <ScrollViewer Margin="0,0,-24,0">
+        <StackPanel x:Name="RowsPanel" Margin="0,0,24,0" />
     </ScrollViewer>
 </ContentDialog>
