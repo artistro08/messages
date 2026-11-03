@@ -172,9 +172,9 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
 
     /// <summary>
     /// Gets whether the message is only emoji with no quote (see <see cref="ChatFormat.IsEmojiOnly"/>): the bubble shows
-    /// them big, with no fill or edge around them.
+    /// them big, with no fill or edge around them. Worked out once per message (see <see cref="Fill"/>).
     /// </summary>
-    public bool IsEmojiOnly => Kind == MessageKind.Text && !HasQuote && ChatFormat.IsEmojiOnly(Text);
+    public bool IsEmojiOnly { get; private set; }
 
     /// <summary>Gets whether the owner sent the message.</summary>
     public bool FromMe { get; private set; }
@@ -764,6 +764,7 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         HasFileCard   = m.Media is not null && m.Kind == MessageKind.File;
         HasVoice      = m.Media is not null && m.Kind == MessageKind.Audio;
         HasCopyText   = m.Media is null || m.Text.Length > 0;
+        IsEmojiOnly   = m.Kind == MessageKind.Text && !HasQuote && ChatFormat.IsEmojiOnly(Text);
 
         // A Photo, Card Or Voice Message Shows Only Its Caption Under It, Not The Kind Label
         BodyText      = HasMediaFile && m.Text.Length == 0 ? string.Empty : BodyOf(Text, DisplayText, _link, Preview);

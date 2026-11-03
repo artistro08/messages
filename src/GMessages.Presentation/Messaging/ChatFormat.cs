@@ -36,6 +36,27 @@ public static class ChatFormat
         (0x1F6F3, 0x1F6F3),
     ];
 
+    // Emoji That Default To Color (Emoji_Presentation, Unicode 16.0 emoji-data.txt), As Inclusive Ranges. With
+    // TextDefaultEmoji, Every Emoji
+    private static readonly (int First, int Last)[] ColorDefaultEmoji =
+    [
+        (0x231A, 0x231B), (0x23E9, 0x23EC), (0x23F0, 0x23F0), (0x23F3, 0x23F3), (0x25FD, 0x25FE), (0x2614, 0x2615),
+        (0x2648, 0x2653), (0x267F, 0x267F), (0x2693, 0x2693), (0x26A1, 0x26A1), (0x26AA, 0x26AB), (0x26BD, 0x26BE),
+        (0x26C4, 0x26C5), (0x26CE, 0x26CE), (0x26D4, 0x26D4), (0x26EA, 0x26EA), (0x26F2, 0x26F3), (0x26F5, 0x26F5),
+        (0x26FA, 0x26FA), (0x26FD, 0x26FD), (0x2705, 0x2705), (0x270A, 0x270B), (0x2728, 0x2728), (0x274C, 0x274C),
+        (0x274E, 0x274E), (0x2753, 0x2755), (0x2757, 0x2757), (0x2795, 0x2797), (0x27B0, 0x27B0), (0x27BF, 0x27BF),
+        (0x2B1B, 0x2B1C), (0x2B50, 0x2B50), (0x2B55, 0x2B55), (0x1F004, 0x1F004), (0x1F0CF, 0x1F0CF), (0x1F18E, 0x1F18E),
+        (0x1F191, 0x1F19A), (0x1F1E6, 0x1F1FF), (0x1F201, 0x1F201), (0x1F21A, 0x1F21A), (0x1F22F, 0x1F22F),
+        (0x1F232, 0x1F236), (0x1F238, 0x1F23A), (0x1F250, 0x1F251), (0x1F300, 0x1F320), (0x1F32D, 0x1F335),
+        (0x1F337, 0x1F37C), (0x1F37E, 0x1F393), (0x1F3A0, 0x1F3CA), (0x1F3CF, 0x1F3D3), (0x1F3E0, 0x1F3F0),
+        (0x1F3F4, 0x1F3F4), (0x1F3F8, 0x1F43E), (0x1F440, 0x1F440), (0x1F442, 0x1F4FC), (0x1F4FF, 0x1F53D),
+        (0x1F54B, 0x1F54E), (0x1F550, 0x1F567), (0x1F57A, 0x1F57A), (0x1F595, 0x1F596), (0x1F5A4, 0x1F5A4),
+        (0x1F5FB, 0x1F64F), (0x1F680, 0x1F6C5), (0x1F6CC, 0x1F6CC), (0x1F6D0, 0x1F6D2), (0x1F6D5, 0x1F6D7),
+        (0x1F6DC, 0x1F6DF), (0x1F6EB, 0x1F6EC), (0x1F6F4, 0x1F6FC), (0x1F7E0, 0x1F7EB), (0x1F7F0, 0x1F7F0),
+        (0x1F90C, 0x1F93A), (0x1F93C, 0x1F945), (0x1F947, 0x1F9FF), (0x1FA70, 0x1FA7C), (0x1FA80, 0x1FA89),
+        (0x1FA8F, 0x1FAC6), (0x1FACE, 0x1FADC), (0x1FADF, 0x1FAE9), (0x1FAF0, 0x1FAF8),
+    ];
+
     /// <summary>
     /// The unread badge on a pinned tile: the newest message itself when it is the only unread one and one or two words
     /// long, else how many messages are unread (owner).
@@ -141,9 +162,10 @@ public static class ChatFormat
     /// Tells whether a message is only emoji (spaces between them allowed), which the chat shows big with no bubble around it.
     /// </summary>
     /// <remarks>
-    /// Each character as shown (a text element: a flag, a skin-toned or joined emoji counts as one) must be an emoji: one
-    /// with VS16 or a keycap, a symbol from U+1F000 up, a text-style emoji (see <see cref="WithColorEmoji"/>), or a symbol
-    /// from the technical, shapes, symbols and dingbats blocks (U+2300 to U+2BFF).
+    /// Each character as shown (a text element: a flag, a skin-toned or joined emoji counts as one) must draw as a color
+    /// emoji: it starts with one of Unicode's emoji (those shown in color with VS16 included, see
+    /// <see cref="WithColorEmoji"/>) and isn't asked for in text style (VS15), or it's a keycap (a digit, # or * with
+    /// U+20E3). Plain symbols (★, ✓, box drawing), half a flag and boxed letters keep the bubble.
     /// </remarks>
     /// <param name="text">The message's text.</param>
     /// <returns>True when it has at least one emoji and nothing else but spaces.</returns>
@@ -170,17 +192,24 @@ public static class ChatFormat
     // One Text Element That Draws As An Emoji
     private static bool IsEmoji(string element)
     {
-        if (element.Contains('️') || element.Contains('⃣'))
+        // Text Style Asked For: A One-Color Glyph
+        if (element.Contains('︎', StringComparison.Ordinal))
         {
-            return true;
+            return false;
         }
 
-        // A Broken Surrogate Decodes As U+FFFD, Which Is No Emoji
-        Rune.DecodeFromUtf16(element, out Rune rune, out _);
+        // Keycap: A Digit, # Or * With U+20E3 (The Bases Themselves Are Left Out Of TextDefaultEmoji)
+        if (element.Contains('⃣', StringComparison.Ordinal))
+        {
+            return element[0] is (>= '0' and <= '9') or '#' or '*';
+        }
+
+        // A Broken Surrogate Decodes As U+FFFD, Which Is No Emoji. A Regional Indicator Draws A Flag Only In A Pair
+        Rune.DecodeFromUtf16(element, out Rune rune, out int used);
         int code = rune.Value;
-        return IsTextDefaultEmoji(code)
-            || (code >= 0x1F000 && CharUnicodeInfo.GetUnicodeCategory(code) == UnicodeCategory.OtherSymbol)
-            || (code is >= 0x2300 and <= 0x2BFF && CharUnicodeInfo.GetUnicodeCategory(code) == UnicodeCategory.OtherSymbol);
+        return code is >= 0x1F1E6 and <= 0x1F1FF
+            ? element.Length > used
+            : InRanges(ColorDefaultEmoji, code) || IsTextDefaultEmoji(code);
     }
 
     /// <summary>
@@ -452,15 +481,17 @@ public static class ChatFormat
             .Where(e => e.Count > 0)
             .OrderByDescending(e => e.Count)];
 
+    private static bool IsTextDefaultEmoji(int code) => InRanges(TextDefaultEmoji, code);
+
     // Binary Search Over The Sorted Ranges, With No Allocation (Runs For Every Character Shown)
-    private static bool IsTextDefaultEmoji(int code)
+    private static bool InRanges((int First, int Last)[] ranges, int code)
     {
         int low  = 0;
-        int high = TextDefaultEmoji.Length - 1;
+        int high = ranges.Length - 1;
         while (low <= high)
         {
             int middle            = (low + high) / 2;
-            (int first, int last) = TextDefaultEmoji[middle];
+            (int first, int last) = ranges[middle];
             if (code < first)
             {
                 high = middle - 1;
