@@ -49,6 +49,16 @@
                 </VisualState>
             </VisualStateGroup>
 
+            <!-- Text Size: emoji alone show big (issue #11); other text keeps the theme's body size -->
+            <VisualStateGroup x:Name="TextSize">
+                <VisualState x:Name="BodyText" />
+                <VisualState x:Name="BigEmoji">
+                    <VisualState.Setters>
+                        <Setter Target="Body.FontSize" Value="32" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+
             <!-- On The Accent: the parts of a sent SMS bubble take the on-accent brushes. The parts load only when the message
                  uses them (x:Load), and a setter would load its part, so each part has its own group, gone to only while
                  the part is loaded (ShowPartStates). The hover strip's column is bound (StripColumn), for the same reason -->
@@ -198,7 +208,7 @@
                 </Grid>
 
                 <!-- Fill: the bubble's color and edge, behind its content. A photo or video with nothing else in its bubble hides
-                     it, so its own edge is the bubble's edge and no fill or stroke shows around it -->
+                     it, so its own edge is the bubble's edge and no fill or stroke shows around it; so do emoji alone -->
                 <Border
                     x:Name="BackFill"
                     Grid.Column="1"
@@ -206,13 +216,13 @@
                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                     BorderThickness="1"
                     CornerRadius="{x:Bind local:MessageBubble.CornersOf(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup), Mode=OneWay}"
-                    Visibility="{x:Bind local:MessageBubble.FillShown(Bubble.FillsBubble, Bubble.HasBodyText, Bubble.HasQuote), Mode=OneWay, FallbackValue=Collapsed}" />
+                    Visibility="{x:Bind local:MessageBubble.FillShown(Bubble.FillsBubble, Bubble.HasBodyText, Bubble.HasQuote, Bubble.IsEmojiOnly), Mode=OneWay, FallbackValue=Collapsed}" />
 
                 <!-- Text: a click shows or hides the time -->
                 <Border
                     x:Name="Back"
                     Grid.Column="1"
-                    Padding="{x:Bind local:MessageBubble.BackPadding(Bubble.FillsBubble), Mode=OneWay}"
+                    Padding="{x:Bind local:MessageBubble.BackPadding(Bubble.FillsBubble, Bubble.IsEmojiOnly), Mode=OneWay}"
                     Background="Transparent"
                     CornerRadius="{x:Bind local:MessageBubble.CornersOf(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup), Mode=OneWay}">
                     <StackPanel>
@@ -526,7 +536,7 @@
                             Value="{x:Bind Bubble.UploadPercent, Mode=OneWay, FallbackValue=0}" />
 
                         <!-- Text: while the preview card shows, without the card's link (Bubble.BodyText); a message that was
-                             only the link shows the card alone -->
+                             only the link shows the card alone. Emoji alone show big (the BigEmoji state) -->
                         <Grid
                             Margin="{x:Bind local:MessageBubble.CaptionMargin(Bubble.FillsBubble), Mode=OneWay}"
                             Visibility="{x:Bind Bubble.HasBodyText, Mode=OneWay, FallbackValue=Collapsed}">

@@ -200,6 +200,35 @@ public sealed class ChatFormatTests
         Assert.AreEqual(expected, ChatFormat.WithColorEmoji(text));
 
     /// <summary>
+    /// Emoji alone (spaces between allowed) show big with no bubble; any letter, digit or plain symbol keeps the bubble.
+    /// </summary>
+    [TestMethod]
+    [DataRow("\U0001F600", true)]                                          // Grinning Face
+    [DataRow(" \U0001F600 \U0001F44D\U0001F3FD ", true)]                   // Spaces, A Skin Tone
+    [DataRow("❤", true)]                                              // Heart (Text Default)
+    [DataRow("❤️‍\U0001F525", true)]                        // Heart On Fire
+    [DataRow("\U0001F1FA\U0001F1F8", true)]                                // A Flag
+    [DataRow("1️⃣", true)]                                       // Keycap One
+    [DataRow("⭐⚡", true)]                                        // Star, Zap (Emoji Style Already)
+    [DataRow("", false)]
+    [DataRow("   ", false)]
+    [DataRow("ok \U0001F600", false)]
+    [DataRow("1", false)]
+    [DataRow("© ™ →", false)]                               // (c), TM, An Arrow
+    [DataRow("★✓■", false)]                                 // Star, Check Mark, Square (Plain Symbols)
+    [DataRow("───", false)]                                 // Box Drawing
+    [DataRow("⠁", false)]                                             // Braille
+    [DataRow("a️", false)]                                            // VS16 On A Letter
+    [DataRow("#️", false)]                                            // VS16 Without A Keycap
+    [DataRow("☺︎", false)]                                       // Text Style Asked For
+    [DataRow("\U0001F1FA", false)]                                         // Half A Flag
+    [DataRow("\U0001F130", false)]                                         // A Boxed Letter
+    [DataRow("\U0001F004", true)]                                          // Mahjong Red Dragon (An Emoji Tile)
+    [DataRow("\uD83D", false)]                                             // A Broken Surrogate
+    public void IsEmojiOnly(string text, bool expected) =>
+        Assert.AreEqual(expected, ChatFormat.IsEmojiOnly(text));
+
+    /// <summary>
     /// A selection in the shown text copies as the original text: the VS16 added for showing is dropped, one the sender
     /// typed is kept.
     /// </summary>

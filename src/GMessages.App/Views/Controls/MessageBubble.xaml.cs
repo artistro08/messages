@@ -161,6 +161,7 @@ public sealed partial class MessageBubble : UserControl
     private static readonly Thickness CaptionInset = new(12, 6, 12, 8);
     private static readonly Thickness TextPadding  = new(12, 8, 12, 8);
 
+
     // How Long A Thumbnail-Only Photo Waits For The Phone's Full Size Before It Offers To Try Again
     private static readonly TimeSpan FullSizeWait = TimeSpan.FromSeconds(30);
 
@@ -612,11 +613,13 @@ public sealed partial class MessageBubble : UserControl
     public static Thickness PreviewMargin(bool hasText) => new(0, hasText ? PreviewGap : 0, 0, 0);
 
     /// <summary>
-    /// Gives the back's padding: none around a photo, which fills the bubble edge to edge; the text's padding otherwise.
+    /// Gives the back's padding: none around a photo, which fills the bubble edge to edge, or around emoji alone, which
+    /// have no bubble, so they line up with the other bubbles' edges; the text's padding otherwise.
     /// </summary>
     /// <param name="hasPhoto">True when the bubble shows a photo.</param>
+    /// <param name="emojiOnly">True when the message is only emoji.</param>
     /// <returns>The padding.</returns>
-    public static Thickness BackPadding(bool hasPhoto) => hasPhoto ? default : TextPadding;
+    public static Thickness BackPadding(bool hasPhoto, bool emojiOnly) => hasPhoto || emojiOnly ? default : TextPadding;
 
     /// <summary>
     /// Gives the text's margin: under a photo the caption keeps the bubble's usual inset; otherwise the back's padding does.
@@ -632,10 +635,10 @@ public sealed partial class MessageBubble : UserControl
     /// <param name="hasPhoto">True when the bubble shows a photo.</param>
     /// <param name="hasCaption">True when a caption shows under the photo.</param>
     /// <param name="hasQuote">True when the bubble quotes the message it replies to.</param>
-    /// <returns>Collapsed for a photo alone.</returns>
-    public static Visibility FillShown(bool hasPhoto, bool hasCaption, bool hasQuote) =>
-        hasPhoto && !hasCaption && !hasQuote ? Visibility.Collapsed : Visibility.Visible;
-
+    /// <param name="emojiOnly">True when the message is only emoji, shown big with no bubble around them (issue #11).</param>
+    /// <returns>Collapsed for a photo alone, or emoji alone.</returns>
+    public static Visibility FillShown(bool hasPhoto, bool hasCaption, bool hasQuote, bool emojiOnly) =>
+        emojiOnly || (hasPhoto && !hasCaption && !hasQuote) ? Visibility.Collapsed : Visibility.Visible;
     /// <summary>
     /// Rounds a photo to its bubble's corners exactly (the photo covers the bubble's edge), square at the bottom when its
     /// caption follows.
@@ -896,7 +899,7 @@ public sealed partial class MessageBubble : UserControl
             // The Side, My Reaction's Fill, And Where The Pill Sits; The Photo's And The Playing Video's Corners Follow The
             // Side And The Bubble's Place In Its Group (Which A Newer Message From The Same Sender Changes)
             case nameof(MessageBubbleViewModel.FromMe) or nameof(MessageBubbleViewModel.IsRcs)
-                or nameof(MessageBubbleViewModel.HasMyReaction) or nameof(MessageBubbleViewModel.HasReactions)
+                or nameof(MessageBubbleViewModel.IsEmojiOnly) or nameof(MessageBubbleViewModel.HasMyReaction) or nameof(MessageBubbleViewModel.HasReactions)
                 or nameof(MessageBubbleViewModel.IsFirstInGroup) or nameof(MessageBubbleViewModel.IsLastInGroup):
                 ShowStates();
                 ClipPhotoFull();
@@ -1229,14 +1232,16 @@ public sealed partial class MessageBubble : UserControl
 
     private void ShowStates()
     {
+        // Emoji Alone Have No Accent Fill Behind Them, So A Sent SMS Takes The Plain Text Color (Sent), Not The On-Accent One
         string side = Bubble switch
         {
-            { FromMe: false } or null => "Received",
-            { IsRcs: true }           => "Sent",
-            _                         => "SentSms",
+            { FromMe: false } or null                => "Received",
+            { IsRcs: true } or { IsEmojiOnly: true } => "Sent",
+            _                                        => "SentSms",
         };
 
         VisualStateManager.GoToState(this, side, false);
+        VisualStateManager.GoToState(this, Bubble?.IsEmojiOnly == true ? "BigEmoji" : "BodyText", false);
         ShowPartStates(refresh: false);
 
         // Re-Lay The Pill, So A Recycled Bubble That Switched Sides Doesn't Keep The Old Side's Shift

@@ -58,6 +58,17 @@ public sealed class MessageBubbleViewModelTests
         Assert.AreEqual(ChatCopy.TextMessage, new MessageBubbleViewModel(Message() with { IsRcs = false }).ItemTypeName);
     }
 
+    /// <summary>
+    /// Emoji alone show big with no bubble (issue #11); a reply keeps its bubble, which holds the quote.
+    /// </summary>
+    [TestMethod]
+    public void Bubble_IsEmojiOnly_TextWithoutQuote()
+    {
+        Assert.IsTrue(new MessageBubbleViewModel(Message(Like + Laugh)).IsEmojiOnly);
+        Assert.IsFalse(new MessageBubbleViewModel(Message("hi " + Like)).IsEmojiOnly);
+        Assert.IsFalse(new MessageBubbleViewModel(Message(Like) with { ReplyToId = "m0" }).IsEmojiOnly);
+    }
+
     [TestMethod]
     public void Bubble_LinkUrl_FirstWebLink()
     {
