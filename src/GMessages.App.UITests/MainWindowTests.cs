@@ -191,20 +191,24 @@ public sealed class MainWindowTests : UiTest
     }
 
     /// <summary>
-    /// The title bar row and the caption buttons are the same height, and the profile picture sits right beside
-    /// Minimize.
+    /// The profile picture is as tall as the caption buttons and sits right beside Minimize; ☰ is the title bar's own
+    /// button, inset from the window's edge and centered in the bar as in the WinUI Gallery.
     /// </summary>
     /// <returns>A task for the test.</returns>
     [TestMethod]
-    public async Task TitleBar_ProfileBesideCaptionButtons_SameHeight()
+    public async Task TitleBar_ProfileBesideCaptionButtons_MenuInset()
     {
         await OpenMainAsync();
 
         System.Drawing.Rectangle menu     = App.Find("Main.MenuButton").BoundingRectangle;
         System.Drawing.Rectangle profile  = App.Find("Main.ProfileButton").BoundingRectangle;
         System.Drawing.Rectangle minimize = App.Find("Minimize").BoundingRectangle;
+        System.Drawing.Rectangle titleBar = App.Find("Main.TitleBar").BoundingRectangle;
 
-        Assert.IsTrue(Math.Abs(minimize.Height - menu.Height) <= 2, $"Caption buttons are {minimize.Height} px high, ☰ is {menu.Height} px.");
+        // Measured From The Title Bar, Not The Window, Whose Bounds Take In Windows' Invisible Resize Border
+        Assert.IsTrue(menu.Height < minimize.Height, $"☰ ({menu.Height} px) fills the bar ({minimize.Height} px), with no inset.");
+        Assert.IsTrue(Math.Abs((menu.Top + menu.Bottom) - (minimize.Top + minimize.Bottom)) <= 4, "☰ isn't centered in the title bar.");
+        Assert.IsTrue(menu.Left - titleBar.Left >= 3, $"☰ starts {menu.Left - titleBar.Left} px from the title bar's edge.");
         Assert.IsTrue(Math.Abs(minimize.Height - profile.Height) <= 2, $"Caption buttons are {minimize.Height} px high, the profile button is {profile.Height} px.");
         Assert.IsTrue(Math.Abs(minimize.Left - profile.Right) <= 2, $"The profile button ends {minimize.Left - profile.Right} px left of Minimize.");
     }

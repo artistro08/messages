@@ -120,6 +120,9 @@ public static class ChatCopy
     // Link Previews (Settings Card; Owner Approved)
     public const string ShowReceivedLinkPreviews = "Show previews for links you receive";
 
+    // Title Bar ☰ (Narrator Name And Tooltip)
+    public const string ShowOrHideConversations = "Show or hide conversations";
+
     // Pinned Grid (Settings Card)
     public const string ShowPinnedGrid            = "Show pinned chats as a grid";
     public const string ShowPinnedGridDescription = "Pinned chats show as large pictures at the top of your inbox. Pin a chat on your phone.";
