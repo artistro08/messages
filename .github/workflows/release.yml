@@ -1,0 +1,121 @@
+name: Release
+
+# A merge to main with a new version in Package.appxmanifest builds the signed Release (Native AOT) MSIX for x64 and
+# ARM64 and publishes a GitHub release with them and the certificate that verifies them. A version that already has its
+# tag (v0.1.3 for 0.1.3.0) is skipped, so merges that don't bump the version make no release. The notes are the install
+# steps, then every commit since the previous version tag (merges and version bumps left out). The signing certificate
+# lives only in the repository secrets (SIGNING_PFX, base64; SIGNING_PASSWORD). Adapted from leaf-calendar's release.yml.
+# Run by hand (Actions > Release > Run workflow), it only builds and keeps the packages as a run artifact: a test of the
+# build, never a release.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      # Full History (the notes need the previous version tag and the commits since it)
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      # Version Check: the tag drops the manifest version's last part when it's 0 (0.1.3.0 is v0.1.3), as the
+      # releases so far do. A merge publishes only a version without its tag yet; a run by hand always builds, never
+      # publishes
+      - name: Check the version
+        id: version
+        shell: pwsh
+        run: |
+          $version = ([xml](Get-Content src/GMessages.App/Package.appxmanifest -Raw)).Package.Identity.Version
+          $name    = $version -replace '\.0$', ''
+          $tag     = "v$name"
+          git rev-parse -q --verify "refs/tags/$tag" | Out-Null
+          $publish = $LASTEXITCODE -ne 0 -and $env:GITHUB_EVENT_NAME -eq 'push'
+          $build   = $publish -or $env:GITHUB_EVENT_NAME -eq 'workflow_dispatch'
+          "VERSION=$version" >> $env:GITHUB_ENV
+          "NAME=$name" >> $env:GITHUB_ENV
+          "TAG=$tag" >> $env:GITHUB_ENV
+          "build=$($build.ToString().ToLower())" >> $env:GITHUB_OUTPUT
+          "publish=$($publish.ToString().ToLower())" >> $env:GITHUB_OUTPUT
+          if (-not $build) { "$tag is released already; skipping." }
+          exit 0
+
+      - uses: actions/setup-dotnet@v5
+        if: steps.version.outputs.build == 'true'
+        with:
+          dotnet-version: '10.0.x'
+
+      # Signing Certificate: from the repository secrets into this runner's store, where Build-Package.ps1 finds it
+      - name: Import the signing certificate
+        if: steps.version.outputs.build == 'true'
+        shell: pwsh
+        env:
+          SIGNING_PFX: ${{ secrets.SIGNING_PFX }}
+          SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP 'signing.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:SIGNING_PFX))
+          $password = ConvertTo-SecureString $env:SIGNING_PASSWORD -AsPlainText -Force
+          Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $password | Out-Null
+          Remove-Item $pfx
+
+      # Signed MSIX: restore first, so SignTool (from the Windows SDK build tools package) is on disk for the script
+      - name: Build the signed MSIX
+        if: steps.version.outputs.build == 'true'
+        shell: pwsh
+        run: |
+          dotnet restore src/GMessages.App/GMessages.App.csproj -p:Platform=x64
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ./scripts/Build-Package.ps1
+          foreach ($platform in 'x64', 'arm64') {
+              $folder = "src/GMessages.App/AppPackages/GMessages.App_$($env:VERSION)_$($platform)_Test"
+              Copy-Item "$folder/GMessages.App_$($env:VERSION)_$platform.msix" .
+          }
+          Copy-Item "src/GMessages.App/AppPackages/GMessages.App_$($env:VERSION)_x64_Test/GMessages.App_$($env:VERSION)_x64.cer" .
+
+      # Test Build: a run by hand keeps the packages for a week instead of releasing them
+      - uses: actions/upload-artifact@v4
+        if: github.event_name == 'workflow_dispatch'
+        with:
+          name: kaituro-${{ env.VERSION }}
+          path: GMessages.App_*
+          retention-days: 7
+
+      # Notes: the install steps, then every commit since the previous version tag (the whole history for the first
+      # one), merges and version bumps left out
+      - name: Write the notes
+        if: steps.version.outputs.publish == 'true'
+        shell: pwsh
+        run: |
+          $previous = git describe --tags --abbrev=0 --match 'v*' HEAD 2>$null
+          $range    = if ($LASTEXITCODE -eq 0) { "$previous..HEAD" } else { 'HEAD' }
+          $changes  = git log $range --no-merges --format='- %s' | Where-Object { $_ -notmatch '^- chore(\(release\))?: version' }
+          $notes = @(
+              '### Install'
+              '1. Download the `.cer` file and install it to **Local Machine > Trusted People** (the app is self-signed).'
+              '2. Download the `.msix` for your PC (`x64` for most PCs, `arm64` for Snapdragon) and open it.'
+              ''
+              '### Changes'
+              $changes
+          )
+          Set-Content -Path notes.md -Value $notes -Encoding utf8
+
+      # Release: both installers and the certificate, published as the latest
+      - name: Publish the release
+        if: steps.version.outputs.publish == 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create $env:TAG --latest --target $env:GITHUB_SHA --title "Kaituro $env:NAME" --notes-file notes.md `
+              "GMessages.App_$($env:VERSION)_x64.msix" "GMessages.App_$($env:VERSION)_arm64.msix" "GMessages.App_$($env:VERSION)_x64.cer"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
