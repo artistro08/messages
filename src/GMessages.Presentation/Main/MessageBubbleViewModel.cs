@@ -28,6 +28,7 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         (nameof(DisplayText), b => b.DisplayText),
         (nameof(BodyText), b => b.BodyText),
         (nameof(HasBodyText), b => b.HasBodyText),
+        (nameof(IsEmojiOnly), b => b.IsEmojiOnly),
         (nameof(FromMe), b => b.FromMe),
         (nameof(SenderName), b => b.SenderName),
         (nameof(SenderColor), b => b.SenderColor),
@@ -168,6 +169,12 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
 
     /// <summary>Gets whether the bubble shows any text (a link alone shows only its card).</summary>
     public bool HasBodyText => BodyText.Length > 0;
+
+    /// <summary>
+    /// Gets whether the message is only emoji with no quote (see <see cref="ChatFormat.IsEmojiOnly"/>): the bubble shows
+    /// them big, with no fill or edge around them.
+    /// </summary>
+    public bool IsEmojiOnly => Kind == MessageKind.Text && !HasQuote && ChatFormat.IsEmojiOnly(Text);
 
     /// <summary>Gets whether the owner sent the message.</summary>
     public bool FromMe { get; private set; }

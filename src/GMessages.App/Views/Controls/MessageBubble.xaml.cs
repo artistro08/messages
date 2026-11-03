@@ -161,6 +161,10 @@ public sealed partial class MessageBubble : UserControl
     private static readonly Thickness CaptionInset = new(12, 6, 12, 8);
     private static readonly Thickness TextPadding  = new(12, 8, 12, 8);
 
+    // The Text's Size: The Body Size (ControlContentThemeFontSize), Or Big For Emoji Alone
+    private const double BodyFontSize  = 14;
+    private const double EmojiOnlySize = 32;
+
     // How Long A Thumbnail-Only Photo Waits For The Phone's Full Size Before It Offers To Try Again
     private static readonly TimeSpan FullSizeWait = TimeSpan.FromSeconds(30);
 
@@ -632,9 +636,17 @@ public sealed partial class MessageBubble : UserControl
     /// <param name="hasPhoto">True when the bubble shows a photo.</param>
     /// <param name="hasCaption">True when a caption shows under the photo.</param>
     /// <param name="hasQuote">True when the bubble quotes the message it replies to.</param>
-    /// <returns>Collapsed for a photo alone.</returns>
-    public static Visibility FillShown(bool hasPhoto, bool hasCaption, bool hasQuote) =>
-        hasPhoto && !hasCaption && !hasQuote ? Visibility.Collapsed : Visibility.Visible;
+    /// <param name="emojiOnly">True when the message is only emoji, shown big with no bubble around them (issue #11).</param>
+    /// <returns>Collapsed for a photo alone, or emoji alone.</returns>
+    public static Visibility FillShown(bool hasPhoto, bool hasCaption, bool hasQuote, bool emojiOnly) =>
+        emojiOnly || (hasPhoto && !hasCaption && !hasQuote) ? Visibility.Collapsed : Visibility.Visible;
+
+    /// <summary>
+    /// Gives the text's size: emoji alone show big (issue #11), other text at the body size.
+    /// </summary>
+    /// <param name="emojiOnly">True when the message is only emoji.</param>
+    /// <returns>The font size, in effective pixels.</returns>
+    public static double BodySize(bool emojiOnly) => emojiOnly ? EmojiOnlySize : BodyFontSize;
 
     /// <summary>
     /// Rounds a photo to its bubble's corners exactly (the photo covers the bubble's edge), square at the bottom when its

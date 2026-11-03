@@ -138,6 +138,52 @@ public static class ChatFormat
     }
 
     /// <summary>
+    /// Tells whether a message is only emoji (spaces between them allowed), which the chat shows big with no bubble around it.
+    /// </summary>
+    /// <remarks>
+    /// Each character as shown (a text element: a flag, a skin-toned or joined emoji counts as one) must be an emoji: one
+    /// with VS16 or a keycap, a symbol from U+1F000 up, a text-style emoji (see <see cref="WithColorEmoji"/>), or a symbol
+    /// from the technical, shapes, symbols and dingbats blocks (U+2300 to U+2BFF).
+    /// </remarks>
+    /// <param name="text">The message's text.</param>
+    /// <returns>True when it has at least one emoji and nothing else but spaces.</returns>
+    public static bool IsEmojiOnly(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+
+        TextElementEnumerator elements = StringInfo.GetTextElementEnumerator(text);
+        while (elements.MoveNext())
+        {
+            string element = elements.GetTextElement();
+            if (!string.IsNullOrWhiteSpace(element) && !IsEmoji(element))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    // One Text Element That Draws As An Emoji
+    private static bool IsEmoji(string element)
+    {
+        if (element.Contains('️') || element.Contains('⃣'))
+        {
+            return true;
+        }
+
+        // A Broken Surrogate Decodes As U+FFFD, Which Is No Emoji
+        Rune.DecodeFromUtf16(element, out Rune rune, out _);
+        int code = rune.Value;
+        return IsTextDefaultEmoji(code)
+            || (code >= 0x1F000 && CharUnicodeInfo.GetUnicodeCategory(code) == UnicodeCategory.OtherSymbol)
+            || (code is >= 0x2300 and <= 0x2BFF && CharUnicodeInfo.GetUnicodeCategory(code) == UnicodeCategory.OtherSymbol);
+    }
+
+    /// <summary>
     /// Gives the part of the original text that a selection in the shown text (see <see cref="WithColorEmoji"/>) covers, so
     /// a copy carries none of the VS16 added for showing.
     /// </summary>
