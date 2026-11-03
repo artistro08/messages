@@ -78,6 +78,9 @@ public sealed partial class ChatsView : UserControl
     private const double StartChatNudge    = 24;
     private const double PinnedTileWidth   = 120;
 
+    // How Long A Tile's Selection Pill Takes To Grow In Or Shrink Away (Windows' ControlFastAnimationDuration)
+    private static readonly TimeSpan PillGrowTime = TimeSpan.FromMilliseconds(167);
+
     private readonly SettingsViewModel _settings;
     private readonly ScrollHider _startChatHider = new(StartChatNudge);
 
@@ -98,6 +101,9 @@ public sealed partial class ChatsView : UserControl
 
     // A Navigation Key In The List Is Moving Its Selection (See OnListPreviewKeyDown)
     private bool _selectingWithKeys;
+
+    // The Open Chat Whose Tile Pills Were Last Shown For (See ShowPinnedPills)
+    private string? _pillChatId;
 
     // The List's Width Beside The Chat (Saved Or Default), And What It Was When A Resize Started
     private double _listWidth;
@@ -347,6 +353,7 @@ public sealed partial class ChatsView : UserControl
     {
         // A Pinned Tile Is Highlighted In The Grid Instead (Never Scrolled To: The Grid Heads The List)
         PinnedGrid.SelectedItem = ViewModel.CurrentList.Pinned.FirstOrDefault(r => r.Id == ViewModel.SelectedConversationId);
+        ShowPinnedPills();
 
         ConversationRowViewModel? row = ViewModel.CurrentList.Rows.FirstOrDefault(r => r.Id == ViewModel.SelectedConversationId);
         if (ConversationList.SelectedItem == row)
@@ -359,6 +366,53 @@ public sealed partial class ChatsView : UserControl
         {
             ConversationList.ScrollIntoView(row);
         }
+    }
+
+    // The Open Chat Changed: Its Tile's Pill Grows In At Its Bottom And The Last One's Shrinks Away, From Their Middles,
+    // As Windows Grows A Row's Pill At Its Side. Tiles Made Or Recycled Later Set Their Own (OnSelectionPillLoaded,
+    // OnPinnedContentChanging), So Nothing Runs While The Open Chat Stays The Same
+    private void ShowPinnedPills()
+    {
+        if (ViewModel.SelectedConversationId == _pillChatId)
+        {
+            return;
+        }
+
+        _pillChatId = ViewModel.SelectedConversationId;
+        foreach (object item in PinnedGrid.Items)
+        {
+            if (PinnedGrid.ContainerFromItem(item) is { } container && FindPill(container) is { } pill)
+            {
+                ShowPill(pill, IsOpen(item), animate: true);
+            }
+        }
+    }
+
+    // A Tile's Pill Is Made With Its Tile (Which May Come After The Tile's Container): It Shows Its Tile's State At Once
+    private void OnSelectionPillLoaded(object sender, RoutedEventArgs e)
+    {
+        FrameworkElement pill = sender.As<FrameworkElement>();
+        ShowPill(pill, IsOpen(pill.DataContext), animate: false);
+    }
+
+    // The One Test For Every Pill: Is This Tile's Chat The Open One
+    private bool IsOpen(object? tile) => tile is ConversationRowViewModel row && row.Id == ViewModel.SelectedConversationId;
+
+    // A Tile's Pill, Found By Name (AOT Safe, See UiHelpers.FindPart); Null Before The Tile Is Made
+    private static UIElement? FindPill(DependencyObject container) => UiHelpers.FindPart<UIElement>(container, "SelectionPill");
+
+    // Grows Or Shrinks One Pill; Snapped With Windows' Animations Off, Or On A Tile Just Made Or Recycled. A Pill Already
+    // Right Is Left Alone, So One Mid-Animation Isn't Cut Short
+    private static void ShowPill(UIElement pill, bool open, bool animate)
+    {
+        float scale = open ? 1 : 0;
+        if (pill.Scale.X == scale)
+        {
+            return;
+        }
+
+        pill.ScaleTransition = animate && Ui.AnimationsEnabled ? new Vector3Transition { Duration = PillGrowTime } : null;
+        pill.Scale           = new Vector3(scale, 1, 1);
     }
 
     // A Row Moved (A New Message Lifts It), Came Or Went: The List Applies A Move As A Remove Plus An Insert, Which Drops
@@ -560,6 +614,11 @@ public sealed partial class ChatsView : UserControl
         }
 
         AutomationProperties.SetAutomationId(args.ItemContainer, "Row." + tile.Id);
+        if (FindPill(args.ItemContainer) is { } pill)
+        {
+            ShowPill(pill, IsOpen(tile), animate: false);
+        }
+
         WatchListScroller();
 
         if (args.ItemIndex == sender.Items.Count - 1 && ViewModel.CurrentList.Rows.Count == 0)

@@ -107,12 +107,12 @@
                     <!-- Pinned Grid: with Settings' "Show pinned chats as a grid" on, the inbox's pinned chats sit above
                          the rows as large pictures with their names, like iMessage, and scroll with the list. Collapsed
                          while there are none (set in code). It has no scroller of its own (a nested one kept the list's
-                         scrollbar showing): it is as tall as its tiles, and the list scrolls it. Its sides line up with
-                         the rows' (their containers' margins), and the code splits its width into even columns -->
+                         scrollbar showing): it is as tall as its tiles, and the list scrolls it. Its sides (with the
+                         tiles' own 3 px margins) line up with the rows', and the code splits its width into even columns -->
                     <ListView.Header>
                         <GridView
                             x:Name="PinnedGrid"
-                            Margin="4,0,4,8"
+                            Margin="1,0,1,5"
                             AutomationProperties.AutomationId="Main.PinnedGrid"
                             ContextRequested="OnPinnedGridContextRequested"
                             SelectionChanged="OnPinnedSelectionChanged"
@@ -124,6 +124,28 @@
                                     <ItemsPresenter />
                                 </ControlTemplate>
                             </GridView.Template>
+
+                            <!-- Selected Tile: no accent outline (Windows' tile look), but the rows' selected fills (by
+                                 color, so they follow a theme switch), with the pill at the tile's bottom (SelectionPill
+                                 below). Default serves Light and Dark; the empty HighContrast falls through to Windows'
+                                 own outline and colors -->
+                            <GridView.Resources>
+                                <ResourceDictionary>
+                                    <ResourceDictionary.ThemeDictionaries>
+                                        <ResourceDictionary x:Key="Default">
+                                            <SolidColorBrush x:Key="GridViewItemSelectedBorderBrush" Color="Transparent" />
+                                            <SolidColorBrush x:Key="GridViewItemSelectedPointerOverBorderBrush" Color="Transparent" />
+                                            <SolidColorBrush x:Key="GridViewItemSelectedPressedBorderBrush" Color="Transparent" />
+                                            <SolidColorBrush x:Key="GridViewItemSelectedInnerBorderBrush" Color="Transparent" />
+                                            <SolidColorBrush x:Key="GridViewItemBackgroundSelected" Color="{ThemeResource SubtleFillColorSecondary}" />
+                                            <SolidColorBrush x:Key="GridViewItemBackgroundSelectedPointerOver" Color="{ThemeResource SubtleFillColorTertiary}" />
+                                            <SolidColorBrush x:Key="GridViewItemBackgroundSelectedPressed" Color="{ThemeResource SubtleFillColorSecondary}" />
+                                        </ResourceDictionary>
+                                        <ResourceDictionary x:Key="HighContrast" />
+                                    </ResourceDictionary.ThemeDictionaries>
+                                </ResourceDictionary>
+                            </GridView.Resources>
+                            <!-- /Selected Tile -->
 
                             <!-- No Transitions: tiles land in place, like the rows' loads -->
                             <GridView.ItemContainerTransitions>
@@ -141,65 +163,87 @@
                                 <Style BasedOn="{StaticResource DefaultGridViewItemStyle}" TargetType="GridViewItem">
                                     <Setter Property="AllowFocusOnInteraction" Value="False" />
                                     <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                                    <Setter Property="Margin" Value="0" />
+                                    <!-- Gap: 6 px between tiles, so their hover and selected fills don't touch (owner) -->
+                                    <Setter Property="Margin" Value="3" />
                                     <Setter Property="MinWidth" Value="0" />
                                 </Style>
                             </GridView.ItemContainerStyle>
 
-                            <!-- Tile: the picture (drawn at 52 px, its photo decoded to match), an accent dot while
-                                 unread, and the name below, bold while unread -->
+                            <!-- Tile: the picture (drawn at 52 px, its photo decoded to match) with the unread badge,
+                                 the name below (bold while unread), and the selection pill at the bottom -->
                             <GridView.ItemTemplate>
                                 <DataTemplate x:DataType="main:ConversationRowViewModel">
-                                    <StackPanel Padding="4,8" Spacing="6">
-                                        <Grid HorizontalAlignment="Center">
-                                            <Viewbox Width="52" Height="52">
-                                                <controls:Avatar
-                                                    PhotoSize="52"
-                                                    Color="{x:Bind AvatarColor, Mode=OneWay}"
-                                                    Initial="{x:Bind Initial, Mode=OneWay}"
-                                                    PhotoId="{x:Bind PhotoId, Mode=OneWay}"
-                                                    SecondColor="{x:Bind SecondColor, Mode=OneWay}"
-                                                    SecondInitial="{x:Bind SecondInitial, Mode=OneWay}"
-                                                    SecondPhotoId="{x:Bind SecondPhotoId, Mode=OneWay}" />
-                                            </Viewbox>
+                                    <Grid>
+                                        <StackPanel Padding="4,8" Spacing="6">
+                                            <Grid HorizontalAlignment="Center">
+                                                <Viewbox Width="52" Height="52">
+                                                    <controls:Avatar
+                                                        PhotoSize="52"
+                                                        Color="{x:Bind AvatarColor, Mode=OneWay}"
+                                                        Initial="{x:Bind Initial, Mode=OneWay}"
+                                                        PhotoId="{x:Bind PhotoId, Mode=OneWay}"
+                                                        SecondColor="{x:Bind SecondColor, Mode=OneWay}"
+                                                        SecondInitial="{x:Bind SecondInitial, Mode=OneWay}"
+                                                        SecondPhotoId="{x:Bind SecondPhotoId, Mode=OneWay}" />
+                                                </Viewbox>
 
-                                            <!-- Unread Badge: the system accent pill at the picture's top right, with the
-                                                 short newest message or the unread count (ChatFormat.UnreadBadge). It
-                                                 hangs past the picture's edge, and grows left for a word or two -->
-                                            <Border
-                                                MinWidth="20"
-                                                MaxWidth="88"
-                                                Height="20"
-                                                Margin="0,-4,-8,0"
-                                                Padding="6,0"
-                                                HorizontalAlignment="Right"
-                                                VerticalAlignment="Top"
-                                                Background="{ThemeResource AccentFillColorDefaultBrush}"
-                                                BorderBrush="{ThemeResource SolidBackgroundFillColorBaseBrush}"
-                                                BorderThickness="1"
-                                                CornerRadius="10"
-                                                Visibility="{x:Bind local:UiHelpers.ShownIfText(UnreadBadge), Mode=OneWay}">
-                                                <TextBlock
-                                                    HorizontalAlignment="Center"
-                                                    VerticalAlignment="Center"
-                                                    AutomationProperties.AutomationId="{x:Bind controls:ConversationRow.PartId('Pinned.Badge.', Id), Mode=OneWay}"
-                                                    Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
-                                                    MaxLines="1"
-                                                    Style="{StaticResource CaptionTextBlockStyle}"
-                                                    Text="{x:Bind UnreadBadge, Mode=OneWay}"
-                                                    TextTrimming="CharacterEllipsis" />
-                                            </Border>
-                                        </Grid>
-                                        <TextBlock
+                                                <!-- Unread Badge: the system accent pill at the picture's top right, with
+                                                     the short newest message or the unread count (ChatFormat.UnreadBadge).
+                                                     It hangs past the picture's edge, and grows left for a word or two -->
+                                                <Border
+                                                    MinWidth="20"
+                                                    MaxWidth="88"
+                                                    Height="20"
+                                                    Margin="0,-4,-8,0"
+                                                    Padding="6,0"
+                                                    HorizontalAlignment="Right"
+                                                    VerticalAlignment="Top"
+                                                    Background="{ThemeResource AccentFillColorDefaultBrush}"
+                                                    BorderBrush="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+                                                    BorderThickness="1"
+                                                    CornerRadius="10"
+                                                    Visibility="{x:Bind local:UiHelpers.ShownIfText(UnreadBadge), Mode=OneWay}">
+                                                    <TextBlock
+                                                        HorizontalAlignment="Center"
+                                                        VerticalAlignment="Center"
+                                                        AutomationProperties.AutomationId="{x:Bind controls:ConversationRow.PartId('Pinned.Badge.', Id), Mode=OneWay}"
+                                                        Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
+                                                        MaxLines="1"
+                                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                                        Text="{x:Bind UnreadBadge, Mode=OneWay}"
+                                                        TextTrimming="CharacterEllipsis" />
+                                                </Border>
+                                            </Grid>
+                                            <TextBlock
+                                                HorizontalAlignment="Center"
+                                                FontWeight="{x:Bind controls:ColorConverters.Weight(IsUnread), Mode=OneWay}"
+                                                MaxLines="1"
+                                                Style="{StaticResource CaptionTextBlockStyle}"
+                                                Text="{x:Bind Name, Mode=OneWay}"
+                                                TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+
+                                        <!-- Selection Pill: the rows' accent pill laid flat at the tile's bottom. Scaled to
+                                             nothing until the tile is picked; the code grows it in from its middle, as
+                                             Windows grows a row's (ShowPinnedPills) -->
+                                        <Border
+                                            x:Name="SelectionPill"
+                                            Width="16"
+                                            Height="3"
+                                            Margin="0,0,0,2"
                                             HorizontalAlignment="Center"
-                                            FontWeight="{x:Bind controls:ColorConverters.Weight(IsUnread), Mode=OneWay}"
-                                            MaxLines="1"
-                                            Style="{StaticResource CaptionTextBlockStyle}"
-                                            Text="{x:Bind Name, Mode=OneWay}"
-                                            TextTrimming="CharacterEllipsis" />
-                                    </StackPanel>
+                                            VerticalAlignment="Bottom"
+                                            AutomationProperties.AccessibilityView="Raw"
+                                            Background="{ThemeResource ListViewItemSelectionIndicatorBrush}"
+                                            CenterPoint="8,1.5,0"
+                                            CornerRadius="1.5"
+                                            IsHitTestVisible="False"
+                                            Loaded="OnSelectionPillLoaded"
+                                            Scale="0,1,1" />
+                                    </Grid>
                                 </DataTemplate>
                             </GridView.ItemTemplate>
+                            <!-- /Tile -->
                         </GridView>
                     </ListView.Header>
                     <!-- /Pinned Grid -->
