@@ -36,7 +36,8 @@ namespace GMessages.App.Views;
 /// The settings page covers the body but keeps it running (a sign-in in progress, the open chat), so Back returns to it
 /// as it was. ☰ and the profile picture hide while pairing, since there is nothing for them yet. On Settings, Archived
 /// and Spam &amp; blocked the title bar's own Back button shows in place of ☰, carrying the AutomationId
-/// <c>Settings.Back</c>, <c>Main.ArchivedBack</c> or <c>Main.SpamBack</c>.
+/// <c>Settings.Back</c>, <c>Main.ArchivedBack</c> or <c>Main.SpamBack</c>. ☰ is the title bar's own pane toggle too,
+/// carrying <c>Main.MenuButton</c>, so both have Windows' spacing and animated icons.
 /// </para>
 /// </remarks>
 public sealed partial class MainWindow : Window
@@ -51,8 +52,9 @@ public sealed partial class MainWindow : Window
     private SettingsPage? _settingsPage;
     private UIElement? _focusBeforeSettings;
 
-    // The Title Bar's Back, Once It Has Shown (The Template Makes It Then)
+    // The Title Bar's Back And ☰, Once Each Has Shown (The Template Makes Them Then)
     private Button? _backButton;
+    private Button? _menuButton;
     private bool _isActive;
 
     // The Caption Buttons' Theme For The App Theme (Dark Instead While The Photo Viewer Is Open)
@@ -118,6 +120,13 @@ public sealed partial class MainWindow : Window
         PhotoViewer.IsOpenChanged += (_, _) => ShowViewerTitleBar();
         AppTitleBar.SizeChanged   += (_, _) =>
         {
+            // Laid Out At Last (A Window Opened Hidden In The Tray Wasn't): Back And ☰ Exist Now To Be Named, Once This
+            // Layout Pass Is Done
+            if ((AppTitleBar.IsBackButtonVisible && _backButton is null) || (AppTitleBar.IsPaneToggleButtonVisible && _menuButton is null))
+            {
+                DispatcherQueue.TryEnqueue(NameTitleBarButtons);
+            }
+
             if (PhotoViewer.IsOpen)
             {
                 DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, PunchViewerToolbar);
@@ -454,32 +463,43 @@ public sealed partial class MainWindow : Window
     {
         bool showBack = ShowsBack();
 
-        AppTitleBar.IsBackButtonVisible = showBack;
-        MenuButton.Visibility           = _chats is not null && !showBack && ViewModel?.IsNarrow != true ? Visibility.Visible : Visibility.Collapsed;
-        ProfileButton.Visibility        = _chats is not null ? Visibility.Visible : Visibility.Collapsed;
+        AppTitleBar.IsBackButtonVisible       = showBack;
+        AppTitleBar.IsPaneToggleButtonVisible = ShowsMenu(showBack);
+        ProfileButton.Visibility              = _chats is not null ? Visibility.Visible : Visibility.Collapsed;
+        NameTitleBarButtons();
 
         // The Title Bar Only Lets Clicks Through Where Its Buttons Are When It Computes Its Regions
         RecomputeTitleBarRegions();
-        if (!showBack)
-        {
-            return null;
-        }
+        return showBack ? _backButton : null;
+    }
 
-        // Back Is Made The First Time It Shows (Deferred In The Template), So The Layout Runs First. Found By Its Part Name:
-        // Native AOT Can Hand Template Parts Back As Base Types, So A Plain Cast Would Miss It (See UiHelpers.FindPart)
-        if (_backButton is null)
-        {
-            AppTitleBar.UpdateLayout();
-            _backButton = UiHelpers.FindPart<Button>(AppTitleBar, "PART_BackButton");
-        }
-
+    // Gives Back And ☰ The Names The Tests And Narrator Know Them By. Each Is Made The First Time It Shows (Deferred In
+    // The Template), So The Layout Runs First, And Is Looked Up Again Every Time: A Template Applied Again (A Theme
+    // Switch) Makes A New One. Also Run When The Title Bar Is Laid Out, For A Window That Opened Hidden In The Tray
+    private void NameTitleBarButtons()
+    {
+        AppTitleBar.UpdateLayout();
+        _backButton = AppTitleBar.IsBackButtonVisible ? TitleBarButton("PART_BackButton") : null;
         if (_backButton is not null)
         {
             AutomationProperties.SetAutomationId(_backButton, BackId());
         }
 
-        return _backButton;
+        _menuButton = AppTitleBar.IsPaneToggleButtonVisible ? TitleBarButton("PART_PaneToggleButton") : null;
+        if (_menuButton is not null)
+        {
+            AutomationProperties.SetAutomationId(_menuButton, "Main.MenuButton");
+            AutomationProperties.SetName(_menuButton, ChatCopy.ShowOrHideConversations);
+            ToolTipService.SetToolTip(_menuButton, ChatCopy.ShowOrHideConversations);
+        }
     }
+
+    // One Of The Title Bar's Own Buttons, By Its Part Name: Native AOT Can Hand Template Parts Back As Base Types, So A
+    // Plain Cast Would Miss It (See UiHelpers.FindPart)
+    private Button? TitleBarButton(string part) => UiHelpers.FindPart<Button>(AppTitleBar, part);
+
+    // ☰ Shows Once Paired, Where Back Doesn't, In A Wide Window (A Narrow One Shows One Pane, So There Is No List To Hide)
+    private bool ShowsMenu(bool showBack) => _chats is not null && !showBack && ViewModel?.IsNarrow != true;
 
     // Back Shows On Settings, In A Folder (Archived, Spam & Blocked) And Over A Narrow Window's Open Chat
     private bool ShowsBack() => _settingsPage is not null || ViewModel?.IsFolderView == true || ViewModel?.ShowChatPane == true;
@@ -614,9 +634,9 @@ public sealed partial class MainWindow : Window
     {
         // The View Model Raises Everything At Once (An Empty Name), So The Title Bar Is Only Touched When It Would Change
         bool showBack = ShowsBack();
-        bool showMenu = _chats is not null && !showBack && ViewModel?.IsNarrow != true;
-        if (AppTitleBar.IsBackButtonVisible != showBack || (MenuButton.Visibility == Visibility.Visible) != showMenu
-            || (showBack && _backButton is not null && AutomationProperties.GetAutomationId(_backButton) != BackId()))
+        if (AppTitleBar.IsBackButtonVisible != showBack || AppTitleBar.IsPaneToggleButtonVisible != ShowsMenu(showBack)
+            || (showBack && (_backButton is null || AutomationProperties.GetAutomationId(_backButton) != BackId()))
+            || (ShowsMenu(showBack) && _menuButton is null))
         {
             ShowTitleBarButtons();
         }
@@ -677,7 +697,8 @@ public sealed partial class MainWindow : Window
         AutomationProperties.SetItemStatus(ProfileButton, "Photo");
     }
 
-    private void OnMenuClick(object sender, RoutedEventArgs e) => ViewModel?.ToggleList();
+    // ☰: Collapses Or Expands The List
+    private void OnPaneToggleRequested(TitleBar sender, object args) => ViewModel?.ToggleList();
 
     // Archived And Spam & Blocked Are Lists, So They Close Settings To Show Them
     private void OnArchivedClick(object sender, RoutedEventArgs e)
