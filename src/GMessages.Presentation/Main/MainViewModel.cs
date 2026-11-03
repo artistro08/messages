@@ -395,10 +395,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
-    // Moves The Open Conversation By One Row, Stopping At Either End
+    // Moves The Open Conversation By One Row, Stopping At Either End. The Pinned Grid (When Shown) Comes First, As On Screen
     private void MoveSelection(int step)
     {
-        var rows = CurrentList.Rows;
+        List<ConversationRowViewModel> rows = [.. CurrentList.Pinned, .. CurrentList.Rows];
         if (rows.Count == 0)
         {
             return;

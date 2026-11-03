@@ -120,6 +120,10 @@ public static class ChatCopy
     // Link Previews (Settings Card; Owner Approved)
     public const string ShowReceivedLinkPreviews = "Show previews for links you receive";
 
+    // Pinned Grid (Settings Card)
+    public const string ShowPinnedGrid            = "Show pinned chats as a grid";
+    public const string ShowPinnedGridDescription = "Pinned chats show as large pictures at the top of your inbox. Pin a chat on your phone.";
+
     // Microphone (Settings Card; Owner Signs Off)
     public const string Microphone            = "Microphone";
     public const string MicrophoneDescription = "Which microphone records voice messages.";

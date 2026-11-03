@@ -114,6 +114,24 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged, IDisposa
         }
     }
 
+    /// <summary>
+    /// Gets or sets whether the inbox shows pinned conversations as a grid above the list. Off by default.
+    /// </summary>
+    public bool ShowPinnedGrid
+    {
+        get => _settings.ShowPinnedGrid;
+        set
+        {
+            if (value == _settings.ShowPinnedGrid)
+            {
+                return;
+            }
+
+            _settings.ShowPinnedGrid = value;
+            Raise();
+        }
+    }
+
     // =========================================================================
     // NOTIFICATIONS
     // =========================================================================

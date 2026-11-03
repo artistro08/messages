@@ -256,6 +256,58 @@ public sealed class MainWindowTests : UiTest
     }
 
     /// <summary>
+    /// The pinned grid is off by default. Turning it on in Settings moves pinned Team out of the rows into a tile above
+    /// them, which opens its chat; turning it off puts Team back at the top of the rows.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task PinnedGrid_Switch_MovesPinnedChatIntoTiles()
+    {
+        await OpenMainAsync();
+        WaitForRows(InboxRows);
+        Assert.IsNull(App.TryFind("Main.PinnedGrid"), "The pinned grid showed with the setting off.");
+
+        // On: Team Leaves The Rows For A Tile
+        SetPinnedGrid(ToggleState.On);
+        WaitForRows(["Row.c-ann"]);
+        AutomationElement tile = App.Find("Main.PinnedGrid").FindFirstDescendant(cf => cf.ByAutomationId("Row.c-team"))
+            ?? throw new AssertFailedException("Team has no tile in the pinned grid.");
+
+        // Unread Badge: A Short Message Shows Itself, A Second Message Shows The Count
+        Server.Phone.PushIncoming("c-team", "Dinner?");
+        App.WaitForText("Pinned.Badge.c-team", "Dinner?");
+        Server.Phone.PushIncoming("c-team", "See you at seven");
+        App.WaitForText("Pinned.Badge.c-team", "2");
+
+        // A Tile Opens Its Chat, Which Reads It: The Badge Goes
+        tile.Patterns.SelectionItem.Pattern.Select();
+        App.WaitForText("Chat.Header", "Team");
+        WaitForGone("Pinned.Badge.c-team");
+
+        // Off: Team Back At The Top Of The Rows
+        SetPinnedGrid(ToggleState.Off);
+        WaitForRows(InboxRows);
+        WaitForGone("Main.PinnedGrid");
+    }
+
+    // Flips Settings' Pinned Grid Switch Through The Profile Menu, Then Goes Back To The Chats
+    private void SetPinnedGrid(ToggleState wanted)
+    {
+        InvokeProfileItem("Main.Profile.Settings");
+        WaitForSettings();
+        ToggleButton toggle = App.Find("Settings.PinnedGrid").AsToggleButton();
+        if (toggle.ToggleState != wanted)
+        {
+            toggle.Toggle();
+        }
+
+        Wait.Until(() => App.Find("Settings.PinnedGrid").AsToggleButton().ToggleState == wanted, AppDriver.DefaultTimeout,
+            () => $"The pinned grid switch isn't {wanted}.");
+        App.Find("Settings.Back").Patterns.Invoke.Pattern.Invoke();
+        WaitForGone("Settings.Back");
+    }
+
+    /// <summary>
     /// Closing the window with an inbox chat open and opening it again from the tray shows that chat again; a chat
     /// opened from Spam &amp; blocked doesn't come back.
     /// </summary>

@@ -80,6 +80,10 @@ public sealed partial class ChatStore : IDisposable
     // IDs Of The Messages In Pages DropPagesAsync Dropped, So IsCached Still Blocks A Second Toast For Them (Under _pagesLock)
     private readonly HashSet<string> _droppedIds = [];
 
+    // New Received Messages Counted Live Per Conversation Since It Was Last Read (The Phone Sends No Count); Dropped
+    // When The Conversation Turns Read
+    private readonly ConcurrentDictionary<string, int> _unreadCounts = new();
+
     // Newest Encryption Tombstone Seen Per Conversation, With Its Time In Microseconds
     private readonly ConcurrentDictionary<string, (bool Encrypted, long At)> _encryption = new();
 
@@ -165,6 +169,18 @@ public sealed partial class ChatStore : IDisposable
     /// </summary>
     /// <returns>A copy of the cached conversations.</returns>
     public IReadOnlyList<ConversationInfo> CachedConversations() => [.. _cache.Values];
+
+    /// <summary>
+    /// Gets how many new messages a conversation received live since it was last read.
+    /// </summary>
+    /// <remarks>
+    /// The phone only says whether a conversation is unread, so received messages are counted as they arrive, and the
+    /// count starts over once the phone says the conversation is read or it is read here. Messages that came while the
+    /// app wasn't running aren't counted (a caller shows an unread conversation with no count as one).
+    /// </remarks>
+    /// <param name="conversationId">The conversation ID.</param>
+    /// <returns>The count; 0 when none were counted.</returns>
+    public int LiveUnreadCount(string conversationId) => _unreadCounts.GetValueOrDefault(conversationId);
 
     /// <summary>
     /// Gets whether a conversation is end-to-end encrypted.
@@ -765,6 +781,9 @@ public sealed partial class ChatStore : IDisposable
         int generation = Generation;
         await RequireClient().MarkReadAsync(conversationId, messageId, ct);
 
+        // Read Here: The Live Unread Count Starts Over, Even When The Cached Conversation Never Turned Unread
+        _unreadCounts.TryRemove(conversationId, out _);
+
         if (generation != Generation || Find(conversationId) is not { Unread: true } cached)
         {
             return;
@@ -914,6 +933,7 @@ public sealed partial class ChatStore : IDisposable
             _cache.Clear();
             _encryption.Clear();
             _liveMedia.Clear();
+            _unreadCounts.Clear();
             _me = null;
         }
 

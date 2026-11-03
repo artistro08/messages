@@ -58,18 +58,25 @@ namespace GMessages.App.Views;
 /// header has the same menu with Details first (<see cref="ConversationDetailsDialog"/>); Ctrl + Shift + o, Ctrl + d
 /// and Ctrl + Alt + h run its Details, Move to trash and Archive. A failed action shows the banner above the list.
 /// </para>
+/// <para>
+/// With Settings' "Show pinned chats as a grid" on, the inbox's pinned conversations show as tiles in the list's header
+/// (<see cref="ConversationListViewModel.Pinned"/>) instead of as rows. A tile opens, highlights and has its menu as a
+/// row does; flipping the setting moves them at once.
+/// </para>
 /// </remarks>
 public sealed partial class ChatsView : UserControl
 {
     // Layout: Below This Width (Effective Pixels) One Pane Shows At A Time; The List Pane's Default Width Beside The
     // Chat And The Narrowest It Can Be Dragged; How Far Start Chat Slides Down To Hide, And Its Shadow's Lift; How Far
-    // The List Must Scroll Against The Current Direction To Hide Or Show Start Chat
+    // The List Must Scroll Against The Current Direction To Hide Or Show Start Chat; The Pinned Grid's Narrowest Column
+    // Before It Takes One More
     private const double NarrowBelow       = 720;
     private const double ListPaneWidth     = 360;
     internal const double MinListPaneWidth = 300;
     private const float StartChatDrop      = 96;
     private const float StartChatLift      = 16;
     private const double StartChatNudge    = 24;
+    private const double PinnedTileWidth   = 120;
 
     private readonly SettingsViewModel _settings;
     private readonly ScrollHider _startChatHider = new(StartChatNudge);
@@ -113,11 +120,14 @@ public sealed partial class ChatsView : UserControl
         EmptyStateText.Text = ChatCopy.StartAConversation;
 
         // Behavior
-        ViewModel.PropertyChanged += OnViewModelChanged;
+        ViewModel.Inbox.PinnedApart = settings.ShowPinnedGrid;
+        _settings.PropertyChanged  += OnSettingsChanged;
+        ViewModel.PropertyChanged  += OnViewModelChanged;
         ConversationList.AddHandler(KeyDownEvent, new KeyEventHandler(OnListKeyDown), handledEventsToo: true);
-        ConversationList.PreviewKeyDown += OnListPreviewKeyDown;
-        ChatView.MenuRequested          += OnChatMenuRequested;
-        ChatView.MuteRequested          += (_, _) => RunOnOpenChat(ViewModel.Chat?.IsMuted == true ? ConversationMenuItem.Unmute : ConversationMenuItem.Mute);
+        ConversationList.PreviewKeyDown     += OnListPreviewKeyDown;
+        PinnedGrid.ContainerContentChanging += OnPinnedContentChanging;
+        ChatView.MenuRequested              += OnChatMenuRequested;
+        ChatView.MuteRequested              += (_, _) => RunOnOpenChat(ViewModel.Chat?.IsMuted == true ? ConversationMenuItem.Unmute : ConversationMenuItem.Mute);
         ShowCurrentList();
         _ = ViewModel.Inbox.LoadAsync();
     }
@@ -144,9 +154,11 @@ public sealed partial class ChatsView : UserControl
 
         if (_shownList is not null)
         {
-            _shownList.RowsChanging -= OnRowsChanging;
+            _shownList.RowsChanging             -= OnRowsChanging;
+            _shownList.Pinned.CollectionChanged -= OnRowsChanged;
         }
 
+        _settings.PropertyChanged -= OnSettingsChanged;
         ViewModel.PropertyChanged -= OnViewModelChanged;
         Bindings.StopTracking();
         ViewModel.Dispose();
@@ -174,7 +186,7 @@ public sealed partial class ChatsView : UserControl
         !isNarrow && !isListCollapsed ? Visibility.Visible : Visibility.Collapsed;
 
     /// <summary>
-    /// The gap left of the chat island: with the list open in a wide window, the list's scrollbar lane already makes
+    /// The gap left of the chat island: with the list open in a wide window, the rows' own right padding already makes
     /// most of the gap, so only a thin resize edge follows it; otherwise the island's usual 8 pixel gap.
     /// </summary>
     /// <param name="isNarrow">True for a narrow window.</param>
@@ -233,6 +245,19 @@ public sealed partial class ChatsView : UserControl
         }
     }
 
+    // Settings' "Show Pinned Chats As A Grid" Flipped While This Window Is Open: The Inbox Moves Its Pinned Rows At Once
+    private void OnSettingsChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(SettingsViewModel.ShowPinnedGrid))
+        {
+            return;
+        }
+
+        ViewModel.Inbox.PinnedApart = _settings.ShowPinnedGrid;
+        ShowPinnedGrid();
+        SelectOpenRow(scroll: false);
+    }
+
     // Narrator Reads The Undo Bar's Notice As It Shows (A Live Region, Polite). After The Bindings Show It (A Turn Later)
     private void AnnounceUndo() => DispatcherQueue.TryEnqueue(() =>
     {
@@ -256,6 +281,7 @@ public sealed partial class ChatsView : UserControl
         }
 
         BindableList.Show(ConversationList, rows);
+        BindableList.Show(PinnedGrid, list.Pinned);
         if (rows == _shownRows)
         {
             return;
@@ -268,13 +294,23 @@ public sealed partial class ChatsView : UserControl
 
         if (_shownList is not null)
         {
-            _shownList.RowsChanging -= OnRowsChanging;
+            _shownList.RowsChanging             -= OnRowsChanging;
+            _shownList.Pinned.CollectionChanged -= OnRowsChanged;
         }
 
-        _shownRows                    = rows;
-        _shownRows.CollectionChanged += OnRowsChanged;
-        _shownList                    = list;
-        _shownList.RowsChanging      += OnRowsChanging;
+        _shownRows                          = rows;
+        _shownRows.CollectionChanged        += OnRowsChanged;
+        _shownList                           = list;
+        _shownList.RowsChanging             += OnRowsChanging;
+        _shownList.Pinned.CollectionChanged += OnRowsChanged;
+        ShowPinnedGrid();
+    }
+
+    // The Grid Shows Only While The List Shown Has Pinned Rows Apart (The Inbox, With The Setting On)
+    private void ShowPinnedGrid()
+    {
+        PinnedGrid.Visibility = ViewModel.CurrentList.Pinned.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        FitPinnedColumns(PinnedGrid.Width);
     }
 
     // The Rows Are About To Change: Windows' List Motion Only For A Live Change (A New Message Lifts A Row, A
@@ -309,6 +345,9 @@ public sealed partial class ChatsView : UserControl
     // Already The Open Chat, So OnSelectionChanged Ignores It (No Second Open, No Second Mark Read)
     private void SelectOpenRow(bool scroll)
     {
+        // A Pinned Tile Is Highlighted In The Grid Instead (Never Scrolled To: The Grid Heads The List)
+        PinnedGrid.SelectedItem = ViewModel.CurrentList.Pinned.FirstOrDefault(r => r.Id == ViewModel.SelectedConversationId);
+
         ConversationRowViewModel? row = ViewModel.CurrentList.Rows.FirstOrDefault(r => r.Id == ViewModel.SelectedConversationId);
         if (ConversationList.SelectedItem == row)
         {
@@ -325,11 +364,13 @@ public sealed partial class ChatsView : UserControl
     // A Row Moved (A New Message Lifts It), Came Or Went: The List Applies A Move As A Remove Plus An Insert, Which Drops
     // The Open Row's Highlight. It Is Put Back A Turn Later, Once The List Has Finished The Change, Without Scrolling, So
     // A List Scrolled Down Isn't Pulled To The Top On Every New Message
+    // The Same For The Pinned Grid, Which Also Shows Or Hides As Its First Tile Comes Or Its Last Goes
     private void OnRowsChanged(object? sender, NotifyCollectionChangedEventArgs e) =>
         DispatcherQueue.TryEnqueue(() =>
         {
-            if (sender == _shownRows)
+            if (sender == _shownRows || sender == _shownList?.Pinned)
             {
+                ShowPinnedGrid();
                 SelectOpenRow(scroll: false);
             }
         });
@@ -463,10 +504,16 @@ public sealed partial class ChatsView : UserControl
     // Right-Click On A Row Opens Its Menu At The Pointer; The Application Key Or Shift + F10 On The Focused Row Opens It
     // On The Row. The Row Is Found By Walking Up From The Source To The List's Container, Matched By Index And Never By
     // A Type Test (See UiHelpers.FindPart)
-    private void OnConversationListContextRequested(UIElement sender, ContextRequestedEventArgs e)
+    private void OnConversationListContextRequested(UIElement sender, ContextRequestedEventArgs e) => ShowItemMenu(ConversationList, e);
+
+    // The Same On A Pinned Tile. The Grid Sits In The List's Header, So The List Must Not Also Take It
+    private void OnPinnedGridContextRequested(UIElement sender, ContextRequestedEventArgs e) => ShowItemMenu(PinnedGrid, e);
+
+    // Opens The Menu Of The List's (Or Grid's) Item Under The Source, At The Pointer Or On The Item
+    private void ShowItemMenu(ListViewBase list, ContextRequestedEventArgs e)
     {
-        if (e.OriginalSource is null || RowContainer(e.OriginalSource.As<DependencyObject>()) is not { } container
-            || ConversationList.ItemFromContainer(container) is not ConversationRowViewModel row)
+        if (e.OriginalSource is null || ItemContainer(list, e.OriginalSource.As<DependencyObject>()) is not { } container
+            || list.ItemFromContainer(container) is not ConversationRowViewModel row)
         {
             return;
         }
@@ -476,10 +523,58 @@ public sealed partial class ChatsView : UserControl
         ShowConversationMenu(row.Id, target, e.TryGetPosition(target, out Windows.Foundation.Point at) ? at : null, from: null);
     }
 
-    // Picking A Row Opens It; A Cleared Selection (List Swapped, Row Moved) Keeps The Open Conversation
-    private void OnSelectionChanged(object sender, SelectionChangedEventArgs e)
+    // Picking A Pinned Tile Opens It, As A Row Does (Arrowing Keeps The Focus On The Grid)
+    private void OnPinnedSelectionChanged(object sender, SelectionChangedEventArgs e) => OpenPicked(PinnedGrid.SelectedItem);
+
+    // The List's Header Sizes To Its Content, So The Grid Is Made As Wide As The Rows (Inside The List's Padding)
+    private void OnConversationListSizeChanged(object sender, SizeChangedEventArgs e)
     {
-        if (ConversationList.SelectedItem is not ConversationRowViewModel row || row.Id == ViewModel.SelectedConversationId)
+        Thickness padding = ConversationList.Padding;
+        Thickness margin  = PinnedGrid.Margin;
+        PinnedGrid.Width  = Math.Max(0, e.NewSize.Width - padding.Left - padding.Right - margin.Left - margin.Right);
+    }
+
+    // The Grid's Width Split Into Even Columns: Three, Or More Once Each Can Be Wider Than PinnedTileWidth. The Panel Is
+    // Read Through A WinRT Cast, Not A Type Test (See UiHelpers.FindPart)
+    private void OnPinnedGridSizeChanged(object sender, SizeChangedEventArgs e) => FitPinnedColumns(e.NewSize.Width);
+
+    // Also Run As The Grid Shows (Its Panel May Not Have Existed At Its Last Size Change)
+    private void FitPinnedColumns(double width)
+    {
+        if (PinnedGrid.ItemsPanelRoot is not { } panel || !(width > 0))
+        {
+            return;
+        }
+
+        int columns                         = Math.Max(3, (int)(width / PinnedTileWidth));
+        panel.As<ItemsWrapGrid>().ItemWidth = Math.Floor(width / columns);
+    }
+
+    // Names Each Tile For UI Automation Like A Row (Row.{id}): A Conversation Is A Tile Or A Row, Never Both. The List's
+    // Rows Hook Its Scroller And Ask For The Next Page; With Every Row Of The Page Pinned There Are None, So Tiles Do
+    private void OnPinnedContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
+    {
+        if (args.InRecycleQueue || args.Item is not ConversationRowViewModel tile)
+        {
+            return;
+        }
+
+        AutomationProperties.SetAutomationId(args.ItemContainer, "Row." + tile.Id);
+        WatchListScroller();
+
+        if (args.ItemIndex == sender.Items.Count - 1 && ViewModel.CurrentList.Rows.Count == 0)
+        {
+            _ = ViewModel.CurrentList.LoadMoreAsync();
+        }
+    }
+
+    // Picking A Row Opens It; A Cleared Selection (List Swapped, Row Moved) Keeps The Open Conversation
+    private void OnSelectionChanged(object sender, SelectionChangedEventArgs e) => OpenPicked(ConversationList.SelectedItem);
+
+    // Opens A Picked Row Or Tile, Unless It Is Already Open
+    private void OpenPicked(object? picked)
+    {
+        if (picked is not ConversationRowViewModel row || row.Id == ViewModel.SelectedConversationId)
         {
             return;
         }
@@ -495,13 +590,14 @@ public sealed partial class ChatsView : UserControl
         ViewModel.Select(row.Id);
     }
 
-    // A Navigation Key Pressed In The List (Before The List Moves Its Selection): The Selection Change It Makes Keeps The
-    // Focus On The List. The Mark Is Dropped Once The Key Is Done (A Turn Later), So A Key That Moved Nothing (The End Of
-    // The List) Leaves No Mark For The Next Click
+    // A Navigation Key Pressed In The List Or The Pinned Grid In Its Header (Before Either Moves Its Selection): The
+    // Selection Change It Makes Keeps The Focus There. The Mark Is Dropped Once The Key Is Done (A Turn Later), So A Key
+    // That Moved Nothing (The End Of The List) Leaves No Mark For The Next Click
     private void OnListPreviewKeyDown(object sender, KeyRoutedEventArgs e)
     {
-        if (e.Key is not (VirtualKey.Up or VirtualKey.Down or VirtualKey.Home or VirtualKey.End or VirtualKey.PageUp or VirtualKey.PageDown
-            or VirtualKey.GamepadDPadUp or VirtualKey.GamepadDPadDown))
+        if (e.Key is not (VirtualKey.Up or VirtualKey.Down or VirtualKey.Left or VirtualKey.Right or VirtualKey.Home or VirtualKey.End
+            or VirtualKey.PageUp or VirtualKey.PageDown or VirtualKey.GamepadDPadUp or VirtualKey.GamepadDPadDown
+            or VirtualKey.GamepadDPadLeft or VirtualKey.GamepadDPadRight))
         {
             return;
         }
@@ -526,7 +622,8 @@ public sealed partial class ChatsView : UserControl
     // List And Read Through A WinRT Cast, Not A Type Test (See UiHelpers.FindPart)
     private bool IsBrowsingWithKeys() =>
         XamlRoot is { } root && FocusManager.GetFocusedElement(root) is { } focused
-        && ConversationList.IndexFromContainer(focused.As<DependencyObject>()) >= 0
+        && (ConversationList.IndexFromContainer(focused.As<DependencyObject>()) >= 0
+            || PinnedGrid.IndexFromContainer(focused.As<DependencyObject>()) >= 0)
         && focused.As<Control>().FocusState == FocusState.Keyboard;
 
     // Names Each Row For UI Automation (Row.{id}), And Loads The Next Page Once The Last Row Is Realized
@@ -550,10 +647,10 @@ public sealed partial class ChatsView : UserControl
     // HELPERS
     // =========================================================================
 
-    // The List's Row Container Holding An Element (The Element Itself When It Is One), Or Null Outside The Rows
-    private DependencyObject? RowContainer(DependencyObject? element)
+    // The List's (Or Grid's) Item Container Holding An Element (The Element Itself When It Is One), Or Null Outside Its Items
+    private static DependencyObject? ItemContainer(ListViewBase list, DependencyObject? element)
     {
-        while (element is not null && ConversationList.IndexFromContainer(element) < 0)
+        while (element is not null && list.IndexFromContainer(element) < 0)
         {
             element = VisualTreeHelper.GetParent(element);
         }
@@ -616,7 +713,7 @@ public sealed partial class ChatsView : UserControl
     // AutomationId (Row.{id}, Set In OnContainerContentChanging), As BubbleViewAround Does, Never By A Type Test
     private bool FocusIsOnRemovedRow(XamlRoot root, string conversationId)
     {
-        if (ConversationList.Items.Any(i => i is ConversationRowViewModel r && r.Id == conversationId)
+        if (ConversationList.Items.Concat(PinnedGrid.Items).Any(i => i is ConversationRowViewModel r && r.Id == conversationId)
             || FocusManager.GetFocusedElement(root) is not { } focused)
         {
             return false;

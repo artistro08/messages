@@ -24,6 +24,7 @@ public sealed class AppSettings : INotifyPropertyChanged
     private const string WindowMaximizedKey          = "WindowMaximized";
     private const string MicrophoneIdKey             = "MicrophoneId";
     private const string ShowReceivedLinkPreviewsKey = "ShowReceivedLinkPreviews";
+    private const string ShowPinnedGridKey           = "ShowPinnedGrid";
 
     // Snooze Lengths, In Minutes (The Choices Settings Offers), And The Default
     private const int DefaultSnoozeMinutes = 15;
@@ -77,6 +78,16 @@ public sealed class AppSettings : INotifyPropertyChanged
     {
         get => GetBool(ShowReceivedLinkPreviewsKey, true);
         set => Set(ShowReceivedLinkPreviewsKey, value.ToString(CultureInfo.InvariantCulture));
+    }
+
+    /// <summary>
+    /// Whether the inbox shows pinned conversations as a grid of large pictures above the list, like iMessage, instead
+    /// of as rows at its top. Defaults to false.
+    /// </summary>
+    public bool ShowPinnedGrid
+    {
+        get => GetBool(ShowPinnedGridKey, false);
+        set => Set(ShowPinnedGridKey, value.ToString(CultureInfo.InvariantCulture));
     }
 
     /// <summary>
