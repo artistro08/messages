@@ -67,7 +67,8 @@ namespace GMessages.App.Views;
 public sealed partial class ChatsView : UserControl
 {
     // Layout: Below This Width (Effective Pixels) One Pane Shows At A Time; The List Pane's Default Width Beside The
-    // Chat And The Narrowest It Can Be Dragged; How Far Start Chat Slides Down To Hide, And Its Shadow's Lift; How Far
+    // Chat And The Narrowest It Can Be Dragged; How Far Start Chat Slides Down To Hide, Its Shadow's Lift, And The Gap
+    // Between It And The Undo Bar Above (The Bottom Row's Spacing In The XAML); How Far
     // The List Must Scroll Against The Current Direction To Hide Or Show Start Chat; The Pinned Grid's Narrowest Column
     // Before It Takes One More
     private const double NarrowBelow       = 720;
@@ -75,6 +76,7 @@ public sealed partial class ChatsView : UserControl
     internal const double MinListPaneWidth = 300;
     private const float StartChatDrop      = 96;
     private const float StartChatLift      = 16;
+    private const float StartChatGap       = 8;
     private const double StartChatNudge    = 24;
     private const double PinnedTileWidth   = 120;
 
@@ -229,6 +231,14 @@ public sealed partial class ChatsView : UserControl
 
     /// <summary>Gets the battery banner's title (for bindings).</summary>
     public static string BatteryTitle => ChatCopy.PhoneBatteryLow;
+
+    /// <summary>
+    /// The list's padding: room at the bottom for Start chat, and for the Undo bar stacked above it while it shows, so
+    /// neither covers the last row when the list is scrolled to its end.
+    /// </summary>
+    /// <param name="hasUndo">True while the Undo bar shows.</param>
+    /// <returns>The padding.</returns>
+    public static Thickness ListPadding(bool hasUndo) => new(0, 0, 0, hasUndo ? 112 : 64);
 
     /// <summary>Gets the Undo bar's button text (for bindings).</summary>
     public static string UndoText => ChatCopy.Undo;
@@ -506,6 +516,9 @@ public sealed partial class ChatsView : UserControl
         StartChatHost.IsHitTestVisible   = show;
         StartChatButton.IsTabStop        = show;
         AutomationProperties.SetItemStatus(StartChatButton, show ? string.Empty : "Hidden");
+
+        // The Undo Bar Above It Slides Down Into Start Chat's Place, So It Never Hangs Over An Empty Gap
+        UndoBar.Translation = new Vector3(0, show ? 0 : (float)StartChatHost.ActualHeight + StartChatGap, StartChatLift);
     }
 
     // Start Chat Opened (Or Found) The Conversation: Show It In Place Of Start Chat

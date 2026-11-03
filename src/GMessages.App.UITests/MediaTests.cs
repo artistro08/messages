@@ -919,7 +919,7 @@ public sealed partial class MediaTests : UiTest
     {
         await FakeMicrophoneAsync();
         await OpenMediaChatAsync();
-        Assert.AreEqual(ChatCopy.RecordVoiceMessage, AppDriver.SafeName(App.Find("Chat.Record")), "The mic has another name.");
+        Assert.AreEqual(ChatCopy.RecordVoiceMessage, AppDriver.SafeName(App.Find("Chat.Record")), "The voice message button has another name.");
 
         App.Find("Chat.Record").Patterns.Invoke.Pattern.Invoke();
         AutomationElement timer = App.Find("Chat.RecordTimer");
