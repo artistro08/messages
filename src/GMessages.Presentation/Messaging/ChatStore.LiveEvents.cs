@@ -30,6 +30,13 @@ public sealed partial class ChatStore
         {
             case ConversationUpdated updated:
                 ConversationInfo info = WithSnippetMedia(ConversationInfo.From(updated.Conversation));
+
+                // The Phone Says It's Read: The Live Unread Count Starts Over
+                if (!info.Unread)
+                {
+                    _unreadCounts.TryRemove(info.Id, out _);
+                }
+
                 Upsert(info);
                 SaveConversation(updated.Conversation, Generation);
                 ConversationChanged?.Invoke(this, info);
@@ -108,6 +115,17 @@ public sealed partial class ChatStore
                          && !HasMyReaction(message)
                          && !IsCached(message)
                          && message.Time >= _time.GetUtcNow() - NewMessageAge;
+
+        // A New Received Message Adds One To Its Conversation's Unread Count, Only While The Phone Says It's Unread (Its
+        // Conversation Update Comes First): One Read Meanwhile Mustn't Carry Into The Next Count. Since That Update Was
+        // Already Shown, A Pinned Tile Re-Reads The Count Below Even When Nothing Else Changed
+        bool counted = isNew && !message.FromMe && Find(message.ConversationId) is { Unread: true };
+        bool shown   = false;
+        if (counted)
+        {
+            _unreadCounts.AddOrUpdate(message.ConversationId, 1, (_, count) => count + 1);
+        }
+
         CacheMessage(message);
         SaveMessages(message.ConversationId, [received.Message], generation);
         if (message is { Media: { } liveMedia, Id.Length: > 0 })
@@ -128,6 +146,7 @@ public sealed partial class ChatStore
             if (Upsert(conversation))
             {
                 ConversationChanged?.Invoke(this, conversation);
+                shown = true;
             }
         }
 
@@ -159,6 +178,13 @@ public sealed partial class ChatStore
         {
             conversation = conversation with { SnippetMedia = ChatFormat.MediaLabel(media) };
             Upsert(conversation);
+            ConversationChanged?.Invoke(this, conversation);
+            shown = true;
+        }
+
+        // Counted But Not Shown Yet: The Lists Re-Read The Conversation (And Its Count). Only A Pinned One Shows A Count
+        if (counted && !shown && conversation is { Pinned: true })
+        {
             ConversationChanged?.Invoke(this, conversation);
         }
 

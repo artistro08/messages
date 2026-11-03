@@ -97,6 +97,23 @@
                     </Grid>
                 </Border>
 
+                <!-- Pinned Grid: pinned chats as large pictures above the inbox, like iMessage; off by default -->
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
+                        <FontIcon Glyph="&#xE718;" Style="{StaticResource CardIconStyle}" />
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock x:Name="PinnedGridHeader" TextWrapping="Wrap" />
+                            <TextBlock x:Name="PinnedGridDescription" Style="{StaticResource CardDescriptionStyle}" />
+                        </StackPanel>
+                        <ToggleSwitch
+                            x:Name="PinnedGridSwitch"
+                            Grid.Column="2"
+                            AutomationProperties.AutomationId="Settings.PinnedGrid"
+                            IsOn="{x:Bind ViewModel.ShowPinnedGrid, Mode=TwoWay}"
+                            Style="{StaticResource CardToggleSwitchStyle}" />
+                    </Grid>
+                </Border>
+
                 <!-- Startup -->
                 <TextBlock Style="{StaticResource GroupHeaderStyle}" Text="Startup" />
                 <Border Style="{StaticResource SettingsCardStyle}">

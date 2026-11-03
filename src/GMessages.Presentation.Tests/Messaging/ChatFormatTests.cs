@@ -9,6 +9,21 @@ public sealed class ChatFormatTests
 {
     private static readonly CultureInfo EnUs = CultureInfo.GetCultureInfo("en-US");
 
+    /// <summary>
+    /// The pinned tile's badge: the message itself when it's the one unread and one or two words, else the count; none
+    /// while read.
+    /// </summary>
+    [TestMethod]
+    [DataRow(false, 3, "hi", "")]
+    [DataRow(true, 1, "hi", "hi")]
+    [DataRow(true, 0, "  sounds   good ", "sounds good")]
+    [DataRow(true, 1, "see you soon", "1")]
+    [DataRow(true, 1, "", "1")]
+    [DataRow(true, 2, "hi", "2")]
+    [DataRow(true, 5, "see you soon", "5")]
+    public void UnreadBadge_ShortSingleMessageElseCount(bool unread, int count, string text, string expected) =>
+        Assert.AreEqual(expected, ChatFormat.UnreadBadge(unread, count, text));
+
     [TestMethod]
     public void Snippet_OwnMessage_HasYouPrefix()
     {

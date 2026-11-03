@@ -181,6 +181,21 @@ public sealed class SettingsViewModelTests
         Assert.IsFalse(new AppSettings(store).ShowReceivedLinkPreviews);
     }
 
+    /// <summary>
+    /// The pinned grid is off for a fresh install, and turning it on lands in the store.
+    /// </summary>
+    [TestMethod]
+    public void ShowPinnedGrid_DefaultsOff_AndPersists()
+    {
+        var store = new InMemorySettingsStore();
+        var vm    = Create(store);
+        Assert.IsFalse(vm.ShowPinnedGrid);
+
+        vm.ShowPinnedGrid = true;
+
+        Assert.IsTrue(new AppSettings(store).ShowPinnedGrid);
+    }
+
     // =========================================================================
     // START WITH WINDOWS
     // =========================================================================

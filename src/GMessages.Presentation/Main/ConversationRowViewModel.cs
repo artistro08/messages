@@ -20,12 +20,13 @@ public sealed class ConversationRowViewModel : INotifyPropertyChanged
     /// </summary>
     /// <param name="c">The conversation.</param>
     /// <param name="now">The current time, for the list time.</param>
-    public ConversationRowViewModel(ConversationInfo c, DateTimeOffset now)
+    /// <param name="unreadCount">The live unread count (<see cref="ChatStore.LiveUnreadCount"/>).</param>
+    public ConversationRowViewModel(ConversationInfo c, DateTimeOffset now, int unreadCount = 0)
     {
         ArgumentNullException.ThrowIfNull(c);
 
         Id = c.Id;
-        Fill(c, now);
+        Fill(c, now, unreadCount);
     }
 
     /// <inheritdoc />
@@ -45,6 +46,9 @@ public sealed class ConversationRowViewModel : INotifyPropertyChanged
 
     /// <summary>Gets whether there are unread messages.</summary>
     public bool IsUnread { get; private set; }
+
+    /// <summary>Gets the pinned tile's unread badge (see <see cref="ChatFormat.UnreadBadge"/>); empty while read.</summary>
+    public string UnreadBadge { get; private set; } = string.Empty;
 
     /// <summary>Gets whether the conversation is pinned.</summary>
     public bool IsPinned { get; private set; }
@@ -84,11 +88,12 @@ public sealed class ConversationRowViewModel : INotifyPropertyChanged
     /// </summary>
     /// <param name="c">The conversation.</param>
     /// <param name="now">The current time, for the list time.</param>
-    public void Update(ConversationInfo c, DateTimeOffset now)
+    /// <param name="unreadCount">The live unread count (<see cref="ChatStore.LiveUnreadCount"/>).</param>
+    public void Update(ConversationInfo c, DateTimeOffset now, int unreadCount = 0)
     {
         ArgumentNullException.ThrowIfNull(c);
 
-        Fill(c, now);
+        Fill(c, now, unreadCount);
         PropertyChanged?.Invoke(this, AllChanged);
     }
 
@@ -99,12 +104,13 @@ public sealed class ConversationRowViewModel : INotifyPropertyChanged
     /// <returns>The name.</returns>
     public override string ToString() => IsUnread ? $"{Name}, Unread" : Name;
 
-    private void Fill(ConversationInfo c, DateTimeOffset now)
+    private void Fill(ConversationInfo c, DateTimeOffset now, int unreadCount)
     {
         Name            = c.Name;
         Snippet         = ChatFormat.Snippet(c);
         Time            = ChatFormat.ListTime(c.LastMessageTime, now, CultureInfo.CurrentCulture);
         IsUnread        = c.Unread;
+        UnreadBadge     = ChatFormat.UnreadBadge(c.Unread, unreadCount, c.Snippet);
         IsPinned        = c.Pinned;
         IsMuted         = c.IsMuted;
         IsGroup         = c.IsGroup;

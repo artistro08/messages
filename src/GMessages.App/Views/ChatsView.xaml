@@ -65,18 +65,20 @@
                     Title="{x:Bind local:ChatsView.BatteryTitle}"
                     Visibility="{x:Bind ViewModel.IsPhoneBatteryLow, Mode=OneWay, FallbackValue=Collapsed}" />
 
-                <!-- Conversations: room at the bottom so Start chat never covers the last row, and a lane on the right where
-                     the scrollbar sits, between the rows and the chat island -->
+                <!-- Conversations: room at the bottom so Start chat never covers the last row. No lane on the right: the
+                     scrollbar floats over the rows' own right padding, so the rows sit as far from the chat island as
+                     from the window's left edge (owner) -->
                 <ListView
                     x:Name="ConversationList"
                     Grid.Row="4"
-                    Padding="0,0,8,64"
+                    Padding="0,0,0,64"
                     AutomationProperties.AutomationId="Main.ConversationList"
                     ContainerContentChanging="OnContainerContentChanging"
                     ContextRequested="OnConversationListContextRequested"
                     Loaded="OnConversationListLoaded"
                     SelectionChanged="OnSelectionChanged"
-                    SelectionMode="Single">
+                    SelectionMode="Single"
+                    SizeChanged="OnConversationListSizeChanged">
                     <!-- Rows: a click opens the chat without taking the focus, so the message box keeps it and never shows its
                          unfocused look between chats (the owner saw that as a flash). Tab and the arrow keys still reach the rows -->
 
@@ -102,6 +104,106 @@
                         </DataTemplate>
                     </ListView.ItemTemplate>
 
+                    <!-- Pinned Grid: with Settings' "Show pinned chats as a grid" on, the inbox's pinned chats sit above
+                         the rows as large pictures with their names, like iMessage, and scroll with the list. Collapsed
+                         while there are none (set in code). It has no scroller of its own (a nested one kept the list's
+                         scrollbar showing): it is as tall as its tiles, and the list scrolls it. Its sides line up with
+                         the rows' (their containers' margins), and the code splits its width into even columns -->
+                    <ListView.Header>
+                        <GridView
+                            x:Name="PinnedGrid"
+                            Margin="4,0,4,8"
+                            AutomationProperties.AutomationId="Main.PinnedGrid"
+                            ContextRequested="OnPinnedGridContextRequested"
+                            SelectionChanged="OnPinnedSelectionChanged"
+                            SelectionMode="Single"
+                            SizeChanged="OnPinnedGridSizeChanged"
+                            Visibility="Collapsed">
+                            <GridView.Template>
+                                <ControlTemplate TargetType="GridView">
+                                    <ItemsPresenter />
+                                </ControlTemplate>
+                            </GridView.Template>
+
+                            <!-- No Transitions: tiles land in place, like the rows' loads -->
+                            <GridView.ItemContainerTransitions>
+                                <TransitionCollection />
+                            </GridView.ItemContainerTransitions>
+
+                            <!-- Tiles: even columns from the left edge (ItemWidth set in code) -->
+                            <GridView.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <ItemsWrapGrid Orientation="Horizontal" />
+                                </ItemsPanelTemplate>
+                            </GridView.ItemsPanel>
+
+                            <GridView.ItemContainerStyle>
+                                <Style BasedOn="{StaticResource DefaultGridViewItemStyle}" TargetType="GridViewItem">
+                                    <Setter Property="AllowFocusOnInteraction" Value="False" />
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                    <Setter Property="Margin" Value="0" />
+                                    <Setter Property="MinWidth" Value="0" />
+                                </Style>
+                            </GridView.ItemContainerStyle>
+
+                            <!-- Tile: the picture (drawn at 52 px, its photo decoded to match), an accent dot while
+                                 unread, and the name below, bold while unread -->
+                            <GridView.ItemTemplate>
+                                <DataTemplate x:DataType="main:ConversationRowViewModel">
+                                    <StackPanel Padding="4,8" Spacing="6">
+                                        <Grid HorizontalAlignment="Center">
+                                            <Viewbox Width="52" Height="52">
+                                                <controls:Avatar
+                                                    PhotoSize="52"
+                                                    Color="{x:Bind AvatarColor, Mode=OneWay}"
+                                                    Initial="{x:Bind Initial, Mode=OneWay}"
+                                                    PhotoId="{x:Bind PhotoId, Mode=OneWay}"
+                                                    SecondColor="{x:Bind SecondColor, Mode=OneWay}"
+                                                    SecondInitial="{x:Bind SecondInitial, Mode=OneWay}"
+                                                    SecondPhotoId="{x:Bind SecondPhotoId, Mode=OneWay}" />
+                                            </Viewbox>
+
+                                            <!-- Unread Badge: the system accent pill at the picture's top right, with the
+                                                 short newest message or the unread count (ChatFormat.UnreadBadge). It
+                                                 hangs past the picture's edge, and grows left for a word or two -->
+                                            <Border
+                                                MinWidth="20"
+                                                MaxWidth="88"
+                                                Height="20"
+                                                Margin="0,-4,-8,0"
+                                                Padding="6,0"
+                                                HorizontalAlignment="Right"
+                                                VerticalAlignment="Top"
+                                                Background="{ThemeResource AccentFillColorDefaultBrush}"
+                                                BorderBrush="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="10"
+                                                Visibility="{x:Bind local:UiHelpers.ShownIfText(UnreadBadge), Mode=OneWay}">
+                                                <TextBlock
+                                                    HorizontalAlignment="Center"
+                                                    VerticalAlignment="Center"
+                                                    AutomationProperties.AutomationId="{x:Bind controls:ConversationRow.PartId('Pinned.Badge.', Id), Mode=OneWay}"
+                                                    Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
+                                                    MaxLines="1"
+                                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                                    Text="{x:Bind UnreadBadge, Mode=OneWay}"
+                                                    TextTrimming="CharacterEllipsis" />
+                                            </Border>
+                                        </Grid>
+                                        <TextBlock
+                                            HorizontalAlignment="Center"
+                                            FontWeight="{x:Bind controls:ColorConverters.Weight(IsUnread), Mode=OneWay}"
+                                            MaxLines="1"
+                                            Style="{StaticResource CaptionTextBlockStyle}"
+                                            Text="{x:Bind Name, Mode=OneWay}"
+                                            TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </GridView.ItemTemplate>
+                        </GridView>
+                    </ListView.Header>
+                    <!-- /Pinned Grid -->
+
                     <!-- Loading More Room: below the last row while the next page loads, where the ring below shows once
                          the list is scrolled to its end -->
                     <ListView.Footer>
@@ -119,7 +221,7 @@
                     Grid.Row="4"
                     Width="40"
                     Height="40"
-                    Margin="0,0,8,64"
+                    Margin="0,0,0,64"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Bottom"
                     Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}"

@@ -37,6 +37,34 @@ public static class ChatFormat
     ];
 
     /// <summary>
+    /// The unread badge on a pinned tile: the newest message itself when it is the only unread one and one or two words
+    /// long, else how many messages are unread (owner).
+    /// </summary>
+    /// <remarks>
+    /// An unread conversation with no live count (its messages came while the app wasn't running) counts as one. A
+    /// message with no text (media with no caption) shows its count.
+    /// </remarks>
+    /// <param name="unread">Whether the conversation is unread.</param>
+    /// <param name="count">The live unread count (<see cref="ChatStore.LiveUnreadCount"/>).</param>
+    /// <param name="text">The newest message's text, or empty.</param>
+    /// <returns>The badge text; empty for a read conversation.</returns>
+    public static string UnreadBadge(bool unread, int count, string text)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+
+        if (!unread)
+        {
+            return string.Empty;
+        }
+
+        count          = Math.Max(1, count);
+        string[] words = text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        return count == 1 && words.Length is 1 or 2
+            ? WithColorEmoji(string.Join(' ', words))
+            : count.ToString(CultureInfo.CurrentCulture);
+    }
+
+    /// <summary>
     /// The snippet line of a conversation: "You: " in front of the owner's own messages, and in a group the sender's
     /// first name in front of anyone else's ("Rachel: "), as Google Messages shows it.
     /// </summary>

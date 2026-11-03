@@ -14,6 +14,10 @@ namespace GMessages.Presentation.Main;
 /// store (which outlives the window), so call <see cref="Dispose"/> when the window closes.
 /// </para>
 /// <para>
+/// With <see cref="PinnedApart"/> on, pinned conversations go to <see cref="Pinned"/> (the inbox's grid) instead of
+/// <see cref="Rows"/>; a row moves between the two as it is pinned or unpinned on the phone.
+/// </para>
+/// <para>
 /// Folder membership follows the status: the inbox shows active conversations, spam and blocked shows the spam and
 /// blocked folders, and archived shows archived and kept-archived ones. A live update that moves a conversation out
 /// of the folder removes its row.
@@ -42,6 +46,9 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
     private bool _reloadPending;
     private bool _morePending;
 
+    // Pinned Conversations Go To Pinned Instead Of Rows
+    private bool _pinnedApart;
+
     /// <summary>
     /// Creates an empty list and starts listening to the store.
     /// </summary>
@@ -65,7 +72,8 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
         _store.Resynced            += OnResynced;
 
         // A Row Landing Mid-Load (A Live Update) Ends The Empty List, So The Ring Goes At Once
-        Rows.CollectionChanged += (_, _) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsLoadingFirstPage)));
+        Rows.CollectionChanged   += (_, _) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsLoadingFirstPage)));
+        Pinned.CollectionChanged += (_, _) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsLoadingFirstPage)));
     }
 
     /// <inheritdoc />
@@ -81,8 +89,35 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
     /// </remarks>
     public event EventHandler<bool>? RowsChanging;
 
-    /// <summary>Gets the rows, pinned first, then newest first.</summary>
+    /// <summary>Gets the rows, pinned first (unless <see cref="PinnedApart"/>), then newest first.</summary>
     public ObservableCollection<ConversationRowViewModel> Rows { get; } = [];
+
+    /// <summary>Gets the pinned rows, newest first, while <see cref="PinnedApart"/> is on; empty otherwise.</summary>
+    public ObservableCollection<ConversationRowViewModel> Pinned { get; } = [];
+
+    /// <summary>
+    /// Gets or sets whether pinned conversations show in <see cref="Pinned"/> instead of <see cref="Rows"/>.
+    /// </summary>
+    /// <remarks>Turning it on or off moves the rows at once, without motion. Call on the UI thread.</remarks>
+    public bool PinnedApart
+    {
+        get => _pinnedApart;
+        set
+        {
+            if (_pinnedApart == value)
+            {
+                return;
+            }
+
+            // A Copy: Placing Moves Rows Between The Two
+            _pinnedApart                        = value;
+            List<ConversationRowViewModel> rows = [.. Pinned, .. Rows];
+            foreach (ConversationRowViewModel row in rows)
+            {
+                Place(row, live: false);
+            }
+        }
+    }
 
     /// <summary>Gets whether a page is loading.</summary>
     public bool IsLoading
@@ -105,7 +140,7 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
     /// Gets whether a page is loading into an empty list (the first load, or a reload after one that failed): the
     /// loading ring. A list with rows keeps them on screen while it reloads or loads more.
     /// </summary>
-    public bool IsLoadingFirstPage => _isLoading && Rows.Count == 0;
+    public bool IsLoadingFirstPage => _isLoading && Rows.Count == 0 && Pinned.Count == 0;
 
     /// <summary>Gets whether the next page is loading below the rows: the small ring at the list's bottom.</summary>
     public bool IsLoadingMore
@@ -142,7 +177,7 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
         }
 
         // What The Store Already Has, Before The Phone Answers
-        if (Rows.Count == 0)
+        if (Rows.Count == 0 && Pinned.Count == 0)
         {
             foreach (ConversationInfo c in _store.CachedConversations())
             {
@@ -157,14 +192,8 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
 
             // Rows Stay The Same Objects, So The Selection And Scroll Survive The Refresh
             HashSet<string> listed = [.. page.Select(c => c.Id)];
-            for (int i = Rows.Count - 1; i >= 0; i--)
-            {
-                if (!listed.Contains(Rows[i].Id))
-                {
-                    RowsChanging?.Invoke(this, false);
-                    Rows.RemoveAt(i);
-                }
-            }
+            DropUnlisted(Pinned, listed);
+            DropUnlisted(Rows, listed);
 
             _next = next;
             _paged.Clear();
@@ -213,7 +242,7 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
         }
 
         // The Rows Before The Page: Loading It Raises Live Updates That Add Its Rows Before It Returns
-        HashSet<string> shown = [.. Rows.Select(r => r.Id)];
+        HashSet<string> shown = [.. Pinned.Select(r => r.Id), .. Rows.Select(r => r.Id)];
 
         IsLoading     = true;
         IsLoadingMore = true;
@@ -292,14 +321,14 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
     // (RowsChanging), So The List Animates It
     private void Apply(ConversationInfo c, bool live)
     {
-        int index = IndexOf(c.Id);
+        ConversationRowViewModel? existing = Find(c.Id);
 
         if (!BelongsHere(c))
         {
-            if (index >= 0)
+            if (existing is not null)
             {
                 RowsChanging?.Invoke(this, live);
-                Rows.RemoveAt(index);
+                ListOf(existing).Remove(existing);
             }
 
             return;
@@ -307,25 +336,61 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
 
         DateTimeOffset now = _time.GetLocalNow();
 
-        if (index < 0)
+        if (existing is null)
         {
-            var row = new ConversationRowViewModel(c, now);
+            var row                                           = new ConversationRowViewModel(c, now, _store.LiveUnreadCount(c.Id));
+            ObservableCollection<ConversationRowViewModel> to = ListFor(row);
 
             RowsChanging?.Invoke(this, live);
-            Rows.Insert(TargetIndex(row, null), row);
+            to.Insert(TargetIndex(to, row, null), row);
             return;
         }
 
-        ConversationRowViewModel existing = Rows[index];
-        existing.Update(c, now);
+        existing.Update(c, now, _store.LiveUnreadCount(c.Id));
+        Place(existing, live);
+    }
 
-        int target = TargetIndex(existing, existing);
-        if (target != index)
+    // Moves A Row To Its Place: Within Its Collection, Or Across When It Was Pinned Or Unpinned (Or PinnedApart Changed)
+    private void Place(ConversationRowViewModel row, bool live)
+    {
+        ObservableCollection<ConversationRowViewModel> from = ListOf(row);
+        ObservableCollection<ConversationRowViewModel> to   = ListFor(row);
+        int index                                           = from.IndexOf(row);
+
+        if (from == to)
         {
-            RowsChanging?.Invoke(this, live);
-            Rows.Move(index, target);
+            int target = TargetIndex(to, row, row);
+            if (target != index)
+            {
+                RowsChanging?.Invoke(this, live);
+                to.Move(index, target);
+            }
+
+            return;
+        }
+
+        RowsChanging?.Invoke(this, live);
+        from.RemoveAt(index);
+        to.Insert(TargetIndex(to, row, null), row);
+    }
+
+    // Removes The Rows A Fresh Page Didn't List
+    private void DropUnlisted(ObservableCollection<ConversationRowViewModel> list, HashSet<string> listed)
+    {
+        for (int i = list.Count - 1; i >= 0; i--)
+        {
+            if (!listed.Contains(list[i].Id))
+            {
+                RowsChanging?.Invoke(this, false);
+                list.RemoveAt(i);
+            }
         }
     }
+
+    // The Collection A Row Belongs In, And The One It Is In Now
+    private ObservableCollection<ConversationRowViewModel> ListFor(ConversationRowViewModel row) => _pinnedApart && row.IsPinned ? Pinned : Rows;
+
+    private ObservableCollection<ConversationRowViewModel> ListOf(ConversationRowViewModel row) => Pinned.Contains(row) ? Pinned : Rows;
 
     private bool BelongsHere(ConversationInfo c) => _folder switch
     {
@@ -335,24 +400,14 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
         _                              => throw new InvalidOperationException($"Unknown folder {_folder}."),
     };
 
-    private int IndexOf(string id)
-    {
-        for (int i = 0; i < Rows.Count; i++)
-        {
-            if (Rows[i].Id == id)
-            {
-                return i;
-            }
-        }
-
-        return -1;
-    }
+    private ConversationRowViewModel? Find(string id) =>
+        Pinned.FirstOrDefault(r => r.Id == id) ?? Rows.FirstOrDefault(r => r.Id == id);
 
     // Where A Row Goes Among The Others: After Every Row That Sorts Before It
-    private int TargetIndex(ConversationRowViewModel row, ConversationRowViewModel? skip)
+    private static int TargetIndex(ObservableCollection<ConversationRowViewModel> list, ConversationRowViewModel row, ConversationRowViewModel? skip)
     {
         int count = 0;
-        foreach (ConversationRowViewModel other in Rows)
+        foreach (ConversationRowViewModel other in list)
         {
             if (other == skip)
             {

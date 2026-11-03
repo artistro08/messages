@@ -36,6 +36,9 @@ public sealed partial class SettingsPage : UserControl
         InitializeComponent();
 
         // Copy
+        PinnedGridHeader.Text      = ChatCopy.ShowPinnedGrid;
+        PinnedGridDescription.Text = ChatCopy.ShowPinnedGridDescription;
+        AutomationProperties.SetName(PinnedGridSwitch, ChatCopy.ShowPinnedGrid);
         SnoozeHeader.Text      = ChatCopy.SnoozeLength;
         SnoozeDescription.Text = ChatCopy.SnoozeLengthDescription;
         AutomationProperties.SetName(SnoozeBox, ChatCopy.SnoozeLength);

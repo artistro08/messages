@@ -32,6 +32,48 @@ public sealed class ConversationListViewModelTests
         Assert.AreEqual("p-pin", list.Rows[0].ParticipantIds.Single());
     }
 
+    /// <summary>
+    /// With PinnedApart on, pinned conversations sit in Pinned (newest first) and not in Rows; pinning or unpinning on
+    /// the phone moves the same row across, and turning it off puts them back at the top of Rows.
+    /// </summary>
+    [TestMethod]
+    public async Task PinnedApart_SplitsPinnedRows_AndFollowsPinChanges()
+    {
+        using var rig = new MainRig();
+        rig.Page(
+            MainRig.Conv("old", "Old", minutesAgo: 90),
+            MainRig.Conv("new", "New", minutesAgo: 1),
+            MainRig.Conv("pin", "Pin", minutesAgo: 600, pinned: true),
+            MainRig.Conv("pin2", "Pin 2", minutesAgo: 300, pinned: true));
+        using var list = NewList(rig);
+        list.PinnedApart = true;
+
+        await list.LoadAsync();
+
+        Assert.AreEqual("pin2,pin", string.Join(",", list.Pinned.Select(r => r.Id)));
+        Assert.AreEqual("new,old", Ids(list));
+
+        // Pinned On The Phone: The Same Row Moves Into The Grid
+        ConversationRowViewModel oldRow = list.Rows[1];
+        await rig.Live(MainRig.Conv("old", "Old", minutesAgo: 90, pinned: true));
+
+        Assert.AreEqual("old,pin2,pin", string.Join(",", list.Pinned.Select(r => r.Id)));
+        Assert.AreSame(oldRow, list.Pinned[0]);
+        Assert.AreEqual("new", Ids(list));
+
+        // Unpinned: Back Among The Rows
+        await rig.Live(MainRig.Conv("pin2", "Pin 2", minutesAgo: 300));
+
+        Assert.AreEqual("old,pin", string.Join(",", list.Pinned.Select(r => r.Id)));
+        Assert.AreEqual("new,pin2", Ids(list));
+
+        // Off: Every Row Back In Rows, Pinned First
+        list.PinnedApart = false;
+
+        Assert.AreEqual(0, list.Pinned.Count);
+        Assert.AreEqual("old,pin,new,pin2", Ids(list));
+    }
+
     [TestMethod]
     public void Row_ToString_NamesAndFlagsUnread()
     {
@@ -188,16 +230,59 @@ public sealed class ConversationListViewModelTests
         Assert.IsTrue(changing.All(live => !live));
     }
 
-    // A Live Message In A Conversation, Sent The Given Minutes Before MainRig.Now
-    private static Message LiveMsg(string id, string conversation, long minutesAgo, string from = "p-x")
+    /// <summary>
+    /// New received messages count up a pinned tile's badge (a repeat of one, or my own, doesn't count); the phone saying
+    /// the conversation is read clears it, and an unread conversation with nothing counted shows its short newest message.
+    /// </summary>
+    [TestMethod]
+    public async Task LiveMessages_CountUnreadBadge_UntilRead()
+    {
+        using var rig = new MainRig();
+        rig.Page(MainRig.Conv("a", "Ann", minutesAgo: 5, pinned: true));
+        using var list = NewList(rig);
+        list.PinnedApart = true;
+        await list.LoadAsync();
+
+        // As The Phone Sends Them: The Unread Conversation First, Then The Message. New Is Judged Against The Real
+        // Clock, So These Are Sent Now
+        DateTimeOffset now  = DateTimeOffset.UtcNow;
+        Conversation unread = MainRig.Conv("a", "Ann", pinned: true, snippet: "ok");
+        unread.Unread       = true;
+        await rig.Live(unread);
+        await rig.LiveMessage(LiveMsg("m1", "a", 0, at: now));
+        Assert.AreEqual("ok", list.Pinned[0].UnreadBadge);
+
+        await rig.Live(unread);
+        await rig.LiveMessage(LiveMsg("m1", "a", 0, at: now));
+        await rig.LiveMessage(LiveMsg("m2", "a", 0, at: now));
+        await rig.LiveMessage(LiveMsg("m3", "a", 0, at: now, status: MessageStatusType.OutgoingComplete));
+        Assert.AreEqual(2, rig.Store.LiveUnreadCount("a"));
+        Assert.AreEqual("2", list.Pinned[0].UnreadBadge);
+
+        // Read On The Phone: Nothing Counted, No Badge
+        await rig.Live(MainRig.Conv("a", "Ann", pinned: true, snippet: "ok"));
+        Assert.AreEqual(0, rig.Store.LiveUnreadCount("a"));
+        Assert.AreEqual(string.Empty, list.Pinned[0].UnreadBadge);
+
+        // A Message While It Reads As Read (Read Along On The Phone) Isn't Counted Into The Next Unread Spell
+        await rig.LiveMessage(LiveMsg("m4", "a", 0, at: now));
+        Assert.AreEqual(0, rig.Store.LiveUnreadCount("a"));
+
+        // Unread Again With Nothing Counted (It Came While The App Was Closed): The Short Message Itself
+        await rig.Live(unread);
+        Assert.AreEqual("ok", list.Pinned[0].UnreadBadge);
+    }
+
+    // A Live Message In A Conversation, Sent The Given Minutes Before MainRig.Now (Or At A Given Time)
+    private static Message LiveMsg(string id, string conversation, long minutesAgo, string from = "p-x", DateTimeOffset? at = null, MessageStatusType status = MessageStatusType.IncomingDelivered)
     {
         var m = new Message
         {
             MessageID      = id,
             ConversationID = conversation,
             ParticipantID  = from,
-            Timestamp      = MainRig.Now.AddMinutes(-minutesAgo).ToUnixTimeMilliseconds() * 1000,
-            MessageStatus  = new MessageStatus { Status = MessageStatusType.IncomingDelivered },
+            Timestamp      = (at ?? MainRig.Now.AddMinutes(-minutesAgo)).ToUnixTimeMilliseconds() * 1000,
+            MessageStatus  = new MessageStatus { Status = status },
         };
         m.MessageInfo.Add(new MessageInfo { MessageContent = new MessageContent { Content = "x" } });
         return m;
