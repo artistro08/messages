@@ -636,15 +636,16 @@
             <!-- /Attachments -->
         </StackPanel>
 
-        <!-- Compose: the message box (Enter sends, Shift + Enter adds a line), with the emoji icon inside it on the left and the
-             paperclip and mic inside it on the right, then send, icons only. Its padding keeps the text clear of them. Under the
-             reply chip or the attachment chips it meets them with square top corners -->
+        <!-- Compose: the message box (Enter sends, Shift + Enter adds a line), with the emoji icon, the paperclip and the
+             voice message waveform inside it on the right (owner), then send, icons only. Its right padding (140: four 32 px
+             buttons and their 6 px inset, plus a gap) keeps the text clear of them. Under the reply chip or the attachment
+             chips it meets them with square top corners -->
         <Grid Grid.Row="4" Padding="{x:Bind local:ChatPane.ComposePadding(Chat.IsReplying, Chat.HasAttachments, Chat.Voice.IsPreview), Mode=OneWay}">
             <TextBox
                 x:Name="DraftBox"
                 MinHeight="44"
                 MaxHeight="160"
-                Padding="44,11,108,11"
+                Padding="12,11,140,11"
                 AcceptsReturn="True"
                 AutomationProperties.AutomationId="Chat.Draft"
                 AutomationProperties.Name="Message"
@@ -682,74 +683,78 @@
                 </TextBox.Resources>
             </TextBox>
 
-            <Button
-                Width="32"
-                Height="32"
-                Margin="6,0,0,6"
-                HorizontalAlignment="Left"
-                VerticalAlignment="Bottom"
-                AutomationProperties.AutomationId="Chat.Emoji"
-                AutomationProperties.Name="Emoji"
-                Click="OnEmojiClick"
-                Style="{StaticResource IconButtonStyle}">
-                <FontIcon
-                    FontSize="16"
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                    Glyph="&#xE76E;" />
-            </Button>
-            <!-- Attach: the paperclip, inside the box's right edge left of the mic, opens the file picker for any files
-                 (Ctrl + Shift + a; Ctrl + Shift + p for photos) -->
-            <Button
-                Width="32"
-                Height="32"
-                Margin="0,0,70,6"
-                HorizontalAlignment="Right"
-                VerticalAlignment="Bottom"
-                AutomationProperties.AutomationId="Chat.Attach"
-                AutomationProperties.Name="{x:Bind local:ChatPane.AttachText}"
-                Click="OnAttachClick"
-                Style="{StaticResource IconButtonStyle}"
-                ToolTipService.ToolTip="{x:Bind local:ChatPane.AttachText}">
-                <FontIcon
-                    FontSize="16"
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                    Glyph="&#xE723;" />
-            </Button>
-            <!-- Record: the mic, inside the box's right edge beside Send, always there -->
-            <Button
-                Width="32"
-                Height="32"
-                Margin="0,0,38,6"
-                HorizontalAlignment="Right"
-                VerticalAlignment="Bottom"
-                AutomationProperties.AutomationId="Chat.Record"
-                AutomationProperties.Name="{x:Bind local:ChatPane.RecordText}"
-                Click="OnRecordClick"
-                Style="{StaticResource IconButtonStyle}"
-                ToolTipService.ToolTip="{x:Bind local:ChatPane.RecordText}">
-                <FontIcon
-                    FontSize="16"
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                    Glyph="&#xE720;" />
-            </Button>
-            <Button
-                Width="32"
-                Height="32"
+            <!-- Compose Buttons: one row inside the box's bottom right, 6 px in from its edges, 32 px each, no gaps -->
+            <StackPanel
                 Margin="0,0,6,6"
                 HorizontalAlignment="Right"
                 VerticalAlignment="Bottom"
-                AutomationProperties.AutomationId="Chat.Send"
-                AutomationProperties.Name="Send"
-                Click="OnSendClick"
-                IsEnabled="{x:Bind Chat.CanSend, Mode=OneWay, FallbackValue=False}"
-                Style="{StaticResource IconButtonStyle}">
-                <!-- Dimmed While Disabled: the icon keeps its own accent color, so the button's disabled color can't reach it -->
-                <FontIcon
-                    FontSize="16"
-                    Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
-                    Glyph="&#xE724;"
-                    Opacity="{x:Bind local:ChatPane.EnabledOpacity(Chat.CanSend), Mode=OneWay, FallbackValue=0.4}" />
-            </Button>
+                Orientation="Horizontal">
+
+                <!-- Emoji: opens Windows' emoji panel (Ctrl + Shift + e) -->
+                <Button
+                    Width="32"
+                    Height="32"
+                    AutomationProperties.AutomationId="Chat.Emoji"
+                    AutomationProperties.Name="Emoji"
+                    Click="OnEmojiClick"
+                    Style="{StaticResource IconButtonStyle}"
+                    ToolTipService.ToolTip="Emoji">
+                    <FontIcon
+                        FontSize="16"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Glyph="&#xE76E;" />
+                </Button>
+
+                <!-- Attach: the paperclip, opens the file picker for any files (Ctrl + Shift + a; Ctrl + Shift + p for photos) -->
+                <Button
+                    Width="32"
+                    Height="32"
+                    AutomationProperties.AutomationId="Chat.Attach"
+                    AutomationProperties.Name="{x:Bind local:ChatPane.AttachText}"
+                    Click="OnAttachClick"
+                    Style="{StaticResource IconButtonStyle}"
+                    ToolTipService.ToolTip="{x:Bind local:ChatPane.AttachText}">
+                    <FontIcon
+                        FontSize="16"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Glyph="&#xE723;" />
+                </Button>
+
+                <!-- Record: a voice message, always there. A waveform: five rounded bars on the 16 px grid, Fluent's 1.5 px
+                     stroke. Not a mic, which reads as speech to text (owner); Segoe Fluent Icons has no waveform glyph -->
+                <Button
+                    Width="32"
+                    Height="32"
+                    AutomationProperties.AutomationId="Chat.Record"
+                    AutomationProperties.Name="{x:Bind local:ChatPane.RecordText}"
+                    Click="OnRecordClick"
+                    Style="{StaticResource IconButtonStyle}"
+                    ToolTipService.ToolTip="{x:Bind local:ChatPane.RecordText}">
+                    <PathIcon
+                        Width="16"
+                        Height="16"
+                        Data="M2,6 a.75,.75 0 0 1 .75,.75 V9.25 a.75,.75 0 0 1 -1.5,0 V6.75 a.75,.75 0 0 1 .75,-.75Z M5,3.5 a.75,.75 0 0 1 .75,.75 V11.75 a.75,.75 0 0 1 -1.5,0 V4.25 a.75,.75 0 0 1 .75,-.75Z M8,1.5 a.75,.75 0 0 1 .75,.75 V13.75 a.75,.75 0 0 1 -1.5,0 V2.25 a.75,.75 0 0 1 .75,-.75Z M11,3.5 a.75,.75 0 0 1 .75,.75 V11.75 a.75,.75 0 0 1 -1.5,0 V4.25 a.75,.75 0 0 1 .75,-.75Z M14,6 a.75,.75 0 0 1 .75,.75 V9.25 a.75,.75 0 0 1 -1.5,0 V6.75 a.75,.75 0 0 1 .75,-.75Z"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </Button>
+
+                <!-- Send -->
+                <Button
+                    Width="32"
+                    Height="32"
+                    AutomationProperties.AutomationId="Chat.Send"
+                    AutomationProperties.Name="Send"
+                    Click="OnSendClick"
+                    IsEnabled="{x:Bind Chat.CanSend, Mode=OneWay, FallbackValue=False}"
+                    Style="{StaticResource IconButtonStyle}">
+                    <!-- Dimmed While Disabled: the icon keeps its own accent color, so the button's disabled color can't reach it -->
+                    <FontIcon
+                        FontSize="16"
+                        Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                        Glyph="&#xE724;"
+                        Opacity="{x:Bind local:ChatPane.EnabledOpacity(Chat.CanSend), Mode=OneWay, FallbackValue=0.4}" />
+                </Button>
+            </StackPanel>
+            <!-- /Compose Buttons -->
 
             <!-- Recording: over the message box while the mic records, a red dot, the running time, the live waveform of the
                  input level, then Cancel recording (deletes it), Pause or Resume (glyph and name set in code) and Done (a check mark; keeps it for the preview chip). On a solid base, since
@@ -758,7 +763,7 @@
                 Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
                 CornerRadius="{x:Bind local:ChatPane.DraftCorners(Chat.IsReplying, Chat.HasAttachments, Chat.Voice.IsPreview), Mode=OneWay}"
                 Visibility="{x:Bind Chat.Voice.IsCapturing, Mode=OneWay, FallbackValue=Collapsed}">
-                <!-- Spacing: the buttons sit like the message box's own (emoji, paperclip, mic, Send): 32 px each, side by
+                <!-- Spacing: the buttons sit like the message box's own (emoji, paperclip, voice message, Send): 32 px each, side by
                      side with no gap, 6 px in from the box's right edge (5 px padding inside the 1 px border). The waveform
                      fills everything between the timer and Cancel recording -->
                 <Grid

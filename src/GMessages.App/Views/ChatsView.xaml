@@ -65,13 +65,13 @@
                     Title="{x:Bind local:ChatsView.BatteryTitle}"
                     Visibility="{x:Bind ViewModel.IsPhoneBatteryLow, Mode=OneWay, FallbackValue=Collapsed}" />
 
-                <!-- Conversations: room at the bottom so Start chat never covers the last row. No lane on the right: the
-                     scrollbar floats over the rows' own right padding, so the rows sit as far from the chat island as
-                     from the window's left edge (owner) -->
+                <!-- Conversations: room at the bottom so Start chat, and the Undo bar above it while it shows, never cover the
+                     last row (ListPadding). No lane on the right: the scrollbar floats over the rows' own right padding, so
+                     the rows sit as far from the chat island as from the window's left edge (owner) -->
                 <ListView
                     x:Name="ConversationList"
                     Grid.Row="4"
-                    Padding="0,0,0,64"
+                    Padding="{x:Bind local:ChatsView.ListPadding(ViewModel.HasUndo), Mode=OneWay}"
                     AutomationProperties.AutomationId="Main.ConversationList"
                     ContainerContentChanging="OnContainerContentChanging"
                     ContextRequested="OnConversationListContextRequested"
@@ -295,23 +295,24 @@
                     AutomationProperties.AutomationId="Main.ListLoading"
                     IsActive="{x:Bind ViewModel.CurrentList.IsLoadingFirstPage, Mode=OneWay}" />
 
-                <!-- Bottom Row: the Undo bar and Start chat side by side, floating over the rows. The row has no background, so
-                     clicks between them still reach the rows -->
-                <Grid
+                <!-- Bottom Row: the Undo bar across the list's width, with Start chat below it at the right, floating over the
+                     rows. No background, so clicks around them still reach the rows. A stack, so a hidden Start chat (in a
+                     folder) leaves no gap under Undo. 22 px up from the bottom: the chat island's 8 px gap plus the message
+                     box's inset, so Start chat's bottom lines up with the message box's (owner, measured) -->
+                <StackPanel
                     Grid.Row="4"
-                    Margin="16,0,16,16"
+                    Margin="16,0,16,22"
                     VerticalAlignment="Bottom"
-                    ColumnDefinitions="*,Auto"
-                    ColumnSpacing="8">
+                    Spacing="8">
 
-                    <!-- Undo: after an archive (only: owner), for a few seconds (the view model hides it), left of Start chat;
-                         Undo puts the conversation back, the X hides it. Solid and lifted like Start chat, with room above
-                         and below its text, bottoms lined up; a narrow list cuts the notice short with "…". It never takes the focus (Tab reaches it), and
-                         Narrator announces the notice (see AnnounceUndo) -->
+                    <!-- Undo: after an archive (only: owner), for a few seconds (the view model hides it), as wide as the list
+                         above Start chat (owner); Undo puts the conversation back, the X hides it. Solid and lifted like
+                         Start chat, with room above and below its text; a narrow list cuts the notice short with "…". It
+                         never takes the focus (Tab reaches it), and Narrator announces the notice (see AnnounceUndo).
+                         When scrolling slides Start chat away, Undo slides down into its place (set from code) -->
                     <Grid
                         x:Name="UndoBar"
                         Padding="12,8,8,8"
-                        VerticalAlignment="Bottom"
                         Background="{ThemeResource SolidBackgroundFillColorTertiaryBrush}"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                         BorderThickness="1"
@@ -322,6 +323,9 @@
                         <Grid.Shadow>
                             <ThemeShadow />
                         </Grid.Shadow>
+                        <Grid.TranslationTransition>
+                            <Vector3Transition />
+                        </Grid.TranslationTransition>
                         <TextBlock
                             x:Name="UndoNoticeText"
                             VerticalAlignment="Center"
@@ -366,8 +370,7 @@
                          see-through, and the rows showed through the button -->
                     <Grid
                         x:Name="StartChatHost"
-                        Grid.Column="1"
-                        VerticalAlignment="Bottom"
+                        HorizontalAlignment="Right"
                         Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
                         CornerRadius="{ThemeResource ControlCornerRadius}"
                         Translation="0,0,16"
@@ -393,7 +396,7 @@
                         </Button>
                     </Grid>
                     <!-- /Start Chat -->
-                </Grid>
+                </StackPanel>
                 <!-- /Bottom Row -->
             </Grid>
         </SplitView.Pane>
