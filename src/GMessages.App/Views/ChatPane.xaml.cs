@@ -158,8 +158,8 @@ public sealed partial class ChatPane : UserControl
     // Typing Dots: Each Rises This Far And Back Within Its Beat (See TypingCycle)
     private const float TypingRise = 4;
 
-    // Another Chat Fades In Over WinUI's Normal Control Animation Time
-    private static readonly TimeSpan ChatFadeIn = TimeSpan.FromMilliseconds(250);
+    // Another Chat Fades In Over WinUI's Faster Control Animation Time: The Normal 250 ms Made Switching Feel Slow
+    private static readonly TimeSpan ChatFadeIn = TimeSpan.FromMilliseconds(83);
 
     // Typing Dots: Each Rises (TypingRise) Within Its Beat, The Next Starting This Much Later, Every Cycle
     private static readonly TimeSpan TypingCycle   = TimeSpan.FromMilliseconds(1200);
