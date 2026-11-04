@@ -586,6 +586,90 @@ public sealed class MainViewModelTests
         Assert.AreEqual(string.Empty, vm.Chat!.Draft);
     }
 
+    /// <summary>
+    /// A draft outlives the window: closing it with a chat open keeps that chat's draft for the next window.
+    /// </summary>
+    [TestMethod]
+    public async Task Drafts_OutliveTheWindow()
+    {
+        using var rig = new MainRig();
+        using (MainViewModel first = await NewMainAsync(rig))
+        {
+            first.Select("a");
+            first.Chat!.Draft = "for ann";
+        }
+
+        using MainViewModel second = await NewMainAsync(rig);
+        second.Select("a");
+        Assert.AreEqual("for ann", second.Chat!.Draft);
+    }
+
+    /// <summary>
+    /// A chat left with a draft shows "Draft: " and the text on its row (in italics); one left with only files names them,
+    /// and the files come back as chips; clearing the draft brings the newest message back.
+    /// </summary>
+    [TestMethod]
+    public async Task Drafts_ShowOnTheRow_TextOrFiles()
+    {
+        using var rig = new MainRig();
+        using MainViewModel vm = await NewMainAsync(rig);
+        ConversationRowViewModel ann = vm.Inbox.Rows.Single(r => r.Id == "a");
+        ConversationRowViewModel bo  = vm.Inbox.Rows.Single(r => r.Id == "b");
+        string annSnippet            = ann.Snippet;
+
+        // Text
+        vm.Select("a");
+        vm.Chat!.Draft = "for ann";
+        vm.Select("b");
+        Assert.AreEqual("Draft: for ann", ann.Snippet);
+        Assert.IsTrue(ann.IsDraft);
+
+        // Files Only
+        vm.Chat!.Attach("plan.pdf", "application/pdf", [1]);
+        vm.Chat.Attach("pic.png", "image/png", [2], 4, 3);
+        vm.Select("a");
+        Assert.AreEqual("Draft: plan.pdf, Photo", bo.Snippet);
+        vm.Select("b");
+        Assert.AreEqual(2, vm.Chat!.Attachments.Count);
+
+        // Cleared: The Newest Message Again
+        vm.Select("a");
+        vm.Chat!.Draft = string.Empty;
+        vm.Select("b");
+        Assert.AreEqual(annSnippet, ann.Snippet);
+        Assert.IsFalse(ann.IsDraft);
+
+        // Blank Text Isn't A Draft
+        vm.Select("a");
+        vm.Chat!.Draft = "  \n ";
+        vm.Select("b");
+        Assert.IsFalse(ann.IsDraft);
+    }
+
+    /// <summary>
+    /// A chat opened and left untouched keeps its saved draft as it is, and a draft cleared and typed again is kept.
+    /// </summary>
+    [TestMethod]
+    public async Task Drafts_UntouchedKept_RetypedSaved()
+    {
+        using var rig = new MainRig();
+        rig.Store.SaveDraft("a", "saved");
+        using MainViewModel vm = await NewMainAsync(rig);
+
+        // Untouched
+        vm.Select("a");
+        vm.Select("b");
+        Assert.AreEqual("saved", rig.Store.Draft("a"));
+
+        // Cleared, Then The Same Text Typed Again
+        vm.Select("a");
+        vm.Chat!.Draft = string.Empty;
+        vm.Chat.Draft  = "saved";
+        rig.Store.SaveDraft("a", string.Empty);
+        vm.Select("b");
+        Assert.AreEqual("saved", rig.Store.Draft("a"));
+    }
+
     private static UserAlert Alert(AlertType type) => new(new UserAlertEvent { AlertType = type });
 
     /// <summary>A window opened after the alert shows the banner right away.</summary>

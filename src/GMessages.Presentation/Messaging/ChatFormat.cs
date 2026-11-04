@@ -123,6 +123,25 @@ public static class ChatFormat
     }
 
     /// <summary>
+    /// What a chat's list row says about its unsent draft: the text, else what the files are ("Photo", or a file's
+    /// name), each after the other; empty for no draft. The row puts "Draft: " in front.
+    /// </summary>
+    /// <param name="text">The draft text.</param>
+    /// <param name="files">The files picked to send with it.</param>
+    /// <returns>The line, or empty.</returns>
+    public static string DraftLine(string text, IReadOnlyList<PendingAttachment> files)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        ArgumentNullException.ThrowIfNull(files);
+
+        // Blank Text Counts As None; Line Breaks Become Spaces, So The One-Line Row Shows The Words
+        string line = string.Join(' ', text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        return line.Length > 0
+            ? line
+            : string.Join(", ", files.Select(f => f.Kind == MessageKind.File ? f.Name : KindLabel(f.Kind)));
+    }
+
+    /// <summary>
     /// The first word of a name, or the whole of a number, short code or email address (which have no first name).
     /// </summary>
     /// <param name="name">The name as the phone gives it.</param>

@@ -523,6 +523,21 @@ public sealed class ChatStoreTests
     }
 
     /// <summary>
+    /// Saved drafts come back after a restart.
+    /// </summary>
+    [TestMethod]
+    public async Task LoadSaved_PutsBackDrafts()
+    {
+        using var rig = new Rig(withDatabase: true);
+        rig.Database!.SaveDraft("c1", "see you");
+
+        await rig.Store.LoadSavedAsync();
+
+        Assert.AreEqual("see you", rig.Store.Draft("c1"));
+        Assert.AreEqual(string.Empty, rig.Store.Draft("c2"));
+    }
+
+    /// <summary>
     /// An unpair or sign-out while the saved conversations wait their turn on the queue: the old account's rows never
     /// reach memory.
     /// </summary>

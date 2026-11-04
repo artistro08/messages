@@ -10,11 +10,12 @@ Kaituro keeps a few files in its own app folder so it can work:
 
 - **Your pairing session**, so you don't have to pair every time you open it. It's encrypted with your Windows account, so only you can read it.
 - **Your recent chats**, so they open instantly after a restart. Names, numbers and message text are encrypted with your Windows account too.
+- **Your unsent drafts**, so what you typed is still there after you close Kaituro. They're encrypted with your Windows account like your chats.
 - **Contact photos** used in notifications.
 - **Your settings**, like your theme and microphone.
 - **Log files** to help fix bugs. They never include your messages, contacts or links.
 
-Signing out deletes your session, your saved chats and the contact photos. Uninstalling Kaituro deletes everything.
+Signing out deletes your session, your saved chats and drafts, and the contact photos. Uninstalling Kaituro deletes everything.
 
 ## Who Kaituro Talks To
 

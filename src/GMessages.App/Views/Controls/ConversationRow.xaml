@@ -133,6 +133,7 @@
             <TextBlock
                 x:Name="SnippetText"
                 AutomationProperties.AutomationId="{x:Bind local:ConversationRow.PartId('Row.Snippet.', Row.Id), Mode=OneWay, FallbackValue=''}"
+                FontStyle="{x:Bind local:ColorConverters.Style(Row.IsDraft), Mode=OneWay}"
                 FontWeight="{x:Bind local:ColorConverters.Weight(Row.IsUnread), Mode=OneWay}"
                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                 IsTextTrimmedChanged="OnTextTrimmedChanged"

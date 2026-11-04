@@ -62,6 +62,9 @@ public sealed partial class ChatStore : IDisposable
     private readonly Lock _queueLock = new();
     private Task _queue = Task.CompletedTask;
 
+    // The Draft Writes Started So Far (Run Outside The Queue, See SaveDraft), So FlushAsync Waits For Them Too (Under _queueLock)
+    private Task _draftWrites = Task.CompletedTask;
+
     // Cache Of Slim Conversation Records, By ID
     private readonly ConcurrentDictionary<string, ConversationInfo> _cache = new();
 
@@ -84,6 +87,11 @@ public sealed partial class ChatStore : IDisposable
     // New Received Messages' Text Kept Live Per Conversation Since It Was Last Read (The Phone Sends No Count); Dropped
     // When The Conversation Turns Read
     private readonly ConcurrentDictionary<string, ImmutableList<string>> _unreadTexts = new();
+
+    // Each Conversation's Unsent Draft, Loaded From And Saved To The Database So It Outlives The Window And The App, And
+    // The Files Picked To Send With It (Memory Only)
+    private readonly ConcurrentDictionary<string, string> _drafts                               = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, IReadOnlyList<PendingAttachment>> _draftFiles = new(StringComparer.Ordinal);
 
     // Newest Encryption Tombstone Seen Per Conversation, With Its Time In Microseconds
     private readonly ConcurrentDictionary<string, (bool Encrypted, long At)> _encryption = new();
@@ -186,6 +194,87 @@ public sealed partial class ChatStore : IDisposable
         _unreadTexts.GetValueOrDefault(conversationId) ?? [];
 
     /// <summary>
+    /// Gets a conversation's unsent draft.
+    /// </summary>
+    /// <param name="conversationId">The conversation ID.</param>
+    /// <returns>The draft; empty when there is none.</returns>
+    public string Draft(string conversationId) => _drafts.GetValueOrDefault(conversationId) ?? string.Empty;
+
+    /// <summary>
+    /// Gets the files picked or pasted to send with a conversation's unsent draft.
+    /// </summary>
+    /// <param name="conversationId">The conversation ID.</param>
+    /// <returns>The files; empty when there are none.</returns>
+    public IReadOnlyList<PendingAttachment> DraftFiles(string conversationId) => _draftFiles.GetValueOrDefault(conversationId) ?? [];
+
+    /// <summary>
+    /// Raised on the caller's thread with the conversation ID when its draft (text or files) changed, so its list row
+    /// can show it.
+    /// </summary>
+    public event EventHandler<string>? DraftChanged;
+
+    /// <summary>
+    /// Keeps a conversation's unsent draft, and saves its text so it's still there after the window or the app closes.
+    /// </summary>
+    /// <remarks>
+    /// An empty draft forgets it. The files are kept in memory only, for as long as the app runs: a pasted picture has
+    /// no file to open again after a restart. The text is saved at once on the thread pool, not behind the queued message
+    /// saves: a quit cuts those off after a limit (they're fetched again from the phone), and a draft can't be fetched
+    /// again. It's encrypted like every other body, and dropped after a sign-out (the database is deleted with the
+    /// account).
+    /// </remarks>
+    /// <param name="conversationId">The conversation ID.</param>
+    /// <param name="text">The draft text.</param>
+    /// <param name="files">The files to send with it, or null for none.</param>
+    public void SaveDraft(string conversationId, string text, IReadOnlyList<PendingAttachment>? files = null)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(conversationId);
+        ArgumentNullException.ThrowIfNull(text);
+
+        // Files In Memory
+        files ??= [];
+        bool filesChanged = !DraftFiles(conversationId).SequenceEqual(files);
+        if (files.Count > 0)
+        {
+            _draftFiles[conversationId] = [.. files];
+        }
+        else
+        {
+            _draftFiles.TryRemove(conversationId, out _);
+        }
+
+        // Text Unchanged: Nothing To Write. A Cleared Draft Stays As An Empty Entry, So A Saved One That Loads Late Can't
+        // Bring It Back (See LoadSavedAsync)
+        if (_drafts.TryGetValue(conversationId, out string? old) && old == text)
+        {
+            if (filesChanged)
+            {
+                DraftChanged?.Invoke(this, conversationId);
+            }
+
+            return;
+        }
+
+        _drafts[conversationId] = text;
+        DraftChanged?.Invoke(this, conversationId);
+
+        // Writes The Draft As It Is When The Write Runs, So Two Quick Saves Can't Land Out Of Order; FlushAsync (And So The
+        // Quit) Waits For It
+        int generation = Generation;
+        Task write     = ReadNowAsync(database =>
+        {
+            if (generation == Generation)
+            {
+                database.SaveDraft(conversationId, Draft(conversationId));
+            }
+        });
+        lock (_queueLock)
+        {
+            _draftWrites = Task.WhenAll(_draftWrites, write);
+        }
+    }
+
+    /// <summary>
     /// Gets whether a conversation is end-to-end encrypted.
     /// </summary>
     /// <remarks>
@@ -239,6 +328,7 @@ public sealed partial class ChatStore : IDisposable
 
             IReadOnlyList<Conversation> saved                                 = database.LoadConversations();
             IReadOnlyDictionary<string, (bool Encrypted, long At)> encryption = database.LoadEncryption();
+            IReadOnlyDictionary<string, string> drafts                        = database.LoadDrafts();
 
             // Under The Reset Lock, So Reset Can't Land Between The Check And The Rows
             lock (_resetLock)
@@ -268,6 +358,12 @@ public sealed partial class ChatStore : IDisposable
                 foreach ((string id, (bool Encrypted, long At) state) in encryption)
                 {
                     _encryption.AddOrUpdate(id, state, (_, old) => state.At > old.At ? state : old);
+                }
+
+                // Each Saved Draft, Unless One Was Typed Meanwhile
+                foreach ((string id, string draft) in drafts)
+                {
+                    _drafts.TryAdd(id, draft);
                 }
             }
         });
@@ -979,6 +1075,8 @@ public sealed partial class ChatStore : IDisposable
             _encryption.Clear();
             _liveMedia.Clear();
             _unreadTexts.Clear();
+            _drafts.Clear();
+            _draftFiles.Clear();
             _me = null;
         }
 

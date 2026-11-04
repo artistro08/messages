@@ -70,6 +70,7 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
 
         _store.ConversationChanged += OnConversationChanged;
         _store.Resynced            += OnResynced;
+        _store.DraftChanged        += OnDraftChanged;
 
         // A Row Landing Mid-Load (A Live Update) Ends The Empty List, So The Ring Goes At Once
         Rows.CollectionChanged   += (_, _) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsLoadingFirstPage)));
@@ -305,6 +306,7 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
     {
         _store.ConversationChanged -= OnConversationChanged;
         _store.Resynced            -= OnResynced;
+        _store.DraftChanged        -= OnDraftChanged;
     }
 
     // =========================================================================
@@ -335,10 +337,11 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
         }
 
         DateTimeOffset now = _time.GetLocalNow();
+        string draft       = ChatFormat.DraftLine(_store.Draft(c.Id), _store.DraftFiles(c.Id));
 
         if (existing is null)
         {
-            var row                                           = new ConversationRowViewModel(c, now, _store.LiveUnreadTexts(c.Id));
+            var row                                           = new ConversationRowViewModel(c, now, _store.LiveUnreadTexts(c.Id), draft);
             ObservableCollection<ConversationRowViewModel> to = ListFor(row);
 
             RowsChanging?.Invoke(this, live);
@@ -346,8 +349,19 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
             return;
         }
 
-        existing.Update(c, now, _store.LiveUnreadTexts(c.Id));
+        existing.Update(c, now, _store.LiveUnreadTexts(c.Id), draft);
         Place(existing, live);
+    }
+
+    // A Draft Kept Or Cleared: The Row Shows It (Or Its Newest Message Again), In Place
+    private void OnDraftChanged(object? sender, string conversationId)
+    {
+        if (_store.Find(conversationId) is not { } c || Find(conversationId) is null)
+        {
+            return;
+        }
+
+        Apply(c, live: false);
     }
 
     // Moves A Row To Its Place: Within Its Collection, Or Across When It Was Pinned Or Unpinned (Or PinnedApart Changed)

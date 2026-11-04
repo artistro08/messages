@@ -39,9 +39,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     // Whether Received Messages' Links Get Previews (Settings); Null Means Always
     private readonly Func<bool>? _showReceivedPreviews;
 
-    // Each Conversation's Unsent Draft While The Window Is Open, So Escape Or Another Chat Loses Nothing (Memory Only)
-    private readonly Dictionary<string, string> _drafts = new(StringComparer.Ordinal);
-
     // The Folder Lists (Spam And Blocked, Archived), Made The First Time Each Opens
     private readonly Dictionary<ConversationFolder, ConversationListViewModel> _folders = [];
 
@@ -350,24 +347,33 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             list.Dispose();
         }
 
-        Chat?.Dispose();
+        // Closing The Window Keeps The Open Chat's Draft
+        if (Chat is { } open)
+        {
+            KeepDraft(open);
+            open.Dispose();
+        }
     }
 
-    // Disposes The Open Chat And Opens One For The New Selection (Null Closes It). The Closing Chat's Draft Is Kept (An
-    // Empty One Forgotten) And The Opening Chat's Put Back
+    // Saves A Closing Chat's Draft And Files (An Empty One Forgets It, See ChatStore.SaveDraft), Only When They Were Changed
+    // While It Was Open: A Saved Draft That Loaded After The Chat Opened Was Never Shown, And Mustn't Be Wiped By The Empty Box
+    private void KeepDraft(ChatViewModel chat)
+    {
+        if (!chat.IsDraftEdited)
+        {
+            return;
+        }
+
+        _store.SaveDraft(chat.ConversationId, chat.Draft, [.. chat.Attachments]);
+    }
+
+    // Disposes The Open Chat And Opens One For The New Selection (Null Closes It). The Closing Chat's Draft Is Kept And The
+    // Opening Chat's Put Back
     private void ReplaceChat(string? conversationId)
     {
         if (Chat is { } closing)
         {
-            if (closing.Draft.Length > 0)
-            {
-                _drafts[closing.ConversationId] = closing.Draft;
-            }
-            else
-            {
-                _drafts.Remove(closing.ConversationId);
-            }
-
+            KeepDraft(closing);
             closing.Dispose();
         }
 
@@ -376,10 +382,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         if (conversationId is not null)
         {
             Chat = new ChatViewModel(_store, conversationId, _time, _post, _previews, _showReceivedPreviews);
-            if (_drafts.TryGetValue(conversationId, out string? draft))
-            {
-                Chat.RestoreDraft(draft);
-            }
+            Chat.RestoreDraft(_store.Draft(conversationId), _store.DraftFiles(conversationId));
 
             _ = Chat.LoadAsync();
         }

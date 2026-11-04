@@ -39,4 +39,11 @@ public static class ColorConverters
     /// <param name="bold">True for bold.</param>
     /// <returns>The font weight.</returns>
     public static FontWeight Weight(bool bold) => bold ? FontWeights.Bold : FontWeights.Normal;
+
+    /// <summary>
+    /// Italic or normal text, for <c>x:Bind</c>.
+    /// </summary>
+    /// <param name="italic">True for italic.</param>
+    /// <returns>The font style.</returns>
+    public static FontStyle Style(bool italic) => italic ? FontStyle.Italic : FontStyle.Normal;
 }

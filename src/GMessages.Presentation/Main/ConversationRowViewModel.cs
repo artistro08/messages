@@ -24,12 +24,13 @@ public sealed class ConversationRowViewModel : INotifyPropertyChanged
     /// <param name="c">The conversation.</param>
     /// <param name="now">The current time, for the list time.</param>
     /// <param name="unreadTexts">The live unread messages' text (<see cref="ChatStore.LiveUnreadTexts"/>), or null for none.</param>
-    public ConversationRowViewModel(ConversationInfo c, DateTimeOffset now, IReadOnlyList<string>? unreadTexts = null)
+    /// <param name="draft">The unsent draft's line (<see cref="ChatFormat.DraftLine"/>), or empty for none.</param>
+    public ConversationRowViewModel(ConversationInfo c, DateTimeOffset now, IReadOnlyList<string>? unreadTexts = null, string draft = "")
     {
         ArgumentNullException.ThrowIfNull(c);
 
         Id = c.Id;
-        Fill(c, now, unreadTexts ?? []);
+        Fill(c, now, unreadTexts ?? [], draft);
     }
 
     /// <inheritdoc />
@@ -41,8 +42,14 @@ public sealed class ConversationRowViewModel : INotifyPropertyChanged
     /// <summary>Gets the conversation name.</summary>
     public string Name { get; private set; } = string.Empty;
 
-    /// <summary>Gets the newest message's text, with "You: " for the owner's own messages.</summary>
+    /// <summary>
+    /// Gets the newest message's text, with "You: " for the owner's own messages; or "Draft: " and the unsent draft while
+    /// there is one (see <see cref="IsDraft"/>).
+    /// </summary>
     public string Snippet { get; private set; } = string.Empty;
+
+    /// <summary>Gets whether the snippet shows an unsent draft (drawn in italics).</summary>
+    public bool IsDraft { get; private set; }
 
     /// <summary>Gets the formatted time of the newest message.</summary>
     public string Time { get; private set; } = string.Empty;
@@ -101,11 +108,12 @@ public sealed class ConversationRowViewModel : INotifyPropertyChanged
     /// <param name="c">The conversation.</param>
     /// <param name="now">The current time, for the list time.</param>
     /// <param name="unreadTexts">The live unread messages' text (<see cref="ChatStore.LiveUnreadTexts"/>), or null for none.</param>
-    public void Update(ConversationInfo c, DateTimeOffset now, IReadOnlyList<string>? unreadTexts = null)
+    /// <param name="draft">The unsent draft's line (<see cref="ChatFormat.DraftLine"/>), or empty for none.</param>
+    public void Update(ConversationInfo c, DateTimeOffset now, IReadOnlyList<string>? unreadTexts = null, string draft = "")
     {
         ArgumentNullException.ThrowIfNull(c);
 
-        Fill(c, now, unreadTexts ?? []);
+        Fill(c, now, unreadTexts ?? [], draft);
         PropertyChanged?.Invoke(this, AllChanged);
     }
 
@@ -116,10 +124,11 @@ public sealed class ConversationRowViewModel : INotifyPropertyChanged
     /// <returns>The name.</returns>
     public override string ToString() => IsUnread ? $"{Name}, Unread" : Name;
 
-    private void Fill(ConversationInfo c, DateTimeOffset now, IReadOnlyList<string> unreadTexts)
+    private void Fill(ConversationInfo c, DateTimeOffset now, IReadOnlyList<string> unreadTexts, string draft)
     {
         Name            = c.Name;
-        Snippet         = ChatFormat.Snippet(c);
+        IsDraft         = draft.Length > 0;
+        Snippet         = IsDraft ? ChatFormat.WithColorEmoji(ChatCopy.DraftPrefix + draft) : ChatFormat.Snippet(c);
         Time            = ChatFormat.ListTime(c.LastMessageTime, now, CultureInfo.CurrentCulture);
         IsUnread        = c.Unread;
         UnreadBadge     = ChatFormat.UnreadBadge(c.Unread, unreadTexts.Count, c.Snippet);
