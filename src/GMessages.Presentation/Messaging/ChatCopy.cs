@@ -8,6 +8,7 @@ public static class ChatCopy
     // Spec Copy
     public const string StartChat      = "Start chat";
     public const string YouPrefix      = "You: ";
+    public const string DraftPrefix    = "Draft: ";
     public const string SpamAndBlocked = "Spam & blocked";
     public const string Archived       = "Archived";
 

@@ -54,14 +54,15 @@ public sealed partial class ChatStore
     }
 
     /// <summary>
-    /// Waits for every save queued so far to be written (the app's quit, bounded by its own timeout; also tests).
+    /// Waits for every save queued so far to be written, and every draft write started (the app's quit, bounded by its
+    /// own timeout; also tests).
     /// </summary>
     /// <returns>A task that completes when the queue is empty up to now.</returns>
     public Task FlushAsync()
     {
         lock (_queueLock)
         {
-            return _queue;
+            return Task.WhenAll(_queue, _draftWrites);
         }
     }
 
@@ -139,6 +140,42 @@ public sealed partial class ChatStore
             if (generation == Generation)
             {
                 database.SaveConversation(conversation);
+            }
+        });
+    }
+
+    // Queues A Change To A Saved Conversation (Read, Status, Mute; See MessageDatabase.UpdateConversation), Dropped When A
+    // Reset Came After The Generation Was Taken
+    private void SaveChange(string conversationId, int generation, Func<Conversation, bool> change)
+    {
+        if (_database is null || conversationId.Length == 0)
+        {
+            return;
+        }
+
+        _ = EnqueueAsync(database =>
+        {
+            if (generation == Generation)
+            {
+                database.UpdateConversation(conversationId, change);
+            }
+        });
+    }
+
+    // Queues Removing A Deleted Conversation And Its Messages From The Database, Dropped When A Reset Came After The
+    // Generation Was Taken
+    private void SaveDelete(string conversationId, int generation)
+    {
+        if (_database is null || conversationId.Length == 0)
+        {
+            return;
+        }
+
+        _ = EnqueueAsync(database =>
+        {
+            if (generation == Generation)
+            {
+                database.DeleteConversation(conversationId);
             }
         });
     }

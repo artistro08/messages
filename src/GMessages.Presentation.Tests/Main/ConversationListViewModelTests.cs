@@ -256,17 +256,21 @@ public sealed class ConversationListViewModelTests
         await rig.LiveMessage(LiveMsg("m1", "a", 0, at: now));
         await rig.LiveMessage(LiveMsg("m2", "a", 0, at: now));
         await rig.LiveMessage(LiveMsg("m3", "a", 0, at: now, status: MessageStatusType.OutgoingComplete));
-        Assert.AreEqual(2, rig.Store.LiveUnreadCount("a"));
+        Assert.AreEqual(2, rig.Store.LiveUnreadTexts("a").Count);
         Assert.AreEqual("2", list.Pinned[0].UnreadBadge);
+        Assert.IsTrue(list.Pinned[0].HasUnreadList);
+        Assert.AreEqual("Ann\nx\nx", list.Pinned[0].HoverText);
 
         // Read On The Phone: Nothing Counted, No Badge
         await rig.Live(MainRig.Conv("a", "Ann", pinned: true, snippet: "ok"));
-        Assert.AreEqual(0, rig.Store.LiveUnreadCount("a"));
+        Assert.AreEqual(0, rig.Store.LiveUnreadTexts("a").Count);
         Assert.AreEqual(string.Empty, list.Pinned[0].UnreadBadge);
+        Assert.IsFalse(list.Pinned[0].HasUnreadList);
+        Assert.AreEqual("Ann\nok", list.Pinned[0].HoverText);
 
         // A Message While It Reads As Read (Read Along On The Phone) Isn't Counted Into The Next Unread Spell
         await rig.LiveMessage(LiveMsg("m4", "a", 0, at: now));
-        Assert.AreEqual(0, rig.Store.LiveUnreadCount("a"));
+        Assert.AreEqual(0, rig.Store.LiveUnreadTexts("a").Count);
 
         // Unread Again With Nothing Counted (It Came While The App Was Closed): The Short Message Itself
         await rig.Live(unread);

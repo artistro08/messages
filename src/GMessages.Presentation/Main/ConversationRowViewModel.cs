@@ -15,18 +15,22 @@ public sealed class ConversationRowViewModel : INotifyPropertyChanged
 {
     private static readonly PropertyChangedEventArgs AllChanged = new(string.Empty);
 
+    // The Most Unread Messages The Tooltip Lists (The Newest)
+    private const int MaxHoverLines = 10;
+
     /// <summary>
     /// Creates the row from a conversation.
     /// </summary>
     /// <param name="c">The conversation.</param>
     /// <param name="now">The current time, for the list time.</param>
-    /// <param name="unreadCount">The live unread count (<see cref="ChatStore.LiveUnreadCount"/>).</param>
-    public ConversationRowViewModel(ConversationInfo c, DateTimeOffset now, int unreadCount = 0)
+    /// <param name="unreadTexts">The live unread messages' text (<see cref="ChatStore.LiveUnreadTexts"/>), or null for none.</param>
+    /// <param name="draft">The unsent draft's line (<see cref="ChatFormat.DraftLine"/>), or empty for none.</param>
+    public ConversationRowViewModel(ConversationInfo c, DateTimeOffset now, IReadOnlyList<string>? unreadTexts = null, string draft = "")
     {
         ArgumentNullException.ThrowIfNull(c);
 
         Id = c.Id;
-        Fill(c, now, unreadCount);
+        Fill(c, now, unreadTexts ?? [], draft);
     }
 
     /// <inheritdoc />
@@ -38,14 +42,29 @@ public sealed class ConversationRowViewModel : INotifyPropertyChanged
     /// <summary>Gets the conversation name.</summary>
     public string Name { get; private set; } = string.Empty;
 
-    /// <summary>Gets the newest message's text, with "You: " for the owner's own messages.</summary>
+    /// <summary>
+    /// Gets the newest message's text, with "You: " for the owner's own messages; or "Draft: " and the unsent draft while
+    /// there is one (see <see cref="IsDraft"/>).
+    /// </summary>
     public string Snippet { get; private set; } = string.Empty;
+
+    /// <summary>Gets whether the snippet shows an unsent draft (drawn in italics).</summary>
+    public bool IsDraft { get; private set; }
 
     /// <summary>Gets the formatted time of the newest message.</summary>
     public string Time { get; private set; } = string.Empty;
 
     /// <summary>Gets whether there are unread messages.</summary>
     public bool IsUnread { get; private set; }
+
+    /// <summary>Gets whether more than one message came in live while unread, so the tooltip lists them.</summary>
+    public bool HasUnreadList { get; private set; }
+
+    /// <summary>
+    /// Gets the row's tooltip: the name, then each live unread message on its own line (the newest 10) when there is more
+    /// than one, else the whole snippet.
+    /// </summary>
+    public string HoverText { get; private set; } = string.Empty;
 
     /// <summary>Gets the pinned tile's unread badge (see <see cref="ChatFormat.UnreadBadge"/>); empty while read.</summary>
     public string UnreadBadge { get; private set; } = string.Empty;
@@ -88,12 +107,13 @@ public sealed class ConversationRowViewModel : INotifyPropertyChanged
     /// </summary>
     /// <param name="c">The conversation.</param>
     /// <param name="now">The current time, for the list time.</param>
-    /// <param name="unreadCount">The live unread count (<see cref="ChatStore.LiveUnreadCount"/>).</param>
-    public void Update(ConversationInfo c, DateTimeOffset now, int unreadCount = 0)
+    /// <param name="unreadTexts">The live unread messages' text (<see cref="ChatStore.LiveUnreadTexts"/>), or null for none.</param>
+    /// <param name="draft">The unsent draft's line (<see cref="ChatFormat.DraftLine"/>), or empty for none.</param>
+    public void Update(ConversationInfo c, DateTimeOffset now, IReadOnlyList<string>? unreadTexts = null, string draft = "")
     {
         ArgumentNullException.ThrowIfNull(c);
 
-        Fill(c, now, unreadCount);
+        Fill(c, now, unreadTexts ?? [], draft);
         PropertyChanged?.Invoke(this, AllChanged);
     }
 
@@ -104,13 +124,17 @@ public sealed class ConversationRowViewModel : INotifyPropertyChanged
     /// <returns>The name.</returns>
     public override string ToString() => IsUnread ? $"{Name}, Unread" : Name;
 
-    private void Fill(ConversationInfo c, DateTimeOffset now, int unreadCount)
+    private void Fill(ConversationInfo c, DateTimeOffset now, IReadOnlyList<string> unreadTexts, string draft)
     {
         Name            = c.Name;
-        Snippet         = ChatFormat.Snippet(c);
+        IsDraft         = draft.Length > 0;
+        Snippet         = IsDraft ? ChatFormat.WithColorEmoji(ChatCopy.DraftPrefix + draft) : ChatFormat.Snippet(c);
         Time            = ChatFormat.ListTime(c.LastMessageTime, now, CultureInfo.CurrentCulture);
         IsUnread        = c.Unread;
-        UnreadBadge     = ChatFormat.UnreadBadge(c.Unread, unreadCount, c.Snippet);
+        UnreadBadge     = ChatFormat.UnreadBadge(c.Unread, unreadTexts.Count, c.Snippet);
+        HasUnreadList   = c.Unread && unreadTexts.Count > 1;
+        string body     = HasUnreadList ? string.Join('\n', unreadTexts.TakeLast(MaxHoverLines).Select(ChatFormat.WithColorEmoji)) : Snippet;
+        HoverText       = body.Length > 0 ? Name + "\n" + body : Name;
         IsPinned        = c.Pinned;
         IsMuted         = c.IsMuted;
         IsGroup         = c.IsGroup;

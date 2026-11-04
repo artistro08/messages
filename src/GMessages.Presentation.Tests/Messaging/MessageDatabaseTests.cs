@@ -48,6 +48,22 @@ public sealed class MessageDatabaseTests
     private static List<Message> Range(int count) =>
         [.. Enumerable.Range(0, count).Select(i => Msg("m-" + i, BaseTime + i, "text " + i))];
 
+    /// <summary>
+    /// Drafts are saved and loaded back (encrypted on disk), and an empty draft deletes the saved one.
+    /// </summary>
+    [TestMethod]
+    public void Drafts_RoundTrip_EmptyDeletes()
+    {
+        Db().SaveDraft("c-1", "see you 🙂");
+        Db().SaveDraft("c-2", "later");
+        Db().SaveDraft("c-2", string.Empty);
+
+        IReadOnlyDictionary<string, string> drafts = Db().LoadDrafts();
+        Assert.AreEqual(1, drafts.Count);
+        Assert.AreEqual("see you 🙂", drafts["c-1"]);
+        Assert.IsFalse(Contains(File.ReadAllBytes(_path), Encoding.UTF8.GetBytes("see you")));
+    }
+
     // Runs SQL Straight On The File, Bypassing The Class
     private void RawSql(string sql)
     {
@@ -165,6 +181,21 @@ public sealed class MessageDatabaseTests
         Assert.AreEqual(0, db.LoadMessages("c-1", 10).Count);
         db.SaveMessages("c-1", Range(2));
         Assert.AreEqual(2, db.LoadMessages("c-1", 10).Count);
+    }
+
+    /// <summary>
+    /// A version 1 file (before drafts) keeps its saved chats and gets the drafts table, instead of starting over.
+    /// </summary>
+    [TestMethod]
+    public void Version1File_KeepsItsRows_AndGetsDrafts()
+    {
+        Db().SaveMessages("c-1", Range(2));
+        RawSql("DROP TABLE drafts; PRAGMA user_version = 1;");
+
+        var db = Db();
+        Assert.AreEqual(2, db.LoadMessages("c-1", 10).Count);
+        db.SaveDraft("c-1", "hi");
+        Assert.AreEqual("hi", db.LoadDrafts()["c-1"]);
     }
 
     [TestMethod]

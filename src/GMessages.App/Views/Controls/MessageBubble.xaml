@@ -167,7 +167,6 @@
             x:Name="Root"
             Padding="{x:Bind local:MessageBubble.LanePadding(Bubble.HasAvatarLane, Bubble.FromMe), Mode=OneWay}"
             HorizontalAlignment="Left"
-            Opacity="{x:Bind local:MessageBubble.SendingOpacity(Bubble.IsSending), Mode=OneWay}"
             Spacing="2">
 
             <!-- Bubble Menu: one for every bubble, in the chat pane (BubbleMenu), opened by its right-click, Application key

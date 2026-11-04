@@ -715,17 +715,17 @@ public sealed class ChatTests : UiTest
         long time         = DateTimeOffset.UtcNow.AddDays(-1).ToUnixTimeMilliseconds() * 1000;
         Server.Phone.Chats.Add(chat, [.. Enumerable.Range(1, Count).Select(Line)]);
         Server.Phone.OlderPagesDelay = TimeSpan.FromMilliseconds(700);
-        string oldest                = $"Bubble.m-{Count - ChatStore.PageSize + 1:000}";
 
         await OpenMainAsync();
         App.Find("Row.c-mixed").Patterns.SelectionItem.Pattern.Select();
         Wait.Until(() => Bubbles().Any(b => b.Id == $"Bubble.m-{Count:000}"), AppDriver.DefaultTimeout, () => "The mixed chat didn't show its newest bubble.");
 
-        // Wheel Up Over The Bubbles Until The Older Page Is Asked For
+        // Wheel Up Over The Bubbles Until The Older Page Is Asked For. It Is Asked For Half A Screen Short Of The Top, So
+        // The Page's Oldest Bubble Can Still Sit Above The View (Past The Tall m-077): The Watched One Is The Topmost Shown
         AutomationElement list        = App.Find("Chat.Messages");
         System.Drawing.Rectangle over = list.BoundingRectangle;
         FlaUI.Core.Input.Mouse.MoveTo(over.X + (over.Width / 2), over.Y + (over.Height / 2));
-        AssertOlderPageKeepsInPlace(list, oldest, () => FlaUI.Core.Input.Mouse.Scroll(5));
+        AssertOlderPageKeepsInPlace(list, null, () => FlaUI.Core.Input.Mouse.Scroll(5));
 
         Message Line(int i)
         {
@@ -956,6 +956,29 @@ public sealed class ChatTests : UiTest
         App.Find("Row.c-ann").Patterns.SelectionItem.Pattern.Select();
 
         Wait.Until(() => Bubbles().Count == 3, TimeSpan.FromSeconds(2), () => $"Ann's saved chat showed {Bubbles().Count} bubbles within 2 s, not 3.");
+    }
+
+    /// <summary>
+    /// What's typed in the message box comes back after the window closes, and again after the app restarts.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Draft_OutlivesWindowAndRestart()
+    {
+        await OpenAnnAsync();
+        Keyboard.Type("see you at 5");
+        WaitForDraft("see you at 5");
+
+        // Window Closed And Opened Again
+        CloseMainWindow();
+        Tray.LeftClick();
+        App.Find("Row.c-ann").Patterns.SelectionItem.Pattern.Select();
+        WaitForDraft("see you at 5");
+
+        // App Restarted (A User Launch Opens The Window)
+        await App.RestartAsync();
+        App.Find("Row.c-ann").Patterns.SelectionItem.Pattern.Select();
+        WaitForDraft("see you at 5");
     }
 
     // =========================================================================
@@ -1250,6 +1273,14 @@ public sealed class ChatTests : UiTest
         // Row Later
         App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout).SetForeground();
         Wait.Until(() => App.Find("Chat.Draft").Properties.HasKeyboardFocus.ValueOrDefault, AppDriver.DefaultTimeout, () => "Opening Ann's chat didn't focus the message box.");
+    }
+
+    // Waits For The Message Box To Hold The Text
+    private void WaitForDraft(string text)
+    {
+        string? last = null;
+        Wait.Until(() => (last = App.Find("Chat.Draft").Patterns.Value.Pattern.Value.ValueOrDefault) == text, AppDriver.DefaultTimeout,
+            () => $"The message box shows '{last}', not '{text}'.");
     }
 
     // Types Each Line In The Message Box, Shift + Enter Between Them, Then Enter To Send

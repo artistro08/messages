@@ -1,8 +1,7 @@
-using GMessages.Presentation.Messaging;
 using GMessages.Protocol;
 using GMessages.Protocol.Proto;
 
-namespace GMessages.Presentation.Main;
+namespace GMessages.Presentation.Messaging;
 
 /// <summary>
 /// A photo or file picked or pasted to send, shown as a chip above the message box until Send.
