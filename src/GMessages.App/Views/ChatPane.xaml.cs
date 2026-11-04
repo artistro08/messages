@@ -352,9 +352,6 @@ public sealed partial class ChatPane : UserControl
     /// <summary>Gets the lock's tooltip and name.</summary>
     public static string EncryptedText => ChatCopy.EndToEndEncrypted;
 
-    /// <summary>Gets the typing dots' name.</summary>
-    public static string TypingText => ChatCopy.Typing;
-
     /// <summary>Gets the reply chip's close button name.</summary>
     public static string CancelReplyText => ChatCopy.CancelReply;
 

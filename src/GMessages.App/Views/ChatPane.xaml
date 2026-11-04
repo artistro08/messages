@@ -388,49 +388,64 @@
             <FontIcon FontSize="16" Glyph="&#xE74B;" />
         </controls:LinkCardButton>
 
-        <!-- Typing: a received-style bubble with three dots while the other person types; outside the list, so it never
-             moves the scroll. The dots bounce in turn while it shows (started from code) -->
-        <Border
+        <!-- Typing: the typer's avatar, then a received-style bubble with three dots while they type; outside the list, so
+             it never moves the scroll. The dots bounce in turn while it shows (started from code) -->
+        <StackPanel
             x:Name="TypingBubble"
             Grid.Row="2"
             Margin="12,4,12,0"
-            Padding="14,6"
             HorizontalAlignment="Left"
-            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-            BorderThickness="1"
-            CornerRadius="18"
+            Orientation="Horizontal"
+            Spacing="8"
             Visibility="{x:Bind Chat.IsTyping, Mode=OneWay, FallbackValue=Collapsed}">
-            <Grid Height="21">
-                <StackPanel
-                    VerticalAlignment="Center"
-                    Orientation="Horizontal"
-                    Spacing="4">
-                    <Ellipse
-                        x:Name="TypingDot1"
-                        Width="6"
-                        Height="6"
-                        Fill="{ThemeResource TextFillColorSecondaryBrush}" />
-                    <Ellipse
-                        x:Name="TypingDot2"
-                        Width="6"
-                        Height="6"
-                        Fill="{ThemeResource TextFillColorSecondaryBrush}" />
-                    <Ellipse
-                        x:Name="TypingDot3"
-                        Width="6"
-                        Height="6"
-                        Fill="{ThemeResource TextFillColorSecondaryBrush}" />
-                </StackPanel>
+            <!-- Typer: the same 28 px avatar received bubbles show -->
+            <Viewbox
+                Width="28"
+                Height="28"
+                VerticalAlignment="Bottom">
+                <controls:Avatar
+                    Color="{x:Bind Chat.TypingColor, Mode=OneWay, FallbackValue=0}"
+                    Initial="{x:Bind Chat.TypingInitial, Mode=OneWay, FallbackValue=''}"
+                    PhotoId="{x:Bind Chat.TypingPhotoId, Mode=OneWay, FallbackValue=''}" />
+            </Viewbox>
 
-                <!-- Name: "Typing" for screen readers and the tests; draws nothing -->
-                <TextBlock
-                    AutomationProperties.AccessibilityView="Content"
-                    AutomationProperties.AutomationId="Chat.Typing"
-                    AutomationProperties.LiveSetting="Polite"
-                    AutomationProperties.Name="{x:Bind local:ChatPane.TypingText}" />
-            </Grid>
-        </Border>
+            <Border
+                Padding="14,6"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1"
+                CornerRadius="18">
+                <Grid Height="21">
+                    <StackPanel
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal"
+                        Spacing="4">
+                        <Ellipse
+                            x:Name="TypingDot1"
+                            Width="6"
+                            Height="6"
+                            Fill="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <Ellipse
+                            x:Name="TypingDot2"
+                            Width="6"
+                            Height="6"
+                            Fill="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <Ellipse
+                            x:Name="TypingDot3"
+                            Width="6"
+                            Height="6"
+                            Fill="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </StackPanel>
+
+                    <!-- Name: "Ann is typing" for screen readers and the tests; draws nothing -->
+                    <TextBlock
+                        AutomationProperties.AccessibilityView="Content"
+                        AutomationProperties.AutomationId="Chat.Typing"
+                        AutomationProperties.LiveSetting="Polite"
+                        AutomationProperties.Name="{x:Bind Chat.TypingName, Mode=OneWay, FallbackValue=''}" />
+                </Grid>
+            </Border>
+        </StackPanel>
         <!-- /Typing -->
 
         <!-- Over The Message Box: the too-big note, then the reply chip and the attachment chips, stacked and joined to the
