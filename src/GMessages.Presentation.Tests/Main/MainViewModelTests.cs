@@ -586,6 +586,24 @@ public sealed class MainViewModelTests
         Assert.AreEqual(string.Empty, vm.Chat!.Draft);
     }
 
+    /// <summary>
+    /// A draft outlives the window: closing it with a chat open keeps that chat's draft for the next window.
+    /// </summary>
+    [TestMethod]
+    public async Task Drafts_OutliveTheWindow()
+    {
+        using var rig = new MainRig();
+        using (MainViewModel first = await NewMainAsync(rig))
+        {
+            first.Select("a");
+            first.Chat!.Draft = "for ann";
+        }
+
+        using MainViewModel second = await NewMainAsync(rig);
+        second.Select("a");
+        Assert.AreEqual("for ann", second.Chat!.Draft);
+    }
+
     private static UserAlert Alert(AlertType type) => new(new UserAlertEvent { AlertType = type });
 
     /// <summary>A window opened after the alert shows the banner right away.</summary>

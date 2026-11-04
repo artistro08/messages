@@ -48,6 +48,22 @@ public sealed class MessageDatabaseTests
     private static List<Message> Range(int count) =>
         [.. Enumerable.Range(0, count).Select(i => Msg("m-" + i, BaseTime + i, "text " + i))];
 
+    /// <summary>
+    /// Drafts are saved and loaded back (encrypted on disk), and an empty draft deletes the saved one.
+    /// </summary>
+    [TestMethod]
+    public void Drafts_RoundTrip_EmptyDeletes()
+    {
+        Db().SaveDraft("c-1", "see you 🙂");
+        Db().SaveDraft("c-2", "later");
+        Db().SaveDraft("c-2", string.Empty);
+
+        IReadOnlyDictionary<string, string> drafts = Db().LoadDrafts();
+        Assert.AreEqual(1, drafts.Count);
+        Assert.AreEqual("see you 🙂", drafts["c-1"]);
+        Assert.IsFalse(Contains(File.ReadAllBytes(_path), Encoding.UTF8.GetBytes("see you")));
+    }
+
     // Runs SQL Straight On The File, Bypassing The Class
     private void RawSql(string sql)
     {

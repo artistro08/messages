@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text;
 using Google.Protobuf;
 using GMessages.Protocol.Proto;
 using Microsoft.Data.Sqlite;
@@ -28,7 +29,7 @@ public sealed partial class MessageDatabase
     /// <summary>
     /// The schema this class writes, kept in <c>PRAGMA user_version</c>. A file with another version starts over.
     /// </summary>
-    public const int SchemaVersion = 1;
+    public const int SchemaVersion = 2;
 
     /// <summary>
     /// How many of a conversation's newest messages are kept.
@@ -41,7 +42,8 @@ public sealed partial class MessageDatabase
                                PRIMARY KEY (conversation_id, id));
         CREATE INDEX messages_by_time ON messages (conversation_id, time);
         CREATE TABLE encryption (conversation_id TEXT PRIMARY KEY, encrypted INTEGER NOT NULL, at INTEGER NOT NULL);
-        PRAGMA user_version = 1;
+        CREATE TABLE drafts (conversation_id TEXT PRIMARY KEY, body BLOB NOT NULL);
+        PRAGMA user_version = 2;
         """;
 
     private readonly string _path;
@@ -270,6 +272,56 @@ public sealed partial class MessageDatabase
             command.Parameters.AddWithValue("$c", conversationId);
             command.Parameters.AddWithValue("$e", encrypted ? 1 : 0);
             command.Parameters.AddWithValue("$at", timestampMicros);
+            command.ExecuteNonQuery();
+            return true;
+        }, false);
+    }
+
+    // =========================================================================
+    // DRAFTS
+    // =========================================================================
+
+    /// <summary>
+    /// Loads every conversation's unsent draft.
+    /// </summary>
+    /// <returns>Conversation ID to draft text; empty when none or unreadable.</returns>
+    public IReadOnlyDictionary<string, string> LoadDrafts() => Run<IReadOnlyDictionary<string, string>>(connection =>
+    {
+        using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = "SELECT body, conversation_id FROM drafts";
+
+        Dictionary<string, string> drafts = [];
+        using SqliteDataReader reader     = command.ExecuteReader();
+        while (reader.Read())
+        {
+            drafts[reader.GetString(1)] = Encoding.UTF8.GetString(Unprotect(reader));
+        }
+
+        return drafts;
+    }, new Dictionary<string, string>());
+
+    /// <summary>
+    /// Saves a conversation's unsent draft, encrypted like every other body; an empty draft deletes it.
+    /// </summary>
+    /// <param name="conversationId">The conversation ID.</param>
+    /// <param name="text">The draft text, or empty for none.</param>
+    public void SaveDraft(string conversationId, string text)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(conversationId);
+        ArgumentNullException.ThrowIfNull(text);
+
+        Run(connection =>
+        {
+            using SqliteCommand command = connection.CreateCommand();
+            command.CommandText = text.Length == 0
+                ? "DELETE FROM drafts WHERE conversation_id = $c"
+                : "INSERT OR REPLACE INTO drafts (conversation_id, body) VALUES ($c, $body)";
+            command.Parameters.AddWithValue("$c", conversationId);
+            if (text.Length > 0)
+            {
+                command.Parameters.AddWithValue("$body", ProtectedData.Protect(Encoding.UTF8.GetBytes(text), null, DataProtectionScope.CurrentUser));
+            }
+
             command.ExecuteNonQuery();
             return true;
         }, false);

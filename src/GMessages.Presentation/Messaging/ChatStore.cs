@@ -84,6 +84,9 @@ public sealed partial class ChatStore : IDisposable
     // When The Conversation Turns Read
     private readonly ConcurrentDictionary<string, int> _unreadCounts = new();
 
+    // Each Conversation's Unsent Draft, Loaded From And Saved To The Database So It Outlives The Window And The App
+    private readonly ConcurrentDictionary<string, string> _drafts = new(StringComparer.Ordinal);
+
     // Newest Encryption Tombstone Seen Per Conversation, With Its Time In Microseconds
     private readonly ConcurrentDictionary<string, (bool Encrypted, long At)> _encryption = new();
 
@@ -183,6 +186,52 @@ public sealed partial class ChatStore : IDisposable
     public int LiveUnreadCount(string conversationId) => _unreadCounts.GetValueOrDefault(conversationId);
 
     /// <summary>
+    /// Gets a conversation's unsent draft.
+    /// </summary>
+    /// <param name="conversationId">The conversation ID.</param>
+    /// <returns>The draft; empty when there is none.</returns>
+    public string Draft(string conversationId) => _drafts.GetValueOrDefault(conversationId) ?? string.Empty;
+
+    /// <summary>
+    /// Keeps a conversation's unsent draft, and saves it so it's still there after the window or the app closes.
+    /// </summary>
+    /// <remarks>
+    /// An empty draft forgets it. The save runs on the background queue, encrypted like every other body, and
+    /// is dropped after a sign-out (the database is deleted with the account).
+    /// </remarks>
+    /// <param name="conversationId">The conversation ID.</param>
+    /// <param name="text">The draft text.</param>
+    public void SaveDraft(string conversationId, string text)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(conversationId);
+        ArgumentNullException.ThrowIfNull(text);
+
+        // Unchanged: Nothing To Write
+        if (Draft(conversationId) == text)
+        {
+            return;
+        }
+
+        if (text.Length > 0)
+        {
+            _drafts[conversationId] = text;
+        }
+        else
+        {
+            _drafts.TryRemove(conversationId, out _);
+        }
+
+        int generation = Generation;
+        _ = EnqueueAsync(database =>
+        {
+            if (generation == Generation)
+            {
+                database.SaveDraft(conversationId, text);
+            }
+        });
+    }
+
+    /// <summary>
     /// Gets whether a conversation is end-to-end encrypted.
     /// </summary>
     /// <remarks>
@@ -236,6 +285,7 @@ public sealed partial class ChatStore : IDisposable
 
             IReadOnlyList<Conversation> saved                                 = database.LoadConversations();
             IReadOnlyDictionary<string, (bool Encrypted, long At)> encryption = database.LoadEncryption();
+            IReadOnlyDictionary<string, string> drafts                        = database.LoadDrafts();
 
             // Under The Reset Lock, So Reset Can't Land Between The Check And The Rows
             lock (_resetLock)
@@ -265,6 +315,12 @@ public sealed partial class ChatStore : IDisposable
                 foreach ((string id, (bool Encrypted, long At) state) in encryption)
                 {
                     _encryption.AddOrUpdate(id, state, (_, old) => state.At > old.At ? state : old);
+                }
+
+                // Each Saved Draft, Unless One Was Typed Meanwhile
+                foreach ((string id, string draft) in drafts)
+                {
+                    _drafts.TryAdd(id, draft);
                 }
             }
         });
@@ -934,6 +990,7 @@ public sealed partial class ChatStore : IDisposable
             _encryption.Clear();
             _liveMedia.Clear();
             _unreadCounts.Clear();
+            _drafts.Clear();
             _me = null;
         }
 
