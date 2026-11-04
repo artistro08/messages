@@ -376,7 +376,7 @@ public sealed class ManualNotificationTests : UiTest
     /// </remarks>
     /// <returns>A task for the test.</returns>
     [TestMethod]
-    public async Task Toast_LeavesScreenWithin10Seconds()
+    public async Task Toast_LeavesScreenWithinDismissTime()
     {
         var toasts = new ToastDriver(App.Automation);
         await PairAsync();
@@ -393,9 +393,16 @@ public sealed class ManualNotificationTests : UiTest
         {
             Wait.Until(() => toasts.TryFind("Ann Lee", "hey there") is null, bannerTime, () => $"The toast was still on screen after {bannerTime.TotalSeconds} s (Windows' setting: {seconds} s).");
         }
-        catch (AssertFailedException) when (PointerInput.SinceLastInput() >= bannerTime)
+        catch (AssertFailedException)
         {
-            Assert.Inconclusive($"No keyboard or mouse input for {PointerInput.SinceLastInput().TotalSeconds:0} s: Windows keeps a banner up while the user is away. Run this while using the machine.");
+            // Read Once, Outside A Filter, So A Failed Read Shows Its Own Message
+            TimeSpan idle = PointerInput.SinceLastInput();
+            if (idle < bannerTime)
+            {
+                throw;
+            }
+
+            Assert.Inconclusive($"No keyboard or mouse input for {idle.TotalSeconds:0} s: Windows keeps a banner up while the user is away. Run this while using the machine.");
         }
     }
 }
