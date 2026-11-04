@@ -167,7 +167,7 @@
                             <TextBlock Text="Show icon in the system tray" TextWrapping="Wrap" />
                             <TextBlock
                                 Style="{StaticResource CardDescriptionStyle}"
-                                Text="When off, open Kaituro from Start, and quit it from the account menu."
+                                Text="When off, there's no icon while Kaituro runs in the background. Open it from Start, and quit it from the account menu."
                                 TextWrapping="Wrap" />
                         </StackPanel>
                         <ToggleSwitch

@@ -235,9 +235,8 @@ public sealed partial class App : Application, IDisposable
         }
 
         // Started By The User: The Main Window Shows (Held Until Start-Up Ends). Windows' Startup Task At Sign-In Keeps
-        // The App In The Background, Unless It Doesn't Run In The Background (Settings): Then The Window Shows Too
-        bool byStartupTask = activation.Kind == ExtendedActivationKind.StartupTask && _settings.RunInBackground;
-        if (LaunchWindow.ShowsAtLaunch(byStartupTask, launched is not null))
+        // The App In The Background, Unless It Doesn't Run In The Background (Settings)
+        if (LaunchWindow.ShowsAtLaunch(activation.Kind == ExtendedActivationKind.StartupTask, launched is not null, _settings.RunInBackground))
         {
             OnShowMainWindowRequested("launch");
         }
@@ -388,10 +387,30 @@ public sealed partial class App : Application, IDisposable
         if (timedOut && NotificationArgs.Parse(args.Argument) is { } reply)
         {
             _notifications.ShowReplyFailed(reply.ConversationId);
+            QuitUnlessInBackground();
             return;
         }
 
-        _ = _notifications.HandleAsync(args);
+        _ = ReplyFromLaunchAsync(_notifications, args);
+    }
+
+    // Sends The Toast Reply That Started The App, Then Quits When The App Doesn't Run In The Background (Settings): It
+    // Started For The Reply Alone, With No Window
+    private async Task ReplyFromLaunchAsync(NotificationService notifications, AppNotificationActivatedEventArgs args)
+    {
+        await notifications.HandleAsync(args);
+        QuitUnlessInBackground();
+    }
+
+    // Quits With No Window Open When The App Doesn't Run In The Background (Settings)
+    private void QuitUnlessInBackground()
+    {
+        if (_settings?.RunInBackground != false || _mainWindow is not null)
+        {
+            return;
+        }
+
+        Quit();
     }
 
     // A Toast Body Click: The Main Window Shows At Once, On That Conversation As Soon As It Can Be Shown
@@ -466,9 +485,8 @@ public sealed partial class App : Application, IDisposable
                 _linkPreviewer?.Dispose();
                 _linkPreviewer = null;
 
-                // Closing Quits When The App Doesn't Run In The Background (Settings), And With No Tray Icon And No Phone:
-                // Then Nothing Runs In The Background, And Nothing Else Could Quit
-                if (_settings?.RunInBackground == false || (_settings?.ShowTrayIcon == false && NeedsPairing()))
+                // Closing Quits When The App Doesn't Run In The Background, Or With No Tray Icon And No Phone
+                if (_settings is { } saved && LaunchWindow.QuitsOnClose(saved.RunInBackground, saved.ShowTrayIcon, NeedsPairing()))
                 {
                     Quit();
                     return;

@@ -27,6 +27,7 @@ internal static class UiHelpers
     /// <param name="text">The text, or null.</param>
     /// <returns>Visible for non-empty text.</returns>
     public static Visibility ShownIfText(string? text) => string.IsNullOrEmpty(text) ? Visibility.Collapsed : Visibility.Visible;
+
     /// <summary>
     /// Finds the first <see cref="ScrollViewer"/> under an element (a list's template holds one).
     /// </summary>
