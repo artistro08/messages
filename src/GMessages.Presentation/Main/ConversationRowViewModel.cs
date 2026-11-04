@@ -124,9 +124,8 @@ public sealed class ConversationRowViewModel : INotifyPropertyChanged
         IsUnread        = c.Unread;
         UnreadBadge     = ChatFormat.UnreadBadge(c.Unread, unreadTexts.Count, c.Snippet);
         HasUnreadList   = c.Unread && unreadTexts.Count > 1;
-        HoverText       = Name + "\n" + (HasUnreadList
-            ? string.Join('\n', unreadTexts.TakeLast(MaxHoverLines).Select(ChatFormat.WithColorEmoji))
-            : Snippet);
+        string body     = HasUnreadList ? string.Join('\n', unreadTexts.TakeLast(MaxHoverLines).Select(ChatFormat.WithColorEmoji)) : Snippet;
+        HoverText       = body.Length > 0 ? Name + "\n" + body : Name;
         IsPinned        = c.Pinned;
         IsMuted         = c.IsMuted;
         IsGroup         = c.IsGroup;

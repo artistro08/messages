@@ -106,6 +106,23 @@ public static class ChatFormat
     }
 
     /// <summary>
+    /// One unread message as the chat list's tooltip lists it: like <see cref="Snippet"/>, with the sender's first name in
+    /// front in a group ("Rachel: ") and the media's label for media with no caption.
+    /// </summary>
+    /// <param name="c">The message's conversation.</param>
+    /// <param name="m">The received message.</param>
+    /// <returns>The line, emoji not yet colored.</returns>
+    public static string UnreadLine(ConversationInfo c, ChatMessage m)
+    {
+        ArgumentNullException.ThrowIfNull(c);
+        ArgumentNullException.ThrowIfNull(m);
+
+        string sender = c.IsGroup ? FirstName(SenderName(c.Participants.FirstOrDefault(p => p.Id == m.ParticipantId))) : string.Empty;
+        string body   = m is { Media: { } media, Text.Length: 0 } ? MediaLabel(media) : ShownText(m);
+        return sender.Length > 0 ? sender + ": " + body : body;
+    }
+
+    /// <summary>
     /// The first word of a name, or the whole of a number, short code or email address (which have no first name).
     /// </summary>
     /// <param name="name">The name as the phone gives it.</param>

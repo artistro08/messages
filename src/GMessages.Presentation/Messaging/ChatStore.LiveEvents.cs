@@ -119,11 +119,12 @@ public sealed partial class ChatStore
         // A New Received Message Adds One To Its Conversation's Unread Count, Only While The Phone Says It's Unread (Its
         // Conversation Update Comes First): One Read Meanwhile Mustn't Carry Into The Next Count. Since That Update Was
         // Already Shown, A Pinned Tile Re-Reads The Count Below Even When Nothing Else Changed
-        bool counted = isNew && !message.FromMe && Find(message.ConversationId) is { Unread: true };
-        bool shown   = false;
-        if (counted)
+        ConversationInfo? unreadIn = isNew && !message.FromMe && Find(message.ConversationId) is { Unread: true } found ? found : null;
+        bool counted               = unreadIn is not null;
+        bool shown                 = false;
+        if (unreadIn is not null)
         {
-            string text = ChatFormat.ShownText(message);
+            string text = ChatFormat.UnreadLine(unreadIn, message);
             _unreadTexts.AddOrUpdate(message.ConversationId, [text], (_, texts) => texts.Add(text));
         }
 

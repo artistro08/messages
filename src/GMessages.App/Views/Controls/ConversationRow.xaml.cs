@@ -137,12 +137,14 @@ public sealed partial class ConversationRow : UserControl
         view.ShowToolTip();
     }
 
+    // Every Update Can Change The Read State And The Tooltip's Text
     private void OnRowUpdated(object? sender, PropertyChangedEventArgs e)
     {
         ShowReadState();
         ShowToolTip();
     }
 
+    // The Name Or Snippet Got Cut Off, Or Fits Again (A Resize Or New Text)
     private void OnTextTrimmedChanged(TextBlock sender, IsTextTrimmedChangedEventArgs e) => ShowToolTip();
 
     // The Tooltip: The Whole Name And Snippet When Either Is Cut Off, Or The Unread Messages When More Than One Came In;

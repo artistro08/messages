@@ -173,7 +173,8 @@
                                  the name below (bold while unread), and the selection pill at the bottom -->
                             <GridView.ItemTemplate>
                                 <DataTemplate x:DataType="main:ConversationRowViewModel">
-                                    <Grid>
+                                    <!-- The Tile's Tooltip: always, since a tile shows no snippet and trims its name -->
+                                    <Grid ToolTipService.ToolTip="{x:Bind HoverText, Mode=OneWay}">
                                         <StackPanel Padding="4,8" Spacing="6">
                                             <Grid HorizontalAlignment="Center">
                                                 <Viewbox Width="52" Height="52">
