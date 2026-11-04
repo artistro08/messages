@@ -139,7 +139,27 @@
                     </Grid>
                 </Border>
 
-                <!-- Tray Icon: off, the app still runs in the background; Start opens it and the account menu quits it -->
+                <!-- Run In Background: off, closing the window quits; separate from the tray icon -->
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
+                        <FontIcon Glyph="&#xE945;" Style="{StaticResource CardIconStyle}" />
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock Text="Run in the background" TextWrapping="Wrap" />
+                            <TextBlock
+                                Style="{StaticResource CardDescriptionStyle}"
+                                Text="Keep Kaituro running after you close its window, so new messages still notify you. When off, closing the window quits."
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+                        <ToggleSwitch
+                            Grid.Column="2"
+                            AutomationProperties.AutomationId="Settings.RunInBackground"
+                            AutomationProperties.Name="Run in the background"
+                            IsOn="{x:Bind ViewModel.RunInBackground, Mode=TwoWay}"
+                            Style="{StaticResource CardToggleSwitchStyle}" />
+                    </Grid>
+                </Border>
+
+                <!-- Tray Icon: off, Start opens the app and the account menu quits it -->
                 <Border Style="{StaticResource SettingsCardStyle}">
                     <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
                         <FontIcon Glyph="&#xE890;" Style="{StaticResource CardIconStyle}" />
@@ -147,7 +167,7 @@
                             <TextBlock Text="Show icon in the system tray" TextWrapping="Wrap" />
                             <TextBlock
                                 Style="{StaticResource CardDescriptionStyle}"
-                                Text="When off, Kaituro keeps running in the background. Open it from Start, and quit it from the account menu."
+                                Text="When off, open Kaituro from Start, and quit it from the account menu."
                                 TextWrapping="Wrap" />
                         </StackPanel>
                         <ToggleSwitch

@@ -150,6 +150,24 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged, IDisposa
         }
     }
 
+    /// <summary>
+    /// Gets or sets whether the app keeps running after its window closes. On by default.
+    /// </summary>
+    public bool RunInBackground
+    {
+        get => _settings.RunInBackground;
+        set
+        {
+            if (value == _settings.RunInBackground)
+            {
+                return;
+            }
+
+            _settings.RunInBackground = value;
+            Raise();
+        }
+    }
+
     // =========================================================================
     // NOTIFICATIONS
     // =========================================================================

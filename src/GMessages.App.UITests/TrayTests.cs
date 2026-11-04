@@ -87,4 +87,24 @@ public sealed class TrayTests : UiTest
         App.Find("Main.Profile.Quit").Patterns.Invoke.Pattern.Invoke();
         await App.WaitForExitAsync();
     }
+
+    /// <summary>
+    /// With running in the background off, closing the window quits, and the tray icon stays until then (the two
+    /// settings are separate).
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task RunInBackgroundOff_ClosingTheWindowQuits()
+    {
+        await PairAsync();
+
+        InvokeTrayMenu("TrayMenu.Settings");
+        WaitForSettings();
+        App.Find("Settings.RunInBackground").AsToggleButton().Toggle();
+        Tray.FindIcon(AppDriver.DefaultTimeout);
+
+        CloseMainWindow();
+        await App.WaitForExitAsync();
+        Tray.WaitForNoIcon(AppDriver.DefaultTimeout);
+    }
 }

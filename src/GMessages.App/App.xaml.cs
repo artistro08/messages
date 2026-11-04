@@ -235,8 +235,9 @@ public sealed partial class App : Application, IDisposable
         }
 
         // Started By The User: The Main Window Shows (Held Until Start-Up Ends). Windows' Startup Task At Sign-In Keeps
-        // The App In The Tray
-        if (LaunchWindow.ShowsAtLaunch(activation.Kind == ExtendedActivationKind.StartupTask, launched is not null))
+        // The App In The Background, Unless It Doesn't Run In The Background (Settings): Then The Window Shows Too
+        bool byStartupTask = activation.Kind == ExtendedActivationKind.StartupTask && _settings.RunInBackground;
+        if (LaunchWindow.ShowsAtLaunch(byStartupTask, launched is not null))
         {
             OnShowMainWindowRequested("launch");
         }
@@ -465,8 +466,9 @@ public sealed partial class App : Application, IDisposable
                 _linkPreviewer?.Dispose();
                 _linkPreviewer = null;
 
-                // No Tray Icon And No Phone: Nothing Runs In The Background, And Nothing Else Could Quit, So Closing Quits
-                if (_settings?.ShowTrayIcon == false && NeedsPairing())
+                // Closing Quits When The App Doesn't Run In The Background (Settings), And With No Tray Icon And No Phone:
+                // Then Nothing Runs In The Background, And Nothing Else Could Quit
+                if (_settings?.RunInBackground == false || (_settings?.ShowTrayIcon == false && NeedsPairing()))
                 {
                     Quit();
                     return;

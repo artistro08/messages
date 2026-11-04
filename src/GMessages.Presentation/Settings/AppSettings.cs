@@ -26,6 +26,7 @@ public sealed class AppSettings : INotifyPropertyChanged
     private const string ShowReceivedLinkPreviewsKey = "ShowReceivedLinkPreviews";
     private const string ShowPinnedGridKey           = "ShowPinnedGrid";
     private const string ShowTrayIconKey             = "ShowTrayIcon";
+    private const string RunInBackgroundKey          = "RunInBackground";
 
     // Snooze Lengths, In Minutes (The Choices Settings Offers), And The Default
     private const int DefaultSnoozeMinutes = 15;
@@ -92,13 +93,23 @@ public sealed class AppSettings : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Whether the app shows its icon in the system tray. Defaults to true; off, it still runs in the background, opens
-    /// from Start, and quits from the account menu.
+    /// Whether the app shows its icon in the system tray. Defaults to true; off, it opens from Start and quits from the
+    /// account menu. Separate from <see cref="RunInBackground"/>.
     /// </summary>
     public bool ShowTrayIcon
     {
         get => GetBool(ShowTrayIconKey, true);
         set => Set(ShowTrayIconKey, value.ToString(CultureInfo.InvariantCulture));
+    }
+
+    /// <summary>
+    /// Whether the app keeps running after its window closes, so new messages still notify. Defaults to true; off,
+    /// closing the window quits, and starting with Windows opens the window. Separate from <see cref="ShowTrayIcon"/>.
+    /// </summary>
+    public bool RunInBackground
+    {
+        get => GetBool(RunInBackgroundKey, true);
+        set => Set(RunInBackgroundKey, value.ToString(CultureInfo.InvariantCulture));
     }
 
     /// <summary>
