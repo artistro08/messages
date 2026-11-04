@@ -1,6 +1,5 @@
+using GMessages.App.Windowing;
 using GMessages.Presentation;
-using Microsoft.UI.Dispatching;
-using Microsoft.UI.Xaml;
 using Microsoft.Windows.AppLifecycle;
 
 namespace GMessages.App;
@@ -112,15 +111,14 @@ public static class Program
             return;
         }
 
-        // First Launch
+        // First Launch: WinUI 2.8 and the UI thread's dispatcher, the App (which starts XAML), then the message loop until
+        // the App quits
         ShowRequest = showRequest;
         QuitRequest = quitRequest;
-        Application.Start(callbackParams =>
-        {
-            var context = new DispatcherQueueSynchronizationContext(DispatcherQueue.GetForCurrentThread());
-            SynchronizationContext.SetSynchronizationContext(context);
-            _ = new App();
-        });
+        XamlHost.Start();
+        var app = new App();
+        app.Launch();
+        XamlWindow.RunMessageLoop();
         ShowRequest?.Dispose();
         QuitRequest?.Dispose();
     }

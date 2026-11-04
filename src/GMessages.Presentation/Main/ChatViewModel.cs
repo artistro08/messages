@@ -338,7 +338,23 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
     public bool HasAttachError => _attachError.Length > 0;
 
     /// <summary>Gets or sets whether the window is focused with this chat open, so incoming messages count as read (set by <see cref="MainViewModel"/>).</summary>
-    public bool IsActive { get; set; }
+    /// <remarks>
+    /// Coming back to the window reads what came in while it was away: the chat stayed open, so nothing else would (it
+    /// read only once the chat was opened again). A chat still loading reads itself when its page is in.
+    /// </remarks>
+    public bool IsActive
+    {
+        get;
+        set
+        {
+            bool cameBack = value && !field;
+            field         = value;
+            if (cameBack && !IsLoading && _store.Find(ConversationId) is { Unread: true, LatestMessageId.Length: > 0 } unread)
+            {
+                _ = MarkReadAsync(unread.LatestMessageId);
+            }
+        }
+    }
 
     /// <summary>
     /// Gets whether a list too short to scroll should load the next older page on its own.

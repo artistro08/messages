@@ -1,10 +1,11 @@
 using GMessages.App.Media;
+using GMessages.App.Windowing;
 using GMessages.Presentation.Main;
 using GMessages.Presentation.Messaging;
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Hosting;
-using Microsoft.UI.Xaml.Media;
+using Windows.UI.Xaml;
+using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml.Hosting;
+using Windows.UI.Xaml.Media;
 
 namespace GMessages.App.Views.Controls;
 
@@ -129,7 +130,7 @@ public sealed partial class MessageBubble
             }
 
             string id = PartIdOf("Video.Player.", Bubble?.PartKey ?? string.Empty);
-            _video         = new VideoPlayback(DispatcherQueue, bytes, part.Mime, start, id, Bubble?.VideoName ?? ChatCopy.Video, drawFrames: true);
+            _video         = new VideoPlayback(XamlHost.Dispatcher, bytes, part.Mime, start, id, Bubble?.VideoName ?? ChatCopy.Video, drawFrames: true);
             _video.Failed += OnVideoFailed;
 
             // The Frames Fit The Box At The Display's Scale, Shown As Its Picture (Rounded, See ClipVideoPicture) Under The

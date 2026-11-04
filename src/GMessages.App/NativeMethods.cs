@@ -262,6 +262,9 @@ internal static class NativeMethods
     public static extern bool IsIconic(IntPtr hwnd);
 
     [DllImport("user32.dll")]
+    public static extern short GetKeyState(int virtualKey);
+
+    [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool ShowWindow(IntPtr hwnd, int command);
 

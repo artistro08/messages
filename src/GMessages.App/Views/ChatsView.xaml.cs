@@ -3,21 +3,23 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Numerics;
 using GMessages.App.Views.Controls;
+using GMessages.App.Windowing;
 using GMessages.Presentation.Main;
 using GMessages.Presentation.Messaging;
 using GMessages.Presentation.Settings;
 using GMessages.Presentation.Shortcuts;
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Automation;
-using Microsoft.UI.Xaml.Automation.Peers;
-using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Controls.Primitives;
-using Microsoft.UI.Xaml.Input;
-using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml.Media.Animation;
 using Windows.System;
 using Windows.UI.ViewManagement;
+using Windows.UI.Xaml;
+using Windows.UI.Xaml.Automation;
+using Windows.UI.Xaml.Automation.Peers;
+using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml.Controls.Primitives;
+using Windows.UI.Xaml.Input;
+using Windows.UI.Xaml.Media;
+using Windows.UI.Xaml.Media.Animation;
 using WinRT;
+using Muxc = Microsoft.UI.Xaml.Controls;
 
 namespace GMessages.App.Views;
 
@@ -275,7 +277,7 @@ public sealed partial class ChatsView : UserControl
     }
 
     // Narrator Reads The Undo Bar's Notice As It Shows (A Live Region, Polite). After The Bindings Show It (A Turn Later)
-    private void AnnounceUndo() => DispatcherQueue.TryEnqueue(() =>
+    private void AnnounceUndo() => XamlHost.Dispatcher.TryEnqueue(() =>
     {
         if (ViewModel.HasUndo && FrameworkElementAutomationPeer.CreatePeerForElement(UndoNoticeText) is { } peer)
         {
@@ -398,10 +400,12 @@ public sealed partial class ChatsView : UserControl
         }
     }
 
-    // A Tile's Pill Is Made With Its Tile (Which May Come After The Tile's Container): It Shows Its Tile's State At Once
+    // A Tile's Pill Is Made With Its Tile (Which May Come After The Tile's Container): It Shows Its Tile's State At Once,
+    // Growing From Its Middle (16 x 3)
     private void OnSelectionPillLoaded(object sender, RoutedEventArgs e)
     {
         FrameworkElement pill = sender.As<FrameworkElement>();
+        pill.CenterPoint      = new Vector3(8, 1.5f, 0);
         ShowPill(pill, IsOpen(pill.DataContext), animate: false);
     }
 
@@ -430,7 +434,7 @@ public sealed partial class ChatsView : UserControl
     // A List Scrolled Down Isn't Pulled To The Top On Every New Message
     // The Same For The Pinned Grid, Which Also Shows Or Hides As Its First Tile Comes Or Its Last Goes
     private void OnRowsChanged(object? sender, NotifyCollectionChangedEventArgs e) =>
-        DispatcherQueue.TryEnqueue(() =>
+        XamlHost.Dispatcher.TryEnqueue(() =>
         {
             if (sender == _shownRows || sender == _shownList?.Pinned)
             {
@@ -524,7 +528,7 @@ public sealed partial class ChatsView : UserControl
     // Start Chat Opened (Or Found) The Conversation: Show It In Place Of Start Chat
     private void OnChatStarted(object? sender, string conversationId) => ViewModel.Select(conversationId);
 
-    private void OnActionErrorClosed(InfoBar sender, object args) => ViewModel.DismissActionError();
+    private void OnActionErrorClosed(Muxc.InfoBar sender, object args) => ViewModel.DismissActionError();
 
     // The Undo Bar: Undo Puts The Conversation Back; Its Close Button Hides It
     private void OnUndoClick(object sender, RoutedEventArgs e) => _ = ViewModel.UndoAsync();
@@ -548,9 +552,9 @@ public sealed partial class ChatsView : UserControl
     }
 
     // The Battery Banner's Own Close Button Dismisses It; The View Model Closing It On Recovery Doesn't
-    private void OnBatteryLowClosed(InfoBar sender, InfoBarClosedEventArgs args)
+    private void OnBatteryLowClosed(Muxc.InfoBar sender, Muxc.InfoBarClosedEventArgs args)
     {
-        if (args.Reason == InfoBarCloseReason.CloseButton)
+        if (args.Reason == Muxc.InfoBarCloseReason.CloseButton)
         {
             ViewModel.DismissPhoneBattery();
         }
@@ -675,7 +679,7 @@ public sealed partial class ChatsView : UserControl
         }
 
         _selectingWithKeys = true;
-        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => _selectingWithKeys = false);
+        XamlHost.Dispatcher.TryEnqueue(DispatcherQueuePriority.Low, () => _selectingWithKeys = false);
     }
 
     // Enter On A Row Moves To The Open Chat's Message Box (The Arrow Keys Opened It But Left The Focus Here). Caught Even
@@ -772,7 +776,7 @@ public sealed partial class ChatsView : UserControl
         bool wasOpen = ViewModel.SelectedConversationId == c.Id;
         await ConversationMenuFlyout.RunAsync(ViewModel, root, c, item, () => ShowDetailsAsync(root, c.Id));
 
-        DispatcherQueue.TryEnqueue(() =>
+        XamlHost.Dispatcher.TryEnqueue(() =>
         {
             if ((wasOpen && !ViewModel.IsChatOpen) || FocusIsOnRemovedRow(root, c.Id))
             {
@@ -860,7 +864,7 @@ public sealed partial class ChatsView : UserControl
                 ViewModel.OpenStartChat();
 
                 // A Turn Later, Once The Pane Shows: A Hidden Box Can't Take Focus
-                return DispatcherQueue.TryEnqueue(() => StartChatView.FocusQuery());
+                return XamlHost.Dispatcher.TryEnqueue(() => StartChatView.FocusQuery());
 
             case ShortcutCommand.FocusConversationList:
                 return ConversationList.Focus(FocusState.Keyboard);
@@ -891,7 +895,7 @@ public sealed partial class ChatsView : UserControl
             // The Message Box Goes With The Chat, So Focus Goes Back To The List (Not Lost)
             case ShortcutCommand.ExitConversation:
                 ViewModel.ExitConversation();
-                DispatcherQueue.TryEnqueue(() => ConversationList.Focus(FocusState.Programmatic));
+                XamlHost.Dispatcher.TryEnqueue(() => ConversationList.Focus(FocusState.Programmatic));
                 return true;
 
             case ShortcutCommand.NextConversation:

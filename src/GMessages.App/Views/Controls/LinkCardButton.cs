@@ -1,5 +1,5 @@
-using Microsoft.UI.Input;
-using Microsoft.UI.Xaml.Controls;
+using GMessages.App.Windowing;
+using Windows.UI.Xaml.Controls;
 
 namespace GMessages.App.Views.Controls;
 
@@ -8,7 +8,7 @@ namespace GMessages.App.Views.Controls;
 /// quote and the chat's scroll-to-bottom arrow.
 /// </summary>
 /// <remarks>
-/// WinUI 3 has no public cursor property; <c>ProtectedCursor</c> is reachable only from a subclass. Otherwise a plain
+/// System XAML has no cursor property; the hand is set through <see cref="PointerCursor"/>. Otherwise a plain
 /// <see cref="Button"/>, with Button's own styles.
 /// </remarks>
 public sealed partial class LinkCardButton : Button
@@ -18,6 +18,6 @@ public sealed partial class LinkCardButton : Button
     /// </summary>
     public LinkCardButton()
     {
-        ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.Hand);
+        PointerCursor.Use(this, PointerCursor.Hand);
     }
 }

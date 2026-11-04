@@ -4,24 +4,26 @@ using System.Numerics;
 using System.Runtime.InteropServices;
 using GMessages.App.Media;
 using GMessages.App.Views.Controls;
+using GMessages.App.Windowing;
 using GMessages.Presentation.Main;
 using GMessages.Presentation.Messaging;
 using GMessages.Protocol;
 using GMessages.Protocol.Proto;
-using Microsoft.UI.Composition;
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Automation;
-using Microsoft.UI.Xaml.Automation.Peers;
-using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Documents;
-using Microsoft.UI.Xaml.Hosting;
-using Microsoft.UI.Xaml.Input;
-using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml.Media.Imaging;
-using Microsoft.UI.Xaml.Shapes;
 using Windows.System;
+using Windows.UI.Composition;
 using Windows.UI.ViewManagement;
+using Windows.UI.Xaml;
+using Windows.UI.Xaml.Automation;
+using Windows.UI.Xaml.Automation.Peers;
+using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml.Documents;
+using Windows.UI.Xaml.Hosting;
+using Windows.UI.Xaml.Input;
+using Windows.UI.Xaml.Media;
+using Windows.UI.Xaml.Media.Imaging;
+using Windows.UI.Xaml.Shapes;
 using WinRT;
+using Muxc = Microsoft.UI.Xaml.Controls;
 
 namespace GMessages.App.Views;
 
@@ -203,7 +205,7 @@ public sealed partial class ChatPane : UserControl
     // Note, The Bubble It Picks A Reaction For, And How Many Times It Has Opened (For The Timing Log)
     private Flyout? _emojiPicker;
     private TextBox? _emojiSearch;
-    private ItemsRepeater? _emojiRows;
+    private Muxc.ItemsRepeater? _emojiRows;
     private ScrollViewer? _emojiScroller;
     private EmojiRowFactory? _emojiFactory;
     private TextBlock? _emojiEmpty;
@@ -238,7 +240,7 @@ public sealed partial class ChatPane : UserControl
     private string _recordPath = string.Empty;
     private long _recordStart;
     private long _recordedBefore;
-    private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _recordTimer;
+    private readonly DispatcherQueueTimer _recordTimer;
 
     /// <summary>
     /// Creates the pane.
@@ -330,7 +332,7 @@ public sealed partial class ChatPane : UserControl
 
         // Recording: The Time And The Input Level, 20 Times A Second, Over A Live Waveform As Wide As The Bar Allows
         RecordBars.FillsWidth = true;
-        _recordTimer          = DispatcherQueue.CreateTimer();
+        _recordTimer          = XamlHost.Dispatcher.CreateTimer();
         _recordTimer.Interval = RecordTick;
         _recordTimer.Tick    += (_, _) => ShowRecording();
 
@@ -451,7 +453,7 @@ public sealed partial class ChatPane : UserControl
             return false;
         }
 
-        return DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => SendEmojiShortcut());
+        return XamlHost.Dispatcher.TryEnqueue(DispatcherQueuePriority.Low, () => SendEmojiShortcut());
     }
 
     /// <summary>
@@ -590,17 +592,17 @@ public sealed partial class ChatPane : UserControl
 
     // Windows' Animation Setting Changed (Raised Off The UI Thread): The Typing Dots Follow It
     private void OnAnimationsEnabledChanged(UISettings sender, UISettingsAnimationsEnabledChangedEventArgs args) =>
-        DispatcherQueue.TryEnqueue(() => AnimateTypingDots(TypingBubble.Visibility == Visibility.Visible));
+        XamlHost.Dispatcher.TryEnqueue(() => AnimateTypingDots(TypingBubble.Visibility == Visibility.Visible));
 
     // High Contrast Turned On Or Off: The Focused Row Swaps Between Its Bubble's Ring And The System Visual. Windows
     // Changes Its Colors Then (Raised Off The UI Thread); AccessibilitySettings.HighContrastChanged Can't Be Used, As
     // Subscribing To It Crashes A Desktop App's Window. The High-Contrast Flag Can Lag The Colors, So It Is Checked Once
     // More On A Low-Priority Pass
     private void OnColorValuesChanged(UISettings sender, object args) =>
-        DispatcherQueue.TryEnqueue(() =>
+        XamlHost.Dispatcher.TryEnqueue(() =>
         {
             RecheckFocusRing();
-            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, RecheckFocusRing);
+            XamlHost.Dispatcher.TryEnqueue(DispatcherQueuePriority.Low, RecheckFocusRing);
         });
 
     // The Focused Row's Ring Or System Visual, For The Current High-Contrast Setting
@@ -683,7 +685,7 @@ public sealed partial class ChatPane : UserControl
             // Background Stays There, And Shows The Cursor In The Box Once The Person Brings It Up. Browsing The List With
             // The Arrow Keys Opens Each Chat But Keeps The Focus On The List
             bool keepFocus = pane._keepFocus;
-            pane.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+            XamlHost.Dispatcher.TryEnqueue(DispatcherQueuePriority.Low, () =>
             {
                 if (pane.Chat == chat && !keepFocus)
                 {
@@ -707,11 +709,11 @@ public sealed partial class ChatPane : UserControl
         _firstDrawFor = null;
         void OnRendering(object? sender, object e)
         {
-            CompositionTarget.Rendering -= OnRendering;
+            Windows.UI.Xaml.Media.CompositionTarget.Rendering -= OnRendering;
             chat.LogOpenStep("first bubbles drawn");
         }
 
-        CompositionTarget.Rendering += OnRendering;
+        Windows.UI.Xaml.Media.CompositionTarget.Rendering += OnRendering;
     }
 
     // The New Chat's Bubbles Fade In From Clear, Already Pinned To The Newest, So No Frame Shows Them Being Laid Out Or
@@ -793,7 +795,7 @@ public sealed partial class ChatPane : UserControl
         }
 
         // After The List Has Measured The New Bubble
-        DispatcherQueue.TryEnqueue(() =>
+        XamlHost.Dispatcher.TryEnqueue(() =>
         {
             MessageList.UpdateLayout();
             if (Scroller() is { } scroller && scroller.VerticalOffset < scroller.ScrollableHeight)
@@ -880,7 +882,7 @@ public sealed partial class ChatPane : UserControl
     {
         if (e.PropertyName == nameof(ChatViewModel.IsLoading) && sender == Chat && Chat is { IsLoading: false })
         {
-            DispatcherQueue.TryEnqueue(FillWithOlder);
+            XamlHost.Dispatcher.TryEnqueue(FillWithOlder);
         }
 
         // An Older Page Goes In Above: The Last Shown Bubble Holds Its Place While It Does (See The Rows' Panel In The
@@ -1065,7 +1067,7 @@ public sealed partial class ChatPane : UserControl
     // A Bubble's Play, Pause Or Seek: One Message Plays At A Time
     private void OnVoiceRequested(object? sender, VoiceRequest request)
     {
-        _voice ??= new VoicePlayer(DispatcherQueue);
+        _voice ??= new VoicePlayer(XamlHost.Dispatcher);
         _voice.Handle(request);
     }
 
@@ -1224,7 +1226,7 @@ public sealed partial class ChatPane : UserControl
     {
         if (at is { } point)
         {
-            menu.ShowAt(anchor, new Microsoft.UI.Xaml.Controls.Primitives.FlyoutShowOptions { Position = point });
+            menu.ShowAt(anchor, new Windows.UI.Xaml.Controls.Primitives.FlyoutShowOptions { Position = point });
             return;
         }
 
@@ -1486,7 +1488,7 @@ public sealed partial class ChatPane : UserControl
         // Timed For Two Seconds From The Open: The Longest Gap Between Frames Is How Long The App Stood Still
         long last  = System.Diagnostics.Stopwatch.GetTimestamp();
         long stall = 0;
-        Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += OnRendering;
+        Windows.UI.Xaml.Media.CompositionTarget.Rendering += OnRendering;
 
         void OnRendering(object? sender, object e)
         {
@@ -1498,7 +1500,7 @@ public sealed partial class ChatPane : UserControl
                 return;
             }
 
-            Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnRendering;
+            Windows.UI.Xaml.Media.CompositionTarget.Rendering -= OnRendering;
             long buildMs  = (long)System.Diagnostics.Stopwatch.GetElapsedTime(start, built).TotalMilliseconds;
             int rows      = _emojiFactory?.Made ?? 0;
             AppLog.EmojiPickerShown(App.ShellLog, open, buildMs, stall, rows);
@@ -1519,7 +1521,7 @@ public sealed partial class ChatPane : UserControl
     {
         Style buttonStyle  = ReactionButtons.Resources["ReactionButtonStyle"].As<Style>();
         Style noteStyle    = ReactionButtons.Resources["EmojiPickerNoteStyle"].As<Style>();
-        var flyout         = new Flyout { Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.Top };
+        var flyout         = new Flyout { Placement = Windows.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.Top };
 
         // Search Box
         _emojiSearch = new TextBox { PlaceholderText = ChatCopy.SearchEmoji, Margin = new Thickness(0, 0, 0, 8) };
@@ -1532,7 +1534,7 @@ public sealed partial class ChatPane : UserControl
 
         // Rows: About Half A Screen Above And Below The View Is Made Ahead
         _emojiFactory = new EmojiRowFactory(EmojiPickerColumns, EmojiCellSize, buttonStyle, noteStyle, PickEmoji);
-        _emojiRows    = new ItemsRepeater { ItemTemplate = _emojiFactory, VerticalCacheLength = 1 };
+        _emojiRows    = new Muxc.ItemsRepeater { ItemTemplate = _emojiFactory, VerticalCacheLength = 1 };
         _emojiScroller = new ScrollViewer { Content = _emojiRows, Height = EmojiPickerHeight, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
 
         var root = new StackPanel { Width = EmojiPickerColumns * EmojiCellSize, Children = { _emojiSearch, _emojiEmpty, _emojiScroller } };
@@ -1595,7 +1597,7 @@ public sealed partial class ChatPane : UserControl
         }
 
         chat.StartReply(bubble);
-        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => DraftBox.Focus(FocusState.Keyboard));
+        XamlHost.Dispatcher.TryEnqueue(DispatcherQueuePriority.Low, () => DraftBox.Focus(FocusState.Keyboard));
     }
 
     // A Bubble's Row Top In The View, Or Null While Its Row Isn't Realized

@@ -1,11 +1,4 @@
 using GMessages.App.Views;
-using Microsoft.UI.Dispatching;
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Automation;
-using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Input;
-using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.Foundation;
 using Windows.Graphics;
 using Windows.Graphics.DirectX;
@@ -14,6 +7,13 @@ using Windows.Media;
 using Windows.Media.Core;
 using Windows.Media.Playback;
 using Windows.Storage.Streams;
+using Windows.System;
+using Windows.UI.Xaml;
+using Windows.UI.Xaml.Automation;
+using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml.Input;
+using Windows.UI.Xaml.Media;
+using Windows.UI.Xaml.Media.Imaging;
 using WinRT;
 
 namespace GMessages.App.Media;
@@ -287,7 +287,7 @@ internal sealed class VideoPlayback : IDisposable
             button.Margin           = new Thickness(0);
             button.IsHitTestVisible = false;
             button.As<Control>().IsTabStop = false;
-            AutomationProperties.SetAccessibilityView(button, Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
+            AutomationProperties.SetAccessibilityView(button, Windows.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
         }
     }
 

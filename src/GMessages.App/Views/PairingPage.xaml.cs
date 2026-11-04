@@ -2,13 +2,15 @@ using System.ComponentModel;
 using System.Globalization;
 using GMessages.Presentation.Pairing;
 using GMessages.Protocol.Http;
+using GMessages.App.Windowing;
 using Microsoft.Extensions.Logging;
-using Microsoft.UI.Dispatching;
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Automation;
-using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.Web.WebView2.Core;
+using Windows.System;
+using Windows.UI.Xaml;
+using Windows.UI.Xaml.Automation;
+using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml.Media.Imaging;
+using Muxc = Microsoft.UI.Xaml.Controls;
 
 namespace GMessages.App.Views;
 
@@ -43,7 +45,7 @@ public sealed partial class PairingPage : UserControl
     private readonly DispatcherQueueTimer _sessionCookieTimer;
 
     // The Current Attempt's Browser And Profile Folder; Null Once Closed
-    private WebView2? _webView;
+    private Muxc.WebView2? _webView;
     private string? _profileFolder;
     private bool _captured;
     private bool _closed;
@@ -62,7 +64,7 @@ public sealed partial class PairingPage : UserControl
         InitializeComponent();
 
         // Grace Wait For The Session Cookie
-        _sessionCookieTimer             = DispatcherQueue.CreateTimer();
+        _sessionCookieTimer             = XamlHost.Dispatcher.CreateTimer();
         _sessionCookieTimer.Interval    = SignIn.SessionCookieWait;
         _sessionCookieTimer.IsRepeating = false;
         _sessionCookieTimer.Tick       += (_, _) => _ = CheckCookiesAsync(force: true);
@@ -109,7 +111,7 @@ public sealed partial class PairingPage : UserControl
         _captured      = false;
         _profileFolder = Path.Combine(Path.GetTempPath(), $"{ProfilePrefix}{Guid.NewGuid():N}");
 
-        var web = new WebView2();
+        var web = new Muxc.WebView2();
         AutomationProperties.SetAutomationId(web, "Pairing.SignIn");
         AutomationProperties.SetName(web, "Google sign-in");
         _webView         = web;
@@ -117,8 +119,11 @@ public sealed partial class PairingPage : UserControl
 
         try
         {
-            var env = await CoreWebView2Environment.CreateWithOptionsAsync(null, _profileFolder, new CoreWebView2EnvironmentOptions { AdditionalBrowserArguments = SignIn.BrowserArguments });
-            await web.EnsureCoreWebView2Async(env);
+            // Profile Folder And Browser Arguments: WinUI 2's WebView2 Takes No Environment, It Makes Its Own From These
+            // Variables (Read When It Starts), So Each Attempt Sets Them First
+            Environment.SetEnvironmentVariable("WEBVIEW2_USER_DATA_FOLDER", _profileFolder);
+            Environment.SetEnvironmentVariable("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", SignIn.BrowserArguments);
+            await web.EnsureCoreWebView2Async();
 
             // Closed While Starting
             if (_webView != web)
@@ -187,7 +192,7 @@ public sealed partial class PairingPage : UserControl
     // Reads The Wanted Cookies; Captures Once Signed In (Or Forced By The Grace Timer With SAPISID Present)
     private async Task CheckCookiesAsync(bool force)
     {
-        WebView2? web = _webView;
+        Muxc.WebView2? web = _webView;
         if (_captured || web?.CoreWebView2 is null)
         {
             return;
@@ -286,8 +291,8 @@ public sealed partial class PairingPage : UserControl
     private void CloseSignIn()
     {
         _sessionCookieTimer.Stop();
-        WebView2? web    = _webView;
-        string? folder   = _profileFolder;
+        Muxc.WebView2? web = _webView;
+        string? folder     = _profileFolder;
         _webView         = null;
         _profileFolder   = null;
         SignInHost.Child = null;

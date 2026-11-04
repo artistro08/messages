@@ -1,7 +1,6 @@
-using Microsoft.UI.Text;
-using Microsoft.UI.Xaml.Media;
 using Windows.UI;
 using Windows.UI.Text;
+using Windows.UI.Xaml.Media;
 
 namespace GMessages.App.Views.Controls;
 

@@ -39,7 +39,11 @@
          space above the 20 px heading's letters in its line, so the gap over them matches the gap beside them. The X's
          negative right margin puts its glyph as far in from the right edge as the heading is from the left -->
     <ContentDialog.Title>
-        <Grid Margin="0,-7,0,0" ColumnDefinitions="*,Auto">
+        <Grid Margin="0,-7,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
             <TextBlock VerticalAlignment="Top" Text="Keyboard shortcuts" />
             <Button
                 Grid.Column="1"

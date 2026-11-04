@@ -1,8 +1,8 @@
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Automation;
-using Microsoft.UI.Xaml.Automation.Peers;
-using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
+using Windows.UI.Xaml;
+using Windows.UI.Xaml.Automation;
+using Windows.UI.Xaml.Automation.Peers;
+using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml.Media;
 
 namespace GMessages.App.Views;
 
@@ -14,7 +14,7 @@ namespace GMessages.App.Views;
 internal sealed partial record EmojiRow(string? Header, IReadOnlyList<(string Emoji, string Words)> Emoji);
 
 /// <summary>
-/// Makes the emoji picker's rows for its <see cref="ItemsRepeater"/> as they scroll into view, and reuses the ones that
+/// Makes the emoji picker's rows for its <see cref="Microsoft.UI.Xaml.Controls.ItemsRepeater"/> as they scroll into view, and reuses the ones that
 /// scroll out.
 /// </summary>
 /// <remarks>
@@ -22,7 +22,8 @@ internal sealed partial record EmojiRow(string? Header, IReadOnlyList<(string Em
 /// Each row is one grid: a name line across it, and a button per column, in equal columns that fill the picker's width.
 /// A name row shows only the name, an emoji row only its buttons (the spare ones in a category's last row hide). Each
 /// button carries the AutomationId <c>EmojiPicker.{Code Points In Hex}</c>, the emoji's first search word as its tooltip,
-/// and draws in Segoe UI Emoji, so emoji that default to plain text (☝️, ✍️) still show in color.
+/// and draws in the app's Fluent emoji font alone (see App.xaml), so emoji that default to plain text (☝️, ✍️) still show
+/// in color.
 /// </para>
 /// <para>
 /// An emoji not yet drawn in this run appears a few frames later (a few new emoji per frame), so a first open never
@@ -32,8 +33,12 @@ internal sealed partial record EmojiRow(string? Header, IReadOnlyList<(string Em
 /// Made rows are kept, so a reused row is found again by reference (it was made here, so it comes back as the same
 /// object; no type test on the element is needed).
 /// </para>
+/// <para>
+/// WinUI 2.8's repeater takes only its own <see cref="Microsoft.UI.Xaml.Controls.ElementFactory"/>, not Windows'
+/// IElementFactory (setting one throws).
+/// </para>
 /// </remarks>
-internal sealed partial class EmojiRowFactory : IElementFactory
+internal sealed partial class EmojiRowFactory : Microsoft.UI.Xaml.Controls.ElementFactory
 {
     // Every Row Made, With Its Parts And The Emoji Its Buttons Show Now, And The Rows Scrolled Out For Reuse
     private readonly Dictionary<UIElement, RowParts> _made = new(ReferenceEqualityComparer.Instance);
@@ -44,7 +49,7 @@ internal sealed partial class EmojiRowFactory : IElementFactory
     private readonly Style _buttonStyle;
     private readonly Style _noteStyle;
     private readonly Action<string> _pick;
-    private readonly FontFamily _emojiFont = new("Segoe UI Emoji");
+    private readonly FontFamily _emojiFont = new("ms-appx:///Assets/Fonts/FluentEmojiColor.ttf#Fluent Emoji Color");
 
     // How Many New Emoji One Turn Draws (About 50 ms Of Work)
     private const int DrawnPerTurn = 4;
@@ -85,10 +90,9 @@ internal sealed partial class EmojiRowFactory : IElementFactory
     /// </summary>
     /// <param name="args">The row's data (an <see cref="EmojiRow"/>).</param>
     /// <returns>The row's grid.</returns>
-    public UIElement GetElement(ElementFactoryGetArgs args)
+    protected override UIElement GetElementCore(Microsoft.UI.Xaml.Controls.ElementFactoryGetArgs args)
     {
         ArgumentNullException.ThrowIfNull(args);
-
         var row           = (EmojiRow)args.Data;
         UIElement element = _free.Count > 0 ? _free.Pop() : MakeRow();
         RowParts parts    = _made[element];
@@ -166,7 +170,7 @@ internal sealed partial class EmojiRowFactory : IElementFactory
     /// Keeps a row that scrolled out, for the next one that scrolls in.
     /// </summary>
     /// <param name="args">The scrolled-out row.</param>
-    public void RecycleElement(ElementFactoryRecycleArgs args)
+    protected override void RecycleElementCore(Microsoft.UI.Xaml.Controls.ElementFactoryRecycleArgs args)
     {
         ArgumentNullException.ThrowIfNull(args);
 

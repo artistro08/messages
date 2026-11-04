@@ -1,33 +1,30 @@
+using GMessages.App.Windowing;
 using GMessages.Presentation.Placement;
 using GMessages.Presentation.Settings;
-using Microsoft.UI.Windowing;
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Automation;
-using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Controls.Primitives;
 using Windows.Foundation;
-using Windows.Graphics;
-using WinRT.Interop;
+using Windows.UI.Xaml;
+using Windows.UI.Xaml.Automation;
+using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml.Controls.Primitives;
 
 namespace GMessages.App;
 
 /// <summary>
-/// Hosts the tray icon's right-click menu as a WinUI <see cref="MenuFlyout"/>.
+/// Hosts the tray icon's right-click menu as a XAML <see cref="MenuFlyout"/>.
 /// </summary>
 /// <remarks>
 /// Ported from Magic Buds' <c>TrayMenuWindow.cs</c>, with Open added and the items given AutomationIds. A
-/// MenuFlyout needs a XAML root, so a 1 × 1 frameless, transparent window sits at the click point and the
-/// menu opens outside its bounds (<c>ShouldConstrainToRootBounds = false</c>), away from the taskbar. The
-/// window hides again when the menu closes or focus moves elsewhere.
+/// MenuFlyout needs a XAML root, so a 1 × 1 frameless, see-through popup window (<see cref="XamlWindowKind.Popup"/>)
+/// sits at the click point and the menu opens outside its bounds (<c>ShouldConstrainToRootBounds = false</c>, a
+/// windowed popup), away from the taskbar. The window hides again when the menu closes or focus moves elsewhere.
 /// </remarks>
-internal sealed partial class TrayMenuWindow : Window
+internal sealed partial class TrayMenuWindow : XamlWindow
 {
     // Hard-Coded Copy Of WinUI's MenuFlyoutItemThemePaddingNarrow: Unboxing The Theme Resource Throws Under Native AOT
     private static readonly Thickness NarrowPadding = new(11, 4, 11, 7);
 
     private readonly Grid _root       = new();
     private readonly MenuFlyout _menu = new() { ShouldConstrainToRootBounds = false };
-    private readonly IntPtr _hwnd;
     private FlyoutShowOptions? _pendingShow;
     private bool _closed;
 
@@ -35,39 +32,19 @@ internal sealed partial class TrayMenuWindow : Window
     /// Creates the hidden host window and its menu.
     /// </summary>
     public TrayMenuWindow()
+        : base(XamlWindowKind.Popup)
     {
         Content = _root;
-        _hwnd   = WindowNative.GetWindowHandle(this);
 
         BuildItems();
-        _menu.Closed += (_, _) =>
-        {
-            if (!_closed)
-            {
-                AppWindow?.Hide();
-            }
-        };
-        Closed += (_, _) => _closed = true;
-
-        // Window Chrome
-        var presenter = OverlappedPresenter.Create();
-        presenter.IsResizable    = false;
-        presenter.IsMaximizable  = false;
-        presenter.IsMinimizable  = false;
-        presenter.IsAlwaysOnTop  = true;
-        presenter.SetBorderAndTitleBar(false, false);
-        AppWindow.SetPresenter(presenter);
-        AppWindow.IsShownInSwitchers = false;
-
-        // Invisible Host: frameless and see-through, so only the menu shows
-        PopupWindowStyle.Apply(_hwnd);
-        SystemBackdrop = new TransparentBackdrop();
+        _menu.Closed += (_, _) => OnMenuClosed();
+        Closed       += (_, _) => _closed = true;
 
         // Behavior
         _root.Loaded += (_, _) => ShowPendingMenu();
-        Activated    += (_, e) =>
+        Activated    += (_, active) =>
         {
-            if (e.WindowActivationState == WindowActivationState.Deactivated)
+            if (!active)
             {
                 HideMenu();
             }
@@ -90,6 +67,11 @@ internal sealed partial class TrayMenuWindow : Window
     public event EventHandler? QuitRequested;
 
     /// <summary>
+    /// The host window hid (the menu closed), so the App can trim memory.
+    /// </summary>
+    public event EventHandler? Hidden;
+
+    /// <summary>
     /// Opens the menu at a screen point (physical pixels), growing away from the taskbar.
     /// </summary>
     /// <param name="x">Anchor X in screen pixels.</param>
@@ -97,10 +79,8 @@ internal sealed partial class TrayMenuWindow : Window
     /// <param name="edge">The taskbar edge the menu grows away from.</param>
     public void ShowAt(int x, int y, TaskbarEdge edge)
     {
-        AppWindow.MoveAndResize(new RectInt32(x, y, 1, 1));
-        AppWindow.Show(true);
+        MoveAndResize(x, y, 1, 1);
         Activate();
-        NativeMethods.SetForegroundWindow(_hwnd);
 
         _pendingShow = new FlyoutShowOptions
         {
@@ -113,7 +93,7 @@ internal sealed partial class TrayMenuWindow : Window
                 _                 => FlyoutPlacementMode.TopEdgeAlignedRight,
             },
         };
-        if (_root.IsLoaded)
+        if (_root.XamlRoot is not null)
         {
             ShowPendingMenu();
         }
@@ -133,16 +113,15 @@ internal sealed partial class TrayMenuWindow : Window
     // Open, Settings, Separator, Quit
     private void BuildItems()
     {
-        _menu.Items.Add(CreateItem("Open", "", "TrayMenu.Open", () => OpenRequested?.Invoke(this, EventArgs.Empty)));
-        _menu.Items.Add(CreateItem("Settings", "", "TrayMenu.Settings", () => SettingsRequested?.Invoke(this, EventArgs.Empty)));
+        _menu.Items.Add(CreateItem("Open", "", "TrayMenu.Open", () => OpenRequested?.Invoke(this, EventArgs.Empty)));
+        _menu.Items.Add(CreateItem("Settings", "", "TrayMenu.Settings", () => SettingsRequested?.Invoke(this, EventArgs.Empty)));
         _menu.Items.Add(new MenuFlyoutSeparator());
-        _menu.Items.Add(CreateItem("Quit", "", "TrayMenu.Quit", () => QuitRequested?.Invoke(this, EventArgs.Empty)));
+        _menu.Items.Add(CreateItem("Quit", "", "TrayMenu.Quit", () => QuitRequested?.Invoke(this, EventArgs.Empty)));
     }
 
     // Closes the menu and hides its host window directly, rather than waiting for the menu's Closed event. An item
     // that activates an already open window (Settings or Open with the main window up) deactivates the host while the
-    // click is still running, and the host could stay shown. The App only rebuilds a hidden menu for a new theme, so a
-    // host left shown kept the old theme's backdrop (the dark menu after choosing Light)
+    // click is still running, and the host could stay shown
     private void HideMenu()
     {
         if (_closed)
@@ -151,7 +130,19 @@ internal sealed partial class TrayMenuWindow : Window
         }
 
         _menu.Hide();
-        AppWindow?.Hide();
+        Hide();
+    }
+
+    // The Menu Is Gone, However It Went: The Host Hides
+    private void OnMenuClosed()
+    {
+        if (_closed)
+        {
+            return;
+        }
+
+        Hide();
+        Hidden?.Invoke(this, EventArgs.Empty);
     }
 
     // Always the mouse-sized padding. WinUI picks touch padding (taller rows) when it can't

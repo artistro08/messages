@@ -1,11 +1,9 @@
 using System.Runtime.InteropServices;
-using Microsoft.UI.Input;
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.System;
-using Windows.UI.Core;
+using Windows.UI.Xaml;
+using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml.Media;
 using WinRT;
 
 namespace GMessages.App.Views;
@@ -18,10 +16,10 @@ internal static class UiHelpers
     /// <summary>
     /// Tells whether a key is held down right now, on the UI thread.
     /// </summary>
+    /// <remarks>Win32's thread key state (the high bit is down); an island's CoreWindow is hidden, so it can't answer.</remarks>
     /// <param name="key">The key.</param>
     /// <returns>True while the key is down.</returns>
-    public static bool IsDown(VirtualKey key) =>
-        InputKeyboardSource.GetKeyStateForCurrentThread(key).HasFlag(CoreVirtualKeyStates.Down);
+    public static bool IsDown(VirtualKey key) => NativeMethods.GetKeyState((int)key) < 0;
 
     /// <summary>
     /// Shows an element only when there is text.

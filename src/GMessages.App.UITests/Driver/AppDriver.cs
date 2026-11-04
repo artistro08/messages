@@ -32,9 +32,10 @@ public sealed class AppDriver : IAsyncDisposable
         ? @"GMessages.App\bin\x64\Debug\net10.0-windows10.0.26100.0\win-x64\publish\" + ExeName
         : @"GMessages.App\bin\x64\Debug\net10.0-windows10.0.26100.0\win-x64\" + ExeName;
 
+    // Visual Studio's MSBuild: The App's System XAML Compiler Doesn't Run Under The dotnet CLI
     private static readonly string BuildCommand = Aot
-        ? "dotnet publish src/GMessages.App -c Debug -p:Platform=x64 -p:Optimize=true"
-        : "dotnet build src/GMessages.App -c Debug -p:Platform=x64";
+        ? "msbuild src/GMessages.App -restore -t:Publish -p:Configuration=Debug -p:Platform=x64 -p:Optimize=true"
+        : "msbuild src/GMessages.App -restore -p:Configuration=Debug -p:Platform=x64";
 
     private static readonly string? FoundExe      = FindExe();
     private const int MaxSearchNodes = 5000;
