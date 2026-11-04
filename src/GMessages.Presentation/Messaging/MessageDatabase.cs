@@ -36,15 +36,16 @@ public sealed partial class MessageDatabase
     /// </summary>
     public const int KeepPerConversation = 100;
 
+    // Version 2 Added Drafts; A Version 1 File Gets The Table In Place (See Open)
+    private const string DraftsTable = "CREATE TABLE drafts (conversation_id TEXT PRIMARY KEY, body BLOB NOT NULL);";
+
     private const string Schema = """
         CREATE TABLE conversations (id TEXT PRIMARY KEY, last_time INTEGER NOT NULL, body BLOB NOT NULL);
         CREATE TABLE messages (conversation_id TEXT NOT NULL, id TEXT NOT NULL, time INTEGER NOT NULL, body BLOB NOT NULL,
                                PRIMARY KEY (conversation_id, id));
         CREATE INDEX messages_by_time ON messages (conversation_id, time);
         CREATE TABLE encryption (conversation_id TEXT PRIMARY KEY, encrypted INTEGER NOT NULL, at INTEGER NOT NULL);
-        CREATE TABLE drafts (conversation_id TEXT PRIMARY KEY, body BLOB NOT NULL);
-        PRAGMA user_version = 2;
-        """;
+        """ + DraftsTable + "PRAGMA user_version = 2;";
 
     private readonly string _path;
     private readonly string _connectionString;
@@ -319,7 +320,7 @@ public sealed partial class MessageDatabase
             command.Parameters.AddWithValue("$c", conversationId);
             if (text.Length > 0)
             {
-                command.Parameters.AddWithValue("$body", ProtectedData.Protect(Encoding.UTF8.GetBytes(text), null, DataProtectionScope.CurrentUser));
+                command.Parameters.AddWithValue("$body", Protect(Encoding.UTF8.GetBytes(text)));
             }
 
             command.ExecuteNonQuery();
@@ -359,7 +360,8 @@ public sealed partial class MessageDatabase
         }
     }
 
-    // Opens The File, Creating The Schema On A New One And Starting Over On Another Version. Caller Holds The Lock
+    // Opens The File, Creating The Schema On A New One, Adding The Drafts Table To A Version 1 File, And Starting Over On
+    // Any Other Version. Caller Holds The Lock
     private SqliteConnection Open()
     {
         var connection = new SqliteConnection(_connectionString);
@@ -368,6 +370,14 @@ public sealed partial class MessageDatabase
             connection.Open();
 
             long version = UserVersion(connection);
+            if (version == 1)
+            {
+                using SqliteCommand upgrade = connection.CreateCommand();
+                upgrade.CommandText = DraftsTable + "PRAGMA user_version = 2;";
+                upgrade.ExecuteNonQuery();
+                version = SchemaVersion;
+            }
+
             if (version != 0 && version != SchemaVersion)
             {
                 LogReset("SchemaVersion" + version);
@@ -432,8 +442,10 @@ public sealed partial class MessageDatabase
     private static bool IsDamage(SqliteException ex) =>
         (ex.SqliteErrorCode & 0xFF) is 1 or 11 or 19 or 20 or 26;
 
-    private static byte[] Protect(IMessage value) =>
-        ProtectedData.Protect(value.ToByteArray(), null, DataProtectionScope.CurrentUser);
+    private static byte[] Protect(IMessage value) => Protect(value.ToByteArray());
+
+    private static byte[] Protect(byte[] value) =>
+        ProtectedData.Protect(value, null, DataProtectionScope.CurrentUser);
 
     // A Body That Isn't A Blob (NULL, Text, Number) Is A Bad Row
     private static byte[] Unprotect(SqliteDataReader reader) =>

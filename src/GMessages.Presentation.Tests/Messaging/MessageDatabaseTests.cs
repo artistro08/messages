@@ -183,6 +183,21 @@ public sealed class MessageDatabaseTests
         Assert.AreEqual(2, db.LoadMessages("c-1", 10).Count);
     }
 
+    /// <summary>
+    /// A version 1 file (before drafts) keeps its saved chats and gets the drafts table, instead of starting over.
+    /// </summary>
+    [TestMethod]
+    public void Version1File_KeepsItsRows_AndGetsDrafts()
+    {
+        Db().SaveMessages("c-1", Range(2));
+        RawSql("DROP TABLE drafts; PRAGMA user_version = 1;");
+
+        var db = Db();
+        Assert.AreEqual(2, db.LoadMessages("c-1", 10).Count);
+        db.SaveDraft("c-1", "hi");
+        Assert.AreEqual("hi", db.LoadDrafts()["c-1"]);
+    }
+
     [TestMethod]
     public void CorruptFile_StartsEmpty()
     {

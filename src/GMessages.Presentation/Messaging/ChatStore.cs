@@ -196,8 +196,9 @@ public sealed partial class ChatStore : IDisposable
     /// Keeps a conversation's unsent draft, and saves it so it's still there after the window or the app closes.
     /// </summary>
     /// <remarks>
-    /// An empty draft forgets it. The save runs on the background queue, encrypted like every other body, and
-    /// is dropped after a sign-out (the database is deleted with the account).
+    /// An empty draft forgets it. The save runs at once on the thread pool, not behind the queued message saves: a quit
+    /// cuts those off after a limit (they're fetched again from the phone), and a draft can't be fetched again. It's
+    /// encrypted like every other body, and dropped after a sign-out (the database is deleted with the account).
     /// </remarks>
     /// <param name="conversationId">The conversation ID.</param>
     /// <param name="text">The draft text.</param>
@@ -221,12 +222,14 @@ public sealed partial class ChatStore : IDisposable
             _drafts.TryRemove(conversationId, out _);
         }
 
+        // Writes The Draft As It Is When The Write Runs, So Two Quick Saves Can't Land Out Of Order
+        // ponytail: the quit doesn't wait on this write; it takes one database call, done long before the connection closes
         int generation = Generation;
-        _ = EnqueueAsync(database =>
+        _ = ReadNowAsync(database =>
         {
             if (generation == Generation)
             {
-                database.SaveDraft(conversationId, text);
+                database.SaveDraft(conversationId, Draft(conversationId));
             }
         });
     }
