@@ -792,7 +792,13 @@ public sealed partial class ChatStore : IDisposable
 
         ConversationInfo read = cached with { Unread = false };
         Upsert(read);
-        SaveRead(conversationId, generation);
+
+        // Saved Read Only While The Read Message Is Still The Newest: One That Came In During The Wait Stays Unread On Disk
+        if (cached.LatestMessageId == messageId)
+        {
+            SaveRead(conversationId, generation);
+        }
+
         ConversationChanged?.Invoke(this, read);
     }
 

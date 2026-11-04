@@ -1383,8 +1383,9 @@ public sealed class ChatStoreTests
     public async Task MarkRead_SavesRead_SoReopenedStoreLoadsItRead()
     {
         using var rig = new Rig(withDatabase: true);
-        Conversation unread = Conv("c1", "Ann");
-        unread.Unread       = true;
+        Conversation unread    = Conv("c1", "Ann");
+        unread.Unread          = true;
+        unread.LatestMessageID = "m1";
         await rig.Store.HandleEventAsync(new ConversationUpdated(unread));
 
         await rig.Store.MarkReadAsync("c1", "m1", Ct);
@@ -1394,6 +1395,27 @@ public sealed class ChatStoreTests
         using var reopened = new ChatStore(rig.Controller, () => rig.Client, NullLogger.Instance, rig.Database, rig.Time, rig.Media);
         await reopened.LoadSavedAsync();
         Assert.IsFalse(reopened.Find("c1")?.Unread);
+    }
+
+    /// <summary>
+    /// A message newer than the one read (it came in while the phone was being told) keeps the saved row unread, so a
+    /// restart never hides a message that wasn't seen.
+    /// </summary>
+    [TestMethod]
+    public async Task MarkRead_NewerMessageCameIn_KeepsSavedUnread()
+    {
+        using var rig = new Rig(withDatabase: true);
+        Conversation unread    = Conv("c1", "Ann");
+        unread.Unread          = true;
+        unread.LatestMessageID = "m2";
+        await rig.Store.HandleEventAsync(new ConversationUpdated(unread));
+
+        await rig.Store.MarkReadAsync("c1", "m1", Ct);
+        await rig.Store.FlushAsync();
+
+        using var reopened = new ChatStore(rig.Controller, () => rig.Client, NullLogger.Instance, rig.Database, rig.Time, rig.Media);
+        await reopened.LoadSavedAsync();
+        Assert.IsTrue(reopened.Find("c1")?.Unread);
     }
 
     [TestMethod]
