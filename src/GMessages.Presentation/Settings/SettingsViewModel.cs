@@ -132,6 +132,42 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged, IDisposa
         }
     }
 
+    /// <summary>
+    /// Gets or sets whether the app shows its icon in the system tray. On by default.
+    /// </summary>
+    public bool ShowTrayIcon
+    {
+        get => _settings.ShowTrayIcon;
+        set
+        {
+            if (value == _settings.ShowTrayIcon)
+            {
+                return;
+            }
+
+            _settings.ShowTrayIcon = value;
+            Raise();
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets whether the app keeps running after its window closes. On by default.
+    /// </summary>
+    public bool RunInBackground
+    {
+        get => _settings.RunInBackground;
+        set
+        {
+            if (value == _settings.RunInBackground)
+            {
+                return;
+            }
+
+            _settings.RunInBackground = value;
+            Raise();
+        }
+    }
+
     // =========================================================================
     // NOTIFICATIONS
     // =========================================================================

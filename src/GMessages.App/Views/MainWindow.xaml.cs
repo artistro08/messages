@@ -157,6 +157,11 @@ public sealed partial class MainWindow : Window
     public event EventHandler? SettingsRequested;
 
     /// <summary>
+    /// Asks the App to quit (the profile menu's Quit, shown while the tray icon is off).
+    /// </summary>
+    public event EventHandler? QuitRequested;
+
+    /// <summary>
     /// Gets the chats' state, or null while the window shows pairing.
     /// </summary>
     public MainViewModel? ViewModel => _chats?.ViewModel;
@@ -716,6 +721,8 @@ public sealed partial class MainWindow : Window
     }
 
     private void OnSettingsClick(object sender, RoutedEventArgs e) => SettingsRequested?.Invoke(this, EventArgs.Empty);
+
+    private void OnQuitClick(object sender, RoutedEventArgs e) => QuitRequested?.Invoke(this, EventArgs.Empty);
 
     // Pairing's Cancel Closes The Window, Which Cancels The Pairing
     private void OnPairingCancel(object? sender, EventArgs e) => Close();

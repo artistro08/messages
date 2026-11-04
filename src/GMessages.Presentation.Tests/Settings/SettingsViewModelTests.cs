@@ -196,6 +196,39 @@ public sealed class SettingsViewModelTests
         Assert.IsTrue(new AppSettings(store).ShowPinnedGrid);
     }
 
+    /// <summary>
+    /// The tray icon shows for a fresh install, and turning it off lands in the store.
+    /// </summary>
+    [TestMethod]
+    public void ShowTrayIcon_DefaultsOn_AndPersists()
+    {
+        var store = new InMemorySettingsStore();
+        var vm    = Create(store);
+        Assert.IsTrue(vm.ShowTrayIcon);
+
+        vm.ShowTrayIcon = false;
+
+        Assert.IsFalse(new AppSettings(store).ShowTrayIcon);
+        Assert.IsTrue(vm.RunInBackground, "The tray icon setting mustn't change running in the background.");
+    }
+
+    /// <summary>
+    /// Running in the background is on for a fresh install, and turning it off lands in the store without touching the
+    /// tray icon.
+    /// </summary>
+    [TestMethod]
+    public void RunInBackground_DefaultsOn_AndPersists()
+    {
+        var store = new InMemorySettingsStore();
+        var vm    = Create(store);
+        Assert.IsTrue(vm.RunInBackground);
+
+        vm.RunInBackground = false;
+
+        Assert.IsFalse(new AppSettings(store).RunInBackground);
+        Assert.IsTrue(vm.ShowTrayIcon);
+    }
+
     // =========================================================================
     // START WITH WINDOWS
     // =========================================================================
