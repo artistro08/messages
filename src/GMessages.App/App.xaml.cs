@@ -202,6 +202,7 @@ public sealed partial class App : Application, IDisposable
         store.MessageArrived                     += (_, e) =>
         {
             _ = _notifications.ShowAsync(e);
+            CopyCode(e);
             ScheduleBackgroundTrim();
         };
         _notifications.Register();
@@ -573,6 +574,21 @@ public sealed partial class App : Application, IDisposable
         AppLog.SettingsRequested(_logger);
         ShowMainWindow();
         _mainWindow?.ShowSettings();
+    }
+
+    // Copy Codes
+    // A New Message's One-Time Passcode Goes To The Clipboard (Settings), Kept Out Of Clipboard History And Cloud Sync. The
+    // Same Messages As Notify, Wherever The Window Is: None From Muted, Spam, Archived Or Blocked Chats
+    private void CopyCode(MessageArrivedEventArgs e)
+    {
+        if (_settings?.CopyCodes != true
+            || !NotificationPolicy.ShouldNotify(e, notificationsEnabled: true, viewedConversationId: null, windowFocused: false, notifyForViewedChat: true)
+            || OneTimeCode.Find(e.Message.Text) is not { } code)
+        {
+            return;
+        }
+
+        _dispatcher?.TryEnqueue(() => UiHelpers.ToClipboard(code, keepPrivate: true));
     }
 
     // Theme: every open window and the tray menu follow the setting live. The tray icon comes and goes with its setting

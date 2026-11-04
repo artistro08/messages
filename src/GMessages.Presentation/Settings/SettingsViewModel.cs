@@ -168,6 +168,24 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged, IDisposa
         }
     }
 
+    /// <summary>
+    /// Gets or sets whether one-time passcodes in new messages are copied to the clipboard. Off by default.
+    /// </summary>
+    public bool CopyCodes
+    {
+        get => _settings.CopyCodes;
+        set
+        {
+            if (value == _settings.CopyCodes)
+            {
+                return;
+            }
+
+            _settings.CopyCodes = value;
+            Raise();
+        }
+    }
+
     // =========================================================================
     // NOTIFICATIONS
     // =========================================================================

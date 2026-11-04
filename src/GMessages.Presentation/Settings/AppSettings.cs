@@ -27,6 +27,7 @@ public sealed class AppSettings : INotifyPropertyChanged
     private const string ShowPinnedGridKey           = "ShowPinnedGrid";
     private const string ShowTrayIconKey             = "ShowTrayIcon";
     private const string RunInBackgroundKey          = "RunInBackground";
+    private const string CopyCodesKey                = "CopyCodes";
 
     // Snooze Lengths, In Minutes (The Choices Settings Offers), And The Default
     private const int DefaultSnoozeMinutes = 15;
@@ -110,6 +111,16 @@ public sealed class AppSettings : INotifyPropertyChanged
     {
         get => GetBool(RunInBackgroundKey, true);
         set => Set(RunInBackgroundKey, value.ToString(CultureInfo.InvariantCulture));
+    }
+
+    /// <summary>
+    /// Whether a one-time passcode in a new received message is copied to the clipboard (see
+    /// <see cref="Messaging.OneTimeCode"/>). Defaults to false, since it replaces what's on the clipboard.
+    /// </summary>
+    public bool CopyCodes
+    {
+        get => GetBool(CopyCodesKey, false);
+        set => Set(CopyCodesKey, value.ToString(CultureInfo.InvariantCulture));
     }
 
     /// <summary>

@@ -229,6 +229,21 @@ public sealed class SettingsViewModelTests
         Assert.IsTrue(vm.ShowTrayIcon);
     }
 
+    /// <summary>
+    /// Copying codes is off for a fresh install, and turning it on lands in the store.
+    /// </summary>
+    [TestMethod]
+    public void CopyCodes_DefaultsOff_AndPersists()
+    {
+        var store = new InMemorySettingsStore();
+        var vm    = Create(store);
+        Assert.IsFalse(vm.CopyCodes);
+
+        vm.CopyCodes = true;
+
+        Assert.IsTrue(new AppSettings(store).CopyCodes);
+    }
+
     // =========================================================================
     // START WITH WINDOWS
     // =========================================================================

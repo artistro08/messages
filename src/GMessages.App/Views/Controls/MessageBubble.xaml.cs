@@ -1465,7 +1465,7 @@ public sealed partial class MessageBubble : UserControl
             return;
         }
 
-        ToClipboard(text);
+        UiHelpers.ToClipboard(text);
     }
 
     /// <summary>
@@ -1475,23 +1475,7 @@ public sealed partial class MessageBubble : UserControl
     {
         if (Bubble?.LinkUrl is { } url)
         {
-            ToClipboard(url.OriginalString);
-        }
-    }
-
-    // Another App Holding The Clipboard Throws; Copy Then Does Nothing, Logged
-    private static void ToClipboard(string text)
-    {
-        var package = new DataPackage();
-        package.SetText(text);
-
-        try
-        {
-            Clipboard.SetContent(package);
-        }
-        catch (COMException ex)
-        {
-            AppLog.CopyFailed(App.ShellLog, ex.GetType().Name);
+            UiHelpers.ToClipboard(url.OriginalString);
         }
     }
 
