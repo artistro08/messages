@@ -768,7 +768,8 @@ public sealed partial class ChatStore : IDisposable
     /// </summary>
     /// <remarks>
     /// The cached copy changes as soon as the phone answers, raising <see cref="ConversationChanged"/>, so the list
-    /// stops showing it unread without waiting for the phone to send the conversation back.
+    /// stops showing it unread without waiting for the phone to send the conversation back. The saved row is marked
+    /// read too, so the chat doesn't show unread for a moment on the next launch.
     /// </remarks>
     /// <param name="conversationId">The conversation ID.</param>
     /// <param name="messageId">The newest message that was read.</param>
@@ -791,6 +792,7 @@ public sealed partial class ChatStore : IDisposable
 
         ConversationInfo read = cached with { Unread = false };
         Upsert(read);
+        SaveRead(conversationId, generation);
         ConversationChanged?.Invoke(this, read);
     }
 

@@ -1375,6 +1375,27 @@ public sealed class ChatStoreTests
         Assert.AreEqual(1, raised.Count);
     }
 
+    /// <summary>
+    /// A chat read here stays read after a restart: the saved row is marked read, so the list doesn't show it unread
+    /// until the phone's page arrives.
+    /// </summary>
+    [TestMethod]
+    public async Task MarkRead_SavesRead_SoReopenedStoreLoadsItRead()
+    {
+        using var rig = new Rig(withDatabase: true);
+        Conversation unread = Conv("c1", "Ann");
+        unread.Unread       = true;
+        await rig.Store.HandleEventAsync(new ConversationUpdated(unread));
+
+        await rig.Store.MarkReadAsync("c1", "m1", Ct);
+        await rig.Store.FlushAsync();
+
+        // A Fresh Store On The Same File Loads It Read
+        using var reopened = new ChatStore(rig.Controller, () => rig.Client, NullLogger.Instance, rig.Database, rig.Time, rig.Media);
+        await reopened.LoadSavedAsync();
+        Assert.IsFalse(reopened.Find("c1")?.Unread);
+    }
+
     [TestMethod]
     public async Task SendText_UnknownConversation_NotFound_ThrowsBeforeSending()
     {

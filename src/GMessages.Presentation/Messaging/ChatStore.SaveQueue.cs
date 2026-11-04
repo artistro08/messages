@@ -143,6 +143,23 @@ public sealed partial class ChatStore
         });
     }
 
+    // Queues Marking A Saved Conversation Read, Dropped When A Reset Came After The Generation Was Taken
+    private void SaveRead(string conversationId, int generation)
+    {
+        if (_database is null || conversationId.Length == 0)
+        {
+            return;
+        }
+
+        _ = EnqueueAsync(database =>
+        {
+            if (generation == Generation)
+            {
+                database.MarkConversationRead(conversationId);
+            }
+        });
+    }
+
     // Queues A Message Save, Dropped When A Reset Came After The Generation Was Taken
     private void SaveMessages(string conversationId, IReadOnlyList<Message> messages, int generation)
     {

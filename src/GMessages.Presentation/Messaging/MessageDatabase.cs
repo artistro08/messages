@@ -120,6 +120,53 @@ public sealed partial class MessageDatabase
         }, false);
     }
 
+    /// <summary>
+    /// Marks a saved conversation read.
+    /// </summary>
+    /// <remarks>
+    /// A chat read here only changes the slim cached copy, so without this the saved row stays unread and the list
+    /// shows it bold on the next launch until the phone's page replaces it. Rewrites only the body, keeping the
+    /// saved order; does nothing when the conversation isn't saved or is already read.
+    /// </remarks>
+    /// <param name="conversationId">The conversation ID.</param>
+    public void MarkConversationRead(string conversationId)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(conversationId);
+
+        Run(connection =>
+        {
+            // Load The Saved Row
+            Conversation conversation;
+            using (SqliteCommand select = connection.CreateCommand())
+            {
+                select.CommandText = "SELECT body FROM conversations WHERE id = $id";
+                select.Parameters.AddWithValue("$id", conversationId);
+
+                using SqliteDataReader reader = select.ExecuteReader();
+                if (!reader.Read())
+                {
+                    return false;
+                }
+
+                conversation = Conversation.Parser.ParseFrom(Unprotect(reader));
+            }
+
+            if (!conversation.Unread)
+            {
+                return false;
+            }
+
+            // Save It Read
+            conversation.Unread = false;
+            using SqliteCommand update = connection.CreateCommand();
+            update.CommandText = "UPDATE conversations SET body = $body WHERE id = $id";
+            update.Parameters.AddWithValue("$id", conversationId);
+            update.Parameters.AddWithValue("$body", Protect(conversation));
+            update.ExecuteNonQuery();
+            return true;
+        }, false);
+    }
+
     // =========================================================================
     // MESSAGES
     // =========================================================================
