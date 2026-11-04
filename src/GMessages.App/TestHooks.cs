@@ -73,11 +73,11 @@ internal static class TestHooks
     /// </summary>
     /// <param name="element">The element.</param>
     /// <param name="state">The state's name.</param>
-    public static void ShowState(Microsoft.UI.Xaml.DependencyObject element, string state)
+    public static void ShowState(Windows.UI.Xaml.DependencyObject element, string state)
     {
         if (BlockLaunches)
         {
-            Microsoft.UI.Xaml.Automation.AutomationProperties.SetItemStatus(element, state);
+            Windows.UI.Xaml.Automation.AutomationProperties.SetItemStatus(element, state);
         }
     }
 
@@ -311,7 +311,7 @@ internal static class TestHooks
     /// <summary>Does nothing in Release.</summary>
     /// <param name="element">The element.</param>
     /// <param name="state">The state's name.</param>
-    public static void ShowState(Microsoft.UI.Xaml.DependencyObject element, string state)
+    public static void ShowState(Windows.UI.Xaml.DependencyObject element, string state)
     {
     }
 

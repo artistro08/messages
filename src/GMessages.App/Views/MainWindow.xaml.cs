@@ -7,17 +7,15 @@ using GMessages.Presentation.Main;
 using GMessages.Presentation.Messaging;
 using GMessages.Presentation.Settings;
 using GMessages.Presentation.Shortcuts;
-using Microsoft.UI.Input;
-using Microsoft.UI.Windowing;
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Automation;
-using Microsoft.UI.Xaml.Automation.Peers;
-using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Input;
-using Microsoft.UI.Xaml.Media;
+using GMessages.App.Windowing;
 using Windows.System;
-using Windows.UI.Core;
-using WinRT;
+using Windows.UI.Xaml;
+using Windows.UI.Xaml.Automation;
+using Windows.UI.Xaml.Automation.Peers;
+using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml.Input;
+using Windows.UI.Xaml.Media;
+using Windows.UI.Xaml.Media.Imaging;
 
 namespace GMessages.App.Views;
 
@@ -39,9 +37,15 @@ namespace GMessages.App.Views;
 /// <c>Settings.Back</c>, <c>Main.ArchivedBack</c> or <c>Main.SpamBack</c>. ☰ is the title bar's own pane toggle too,
 /// carrying <c>Main.MenuButton</c>, so both have Windows' spacing and animated icons.
 /// </para>
+/// <para>
+/// WinUI 2.8: the window is a <see cref="XamlWindow"/> (a Win32 window hosting this content in a XAML Island, with
+/// synced resizing and Mica), and the title bar is the app's own <see cref="TitleBar"/>.
+/// </para>
 /// </remarks>
-public sealed partial class MainWindow : Window
+public sealed partial class MainWindow : UserControl
 {
+    private readonly XamlWindow _window = new(XamlWindowKind.Main);
+    private readonly DispatcherQueue _dispatcher = DispatcherQueue.GetForCurrentThread();
     private readonly SettingsViewModel _settings;
     private readonly AppSettings _appSettings;
     private readonly AvatarCache _avatars;
@@ -52,13 +56,7 @@ public sealed partial class MainWindow : Window
     private SettingsPage? _settingsPage;
     private UIElement? _focusBeforeSettings;
 
-    // The Title Bar's Back And ☰, Once Each Has Shown (The Template Makes Them Then)
-    private Button? _backButton;
-    private Button? _menuButton;
     private bool _isActive;
-
-    // The Caption Buttons' Theme For The App Theme (Dark Instead While The Photo Viewer Is Open)
-    private TitleBarTheme _captionTheme = TitleBarTheme.UseDefaultAppMode;
 
     // The Owner's Photo Is Asked For Once A Load Names The Owner, And Again After An Answer Without One
     private bool _profileAsked;
@@ -70,7 +68,7 @@ public sealed partial class MainWindow : Window
     // The Last Download's File, For Show In Folder, And The Timer That Closes Its Confirmation
     private static readonly TimeSpan DownloadedShownFor = TimeSpan.FromSeconds(6);
     private string? _downloadedPath;
-    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _downloadedTimer;
+    private DispatcherQueueTimer? _downloadedTimer;
 
     /// <summary>
     /// Creates the window with an empty body; the App then calls <see cref="ShowPairing"/> or <see cref="ShowChats"/>.
@@ -86,18 +84,18 @@ public sealed partial class MainWindow : Window
         Avatar.Cache = avatars;
         InitializeComponent();
 
-        // Window
-        Title                      = AppInfo.WindowTitle;
-        AppTitleBar.Title          = Title;
-        ExtendsContentIntoTitleBar = true;
-        SetTitleBar(AppTitleBar);
+        // Window: this content in the window's island, the title bar in its title bar row
+        _window.Content   = this;
+        _window.Title     = AppInfo.WindowTitle;
+        AppTitleBar.Title = AppInfo.WindowTitle;
+        AppTitleBar.Icon  = new BitmapImage(new Uri("ms-appx:///Assets/AppIcon.ico"));
+        AppTitleBar.Attach(_window);
+        AppTitleBar.AddPassthrough(ProfileButton);
 
-        // Tall Caption Buttons, As High As The Title Bar Row (48 px)
-        AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Tall;
-        AppWindow.Resize(new Windows.Graphics.SizeInt32(1100, 760));
-        AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"));
+        _window.Resize(1100, 760);
+        _window.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"));
         RestoreWindowBounds();
-        AppWindow.Changed += OnAppWindowChanged;
+        _window.BoundsChanged += (_, _) => OnBoundsChanged();
 
         // Copy
         ProfileArchived.Text    = ChatCopy.Archived;
@@ -107,40 +105,34 @@ public sealed partial class MainWindow : Window
         RootGrid.Loaded += (_, _) =>
         {
             ApplyMinimumSize();
+            ApplyFrameTheme();
             RootGrid.XamlRoot.Changed += (_, _) =>
             {
                 ApplyMinimumSize();
-                PlaceProfilePicture();
                 PunchViewerToolbar();
             };
         };
+        RootGrid.ActualThemeChanged += (_, _) => ApplyFrameTheme();
 
-        // The Photo Viewer Takes The Title Bar Row While Open. The TitleBar Control Recomputes Its Own Click-Through Holes
-        // When It Resizes, So The Toolbar's Hole Is Punched Again After That (Low Runs After Layout)
+        // The Photo Viewer Takes The Title Bar Row While Open: Its Toolbar Is The Row's Only Click-Through Hole Then
         PhotoViewer.IsOpenChanged += (_, _) => ShowViewerTitleBar();
         AppTitleBar.SizeChanged   += (_, _) =>
         {
-            // Laid Out At Last (A Window Opened Hidden In The Tray Wasn't): Back And ☰ Exist Now To Be Named, Once This
-            // Layout Pass Is Done
-            if ((AppTitleBar.IsBackButtonVisible && _backButton is null) || (AppTitleBar.IsPaneToggleButtonVisible && _menuButton is null))
-            {
-                DispatcherQueue.TryEnqueue(NameTitleBarButtons);
-            }
-
             if (PhotoViewer.IsOpen)
             {
-                DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, PunchViewerToolbar);
+                _ = _dispatcher.TryEnqueue(DispatcherQueuePriority.Low, PunchViewerToolbar);
             }
         };
+
         // Inactive, Only The Title Bar Dims, As In Windows' Own Apps: Fading The Content Faded Each Element On Its Own, So
         // Overlapping Ones (A Photo Over Its Letter, Start Chat Over The Rows) Showed Through Each Other
-        Activated       += (_, e) =>
+        _window.Activated += (_, active) =>
         {
-            _isActive = e.WindowActivationState != WindowActivationState.Deactivated;
+            _isActive = active;
             ShowChatFocus();
             PhotoViewer.ShowActive(_isActive);
         };
-        Closed += (_, _) =>
+        _window.Closed += (_, _) =>
         {
             CloseSettings();
             DropBody();
@@ -148,8 +140,29 @@ public sealed partial class MainWindow : Window
             _settings.Dispose();
             Avatar.Cache = null;
             _avatars.Clear();
+            Closed?.Invoke(this, EventArgs.Empty);
         };
     }
+
+    /// <summary>
+    /// Raised once the window is closed (by <see cref="Close"/> or by the person); the window is gone after this.
+    /// </summary>
+    public event EventHandler? Closed;
+
+    /// <summary>
+    /// Gets the window's handle.
+    /// </summary>
+    public nint Hwnd => _window.Hwnd;
+
+    /// <summary>
+    /// Shows the window and brings it forward.
+    /// </summary>
+    public void Activate() => _window.Activate();
+
+    /// <summary>
+    /// Closes the window (<see cref="Closed"/> is raised).
+    /// </summary>
+    public void Close() => _window.Close();
 
     /// <summary>
     /// Asks the App to open the settings page (the profile menu's Settings, Ctrl + ,).
@@ -222,7 +235,7 @@ public sealed partial class MainWindow : Window
         _downloadedPath      = path;
         DownloadedBar.IsOpen = true;
 
-        _downloadedTimer ??= DispatcherQueue.CreateTimer();
+        _downloadedTimer ??= _dispatcher.CreateTimer();
         _downloadedTimer.Interval    = DownloadedShownFor;
         _downloadedTimer.IsRepeating = false;
         _downloadedTimer.Tick       -= OnDownloadedTimerTick;
@@ -231,7 +244,7 @@ public sealed partial class MainWindow : Window
     }
 
     // The Confirmation Closes Itself
-    private void OnDownloadedTimerTick(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args) => DownloadedBar.IsOpen = false;
+    private void OnDownloadedTimerTick(DispatcherQueueTimer sender, object args) => DownloadedBar.IsOpen = false;
 
     private void OnShowInFolderClick(object sender, RoutedEventArgs e)
     {
@@ -256,16 +269,14 @@ public sealed partial class MainWindow : Window
             _              => ElementTheme.Default,
         };
 
-        // Caption Buttons: Drawn By The System, So Tell Them The App Theme (Or They Follow Windows' Instead); Dark While The
-        // Photo Viewer's Scrim Is Under Them
-        _captionTheme = theme switch
-        {
-            AppTheme.Light => TitleBarTheme.Light,
-            AppTheme.Dark  => TitleBarTheme.Dark,
-            _              => TitleBarTheme.UseDefaultAppMode,
-        };
-        AppWindow.TitleBar.PreferredTheme = PhotoViewer.IsOpen ? TitleBarTheme.Dark : _captionTheme;
+        // Caption Buttons: Drawn In The Title Bar, So They Follow The Page Colors; Dark While The Photo Viewer's Scrim Is
+        // Under Them
+        AppTitleBar.CaptionTheme = PhotoViewer.IsOpen ? ElementTheme.Dark : ElementTheme.Default;
+        ApplyFrameTheme();
     }
+
+    // The Window's Border And Mica Take The Dark Tint When The Page Is Dark (DWM Can't Tell On Its Own)
+    private void ApplyFrameTheme() => _window.SetDarkFrame(RootGrid.ActualTheme == ElementTheme.Dark);
 
     // =========================================================================
     // PHOTO VIEWER TITLE BAR
@@ -276,10 +287,10 @@ public sealed partial class MainWindow : Window
     // Caption Buttons Follow The App Theme Again, And The Title Bar Gets Its Own Click-Through Holes Back
     private void ShowViewerTitleBar()
     {
-        AppWindow.TitleBar.PreferredTheme = PhotoViewer.IsOpen ? TitleBarTheme.Dark : _captionTheme;
+        AppTitleBar.CaptionTheme = PhotoViewer.IsOpen ? ElementTheme.Dark : ElementTheme.Default;
         if (!PhotoViewer.IsOpen)
         {
-            AppTitleBar.RecomputeDragRegions();
+            AppTitleBar.SetPassthroughOverride(null);
             return;
         }
 
@@ -293,33 +304,18 @@ public sealed partial class MainWindow : Window
         PunchViewerToolbar();
     }
 
-    // While The Photo Viewer Is Open: Its Toolbar Sits In The Row's Top-Left Corner (Past The System's Left Inset), And
-    // Its Bounds (Physical Pixels, From The Window's Top Left) Become The Title Bar's Only Click-Through Hole. Its Own
-    // SetRegionRects Replaces The TitleBar Control's Holes For ☰, Back And The Profile, Which The Scrim Covers
+    // While The Photo Viewer Is Open: Its Toolbar Sits In The Row's Top-Left Corner And Becomes The Title Bar's Only
+    // Click-Through Hole, In Place Of ☰, Back And The Profile, Which The Scrim Covers
     private void PunchViewerToolbar()
     {
-        if (!PhotoViewer.IsOpen || RootGrid.XamlRoot is not { } root)
+        if (!PhotoViewer.IsOpen || RootGrid.XamlRoot is null)
         {
             return;
         }
 
-        double scale = root.RasterizationScale;
-        PhotoViewer.FitToolbar(AppWindow.TitleBar.LeftInset / scale);
+        PhotoViewer.FitToolbar(0);
         PhotoViewer.UpdateLayout();
-
-        FrameworkElement toolbar = PhotoViewer.Toolbar;
-        if (toolbar.ActualWidth <= 0)
-        {
-            return;
-        }
-
-        Windows.Foundation.Rect bounds = toolbar.TransformToVisual(null).TransformBounds(new Windows.Foundation.Rect(0, 0, toolbar.ActualWidth, toolbar.ActualHeight));
-        var hole                       = new Windows.Graphics.RectInt32(
-            (int)Math.Round(bounds.X * scale),
-            (int)Math.Round(bounds.Y * scale),
-            (int)Math.Round(bounds.Width * scale),
-            (int)Math.Round(bounds.Height * scale));
-        InputNonClientPointerSource.GetForWindowId(AppWindow.Id).SetRegionRects(NonClientRegionKind.Passthrough, [hole]);
+        AppTitleBar.SetPassthroughOverride([PhotoViewer.Toolbar]);
     }
 
     // =========================================================================
@@ -431,7 +427,12 @@ public sealed partial class MainWindow : Window
         ShowChatFocus();
         ShowTitleBarButtons();
 
-        _focusBeforeSettings?.Focus(FocusState.Programmatic);
+        // System XAML's UIElement Has No Focus(), So The Focus Manager Moves It
+        if (_focusBeforeSettings is { } previous)
+        {
+            _ = FocusManager.TryFocusAsync(previous, FocusState.Programmatic);
+        }
+
         _focusBeforeSettings = null;
     }
 
@@ -475,33 +476,21 @@ public sealed partial class MainWindow : Window
 
         // The Title Bar Only Lets Clicks Through Where Its Buttons Are When It Computes Its Regions
         RecomputeTitleBarRegions();
-        return showBack ? _backButton : null;
+        return showBack ? AppTitleBar.Back : null;
     }
 
-    // Gives Back And ☰ The Names The Tests And Narrator Know Them By. Each Is Made The First Time It Shows (Deferred In
-    // The Template), So The Layout Runs First, And Is Looked Up Again Every Time: A Template Applied Again (A Theme
-    // Switch) Makes A New One. Also Run When The Title Bar Is Laid Out, For A Window That Opened Hidden In The Tray
+    // Gives Back And ☰ The Names The Tests And Narrator Know Them By: Back's Is The Page It Leaves
     private void NameTitleBarButtons()
     {
-        AppTitleBar.UpdateLayout();
-        _backButton = AppTitleBar.IsBackButtonVisible ? TitleBarButton("PART_BackButton") : null;
-        if (_backButton is not null)
+        if (AppTitleBar.IsBackButtonVisible)
         {
-            AutomationProperties.SetAutomationId(_backButton, BackId());
+            AutomationProperties.SetAutomationId(AppTitleBar.Back, BackId());
         }
 
-        _menuButton = AppTitleBar.IsPaneToggleButtonVisible ? TitleBarButton("PART_PaneToggleButton") : null;
-        if (_menuButton is not null)
-        {
-            AutomationProperties.SetAutomationId(_menuButton, "Main.MenuButton");
-            AutomationProperties.SetName(_menuButton, ChatCopy.ShowOrHideConversations);
-            ToolTipService.SetToolTip(_menuButton, ChatCopy.ShowOrHideConversations);
-        }
+        AutomationProperties.SetAutomationId(AppTitleBar.PaneToggle, "Main.MenuButton");
+        AutomationProperties.SetName(AppTitleBar.PaneToggle, ChatCopy.ShowOrHideConversations);
+        ToolTipService.SetToolTip(AppTitleBar.PaneToggle, ChatCopy.ShowOrHideConversations);
     }
-
-    // One Of The Title Bar's Own Buttons, By Its Part Name: Native AOT Can Hand Template Parts Back As Base Types, So A
-    // Plain Cast Would Miss It (See UiHelpers.FindPart)
-    private Button? TitleBarButton(string part) => UiHelpers.FindPart<Button>(AppTitleBar, part);
 
     // ☰ Shows Once Paired, Where Back Doesn't, In A Wide Window (A Narrow One Shows One Pane, So There Is No List To Hide)
     private bool ShowsMenu(bool showBack) => _chats is not null && !showBack && ViewModel?.IsNarrow != true;
@@ -547,90 +536,66 @@ public sealed partial class MainWindow : Window
     // EVENT HANDLERS
     // =========================================================================
 
-    private void OnTitleBarContentSizeChanged(object sender, SizeChangedEventArgs e) => PlaceProfilePicture();
-
     // Where The Window Was Last Left (Owner): Its Place And Size Go Back, When They Still Land On A Display (A Monitor
     // Unplugged Since Leaves The Default), And Maximized Again If It Was
-    private void RestoreWindowBounds()
+    private unsafe void RestoreWindowBounds()
     {
         // Bounds Only Once Moved Or Sized Restored (Maximized Straight Away, There Are None, But It Still Maximizes)
         if (_appSettings.WindowBounds is { } saved)
         {
-            var bounds = new Windows.Graphics.RectInt32(saved.Left, saved.Top, saved.Width, saved.Height);
-            if (DisplayArea.GetFromRect(bounds, DisplayAreaFallback.None) is null)
+            var bounds = new WindowInterop.RECT { Left = saved.Left, Top = saved.Top, Right = saved.Left + saved.Width, Bottom = saved.Top + saved.Height };
+            if (WindowInterop.MonitorFromRect(&bounds, 0) == 0)
             {
                 return;
             }
 
-            AppWindow.MoveAndResize(bounds);
+            _window.MoveAndResize(saved.Left, saved.Top, saved.Width, saved.Height);
         }
 
-        if (_appSettings.WindowMaximized && AppWindow.Presenter is OverlappedPresenter presenter)
+        if (_appSettings.WindowMaximized)
         {
-            presenter.Maximize();
+            _window.Maximize();
         }
     }
 
     // Every Move Or Resize Of The Shown Window Is Kept; Maximized Or Minimized, Only That State Is (The Bounds Stay Those
     // Of The Restored Window)
-    private void OnAppWindowChanged(AppWindow sender, AppWindowChangedEventArgs e)
+    private void OnBoundsChanged()
     {
-        if (!sender.IsVisible || (!e.DidPositionChange && !e.DidSizeChange && !e.DidPresenterChange) || sender.Presenter is not OverlappedPresenter presenter)
+        if (!_window.IsVisible)
         {
             return;
         }
 
-        if (presenter.State == OverlappedPresenterState.Restored)
+        if (!_window.IsMaximized && !_window.IsMinimized)
         {
-            _appSettings.WindowBounds = (sender.Position.X, sender.Position.Y, sender.Size.Width, sender.Size.Height);
+            WindowInterop.RECT bounds = _window.Bounds;
+            _appSettings.WindowBounds = (bounds.Left, bounds.Top, bounds.Right - bounds.Left, bounds.Bottom - bounds.Top);
         }
 
-        if (presenter.State != OverlappedPresenterState.Minimized)
+        if (!_window.IsMinimized)
         {
-            _appSettings.WindowMaximized = presenter.State == OverlappedPresenterState.Maximized;
+            _appSettings.WindowMaximized = _window.IsMaximized;
         }
     }
 
     // The Window Never Shrinks Below The Chat List's Narrowest Layout (Its Least Width, Shown Alone In A Narrow Window)
-    // Or Below Room For The Title Bar, A Few Rows And The Message Box. The Presenter Takes Physical Pixels Of The Whole
+    // Or Below Room For The Title Bar, A Few Rows And The Message Box. The Window Takes Physical Pixels Of The Whole
     // Window, So The Minimum Is Scaled By The Display's Scale (Again When It Changes) And The Frame's Width Is Added
     private void ApplyMinimumSize()
     {
-        if (RootGrid.XamlRoot is not { } root || AppWindow.Presenter.Kind != AppWindowPresenterKind.Overlapped)
+        // Minimized Or Maximized, The Window's Rect Isn't The Restored Frame's; The Restore Comes Back Here
+        if (RootGrid.XamlRoot is not { } root || _window.IsMinimized || _window.IsMaximized)
         {
             return;
         }
 
-        double scale                     = root.RasterizationScale;
-        Windows.Graphics.SizeInt32 outer = AppWindow.Size;
-        Windows.Graphics.SizeInt32 inner = AppWindow.ClientSize;
-        OverlappedPresenter presenter    = AppWindow.Presenter.As<OverlappedPresenter>();
-        presenter.PreferredMinimumWidth  = (int)Math.Ceiling(MinWindowWidth * scale) + Math.Max(0, outer.Width - inner.Width);
-        presenter.PreferredMinimumHeight = (int)Math.Ceiling(MinWindowHeight * scale) + Math.Max(0, outer.Height - inner.Height);
-    }
-
-    // Leaf Calendar's Way (UpdateTitleBarLayout): The Profile Picture Rides The Right End Of The Title Bar's Content,
-    // Which Stretches With The Window In The Same Layout Pass, So It Never Trails The Edge. The TitleBar Control Reserves
-    // The Caption Buttons' Width In Physical Pixels As If Effective, So Above 100% Scale The Content Stops Short Of
-    // Minimize; The Gap Is Measured, Not Assumed, And A Negative Right Margin Closes It. Then The Click-Through Hole Is
-    // Punched Again Where The Picture Now Is (WinUI 2.3), So The Picture Takes Clicks And The Rest Drags. Runs For Every
-    // Step Of A Resize, So Nothing Happens Unless The Gap Changed (Only The Scale Changes It)
-    private void PlaceProfilePicture()
-    {
-        if (RootGrid.XamlRoot is not { } root || TitleBarContent.ActualWidth <= 0)
-        {
-            return;
-        }
-
-        double scale       = root.RasterizationScale;
-        double caption     = AppWindow.TitleBar.RightInset / scale;
-        double contentEnd  =TitleBarContent.TransformToVisual(RootGrid).TransformPoint(new Windows.Foundation.Point(TitleBarContent.ActualWidth, 0)).X;
-        double overhang    = Math.Round((contentEnd - (RootGrid.ActualWidth - caption)) * scale) / scale;
-        if (ProfileButton.Margin.Right != overhang)
-        {
-            ProfileButton.Margin = new Thickness(0, 0, overhang, 0);
-            RecomputeTitleBarRegions();
-        }
+        double scale              = root.RasterizationScale;
+        WindowInterop.RECT outer  = _window.Bounds;
+        (int width, int height)   = _window.ClientSize;
+        int frameWidth            = Math.Max(0, outer.Right - outer.Left - width);
+        int frameHeight           = Math.Max(0, outer.Bottom - outer.Top - height);
+        _window.SetMinimumSize((int)Math.Ceiling(MinWindowWidth * scale) + frameWidth, (int)Math.Ceiling(MinWindowHeight * scale) + frameHeight);
     }
 
     // A Folder Opened Or Closed, The Window Went Narrow Or Wide, Or A Narrow Window's Chat Opened Or Closed: Back
@@ -640,15 +605,14 @@ public sealed partial class MainWindow : Window
         // The View Model Raises Everything At Once (An Empty Name), So The Title Bar Is Only Touched When It Would Change
         bool showBack = ShowsBack();
         if (AppTitleBar.IsBackButtonVisible != showBack || AppTitleBar.IsPaneToggleButtonVisible != ShowsMenu(showBack)
-            || (showBack && (_backButton is null || AutomationProperties.GetAutomationId(_backButton) != BackId()))
-            || (ShowsMenu(showBack) && _menuButton is null))
+            || (showBack && AutomationProperties.GetAutomationId(AppTitleBar.Back) != BackId()))
         {
             ShowTitleBarButtons();
         }
     }
 
     // The Title Bar's Back: Leaves Settings, Else A Narrow Window's Chat (Back To The List), Else Archived Or Spam & Blocked
-    private void OnTitleBarBackRequested(TitleBar sender, object args)
+    private void OnTitleBarBackRequested(object? sender, EventArgs args)
     {
         if (_settingsPage is not null)
         {
@@ -703,7 +667,7 @@ public sealed partial class MainWindow : Window
     }
 
     // ☰: Collapses Or Expands The List
-    private void OnPaneToggleRequested(TitleBar sender, object args) => ViewModel?.ToggleList();
+    private void OnPaneToggleRequested(object? sender, EventArgs args) => ViewModel?.ToggleList();
 
     // Archived And Spam & Blocked Are Lists, So They Close Settings To Show Them
     private void OnArchivedClick(object sender, RoutedEventArgs e)

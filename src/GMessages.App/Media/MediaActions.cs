@@ -1,8 +1,9 @@
+using GMessages.App.Windowing;
 using GMessages.Presentation.Messaging;
-using Microsoft.UI.Xaml;
 using Windows.Storage;
 using Windows.Storage.Pickers;
 using Windows.System;
+using Windows.UI.Xaml;
 
 namespace GMessages.App.Media;
 
@@ -114,7 +115,8 @@ internal static class MediaActions
     /// <returns>A task that ends when the file is written, or the dialog was cancelled.</returns>
     public static async Task SaveAsAsync(XamlRoot? root, MediaPart part, string messageId)
     {
-        if ((Application.Current as App)?.Media is not { } media || root?.ContentIslandEnvironment is not { } island)
+        nint owner = XamlWindow.HwndFor(root);
+        if ((Application.Current as App)?.Media is not { } media || owner == 0)
         {
             AppLog.MediaFailed(App.ShellLog, "save", messageId, "NoWindow");
             return;
@@ -132,7 +134,7 @@ internal static class MediaActions
             var choices = new List<string> { extension.Length > 1 ? extension : ".bin" };
             picker.FileTypeChoices.Add(ChatCopy.File, choices);
             TestHooks.NoteState("save-as", picker.SuggestedFileName + choices[0]);
-            WinRT.Interop.InitializeWithWindow.Initialize(picker, Microsoft.UI.Win32Interop.GetWindowFromWindowId(island.AppWindowId));
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, owner);
 
             StorageFile? file = TestHooks.PickSaveFile() is { } picked
                 ? (picked.Length > 0 ? await TestSaveFileAsync(picked) : null)

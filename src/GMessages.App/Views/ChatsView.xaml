@@ -4,7 +4,8 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:GMessages.App.Views.Controls"
     xmlns:local="using:GMessages.App.Views"
-    xmlns:main="using:GMessages.Presentation.Main">
+    xmlns:main="using:GMessages.Presentation.Main"
+    xmlns:muxc="using:Microsoft.UI.Xaml.Controls">
 
     <!-- Panes: the list is the SplitView's pane, so ☰ slides it in and out the way Windows does; the chat is its content.
          A narrow window widens the pane to the whole window (set in code) and closes it while the chat shows -->
@@ -17,9 +18,17 @@
         PaneBackground="Transparent"
         SizeChanged="OnSizeChanged">
 
-        <!-- List Pane: on the Mica -->
+        <!-- List Pane: on the Mica. Held at the pane's width: the SplitView first measures its pane at the chat's width, then
+             at its own, so without it every row laid out twice per window resize step -->
         <SplitView.Pane>
-            <Grid x:Name="ListPane" RowDefinitions="Auto,Auto,Auto,Auto,*">
+            <Grid x:Name="ListPane" Width="{x:Bind Panes.OpenPaneLength, Mode=OneWay}">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
 
                 <!-- Folder Header: Archived or Spam & blocked (the title bar's Back returns to the inbox) -->
                 <TextBlock
@@ -41,7 +50,7 @@
                 <!-- Action Failure Banner: a conversation action the phone didn't make; closing it dismisses it. Collapsed
                      while closed: a closed InfoBar still keeps its margin, which pushed the list below the chat island's
                      top edge -->
-                <InfoBar
+                <muxc:InfoBar
                     Grid.Row="2"
                     Margin="16,0,16,8"
                     AutomationProperties.AutomationId="Main.ActionError"
@@ -54,7 +63,7 @@
 
                 <!-- Phone Battery Banner: only after a live low battery alert; closing it hides it until the next one.
                      Collapsed while closed, as above -->
-                <InfoBar
+                <muxc:InfoBar
                     Grid.Row="3"
                     Margin="16,0,16,8"
                     AutomationProperties.AutomationId="Main.BatteryLow"
@@ -217,6 +226,7 @@
                                             </Grid>
                                             <TextBlock
                                                 HorizontalAlignment="Center"
+                                                FontFamily="{ThemeResource ContentControlThemeFontFamily}"
                                                 FontWeight="{x:Bind controls:ColorConverters.Weight(IsUnread), Mode=OneWay}"
                                                 MaxLines="1"
                                                 Style="{StaticResource CaptionTextBlockStyle}"
@@ -226,7 +236,8 @@
 
                                         <!-- Selection Pill: the rows' accent pill laid flat at the tile's bottom. Scaled to
                                              nothing until the tile is picked; the code grows it in from its middle, as
-                                             Windows grows a row's (ShowPinnedPills) -->
+                                             Windows grows a row's (ShowPinnedPills). Its scale and middle are set from code
+                                             as it loads: Windows' XAML ignores them in markup (every tile showed its pill) -->
                                         <Border
                                             x:Name="SelectionPill"
                                             Width="16"
@@ -236,11 +247,9 @@
                                             VerticalAlignment="Bottom"
                                             AutomationProperties.AccessibilityView="Raw"
                                             Background="{ThemeResource ListViewItemSelectionIndicatorBrush}"
-                                            CenterPoint="8,1.5,0"
                                             CornerRadius="1.5"
                                             IsHitTestVisible="False"
-                                            Loaded="OnSelectionPillLoaded"
-                                            Scale="0,1,1" />
+                                            Loaded="OnSelectionPillLoaded" />
                                     </Grid>
                                 </DataTemplate>
                             </GridView.ItemTemplate>
@@ -278,7 +287,7 @@
                     <Border.Shadow>
                         <ThemeShadow />
                     </Border.Shadow>
-                    <ProgressRing
+                    <muxc:ProgressRing
                         Width="24"
                         Height="24"
                         AutomationProperties.AutomationId="Main.ListLoadingMore"
@@ -287,7 +296,7 @@
 
                 <!-- Loading: while an empty list (the inbox, Archived or Spam & blocked) loads; the standard 32 px (a whole
                      4 px stroke), stated so a style change can't make it fractional -->
-                <ProgressRing
+                <muxc:ProgressRing
                     Grid.Row="4"
                     Width="32"
                     Height="32"
@@ -317,10 +326,14 @@
                         Background="{ThemeResource SolidBackgroundFillColorTertiaryBrush}"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                         BorderThickness="1"
-                        ColumnDefinitions="*,Auto,Auto"
                         CornerRadius="{ThemeResource ControlCornerRadius}"
                         Translation="0,0,16"
                         Visibility="{x:Bind ViewModel.HasUndo, Mode=OneWay, FallbackValue=Collapsed}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
                         <Grid.Shadow>
                             <ThemeShadow />
                         </Grid.Shadow>

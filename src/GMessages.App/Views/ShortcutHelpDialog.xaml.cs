@@ -1,9 +1,9 @@
 using GMessages.Presentation.Shortcuts;
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Automation;
-using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Controls.Primitives;
-using Microsoft.UI.Xaml.Media;
+using Windows.UI.Xaml;
+using Windows.UI.Xaml.Automation;
+using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml.Controls.Primitives;
+using Windows.UI.Xaml.Media;
 
 namespace GMessages.App.Views;
 
@@ -134,7 +134,7 @@ public sealed partial class ShortcutHelpDialog : ContentDialog
         _card  = null;
     }
 
-    private void OnSmokeTapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e) => Hide();
+    private void OnSmokeTapped(object sender, Windows.UI.Xaml.Input.TappedRoutedEventArgs e) => Hide();
 
     private void OnCloseClick(object sender, RoutedEventArgs e) => Hide();
 

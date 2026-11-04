@@ -1,18 +1,19 @@
 using System.Numerics;
 using System.Runtime.InteropServices.WindowsRuntime;
 using GMessages.App.Media;
+using GMessages.App.Windowing;
 using GMessages.Presentation.Messaging;
-using Microsoft.UI.Composition;
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Automation;
-using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Hosting;
-using Microsoft.UI.Xaml.Input;
-using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.Foundation;
 using Windows.Storage.Streams;
+using Windows.UI.Composition;
 using Windows.UI.ViewManagement;
+using Windows.UI.Xaml;
+using Windows.UI.Xaml.Automation;
+using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml.Hosting;
+using Windows.UI.Xaml.Input;
+using Windows.UI.Xaml.Media;
+using Windows.UI.Xaml.Media.Imaging;
 
 namespace GMessages.App.Views.Controls;
 
@@ -189,7 +190,7 @@ public sealed partial class PhotoViewer : UserControl
 
         // Focus Moves In Once The Viewer Is Laid Out (Before That It Can't Take It), After The Click Has Finished With
         // The Photo In The Chat
-        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => Zoomer.Focus(FocusState.Programmatic));
+        XamlHost.Dispatcher.TryEnqueue(Windows.System.DispatcherQueuePriority.Low, () => Zoomer.Focus(FocusState.Programmatic));
 
         // The Full Image, Decoded From Memory
         try
@@ -277,10 +278,10 @@ public sealed partial class PhotoViewer : UserControl
                 return;
             }
 
-            VideoPlayback video = new(DispatcherQueue, bytes, part.Mime, start, "PhotoViewer.Video", name);
+            VideoPlayback video = new(XamlHost.Dispatcher, bytes, part.Mime, start, "PhotoViewer.Video", name);
             _video              = video;
             VideoHost.Children.Add(video.Element);
-            video.Player.MediaOpened += (_, _) => DispatcherQueue.TryEnqueue(() => FitVideo(video));
+            video.Player.MediaOpened += (_, _) => XamlHost.Dispatcher.TryEnqueue(() => FitVideo(video));
             if (!poster)
             {
                 _ = GrowAsync(VideoHost, part);
@@ -297,7 +298,7 @@ public sealed partial class PhotoViewer : UserControl
             {
                 if (session.PlaybackState == Windows.Media.Playback.MediaPlaybackState.Playing)
                 {
-                    DispatcherQueue.TryEnqueue(() =>
+                    XamlHost.Dispatcher.TryEnqueue(() =>
                     {
                         if (ReferenceEquals(video, _video) && !_closing && VideoPoster.Source is not null)
                         {
@@ -318,7 +319,7 @@ public sealed partial class PhotoViewer : UserControl
                 ShowPoster(null);
             }
 
-            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => _video?.Element.Focus(FocusState.Programmatic));
+            XamlHost.Dispatcher.TryEnqueue(Windows.System.DispatcherQueuePriority.Low, () => _video?.Element.Focus(FocusState.Programmatic));
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -452,7 +453,7 @@ public sealed partial class PhotoViewer : UserControl
         CompositionScopedBatch done = visual.Compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
         Morph(visual, from, to, growing: true, GrowTime, Decelerate());
         done.End();
-        done.Completed += (_, _) => DispatcherQueue.TryEnqueue(() => ended.TrySetResult());
+        done.Completed += (_, _) => XamlHost.Dispatcher.TryEnqueue(() => ended.TrySetResult());
         TestHooks.NoteState("viewer-motion", grew);
         return ended.Task;
     }
@@ -492,7 +493,7 @@ public sealed partial class PhotoViewer : UserControl
         Morph(visual, to, from, growing: false, ShrinkTime, Accelerate());
         Fade(1, 0, ShrinkTime, Accelerate());
         done.End();
-        done.Completed += (_, _) => DispatcherQueue.TryEnqueue(() =>
+        done.Completed += (_, _) => XamlHost.Dispatcher.TryEnqueue(() =>
         {
             if (run == _closeRun && _closing)
             {

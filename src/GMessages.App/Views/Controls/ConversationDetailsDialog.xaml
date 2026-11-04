@@ -21,7 +21,11 @@
             </ItemsControl.ItemsPanel>
             <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="main:PersonRow">
-                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
                         <local:Avatar
                             VerticalAlignment="Center"
                             Color="{x:Bind Color}"

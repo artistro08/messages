@@ -27,8 +27,11 @@
     <!-- Scrim: Tab and Shift + Tab cycle inside, so focus never leaves the viewer -->
     <Grid
         x:Name="Scrim"
-        RowDefinitions="48,*"
         TabFocusNavigation="Cycle">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="48" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
 
         <!-- Window Activation: the toolbar's icons dim while the window is inactive, as the title bar's text does (set from
              the window's Activated, through ShowActive) -->

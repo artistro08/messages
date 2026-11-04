@@ -1,5 +1,5 @@
 using GMessages.Presentation.Settings;
-using Microsoft.UI.Xaml.Controls;
+using Windows.UI.Xaml.Controls;
 
 namespace GMessages.App.Views.Controls;
 

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using GMessages.App.Windowing;
 using Microsoft.Windows.System.Power;
 using Windows.Networking.Connectivity;
 
@@ -102,12 +103,12 @@ public sealed partial class App
             // No Decrypted File Outlives The App
             _media?.Clear();
             Dispose();
-            Exit();
+            XamlWindow.ExitMessageLoop();
             ExitSoon();
         }
     }
 
-    // Exit Ends The Message Loop, Then The Process Ends Once Main Returns; Anything Native Still Winding Down (A Media
+    // ExitMessageLoop Ends The Message Loop, Then The Process Ends Once Main Returns; Anything Native Still Winding Down (A Media
     // Job, A Notification Or Network Teardown) Could Hold The Process Up For About A Minute (0.6.4). Nothing Is Left To
     // Save By Now, So The Process Ends For Sure Shortly After
     // ponytail: a hard exit after a fixed wait; find the native holder in a dump if the wait ever fires in the log-free gap

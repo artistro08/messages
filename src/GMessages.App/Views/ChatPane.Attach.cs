@@ -1,16 +1,17 @@
 using GMessages.Presentation.Main;
 using GMessages.Presentation.Messaging;
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Automation;
-using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Input;
-using Microsoft.UI.Xaml.Media.Imaging;
+using GMessages.App.Windowing;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Graphics.Imaging;
 using Windows.Storage;
 using Windows.Storage.Pickers;
 using Windows.Storage.Streams;
 using Windows.System;
+using Windows.UI.Xaml;
+using Windows.UI.Xaml.Automation;
+using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml.Input;
+using Windows.UI.Xaml.Media.Imaging;
 using WinRT;
 
 namespace GMessages.App.Views;
@@ -61,7 +62,8 @@ public sealed partial class ChatPane
     // The Windows File Picker Over This Window: Any Files, Or Photos Only; Several May Be Picked
     private async Task<IReadOnlyList<StorageFile>> PickWithDialogAsync(bool photos)
     {
-        if (XamlRoot?.ContentIslandEnvironment is not { } island)
+        nint hwnd = XamlWindow.HwndFor(XamlRoot);
+        if (hwnd == 0)
         {
             return [];
         }
@@ -77,7 +79,7 @@ public sealed partial class ChatPane
             picker.FileTypeFilter.Add(type);
         }
 
-        WinRT.Interop.InitializeWithWindow.Initialize(picker, Microsoft.UI.Win32Interop.GetWindowFromWindowId(island.AppWindowId));
+        WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
         return await picker.PickMultipleFilesAsync();
     }
 

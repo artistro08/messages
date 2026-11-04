@@ -5,8 +5,8 @@ using GMessages.Presentation.Notifications;
 using GMessages.Presentation.Settings;
 using GMessages.Protocol;
 using Microsoft.Extensions.Logging;
-using Microsoft.UI.Dispatching;
 using Microsoft.Windows.AppNotifications;
+using Windows.System;
 
 namespace GMessages.App;
 
