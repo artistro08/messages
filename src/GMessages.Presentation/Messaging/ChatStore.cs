@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Collections.Immutable;
 using System.Diagnostics;
 using GMessages.Presentation.Connection;
 using GMessages.Protocol;
@@ -83,9 +84,9 @@ public sealed partial class ChatStore : IDisposable
     // IDs Of The Messages In Pages DropPagesAsync Dropped, So IsCached Still Blocks A Second Toast For Them (Under _pagesLock)
     private readonly HashSet<string> _droppedIds = [];
 
-    // New Received Messages Counted Live Per Conversation Since It Was Last Read (The Phone Sends No Count); Dropped
+    // New Received Messages' Text Kept Live Per Conversation Since It Was Last Read (The Phone Sends No Count); Dropped
     // When The Conversation Turns Read
-    private readonly ConcurrentDictionary<string, int> _unreadCounts = new();
+    private readonly ConcurrentDictionary<string, ImmutableList<string>> _unreadTexts = new();
 
     // Each Conversation's Unsent Draft, Loaded From And Saved To The Database So It Outlives The Window And The App, And
     // The Files Picked To Send With It (Memory Only)
@@ -179,16 +180,18 @@ public sealed partial class ChatStore : IDisposable
     public IReadOnlyList<ConversationInfo> CachedConversations() => [.. _cache.Values];
 
     /// <summary>
-    /// Gets how many new messages a conversation received live since it was last read.
+    /// Gets the text of each new message a conversation received live since it was last read, oldest first.
     /// </summary>
     /// <remarks>
-    /// The phone only says whether a conversation is unread, so received messages are counted as they arrive, and the
-    /// count starts over once the phone says the conversation is read or it is read here. Messages that came while the
-    /// app wasn't running aren't counted (a caller shows an unread conversation with no count as one).
+    /// The phone only says whether a conversation is unread, so received messages are kept as they arrive (their
+    /// <see cref="ChatFormat.ShownText"/>), and the list starts over once the phone says the conversation is read or it
+    /// is read here. Its count is the unread count. Messages that came while the app wasn't running aren't kept (a
+    /// caller shows an unread conversation with none as one).
     /// </remarks>
     /// <param name="conversationId">The conversation ID.</param>
-    /// <returns>The count; 0 when none were counted.</returns>
-    public int LiveUnreadCount(string conversationId) => _unreadCounts.GetValueOrDefault(conversationId);
+    /// <returns>The texts; empty when none were kept.</returns>
+    public IReadOnlyList<string> LiveUnreadTexts(string conversationId) =>
+        _unreadTexts.GetValueOrDefault(conversationId) ?? [];
 
     /// <summary>
     /// Gets a conversation's unsent draft.
@@ -864,7 +867,8 @@ public sealed partial class ChatStore : IDisposable
     /// </summary>
     /// <remarks>
     /// The cached copy changes as soon as the phone answers, raising <see cref="ConversationChanged"/>, so the list
-    /// stops showing it unread without waiting for the phone to send the conversation back.
+    /// stops showing it unread without waiting for the phone to send the conversation back. The saved row is marked
+    /// read too, so the chat doesn't show unread for a moment on the next launch.
     /// </remarks>
     /// <param name="conversationId">The conversation ID.</param>
     /// <param name="messageId">The newest message that was read.</param>
@@ -878,7 +882,7 @@ public sealed partial class ChatStore : IDisposable
         await RequireClient().MarkReadAsync(conversationId, messageId, ct);
 
         // Read Here: The Live Unread Count Starts Over, Even When The Cached Conversation Never Turned Unread
-        _unreadCounts.TryRemove(conversationId, out _);
+        _unreadTexts.TryRemove(conversationId, out _);
 
         if (generation != Generation || Find(conversationId) is not { Unread: true } cached)
         {
@@ -887,6 +891,20 @@ public sealed partial class ChatStore : IDisposable
 
         ConversationInfo read = cached with { Unread = false };
         Upsert(read);
+
+        // Saved Read Only While The Saved Row's Newest Message Is The Read One, Or My Own (A Reply From A Toast), Checked When
+        // The Write Runs: One That Came In Meanwhile Stays Unread On Disk
+        SaveChange(conversationId, generation, c =>
+        {
+            if (!c.Unread || (c.LatestMessageID != messageId && c.LatestMessage?.FromMe != 1))
+            {
+                return false;
+            }
+
+            c.Unread = false;
+            return true;
+        });
+
         ConversationChanged?.Invoke(this, read);
     }
 
@@ -895,8 +913,9 @@ public sealed partial class ChatStore : IDisposable
     /// </summary>
     /// <remarks>
     /// Sends the request <see cref="BuildRequest"/> builds. Only once the phone says it succeeded does the cached
-    /// conversation take its new status (<see cref="StatusAfter"/>) or mute state, in memory only, raising
-    /// <see cref="ConversationChanged"/> so the lists move it at once; the phone's echo is what gets saved. A
+    /// conversation take its new status (<see cref="StatusAfter"/>) or mute state, raising
+    /// <see cref="ConversationChanged"/> so the lists move it at once. The saved row changes too, so the next launch
+    /// doesn't show it in its old place for a moment. A
     /// <see cref="Reset"/> while the phone is answering applies nothing. A refusal is logged here;
     /// callers log every other failure, as they do for the other writers.
     /// </remarks>
@@ -928,10 +947,36 @@ public sealed partial class ChatStore : IDisposable
         }
 
         // Mute And Unmute Leave The Status Alone
-        ConversationInfo updated = StatusAfter(action) is { } status
+        ConversationStatus? newStatus = StatusAfter(action);
+        ConversationInfo updated      = newStatus is { } status
             ? cached with { Status = status }
             : cached with { IsMuted = action == ConversationAction.Mute };
-        if (Upsert(updated))
+        bool changed                  = Upsert(updated);
+
+        // The Saved Row Changes Too, Even When The Cached Copy Already Had It, So The Next Launch Doesn't Show It In Its Old
+        // Place Until The Phone's Page Comes. A Deleted Chat Leaves The Database, Messages And All
+        if (action == ConversationAction.Delete)
+        {
+            SaveDelete(conversationId, generation);
+        }
+        else
+        {
+            SaveChange(conversationId, generation, c =>
+            {
+                if (newStatus is { } saved)
+                {
+                    c.Status = saved;
+                }
+                else
+                {
+                    c.Muted = updated.IsMuted ? ConversationMuteStatus.Mute : ConversationMuteStatus.Unmute;
+                }
+
+                return true;
+            });
+        }
+
+        if (changed)
         {
             ConversationChanged?.Invoke(this, updated);
         }
@@ -1029,7 +1074,7 @@ public sealed partial class ChatStore : IDisposable
             _cache.Clear();
             _encryption.Clear();
             _liveMedia.Clear();
-            _unreadCounts.Clear();
+            _unreadTexts.Clear();
             _drafts.Clear();
             _draftFiles.Clear();
             _me = null;

@@ -144,6 +144,42 @@ public sealed partial class ChatStore
         });
     }
 
+    // Queues A Change To A Saved Conversation (Read, Status, Mute; See MessageDatabase.UpdateConversation), Dropped When A
+    // Reset Came After The Generation Was Taken
+    private void SaveChange(string conversationId, int generation, Func<Conversation, bool> change)
+    {
+        if (_database is null || conversationId.Length == 0)
+        {
+            return;
+        }
+
+        _ = EnqueueAsync(database =>
+        {
+            if (generation == Generation)
+            {
+                database.UpdateConversation(conversationId, change);
+            }
+        });
+    }
+
+    // Queues Removing A Deleted Conversation And Its Messages From The Database, Dropped When A Reset Came After The
+    // Generation Was Taken
+    private void SaveDelete(string conversationId, int generation)
+    {
+        if (_database is null || conversationId.Length == 0)
+        {
+            return;
+        }
+
+        _ = EnqueueAsync(database =>
+        {
+            if (generation == Generation)
+            {
+                database.DeleteConversation(conversationId);
+            }
+        });
+    }
+
     // Queues A Message Save, Dropped When A Reset Came After The Generation Was Taken
     private void SaveMessages(string conversationId, IReadOnlyList<Message> messages, int generation)
     {

@@ -66,7 +66,7 @@ public static class ChatFormat
     /// message with no text (media with no caption) shows its count.
     /// </remarks>
     /// <param name="unread">Whether the conversation is unread.</param>
-    /// <param name="count">The live unread count (<see cref="ChatStore.LiveUnreadCount"/>).</param>
+    /// <param name="count">The live unread count (<see cref="ChatStore.LiveUnreadTexts"/>).</param>
     /// <param name="text">The newest message's text, or empty.</param>
     /// <returns>The badge text; empty for a read conversation.</returns>
     public static string UnreadBadge(bool unread, int count, string text)
@@ -103,6 +103,23 @@ public static class ChatFormat
         string prefix = c.SnippetFromMe ? ChatCopy.YouPrefix : sender.Length > 0 ? sender + ": " : string.Empty;
         string body   = c.Snippet.Length > 0 ? c.Snippet : c.SnippetMedia;
         return WithColorEmoji(prefix + body);
+    }
+
+    /// <summary>
+    /// One unread message as the chat list's tooltip lists it: like <see cref="Snippet"/>, with the sender's first name in
+    /// front in a group ("Rachel: ") and the media's label for media with no caption.
+    /// </summary>
+    /// <param name="c">The message's conversation.</param>
+    /// <param name="m">The received message.</param>
+    /// <returns>The line, emoji not yet colored.</returns>
+    public static string UnreadLine(ConversationInfo c, ChatMessage m)
+    {
+        ArgumentNullException.ThrowIfNull(c);
+        ArgumentNullException.ThrowIfNull(m);
+
+        string sender = c.IsGroup ? FirstName(SenderName(c.Participants.FirstOrDefault(p => p.Id == m.ParticipantId))) : string.Empty;
+        string body   = m is { Media: { } media, Text.Length: 0 } ? MediaLabel(media) : ShownText(m);
+        return sender.Length > 0 ? sender + ": " + body : body;
     }
 
     /// <summary>

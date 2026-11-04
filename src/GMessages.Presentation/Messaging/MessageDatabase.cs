@@ -123,6 +123,76 @@ public sealed partial class MessageDatabase
         }, false);
     }
 
+    /// <summary>
+    /// Changes a saved conversation in place: read, archived, muted, moved to spam or deleted here.
+    /// </summary>
+    /// <remarks>
+    /// A change made here only touches the slim cached copy, so without this the saved row keeps its old state and the
+    /// next launch shows it there (bold, or in the wrong list) until the phone's page replaces it. Rewrites only the
+    /// body, keeping the saved order; does nothing when the conversation isn't saved or the change leaves it as it was.
+    /// </remarks>
+    /// <param name="conversationId">The conversation ID.</param>
+    /// <param name="change">Changes the saved conversation; returns false when it was already that way.</param>
+    public void UpdateConversation(string conversationId, Func<Conversation, bool> change)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(conversationId);
+        ArgumentNullException.ThrowIfNull(change);
+
+        Run(connection =>
+        {
+            // Load The Saved Row
+            Conversation conversation;
+            using (SqliteCommand select = connection.CreateCommand())
+            {
+                select.CommandText = "SELECT body FROM conversations WHERE id = $id";
+                select.Parameters.AddWithValue("$id", conversationId);
+
+                using SqliteDataReader reader = select.ExecuteReader();
+                if (!reader.Read())
+                {
+                    return false;
+                }
+
+                conversation = Conversation.Parser.ParseFrom(Unprotect(reader));
+            }
+
+            if (!change(conversation))
+            {
+                return false;
+            }
+
+            // Save The Change
+            using SqliteCommand update = connection.CreateCommand();
+            update.CommandText = "UPDATE conversations SET body = $body WHERE id = $id";
+            update.Parameters.AddWithValue("$id", conversationId);
+            update.Parameters.AddWithValue("$body", Protect(conversation));
+            update.ExecuteNonQuery();
+            return true;
+        }, false);
+    }
+
+    /// <summary>
+    /// Removes a conversation deleted here, with its saved messages and encryption state.
+    /// </summary>
+    /// <param name="conversationId">The conversation ID.</param>
+    public void DeleteConversation(string conversationId)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(conversationId);
+
+        Run(connection =>
+        {
+            using SqliteCommand command = connection.CreateCommand();
+            command.CommandText = """
+                DELETE FROM conversations WHERE id = $id;
+                DELETE FROM messages WHERE conversation_id = $id;
+                DELETE FROM encryption WHERE conversation_id = $id;
+                """;
+            command.Parameters.AddWithValue("$id", conversationId);
+            command.ExecuteNonQuery();
+            return true;
+        }, false);
+    }
+
     // =========================================================================
     // MESSAGES
     // =========================================================================
