@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text;
 using GMessages.Presentation.Messaging;
 
 namespace GMessages.Presentation.Main;
@@ -10,6 +12,9 @@ namespace GMessages.Presentation.Main;
 /// </remarks>
 public sealed partial class ChatViewModel
 {
+    // "Ann is typing", For Screen Readers
+    private static readonly CompositeFormat TypingFormat = CompositeFormat.Parse(ChatCopy.TypingFormat);
+
 
     // =========================================================================
     // LIVE UPDATES
@@ -132,10 +137,44 @@ public sealed partial class ChatViewModel
             return;
         }
 
+        if (e.ParticipantId != _typingParticipant)
+        {
+            ShowTyper(e.ParticipantId);
+        }
+
         _typingParticipant = e.ParticipantId;
         _typingUntil       = _time.GetUtcNow() + TypingTimeout;
         IsTyping           = true;
         _typingTimer.Change(TypingTimeout, Timeout.InfiniteTimeSpan);
+    }
+
+    // The Typer's Avatar Beside The Dots: A Group Shows The Person's Own, As Beside Their Bubbles; A One On One Shows The
+    // Conversation's, As In The Header. Screen Readers Hear Their Name
+    private void ShowTyper(string participantId)
+    {
+        ConversationInfo? c    = _store.Find(ConversationId);
+        ParticipantInfo? typer = c?.FindParticipant(participantId);
+        string name            = ChatFormat.SenderName(typer);
+        TypingName             = name.Length > 0 ? string.Format(CultureInfo.CurrentCulture, TypingFormat, name) : ChatCopy.Typing;
+
+        if (c is { IsGroup: false })
+        {
+            AvatarParts avatar = AvatarParts.Of(c);
+            TypingInitial      = avatar.Initial;
+            TypingColor        = avatar.Color;
+            TypingPhotoId      = avatar.PhotoId;
+        }
+        else
+        {
+            TypingInitial = ChatFormat.Initial(name);
+            TypingColor   = AvatarParts.ColorOf(typer);
+            TypingPhotoId = participantId;
+        }
+
+        Raise(nameof(TypingInitial));
+        Raise(nameof(TypingColor));
+        Raise(nameof(TypingPhotoId));
+        Raise(nameof(TypingName));
     }
 
     // The Timer Fired; A Start That Came Since Moved The Deadline
