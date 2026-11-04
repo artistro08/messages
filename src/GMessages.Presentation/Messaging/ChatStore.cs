@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Collections.Immutable;
 using System.Diagnostics;
 using GMessages.Presentation.Connection;
 using GMessages.Protocol;
@@ -80,9 +81,9 @@ public sealed partial class ChatStore : IDisposable
     // IDs Of The Messages In Pages DropPagesAsync Dropped, So IsCached Still Blocks A Second Toast For Them (Under _pagesLock)
     private readonly HashSet<string> _droppedIds = [];
 
-    // New Received Messages Counted Live Per Conversation Since It Was Last Read (The Phone Sends No Count); Dropped
+    // New Received Messages' Text Kept Live Per Conversation Since It Was Last Read (The Phone Sends No Count); Dropped
     // When The Conversation Turns Read
-    private readonly ConcurrentDictionary<string, int> _unreadCounts = new();
+    private readonly ConcurrentDictionary<string, ImmutableList<string>> _unreadTexts = new();
 
     // Newest Encryption Tombstone Seen Per Conversation, With Its Time In Microseconds
     private readonly ConcurrentDictionary<string, (bool Encrypted, long At)> _encryption = new();
@@ -171,16 +172,18 @@ public sealed partial class ChatStore : IDisposable
     public IReadOnlyList<ConversationInfo> CachedConversations() => [.. _cache.Values];
 
     /// <summary>
-    /// Gets how many new messages a conversation received live since it was last read.
+    /// Gets the text of each new message a conversation received live since it was last read, oldest first.
     /// </summary>
     /// <remarks>
-    /// The phone only says whether a conversation is unread, so received messages are counted as they arrive, and the
-    /// count starts over once the phone says the conversation is read or it is read here. Messages that came while the
-    /// app wasn't running aren't counted (a caller shows an unread conversation with no count as one).
+    /// The phone only says whether a conversation is unread, so received messages are kept as they arrive (their
+    /// <see cref="ChatFormat.ShownText"/>), and the list starts over once the phone says the conversation is read or it
+    /// is read here. Its count is the unread count. Messages that came while the app wasn't running aren't kept (a
+    /// caller shows an unread conversation with none as one).
     /// </remarks>
     /// <param name="conversationId">The conversation ID.</param>
-    /// <returns>The count; 0 when none were counted.</returns>
-    public int LiveUnreadCount(string conversationId) => _unreadCounts.GetValueOrDefault(conversationId);
+    /// <returns>The texts; empty when none were kept.</returns>
+    public IReadOnlyList<string> LiveUnreadTexts(string conversationId) =>
+        _unreadTexts.GetValueOrDefault(conversationId) ?? [];
 
     /// <summary>
     /// Gets whether a conversation is end-to-end encrypted.
@@ -782,7 +785,7 @@ public sealed partial class ChatStore : IDisposable
         await RequireClient().MarkReadAsync(conversationId, messageId, ct);
 
         // Read Here: The Live Unread Count Starts Over, Even When The Cached Conversation Never Turned Unread
-        _unreadCounts.TryRemove(conversationId, out _);
+        _unreadTexts.TryRemove(conversationId, out _);
 
         if (generation != Generation || Find(conversationId) is not { Unread: true } cached)
         {
@@ -933,7 +936,7 @@ public sealed partial class ChatStore : IDisposable
             _cache.Clear();
             _encryption.Clear();
             _liveMedia.Clear();
-            _unreadCounts.Clear();
+            _unreadTexts.Clear();
             _me = null;
         }
 

@@ -66,7 +66,7 @@ public static class ChatFormat
     /// message with no text (media with no caption) shows its count.
     /// </remarks>
     /// <param name="unread">Whether the conversation is unread.</param>
-    /// <param name="count">The live unread count (<see cref="ChatStore.LiveUnreadCount"/>).</param>
+    /// <param name="count">The live unread count (<see cref="ChatStore.LiveUnreadTexts"/>).</param>
     /// <param name="text">The newest message's text, or empty.</param>
     /// <returns>The badge text; empty for a read conversation.</returns>
     public static string UnreadBadge(bool unread, int count, string text)

@@ -34,7 +34,7 @@ public sealed partial class ChatStore
                 // The Phone Says It's Read: The Live Unread Count Starts Over
                 if (!info.Unread)
                 {
-                    _unreadCounts.TryRemove(info.Id, out _);
+                    _unreadTexts.TryRemove(info.Id, out _);
                 }
 
                 Upsert(info);
@@ -123,7 +123,8 @@ public sealed partial class ChatStore
         bool shown   = false;
         if (counted)
         {
-            _unreadCounts.AddOrUpdate(message.ConversationId, 1, (_, count) => count + 1);
+            string text = ChatFormat.ShownText(message);
+            _unreadTexts.AddOrUpdate(message.ConversationId, [text], (_, texts) => texts.Add(text));
         }
 
         CacheMessage(message);
