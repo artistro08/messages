@@ -19,6 +19,8 @@ public sealed class OneTimeCodeTests
     [DataRow("Call 555-1234 if you didn't request this code 482913", "482913")]
     [DataRow("$1234 charge, code 482913", "482913")]
     [DataRow("See you at 5, call me at 555-1234", null)]
+    [DataRow("Call 555 1234 to verify", null)]
+    [DataRow("Code expires 11/03/2026", null)]
     [DataRow("Can you pin the address? 1234 Main St", null)]
     [DataRow("Your order 48291 has shipped", null)]
     [DataRow("Your code is ready", null)]

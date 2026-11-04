@@ -36,8 +36,8 @@ public static partial class OneTimeCode
     [GeneratedRegex(@"\b(?:code|passcode|otp|verification|verify|one[- ]time|2fa)\b", RegexOptions.IgnoreCase)]
     private static partial Regex Keyword();
 
-    // ASCII Digits Not Touching Other Digits, Letters, A Decimal Point, A Currency Sign Or A Number Before A Dash: 3+3
-    // Grouped, Else 4 To 8 In A Row
-    [GeneratedRegex(@"(?<![\w.,$€£]|\d-)(?:[0-9]{3}[- ][0-9]{3}|[0-9]{4,8})(?![\w]|[.,][0-9])")]
+    // ASCII Digits Not Touching Other Digits, Letters, A Decimal Point, A Currency Sign, A Date's Slash, Or A Number Before
+    // A Dash Or Space (A Phone Number's Last Part): 3+3 Grouped, Else 4 To 8 In A Row
+    [GeneratedRegex(@"(?<![\w.,/$€£]|\d[- ])(?:[0-9]{3}[- ][0-9]{3}|[0-9]{4,8})(?![\w/]|[.,][0-9])")]
     private static partial Regex Code();
 }

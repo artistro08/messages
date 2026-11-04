@@ -1197,6 +1197,7 @@ public sealed class ChatStoreTests
         await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1")));
         await rig.Store.HandleEventAsync(new ConversationUpdated(muted));
         rig.Database!.SaveMessages("c1", [Msg("m1", "c1")]);
+        rig.Store.SaveDraft("c1", "unsent");
 
         await rig.Store.UpdateConversationAsync("c1", ConversationAction.Delete, Ct);
         await rig.Store.UpdateConversationAsync("c2", ConversationAction.Unmute, Ct);
@@ -1206,6 +1207,8 @@ public sealed class ChatStoreTests
         await reopened.LoadSavedAsync();
         Assert.IsNull(reopened.Find("c1"));
         Assert.AreEqual(0, rig.Database.LoadMessages("c1", 10).Count);
+        Assert.AreEqual(string.Empty, rig.Store.Draft("c1"));
+        Assert.IsFalse(rig.Database.LoadDrafts().ContainsKey("c1"));
         Assert.IsFalse(reopened.Find("c2")?.IsMuted);
     }
 

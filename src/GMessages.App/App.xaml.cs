@@ -258,11 +258,7 @@ public sealed partial class App : Application, IDisposable
         _trayIcon.Invoked              += (_, _) => ShowMainWindowRequested?.Invoke(this, "tray");
         _trayIcon.ContextMenuRequested += (_, point) => ShowTrayMenu(point.X, point.Y);
         _trayIcon.ThemeChanged         += (_, _) => OnSystemThemeChanged();
-        if (_settings.ShowTrayIcon)
-        {
-            bool trayAdded = _trayIcon.Show();
-            AppLog.TrayAdded(_logger, trayAdded);
-        }
+        ApplyTrayIcon();
 
         // Quit and Show Requests
         if (Program.QuitRequest is not null)
@@ -591,22 +587,31 @@ public sealed partial class App : Application, IDisposable
         _dispatcher?.TryEnqueue(() => UiHelpers.ToClipboard(code, keepPrivate: true));
     }
 
-    // Theme: every open window and the tray menu follow the setting live. The tray icon comes and goes with its setting
+    // Tray Icon Shown Or Taken Off, As Its Setting Says
+    private void ApplyTrayIcon()
+    {
+        if (_settings is null || _trayIcon is null)
+        {
+            return;
+        }
+
+        if (!_settings.ShowTrayIcon)
+        {
+            _trayIcon.Hide();
+            return;
+        }
+
+        bool trayAdded = _trayIcon.Show();
+        AppLog.TrayAdded(_logger, trayAdded);
+    }
+
+    // Live Settings: The Theme And The Tray Icon
     private void OnSettingChanged(object? sender, PropertyChangedEventArgs e)
     {
         // Tray Icon
-        if (e.PropertyName == nameof(AppSettings.ShowTrayIcon) && _settings is not null && _trayIcon is not null)
+        if (e.PropertyName == nameof(AppSettings.ShowTrayIcon))
         {
-            if (_settings.ShowTrayIcon)
-            {
-                bool trayAdded = _trayIcon.Show();
-                AppLog.TrayAdded(_logger, trayAdded);
-            }
-            else
-            {
-                _trayIcon.Hide();
-            }
-
+            ApplyTrayIcon();
             return;
         }
 

@@ -172,7 +172,7 @@ public sealed partial class MessageDatabase
     }
 
     /// <summary>
-    /// Removes a conversation deleted here, with its saved messages and encryption state.
+    /// Removes a conversation deleted here, with its saved messages, encryption state and draft.
     /// </summary>
     /// <param name="conversationId">The conversation ID.</param>
     public void DeleteConversation(string conversationId)
@@ -186,6 +186,7 @@ public sealed partial class MessageDatabase
                 DELETE FROM conversations WHERE id = $id;
                 DELETE FROM messages WHERE conversation_id = $id;
                 DELETE FROM encryption WHERE conversation_id = $id;
+                DELETE FROM drafts WHERE conversation_id = $id;
                 """;
             command.Parameters.AddWithValue("$id", conversationId);
             command.ExecuteNonQuery();

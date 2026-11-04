@@ -23,7 +23,7 @@ public static class LaunchWindow
     /// <param name="byNotification">Whether a toast click started the app.</param>
     /// <param name="runInBackground">The setting that keeps the app running with no window.</param>
     /// <returns>True for a launch by the user, or by the startup task when the app doesn't run in the background.</returns>
-    public static bool ShowsAtLaunch(bool byStartupTask, bool byNotification, bool runInBackground = true) =>
+    public static bool ShowsAtLaunch(bool byStartupTask, bool byNotification, bool runInBackground) =>
         !byNotification && (!byStartupTask || !runInBackground);
 
     /// <summary>

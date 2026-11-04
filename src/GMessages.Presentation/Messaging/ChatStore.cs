@@ -62,9 +62,6 @@ public sealed partial class ChatStore : IDisposable
     private readonly Lock _queueLock = new();
     private Task _queue = Task.CompletedTask;
 
-    // The Draft Writes Started So Far (Run Outside The Queue, See SaveDraft), So FlushAsync Waits For Them Too (Under _queueLock)
-    private Task _draftWrites = Task.CompletedTask;
-
     // Cache Of Slim Conversation Records, By ID
     private readonly ConcurrentDictionary<string, ConversationInfo> _cache = new();
 
@@ -183,8 +180,8 @@ public sealed partial class ChatStore : IDisposable
     /// Gets the text of each new message a conversation received live since it was last read, oldest first.
     /// </summary>
     /// <remarks>
-    /// The phone only says whether a conversation is unread, so received messages are kept as they arrive (their
-    /// <see cref="ChatFormat.ShownText"/>), and the list starts over once the phone says the conversation is read or it
+    /// The phone only says whether a conversation is unread, so received messages are kept as they arrive (each as its
+    /// <see cref="ChatFormat.UnreadLine"/>: the sender's first name in a group, the media's label), and the list starts over once the phone says the conversation is read or it
     /// is read here. Its count is the unread count. Messages that came while the app wasn't running aren't kept (a
     /// caller shows an unread conversation with none as one).
     /// </remarks>
@@ -218,10 +215,10 @@ public sealed partial class ChatStore : IDisposable
     /// </summary>
     /// <remarks>
     /// An empty draft forgets it. The files are kept in memory only, for as long as the app runs: a pasted picture has
-    /// no file to open again after a restart. The text is saved at once on the thread pool, not behind the queued message
-    /// saves: a quit cuts those off after a limit (they're fetched again from the phone), and a draft can't be fetched
-    /// again. It's encrypted like every other body, and dropped after a sign-out (the database is deleted with the
-    /// account).
+    /// no file to open again after a restart. The text is saved on the background queue, in order, encrypted like every
+    /// other body, and dropped after a sign-out (the database is deleted with the account).
+    /// ponytail: a quit right after a catch-up (hundreds of saves queued) can cut the draft's save off with the rest; give
+    /// drafts their own locked write path if that ever bites.
     /// </remarks>
     /// <param name="conversationId">The conversation ID.</param>
     /// <param name="text">The draft text.</param>
@@ -245,33 +242,20 @@ public sealed partial class ChatStore : IDisposable
 
         // Text Unchanged: Nothing To Write. A Cleared Draft Stays As An Empty Entry, So A Saved One That Loads Late Can't
         // Bring It Back (See LoadSavedAsync)
-        if (_drafts.TryGetValue(conversationId, out string? old) && old == text)
+        bool textChanged = !_drafts.TryGetValue(conversationId, out string? old) || old != text;
+        _drafts[conversationId] = text;
+        if (textChanged || filesChanged)
         {
-            if (filesChanged)
-            {
-                DraftChanged?.Invoke(this, conversationId);
-            }
+            DraftChanged?.Invoke(this, conversationId);
+        }
 
+        if (!textChanged)
+        {
             return;
         }
 
-        _drafts[conversationId] = text;
-        DraftChanged?.Invoke(this, conversationId);
-
-        // Writes The Draft As It Is When The Write Runs, So Two Quick Saves Can't Land Out Of Order; FlushAsync (And So The
-        // Quit) Waits For It
-        int generation = Generation;
-        Task write     = ReadNowAsync(database =>
-        {
-            if (generation == Generation)
-            {
-                database.SaveDraft(conversationId, Draft(conversationId));
-            }
-        });
-        lock (_queueLock)
-        {
-            _draftWrites = Task.WhenAll(_draftWrites, write);
-        }
+        // On The Save Queue: In Order, Behind A Sign-Out's Delete, So An Old Account's Draft Never Lands In The Next One's File
+        SaveIfCurrent(conversationId, Generation, database => database.SaveDraft(conversationId, text));
     }
 
     /// <summary>
@@ -894,7 +878,7 @@ public sealed partial class ChatStore : IDisposable
 
         // Saved Read Only While The Saved Row's Newest Message Is The Read One, Or My Own (A Reply From A Toast), Checked When
         // The Write Runs: One That Came In Meanwhile Stays Unread On Disk
-        SaveChange(conversationId, generation, c =>
+        SaveIfCurrent(conversationId, generation, database => database.UpdateConversation(conversationId, c =>
         {
             if (!c.Unread || (c.LatestMessageID != messageId && c.LatestMessage?.FromMe != 1))
             {
@@ -903,7 +887,7 @@ public sealed partial class ChatStore : IDisposable
 
             c.Unread = false;
             return true;
-        });
+        }));
 
         ConversationChanged?.Invoke(this, read);
     }
@@ -957,23 +941,33 @@ public sealed partial class ChatStore : IDisposable
         // Place Until The Phone's Page Comes. A Deleted Chat Leaves The Database, Messages And All
         if (action == ConversationAction.Delete)
         {
-            SaveDelete(conversationId, generation);
+            _drafts.TryRemove(conversationId, out _);
+            _draftFiles.TryRemove(conversationId, out _);
+            SaveIfCurrent(conversationId, generation, database => database.DeleteConversation(conversationId));
         }
         else
         {
-            SaveChange(conversationId, generation, c =>
+            ConversationMuteStatus mute = updated.IsMuted ? ConversationMuteStatus.Mute : ConversationMuteStatus.Unmute;
+            SaveIfCurrent(conversationId, generation, database => database.UpdateConversation(conversationId, c =>
             {
-                if (newStatus is { } saved)
+                // Already So: Nothing To Rewrite
+                bool same = newStatus is { } target ? c.Status == target : c.Muted == mute;
+                if (same)
                 {
-                    c.Status = saved;
+                    return false;
+                }
+
+                if (newStatus is { } newOne)
+                {
+                    c.Status = newOne;
                 }
                 else
                 {
-                    c.Muted = updated.IsMuted ? ConversationMuteStatus.Mute : ConversationMuteStatus.Unmute;
+                    c.Muted = mute;
                 }
 
                 return true;
-            });
+            }));
         }
 
         if (changed)
