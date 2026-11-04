@@ -257,8 +257,11 @@ public sealed partial class App : Application, IDisposable
         _trayIcon.Invoked              += (_, _) => ShowMainWindowRequested?.Invoke(this, "tray");
         _trayIcon.ContextMenuRequested += (_, point) => ShowTrayMenu(point.X, point.Y);
         _trayIcon.ThemeChanged         += (_, _) => OnSystemThemeChanged();
-        var trayAdded = _trayIcon.Show();
-        AppLog.TrayAdded(_logger, trayAdded);
+        if (_settings?.ShowTrayIcon ?? true)
+        {
+            bool trayAdded = _trayIcon.Show();
+            AppLog.TrayAdded(_logger, trayAdded);
+        }
 
         // Quit and Show Requests
         if (Program.QuitRequest is not null)
@@ -451,6 +454,7 @@ public sealed partial class App : Application, IDisposable
             _linkPreviewer = new LinkPreviewer(TestHooks.AllowLoopbackPreviews, _logger);
             _mainWindow.ApplyTheme(_settings.Theme);
             _mainWindow.SettingsRequested += (_, _) => ShowSettings();
+            _mainWindow.QuitRequested     += (_, _) => Quit();
             _mainWindow.Closed            += (_, _) =>
             {
                 // A Toast's Conversation Not Yet Shown Goes With The Window, So A Later Open Doesn't Jump To It. The Open
@@ -544,9 +548,24 @@ public sealed partial class App : Application, IDisposable
         _mainWindow?.ShowSettings();
     }
 
-    // Theme: every open window and the tray menu follow the setting live
+    // Theme: every open window and the tray menu follow the setting live. The tray icon comes and goes with its setting
     private void OnSettingChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(AppSettings.ShowTrayIcon) && _settings is not null && _trayIcon is not null)
+        {
+            if (_settings.ShowTrayIcon)
+            {
+                bool trayAdded = _trayIcon.Show();
+                AppLog.TrayAdded(_logger, trayAdded);
+            }
+            else
+            {
+                _trayIcon.Hide();
+            }
+
+            return;
+        }
+
         if (e.PropertyName != nameof(AppSettings.Theme) || _settings is null)
         {
             return;

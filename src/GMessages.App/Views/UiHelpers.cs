@@ -29,6 +29,13 @@ internal static class UiHelpers
     public static Visibility ShownIfText(string? text) => string.IsNullOrEmpty(text) ? Visibility.Collapsed : Visibility.Visible;
 
     /// <summary>
+    /// Shows an element only while a flag is off, for <c>x:Bind</c>.
+    /// </summary>
+    /// <param name="value">The flag.</param>
+    /// <returns>Collapsed while on, else visible.</returns>
+    public static Visibility ShownIfOff(bool value) => value ? Visibility.Collapsed : Visibility.Visible;
+
+    /// <summary>
     /// Finds the first <see cref="ScrollViewer"/> under an element (a list's template holds one).
     /// </summary>
     /// <remarks>

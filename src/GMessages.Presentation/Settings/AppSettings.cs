@@ -25,6 +25,7 @@ public sealed class AppSettings : INotifyPropertyChanged
     private const string MicrophoneIdKey             = "MicrophoneId";
     private const string ShowReceivedLinkPreviewsKey = "ShowReceivedLinkPreviews";
     private const string ShowPinnedGridKey           = "ShowPinnedGrid";
+    private const string ShowTrayIconKey             = "ShowTrayIcon";
 
     // Snooze Lengths, In Minutes (The Choices Settings Offers), And The Default
     private const int DefaultSnoozeMinutes = 15;
@@ -88,6 +89,16 @@ public sealed class AppSettings : INotifyPropertyChanged
     {
         get => GetBool(ShowPinnedGridKey, false);
         set => Set(ShowPinnedGridKey, value.ToString(CultureInfo.InvariantCulture));
+    }
+
+    /// <summary>
+    /// Whether the app shows its icon in the system tray. Defaults to true; off, it still runs in the background, opens
+    /// from Start, and quits from the account menu.
+    /// </summary>
+    public bool ShowTrayIcon
+    {
+        get => GetBool(ShowTrayIconKey, true);
+        set => Set(ShowTrayIconKey, value.ToString(CultureInfo.InvariantCulture));
     }
 
     /// <summary>

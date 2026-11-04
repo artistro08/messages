@@ -139,6 +139,26 @@
                     </Grid>
                 </Border>
 
+                <!-- Tray Icon: off, the app still runs in the background; Start opens it and the account menu quits it -->
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
+                        <FontIcon Glyph="&#xE890;" Style="{StaticResource CardIconStyle}" />
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock Text="Show icon in the system tray" TextWrapping="Wrap" />
+                            <TextBlock
+                                Style="{StaticResource CardDescriptionStyle}"
+                                Text="When off, Kaituro keeps running in the background. Open it from Start, and quit it from the account menu."
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+                        <ToggleSwitch
+                            Grid.Column="2"
+                            AutomationProperties.AutomationId="Settings.ShowTrayIcon"
+                            AutomationProperties.Name="Show icon in the system tray"
+                            IsOn="{x:Bind ViewModel.ShowTrayIcon, Mode=TwoWay}"
+                            Style="{StaticResource CardToggleSwitchStyle}" />
+                    </Grid>
+                </Border>
+
                 <!-- Notifications -->
                 <TextBlock Style="{StaticResource GroupHeaderStyle}" Text="Notifications" />
                 <Border Style="{StaticResource SettingsCardStyle}">

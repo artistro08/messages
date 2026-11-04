@@ -196,6 +196,21 @@ public sealed class SettingsViewModelTests
         Assert.IsTrue(new AppSettings(store).ShowPinnedGrid);
     }
 
+    /// <summary>
+    /// The tray icon shows for a fresh install, and turning it off lands in the store.
+    /// </summary>
+    [TestMethod]
+    public void ShowTrayIcon_DefaultsOn_AndPersists()
+    {
+        var store = new InMemorySettingsStore();
+        var vm    = Create(store);
+        Assert.IsTrue(vm.ShowTrayIcon);
+
+        vm.ShowTrayIcon = false;
+
+        Assert.IsFalse(new AppSettings(store).ShowTrayIcon);
+    }
+
     // =========================================================================
     // START WITH WINDOWS
     // =========================================================================
