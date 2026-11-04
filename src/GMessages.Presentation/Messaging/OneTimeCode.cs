@@ -6,9 +6,10 @@ namespace GMessages.Presentation.Messaging;
 /// Finds the one-time passcode in a received message ("Your verification code is 482913"), so it can be copied for you.
 /// </summary>
 /// <remarks>
-/// A message counts only when it says what it is (code, passcode, OTP, PIN, verification, verify, one-time, 2FA, sign-in or
-/// login), so a phone number, an amount or an order number in an ordinary text is never taken. The code is the first
-/// group of 4 to 8 digits standing on its own; "123-456" and "123 456" are read as 123456.
+/// A message counts only when it says what it is (code, passcode, OTP, verification, verify, one-time or 2FA), so a
+/// phone number, an amount or an order number in an ordinary text is never taken. The code is the group of 4 to 8 ASCII
+/// digits standing on its own that sits closest to one of those words, so an account number or an amount earlier in the
+/// message doesn't win; "123-456" and "123 456" are read as 123456.
 /// </remarks>
 public static partial class OneTimeCode
 {
@@ -21,18 +22,22 @@ public static partial class OneTimeCode
     {
         ArgumentNullException.ThrowIfNull(text);
 
-        if (!Keyword().IsMatch(text) || Code().Match(text) is not { Success: true } match)
+        int[] keywords = [.. Keyword().Matches(text).Select(k => k.Index)];
+        if (keywords.Length == 0)
         {
             return null;
         }
 
-        return match.Value.Replace("-", string.Empty, StringComparison.Ordinal).Replace(" ", string.Empty, StringComparison.Ordinal);
+        // The Number Nearest A Keyword
+        Match? code = Code().Matches(text).MinBy(m => keywords.Min(k => Math.Abs(m.Index - k)));
+        return code is null ? null : string.Concat(code.Value.Where(char.IsAsciiDigit));
     }
 
-    [GeneratedRegex(@"\b(?:code|passcode|otp|pin|verification|verify|one[- ]time|2fa|sign[- ]?in|log[- ]?in)\b", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"\b(?:code|passcode|otp|verification|verify|one[- ]time|2fa)\b", RegexOptions.IgnoreCase)]
     private static partial Regex Keyword();
 
-    // Digits Not Touching Other Digits, Letters Or A Decimal Point: 3+3 Grouped, Else 4 To 8 In A Row
-    [GeneratedRegex(@"(?<![\w.,])(?:\d{3}[- ]\d{3}|\d{4,8})(?![\w]|[.,]\d)")]
+    // ASCII Digits Not Touching Other Digits, Letters, A Decimal Point, A Currency Sign Or A Number Before A Dash: 3+3
+    // Grouped, Else 4 To 8 In A Row
+    [GeneratedRegex(@"(?<![\w.,$€£]|\d-)(?:[0-9]{3}[- ][0-9]{3}|[0-9]{4,8})(?![\w]|[.,][0-9])")]
     private static partial Regex Code();
 }

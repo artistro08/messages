@@ -1,6 +1,5 @@
 using System.ComponentModel;
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 using GMessages.App.Startup;
 using GMessages.App.Views;
 using GMessages.Presentation;
@@ -19,7 +18,6 @@ using Microsoft.UI.Xaml;
 using Microsoft.Windows.AppLifecycle;
 using Microsoft.Windows.AppNotifications;
 using Microsoft.Windows.System.Power;
-using Windows.ApplicationModel.DataTransfer;
 using Windows.Networking.Connectivity;
 using Windows.Storage;
 
@@ -547,29 +545,19 @@ public sealed partial class App : Application, IDisposable
         _mainWindow?.ShowSettings();
     }
 
-    // Copy Codes: a new received message's one-time passcode goes to the clipboard (Settings), kept out of clipboard history
-    // and cloud sync. Another app holding the clipboard throws; the copy then does nothing, logged
+    // Copy Codes
+    // A New Message's One-Time Passcode Goes To The Clipboard (Settings), Kept Out Of Clipboard History And Cloud Sync. The
+    // Same Messages As Notify, Wherever The Window Is: None From Muted, Spam, Archived Or Blocked Chats
     private void CopyCode(MessageArrivedEventArgs e)
     {
-        if (_settings?.CopyCodes != true || !e.IsNew || e.IsOld || e.Message.FromMe || OneTimeCode.Find(e.Message.Text) is not { } code)
+        if (_settings?.CopyCodes != true
+            || !NotificationPolicy.ShouldNotify(e, notificationsEnabled: true, viewedConversationId: null, windowFocused: false, notifyForViewedChat: true)
+            || OneTimeCode.Find(e.Message.Text) is not { } code)
         {
             return;
         }
 
-        _dispatcher?.TryEnqueue(() =>
-        {
-            var package = new DataPackage();
-            package.SetText(code);
-
-            try
-            {
-                Clipboard.SetContentWithOptions(package, new ClipboardContentOptions { IsAllowedInHistory = false, IsRoamable = false });
-            }
-            catch (COMException ex)
-            {
-                AppLog.CopyFailed(_logger, ex.GetType().Name);
-            }
-        });
+        _dispatcher?.TryEnqueue(() => UiHelpers.ToClipboard(code, keepPrivate: true));
     }
 
     // Theme: every open window and the tray menu follow the setting live
