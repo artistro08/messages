@@ -6,7 +6,8 @@
     xmlns:controls="using:GMessages.App.Views.Controls"
     xmlns:local="using:GMessages.App.Views"
     xmlns:main="using:GMessages.Presentation.Main"
-    xmlns:messaging="using:GMessages.Presentation.Messaging">
+    xmlns:messaging="using:GMessages.Presentation.Messaging"
+    xmlns:muxc="using:Microsoft.UI.Xaml.Controls">
 
     <UserControl.Resources>
 
@@ -94,7 +95,14 @@
         </MenuFlyout>
     </UserControl.Resources>
 
-    <Grid x:Name="PaneGrid" RowDefinitions="Auto,*,Auto,Auto,Auto">
+    <Grid x:Name="PaneGrid">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
 
         <!-- Header: avatar and name, with the lock after it in an encrypted chat (a narrow window's back is the title bar's),
              and the ⋮ at the right edge. Transparent, so a right-click anywhere on it opens the same menu -->
@@ -104,9 +112,14 @@
             Background="Transparent"
             BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
             BorderThickness="0,0,0,1"
-            ColumnDefinitions="Auto,*,Auto,Auto"
             ColumnSpacing="12"
             ContextRequested="OnHeaderContextRequested">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
             <controls:Avatar
                 VerticalAlignment="Center"
                 Color="{x:Bind Chat.AvatarColor, Mode=OneWay, FallbackValue=0}"
@@ -118,11 +131,15 @@
             <Grid
                 Grid.Column="1"
                 HorizontalAlignment="Left"
-                ColumnDefinitions="*,Auto"
                 ColumnSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
                 <TextBlock
                     VerticalAlignment="Center"
                     AutomationProperties.AutomationId="Chat.Header"
+                    FontFamily="{ThemeResource ContentControlThemeFontFamily}"
                     MaxLines="1"
                     Style="{StaticResource SubtitleTextBlockStyle}"
                     Text="{x:Bind Chat.Title, Mode=OneWay, FallbackValue=''}"
@@ -287,7 +304,7 @@
         </ListView>
 
         <!-- Loading: the history with nothing cached to show yet -->
-        <ProgressRing
+        <muxc:ProgressRing
             Grid.Row="1"
             HorizontalAlignment="Center"
             VerticalAlignment="Center"
@@ -313,7 +330,7 @@
                 <ThemeShadow />
             </Border.Shadow>
             <!-- 24 px: a whole 3 px stroke, as the chat list's ring (20 px drew a jagged 2.5 px one) -->
-            <ProgressRing
+            <muxc:ProgressRing
                 Width="24"
                 Height="24"
                 AutomationProperties.AutomationId="Chat.LoadingOlder"
@@ -439,17 +456,23 @@
                 Background="{ThemeResource SolidBackgroundFillColorTertiaryBrush}"
                 BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
                 BorderThickness="1,1,1,0"
-                ColumnDefinitions="Auto,*,Auto"
                 ColumnSpacing="8"
                 CornerRadius="4,4,0,0"
                 Visibility="{x:Bind Chat.IsReplying, Mode=OneWay, FallbackValue=Collapsed}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
                 <Border
                     Width="3"
                     Background="{ThemeResource QuoteBarBrush}"
                     CornerRadius="1.5" />
-                <Grid
-                    Grid.Column="1"
-                    ColumnDefinitions="Auto,*">
+                <Grid Grid.Column="1">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
                     <controls:MediaThumb
                         Margin="0,0,8,0"
                         VerticalAlignment="Center"
@@ -772,9 +795,14 @@
                     Background="{ThemeResource ControlFillColorInputActiveBrush}"
                     BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
                     BorderThickness="1"
-                    ColumnDefinitions="Auto,Auto,*,Auto"
                     ColumnSpacing="8"
                     CornerRadius="{x:Bind local:ChatPane.DraftCorners(Chat.IsReplying, Chat.HasAttachments, Chat.Voice.IsPreview), Mode=OneWay}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
                     <Ellipse
                         Width="8"
                         Height="8"

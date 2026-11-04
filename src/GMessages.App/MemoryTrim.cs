@@ -1,4 +1,4 @@
-using Microsoft.UI.Dispatching;
+using Windows.System;
 
 namespace GMessages.App;
 

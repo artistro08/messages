@@ -140,11 +140,22 @@ public sealed partial class ChatStore
         ConversationInfo? conversation = Find(message.ConversationId);
 
         // A Live Message Newer Than The Cached Conversation's Last Moves It To The Top At Once (The List Sorts By This
-        // Time), Sent Or Received, Without Waiting For Google's Conversation Update, Which Doesn't Always Come. That Update,
-        // When It Comes, Brings The Snippet. A Conversation Fetched Below Is Already Current
+        // Time), Sent Or Received, Without Waiting For Google's Conversation Update, Which Doesn't Always Come. A Received
+        // One's Update Comes First With Its Snippet; For One Of Mine It Often Never Came (The Row Kept The Old Snippet), So
+        // Mine Brings Its Own (A System Line Keeps It). The Update, When It Comes, Has The Last Word. A Conversation Fetched
+        // Below Is Already Current
         if (!received.IsOld && conversation is not null && message.Time > conversation.LastMessageTime)
         {
-            conversation = conversation with { LastMessageTime = message.Time };
+            conversation = message.FromMe && message.Kind is not (MessageKind.Tombstone or MessageKind.Other)
+                ? conversation with
+                {
+                    LastMessageTime = message.Time,
+                    Snippet         = message.Text,
+                    SnippetFromMe   = true,
+                    SnippetMedia    = message.Media is { } snippetMedia ? ChatFormat.MediaLabel(snippetMedia) : string.Empty,
+                    LatestMessageId = message.Id,
+                }
+                : conversation with { LastMessageTime = message.Time };
             if (Upsert(conversation))
             {
                 ConversationChanged?.Invoke(this, conversation);

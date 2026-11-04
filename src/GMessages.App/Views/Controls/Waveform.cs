@@ -1,11 +1,11 @@
 using GMessages.Presentation.Messaging;
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Automation;
-using Microsoft.UI.Xaml.Automation.Peers;
-using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Input;
-using Microsoft.UI.Xaml.Media;
-using Path = Microsoft.UI.Xaml.Shapes.Path;
+using Windows.UI.Xaml;
+using Windows.UI.Xaml.Automation;
+using Windows.UI.Xaml.Automation.Peers;
+using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml.Input;
+using Windows.UI.Xaml.Media;
+using Path = Windows.UI.Xaml.Shapes.Path;
 using Windows.System;
 
 namespace GMessages.App.Views.Controls;
@@ -80,7 +80,7 @@ public sealed partial class Waveform : UserControl
         SetBarCount(VoiceWave.BarCount);
 
         // Transparent, So A Click Between The Bars Still Seeks
-        Content               = new Grid { Height = WaveHeight, Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent), Children = { _unplayed, _played } };
+        Content               = new Grid { Height = WaveHeight, Background = new SolidColorBrush(Windows.UI.Colors.Transparent), Children = { _unplayed, _played } };
         IsTabStop             = false;
         UseSystemFocusVisuals = true;
         Tapped               += OnTapped;

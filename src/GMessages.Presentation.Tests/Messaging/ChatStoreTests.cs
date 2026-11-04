@@ -105,6 +105,27 @@ public sealed class ChatStoreTests
         Assert.IsTrue(rig.Store.Me?.IsMe);
     }
 
+    /// <summary>
+    /// A message sent here moves its row and shows as the snippet at once, without Google's conversation update (which
+    /// doesn't always come).
+    /// </summary>
+    [TestMethod]
+    public async Task LiveSentMessage_BringsItsOwnSnippet()
+    {
+        using var rig = new Rig();
+        await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1")));
+        var raised = new List<ConversationInfo>();
+        rig.Store.ConversationChanged += (_, c) => raised.Add(c);
+
+        await rig.Store.HandleEventAsync(new MessageReceived(Msg("m1", "c1", "on my way"), false));
+
+        ConversationInfo shown = raised.Single();
+        Assert.AreEqual("on my way", shown.Snippet);
+        Assert.IsTrue(shown.SnippetFromMe);
+        Assert.AreEqual("m1", shown.LatestMessageId);
+        Assert.AreEqual("on my way", rig.Store.Find("c1")?.Snippet);
+    }
+
     [TestMethod]
     public async Task CatchUpMessage_RaisesWithIsOldTrue()
     {

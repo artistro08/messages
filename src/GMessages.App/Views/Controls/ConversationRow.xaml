@@ -12,8 +12,13 @@
     <Grid
         x:Name="Root"
         Padding="0,10"
-        Background="Transparent"
-        ColumnDefinitions="Auto,*,Auto,Auto">
+        Background="Transparent">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
 
         <!-- Hover: the ⋮ (collapsed until then, so it takes no space and screen readers don't find it) takes its 32 px
              at the right edge and fades in, and this row's time and icons slide left to make room. The ⋮ shows or

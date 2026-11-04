@@ -133,7 +133,7 @@ dotnet_naming_rule.async_methods_rule.severity = none
 dotnet_naming_rule.async_methods_rule.severity = none
 
 # Win32 Interop: Struct Fields Keep Their Windows SDK Names (cbSize, hWnd)
-[GMessages.App/NativeMethods.cs]
+[{GMessages.App/NativeMethods.cs,GMessages.App/Windowing/WindowInterop.cs}]
 dotnet_diagnostic.IDE1006.severity = none
 
 # ConfigureAwait In The Protocol Library Only

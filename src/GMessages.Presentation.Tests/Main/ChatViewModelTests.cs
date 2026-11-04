@@ -927,6 +927,27 @@ public sealed class ChatViewModelTests
     }
 
     [TestMethod]
+    public async Task BackToTheWindow_ReadsWhatCameMeanwhile()
+    {
+        using var rig = new MainRig();
+        using ChatViewModel chat = NewChat(rig);
+        await chat.LoadAsync();
+
+        // Away: A Message Comes And The Phone Says The Chat Is Unread
+        Conversation unread  = MainRig.Conv("a", "Ann");
+        unread.Unread          = true;
+        unread.LatestMessageID = "m1";
+        await rig.Live(unread);
+        await rig.LiveMessage(Msg("m1", "one"));
+        Assert.AreEqual(0, rig.Client.MarkedRead.Count);
+
+        chat.IsActive = true;
+
+        Assert.AreEqual(1, rig.Client.MarkedRead.Count);
+        Assert.AreEqual(("a", "m1"), rig.Client.MarkedRead[0]);
+    }
+
+    [TestMethod]
     public async Task Resync_ReloadsAndKeepsUnsentBubbles()
     {
         using var rig = new MainRig();

@@ -484,8 +484,11 @@ public sealed class ConversationActionTests : UiTest
         AutomationElement more         = App.Find("Chat.More");
         System.Drawing.Rectangle under = more.BoundingRectangle;
         more.Patterns.Invoke.Pattern.Invoke();
-        System.Drawing.Rectangle first = App.Find("Conversation.Details").BoundingRectangle;
-        Assert.IsTrue(first.Top >= under.Bottom, $"The header menu's top ({first.Top}) isn't below its button's bottom ({under.Bottom}).");
+
+        // Waited For: WinUI 2.8's Menu Slides Down Into Place As It Opens
+        int top = 0;
+        Wait.Until(() => (top = App.Find("Conversation.Details").BoundingRectangle.Top) >= under.Bottom, AppDriver.DefaultTimeout,
+            () => $"The header menu's top ({top}) isn't below its button's bottom ({under.Bottom}).");
         Keyboard.Type(VirtualKeyShort.ESCAPE);
         WaitForGone("Conversation.Details");
 
@@ -495,8 +498,8 @@ public sealed class ConversationActionTests : UiTest
         AutomationElement rowMore       = App.Find("Row.More.c-team");
         System.Drawing.Rectangle button = rowMore.BoundingRectangle;
         rowMore.Patterns.Invoke.Pattern.Invoke();
-        System.Drawing.Rectangle item = App.Find("Conversation.Archive").BoundingRectangle;
-        Assert.IsTrue(item.Top >= button.Bottom, $"The row menu's top ({item.Top}) isn't below its ⋮'s bottom ({button.Bottom}).");
+        Wait.Until(() => (top = App.Find("Conversation.Archive").BoundingRectangle.Top) >= button.Bottom, AppDriver.DefaultTimeout,
+            () => $"The row menu's top ({top}) isn't below its ⋮'s bottom ({button.Bottom}).");
         Keyboard.Type(VirtualKeyShort.ESCAPE);
     }
 

@@ -2,22 +2,23 @@ using System.ComponentModel;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using GMessages.App.Media;
+using GMessages.App.Windowing;
 using GMessages.Presentation.Main;
 using GMessages.Presentation.Messaging;
-using Microsoft.UI.Composition;
-using Microsoft.UI.Text;
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Automation;
-using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Documents;
-using Microsoft.UI.Xaml.Hosting;
-using Microsoft.UI.Xaml.Input;
-using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Foundation;
 using Windows.System;
+using Windows.UI.Composition;
+using Windows.UI.Text;
 using Windows.UI.ViewManagement;
+using Windows.UI.Xaml;
+using Windows.UI.Xaml.Automation;
+using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml.Documents;
+using Windows.UI.Xaml.Hosting;
+using Windows.UI.Xaml.Input;
+using Windows.UI.Xaml.Media;
+using Windows.UI.Xaml.Media.Imaging;
 using WinRT;
 
 namespace GMessages.App.Views.Controls;
@@ -1298,7 +1299,7 @@ public sealed partial class MessageBubble : UserControl
         link.Click += (_, _) =>
         {
             _linkClicked = true;
-            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => _linkClicked = false);
+            XamlHost.Dispatcher.TryEnqueue(DispatcherQueuePriority.Low, () => _linkClicked = false);
             OpenLink(url);
         };
 
@@ -1389,7 +1390,7 @@ public sealed partial class MessageBubble : UserControl
             return;
         }
 
-        var blocker = new Border { Width = width, Height = height, Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent) };
+        var blocker = new Border { Width = width, Height = height, Background = new SolidColorBrush(Windows.UI.Colors.Transparent) };
         Canvas.SetLeft(blocker, left);
         Canvas.SetTop(blocker, top);
         LinkBlockers.Children.Add(blocker);
@@ -1429,7 +1430,7 @@ public sealed partial class MessageBubble : UserControl
             return;
         }
 
-        DispatcherQueue.TryEnqueue(() =>
+        XamlHost.Dispatcher.TryEnqueue(() =>
         {
             if (_linkClicked)
             {
@@ -1506,7 +1507,7 @@ public sealed partial class MessageBubble : UserControl
         }
 
         var list  = new ListView { SelectionMode = ListViewSelectionMode.None, MaxHeight = ReactorsMaxHeight };
-        var clear = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+        var clear = new SolidColorBrush(Windows.UI.Colors.Transparent);
         list.Resources["ListViewItemBackgroundPointerOver"] = clear;
         list.Resources["ListViewItemBackgroundPressed"]     = clear;
         AutomationProperties.SetAutomationId(list, "Reactors");

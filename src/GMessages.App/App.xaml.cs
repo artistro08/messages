@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using GMessages.App.Startup;
 using GMessages.App.Views;
+using GMessages.App.Windowing;
 using GMessages.Presentation;
 using GMessages.Presentation.Connection;
 using GMessages.Presentation.Logging;
@@ -13,13 +14,14 @@ using GMessages.Presentation.Settings;
 using GMessages.Protocol;
 using GMessages.Protocol.Http;
 using Microsoft.Extensions.Logging;
-using Microsoft.UI.Dispatching;
-using Microsoft.UI.Xaml;
 using Microsoft.Windows.AppLifecycle;
 using Microsoft.Windows.AppNotifications;
 using Microsoft.Windows.System.Power;
 using Windows.Networking.Connectivity;
 using Windows.Storage;
+using Windows.System;
+using Windows.UI.Xaml;
+using Windows.UI.Xaml.Hosting;
 
 namespace GMessages.App;
 
@@ -95,18 +97,24 @@ public sealed partial class App : Application, IDisposable
     private bool _launched;
 
     /// <summary>
-    /// Creates the app. Closing a window must never end a tray app, so it only shuts down on request.
+    /// Creates the app and starts XAML on the UI thread. Closing a window never ends a tray app: the message loop runs
+    /// until <see cref="Quit"/> ends it.
     /// </summary>
     public App()
     {
+        // A desktop process has no UWP launch, so XAML starts here, before App.xaml loads
+        XamlManager = WindowsXamlManager.InitializeForCurrentThread();
         InitializeComponent();
 
-        // Closing the last window must not end a tray app
-        DispatcherShutdownMode = DispatcherShutdownMode.OnExplicitShutdown;
-
-        // Last Resort For UI Event Handlers
-        UnhandledException += OnUnhandledException;
+        // Last Resort For UI Event Handlers, And For Awaits That Came Back On The UI Thread
+        UnhandledException          += OnUnhandledException;
+        XamlHost.UnhandledException  = OnEscapedException;
     }
+
+    /// <summary>
+    /// Gets the UI thread's XAML core; holding it keeps XAML running between windows (the app lives on in the tray).
+    /// </summary>
+    public WindowsXamlManager XamlManager { get; }
 
     /// <summary>
     /// Asks for the main window: tray left-click, the menu's Open, or a second launch. Carries what asked.
@@ -135,10 +143,10 @@ public sealed partial class App : Application, IDisposable
     internal string? MicrophoneId => _settings?.MicrophoneId;
 
     /// <summary>
-    /// Sets up logging, settings and the tray icon, then starts watching for quit and show requests.
+    /// Sets up logging, settings and the tray icon, then starts watching for quit and show requests. Called once by
+    /// <see cref="Program"/> before the message loop starts (the command line is read there).
     /// </summary>
-    /// <param name="args">Launch details (unused; the command line is read by <see cref="Program"/>).</param>
-    protected override void OnLaunched(LaunchActivatedEventArgs args)
+    internal void Launch()
     {
         // Paths
         var paths = AppPaths.Resolve(AppIdentity.IsPackaged ? ApplicationData.Current.LocalFolder.Path : null, TestHooks.DataDir);
@@ -172,7 +180,7 @@ public sealed partial class App : Application, IDisposable
         // Memory Trim
         var dispatcher = DispatcherQueue.GetForCurrentThread();
         _dispatcher    = dispatcher;
-        _memoryTrim    = new MemoryTrim(dispatcher, () => _trayMenu?.AppWindow.IsVisible != true && _mainWindow is null);
+        _memoryTrim    = new MemoryTrim(dispatcher, () => _trayMenu?.IsVisible != true && _mainWindow is null);
 
         // Connection: every controller event comes back on the UI thread
         // Debug test hooks can point it at a local fake server; Release is always production
@@ -280,10 +288,18 @@ public sealed partial class App : Application, IDisposable
     // message (it can hold content). Once launched it is marked handled, so one failed click can't take the tray, and
     // with it every later notification, down. Before then it still ends the app, so a broken start-up is never hidden.
     // The stack's frames are logged too (code names only, see StackFrames), so the source can be found
-    private void OnUnhandledException(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs e)
+    private void OnUnhandledException(object sender, Windows.UI.Xaml.UnhandledExceptionEventArgs e)
     {
         e.Handled = _launched && e.Exception is not OutOfMemoryException;
         AppLog.UnhandledError(_logger, e.Exception?.GetType().Name ?? "Unknown", e.Exception?.HResult ?? 0, e.Handled, ExceptionText.StackFrames(e.Exception));
+    }
+
+    // The Same For An Exception That Escaped An Await Continuation On The UI Thread (An Async Void Click After Its First Await)
+    private bool OnEscapedException(Exception ex)
+    {
+        bool handled = _launched && ex is not OutOfMemoryException;
+        AppLog.UnhandledError(_logger, ex.GetType().Name, ex.HResult, handled, ExceptionText.StackFrames(ex));
+        return handled;
     }
 
     // =========================================================================
@@ -502,14 +518,14 @@ public sealed partial class App : Application, IDisposable
     // Window Forward (Microsoft's Toast Migration Guide: ShowWindow(SW_RESTORE), Then SetForegroundWindow). When Windows
     // Still Refuses (The Foreground Lock), The Input Of The Foreground Window's Thread Is Joined For A Moment, Which Lets
     // The Call Through, Then Let Go Again
-    private static void BringToFront(Window? window)
+    private static void BringToFront(MainWindow? window)
     {
         if (window is null)
         {
             return;
         }
 
-        IntPtr hwnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
+        IntPtr hwnd = window.Hwnd;
         if (NativeMethods.IsIconic(hwnd))
         {
             NativeMethods.ShowWindow(hwnd, NativeMethods.SW_RESTORE);
@@ -626,8 +642,7 @@ public sealed partial class App : Application, IDisposable
         _mainWindow?.ApplyTheme(theme);
     }
 
-    // Tray Menu: a hidden menu is closed (see ShowTrayMenu) and made fresh, with the current theme, on the next
-    // right-click, so only an open menu needs the new theme
+    // Tray Menu: the one menu window (kept, see ShowTrayMenu) takes the new theme
     private void RefreshTrayMenu(AppTheme theme) => _trayMenu?.ApplyTheme(theme);
 
     // Windows Switched Light And Dark: With "System" The Tray Menu Follows It, The Same Way As A Theme Setting Change

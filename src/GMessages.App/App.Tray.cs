@@ -38,25 +38,14 @@ public sealed partial class App
             _trayMenu.SettingsRequested += (_, _) => ShowSettings();
             _trayMenu.QuitRequested     += (_, _) => Quit();
 
-            // Close The Menu Window Once It Hides (A Hidden WinUI Window Keeps Its XAML Island And D3D Device), Then Trim.
-            // Deferred, So The Click Handler That Hid It Finishes First
-            var menu = _trayMenu;
-            menu.AppWindow.Changed += (sender, e) =>
+            // Kept Once Made, Hidden Between Uses: Closing A Menu Window (Its XAML Island) Stopped XAML Drawing Anything
+            // In The Next Window Opened. Trimmed Once It Hides
+            _trayMenu.Hidden += (_, _) =>
             {
-                if (!e.DidVisibilityChange || sender.IsVisible || _quitting)
+                if (!_quitting)
                 {
-                    return;
+                    _memoryTrim?.Schedule();
                 }
-
-                _dispatcher?.TryEnqueue(() =>
-                {
-                    if (!_quitting && ReferenceEquals(_trayMenu, menu) && !menu.AppWindow.IsVisible)
-                    {
-                        _trayMenu = null;
-                        menu.Close();
-                        _memoryTrim?.Schedule();
-                    }
-                });
             };
         }
 

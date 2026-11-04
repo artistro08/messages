@@ -22,7 +22,7 @@ I'm literally sick and tired of web apps. They are bloated. they take up memory.
 - Native Notifications
 - Undo Archived messages you've accidentally archived
 - Shortcuts, Press Ctrl + ? to see them all.
-- Native, Uses WinUI 3.
+- Native, Uses WinUI 2.8 With Smooth Window Resizing.
 - Looks beautiful. 
 
 ## Building
@@ -30,16 +30,16 @@ I'm literally sick and tired of web apps. They are bloated. they take up memory.
 ### Prerequisites
 
 - Windows 11
-- [Visual Studio 2026](https://visualstudio.microsoft.com/) with the **.NET desktop development** and **Desktop development with C++** workloads (the C++ tools build the Native AOT release)
+- [Visual Studio 2026](https://visualstudio.microsoft.com/) with the **.NET desktop development** and **Desktop development with C++** workloads (the C++ tools build the Native AOT release), plus **WinUI application development** with its **Universal Windows Platform tools** option (they compile the app's XAML)
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
 - [Node.js](https://nodejs.org/), only if you change the icon
 
 ### Run It
 
-Build the app, then run its exe:
+Build the app from a **Developer PowerShell for VS 2026** (its XAML only compiles with Visual Studio's MSBuild, not `dotnet build`), then run its exe:
 
 ```powershell
-dotnet build src/GMessages.App -c Debug -p:Platform=x64
+msbuild src/GMessages.App -restore -p:Configuration=Debug -p:Platform=x64
 .\src\GMessages.App\bin\x64\Debug\net10.0-windows10.0.26100.0\win-x64\Kaituro.exe
 ```
 
