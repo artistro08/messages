@@ -338,7 +338,7 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
 
         if (existing is null)
         {
-            var row                                           = new ConversationRowViewModel(c, now, _store.LiveUnreadCount(c.Id));
+            var row                                           = new ConversationRowViewModel(c, now, _store.LiveUnreadTexts(c.Id));
             ObservableCollection<ConversationRowViewModel> to = ListFor(row);
 
             RowsChanging?.Invoke(this, live);
@@ -346,7 +346,7 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
             return;
         }
 
-        existing.Update(c, now, _store.LiveUnreadCount(c.Id));
+        existing.Update(c, now, _store.LiveUnreadTexts(c.Id));
         Place(existing, live);
     }
 

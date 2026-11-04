@@ -59,6 +59,22 @@ public sealed class ChatFormatTests
         Assert.AreEqual("You: look", ChatFormat.Snippet(ConversationInfo.From(c) with { SnippetMedia = "Image" }));
     }
 
+    /// <summary>
+    /// An unread message in the tooltip: the sender's first name in front in a group, none in a one-to-one chat.
+    /// </summary>
+    [TestMethod]
+    [DataRow(true, "Rachel: hi")]
+    [DataRow(false, "hi")]
+    public void UnreadLine_GroupHasSenderFirstName(bool isGroup, string expected)
+    {
+        var c = new Conversation { ConversationID = "c1", IsGroupChat = isGroup };
+        c.Participants.Add(new Participant { ID = new SmallInfo { ParticipantID = "p1" }, FullName = "Rachel Green" });
+        var m = new Message { MessageID = "m1", ConversationID = "c1", ParticipantID = "p1" };
+        m.MessageInfo.Add(new MessageInfo { MessageContent = new MessageContent { Content = "hi" } });
+
+        Assert.AreEqual(expected, ChatFormat.UnreadLine(ConversationInfo.From(c), ChatMessage.From(m)));
+    }
+
     [TestMethod]
     [DataRow("2026-10-29T15:04:00-04:00", "2026-10-29T18:00:00-04:00", "3:04 PM")]   // today: time
     [DataRow("2026-10-27T15:04:00-04:00", "2026-10-29T18:00:00-04:00", "Tue")]       // within 7 days: weekday
