@@ -61,6 +61,9 @@ public sealed partial class ChatStore : IDisposable
     private readonly Lock _queueLock = new();
     private Task _queue = Task.CompletedTask;
 
+    // The Draft Writes Started So Far (Run Outside The Queue, See SaveDraft), So FlushAsync Waits For Them Too (Under _queueLock)
+    private Task _draftWrites = Task.CompletedTask;
+
     // Cache Of Slim Conversation Records, By ID
     private readonly ConcurrentDictionary<string, ConversationInfo> _cache = new();
 
@@ -237,8 +240,9 @@ public sealed partial class ChatStore : IDisposable
             _draftFiles.TryRemove(conversationId, out _);
         }
 
-        // Text Unchanged: Nothing To Write
-        if (Draft(conversationId) == text)
+        // Text Unchanged: Nothing To Write. A Cleared Draft Stays As An Empty Entry, So A Saved One That Loads Late Can't
+        // Bring It Back (See LoadSavedAsync)
+        if (_drafts.TryGetValue(conversationId, out string? old) && old == text)
         {
             if (filesChanged)
             {
@@ -248,27 +252,23 @@ public sealed partial class ChatStore : IDisposable
             return;
         }
 
-        if (text.Length > 0)
-        {
-            _drafts[conversationId] = text;
-        }
-        else
-        {
-            _drafts.TryRemove(conversationId, out _);
-        }
-
+        _drafts[conversationId] = text;
         DraftChanged?.Invoke(this, conversationId);
 
-        // Writes The Draft As It Is When The Write Runs, So Two Quick Saves Can't Land Out Of Order
-        // ponytail: the quit doesn't wait on this write; it takes one database call, done long before the connection closes
+        // Writes The Draft As It Is When The Write Runs, So Two Quick Saves Can't Land Out Of Order; FlushAsync (And So The
+        // Quit) Waits For It
         int generation = Generation;
-        _ = ReadNowAsync(database =>
+        Task write     = ReadNowAsync(database =>
         {
             if (generation == Generation)
             {
                 database.SaveDraft(conversationId, Draft(conversationId));
             }
         });
+        lock (_queueLock)
+        {
+            _draftWrites = Task.WhenAll(_draftWrites, write);
+        }
     }
 
     /// <summary>

@@ -39,9 +39,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     // Whether Received Messages' Links Get Previews (Settings); Null Means Always
     private readonly Func<bool>? _showReceivedPreviews;
 
-    // The Draft Put Back When The Open Chat Opened (See KeepDraft)
-    private string _shownDraft = string.Empty;
-
     // The Folder Lists (Spam And Blocked, Archived), Made The First Time Each Opens
     private readonly Dictionary<ConversationFolder, ConversationListViewModel> _folders = [];
 
@@ -358,13 +355,16 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
-    // Saves A Closing Chat's Draft And Files (An Empty One Forgets It, See ChatStore.SaveDraft). The Text Only When It
-    // Changed Since The Chat Opened: A Saved Draft That Loaded After The Chat Opened Was Never Shown, And Mustn't Be Wiped
-    // By The Empty Box
+    // Saves A Closing Chat's Draft And Files (An Empty One Forgets It, See ChatStore.SaveDraft), Only When They Were Changed
+    // While It Was Open: A Saved Draft That Loaded After The Chat Opened Was Never Shown, And Mustn't Be Wiped By The Empty Box
     private void KeepDraft(ChatViewModel chat)
     {
-        string text = chat.Draft != _shownDraft ? chat.Draft : _store.Draft(chat.ConversationId);
-        _store.SaveDraft(chat.ConversationId, text, [.. chat.Attachments]);
+        if (!chat.IsDraftEdited)
+        {
+            return;
+        }
+
+        _store.SaveDraft(chat.ConversationId, chat.Draft, [.. chat.Attachments]);
     }
 
     // Disposes The Open Chat And Opens One For The New Selection (Null Closes It). The Closing Chat's Draft Is Kept And The
@@ -381,9 +381,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
         if (conversationId is not null)
         {
-            Chat        = new ChatViewModel(_store, conversationId, _time, _post, _previews, _showReceivedPreviews);
-            _shownDraft = _store.Draft(conversationId);
-            Chat.RestoreDraft(_shownDraft, _store.DraftFiles(conversationId));
+            Chat = new ChatViewModel(_store, conversationId, _time, _post, _previews, _showReceivedPreviews);
+            Chat.RestoreDraft(_store.Draft(conversationId), _store.DraftFiles(conversationId));
 
             _ = Chat.LoadAsync();
         }

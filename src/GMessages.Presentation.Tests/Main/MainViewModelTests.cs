@@ -638,6 +638,36 @@ public sealed class MainViewModelTests
         vm.Select("b");
         Assert.AreEqual(annSnippet, ann.Snippet);
         Assert.IsFalse(ann.IsDraft);
+
+        // Blank Text Isn't A Draft
+        vm.Select("a");
+        vm.Chat!.Draft = "  \n ";
+        vm.Select("b");
+        Assert.IsFalse(ann.IsDraft);
+    }
+
+    /// <summary>
+    /// A chat opened and left untouched keeps its saved draft as it is, and a draft cleared and typed again is kept.
+    /// </summary>
+    [TestMethod]
+    public async Task Drafts_UntouchedKept_RetypedSaved()
+    {
+        using var rig = new MainRig();
+        rig.Store.SaveDraft("a", "saved");
+        using MainViewModel vm = await NewMainAsync(rig);
+
+        // Untouched
+        vm.Select("a");
+        vm.Select("b");
+        Assert.AreEqual("saved", rig.Store.Draft("a"));
+
+        // Cleared, Then The Same Text Typed Again
+        vm.Select("a");
+        vm.Chat!.Draft = string.Empty;
+        vm.Chat.Draft  = "saved";
+        rig.Store.SaveDraft("a", string.Empty);
+        vm.Select("b");
+        Assert.AreEqual("saved", rig.Store.Draft("a"));
     }
 
     private static UserAlert Alert(AlertType type) => new(new UserAlertEvent { AlertType = type });

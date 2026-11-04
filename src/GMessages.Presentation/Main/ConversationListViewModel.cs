@@ -356,10 +356,12 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
     // A Draft Kept Or Cleared: The Row Shows It (Or Its Newest Message Again), In Place
     private void OnDraftChanged(object? sender, string conversationId)
     {
-        if (_store.Find(conversationId) is { } c && Find(conversationId) is not null)
+        if (_store.Find(conversationId) is not { } c || Find(conversationId) is null)
         {
-            Apply(c, live: false);
+            return;
         }
+
+        Apply(c, live: false);
     }
 
     // Moves A Row To Its Place: Within Its Collection, Or Across When It Was Pinned Or Unpinned (Or PinnedApart Changed)

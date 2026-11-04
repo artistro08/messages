@@ -54,14 +54,15 @@ public sealed partial class ChatStore
     }
 
     /// <summary>
-    /// Waits for every save queued so far to be written (the app's quit, bounded by its own timeout; also tests).
+    /// Waits for every save queued so far to be written, and every draft write started (the app's quit, bounded by its
+    /// own timeout; also tests).
     /// </summary>
     /// <returns>A task that completes when the queue is empty up to now.</returns>
     public Task FlushAsync()
     {
         lock (_queueLock)
         {
-            return _queue;
+            return Task.WhenAll(_queue, _draftWrites);
         }
     }
 

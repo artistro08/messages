@@ -117,8 +117,10 @@ public static class ChatFormat
         ArgumentNullException.ThrowIfNull(text);
         ArgumentNullException.ThrowIfNull(files);
 
-        return text.Length > 0
-            ? text
+        // Blank Text Counts As None; Line Breaks Become Spaces, So The One-Line Row Shows The Words
+        string line = string.Join(' ', text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        return line.Length > 0
+            ? line
             : string.Join(", ", files.Select(f => f.Kind == MessageKind.File ? f.Name : KindLabel(f.Kind)));
     }
 
