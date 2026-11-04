@@ -958,6 +958,29 @@ public sealed class ChatTests : UiTest
         Wait.Until(() => Bubbles().Count == 3, TimeSpan.FromSeconds(2), () => $"Ann's saved chat showed {Bubbles().Count} bubbles within 2 s, not 3.");
     }
 
+    /// <summary>
+    /// What's typed in the message box comes back after the window closes, and again after the app restarts.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task Draft_OutlivesWindowAndRestart()
+    {
+        await OpenAnnAsync();
+        Keyboard.Type("see you at 5");
+        WaitForDraft("see you at 5");
+
+        // Window Closed And Opened Again
+        CloseMainWindow();
+        Tray.LeftClick();
+        App.Find("Row.c-ann").Patterns.SelectionItem.Pattern.Select();
+        WaitForDraft("see you at 5");
+
+        // App Restarted (A User Launch Opens The Window)
+        await App.RestartAsync();
+        App.Find("Row.c-ann").Patterns.SelectionItem.Pattern.Select();
+        WaitForDraft("see you at 5");
+    }
+
     // =========================================================================
     // HELPERS
     // =========================================================================
@@ -1250,6 +1273,14 @@ public sealed class ChatTests : UiTest
         // Row Later
         App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout).SetForeground();
         Wait.Until(() => App.Find("Chat.Draft").Properties.HasKeyboardFocus.ValueOrDefault, AppDriver.DefaultTimeout, () => "Opening Ann's chat didn't focus the message box.");
+    }
+
+    // Waits For The Message Box To Hold The Text
+    private void WaitForDraft(string text)
+    {
+        string? last = null;
+        Wait.Until(() => (last = App.Find("Chat.Draft").Patterns.Value.Pattern.Value.ValueOrDefault) == text, AppDriver.DefaultTimeout,
+            () => $"The message box shows '{last}', not '{text}'.");
     }
 
     // Types Each Line In The Message Box, Shift + Enter Between Them, Then Enter To Send
