@@ -768,7 +768,8 @@ public sealed partial class ChatStore : IDisposable
     /// </summary>
     /// <remarks>
     /// The cached copy changes as soon as the phone answers, raising <see cref="ConversationChanged"/>, so the list
-    /// stops showing it unread without waiting for the phone to send the conversation back.
+    /// stops showing it unread without waiting for the phone to send the conversation back. The saved row is marked
+    /// read too, so the chat doesn't show unread for a moment on the next launch.
     /// </remarks>
     /// <param name="conversationId">The conversation ID.</param>
     /// <param name="messageId">The newest message that was read.</param>
@@ -791,6 +792,20 @@ public sealed partial class ChatStore : IDisposable
 
         ConversationInfo read = cached with { Unread = false };
         Upsert(read);
+
+        // Saved Read Only While The Saved Row's Newest Message Is The Read One, Or My Own (A Reply From A Toast), Checked When
+        // The Write Runs: One That Came In Meanwhile Stays Unread On Disk
+        SaveChange(conversationId, generation, c =>
+        {
+            if (!c.Unread || (c.LatestMessageID != messageId && c.LatestMessage?.FromMe != 1))
+            {
+                return false;
+            }
+
+            c.Unread = false;
+            return true;
+        });
+
         ConversationChanged?.Invoke(this, read);
     }
 
@@ -799,8 +814,9 @@ public sealed partial class ChatStore : IDisposable
     /// </summary>
     /// <remarks>
     /// Sends the request <see cref="BuildRequest"/> builds. Only once the phone says it succeeded does the cached
-    /// conversation take its new status (<see cref="StatusAfter"/>) or mute state, in memory only, raising
-    /// <see cref="ConversationChanged"/> so the lists move it at once; the phone's echo is what gets saved. A
+    /// conversation take its new status (<see cref="StatusAfter"/>) or mute state, raising
+    /// <see cref="ConversationChanged"/> so the lists move it at once. The saved row changes too, so the next launch
+    /// doesn't show it in its old place for a moment. A
     /// <see cref="Reset"/> while the phone is answering applies nothing. A refusal is logged here;
     /// callers log every other failure, as they do for the other writers.
     /// </remarks>
@@ -832,10 +848,36 @@ public sealed partial class ChatStore : IDisposable
         }
 
         // Mute And Unmute Leave The Status Alone
-        ConversationInfo updated = StatusAfter(action) is { } status
+        ConversationStatus? newStatus = StatusAfter(action);
+        ConversationInfo updated      = newStatus is { } status
             ? cached with { Status = status }
             : cached with { IsMuted = action == ConversationAction.Mute };
-        if (Upsert(updated))
+        bool changed                  = Upsert(updated);
+
+        // The Saved Row Changes Too, Even When The Cached Copy Already Had It, So The Next Launch Doesn't Show It In Its Old
+        // Place Until The Phone's Page Comes. A Deleted Chat Leaves The Database, Messages And All
+        if (action == ConversationAction.Delete)
+        {
+            SaveDelete(conversationId, generation);
+        }
+        else
+        {
+            SaveChange(conversationId, generation, c =>
+            {
+                if (newStatus is { } saved)
+                {
+                    c.Status = saved;
+                }
+                else
+                {
+                    c.Muted = updated.IsMuted ? ConversationMuteStatus.Mute : ConversationMuteStatus.Unmute;
+                }
+
+                return true;
+            });
+        }
+
+        if (changed)
         {
             ConversationChanged?.Invoke(this, updated);
         }
