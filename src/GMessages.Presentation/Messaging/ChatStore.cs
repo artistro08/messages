@@ -793,16 +793,18 @@ public sealed partial class ChatStore : IDisposable
         ConversationInfo read = cached with { Unread = false };
         Upsert(read);
 
-        // Saved Read Only While The Read Message Is Still The Newest: One That Came In During The Wait Stays Unread On Disk
-        if (cached.LatestMessageId == messageId)
+        // Saved Read Only While The Saved Row's Newest Message Is The Read One, Or My Own (A Reply From A Toast), Checked When
+        // The Write Runs: One That Came In Meanwhile Stays Unread On Disk
+        SaveChange(conversationId, generation, c =>
         {
-            SaveChange(conversationId, generation, c =>
+            if (!c.Unread || (c.LatestMessageID != messageId && c.LatestMessage?.FromMe != 1))
             {
-                bool wasUnread = c.Unread;
-                c.Unread       = false;
-                return wasUnread;
-            });
-        }
+                return false;
+            }
+
+            c.Unread = false;
+            return true;
+        });
 
         ConversationChanged?.Invoke(this, read);
     }
@@ -850,27 +852,35 @@ public sealed partial class ChatStore : IDisposable
         ConversationInfo updated      = newStatus is { } status
             ? cached with { Status = status }
             : cached with { IsMuted = action == ConversationAction.Mute };
-        if (!Upsert(updated))
+        bool changed                  = Upsert(updated);
+
+        // The Saved Row Changes Too, Even When The Cached Copy Already Had It, So The Next Launch Doesn't Show It In Its Old
+        // Place Until The Phone's Page Comes. A Deleted Chat Leaves The Database, Messages And All
+        if (action == ConversationAction.Delete)
         {
-            return;
+            SaveDelete(conversationId, generation);
+        }
+        else
+        {
+            SaveChange(conversationId, generation, c =>
+            {
+                if (newStatus is { } saved)
+                {
+                    c.Status = saved;
+                }
+                else
+                {
+                    c.Muted = updated.IsMuted ? ConversationMuteStatus.Mute : ConversationMuteStatus.Unmute;
+                }
+
+                return true;
+            });
         }
 
-        // The Saved Row Changes Too, So The Next Launch Doesn't Show It In Its Old Place Until The Phone's Page Comes
-        ConversationMuteStatus mute = action == ConversationAction.Mute ? ConversationMuteStatus.Mute : ConversationMuteStatus.Unmute;
-        SaveChange(conversationId, generation, c =>
+        if (changed)
         {
-            if (newStatus is { } saved)
-            {
-                c.Status = saved;
-            }
-            else
-            {
-                c.Muted = mute;
-            }
-
-            return true;
-        });
-        ConversationChanged?.Invoke(this, updated);
+            ConversationChanged?.Invoke(this, updated);
+        }
     }
 
     /// <summary>

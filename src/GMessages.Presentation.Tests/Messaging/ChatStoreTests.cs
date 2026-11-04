@@ -1170,6 +1170,51 @@ public sealed class ChatStoreTests
         Assert.AreEqual(ConversationStatus.Active, reopened.Find("c2")?.Status);
     }
 
+    /// <summary>
+    /// A chat deleted here leaves the database with its messages; unmuting is saved too.
+    /// </summary>
+    [TestMethod]
+    public async Task Update_DeleteAndUnmute_Saved()
+    {
+        using var rig = new Rig(withDatabase: true);
+        Conversation muted = Conv("c2", "Bo");
+        muted.Muted        = ConversationMuteStatus.Mute;
+        await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1")));
+        await rig.Store.HandleEventAsync(new ConversationUpdated(muted));
+        rig.Database!.SaveMessages("c1", [Msg("m1", "c1")]);
+
+        await rig.Store.UpdateConversationAsync("c1", ConversationAction.Delete, Ct);
+        await rig.Store.UpdateConversationAsync("c2", ConversationAction.Unmute, Ct);
+        await rig.Store.FlushAsync();
+
+        using var reopened = new ChatStore(rig.Controller, () => rig.Client, NullLogger.Instance, rig.Database, rig.Time, rig.Media);
+        await reopened.LoadSavedAsync();
+        Assert.IsNull(reopened.Find("c1"));
+        Assert.AreEqual(0, rig.Database.LoadMessages("c1", 10).Count);
+        Assert.IsFalse(reopened.Find("c2")?.IsMuted);
+    }
+
+    /// <summary>
+    /// Replying from a toast makes my reply the newest message; marking the chat read then still saves it read.
+    /// </summary>
+    [TestMethod]
+    public async Task MarkRead_NewestIsMyReply_SavesRead()
+    {
+        using var rig = new Rig(withDatabase: true);
+        Conversation unread    = Conv("c1", "Ann");
+        unread.Unread          = true;
+        unread.LatestMessageID = "m2";
+        unread.LatestMessage   = new LatestMessage { DisplayContent = "on my way", FromMe = 1 };
+        await rig.Store.HandleEventAsync(new ConversationUpdated(unread));
+
+        await rig.Store.MarkReadAsync("c1", "m1", Ct);
+        await rig.Store.FlushAsync();
+
+        using var reopened = new ChatStore(rig.Controller, () => rig.Client, NullLogger.Instance, rig.Database, rig.Time, rig.Media);
+        await reopened.LoadSavedAsync();
+        Assert.IsFalse(reopened.Find("c1")?.Unread);
+    }
+
     [TestMethod]
     public async Task Update_PhoneRefuses_NoLocalChange()
     {

@@ -168,6 +168,28 @@ public sealed partial class MessageDatabase
         }, false);
     }
 
+    /// <summary>
+    /// Removes a conversation deleted here, with its saved messages and encryption state.
+    /// </summary>
+    /// <param name="conversationId">The conversation ID.</param>
+    public void DeleteConversation(string conversationId)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(conversationId);
+
+        Run(connection =>
+        {
+            using SqliteCommand command = connection.CreateCommand();
+            command.CommandText = """
+                DELETE FROM conversations WHERE id = $id;
+                DELETE FROM messages WHERE conversation_id = $id;
+                DELETE FROM encryption WHERE conversation_id = $id;
+                """;
+            command.Parameters.AddWithValue("$id", conversationId);
+            command.ExecuteNonQuery();
+            return true;
+        }, false);
+    }
+
     // =========================================================================
     // MESSAGES
     // =========================================================================
