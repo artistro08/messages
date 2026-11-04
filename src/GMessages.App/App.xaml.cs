@@ -257,7 +257,7 @@ public sealed partial class App : Application, IDisposable
         _trayIcon.Invoked              += (_, _) => ShowMainWindowRequested?.Invoke(this, "tray");
         _trayIcon.ContextMenuRequested += (_, point) => ShowTrayMenu(point.X, point.Y);
         _trayIcon.ThemeChanged         += (_, _) => OnSystemThemeChanged();
-        if (_settings?.ShowTrayIcon ?? true)
+        if (_settings.ShowTrayIcon)
         {
             bool trayAdded = _trayIcon.Show();
             AppLog.TrayAdded(_logger, trayAdded);
@@ -465,6 +465,13 @@ public sealed partial class App : Application, IDisposable
                 _linkPreviewer?.Dispose();
                 _linkPreviewer = null;
 
+                // No Tray Icon And No Phone: Nothing Runs In The Background, And Nothing Else Could Quit, So Closing Quits
+                if (_settings?.ShowTrayIcon == false && NeedsPairing())
+                {
+                    Quit();
+                    return;
+                }
+
                 _ = DropThenTrimAsync();
             };
         }
@@ -551,6 +558,7 @@ public sealed partial class App : Application, IDisposable
     // Theme: every open window and the tray menu follow the setting live. The tray icon comes and goes with its setting
     private void OnSettingChanged(object? sender, PropertyChangedEventArgs e)
     {
+        // Tray Icon
         if (e.PropertyName == nameof(AppSettings.ShowTrayIcon) && _settings is not null && _trayIcon is not null)
         {
             if (_settings.ShowTrayIcon)
@@ -566,6 +574,7 @@ public sealed partial class App : Application, IDisposable
             return;
         }
 
+        // Theme
         if (e.PropertyName != nameof(AppSettings.Theme) || _settings is null)
         {
             return;
