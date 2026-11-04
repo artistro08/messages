@@ -18,6 +18,8 @@ namespace GMessages.App.Views.Controls;
 /// <c>x:Bind</c> here re-reads it. The ⋮ (<c>Row.More.{id}</c>) is collapsed until the pointer is over the row; then it
 /// takes 32 px at the right edge and fades in while this row's time and icons slide left (the <c>Hover</c> visual states
 /// on the root element, snapped when Windows animations are off). It raises <see cref="MoreRequested"/> when clicked.
+/// Hovering the row shows <see cref="ConversationRowViewModel.HoverText"/> as a tooltip, only when the name or snippet
+/// is cut off or more than one unread message came in, like Windows' own trimmed text.
 /// </remarks>
 public sealed partial class ConversationRow : UserControl
 {
@@ -132,9 +134,23 @@ public sealed partial class ConversationRow : UserControl
         }
 
         view.ShowReadState();
+        view.ShowToolTip();
     }
 
-    private void OnRowUpdated(object? sender, PropertyChangedEventArgs e) => ShowReadState();
+    // Every Update Can Change The Read State And The Tooltip's Text
+    private void OnRowUpdated(object? sender, PropertyChangedEventArgs e)
+    {
+        ShowReadState();
+        ShowToolTip();
+    }
+
+    // The Name Or Snippet Got Cut Off, Or Fits Again (A Resize Or New Text)
+    private void OnTextTrimmedChanged(TextBlock sender, IsTextTrimmedChangedEventArgs e) => ShowToolTip();
+
+    // The Tooltip: The Whole Name And Snippet When Either Is Cut Off, Or The Unread Messages When More Than One Came In;
+    // Else None
+    private void ShowToolTip() =>
+        ToolTipService.SetToolTip(Root, Row is { } row && (row.HasUnreadList || NameText.IsTextTrimmed || SnippetText.IsTextTrimmed) ? row.HoverText : null);
 
     // Unread: The Snippet And Time In Primary Text (See ReadState)
     private void ShowReadState() => VisualStateManager.GoToState(this, Row?.IsUnread == true ? "Unread" : "Read", false);

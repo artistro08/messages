@@ -523,6 +523,21 @@ public sealed class ChatStoreTests
     }
 
     /// <summary>
+    /// Saved drafts come back after a restart.
+    /// </summary>
+    [TestMethod]
+    public async Task LoadSaved_PutsBackDrafts()
+    {
+        using var rig = new Rig(withDatabase: true);
+        rig.Database!.SaveDraft("c1", "see you");
+
+        await rig.Store.LoadSavedAsync();
+
+        Assert.AreEqual("see you", rig.Store.Draft("c1"));
+        Assert.AreEqual(string.Empty, rig.Store.Draft("c2"));
+    }
+
+    /// <summary>
     /// An unpair or sign-out while the saved conversations wait their turn on the queue: the old account's rows never
     /// reach memory.
     /// </summary>
@@ -1148,6 +1163,76 @@ public sealed class ChatStoreTests
         Assert.AreEqual(ConversationStatus.Archived, raised.Single().Status);
     }
 
+    /// <summary>
+    /// A chat archived or muted here stays that way after a restart: the saved row changes too, so it doesn't show in
+    /// its old place until the phone's page arrives.
+    /// </summary>
+    [TestMethod]
+    public async Task Update_ArchiveAndMute_SavedSoReopenedStoreLoadsThem()
+    {
+        using var rig = new Rig(withDatabase: true);
+        await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1")));
+        await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c2", "Bo")));
+
+        await rig.Store.UpdateConversationAsync("c1", ConversationAction.Archive, Ct);
+        await rig.Store.UpdateConversationAsync("c2", ConversationAction.Mute, Ct);
+        await rig.Store.FlushAsync();
+
+        using var reopened = new ChatStore(rig.Controller, () => rig.Client, NullLogger.Instance, rig.Database, rig.Time, rig.Media);
+        await reopened.LoadSavedAsync();
+        Assert.AreEqual(ConversationStatus.Archived, reopened.Find("c1")?.Status);
+        Assert.IsTrue(reopened.Find("c2")?.IsMuted);
+        Assert.AreEqual(ConversationStatus.Active, reopened.Find("c2")?.Status);
+    }
+
+    /// <summary>
+    /// A chat deleted here leaves the database with its messages; unmuting is saved too.
+    /// </summary>
+    [TestMethod]
+    public async Task Update_DeleteAndUnmute_Saved()
+    {
+        using var rig = new Rig(withDatabase: true);
+        Conversation muted = Conv("c2", "Bo");
+        muted.Muted        = ConversationMuteStatus.Mute;
+        await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1")));
+        await rig.Store.HandleEventAsync(new ConversationUpdated(muted));
+        rig.Database!.SaveMessages("c1", [Msg("m1", "c1")]);
+        rig.Store.SaveDraft("c1", "unsent");
+
+        await rig.Store.UpdateConversationAsync("c1", ConversationAction.Delete, Ct);
+        await rig.Store.UpdateConversationAsync("c2", ConversationAction.Unmute, Ct);
+        await rig.Store.FlushAsync();
+
+        using var reopened = new ChatStore(rig.Controller, () => rig.Client, NullLogger.Instance, rig.Database, rig.Time, rig.Media);
+        await reopened.LoadSavedAsync();
+        Assert.IsNull(reopened.Find("c1"));
+        Assert.AreEqual(0, rig.Database.LoadMessages("c1", 10).Count);
+        Assert.AreEqual(string.Empty, rig.Store.Draft("c1"));
+        Assert.IsFalse(rig.Database.LoadDrafts().ContainsKey("c1"));
+        Assert.IsFalse(reopened.Find("c2")?.IsMuted);
+    }
+
+    /// <summary>
+    /// Replying from a toast makes my reply the newest message; marking the chat read then still saves it read.
+    /// </summary>
+    [TestMethod]
+    public async Task MarkRead_NewestIsMyReply_SavesRead()
+    {
+        using var rig = new Rig(withDatabase: true);
+        Conversation unread    = Conv("c1", "Ann");
+        unread.Unread          = true;
+        unread.LatestMessageID = "m2";
+        unread.LatestMessage   = new LatestMessage { DisplayContent = "on my way", FromMe = 1 };
+        await rig.Store.HandleEventAsync(new ConversationUpdated(unread));
+
+        await rig.Store.MarkReadAsync("c1", "m1", Ct);
+        await rig.Store.FlushAsync();
+
+        using var reopened = new ChatStore(rig.Controller, () => rig.Client, NullLogger.Instance, rig.Database, rig.Time, rig.Media);
+        await reopened.LoadSavedAsync();
+        Assert.IsFalse(reopened.Find("c1")?.Unread);
+    }
+
     [TestMethod]
     public async Task Update_PhoneRefuses_NoLocalChange()
     {
@@ -1373,6 +1458,49 @@ public sealed class ChatStoreTests
         // Already Read: Nothing Changes, Nothing Raised
         await rig.Store.MarkReadAsync("c1", "m1", Ct);
         Assert.AreEqual(1, raised.Count);
+    }
+
+    /// <summary>
+    /// A chat read here stays read after a restart: the saved row is marked read, so the list doesn't show it unread
+    /// until the phone's page arrives.
+    /// </summary>
+    [TestMethod]
+    public async Task MarkRead_SavesRead_SoReopenedStoreLoadsItRead()
+    {
+        using var rig = new Rig(withDatabase: true);
+        Conversation unread    = Conv("c1", "Ann");
+        unread.Unread          = true;
+        unread.LatestMessageID = "m1";
+        await rig.Store.HandleEventAsync(new ConversationUpdated(unread));
+
+        await rig.Store.MarkReadAsync("c1", "m1", Ct);
+        await rig.Store.FlushAsync();
+
+        // A Fresh Store On The Same File Loads It Read
+        using var reopened = new ChatStore(rig.Controller, () => rig.Client, NullLogger.Instance, rig.Database, rig.Time, rig.Media);
+        await reopened.LoadSavedAsync();
+        Assert.IsFalse(reopened.Find("c1")?.Unread);
+    }
+
+    /// <summary>
+    /// A message newer than the one read (it came in while the phone was being told) keeps the saved row unread, so a
+    /// restart never hides a message that wasn't seen.
+    /// </summary>
+    [TestMethod]
+    public async Task MarkRead_NewerMessageCameIn_KeepsSavedUnread()
+    {
+        using var rig = new Rig(withDatabase: true);
+        Conversation unread    = Conv("c1", "Ann");
+        unread.Unread          = true;
+        unread.LatestMessageID = "m2";
+        await rig.Store.HandleEventAsync(new ConversationUpdated(unread));
+
+        await rig.Store.MarkReadAsync("c1", "m1", Ct);
+        await rig.Store.FlushAsync();
+
+        using var reopened = new ChatStore(rig.Controller, () => rig.Client, NullLogger.Instance, rig.Database, rig.Time, rig.Media);
+        await reopened.LoadSavedAsync();
+        Assert.IsTrue(reopened.Find("c1")?.Unread);
     }
 
     [TestMethod]

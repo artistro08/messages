@@ -59,12 +59,31 @@ public static partial class PointerInput
         return GetCursorInfo(ref info) && info.Cursor == LoadCursorW(IntPtr.Zero, IdcHand);
     }
 
+    /// <summary>
+    /// Tells how long ago Windows last saw keyboard or mouse input in this session.
+    /// </summary>
+    /// <remarks>
+    /// UI Automation calls and <c>SetCursorPos</c> aren't input, so while a test drives the app only by those, this says
+    /// how long the person at the machine has been away.
+    /// </remarks>
+    /// <returns>The time since the last input.</returns>
+    public static TimeSpan SinceLastInput()
+    {
+        var info = new LastInputInfo { Size = (uint)Marshal.SizeOf<LastInputInfo>() };
+        Assert.IsTrue(GetLastInputInfo(ref info), "Windows didn't say when the last input was.");
+        return TimeSpan.FromMilliseconds((uint)Environment.TickCount - info.Time);
+    }
+
     // =========================================================================
     // NATIVE MOUSE INPUT
     // =========================================================================
 
     // The System Hand Cursor's Resource ID
     private const int IdcHand = 32649;
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool GetLastInputInfo(ref LastInputInfo info);
 
     [LibraryImport("user32.dll")]
     private static partial uint SendInput(uint count, [In] Input[] inputs, int size);
@@ -85,6 +104,14 @@ public static partial class PointerInput
         public IntPtr Cursor;
         public int X;
         public int Y;
+    }
+
+    // LASTINPUTINFO (Time Is The Tick Count Of The Last Input)
+    [StructLayout(LayoutKind.Sequential)]
+    private struct LastInputInfo
+    {
+        public uint Size;
+        public uint Time;
     }
 
     // INPUT With Its MOUSEINPUT (The Union's Other Members Are Smaller)

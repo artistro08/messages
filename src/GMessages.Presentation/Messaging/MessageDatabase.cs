@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text;
 using Google.Protobuf;
 using GMessages.Protocol.Proto;
 using Microsoft.Data.Sqlite;
@@ -28,12 +29,15 @@ public sealed partial class MessageDatabase
     /// <summary>
     /// The schema this class writes, kept in <c>PRAGMA user_version</c>. A file with another version starts over.
     /// </summary>
-    public const int SchemaVersion = 1;
+    public const int SchemaVersion = 2;
 
     /// <summary>
     /// How many of a conversation's newest messages are kept.
     /// </summary>
     public const int KeepPerConversation = 100;
+
+    // Version 2 Added Drafts; A Version 1 File Gets The Table In Place (See Open)
+    private const string DraftsTable = "CREATE TABLE drafts (conversation_id TEXT PRIMARY KEY, body BLOB NOT NULL);";
 
     private const string Schema = """
         CREATE TABLE conversations (id TEXT PRIMARY KEY, last_time INTEGER NOT NULL, body BLOB NOT NULL);
@@ -41,8 +45,7 @@ public sealed partial class MessageDatabase
                                PRIMARY KEY (conversation_id, id));
         CREATE INDEX messages_by_time ON messages (conversation_id, time);
         CREATE TABLE encryption (conversation_id TEXT PRIMARY KEY, encrypted INTEGER NOT NULL, at INTEGER NOT NULL);
-        PRAGMA user_version = 1;
-        """;
+        """ + DraftsTable + "PRAGMA user_version = 2;";
 
     private readonly string _path;
     private readonly string _connectionString;
@@ -115,6 +118,77 @@ public sealed partial class MessageDatabase
             command.Parameters.AddWithValue("$id", conversation.ConversationID);
             command.Parameters.AddWithValue("$time", conversation.LastMessageTimestamp);
             command.Parameters.AddWithValue("$body", Protect(conversation));
+            command.ExecuteNonQuery();
+            return true;
+        }, false);
+    }
+
+    /// <summary>
+    /// Changes a saved conversation in place: read, archived, muted, moved to spam or deleted here.
+    /// </summary>
+    /// <remarks>
+    /// A change made here only touches the slim cached copy, so without this the saved row keeps its old state and the
+    /// next launch shows it there (bold, or in the wrong list) until the phone's page replaces it. Rewrites only the
+    /// body, keeping the saved order; does nothing when the conversation isn't saved or the change leaves it as it was.
+    /// </remarks>
+    /// <param name="conversationId">The conversation ID.</param>
+    /// <param name="change">Changes the saved conversation; returns false when it was already that way.</param>
+    public void UpdateConversation(string conversationId, Func<Conversation, bool> change)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(conversationId);
+        ArgumentNullException.ThrowIfNull(change);
+
+        Run(connection =>
+        {
+            // Load The Saved Row
+            Conversation conversation;
+            using (SqliteCommand select = connection.CreateCommand())
+            {
+                select.CommandText = "SELECT body FROM conversations WHERE id = $id";
+                select.Parameters.AddWithValue("$id", conversationId);
+
+                using SqliteDataReader reader = select.ExecuteReader();
+                if (!reader.Read())
+                {
+                    return false;
+                }
+
+                conversation = Conversation.Parser.ParseFrom(Unprotect(reader));
+            }
+
+            if (!change(conversation))
+            {
+                return false;
+            }
+
+            // Save The Change
+            using SqliteCommand update = connection.CreateCommand();
+            update.CommandText = "UPDATE conversations SET body = $body WHERE id = $id";
+            update.Parameters.AddWithValue("$id", conversationId);
+            update.Parameters.AddWithValue("$body", Protect(conversation));
+            update.ExecuteNonQuery();
+            return true;
+        }, false);
+    }
+
+    /// <summary>
+    /// Removes a conversation deleted here, with its saved messages, encryption state and draft.
+    /// </summary>
+    /// <param name="conversationId">The conversation ID.</param>
+    public void DeleteConversation(string conversationId)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(conversationId);
+
+        Run(connection =>
+        {
+            using SqliteCommand command = connection.CreateCommand();
+            command.CommandText = """
+                DELETE FROM conversations WHERE id = $id;
+                DELETE FROM messages WHERE conversation_id = $id;
+                DELETE FROM encryption WHERE conversation_id = $id;
+                DELETE FROM drafts WHERE conversation_id = $id;
+                """;
+            command.Parameters.AddWithValue("$id", conversationId);
             command.ExecuteNonQuery();
             return true;
         }, false);
@@ -276,6 +350,56 @@ public sealed partial class MessageDatabase
     }
 
     // =========================================================================
+    // DRAFTS
+    // =========================================================================
+
+    /// <summary>
+    /// Loads every conversation's unsent draft.
+    /// </summary>
+    /// <returns>Conversation ID to draft text; empty when none or unreadable.</returns>
+    public IReadOnlyDictionary<string, string> LoadDrafts() => Run<IReadOnlyDictionary<string, string>>(connection =>
+    {
+        using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = "SELECT body, conversation_id FROM drafts";
+
+        Dictionary<string, string> drafts = [];
+        using SqliteDataReader reader     = command.ExecuteReader();
+        while (reader.Read())
+        {
+            drafts[reader.GetString(1)] = Encoding.UTF8.GetString(Unprotect(reader));
+        }
+
+        return drafts;
+    }, new Dictionary<string, string>());
+
+    /// <summary>
+    /// Saves a conversation's unsent draft, encrypted like every other body; an empty draft deletes it.
+    /// </summary>
+    /// <param name="conversationId">The conversation ID.</param>
+    /// <param name="text">The draft text, or empty for none.</param>
+    public void SaveDraft(string conversationId, string text)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(conversationId);
+        ArgumentNullException.ThrowIfNull(text);
+
+        Run(connection =>
+        {
+            using SqliteCommand command = connection.CreateCommand();
+            command.CommandText = text.Length == 0
+                ? "DELETE FROM drafts WHERE conversation_id = $c"
+                : "INSERT OR REPLACE INTO drafts (conversation_id, body) VALUES ($c, $body)";
+            command.Parameters.AddWithValue("$c", conversationId);
+            if (text.Length > 0)
+            {
+                command.Parameters.AddWithValue("$body", Protect(Encoding.UTF8.GetBytes(text)));
+            }
+
+            command.ExecuteNonQuery();
+            return true;
+        }, false);
+    }
+
+    // =========================================================================
     // FILE
     // =========================================================================
 
@@ -307,7 +431,8 @@ public sealed partial class MessageDatabase
         }
     }
 
-    // Opens The File, Creating The Schema On A New One And Starting Over On Another Version. Caller Holds The Lock
+    // Opens The File, Creating The Schema On A New One, Adding The Drafts Table To A Version 1 File, And Starting Over On
+    // Any Other Version. Caller Holds The Lock
     private SqliteConnection Open()
     {
         var connection = new SqliteConnection(_connectionString);
@@ -316,6 +441,14 @@ public sealed partial class MessageDatabase
             connection.Open();
 
             long version = UserVersion(connection);
+            if (version == 1)
+            {
+                using SqliteCommand upgrade = connection.CreateCommand();
+                upgrade.CommandText = DraftsTable + "PRAGMA user_version = 2;";
+                upgrade.ExecuteNonQuery();
+                version = SchemaVersion;
+            }
+
             if (version != 0 && version != SchemaVersion)
             {
                 LogReset("SchemaVersion" + version);
@@ -380,8 +513,10 @@ public sealed partial class MessageDatabase
     private static bool IsDamage(SqliteException ex) =>
         (ex.SqliteErrorCode & 0xFF) is 1 or 11 or 19 or 20 or 26;
 
-    private static byte[] Protect(IMessage value) =>
-        ProtectedData.Protect(value.ToByteArray(), null, DataProtectionScope.CurrentUser);
+    private static byte[] Protect(IMessage value) => Protect(value.ToByteArray());
+
+    private static byte[] Protect(byte[] value) =>
+        ProtectedData.Protect(value, null, DataProtectionScope.CurrentUser);
 
     // A Body That Isn't A Blob (NULL, Text, Number) Is A Bad Row
     private static byte[] Unprotect(SqliteDataReader reader) =>

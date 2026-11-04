@@ -202,6 +202,7 @@ public sealed partial class App : Application, IDisposable
         store.MessageArrived                     += (_, e) =>
         {
             _ = _notifications.ShowAsync(e);
+            CopyCode(e);
             ScheduleBackgroundTrim();
         };
         _notifications.Register();
@@ -235,8 +236,8 @@ public sealed partial class App : Application, IDisposable
         }
 
         // Started By The User: The Main Window Shows (Held Until Start-Up Ends). Windows' Startup Task At Sign-In Keeps
-        // The App In The Tray
-        if (LaunchWindow.ShowsAtLaunch(activation.Kind == ExtendedActivationKind.StartupTask, launched is not null))
+        // The App In The Background, Unless It Doesn't Run In The Background (Settings)
+        if (LaunchWindow.ShowsAtLaunch(activation.Kind == ExtendedActivationKind.StartupTask, launched is not null, _settings.RunInBackground))
         {
             OnShowMainWindowRequested("launch");
         }
@@ -257,8 +258,7 @@ public sealed partial class App : Application, IDisposable
         _trayIcon.Invoked              += (_, _) => ShowMainWindowRequested?.Invoke(this, "tray");
         _trayIcon.ContextMenuRequested += (_, point) => ShowTrayMenu(point.X, point.Y);
         _trayIcon.ThemeChanged         += (_, _) => OnSystemThemeChanged();
-        var trayAdded = _trayIcon.Show();
-        AppLog.TrayAdded(_logger, trayAdded);
+        ApplyTrayIcon();
 
         // Quit and Show Requests
         if (Program.QuitRequest is not null)
@@ -384,10 +384,30 @@ public sealed partial class App : Application, IDisposable
         if (timedOut && NotificationArgs.Parse(args.Argument) is { } reply)
         {
             _notifications.ShowReplyFailed(reply.ConversationId);
+            QuitUnlessInBackground();
             return;
         }
 
-        _ = _notifications.HandleAsync(args);
+        _ = ReplyFromLaunchAsync(_notifications, args);
+    }
+
+    // Sends The Toast Reply That Started The App, Then Quits When The App Doesn't Run In The Background (Settings): It
+    // Started For The Reply Alone, With No Window
+    private async Task ReplyFromLaunchAsync(NotificationService notifications, AppNotificationActivatedEventArgs args)
+    {
+        await notifications.HandleAsync(args);
+        QuitUnlessInBackground();
+    }
+
+    // Quits With No Window Open When The App Doesn't Run In The Background (Settings)
+    private void QuitUnlessInBackground()
+    {
+        if (_settings?.RunInBackground != false || _mainWindow is not null)
+        {
+            return;
+        }
+
+        Quit();
     }
 
     // A Toast Body Click: The Main Window Shows At Once, On That Conversation As Soon As It Can Be Shown
@@ -451,6 +471,7 @@ public sealed partial class App : Application, IDisposable
             _linkPreviewer = new LinkPreviewer(TestHooks.AllowLoopbackPreviews, _logger);
             _mainWindow.ApplyTheme(_settings.Theme);
             _mainWindow.SettingsRequested += (_, _) => ShowSettings();
+            _mainWindow.QuitRequested     += (_, _) => Quit();
             _mainWindow.Closed            += (_, _) =>
             {
                 // A Toast's Conversation Not Yet Shown Goes With The Window, So A Later Open Doesn't Jump To It. The Open
@@ -460,6 +481,13 @@ public sealed partial class App : Application, IDisposable
                 _pendingConversationId = null;
                 _linkPreviewer?.Dispose();
                 _linkPreviewer = null;
+
+                // Closing Quits When The App Doesn't Run In The Background, Or With No Tray Icon And No Phone
+                if (_settings is { } saved && LaunchWindow.QuitsOnClose(saved.RunInBackground, saved.ShowTrayIcon, NeedsPairing()))
+                {
+                    Quit();
+                    return;
+                }
 
                 _ = DropThenTrimAsync();
             };
@@ -544,9 +572,50 @@ public sealed partial class App : Application, IDisposable
         _mainWindow?.ShowSettings();
     }
 
-    // Theme: every open window and the tray menu follow the setting live
+    // Copy Codes
+    // A New Message's One-Time Passcode Goes To The Clipboard (Settings), Kept Out Of Clipboard History And Cloud Sync. The
+    // Same Messages As Notify, Wherever The Window Is: None From Muted, Spam, Archived Or Blocked Chats
+    private void CopyCode(MessageArrivedEventArgs e)
+    {
+        if (_settings?.CopyCodes != true
+            || !NotificationPolicy.ShouldNotify(e, notificationsEnabled: true, viewedConversationId: null, windowFocused: false, notifyForViewedChat: true)
+            || OneTimeCode.Find(e.Message.Text) is not { } code)
+        {
+            return;
+        }
+
+        _dispatcher?.TryEnqueue(() => UiHelpers.ToClipboard(code, keepPrivate: true));
+    }
+
+    // Tray Icon Shown Or Taken Off, As Its Setting Says
+    private void ApplyTrayIcon()
+    {
+        if (_settings is null || _trayIcon is null)
+        {
+            return;
+        }
+
+        if (!_settings.ShowTrayIcon)
+        {
+            _trayIcon.Hide();
+            return;
+        }
+
+        bool trayAdded = _trayIcon.Show();
+        AppLog.TrayAdded(_logger, trayAdded);
+    }
+
+    // Live Settings: The Theme And The Tray Icon
     private void OnSettingChanged(object? sender, PropertyChangedEventArgs e)
     {
+        // Tray Icon
+        if (e.PropertyName == nameof(AppSettings.ShowTrayIcon))
+        {
+            ApplyTrayIcon();
+            return;
+        }
+
+        // Theme
         if (e.PropertyName != nameof(AppSettings.Theme) || _settings is null)
         {
             return;

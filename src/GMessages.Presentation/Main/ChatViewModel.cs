@@ -153,9 +153,10 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
         _store.ConversationChanged += OnConversationChanged;
         ApplyConversation(_store.Find(conversationId));
 
-        // A Chip Added Or Removed: Send May Turn On Or Off
+        // A Chip Added Or Removed: Send May Turn On Or Off, And The Draft Changed
         Attachments.CollectionChanged += (_, _) =>
         {
+            IsDraftEdited = true;
             Raise(nameof(HasAttachments));
             Raise(nameof(CanSend));
         };
@@ -233,7 +234,8 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
         get => _draft;
         set
         {
-            _draft = value ?? string.Empty;
+            IsDraftEdited |= (value ?? string.Empty) != _draft;
+            _draft         = value ?? string.Empty;
             Raise(nameof(Draft));
             Raise(nameof(CanSend));
 
@@ -248,15 +250,31 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
-    /// Puts back a draft kept from the last time the chat was open, without telling the other side I'm typing.
+    /// Puts back a draft kept from the last time the chat was open, and its files as chips, without telling the other
+    /// side I'm typing.
     /// </summary>
+    /// <remarks>New chips number on from the kept ones, so every chip's AutomationId stays unique.</remarks>
     /// <param name="draft">The kept draft.</param>
-    public void RestoreDraft(string draft)
+    /// <param name="files">The kept files, or null for none.</param>
+    public void RestoreDraft(string draft, IReadOnlyList<PendingAttachment>? files = null)
     {
         _draft = draft ?? string.Empty;
+        foreach (PendingAttachment file in files ?? [])
+        {
+            Attachments.Add(file);
+            _nextAttachmentId = Math.Max(_nextAttachmentId, file.Id);
+        }
+
+        IsDraftEdited = false;
         Raise(nameof(Draft));
         Raise(nameof(CanSend));
     }
+
+    /// <summary>
+    /// Gets whether the text or the files changed since the chat opened (or its draft was put back), so leaving it saves
+    /// the draft; an untouched box keeps the saved one, even one that loaded after the chat opened.
+    /// </summary>
+    public bool IsDraftEdited { get; private set; }
 
     /// <summary>Gets the bubble being replied to, or null.</summary>
     public MessageBubbleViewModel? ReplyingTo

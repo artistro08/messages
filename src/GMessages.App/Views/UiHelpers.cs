@@ -1,7 +1,9 @@
+using System.Runtime.InteropServices;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using Windows.ApplicationModel.DataTransfer;
 using Windows.System;
 using Windows.UI.Core;
 using WinRT;
@@ -27,6 +29,37 @@ internal static class UiHelpers
     /// <param name="text">The text, or null.</param>
     /// <returns>Visible for non-empty text.</returns>
     public static Visibility ShownIfText(string? text) => string.IsNullOrEmpty(text) ? Visibility.Collapsed : Visibility.Visible;
+
+    /// <summary>
+    /// Puts text on the clipboard, on the UI thread.
+    /// </summary>
+    /// <remarks>
+    /// Kept private, it stays out of Windows' clipboard history and isn't synced to other devices (a one-time code).
+    /// Another app holding the clipboard throws, or Windows refuses it; the copy then does nothing, logged by type.
+    /// </remarks>
+    /// <param name="text">The text.</param>
+    /// <param name="keepPrivate">True to keep it out of clipboard history and sync.</param>
+    public static void ToClipboard(string text, bool keepPrivate = false)
+    {
+        var package = new DataPackage();
+        package.SetText(text);
+
+        try
+        {
+            if (!keepPrivate)
+            {
+                Clipboard.SetContent(package);
+            }
+            else if (!Clipboard.SetContentWithOptions(package, new ClipboardContentOptions { IsAllowedInHistory = false, IsRoamable = false }))
+            {
+                AppLog.CopyFailed(App.ShellLog, "Refused");
+            }
+        }
+        catch (COMException ex)
+        {
+            AppLog.CopyFailed(App.ShellLog, ex.GetType().Name);
+        }
+    }
 
     /// <summary>
     /// Finds the first <see cref="ScrollViewer"/> under an element (a list's template holds one).

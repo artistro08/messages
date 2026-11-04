@@ -143,6 +143,24 @@ public sealed partial class ChatStore
         });
     }
 
+    // Queues A Write To One Saved Conversation (A Change Through MessageDatabase.UpdateConversation, Or Its Delete),
+    // Dropped When A Reset Came After The Generation Was Taken
+    private void SaveIfCurrent(string conversationId, int generation, Action<MessageDatabase> write)
+    {
+        if (_database is null || conversationId.Length == 0)
+        {
+            return;
+        }
+
+        _ = EnqueueAsync(database =>
+        {
+            if (generation == Generation)
+            {
+                write(database);
+            }
+        });
+    }
+
     // Queues A Message Save, Dropped When A Reset Came After The Generation Was Taken
     private void SaveMessages(string conversationId, IReadOnlyList<Message> messages, int generation)
     {
