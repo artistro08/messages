@@ -147,7 +147,7 @@
                             <TextBlock Text="Run in the background" TextWrapping="Wrap" />
                             <TextBlock
                                 Style="{StaticResource CardDescriptionStyle}"
-                                Text="Keep Kaituro running after you close its window, so new messages still notify you. When off, closing the window quits."
+                                Text="Keep running after you close the window, so new messages still notify you. When off, closing the window quits."
                                 TextWrapping="Wrap" />
                         </StackPanel>
                         <ToggleSwitch
@@ -167,7 +167,7 @@
                             <TextBlock Text="Show icon in the system tray" TextWrapping="Wrap" />
                             <TextBlock
                                 Style="{StaticResource CardDescriptionStyle}"
-                                Text="When off, there's no icon while Kaituro runs in the background. Open it from Start, and quit it from the account menu."
+                                Text="When off, there's no icon while it runs in the background. Open it from Start, and quit it from the account menu."
                                 TextWrapping="Wrap" />
                         </StackPanel>
                         <ToggleSwitch
