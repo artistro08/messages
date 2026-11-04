@@ -112,9 +112,6 @@ public sealed partial class MessageBubble : UserControl
     public static readonly DependencyProperty BubbleProperty =
         DependencyProperty.Register(nameof(Bubble), typeof(MessageBubbleViewModel), typeof(MessageBubble), new PropertyMetadata(null, OnBubbleChanged));
 
-    // A Bubble Still Being Sent Shows Faded
-    private const double SendingFade = 0.6;
-
     // How Far The Reaction Pill's Top Overlaps The Back (PillHost's -8 Top Margin)
     private const double PillOverlap = 8;
 
@@ -695,13 +692,6 @@ public sealed partial class MessageBubble : UserControl
         int result    = NativeMethods.StrFormatByteSizeEx((ulong)bytes, NativeMethods.SFBS_FLAGS_ROUND_TO_NEAREST_DISPLAYED_DIGIT, buffer, (uint)buffer.Length);
         return result < 0 ? string.Empty : new string(buffer).TrimEnd('\0');
     }
-
-    /// <summary>
-    /// Fades a bubble that is still being sent.
-    /// </summary>
-    /// <param name="isSending">True while sending.</param>
-    /// <returns>The opacity.</returns>
-    public static double SendingOpacity(bool isSending) => isSending ? SendingFade : 1;
 
     /// <summary>
     /// Caps the bubble at 70% of the chat's width (560 px at most) before it is measured, so it is the right width from its
