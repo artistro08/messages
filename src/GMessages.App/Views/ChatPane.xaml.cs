@@ -655,7 +655,7 @@ public sealed partial class ChatPane : UserControl
         BindableList.Show(pane.AttachmentList, chat?.Attachments);
         if (chat is not null)
         {
-            pane.FadeInMessages();
+            pane.HideMessages();
         }
         pane.ShowScrollToBottom(false);
         pane._pinned       = true;
@@ -694,8 +694,8 @@ public sealed partial class ChatPane : UserControl
         pane._keepFocus = false;
     }
 
-    // The Open-Timing Log's Last Step: The Frame That Draws The Opened Chat's First Bubbles (Once Per Chat, Milliseconds
-    // And Counts Only). Called On Open And On Each Change Of The Bubbles Until Then
+    // The Frame That Draws The Opened Chat's First Bubbles: They Fade In From There, And The Open-Timing Log Takes Its Last
+    // Step (Once Per Chat, Milliseconds And Counts Only). Called On Open And On Each Change Of The Bubbles Until Then
     private void LogFirstDraw()
     {
         if (_firstDrawFor is not { Messages.Count: > 0 } chat || chat != Chat)
@@ -707,15 +707,28 @@ public sealed partial class ChatPane : UserControl
         void OnRendering(object? sender, object e)
         {
             Windows.UI.Xaml.Media.CompositionTarget.Rendering -= OnRendering;
+            if (chat == Chat)
+            {
+                FadeInMessages();
+            }
+
             chat.LogOpenStep("first bubbles drawn");
         }
 
         Windows.UI.Xaml.Media.CompositionTarget.Rendering += OnRendering;
     }
 
-    // The New Chat's Bubbles Fade In From Clear, Already Pinned To The Newest, So No Frame Shows Them Being Laid Out Or
-    // Their First Composition Frame (The Gray Frame The Owner Saw Was The List's Scrolling Placeholders, Now Off In The
-    // XAML). A Composition Animation, Not The Opacity Property: It Starts From Clear At Once, Before The Next Frame Draws
+    // The New Chat's Bubbles Stay Clear Until Their First Frame, So No Frame Shows The Last Chat's Or Them Being Laid Out
+    private void HideMessages()
+    {
+        Visual visual = ElementCompositionPreview.GetElementVisual(MessageList);
+        visual.StopAnimation(nameof(Visual.Opacity));
+        visual.Opacity = 0;
+    }
+
+    // Then They Fade In From Clear, Already Pinned To The Newest, Starting With The Frame That Draws Them (The Gray Frame
+    // The Owner Saw Was The List's Scrolling Placeholders, Now Off In The XAML). A Composition Animation, Not The Opacity
+    // Property, So It Starts In That Same Frame. A Chat With No Bubbles Stays Clear Until Its First One Comes
     private void FadeInMessages()
     {
         Visual visual = ElementCompositionPreview.GetElementVisual(MessageList);
