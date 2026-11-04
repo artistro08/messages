@@ -715,17 +715,17 @@ public sealed class ChatTests : UiTest
         long time         = DateTimeOffset.UtcNow.AddDays(-1).ToUnixTimeMilliseconds() * 1000;
         Server.Phone.Chats.Add(chat, [.. Enumerable.Range(1, Count).Select(Line)]);
         Server.Phone.OlderPagesDelay = TimeSpan.FromMilliseconds(700);
-        string oldest                = $"Bubble.m-{Count - ChatStore.PageSize + 1:000}";
 
         await OpenMainAsync();
         App.Find("Row.c-mixed").Patterns.SelectionItem.Pattern.Select();
         Wait.Until(() => Bubbles().Any(b => b.Id == $"Bubble.m-{Count:000}"), AppDriver.DefaultTimeout, () => "The mixed chat didn't show its newest bubble.");
 
-        // Wheel Up Over The Bubbles Until The Older Page Is Asked For
+        // Wheel Up Over The Bubbles Until The Older Page Is Asked For. It Is Asked For Half A Screen Short Of The Top, So
+        // The Page's Oldest Bubble Can Still Sit Above The View (Past The Tall m-077): The Watched One Is The Topmost Shown
         AutomationElement list        = App.Find("Chat.Messages");
         System.Drawing.Rectangle over = list.BoundingRectangle;
         FlaUI.Core.Input.Mouse.MoveTo(over.X + (over.Width / 2), over.Y + (over.Height / 2));
-        AssertOlderPageKeepsInPlace(list, oldest, () => FlaUI.Core.Input.Mouse.Scroll(5));
+        AssertOlderPageKeepsInPlace(list, null, () => FlaUI.Core.Input.Mouse.Scroll(5));
 
         Message Line(int i)
         {

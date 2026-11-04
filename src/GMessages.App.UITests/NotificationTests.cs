@@ -350,21 +350,30 @@ public sealed class NotificationTests : UiTest
 /// </summary>
 /// <remarks>
 /// Windows keeps a toast's banner on screen while the user is away (no real keyboard or mouse input; UI Automation
-/// and a cursor moved from code don't count), so on an unattended machine the banner never leaves. Run these with
-/// <c>--filter TestCategory=Manual</c> while using the mouse or keyboard now and then.
+/// and a cursor moved from code don't count; nor does a mouse move sent through <c>SendInput</c>), so on an unattended
+/// machine the banner never leaves. Run these with <c>--filter TestCategory=Manual</c> while using the mouse or keyboard
+/// now and then. Run unattended, they end inconclusive rather than failed.
 /// </remarks>
 [TestClass]
 [TestCategory("Manual")]
 [DoNotParallelize]
 public sealed class ManualNotificationTests : UiTest
 {
-    // How Long A Toast's Banner May Stay On Screen Before It Moves To The Notification Center
-    private static readonly TimeSpan BannerTime = TimeSpan.FromSeconds(10);
+    // Windows' Default For "Dismiss Notifications After" (Settings, Accessibility, Visual Effects), In Seconds
+    private const int DefaultMessageSeconds = 5;
+
+    // Room Past That Setting For The Banner's Slide Out And The Polling
+    private static readonly TimeSpan BannerMargin = TimeSpan.FromSeconds(5);
 
     /// <summary>
-    /// A message's toast leaves the screen (for the Notification Center) within 10 s, as other apps' toasts do. Needs
-    /// real user input during the run (see the class remarks).
+    /// A message's toast leaves the screen (for the Notification Center) within Windows' "Dismiss notifications after"
+    /// time plus 5 s (10 s at the default 5 s), as other apps' toasts do. Needs real user input during the run (see the
+    /// class remarks).
     /// </summary>
+    /// <remarks>
+    /// The setting is only read, never written. With no keyboard or mouse input since the toast showed, the banner
+    /// staying proves nothing, so the test is inconclusive then instead of failed.
+    /// </remarks>
     /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Toast_LeavesScreenWithin10Seconds()
@@ -372,9 +381,21 @@ public sealed class ManualNotificationTests : UiTest
         var toasts = new ToastDriver(App.Automation);
         await PairAsync();
 
+        // The Banner's Time On This Machine
+        int seconds         = Microsoft.Win32.Registry.GetValue(@"HKEY_CURRENT_USER\Control Panel\Accessibility", "MessageDuration", null) is int set ? set : DefaultMessageSeconds;
+        TimeSpan bannerTime = TimeSpan.FromSeconds(seconds) + BannerMargin;
+
         Server.Phone.PushIncoming("c-ann", "hey there");
         toasts.WaitFor(AppDriver.DefaultTimeout, "Ann Lee", "hey there");
 
-        Wait.Until(() => toasts.TryFind("Ann Lee", "hey there") is null, BannerTime, () => $"The toast was still on screen after {BannerTime.TotalSeconds} s.");
+        // Off The Screen In Time, Unless Nobody Was There To Let Windows Take It Down
+        try
+        {
+            Wait.Until(() => toasts.TryFind("Ann Lee", "hey there") is null, bannerTime, () => $"The toast was still on screen after {bannerTime.TotalSeconds} s (Windows' setting: {seconds} s).");
+        }
+        catch (AssertFailedException) when (PointerInput.SinceLastInput() >= bannerTime)
+        {
+            Assert.Inconclusive($"No keyboard or mouse input for {PointerInput.SinceLastInput().TotalSeconds:0} s: Windows keeps a banner up while the user is away. Run this while using the machine.");
+        }
     }
 }
