@@ -1098,7 +1098,7 @@ public sealed class RcsTests : UiTest
         await OpenChatAsync("Row.c-ann");
 
         Server.Phone.PushTyping("c-ann", AnnPhone, started: true);
-        Assert.AreEqual(ChatCopy.Typing, AppDriver.SafeName(App.Find("Chat.Typing")));
+        Assert.AreEqual("Ann Lee is typing", AppDriver.SafeName(App.Find("Chat.Typing")));
 
         Server.Phone.PushTyping("c-ann", AnnPhone, started: false);
         WaitForGone("Chat.Typing");

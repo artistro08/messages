@@ -57,6 +57,7 @@ public static class ChatCopy
     public const string CancelReply       = "Cancel reply";
     public const string EndToEndEncrypted = "End-to-end encrypted";
     public const string Typing            = "Typing";
+    public const string TypingFormat      = "{0} is typing";
     public const string OriginalMessage   = "Original message";
     public const string Copy              = "Copy";
 

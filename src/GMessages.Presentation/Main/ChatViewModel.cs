@@ -298,6 +298,18 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
         private set => Set(ref _isTyping, value, nameof(IsTyping));
     }
 
+    /// <summary>Gets the typer's avatar letter, beside the typing dots.</summary>
+    public string TypingInitial { get; private set; } = string.Empty;
+
+    /// <summary>Gets the typer's avatar color as opaque ARGB.</summary>
+    public uint TypingColor { get; private set; } = AvatarParts.FallbackColor;
+
+    /// <summary>Gets the participant whose photo covers the typer's avatar, or empty.</summary>
+    public string TypingPhotoId { get; private set; } = string.Empty;
+
+    /// <summary>Gets the typing bubble's name for screen readers, such as "Ann is typing".</summary>
+    public string TypingName { get; private set; } = ChatCopy.Typing;
+
     /// <summary>Gets whether the conversation is end-to-end encrypted (the lock shows).</summary>
     public bool IsEncrypted
     {

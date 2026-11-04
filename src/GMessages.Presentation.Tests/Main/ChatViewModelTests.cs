@@ -1509,6 +1509,9 @@ public sealed class ChatViewModelTests
 
         await rig.Store.HandleEventAsync(Typing(true));
         Assert.IsTrue(chat.IsTyping);
+        Assert.AreEqual("Ann is typing", chat.TypingName);
+        Assert.AreEqual("A", chat.TypingInitial);
+        Assert.AreEqual("p-a", chat.TypingPhotoId);
         time.Advance(TimeSpan.FromSeconds(14));
         Assert.IsTrue(chat.IsTyping);
         time.Advance(TimeSpan.FromSeconds(1));
