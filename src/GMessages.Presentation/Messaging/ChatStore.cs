@@ -796,7 +796,12 @@ public sealed partial class ChatStore : IDisposable
         // Saved Read Only While The Read Message Is Still The Newest: One That Came In During The Wait Stays Unread On Disk
         if (cached.LatestMessageId == messageId)
         {
-            SaveRead(conversationId, generation);
+            SaveChange(conversationId, generation, c =>
+            {
+                bool wasUnread = c.Unread;
+                c.Unread       = false;
+                return wasUnread;
+            });
         }
 
         ConversationChanged?.Invoke(this, read);
@@ -807,8 +812,9 @@ public sealed partial class ChatStore : IDisposable
     /// </summary>
     /// <remarks>
     /// Sends the request <see cref="BuildRequest"/> builds. Only once the phone says it succeeded does the cached
-    /// conversation take its new status (<see cref="StatusAfter"/>) or mute state, in memory only, raising
-    /// <see cref="ConversationChanged"/> so the lists move it at once; the phone's echo is what gets saved. A
+    /// conversation take its new status (<see cref="StatusAfter"/>) or mute state, raising
+    /// <see cref="ConversationChanged"/> so the lists move it at once. The saved row changes too, so the next launch
+    /// doesn't show it in its old place for a moment. A
     /// <see cref="Reset"/> while the phone is answering applies nothing. A refusal is logged here;
     /// callers log every other failure, as they do for the other writers.
     /// </remarks>
@@ -840,13 +846,31 @@ public sealed partial class ChatStore : IDisposable
         }
 
         // Mute And Unmute Leave The Status Alone
-        ConversationInfo updated = StatusAfter(action) is { } status
+        ConversationStatus? newStatus = StatusAfter(action);
+        ConversationInfo updated      = newStatus is { } status
             ? cached with { Status = status }
             : cached with { IsMuted = action == ConversationAction.Mute };
-        if (Upsert(updated))
+        if (!Upsert(updated))
         {
-            ConversationChanged?.Invoke(this, updated);
+            return;
         }
+
+        // The Saved Row Changes Too, So The Next Launch Doesn't Show It In Its Old Place Until The Phone's Page Comes
+        ConversationMuteStatus mute = action == ConversationAction.Mute ? ConversationMuteStatus.Mute : ConversationMuteStatus.Unmute;
+        SaveChange(conversationId, generation, c =>
+        {
+            if (newStatus is { } saved)
+            {
+                c.Status = saved;
+            }
+            else
+            {
+                c.Muted = mute;
+            }
+
+            return true;
+        });
+        ConversationChanged?.Invoke(this, updated);
     }
 
     /// <summary>

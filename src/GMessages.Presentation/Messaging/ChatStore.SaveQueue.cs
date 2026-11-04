@@ -143,8 +143,9 @@ public sealed partial class ChatStore
         });
     }
 
-    // Queues Marking A Saved Conversation Read, Dropped When A Reset Came After The Generation Was Taken
-    private void SaveRead(string conversationId, int generation)
+    // Queues A Change To A Saved Conversation (Read, Status, Mute; See MessageDatabase.UpdateConversation), Dropped When A
+    // Reset Came After The Generation Was Taken
+    private void SaveChange(string conversationId, int generation, Func<Conversation, bool> change)
     {
         if (_database is null || conversationId.Length == 0)
         {
@@ -155,7 +156,7 @@ public sealed partial class ChatStore
         {
             if (generation == Generation)
             {
-                database.MarkConversationRead(conversationId);
+                database.UpdateConversation(conversationId, change);
             }
         });
     }

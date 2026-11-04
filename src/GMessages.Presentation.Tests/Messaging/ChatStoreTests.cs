@@ -1148,6 +1148,28 @@ public sealed class ChatStoreTests
         Assert.AreEqual(ConversationStatus.Archived, raised.Single().Status);
     }
 
+    /// <summary>
+    /// A chat archived or muted here stays that way after a restart: the saved row changes too, so it doesn't show in
+    /// its old place until the phone's page arrives.
+    /// </summary>
+    [TestMethod]
+    public async Task Update_ArchiveAndMute_SavedSoReopenedStoreLoadsThem()
+    {
+        using var rig = new Rig(withDatabase: true);
+        await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1")));
+        await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c2", "Bo")));
+
+        await rig.Store.UpdateConversationAsync("c1", ConversationAction.Archive, Ct);
+        await rig.Store.UpdateConversationAsync("c2", ConversationAction.Mute, Ct);
+        await rig.Store.FlushAsync();
+
+        using var reopened = new ChatStore(rig.Controller, () => rig.Client, NullLogger.Instance, rig.Database, rig.Time, rig.Media);
+        await reopened.LoadSavedAsync();
+        Assert.AreEqual(ConversationStatus.Archived, reopened.Find("c1")?.Status);
+        Assert.IsTrue(reopened.Find("c2")?.IsMuted);
+        Assert.AreEqual(ConversationStatus.Active, reopened.Find("c2")?.Status);
+    }
+
     [TestMethod]
     public async Task Update_PhoneRefuses_NoLocalChange()
     {

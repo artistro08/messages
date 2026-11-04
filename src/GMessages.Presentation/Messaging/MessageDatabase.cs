@@ -121,17 +121,19 @@ public sealed partial class MessageDatabase
     }
 
     /// <summary>
-    /// Marks a saved conversation read.
+    /// Changes a saved conversation in place: read, archived, muted, moved to spam or deleted here.
     /// </summary>
     /// <remarks>
-    /// A chat read here only changes the slim cached copy, so without this the saved row stays unread and the list
-    /// shows it bold on the next launch until the phone's page replaces it. Rewrites only the body, keeping the
-    /// saved order; does nothing when the conversation isn't saved or is already read.
+    /// A change made here only touches the slim cached copy, so without this the saved row keeps its old state and the
+    /// next launch shows it there (bold, or in the wrong list) until the phone's page replaces it. Rewrites only the
+    /// body, keeping the saved order; does nothing when the conversation isn't saved or the change leaves it as it was.
     /// </remarks>
     /// <param name="conversationId">The conversation ID.</param>
-    public void MarkConversationRead(string conversationId)
+    /// <param name="change">Changes the saved conversation; returns false when it was already that way.</param>
+    public void UpdateConversation(string conversationId, Func<Conversation, bool> change)
     {
         ArgumentException.ThrowIfNullOrEmpty(conversationId);
+        ArgumentNullException.ThrowIfNull(change);
 
         Run(connection =>
         {
@@ -151,13 +153,12 @@ public sealed partial class MessageDatabase
                 conversation = Conversation.Parser.ParseFrom(Unprotect(reader));
             }
 
-            if (!conversation.Unread)
+            if (!change(conversation))
             {
                 return false;
             }
 
-            // Save It Read
-            conversation.Unread = false;
+            // Save The Change
             using SqliteCommand update = connection.CreateCommand();
             update.CommandText = "UPDATE conversations SET body = $body WHERE id = $id";
             update.Parameters.AddWithValue("$id", conversationId);
