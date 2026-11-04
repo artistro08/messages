@@ -604,6 +604,42 @@ public sealed class MainViewModelTests
         Assert.AreEqual("for ann", second.Chat!.Draft);
     }
 
+    /// <summary>
+    /// A chat left with a draft shows "Draft: " and the text on its row (in italics); one left with only files names them,
+    /// and the files come back as chips; clearing the draft brings the newest message back.
+    /// </summary>
+    [TestMethod]
+    public async Task Drafts_ShowOnTheRow_TextOrFiles()
+    {
+        using var rig = new MainRig();
+        using MainViewModel vm = await NewMainAsync(rig);
+        ConversationRowViewModel ann = vm.Inbox.Rows.Single(r => r.Id == "a");
+        ConversationRowViewModel bo  = vm.Inbox.Rows.Single(r => r.Id == "b");
+        string annSnippet            = ann.Snippet;
+
+        // Text
+        vm.Select("a");
+        vm.Chat!.Draft = "for ann";
+        vm.Select("b");
+        Assert.AreEqual("Draft: for ann", ann.Snippet);
+        Assert.IsTrue(ann.IsDraft);
+
+        // Files Only
+        vm.Chat!.Attach("plan.pdf", "application/pdf", [1]);
+        vm.Chat.Attach("pic.png", "image/png", [2], 4, 3);
+        vm.Select("a");
+        Assert.AreEqual("Draft: plan.pdf, Photo", bo.Snippet);
+        vm.Select("b");
+        Assert.AreEqual(2, vm.Chat!.Attachments.Count);
+
+        // Cleared: The Newest Message Again
+        vm.Select("a");
+        vm.Chat!.Draft = string.Empty;
+        vm.Select("b");
+        Assert.AreEqual(annSnippet, ann.Snippet);
+        Assert.IsFalse(ann.IsDraft);
+    }
+
     private static UserAlert Alert(AlertType type) => new(new UserAlertEvent { AlertType = type });
 
     /// <summary>A window opened after the alert shows the banner right away.</summary>

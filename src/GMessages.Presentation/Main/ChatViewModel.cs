@@ -248,12 +248,21 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
-    /// Puts back a draft kept from the last time the chat was open, without telling the other side I'm typing.
+    /// Puts back a draft kept from the last time the chat was open, and its files as chips, without telling the other
+    /// side I'm typing.
     /// </summary>
+    /// <remarks>New chips number on from the kept ones, so every chip's AutomationId stays unique.</remarks>
     /// <param name="draft">The kept draft.</param>
-    public void RestoreDraft(string draft)
+    /// <param name="files">The kept files, or null for none.</param>
+    public void RestoreDraft(string draft, IReadOnlyList<PendingAttachment>? files = null)
     {
         _draft = draft ?? string.Empty;
+        foreach (PendingAttachment file in files ?? [])
+        {
+            Attachments.Add(file);
+            _nextAttachmentId = Math.Max(_nextAttachmentId, file.Id);
+        }
+
         Raise(nameof(Draft));
         Raise(nameof(CanSend));
     }

@@ -84,8 +84,10 @@ public sealed partial class ChatStore : IDisposable
     // When The Conversation Turns Read
     private readonly ConcurrentDictionary<string, int> _unreadCounts = new();
 
-    // Each Conversation's Unsent Draft, Loaded From And Saved To The Database So It Outlives The Window And The App
-    private readonly ConcurrentDictionary<string, string> _drafts = new(StringComparer.Ordinal);
+    // Each Conversation's Unsent Draft, Loaded From And Saved To The Database So It Outlives The Window And The App, And
+    // The Files Picked To Send With It (Memory Only)
+    private readonly ConcurrentDictionary<string, string> _drafts                               = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, IReadOnlyList<PendingAttachment>> _draftFiles = new(StringComparer.Ordinal);
 
     // Newest Encryption Tombstone Seen Per Conversation, With Its Time In Microseconds
     private readonly ConcurrentDictionary<string, (bool Encrypted, long At)> _encryption = new();
@@ -193,23 +195,56 @@ public sealed partial class ChatStore : IDisposable
     public string Draft(string conversationId) => _drafts.GetValueOrDefault(conversationId) ?? string.Empty;
 
     /// <summary>
-    /// Keeps a conversation's unsent draft, and saves it so it's still there after the window or the app closes.
+    /// Gets the files picked or pasted to send with a conversation's unsent draft.
+    /// </summary>
+    /// <param name="conversationId">The conversation ID.</param>
+    /// <returns>The files; empty when there are none.</returns>
+    public IReadOnlyList<PendingAttachment> DraftFiles(string conversationId) => _draftFiles.GetValueOrDefault(conversationId) ?? [];
+
+    /// <summary>
+    /// Raised on the caller's thread with the conversation ID when its draft (text or files) changed, so its list row
+    /// can show it.
+    /// </summary>
+    public event EventHandler<string>? DraftChanged;
+
+    /// <summary>
+    /// Keeps a conversation's unsent draft, and saves its text so it's still there after the window or the app closes.
     /// </summary>
     /// <remarks>
-    /// An empty draft forgets it. The save runs at once on the thread pool, not behind the queued message saves: a quit
-    /// cuts those off after a limit (they're fetched again from the phone), and a draft can't be fetched again. It's
-    /// encrypted like every other body, and dropped after a sign-out (the database is deleted with the account).
+    /// An empty draft forgets it. The files are kept in memory only, for as long as the app runs: a pasted picture has
+    /// no file to open again after a restart. The text is saved at once on the thread pool, not behind the queued message
+    /// saves: a quit cuts those off after a limit (they're fetched again from the phone), and a draft can't be fetched
+    /// again. It's encrypted like every other body, and dropped after a sign-out (the database is deleted with the
+    /// account).
     /// </remarks>
     /// <param name="conversationId">The conversation ID.</param>
     /// <param name="text">The draft text.</param>
-    public void SaveDraft(string conversationId, string text)
+    /// <param name="files">The files to send with it, or null for none.</param>
+    public void SaveDraft(string conversationId, string text, IReadOnlyList<PendingAttachment>? files = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(conversationId);
         ArgumentNullException.ThrowIfNull(text);
 
-        // Unchanged: Nothing To Write
+        // Files In Memory
+        files ??= [];
+        bool filesChanged = !DraftFiles(conversationId).SequenceEqual(files);
+        if (files.Count > 0)
+        {
+            _draftFiles[conversationId] = [.. files];
+        }
+        else
+        {
+            _draftFiles.TryRemove(conversationId, out _);
+        }
+
+        // Text Unchanged: Nothing To Write
         if (Draft(conversationId) == text)
         {
+            if (filesChanged)
+            {
+                DraftChanged?.Invoke(this, conversationId);
+            }
+
             return;
         }
 
@@ -221,6 +256,8 @@ public sealed partial class ChatStore : IDisposable
         {
             _drafts.TryRemove(conversationId, out _);
         }
+
+        DraftChanged?.Invoke(this, conversationId);
 
         // Writes The Draft As It Is When The Write Runs, So Two Quick Saves Can't Land Out Of Order
         // ponytail: the quit doesn't wait on this write; it takes one database call, done long before the connection closes
@@ -994,6 +1031,7 @@ public sealed partial class ChatStore : IDisposable
             _liveMedia.Clear();
             _unreadCounts.Clear();
             _drafts.Clear();
+            _draftFiles.Clear();
             _me = null;
         }
 

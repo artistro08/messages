@@ -52,11 +52,13 @@ public sealed partial class ChatViewModel
         bool isRcs                          = _store.Find(ConversationId)?.IsRcs == true;
         string? replyTo                     = ReplyingTo is { IsRcs: true, Id.Length: > 0 } quoted ? quoted.Id : null;
 
-        // Cleared Before Reading, So A Second Send Can't Send The Same Files Again
+        // Cleared Before Reading, So A Second Send Can't Send The Same Files Again; The Kept Draft Goes Too, So The List Row
+        // Stops Showing It
         Draft = string.Empty;
         Attachments.Clear();
         AttachError = string.Empty;
         CancelReply();
+        _store.SaveDraft(ConversationId, string.Empty);
 
         // Read The Picked Files Now; One That Can't Be Read Goes Back As Its Chip
         List<(string Name, string Mime, byte[] Bytes, int Width, int Height)> ready = [];

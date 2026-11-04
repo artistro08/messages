@@ -5,7 +5,8 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:GMessages.App.Views.Controls"
     xmlns:local="using:GMessages.App.Views"
-    xmlns:main="using:GMessages.Presentation.Main">
+    xmlns:main="using:GMessages.Presentation.Main"
+    xmlns:messaging="using:GMessages.Presentation.Messaging">
 
     <UserControl.Resources>
 
@@ -562,7 +563,7 @@
                                 </ItemsPanelTemplate>
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="main:PendingAttachment">
+                                <DataTemplate x:DataType="messaging:PendingAttachment">
                                     <Grid
                                         Height="64"
                                         MinWidth="64"

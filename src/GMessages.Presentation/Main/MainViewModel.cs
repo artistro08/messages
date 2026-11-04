@@ -358,14 +358,13 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
-    // Saves A Closing Chat's Draft (An Empty One Forgets It, See ChatStore.SaveDraft), Only When It Changed Since The Chat
-    // Opened: A Saved Draft That Loaded After The Chat Opened Was Never Shown, And Mustn't Be Wiped By The Empty Box
+    // Saves A Closing Chat's Draft And Files (An Empty One Forgets It, See ChatStore.SaveDraft). The Text Only When It
+    // Changed Since The Chat Opened: A Saved Draft That Loaded After The Chat Opened Was Never Shown, And Mustn't Be Wiped
+    // By The Empty Box
     private void KeepDraft(ChatViewModel chat)
     {
-        if (chat.Draft != _shownDraft)
-        {
-            _store.SaveDraft(chat.ConversationId, chat.Draft);
-        }
+        string text = chat.Draft != _shownDraft ? chat.Draft : _store.Draft(chat.ConversationId);
+        _store.SaveDraft(chat.ConversationId, text, [.. chat.Attachments]);
     }
 
     // Disposes The Open Chat And Opens One For The New Selection (Null Closes It). The Closing Chat's Draft Is Kept And The
@@ -384,10 +383,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         {
             Chat        = new ChatViewModel(_store, conversationId, _time, _post, _previews, _showReceivedPreviews);
             _shownDraft = _store.Draft(conversationId);
-            if (_shownDraft.Length > 0)
-            {
-                Chat.RestoreDraft(_shownDraft);
-            }
+            Chat.RestoreDraft(_shownDraft, _store.DraftFiles(conversationId));
 
             _ = Chat.LoadAsync();
         }
