@@ -36,6 +36,9 @@ public static class ChatCopy
     public const string MoveToTrashTitle = "Move to trash?";
     public const string MoveToTrashText  = "It moves to trash on your phone too.";
 
+    // A Toast's Note That Its One-Time Code Is On The Clipboard (Controller Copy; Owner Signs Off)
+    public const string CodeCopied = "Code copied";
+
     // A Message's Delete And Its Dialog (Controller Copy; Owner Signs Off)
     public const string Delete             = "Delete";
     public const string DeleteMessageTitle = "Delete this message?";

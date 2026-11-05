@@ -1,4 +1,5 @@
 using System.Xml.Linq;
+using GMessages.Presentation.Messaging;
 using GMessages.Presentation.Notifications;
 
 namespace GMessages.Presentation.Tests.Notifications;
@@ -10,6 +11,21 @@ public sealed class NotificationXmlTests
 
     private static XDocument Doc(string title = "Ann", string body = "hi", string? avatar = null) =>
         XDocument.Parse(NotificationXml.Build(new NotificationContent("m1", "c1", title, body, "p1"), avatar, Send));
+
+    /// <summary>
+    /// A toast whose one-time code was copied says so in Windows' small line under the text; any other has no such line.
+    /// </summary>
+    [TestMethod]
+    public void Build_CodeCopied_SaysSoUnderTheText()
+    {
+        var content = new NotificationContent("m1", "c1", "Bank", "Your code is 123456", "p1");
+
+        XElement? copied = XDocument.Parse(NotificationXml.Build(content with { CodeCopied = true }, null, Send)).Descendants("text")
+            .SingleOrDefault(t => (string?)t.Attribute("placement") == "attribution");
+        Assert.AreEqual(ChatCopy.CodeCopied, copied?.Value);
+
+        Assert.IsFalse(XDocument.Parse(NotificationXml.Build(content, null, Send)).Descendants("text").Any(t => t.Attribute("placement") is not null));
+    }
 
     [TestMethod]
     public void Build_EscapesMarkupInTitleAndBody()

@@ -35,6 +35,12 @@ public static class NotificationXml
             binding.Add(new XElement("image", new XAttribute("placement", "appLogoOverride"), new XAttribute("hint-crop", "circle"), new XAttribute("src", avatarFileUri)));
         }
 
+        // The Code Was Copied: Said In Windows' Small Line Under The Text
+        if (n.CodeCopied)
+        {
+            binding.Add(new XElement("text", new XAttribute("placement", "attribution"), ChatCopy.CodeCopied));
+        }
+
         // Actions: Windows' Quick Reply (A Text Input With A Button Tied To It By hint-inputId, Its Icon From imageUri),
         // The App's Own Snooze (Its Length Is A Setting, Which Windows' System Snooze Can't Take Without A Picker) And
         // Windows' Dismiss. Every <input> Before Any <action>, As The Toast Schema Requires (Else Windows Shows "New
