@@ -159,7 +159,7 @@ internal static class ConversationMenuFlyout
     }
 
     // A Confirm Dialog: Enter Picks Cancel (DefaultButton Close), So Nothing Happens By Accident
-    private static ContentDialog NewDialog(XamlRoot root, string automationId, string title, UIElement content, string primary)
+    internal static ContentDialog NewDialog(XamlRoot root, string automationId, string title, UIElement content, string primary)
     {
         ContentDialog dialog     = Dialogs.Create(root);
         dialog.Title             = title;

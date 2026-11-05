@@ -260,6 +260,40 @@ public sealed partial class ChatViewModel
     }
 
     /// <summary>
+    /// Deletes a bubble's message from the phone; the bubble goes once the phone says it did.
+    /// </summary>
+    /// <remarks>Only this side's copy goes. A failure (or the phone saying no) is logged and the bubble stays.</remarks>
+    /// <param name="bubble">The bubble to delete.</param>
+    /// <returns>True when it was deleted.</returns>
+    public async Task<bool> DeleteAsync(MessageBubbleViewModel bubble)
+    {
+        ArgumentNullException.ThrowIfNull(bubble);
+
+        // Not Reported By The Phone Yet: Nothing To Delete There
+        if (bubble.Id.Length == 0)
+        {
+            return false;
+        }
+
+        try
+        {
+            if (!await _store.DeleteMessageAsync(ConversationId, bubble.Id, CancellationToken.None))
+            {
+                return false;
+            }
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            _store.LogFailure("delete", ex);
+            return false;
+        }
+
+        Messages.Remove(bubble);
+        RefreshBubbles();
+        return true;
+    }
+
+    /// <summary>
     /// Sends a failed bubble again with a new temporary ID: its text, or its attachment with its caption.
     /// </summary>
     /// <remarks>

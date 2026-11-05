@@ -110,7 +110,7 @@ public sealed partial class ChatViewModel
 
             // The Page Is Oldest First, So Each Bubble Goes In Above The Ones Already Placed; One Already Shown Is Skipped
             int at = 0;
-            foreach (ChatMessage m in page.Where(m => m.Kind != MessageKind.Tombstone && ById(m.Id) is null))
+            foreach (ChatMessage m in page.Where(m => !ChatFormat.IsHiddenLine(m) && ById(m.Id) is null))
             {
                 Messages.Insert(at++, NewBubble(m));
             }

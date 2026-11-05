@@ -461,7 +461,7 @@
                             VerticalAlignment="Center"
                             AutomationProperties.AutomationId="Settings.Repository"
                             Content="View on GitHub"
-                            NavigateUri="https://github.com/artistro08/kaituro" />
+                            NavigateUri="https://github.com/artistro08/messages" />
                     </Grid>
                 </Border>
                 <!-- /About -->

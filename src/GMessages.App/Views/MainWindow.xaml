@@ -94,7 +94,7 @@
                                 <MenuFlyoutItem
                                     AutomationProperties.AutomationId="Main.Profile.Quit"
                                     Click="OnQuitClick"
-                                    Text="Quit Kaituro"
+                                    Text="Quit Messages"
                                     Visibility="{x:Bind local:MainWindow.HiddenIf(Settings.ShowTrayIcon), Mode=OneWay}">
                                     <MenuFlyoutItem.Icon>
                                         <FontIcon Glyph="&#xE7E8;" />

@@ -99,7 +99,11 @@ public sealed partial class TitleBar : UserControl
     public bool IsBackButtonVisible
     {
         get => BackButton.Visibility == Visibility.Visible;
-        set => BackButton.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
+        set
+        {
+            BackButton.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
+            ShowHeaderSpacing();
+        }
     }
 
     /// <summary>
@@ -108,8 +112,16 @@ public sealed partial class TitleBar : UserControl
     public bool IsPaneToggleButtonVisible
     {
         get => PaneToggleButton.Visibility == Visibility.Visible;
-        set => PaneToggleButton.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
+        set
+        {
+            PaneToggleButton.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
+            ShowHeaderSpacing();
+        }
     }
+
+    // After Back Or ☰ The Icon Sits 2 px On (WinUI 3's NegativeInsetSpacing), Else 14 px From The Edge
+    private void ShowHeaderSpacing() =>
+        LeftHeaderPaddingColumn.Width = new GridLength(IsBackButtonVisible || IsPaneToggleButtonVisible ? 2 : 14);
 
     /// <summary>
     /// Sets the caption buttons' light or dark look apart from the rest (dark over the photo viewer's scrim).

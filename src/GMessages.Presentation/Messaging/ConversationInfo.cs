@@ -39,6 +39,9 @@ public sealed record ConversationInfo(
     /// <summary>Gets whether the conversation is an RCS (chat) conversation rather than SMS.</summary>
     public bool IsRcs { get; init; }
 
+    /// <summary>Gets whether the phone says the chat is end-to-end encrypted (conversation field 39), or null when it didn't say.</summary>
+    public bool? IsEncrypted { get; init; }
+
     /// <summary>Gets the name the phone gives the newest message's sender (shown before a group's snippet), or empty.</summary>
     public string SnippetSender { get; init; } = string.Empty;
 
@@ -78,6 +81,7 @@ public sealed record ConversationInfo(
             c.LatestMessageID)
         {
             IsRcs         = c.Type == ConversationType.Rcs,
+            IsEncrypted   = c.EncryptionState?.Encrypted,
             SnippetSender = c.LatestMessage?.DisplayName ?? string.Empty,
             IsMuted       = MutedOf(c),
         };

@@ -37,6 +37,9 @@ public sealed partial class MediaStore : IDisposable
     // ponytail: a whole-download deadline, not a stall check; reset a timer per chunk read if slow links need more
     public static readonly TimeSpan DefaultDownloadTimeout = TimeSpan.FromMinutes(15);
 
+    // How Long Before Asking Again For Media Google Has Nothing Of Yet
+    private static readonly TimeSpan NotReadyRetry = TimeSpan.FromSeconds(3);
+
     /// <summary>The longest file name written to the temp folder, extension included.</summary>
     public const int MaxNameLength = 100;
 
@@ -631,7 +634,12 @@ public sealed partial class MediaStore : IDisposable
             byte[] bytes;
             try
             {
-                bytes = await client.DownloadMediaAsync(id, key, limit.Token).ConfigureAwait(false);
+                // Not Ready Yet: Google Answers With Nothing Until The Sender's Upload Is Done (A Video Arriving), So Nothing
+                // Is Asked For Again Shortly, Never Kept, Until The Timeout
+                while ((bytes = await client.DownloadMediaAsync(id, key, limit.Token).ConfigureAwait(false)).Length == 0)
+                {
+                    await Task.Delay(NotReadyRetry, limit.Token).ConfigureAwait(false);
+                }
             }
             catch (OperationCanceledException) when (!clear.IsCancellationRequested)
             {

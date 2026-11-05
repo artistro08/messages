@@ -79,6 +79,16 @@
                     <FontIcon Glyph="&#xE97A;" />
                 </MenuFlyoutItem.Icon>
             </MenuFlyoutItem>
+            <MenuFlyoutSeparator />
+            <MenuFlyoutItem
+                x:Name="BubbleMenuDelete"
+                AutomationProperties.AutomationId="Bubble.Delete"
+                Click="OnBubbleMenuDeleteClick"
+                Text="{x:Bind controls:MessageBubble.DeleteText}">
+                <MenuFlyoutItem.Icon>
+                    <FontIcon Glyph="&#xE74D;" />
+                </MenuFlyoutItem.Icon>
+            </MenuFlyoutItem>
         </MenuFlyout>
         <!-- /Bubble Menu -->
 
@@ -104,8 +114,7 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- Header: avatar and name, with the lock after it in an encrypted chat (a narrow window's back is the title bar's),
-             and the ⋮ at the right edge. Transparent, so a right-click anywhere on it opens the same menu -->
+        <!-- Header: avatar and name (a narrow window's back is the title bar's), and the ⋮ at the right edge. Transparent, so a right-click anywhere on it opens the same menu -->
         <Grid
             x:Name="HeaderBar"
             Padding="12,8,8,8"
@@ -128,34 +137,16 @@
                 SecondColor="{x:Bind Chat.SecondColor, Mode=OneWay, FallbackValue=0}"
                 SecondInitial="{x:Bind Chat.SecondInitial, Mode=OneWay, FallbackValue=''}"
                 SecondPhotoId="{x:Bind Chat.SecondPhotoId, Mode=OneWay, FallbackValue=''}" />
-            <Grid
+            <TextBlock
                 Grid.Column="1"
                 HorizontalAlignment="Left"
-                ColumnSpacing="8">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <TextBlock
-                    VerticalAlignment="Center"
-                    AutomationProperties.AutomationId="Chat.Header"
-                    FontFamily="{ThemeResource ContentControlThemeFontFamily}"
-                    MaxLines="1"
-                    Style="{StaticResource SubtitleTextBlockStyle}"
-                    Text="{x:Bind Chat.Title, Mode=OneWay, FallbackValue=''}"
-                    TextTrimming="CharacterEllipsis" />
-                <TextBlock
-                    Grid.Column="1"
-                    VerticalAlignment="Center"
-                    AutomationProperties.AutomationId="Chat.Encrypted"
-                    AutomationProperties.Name="{x:Bind local:ChatPane.EncryptedText}"
-                    FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                    FontSize="14"
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                    Text="&#xE72E;"
-                    ToolTipService.ToolTip="{x:Bind local:ChatPane.EncryptedText}"
-                    Visibility="{x:Bind Chat.IsEncrypted, Mode=OneWay, FallbackValue=Collapsed}" />
-            </Grid>
+                VerticalAlignment="Center"
+                AutomationProperties.AutomationId="Chat.Header"
+                FontFamily="{ThemeResource ContentControlThemeFontFamily}"
+                MaxLines="1"
+                Style="{StaticResource SubtitleTextBlockStyle}"
+                Text="{x:Bind Chat.Title, Mode=OneWay, FallbackValue=''}"
+                TextTrimming="CharacterEllipsis" />
 
             <!-- Mute: the bell shows the chat's state (crossed out while muted) and flips it, as the ⋮ menu's Mute or
                  Unmute does; hidden where the menu has neither (spam and blocked) -->
@@ -398,11 +389,11 @@
             Orientation="Horizontal"
             Spacing="8"
             Visibility="{x:Bind Chat.IsTyping, Mode=OneWay, FallbackValue=Collapsed}">
-            <!-- Typer: the same 28 px avatar received bubbles show -->
+            <!-- Typer: the same 28 px avatar received bubbles show, centered on the dots' bubble -->
             <Viewbox
                 Width="28"
                 Height="28"
-                VerticalAlignment="Bottom">
+                VerticalAlignment="Center">
                 <controls:Avatar
                     Color="{x:Bind Chat.TypingColor, Mode=OneWay, FallbackValue=0}"
                     Initial="{x:Bind Chat.TypingInitial, Mode=OneWay, FallbackValue=''}"
@@ -690,6 +681,7 @@
                 AutomationProperties.Name="Message"
                 CornerRadius="{x:Bind local:ChatPane.DraftCorners(Chat.IsReplying, Chat.HasAttachments, Chat.Voice.IsPreview), Mode=OneWay}"
                 Paste="OnDraftPaste"
+                PlaceholderText="{x:Bind Chat.DraftPlaceholder, Mode=OneWay, FallbackValue=''}"
                 PreviewKeyDown="OnDraftKeyDown"
                 Text="{x:Bind Chat.Draft, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, FallbackValue=''}"
                 TextChanged="OnDraftTextChanged"
@@ -823,16 +815,19 @@
                         Height="8"
                         VerticalAlignment="Center"
                         Fill="{ThemeResource SystemFillColorCriticalBrush}" />
-                    <!-- Timer: tabular digits, at least as wide as an unseen 00:00, so counting never nudges the waveform or the buttons -->
+                    <!-- Timer: tabular digits, at least as wide as an unseen 00:00, so counting never nudges the waveform or the buttons.
+                         Tight to the digits' ink (no room for descenders), so they center on the dot and the waveform -->
                     <Grid Grid.Column="1" VerticalAlignment="Center">
                         <TextBlock
                             AutomationProperties.AccessibilityView="Raw"
                             Opacity="0"
                             Text="00:00"
+                            TextLineBounds="Tight"
                             Typography.NumeralAlignment="Tabular" />
                         <TextBlock
                             x:Name="RecordTimer"
                             AutomationProperties.AutomationId="Chat.RecordTimer"
+                            TextLineBounds="Tight"
                             Typography.NumeralAlignment="Tabular" />
                     </Grid>
                     <controls:Waveform

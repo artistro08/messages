@@ -47,6 +47,7 @@ public sealed class FakePhone
     private readonly Action<IncomingRPCMessage> _pushCatchUp;
     private readonly List<SendMessageRequest> _sent  = [];
     private readonly List<MessageReadRequest> _reads = [];
+    private readonly List<string> _deletes           = [];
     private readonly List<SendReactionRequest> _reactions = [];
     private readonly List<TypingUpdateRequest> _typing    = [];
     private readonly List<UpdateConversationRequest> _conversationUpdates = [];
@@ -136,6 +137,20 @@ public sealed class FakePhone
             lock (_lock)
             {
                 return [.. _reads];
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets every message ID a <c>DeleteMessage</c> request asked for, in arrival order.
+    /// </summary>
+    public IReadOnlyList<string> Deletes
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return [.. _deletes];
             }
         }
     }
@@ -318,6 +333,16 @@ public sealed class FakePhone
 
                 Chats.MarkRead(read.ConversationID);
                 Reply(data.RequestID, data.Action, new EmptyArr(), encrypt: true);
+                break;
+
+            case ActionType.DeleteMessage when RequestCrypto is not null:
+                var delete = Open(data, DeleteMessageRequest.Parser);
+                lock (_lock)
+                {
+                    _deletes.Add(delete.MessageID);
+                }
+
+                Reply(data.RequestID, data.Action, new DeleteMessageResponse { Success = true }, encrypt: true);
                 break;
 
             case ActionType.GetConversation when RequestCrypto is not null:

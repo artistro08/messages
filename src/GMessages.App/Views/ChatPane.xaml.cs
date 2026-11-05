@@ -295,6 +295,9 @@ public sealed partial class ChatPane : UserControl
             }
         };
 
+        // The Message Box's Right-Click Menu; Its Paste Takes A Copied Picture Or File Too
+        TextMenu.Attach(DraftBox, PasteMediaFromMenu);
+
         // Typing Dots Bounce Only While Their Bubble Shows, And Follow Windows' Animation Setting As It Changes (Raised Off The
         // UI Thread)
         TypingBubble.RegisterPropertyChangedCallback(VisibilityProperty, (_, _) => AnimateTypingDots(TypingBubble.Visibility == Visibility.Visible));
@@ -306,23 +309,11 @@ public sealed partial class ChatPane : UserControl
             Ui.ColorValuesChanged       -= OnColorValuesChanged;
             Ui.AnimationsEnabledChanged += OnAnimationsEnabledChanged;
             Ui.ColorValuesChanged       += OnColorValuesChanged;
-
-            // The Message Box's Menu Is Windows' Shared Text Menu, So It Too Holds The Pane Only While Loaded
-            if (DraftBox.ContextFlyout is { } menu)
-            {
-                menu.Opening -= OnDraftMenuOpening;
-                menu.Opening += OnDraftMenuOpening;
-            }
         };
         Unloaded += (_, _) =>
         {
             Ui.AnimationsEnabledChanged -= OnAnimationsEnabledChanged;
             Ui.ColorValuesChanged       -= OnColorValuesChanged;
-            if (DraftBox.ContextFlyout is { } menu)
-            {
-                menu.Opening -= OnDraftMenuOpening;
-            }
-
             StopVoice();
             DropRecorder();
         };
@@ -348,9 +339,6 @@ public sealed partial class ChatPane : UserControl
     /// </remarks>
     /// <returns>The pane's peer.</returns>
     protected override AutomationPeer OnCreateAutomationPeer() => new FrameworkElementAutomationPeer(this);
-
-    /// <summary>Gets the lock's tooltip and name.</summary>
-    public static string EncryptedText => ChatCopy.EndToEndEncrypted;
 
     /// <summary>Gets the reply chip's close button name.</summary>
     public static string CancelReplyText => ChatCopy.CancelReply;
@@ -1081,6 +1069,16 @@ public sealed partial class ChatPane : UserControl
         _voice.Handle(request);
     }
 
+    /// <summary>
+    /// Stops what plays or records: the voice message, the inline video and a recording (the window was hidden).
+    /// </summary>
+    internal void StopMedia()
+    {
+        StopVoice();
+        MessageBubble.StopInlineVideo();
+        DropRecorder();
+    }
+
     // Stops The Playing Voice Message And Lets Go Of The Player
     private void StopVoice()
     {
@@ -1207,7 +1205,8 @@ public sealed partial class ChatPane : UserControl
     // Opens The Bubble Menu On A Bubble, With The Items It Takes, Keeping Its Hover Strip Shown Until The Menu Closes
     private void ShowBubbleMenu(MessageBubble view, FrameworkElement anchor, Windows.Foundation.Point? at)
     {
-        if (view.Bubble is not { } bubble)
+        // A System Line (A Group Rename) Has No Menu
+        if (view.Bubble is not { IsSystemLine: false } bubble)
         {
             return;
         }
@@ -1228,6 +1227,7 @@ public sealed partial class ChatPane : UserControl
         BubbleMenuOpenWith.Visibility = bubble.HasMediaFile ? Visibility.Visible : Visibility.Collapsed;
         BubbleMenuSaveAs.Visibility   = bubble.HasMediaFile ? Visibility.Visible : Visibility.Collapsed;
         BubbleMenuDownload.Visibility = bubble.HasMediaFile ? Visibility.Visible : Visibility.Collapsed;
+        BubbleMenuDelete.Visibility   = bubble.CanAct ? Visibility.Visible : Visibility.Collapsed;
         ShowMenuAt(BubbleMenu, anchor, at);
     }
 
@@ -1284,6 +1284,21 @@ public sealed partial class ChatPane : UserControl
     private void OnBubbleMenuReactClick(object sender, RoutedEventArgs e) => _menuView?.React();
 
     private void OnBubbleMenuReplyClick(object sender, RoutedEventArgs e) => _menuView?.Reply();
+
+    // Delete, Once Confirmed (Enter Picks Cancel, So Nothing Goes By Accident): Only This Side's Copy Goes
+    private async void OnBubbleMenuDeleteClick(object sender, RoutedEventArgs e)
+    {
+        if (_menuView?.Bubble is not { } bubble || Chat is not { } chat || XamlRoot is not { } root)
+        {
+            return;
+        }
+
+        var text = new TextBlock { Text = ChatCopy.DeleteMessageText, TextWrapping = TextWrapping.Wrap };
+        if (await ConversationMenuFlyout.ShowAsync(ConversationMenuFlyout.NewDialog(root, "Dialog.DeleteMessage", ChatCopy.DeleteMessageTitle, text, ChatCopy.Delete)))
+        {
+            await chat.DeleteAsync(bubble);
+        }
+    }
 
     private void OnPreviewMenuCopyLinkClick(object sender, RoutedEventArgs e) => _menuView?.CopyLink();
 

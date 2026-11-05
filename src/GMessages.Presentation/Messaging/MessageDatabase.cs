@@ -199,6 +199,27 @@ public sealed partial class MessageDatabase
     // =========================================================================
 
     /// <summary>
+    /// Deletes one saved message (it was deleted from the phone).
+    /// </summary>
+    /// <param name="conversationId">The conversation ID.</param>
+    /// <param name="messageId">The message ID.</param>
+    public void DeleteMessage(string conversationId, string messageId)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(conversationId);
+        ArgumentException.ThrowIfNullOrEmpty(messageId);
+
+        Run(connection =>
+        {
+            using SqliteCommand command = connection.CreateCommand();
+            command.CommandText = "DELETE FROM messages WHERE conversation_id = $c AND id = $id";
+            command.Parameters.AddWithValue("$c", conversationId);
+            command.Parameters.AddWithValue("$id", messageId);
+            command.ExecuteNonQuery();
+            return true;
+        }, false);
+    }
+
+    /// <summary>
     /// Loads a conversation's newest messages.
     /// </summary>
     /// <param name="conversationId">The conversation ID.</param>

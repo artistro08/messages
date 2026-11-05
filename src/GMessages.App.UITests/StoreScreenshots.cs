@@ -13,9 +13,9 @@ namespace GMessages.App.UITests;
 /// with the Unsplash photos in <c>Screenshots/Photos</c>, into <c>docs/screenshots</c> at 1920 x 1080.
 /// </summary>
 /// <remarks>
-/// Not part of a normal run: it only goes with the <c>KAITURO_SCREENSHOTS</c> environment variable set to 1, and is
+/// Not part of a normal run: it only goes with the <c>MESSAGES_SCREENSHOTS</c> environment variable set to 1, and is
 /// inconclusive otherwise. Run it with:
-/// <c>$env:KAITURO_SCREENSHOTS = 1; dotnet test src/GMessages.App.UITests -p:Platform=x64 --filter StoreScreenshots</c>.
+/// <c>$env:MESSAGES_SCREENSHOTS = 1; dotnet test src/GMessages.App.UITests -p:Platform=x64 --filter StoreScreenshots</c>.
 /// Each shot is the window's visible frame (no resize border or shadow), with square corners, the pointer moved off it.
 /// </remarks>
 [TestClass]
@@ -40,9 +40,9 @@ public sealed partial class StoreScreenshots : UiTest
     [TestCategory("Screenshots")]
     public async Task TakeStoreScreenshots()
     {
-        if (Environment.GetEnvironmentVariable("KAITURO_SCREENSHOTS") != "1")
+        if (Environment.GetEnvironmentVariable("MESSAGES_SCREENSHOTS") != "1")
         {
-            Assert.Inconclusive("Screenshots run only with KAITURO_SCREENSHOTS=1.");
+            Assert.Inconclusive("Screenshots run only with MESSAGES_SCREENSHOTS=1.");
         }
 
         _ = SetThreadDpiAwarenessContext(-4);

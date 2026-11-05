@@ -232,6 +232,25 @@ public sealed partial class GmClient
     }
 
     /// <summary>
+    /// Deletes a message from the phone.
+    /// </summary>
+    /// <remarks>Ported from <see href="https://github.com/mautrix/gmessages/blob/ba33f4875a491f5cb47db8a6baf42a8869f5f383/pkg/libgm/methods.go">DeleteMessage</see>. Only this side's copy goes; the other side keeps theirs.</remarks>
+    /// <param name="messageId">The message ID.</param>
+    /// <param name="ct">Cancels the wait.</param>
+    /// <returns>The phone's answer; <see cref="DeleteMessageResponse.Success"/> says whether it deleted it.</returns>
+    /// <exception cref="ArgumentException"><paramref name="messageId"/> is empty.</exception>
+    /// <exception cref="InvalidDataException">The phone answered with another type.</exception>
+    /// <exception cref="PhoneNotRespondingException">No answer within 60 seconds.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="ct"/> was canceled.</exception>
+    public async Task<DeleteMessageResponse> DeleteMessageAsync(string messageId, CancellationToken ct)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(messageId);
+
+        IncomingRpc answer = await Rpc.SendAsync(new SendParams(ActionType.DeleteMessage, new DeleteMessageRequest { MessageID = messageId }), ct).ConfigureAwait(false);
+        return Typed<DeleteMessageResponse>(answer);
+    }
+
+    /// <summary>
     /// Makes a temporary ID for a message that is about to be sent.
     /// </summary>
     /// <remarks>Ported from <c>GenerateTmpID</c> in <see href="https://github.com/mautrix/gmessages/blob/ba33f4875a491f5cb47db8a6baf42a8869f5f383/pkg/libgm/util/func.go">util/func.go</see>: a random GUID, like the official app's.</remarks>

@@ -19,6 +19,7 @@ internal static unsafe partial class WindowInterop
     public const uint WM_SIZE             = 0x0005;
     public const uint WM_ACTIVATE         = 0x0006;
     public const uint WM_SETFOCUS         = 0x0007;
+    public const uint WM_CLOSE            = 0x0010;
     public const uint WM_ERASEBKGND       = 0x0014;
     public const uint WM_SETCURSOR        = 0x0020;
     public const uint WM_GETMINMAXINFO    = 0x0024;
@@ -99,6 +100,7 @@ internal static unsafe partial class WindowInterop
     public const uint TPM_RETURNCMD = 0x0100;
 
     // DWM
+    public const int DWMWA_CLOAK                    = 13;
     public const int DWMWA_USE_IMMERSIVE_DARK_MODE  = 20;
     public const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
     public const int DWMWA_BORDER_COLOR             = 34;

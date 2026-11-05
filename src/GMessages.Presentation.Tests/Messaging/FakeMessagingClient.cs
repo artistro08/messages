@@ -198,6 +198,18 @@ internal sealed class FakeMessagingClient : IMessagingClient
         return ReactionThrows is { } ex ? Task.FromException<SendReactionResponse>(ex) : Task.FromResult(ReactionAnswer);
     }
 
+    /// <summary>Every message ID a delete asked for.</summary>
+    public List<string> Deletes { get; } = [];
+
+    /// <summary>Whether the phone says it deleted the message.</summary>
+    public bool DeleteSucceeds { get; set; } = true;
+
+    public Task<DeleteMessageResponse> DeleteMessageAsync(string messageId, CancellationToken ct)
+    {
+        Deletes.Add(messageId);
+        return Task.FromResult(new DeleteMessageResponse { Success = DeleteSucceeds });
+    }
+
     public List<(string ConversationId, SIMPayload? Sim)> Typing { get; } = [];
 
     public Task SetTypingAsync(string conversationId, SIMPayload? sim, CancellationToken ct)

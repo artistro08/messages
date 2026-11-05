@@ -31,7 +31,10 @@ public sealed partial class ChatPane
             return;
         }
 
+        // The Bar Shows At Once, While The Microphone Opens: Empty, Not The Last Recording's Waveform And Time
         string path = System.IO.Path.Combine(media.TempFolder, "voice-" + Guid.NewGuid().ToString("N") + ".m4a");
+        RecordBars.Show(null);
+        RecordTimer.Text = VoiceWave.LengthText(TimeSpan.Zero);
         chat.Voice.Start(path);
         chat.ClearAttachError();
         _recordChat = chat;
@@ -68,7 +71,6 @@ public sealed partial class ChatPane
         _recordStart    = Environment.TickCount64;
         _recordedBefore = 0;
         ShowPaused(false);
-        RecordBars.Show(null);
         ShowRecording();
         _recordTimer.Start();
 
@@ -201,11 +203,11 @@ public sealed partial class ChatPane
         }
     }
 
-    // Pause Becomes Resume (The Mic, To Record More) While Paused, And Back
+    // Pause Becomes Resume (Play, To Record More) While Paused, And Back
     private void ShowPaused(bool paused)
     {
         string name                = paused ? ChatCopy.Resume : ChatCopy.Pause;
-        PauseRecordingGlyph.Glyph  = paused ? "" : "";
+        PauseRecordingGlyph.Glyph  = paused ? "" : "";
         AutomationProperties.SetName(PauseRecordingButton, name);
         ToolTipService.SetToolTip(PauseRecordingButton, name);
     }

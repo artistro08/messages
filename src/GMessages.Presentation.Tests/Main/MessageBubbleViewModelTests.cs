@@ -160,6 +160,31 @@ public sealed class MessageBubbleViewModelTests
     }
 
     /// <summary>
+    /// My newest message sent as SMS says "SMS" in place of the delivery icon; one sent as RCS keeps its icon.
+    /// </summary>
+    [TestMethod]
+    public void SentAsSms_SaysSms_NotTheIcon()
+    {
+        var sent    = new ChatMessage("m1", string.Empty, "c1", "me1", DateTimeOffset.UnixEpoch, true, MessageKind.Text, "hi", MessageStatusType.OutgoingDelivered);
+        var sms     = new MessageBubbleViewModel(sent with { IsRcs = false });
+        var rcs     = new MessageBubbleViewModel(sent with { IsRcs = true });
+        var sending = new MessageBubbleViewModel(sent with { IsRcs = false, Status = MessageStatusType.OutgoingSending });
+        sms.SetStatus(true, ChatCopy.Delivered, false);
+        rcs.SetStatus(true, ChatCopy.Delivered, false);
+        sending.SetStatus(true, "Sending", false);
+
+        Assert.IsTrue(sms.ShowsSmsLabel);
+        Assert.AreEqual(MessageStatusIcon.None, sms.StatusIcon);
+        Assert.IsTrue(sms.ShowsCaptionDot);
+        Assert.IsFalse(rcs.ShowsSmsLabel);
+        Assert.AreEqual(MessageStatusIcon.Delivered, rcs.StatusIcon);
+
+        // While Sending, The Clock
+        Assert.IsFalse(sending.ShowsSmsLabel);
+        Assert.AreEqual(MessageStatusIcon.Sending, sending.StatusIcon);
+    }
+
+    /// <summary>
     /// A failed send raises what shows the retry footer and hides the caption row.
     /// </summary>
     [TestMethod]

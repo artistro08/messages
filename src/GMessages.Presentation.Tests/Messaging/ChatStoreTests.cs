@@ -1645,6 +1645,61 @@ public sealed class ChatStoreTests
         Assert.IsTrue(restarted.IsEncrypted("c1"));
     }
 
+    /// <summary>
+    /// A list page asked for before a live update (the chat read while the page was on its way) doesn't put the older,
+    /// unread copy back; a conversation that didn't change takes the page's copy.
+    /// </summary>
+    [TestMethod]
+    public async Task ListPage_AskedBeforeALiveChange_KeepsTheLiveCopy()
+    {
+        using var rig       = new Rig();
+        Conversation unread = Conv("c1");
+        unread.Unread       = true;
+        Conversation other  = Conv("c2", "Bo");
+        await rig.Store.HandleEventAsync(new ConversationUpdated(unread));
+
+        var listGate                 = new TaskCompletionSource();
+        rig.Client.ConversationsPage = new ListConversationsResponse();
+        rig.Client.ConversationsPage.Conversations.Add(unread);
+        rig.Client.ConversationsPage.Conversations.Add(other);
+        rig.Client.ListGate          = listGate;
+        Task<(IReadOnlyList<ConversationInfo> Conversations, Cursor? Next)> folder = rig.Store.LoadFolderAsync(ConversationFolder.Inbox, null, Ct);
+
+        // Read Live While The Page Is On Its Way
+        await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1")));
+        listGate.SetResult();
+        (IReadOnlyList<ConversationInfo> page, _) = await folder;
+
+        Assert.IsFalse(rig.Store.Find("c1")!.Unread, "The older page put the read chat back as unread.");
+        Assert.IsFalse(page[0].Unread);
+        Assert.IsNotNull(rig.Store.Find("c2"));
+    }
+
+    /// <summary>
+    /// The conversation's own encryption flag (field 39) decides the lock; without it, the newest encryption line does.
+    /// </summary>
+    [TestMethod]
+    public async Task Store_IsEncrypted_TheConversationsOwnFlagWins()
+    {
+        using var rig = new Rig();
+
+        // No Flag: The Tombstone Says Encrypted
+        await rig.Store.HandleEventAsync(new MessageReceived(Tomb("t1", "c1", MessageStatusType.TombstoneEncryptedOneOnOneRcsCreated, 1_000_000), true));
+        await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1")));
+        Assert.IsTrue(rig.Store.IsEncrypted("c1"));
+
+        // The Phone Says Not Encrypted On The Conversation, Then Encrypted
+        Conversation plain    = Conv("c1");
+        plain.EncryptionState = new EncryptionState { Encrypted = false };
+        await rig.Store.HandleEventAsync(new ConversationUpdated(plain));
+        Assert.IsFalse(rig.Store.IsEncrypted("c1"));
+
+        Conversation secure    = Conv("c1");
+        secure.EncryptionState = new EncryptionState { Encrypted = true };
+        await rig.Store.HandleEventAsync(new ConversationUpdated(secure));
+        Assert.IsTrue(rig.Store.IsEncrypted("c1"));
+    }
+
     [TestMethod]
     public async Task Store_FindMessage_MemoryElseDatabase()
     {

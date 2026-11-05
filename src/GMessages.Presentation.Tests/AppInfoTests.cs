@@ -10,7 +10,7 @@ public sealed class AppInfoTests
     private static readonly string[] ScannedPatterns = ["*.cs", "*.xaml", "*.appxmanifest"];
 
     [TestMethod]
-    public void DisplayName_ComesFromTheSingleBuildProperty() => Assert.AreEqual("Kaituro", AppInfo.DisplayName);
+    public void DisplayName_ComesFromTheSingleBuildProperty() => Assert.AreEqual("Messages", AppInfo.DisplayName);
 
     [TestMethod]
     public void Version_IsNotEmpty() => Assert.IsFalse(string.IsNullOrWhiteSpace(AppInfo.Version));
@@ -21,6 +21,9 @@ public sealed class AppInfoTests
         // Scans the app and presentation sources for the name quoted or as element text; Directory.Build.props isn't scanned
         var src = Path.Combine(FindRepoRoot(), "src");
         var self = Path.GetFullPath(Path.Combine(src, "GMessages.Presentation.Tests", "AppInfoTests.cs"));
+
+        // AppInfo.cs Holds The Window Title, "Messages", Which Is What The App Is For, Not Its Name (They Match Today)
+        var info = Path.GetFullPath(Path.Combine(src, "GMessages.Presentation", "AppInfo.cs"));
         var offenders = new List<string>();
 
         foreach (var project in ScannedProjects)
@@ -28,10 +31,11 @@ public sealed class AppInfoTests
             var files = ScannedPatterns.SelectMany(pattern => Directory.EnumerateFiles(Path.Combine(src, project), pattern, SearchOption.AllDirectories));
             foreach (var file in files)
             {
-                // Skip build output and this test
+                // Skip build output, this test and AppInfo.cs
                 var relative = Path.GetRelativePath(src, file);
                 if (relative.Split(Path.DirectorySeparatorChar).Any(part => part is "bin" or "obj")
-                    || string.Equals(Path.GetFullPath(file), self, StringComparison.OrdinalIgnoreCase))
+                    || string.Equals(Path.GetFullPath(file), self, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(Path.GetFullPath(file), info, StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
                 }

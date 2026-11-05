@@ -13,9 +13,9 @@
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <Authors>Devin Green</Authors>
     <!-- The one place the app display name lives: exe name, MSIX names and AppInfo.DisplayName all read it -->
-    <AppDisplayName>Kaituro</AppDisplayName>
+    <AppDisplayName>Messages</AppDisplayName>
     <!-- App version (AppInfo.Version); keep it in step with Identity Version in src/GMessages.App/Package.appxmanifest -->
-    <Version>0.1.6</Version>
+    <Version>0.1.7</Version>
   </PropertyGroup>
 
   <!-- Display Name: stamped into every assembly, read at runtime by AppInfo.DisplayName -->

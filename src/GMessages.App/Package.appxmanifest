@@ -15,9 +15,9 @@
 
   <!-- Publisher must match the signing certificate's subject (scripts/Signing.ps1) -->
   <Identity
-    Name="artistro08.Kaituro"
+    Name="artistro08.Messages"
     Publisher="CN=BF59F607-536B-4252-888F-7B3ED9D56F96"
-    Version="0.1.6.0" />
+    Version="0.1.7.0" />
 
   <Properties>
     <DisplayName>$AppDisplayName$</DisplayName>

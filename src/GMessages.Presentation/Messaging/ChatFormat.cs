@@ -415,14 +415,17 @@ public static class ChatFormat
     /// <summary>
     /// The text that stands for a message wherever text is shown (bubble, notification, reply quote).
     /// </summary>
-    /// <remarks>A text message's text, a media message's caption when it has one, else <see cref="KindLabel"/>.</remarks>
+    /// <remarks>
+    /// A text message's text, a media message's caption or a system line's words when it has them, else
+    /// <see cref="KindLabel"/>.
+    /// </remarks>
     /// <param name="m">The message.</param>
     /// <returns>The text to show.</returns>
     public static string ShownText(ChatMessage m)
     {
         ArgumentNullException.ThrowIfNull(m);
 
-        return m.Kind == MessageKind.Text || (m.Media is not null && m.Text.Length > 0) ? m.Text : KindLabel(m.Kind);
+        return m.Kind == MessageKind.Text || ((m.Media is not null || m.Kind == MessageKind.Tombstone) && m.Text.Length > 0) ? m.Text : KindLabel(m.Kind);
     }
 
     /// <summary>
@@ -433,13 +436,27 @@ public static class ChatFormat
     public static string SenderName(ParticipantInfo? p) =>
         new[] { p?.FullName, p?.FirstName, p?.FormattedNumber }.FirstOrDefault(n => !string.IsNullOrEmpty(n)) ?? string.Empty;
 
-    // TODO: LibGM has no encryption field on Conversation; the lock follows the newest protocol tombstone seen, so a chat whose tombstone is older than every stored page shows no lock until it is scrolled to.
+    /// <summary>
+    /// Whether a message stays out of the chat: a system line, except a group's name change (changed or cleared, in
+    /// Google's own words), which shows as a centered gray line. The others only steer the lock (<see cref="EncryptionOf"/>).
+    /// </summary>
+    /// <param name="m">The message.</param>
+    /// <returns>True for a hidden system line.</returns>
+    public static bool IsHiddenLine(ChatMessage m)
+    {
+        ArgumentNullException.ThrowIfNull(m);
+
+        return m.Kind == MessageKind.Tombstone
+            && !(m.Text.Length > 0 && m.Status is MessageStatusType.TombstoneGroupRenamedLocal or MessageStatusType.TombstoneGroupRenamedGlobal or MessageStatusType.TombstoneGroupNameClearedGlobal);
+    }
+
     /// <summary>
     /// What a system line says about end-to-end encryption.
     /// </summary>
     /// <remarks>
     /// The protocol tombstones that switch a chat into or out of encryption. The newest one seen decides whether the
-    /// chat shows the lock.
+    /// chat shows the lock, when the conversation itself doesn't say (<see cref="ConversationInfo.IsEncrypted"/>, field
+    /// 39, comes first).
     /// </remarks>
     /// <param name="status">The message status.</param>
     /// <returns>True when the chat is now encrypted, false when it no longer is, null when the status says nothing.</returns>

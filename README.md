@@ -1,16 +1,16 @@
 <p align="center">
-    <img src="src/GMessages.App/Assets/Square44x44Logo.targetsize-256.png" width="128" height="128" alt="Kaituro icon">
+    <img src="src/GMessages.App/Assets/Square44x44Logo.targetsize-256.png" width="128" height="128" alt="Messages icon">
 </p>
 
 <h1 align="center">
-    Kaituro
+    Messages
 </h1>
 
 <p align="center">
    Google messages but Native. 
 </p>
 
-![Kaituro showing a chat with a photo, reactions and a reply, in dark mode](docs/screenshots/01-chat-dark.png)
+![Messages showing a chat with a photo, reactions and a reply, in dark mode](docs/screenshots/01-chat-dark.png)
 
 ## Why? 
 I'm literally sick and tired of web apps. They are bloated. they take up memory. they literally run a web browser. The idea here was to create something that was light on memory when using it and have an app that doesn't take up much resources when running in the background.
@@ -40,10 +40,10 @@ Build the app from a **Developer PowerShell for VS 2026** (its XAML only compile
 
 ```powershell
 msbuild src/GMessages.App -restore -p:Configuration=Debug -p:Platform=x64
-.\src\GMessages.App\bin\x64\Debug\net10.0-windows10.0.26100.0\win-x64\Kaituro.exe
+.\src\GMessages.App\bin\x64\Debug\net10.0-windows10.0.26100.0\win-x64\Messages.exe
 ```
 
-> A debug build keeps its data in `%LOCALAPPDATA%\Kaituro`, apart from the installed app, so you'll pair it separately.
+> A debug build keeps its data in `%LOCALAPPDATA%\Messages`, apart from the installed app, so you'll pair it separately.
 
 ### Build The Installer
 
@@ -70,13 +70,13 @@ dotnet test src/GMessages.Presentation.Tests
 dotnet test src/GMessages.App.UITests -p:Platform=x64
 ```
 
-> The UI tests drive a real copy of the app against a fake Google server. Quit the installed Kaituro first, and rebuild `src/GMessages.App` before running them so they don't test an old build.
+> The UI tests drive a real copy of the app against a fake Google server. Quit the installed Messages first, and rebuild `src/GMessages.App` before running them so they don't test an old build.
 
 ### Change The Icon Or Screenshots
 
-- `.\scripts\Make-Icons.ps1` redraws every icon size and the tray icons from `assets-src/Kaituro.svg`.
+- `.\scripts\Make-Icons.ps1` redraws every icon size and the tray icons from `assets-src/Messages.svg`.
 - The store screenshots in `docs/screenshots` come from a mock phone. Retake them with:
 
 ```powershell
-$env:KAITURO_SCREENSHOTS = 1; dotnet test src/GMessages.App.UITests -p:Platform=x64 --filter StoreScreenshots
+$env:MESSAGES_SCREENSHOTS = 1; dotnet test src/GMessages.App.UITests -p:Platform=x64 --filter StoreScreenshots
 ```

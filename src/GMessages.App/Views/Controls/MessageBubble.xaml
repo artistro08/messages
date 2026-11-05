@@ -11,8 +11,10 @@
 
     <!-- Row: the bubble, with an avatar lane on its left for received bubbles in a group chat (the avatar beside a group's
          last bubble). Bubbles of one group sit 2 px apart, groups further -->
+    <!-- Row: transparent, so a click anywhere on it shows the time -->
     <Grid
         x:Name="Row"
+        Background="Transparent"
         Margin="{x:Bind local:MessageBubble.GroupMargin(Bubble.IsFirstInGroup, Bubble.IsLastInGroup), Mode=OneWay}">
 
         <!-- Sent Or Received: sent RCS sits right on a lighter shade of the accent, sent SMS right on the accent color,
@@ -168,7 +170,8 @@
             x:Name="Root"
             Padding="{x:Bind local:MessageBubble.LanePadding(Bubble.HasAvatarLane, Bubble.FromMe), Mode=OneWay}"
             HorizontalAlignment="Left"
-            Spacing="2">
+            Spacing="2"
+            Visibility="{x:Bind views:MainWindow.HiddenIf(Bubble.IsSystemLine), Mode=OneWay, FallbackValue=Visible}">
 
             <!-- Bubble Menu: one for every bubble, in the chat pane (BubbleMenu), opened by its right-click, Application key
                  and Shift + F10 handling, the hover strip's ⋮ and MenuRequested -->
@@ -801,14 +804,29 @@
                 <!-- Captions: the time or retry link, or the caption row, on the bubble's outer side -->
                 <StackPanel x:Name="Captions" Spacing="2">
 
-                    <!-- Time (Hidden Until The Bubble Is Clicked), Or The Retry Link When The Send Failed -->
+                    <!-- Time (Hidden Until The Bubble Is Clicked), With The Lock On An Encrypted RCS Message, Or The Retry Link
+                         When The Send Failed -->
                     <Grid x:Name="Footer">
-                        <TextBlock
-                            AutomationProperties.AutomationId="{x:Bind local:MessageBubble.TimeIdOf(Bubble.PartKey), Mode=OneWay}"
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            Style="{StaticResource CaptionTextBlockStyle}"
-                            Text="{x:Bind Bubble.Time, Mode=OneWay}"
-                            Visibility="{x:Bind local:MessageBubble.TimeVisibility(Bubble.IsTimeShown, Bubble.IsFailed, Bubble.ShowsStatusRow), Mode=OneWay}" />
+                        <StackPanel
+                            Orientation="Horizontal"
+                            Spacing="4"
+                            Visibility="{x:Bind local:MessageBubble.TimeVisibility(Bubble.IsTimeShown, Bubble.IsFailed, Bubble.ShowsStatusRow), Mode=OneWay}">
+                            <TextBlock
+                                VerticalAlignment="Center"
+                                AutomationProperties.AutomationId="{x:Bind local:MessageBubble.TimeIdOf(Bubble.PartKey), Mode=OneWay}"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Text="{x:Bind Bubble.Time, Mode=OneWay}" />
+                            <FontIcon
+                                x:Name="TimeLock"
+                                x:Load="{x:Bind Bubble.ShowsLock, Mode=OneWay, FallbackValue=False}"
+                                VerticalAlignment="Center"
+                                AutomationProperties.Name="{x:Bind local:MessageBubble.EncryptedText}"
+                                FontSize="12"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Glyph="&#xE72E;"
+                                ToolTipService.ToolTip="{x:Bind local:MessageBubble.EncryptedText}" />
+                        </StackPanel>
 
                         <!-- Not Sent: a red error mark before the retry link -->
                         <StackPanel
@@ -935,6 +953,17 @@
                                 AutomationProperties.Name="{x:Bind Bubble.StatusText, Mode=OneWay, FallbackValue=''}" />
                         </Grid>
 
+                        <!-- SMS: in place of the delivery icon for a message sent as SMS or MMS (Sms.{id}); the status name above
+                             still says Sent or Delivered -->
+                        <TextBlock
+                            x:Name="StatusSms"
+                            x:Load="{x:Bind Bubble.ShowsSmsLabel, Mode=OneWay, FallbackValue=False}"
+                            VerticalAlignment="Center"
+                            AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Sms.', Bubble.PartKey), Mode=OneWay}"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            Text="{x:Bind local:MessageBubble.SmsText}" />
+
                         <!-- Lock: end-to-end encrypted -->
                         <FontIcon
                             x:Name="StatusLock"
@@ -953,6 +982,19 @@
             <!-- /Under The Bubble -->
         </StackPanel>
         <!-- /Bubble -->
+
+        <!-- System Line: a group's name change in Google's words, small, centered and gray, in place of a bubble -->
+        <TextBlock
+            x:Name="SystemLine"
+            x:Load="{x:Bind Bubble.IsSystemLine, Mode=OneWay, FallbackValue=False}"
+            Margin="24,8"
+            HorizontalAlignment="Center"
+            AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Line.', Bubble.PartKey), Mode=OneWay}"
+            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+            Style="{StaticResource CaptionTextBlockStyle}"
+            Text="{x:Bind Bubble.Text, Mode=OneWay}"
+            TextAlignment="Center"
+            TextWrapping="Wrap" />
     </Grid>
     <!-- /Row -->
 </UserControl>

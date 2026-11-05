@@ -1,7 +1,7 @@
 <#
-    Renders Kaituro's icons into src/GMessages.App/Assets (see scripts/make-icons.cjs): the MSIX logos at every scale and
-    target size, the window/exe icon (AppIcon.ico) from assets-src/Kaituro.svg, and the tray icons (TrayLight.ico,
-    TrayDark.ico) from assets-src/Kaituro-mono.svg. The notification Send button comes from scripts/New-AppAssets.ps1.
+    Renders the app's icons into src/GMessages.App/Assets (see scripts/make-icons.cjs): the MSIX logos at every scale and
+    target size, the window/exe icon (AppIcon.ico) from assets-src/Messages.svg, and the tray icons (TrayLight.ico,
+    TrayDark.ico) from assets-src/Messages-mono.svg. The notification Send button comes from scripts/New-AppAssets.ps1.
 
     Ported from Leaf Calendar's tools/make-icons.ps1. Uses resvg (https://github.com/yisibl/resvg-js), installed by npm
     into a temp folder; needs Node.js, no admin.
@@ -9,7 +9,7 @@
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
-$tool = Join-Path ([IO.Path]::GetTempPath()) 'kaituro-make-icons'
+$tool = Join-Path ([IO.Path]::GetTempPath()) 'messages-make-icons'
 
 # Renderer (npm, outside the repo)
 New-Item -ItemType Directory -Force $tool | Out-Null

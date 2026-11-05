@@ -36,6 +36,11 @@ public static class ChatCopy
     public const string MoveToTrashTitle = "Move to trash?";
     public const string MoveToTrashText  = "It moves to trash on your phone too.";
 
+    // A Message's Delete And Its Dialog (Controller Copy; Owner Signs Off)
+    public const string Delete             = "Delete";
+    public const string DeleteMessageTitle = "Delete this message?";
+    public const string DeleteMessageText  = "It's deleted from your phone too. Others in the chat keep their copy.";
+
     // Details Dialog; Its Title Is Details, Its Toggle Mute And Its Button BlockAndReportSpam (Controller Copy; Owner Signs Off)
     public const string People = "People";
     public const string Close  = "Close";
@@ -57,6 +62,8 @@ public static class ChatCopy
     public const string CancelReply       = "Cancel reply";
     public const string EndToEndEncrypted = "End-to-end encrypted";
     public const string Typing            = "Typing";
+    public const string RcsMessage        = "RCS Message";
+    public const string Sms               = "SMS";
     public const string TypingFormat      = "{0} is typing";
     public const string OriginalMessage   = "Original message";
     public const string Copy              = "Copy";

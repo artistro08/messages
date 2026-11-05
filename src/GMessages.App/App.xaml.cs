@@ -72,6 +72,10 @@ public sealed partial class App : Application, IDisposable
     private DispatcherQueueTimer? _launchNotificationTimeout;
     private MainWindow? _mainWindow;
 
+    // A Closed Window Is Kept Hidden For A Quick Reopen, Then Destroyed So Its Memory Goes Back To Windows
+    private static readonly TimeSpan KeepClosedWindow = TimeSpan.FromMinutes(5);
+    private DispatcherQueueTimer? _dropWindow;
+
     // The Main Window's Link Preview Fetcher: Made With The Window And Disposed On Close, So Its Cache Goes With It
     private LinkPreviewer? _linkPreviewer;
     private IStartupService? _startup;
@@ -488,6 +492,7 @@ public sealed partial class App : Application, IDisposable
             _mainWindow.ApplyTheme(_settings.Theme);
             _mainWindow.SettingsRequested += (_, _) => ShowSettings();
             _mainWindow.QuitRequested     += (_, _) => Quit();
+            _mainWindow.Closing           += OnMainWindowClosing;
             _mainWindow.Closed            += (_, _) =>
             {
                 // A Toast's Conversation Not Yet Shown Goes With The Window, So A Later Open Doesn't Jump To It. The Open
@@ -509,8 +514,33 @@ public sealed partial class App : Application, IDisposable
             };
         }
 
+        _dropWindow?.Stop();
         ShowBody();
         _mainWindow.Activate();
+    }
+
+    // Closed By The Person: Hidden And Kept A Few Minutes, So Reopening Is Instant, Then Destroyed. A Close That Quits
+    // (No Background, Or Nothing To Come Back To) Goes Through At Once
+    private void OnMainWindowClosing(object? sender, CancelEventArgs e)
+    {
+        if (_mainWindow is not { } window || _settings is not { } saved || LaunchWindow.QuitsOnClose(saved.RunInBackground, saved.ShowTrayIcon, NeedsPairing()))
+        {
+            return;
+        }
+
+        e.Cancel               = true;
+        _pendingConversationId = null;
+        window.Hide();
+
+        if (_dropWindow is null)
+        {
+            _dropWindow             = DispatcherQueue.GetForCurrentThread().CreateTimer();
+            _dropWindow.IsRepeating = false;
+            _dropWindow.Tick       += (_, _) => _mainWindow?.Close();
+        }
+
+        _dropWindow.Interval = TestHooks.ShortWait("keep-window") ?? KeepClosedWindow;
+        _dropWindow.Start();
     }
 
     // Asked For By The Person (Tray, Second Launch, A Toast Click): The Window Comes To The Front, Restored If Minimized.
