@@ -199,6 +199,27 @@ public sealed class ChatStoreTests
         Assert.IsNull(req.SIMPayload, "the old phone's SIMs are gone");
     }
 
+    /// <summary>
+    /// A received message that beats the phone's conversation update moves a read chat up as unread: raised as read, it
+    /// would take the toast just made for that message with it.
+    /// </summary>
+    [TestMethod]
+    public async Task ReceivedBeforeConversationUpdate_ReadChatTurnsUnread()
+    {
+        using var rig = new Rig();
+        await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1")));
+        List<ConversationInfo> raised  = [];
+        rig.Store.ConversationChanged += (_, c) => raised.Add(c);
+
+        Message received              = Msg("m1", "c1", ts: 2_000);
+        received.ParticipantID        = "p-ann";
+        received.MessageStatus.Status = MessageStatusType.IncomingComplete;
+        await rig.Store.HandleEventAsync(new MessageReceived(received, false));
+
+        Assert.IsTrue(rig.Store.Find("c1")?.Unread);
+        Assert.IsTrue(raised.All(c => c.Unread), "never raised as read");
+    }
+
     [TestMethod]
     public async Task MessageForUnknownConversation_FetchesConversationFirst()
     {

@@ -142,8 +142,9 @@ public sealed partial class ChatStore
         // A Live Message Newer Than The Cached Conversation's Last Moves It To The Top At Once (The List Sorts By This
         // Time), Sent Or Received, Without Waiting For Google's Conversation Update, Which Doesn't Always Come. A Received
         // One's Update Comes First With Its Snippet; For One Of Mine It Often Never Came (The Row Kept The Old Snippet), So
-        // Mine Brings Its Own (A System Line Keeps It). The Update, When It Comes, Has The Last Word. A Conversation Fetched
-        // Below Is Already Current
+        // Mine Brings Its Own (A System Line Keeps It). A Received One Makes The Chat Unread: When It Beats The Update, The
+        // Cached Copy Is Still Read, And Raising That Would Take This Message's Toast With It. The Update, When It Comes,
+        // Has The Last Word. A Conversation Fetched Below Is Already Current
         if (!received.IsOld && conversation is not null && message.Time > conversation.LastMessageTime)
         {
             conversation = message.FromMe && message.Kind is not (MessageKind.Tombstone or MessageKind.Other)
@@ -155,7 +156,7 @@ public sealed partial class ChatStore
                     SnippetMedia    = message.Media is { } snippetMedia ? ChatFormat.MediaLabel(snippetMedia) : string.Empty,
                     LatestMessageId = message.Id,
                 }
-                : conversation with { LastMessageTime = message.Time };
+                : conversation with { LastMessageTime = message.Time, Unread = conversation.Unread || !message.FromMe };
             if (Upsert(conversation))
             {
                 ConversationChanged?.Invoke(this, conversation);
