@@ -148,6 +148,11 @@ public sealed partial class ChatsView : UserControl
     public MainViewModel ViewModel { get; }
 
     /// <summary>
+    /// Stops what the open chat plays or records (the window was hidden).
+    /// </summary>
+    internal void StopMedia() => ChatView.StopMedia();
+
+    /// <summary>
     /// Stops the bindings and disposes the view model. Call when the window drops the view.
     /// </summary>
     public void Close()

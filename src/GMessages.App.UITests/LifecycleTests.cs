@@ -158,8 +158,9 @@ public sealed class LifecycleTests : UiTest
     }
 
     /// <summary>
-    /// Once paired and connected, closing the main window leaves the tray idle; the app trims its memory (a debug-build
-    /// note, <c>trim-done.txt</c>, says when) and its private bytes end below what they were right after the close.
+    /// Once paired and connected, closing the main window leaves the tray idle; once the kept window is dropped (a
+    /// second here, minutes for real) the app trims its memory (a debug-build note, <c>trim-done.txt</c>, says when) and
+    /// its private bytes end below what they were right after the close.
     /// </summary>
     /// <returns>A task for the test.</returns>
     [TestMethod]
@@ -170,6 +171,7 @@ public sealed class LifecycleTests : UiTest
         // No Trim Note Yet: A Trim Skipped For The Open Window Writes None
         string done = Path.Combine(App.DataDir, "trim-done.txt");
         File.Delete(done);
+        File.WriteAllText(Path.Combine(App.DataDir, "keep-window.txt"), "1");
         CloseMainWindow();
 
         App.Process.Refresh();

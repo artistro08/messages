@@ -28,12 +28,15 @@ public sealed partial class ChatViewModel
             return;
         }
 
-        // A System Line Shows No Bubble, But Can Switch Encryption On Or Off (The Header's Lock And The Status Row's)
+        // A System Line Can Switch Encryption On Or Off (The Lock); Only A Group's Name Change Shows, As A Line
         if (m.Kind == MessageKind.Tombstone)
         {
             IsEncrypted = _store.IsEncrypted(ConversationId);
-            RefreshStatus(IsEncrypted, Messages.Count - 1);
-            return;
+            RefreshStatus(IsEncrypted, 0);
+            if (ChatFormat.IsHiddenLine(m))
+            {
+                return;
+            }
         }
 
         // Only A Message New To This PC Animates In. The Phone Also Sends A Chat's Recent History As Live Messages (On A
@@ -102,8 +105,24 @@ public sealed partial class ChatViewModel
             return;
         }
 
-        bool couldMute = CanMute;
-        Conversation   = c;
+        bool couldMute   = CanMute;
+        string wasHolder = DraftPlaceholder;
+        Conversation     = c;
+
+        // Turned RCS Or Back To SMS: The Placeholder Follows
+        if (wasHolder != DraftPlaceholder)
+        {
+            Raise(nameof(DraftPlaceholder));
+        }
+
+        // Encrypted Or Not Any More (The Phone Says So On The Conversation): The Lock Follows
+        bool encrypted = _store.IsEncrypted(ConversationId);
+        if (encrypted != IsEncrypted)
+        {
+            IsEncrypted = encrypted;
+            RefreshStatus(encrypted, 0);
+        }
+
         if (IsMuted != c.IsMuted)
         {
             IsMuted = c.IsMuted;

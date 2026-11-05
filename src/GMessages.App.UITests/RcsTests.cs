@@ -23,6 +23,42 @@ public sealed class RcsTests : UiTest
     private const string AnnPhone = "+15550000001";
 
     /// <summary>
+    /// A message's Delete asks first (Cancel keeps it), then deletes it from the phone and the bubble goes.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task DeleteMessage_AsksThenDeletes()
+    {
+        await OpenChatAsync("Row.c-ann");
+        string id = Newest("c-ann").MessageID;
+
+        // Cancel: Nothing Goes
+        App.Find("Bubble." + id).RightClick();
+        App.Find("Bubble.Delete").Patterns.Invoke.Pattern.Invoke();
+        DialogButton(App.Find("Dialog.DeleteMessage"), ChatCopy.Cancel).Patterns.Invoke.Pattern.Invoke();
+        WaitForGone("Dialog.DeleteMessage");
+        Thread.Sleep(500);
+        Assert.IsEmpty(Server.Phone.Deletes, "Cancel still asked the phone to delete.");
+        App.Find("Bubble." + id);
+
+        // Delete
+        App.Find("Bubble." + id).RightClick();
+        App.Find("Bubble.Delete").Patterns.Invoke.Pattern.Invoke();
+        DialogButton(App.Find("Dialog.DeleteMessage"), ChatCopy.Delete).Patterns.Invoke.Pattern.Invoke();
+        Wait.Until(() => Server.Phone.Deletes.Contains(id), AppDriver.DefaultTimeout, () => "The phone was never asked to delete the message.");
+        WaitForGone("Bubble." + id);
+    }
+
+    // A Dialog's Button, By Name
+    private static AutomationElement DialogButton(AutomationElement dialog, string name)
+    {
+        AutomationElement? button = null;
+        Wait.Until(() => (button = AppDriver.Search(dialog, e => e.ControlType == FlaUI.Core.Definitions.ControlType.Button && AppDriver.SafeName(e) == name)) is not null,
+            AppDriver.DefaultTimeout, () => $"The dialog has no '{name}' button.");
+        return button!;
+    }
+
+    /// <summary>
     /// A sent message reads "Sent" once the phone echoes it, then "Delivered", then "Read" as the phone reports them.
     /// </summary>
     /// <returns>A task for the test.</returns>
@@ -223,18 +259,21 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// Ann's encrypted chat shows the lock after her name; Team's SMS group doesn't.
+    /// Ann's encrypted chat shows the lock under its newest message, not in the header; Team's SMS group shows none.
     /// </summary>
     /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task EncryptedChat_ShowsLock()
     {
         await OpenChatAsync("Row.c-ann");
-        Assert.AreEqual(ChatCopy.EndToEndEncrypted, AppDriver.SafeName(App.Find("Chat.Encrypted")));
+        Wait.Until(() => App.TryFindWhere(e => AppDriver.SafeName(e) == ChatCopy.EndToEndEncrypted) is not null, AppDriver.DefaultTimeout,
+            () => "Ann's encrypted chat showed no lock.");
+        Assert.IsNull(App.TryFind("Chat.Encrypted"), "The header still shows a lock.");
 
         App.Find("Row.c-team").Patterns.SelectionItem.Pattern.Select();
         App.WaitForText("Chat.Header", "Team");
-        WaitForGone("Chat.Encrypted");
+        Wait.Until(() => App.TryFindWhere(e => AppDriver.SafeName(e) == ChatCopy.EndToEndEncrypted) is null, AppDriver.DefaultTimeout,
+            () => "Team's SMS group showed a lock.");
     }
 
     /// <summary>
@@ -373,7 +412,8 @@ public sealed class RcsTests : UiTest
 
     /// <summary>
     /// On my newest message "Oh yeahhhh" (owner's screenshot), the pill covers neither the time nor the status: the time
-    /// ends at the bubble's right side and drops below the pill. Team, as the owner's chat had no lock after the status.
+    /// ends at the bubble's right side and drops below the pill. Team, as the owner's chat had no lock after the status;
+    /// Team is SMS, so the status is the "SMS" word.
     /// </summary>
     /// <returns>A task for the test.</returns>
     [TestMethod]
@@ -385,7 +425,7 @@ public sealed class RcsTests : UiTest
         System.Drawing.Rectangle on      = ReactAndWait("c-team", id, "p-bo").BoundingRectangle;
         System.Drawing.Rectangle text    = App.Find("Bubble." + id).BoundingRectangle;
         System.Drawing.Rectangle caption = App.Find("Caption." + id).BoundingRectangle;
-        System.Drawing.Rectangle status  = App.Find("Status." + id).BoundingRectangle;
+        System.Drawing.Rectangle status  = App.Find("Sms." + id).BoundingRectangle;
 
         Assert.IsFalse(on.IntersectsWith(caption), $"The pill {on} covers the time {caption}.");
         Assert.IsFalse(on.IntersectsWith(status), $"The pill {on} covers the status {status}.");

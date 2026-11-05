@@ -224,6 +224,9 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
     /// </summary>
     public bool CanMute => Conversation is { Status: not (ConversationStatus.SpamFolder or ConversationStatus.BlockedFolder) };
 
+    /// <summary>Gets the empty message box's placeholder: "RCS Message" in an RCS chat, else "Text message".</summary>
+    public string DraftPlaceholder => Conversation?.IsRcs == true ? ChatCopy.RcsMessage : ChatCopy.TextMessage;
+
     /// <summary>Gets the bubbles, oldest first.</summary>
     public ObservableCollection<MessageBubbleViewModel> Messages { get; } = [];
 
@@ -550,7 +553,7 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
         _pageShown = true;
         List<MessageBubbleViewModel> wanted  = [];
         HashSet<MessageBubbleViewModel> keep = [];
-        foreach (ChatMessage m in page.Where(m => m.Kind != MessageKind.Tombstone))
+        foreach (ChatMessage m in page.Where(m => !ChatFormat.IsHiddenLine(m)))
         {
             MessageBubbleViewModel? bubble = FindBubble(m);
             if (bubble is null || keep.Contains(bubble))
@@ -668,10 +671,17 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
+        // The Status Moves From The Last Real Bubble Before To The Newest One, Past Any System Line Between
         bool encrypted = _store.IsEncrypted(ConversationId);
+        int from       = Messages.Count - 2;
+        while (from > 0 && Messages[from].IsSystemLine)
+        {
+            from--;
+        }
+
         RefreshGroups(c, at - 1, at + 1);
         RefreshQuotes(c);
-        RefreshStatus(encrypted, Messages.Count - 2);
+        RefreshStatus(encrypted, from);
         RefreshPreviews(c);
         IsEncrypted = encrypted;
     }
@@ -741,8 +751,9 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
             b.SetConversation(c);
         }
 
+        // A System Line (A Group Rename) Breaks A Group
         static bool SameGroup(MessageBubbleViewModel a, MessageBubbleViewModel b) =>
-            a.FromMe == b.FromMe && (a.FromMe || a.ParticipantId == b.ParticipantId) && b.SentAt - a.SentAt <= GroupGap;
+            !a.IsSystemLine && !b.IsSystemLine && a.FromMe == b.FromMe && (a.FromMe || a.ParticipantId == b.ParticipantId) && b.SentAt - a.SentAt <= GroupGap;
     }
 
     // Quotes Come From The Bubbles Shown, Else The Store (Memory Or Database), Else "Original message" With No Sender.
@@ -781,18 +792,18 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
         });
     }
 
-    // The Caption Row Goes Under The Chat's Newest Bubble Only, Mine Or Received, With The Lock In An Encrypted Chat. When
-    // It Is Mine: "Sent", "Delivered" Or "Read" (Google's Icon, Named So), Or The Clock While Sending. Only The Bubbles
-    // From An Index On
+    // The Caption Row Goes Under The Chat's Newest Bubble Only, Mine Or Received. When It Is Mine: "Sent", "Delivered" Or
+    // "Read" (Google's Icon, Named So), Or The Clock While Sending. Every RCS Bubble Of An Encrypted Chat Has The Lock, By
+    // Its Caption Row Or Its Clicked Time (One Sent As SMS Meanwhile Hasn't). Only The Bubbles From An Index On
     private void RefreshStatus(bool encrypted, int from)
     {
-        MessageBubbleViewModel? newest = Messages.Count > 0 ? Messages[^1] : null;
+        MessageBubbleViewModel? newest = Messages.LastOrDefault(b => !b.IsSystemLine);
 
         for (int i = Math.Max(0, from); i < Messages.Count; i++)
         {
             MessageBubbleViewModel b = Messages[i];
             bool isNewest            = b == newest;
-            b.SetStatus(isNewest, isNewest && b.FromMe ? ChatFormat.StatusText(b.Status) : string.Empty, isNewest && encrypted);
+            b.SetStatus(isNewest, isNewest && b.FromMe ? ChatFormat.StatusText(b.Status) : string.Empty, encrypted && b.IsRcs);
         }
     }
 

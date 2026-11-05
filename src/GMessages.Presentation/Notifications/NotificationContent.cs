@@ -19,6 +19,9 @@ public sealed record NotificationContent(string Tag, string Group, string Title,
     /// <summary>The longest toast body, in text elements (what a reader sees as one character), ellipsis excluded.</summary>
     public const int MaxBodyLength = 100;
 
+    /// <summary>Gets whether the message's one-time code was copied (Settings), which the toast says under the text.</summary>
+    public bool CodeCopied { get; init; }
+
     // A Word Boundary Further Back Than This Is Ignored, And The Body Is Cut Mid-Word
     private const int WordSearchLength = 20;
 

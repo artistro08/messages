@@ -29,6 +29,7 @@ public sealed partial class StartChatPane : UserControl
     {
         InitializeComponent();
         QueryBox.PlaceholderText = ChatCopy.TypeNameOrNumber;
+        TextMenu.Attach(QueryBox);
     }
 
     /// <summary>

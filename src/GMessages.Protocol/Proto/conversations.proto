@@ -220,6 +220,13 @@ message Conversation {
     string groupAvatarURL = 34;
     AnotherMessageID latestMessageAnotherID = 35;
     // index 37 has an unknown byte string (\001)
+    // Not in LibGM: on every conversation; 1 = 1 (with more after) on end-to-end encrypted RCS chats, 0 = 0 on the rest
+    // (seen on the owner's phone, November 2026)
+    EncryptionState encryptionState = 39;
+}
+
+message EncryptionState {
+    bool encrypted = 1;
 }
 
 // Moved here from client.proto (client imports this file) so Conversation can use it

@@ -30,6 +30,7 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         (nameof(HasBodyText), b => b.HasBodyText),
         (nameof(IsEmojiOnly), b => b.IsEmojiOnly),
         (nameof(FromMe), b => b.FromMe),
+        (nameof(IsSystemLine), b => b.IsSystemLine),
         (nameof(SenderName), b => b.SenderName),
         (nameof(SenderColor), b => b.SenderColor),
         (nameof(HasSenderName), b => b.HasSenderName),
@@ -53,6 +54,7 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         (nameof(StatusIcon), b => b.StatusIcon),
         (nameof(ShowsStatusRow), b => b.ShowsStatusRow),
         (nameof(ShowsLock), b => b.ShowsLock),
+        (nameof(ShowsSmsLabel), b => b.ShowsSmsLabel),
         (nameof(ShowsCaptionDot), b => b.ShowsCaptionDot),
         (nameof(ReactionsText), b => b.ReactionsText),
         (nameof(HasReactions), b => b.HasReactions),
@@ -234,7 +236,7 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     /// Gets whether the bubble takes react, reply and its menu from the hover strip: the phone has reported it, and it isn't a
     /// tombstone, still being sent or failed.
     /// </summary>
-    public bool CanAct => Id.Length > 0 && !IsTombstone && !IsSending && !IsFailed;
+    public bool CanAct => Id.Length > 0 && !IsSystemLine && !IsSending && !IsFailed;
 
     /// <summary>Gets the bubble's accessible item type: "Chat message" for RCS, "Text message" for SMS.</summary>
     public string ItemTypeName => IsRcs ? ChatCopy.ChatMessage : ChatCopy.TextMessage;
@@ -242,8 +244,11 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     /// <summary>Gets the status of my newest bubble ("Sent", "Delivered", "Read"), or empty; set by the chat. The icon's accessible name.</summary>
     public string StatusText { get; private set; } = string.Empty;
 
-    /// <summary>Gets the delivery icon in the caption row: when the newest bubble is mine, the clock while sending, else its status.</summary>
-    public MessageStatusIcon StatusIcon => !IsNewest || !FromMe ? MessageStatusIcon.None : IsSending ? MessageStatusIcon.Sending : StatusText.Length == 0 ? MessageStatusIcon.None : Status switch
+    /// <summary>
+    /// Gets the delivery icon in the caption row: when the newest bubble is mine, the clock while sending, else its status;
+    /// none for one sent as SMS, which says so instead (<see cref="ShowsSmsLabel"/>).
+    /// </summary>
+    public MessageStatusIcon StatusIcon => !IsNewest || !FromMe ? MessageStatusIcon.None : IsSending ? MessageStatusIcon.Sending : StatusText.Length == 0 || !IsRcs ? MessageStatusIcon.None : Status switch
     {
         MessageStatusType.OutgoingDelivered => MessageStatusIcon.Delivered,
         MessageStatusType.OutgoingDisplayed => MessageStatusIcon.Read,
@@ -257,11 +262,14 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     /// </summary>
     public bool ShowsStatusRow => IsNewest && !IsFailed && !IsCaptionHidden;
 
-    /// <summary>Gets whether the lock shows in the caption row: the newest bubble of an end-to-end encrypted chat.</summary>
+    /// <summary>Gets whether the lock shows by the caption row or the clicked time: an RCS bubble of an end-to-end encrypted chat.</summary>
     public bool ShowsLock { get; private set; }
 
-    /// <summary>Gets whether the dot after the caption row's time shows: only when the delivery icon or the lock follows it.</summary>
-    public bool ShowsCaptionDot => StatusIcon != MessageStatusIcon.None || ShowsLock;
+    /// <summary>Gets whether "SMS" shows in place of the delivery icon: my newest bubble, sent as SMS or MMS (not RCS).</summary>
+    public bool ShowsSmsLabel => IsNewest && FromMe && !IsRcs && !IsSending && StatusText.Length > 0;
+
+    /// <summary>Gets whether the dot after the caption row's time shows: only when the delivery icon, "SMS" or the lock follows it.</summary>
+    public bool ShowsCaptionDot => StatusIcon != MessageStatusIcon.None || ShowsSmsLabel || ShowsLock;
 
     /// <summary>Gets the reaction chip text, such as "👍😂 3", or empty.</summary>
     public string ReactionsText { get; private set; } = string.Empty;
@@ -408,8 +416,8 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     // The Phone's Delivery Status, For The Chat's Status Line
     internal MessageStatusType Status { get; private set; }
 
-    // A Tombstone (Such As "Now Chatting With End-To-End Encryption"): Nothing To React Or Reply To
-    private bool IsTombstone { get; set; }
+    /// <summary>Gets whether the bubble is a system line (a group's name change): small centered gray text, no bubble, nothing to react or reply to.</summary>
+    public bool IsSystemLine { get; private set; }
 
     /// <summary>
     /// Copies new message details into the bubble (an echo or a status change).
@@ -747,7 +755,7 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         IsFailed      = m.IsFailed;
         IsSending     = m.Status == MessageStatusType.OutgoingSending;
         Status        = m.Status;
-        IsTombstone   = m.Kind == MessageKind.Tombstone;
+        IsSystemLine  = m.Kind == MessageKind.Tombstone;
         IsRcs         = m.IsRcs;
         ReactionsText = ChatFormat.ReactionSummary(m.Reactions);
         _reactions    = m.Reactions;

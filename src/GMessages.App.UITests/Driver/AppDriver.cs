@@ -26,7 +26,7 @@ public sealed class AppDriver : IAsyncDisposable
     private static readonly bool Aot = Environment.GetEnvironmentVariable("GMESSAGES_UITEST_AOT") == "1";
 
     // The Exe Is Named After AppDisplayName In src/Directory.Build.props; Change Both Together
-    private const string ExeName = "Kaituro.exe";
+    private const string ExeName = "Messages.exe";
 
     private static readonly string ExeRelativePath = Aot
         ? @"GMessages.App\bin\x64\Debug\net10.0-windows10.0.26100.0\win-x64\publish\" + ExeName

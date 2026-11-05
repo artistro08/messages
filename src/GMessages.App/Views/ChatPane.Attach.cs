@@ -349,36 +349,21 @@ public sealed partial class ChatPane
         }
     }
 
-    // The Box's Menu: Windows Shows Its Paste Only For Text, So With Media On The Clipboard Windows' Own Paste Command Is
-    // Added (Its Name And Icon Come From Windows), And Taken Away Again When The Menu Closes
-    private void OnDraftMenuOpening(object? sender, object e)
+    // The Box's Menu Pastes Text Itself; With Only Media On The Clipboard Its Paste Takes That Instead
+    private Action? PasteMediaFromMenu()
     {
-        // The Menu Is Windows' Shared Text Menu: Only When It Opens On The Message Box
-        if (DraftBox.ContextFlyout is not { } menu || menu.Target != DraftBox || DraftBox.CanPasteClipboardContent || ClipboardView() is not { } view || !CarriesMedia(view))
+        if (DraftBox.CanPasteClipboardContent || ClipboardView() is not { } view || !CarriesMedia(view))
         {
-            return;
+            return null;
         }
 
-        var command = new StandardUICommand(StandardUICommandKind.Paste);
-        command.ExecuteRequested += (_, _) =>
+        return () =>
         {
             if (ClipboardView() is { } now)
             {
                 Paste(now, owned: CarriesMedia(now));
             }
         };
-
-        var paste = new AppBarButton { Command = command };
-        AutomationProperties.SetAutomationId(paste, "Chat.PasteMedia");
-        CommandBarFlyout bar = menu.As<CommandBarFlyout>();
-        bar.PrimaryCommands.Add(paste);
-        menu.Closed += OnClosed;
-
-        void OnClosed(object? s, object a)
-        {
-            menu.Closed -= OnClosed;
-            bar.PrimaryCommands.Remove(paste);
-        }
     }
 
     // A Photo Chip's Picture, Decoded Small From The File; A File Windows Can't Read Leaves The Chip Blank

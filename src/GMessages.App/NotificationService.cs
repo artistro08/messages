@@ -111,7 +111,8 @@ internal sealed class NotificationService(ChatStore store, AppSettings settings,
         try
         {
             // Content And The Sender's Photo
-            var content    = NotificationContent.Compose(e.Message, e.Conversation!);
+            // The App Copies A Code From Every Message That Notifies (CopyCode), So The Toast Can Say So
+            var content    = NotificationContent.Compose(e.Message, e.Conversation!) with { CodeCopied = settings.CopyCodes && OneTimeCode.Find(e.Message.Text) is not null };
             string? avatar = content.AvatarParticipantId is { Length: > 0 } participant ? await avatars.GetFileUriAsync(participant, CancellationToken.None) : null;
             avatars.Clear();
 

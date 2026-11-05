@@ -208,6 +208,39 @@ public sealed class MediaStoreTests
     }
 
     /// <summary>
+    /// Google answers with nothing until the sender's upload is done (a video just arriving): the empty answer isn't kept,
+    /// and the store asks again until the file is there.
+    /// </summary>
+    [TestMethod]
+    public async Task NotReadyYet_AsksAgain_KeepsNothingEmpty()
+    {
+        using var rig           = new Rig();
+        rig.Client.Media["m-1"] = [];
+
+        Task<byte[]> download = rig.Store.GetAsync(Part("m-1"), thumbnail: false, Ct);
+        while (true)
+        {
+            lock (rig.Client.DownloadCalls)
+            {
+                if (rig.Client.DownloadCalls.Count > 0)
+                {
+                    break;
+                }
+            }
+
+            await Task.Delay(20, Ct);
+        }
+
+        rig.Client.Media["m-1"] = [1, 2, 3];
+
+        CollectionAssert.AreEqual(new byte[] { 1, 2, 3 }, await download.WaitAsync(TimeSpan.FromSeconds(10)));
+        lock (rig.Client.DownloadCalls)
+        {
+            Assert.IsGreaterThanOrEqualTo(2, rig.Client.DownloadCalls.Count);
+        }
+    }
+
+    /// <summary>
     /// Seeded bytes answer their media ID with no download.
     /// </summary>
     [TestMethod]

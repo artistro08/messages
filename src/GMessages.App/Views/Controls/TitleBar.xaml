@@ -7,7 +7,7 @@
     Height="48">
 
     <!-- WinUI 3's TitleBar, Rebuilt: its Back and ☰ styles (Windows App SDK 2.3's generic.xaml: 40 px wide, 2 px margin,
-         subtle fills, the animated arrow and lines), its expanded (48 px) layout, and the caption buttons Windows draws
+         subtle fills, the animated arrow and lines; square here, 40 px tall, not stretched to the bar's 44), its expanded (48 px) layout, and the caption buttons Windows draws
          for a tall title bar, drawn here instead. The caption buttons never see the pointer (the window's title bar input
          sits over them and reports hover and press, see TitleBarInput) -->
     <UserControl.Resources>
@@ -17,7 +17,8 @@
             <Setter Property="FontFamily" Value="{ThemeResource SymbolThemeFontFamily}" />
             <Setter Property="FontSize" Value="16" />
             <Setter Property="Width" Value="40" />
-            <Setter Property="VerticalAlignment" Value="Stretch" />
+            <Setter Property="Height" Value="40" />
+            <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="HorizontalContentAlignment" Value="Center" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
             <Setter Property="UseSystemFocusVisuals" Value="{StaticResource UseSystemFocusVisuals}" />
@@ -189,8 +190,8 @@
             <ColumnDefinition Width="Auto" />
             <!-- 2: ☰ -->
             <ColumnDefinition Width="Auto" />
-            <!-- 3: Left Header Padding -->
-            <ColumnDefinition Width="14" />
+            <!-- 3: Left Header Padding: 2 px after Back or ☰, set from code -->
+            <ColumnDefinition x:Name="LeftHeaderPaddingColumn" Width="14" />
             <!-- 4: Icon -->
             <ColumnDefinition Width="Auto" />
             <!-- 5: Title -->

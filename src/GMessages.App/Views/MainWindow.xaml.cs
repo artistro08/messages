@@ -165,6 +165,38 @@ public sealed partial class MainWindow : UserControl
     public void Close() => _window.Close();
 
     /// <summary>
+    /// Raised when the person closes the window; cancel it to keep the window.
+    /// </summary>
+    public event EventHandler<System.ComponentModel.CancelEventArgs>? Closing
+    {
+        add    => _window.Closing += value;
+        remove => _window.Closing -= value;
+    }
+
+    /// <summary>
+    /// Hides the window, kept for a quick reopen; what the open chat plays or records stops.
+    /// </summary>
+    /// <remarks>
+    /// It comes back as a new window would: no settings or photo over it, and the inbox, without a chat opened from
+    /// another folder.
+    /// </remarks>
+    public void Hide()
+    {
+        _chats?.StopMedia();
+        CloseSettings();
+        PhotoViewer.Close();
+
+        // ponytail: any chat open in a folder view closes, even an inbox one left beside it; a new window kept that one
+        if (ViewModel is { IsFolderView: true } chats)
+        {
+            chats.ExitConversation();
+            chats.BackToInbox();
+        }
+
+        _window.Hide();
+    }
+
+    /// <summary>
     /// Asks the App to open the settings page (the profile menu's Settings, Ctrl + ,).
     /// </summary>
     public event EventHandler? SettingsRequested;

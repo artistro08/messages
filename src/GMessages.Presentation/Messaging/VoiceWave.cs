@@ -23,6 +23,9 @@ public sealed record VoiceWave(float[] Peaks, TimeSpan Length)
     private const ushort PcmFormat        = 1;
     private const ushort ExtensibleFormat = 0xFFFE;
 
+    // The Quietest Input The Live Waveform Draws, In Decibels; Anything Under It Is Silence
+    private const double QuietestLevelDb = -50;
+
     /// <summary>
     /// Reads a 16-bit PCM WAV file: its waveform and its length.
     /// </summary>
@@ -131,9 +134,14 @@ public sealed record VoiceWave(float[] Peaks, TimeSpan Length)
     }
 
     /// <summary>
-    /// Gives the live input level of a block of 32-bit float samples (an audio graph's frame): the loudest sample.
+    /// Gives the live input level of a block of 32-bit float samples (an audio graph's frame): the loudest sample, in
+    /// decibels from -50 dB (0) to full scale (1), as level meters show it.
     /// </summary>
-    /// <remarks>Any trailing partial sample is ignored; silence or no samples gives 0, and clipping caps at 1.</remarks>
+    /// <remarks>
+    /// Speech mostly peaks at 5 to 30 percent of full scale, so the plain peak drew short bars that barely moved; on
+    /// the decibel scale it fills the bar and follows the voice. Any trailing partial sample is ignored; silence or no
+    /// samples gives 0, and clipping caps at 1.
+    /// </remarks>
     /// <param name="floats">Interleaved 32-bit float samples, as bytes.</param>
     /// <returns>The level, from 0 to 1.</returns>
     public static float LevelOf(ReadOnlySpan<byte> floats)
@@ -144,7 +152,13 @@ public sealed record VoiceWave(float[] Peaks, TimeSpan Length)
             peak = Math.Max(peak, Math.Abs(sample));
         }
 
-        return Math.Min(1, peak);
+        if (peak <= 0)
+        {
+            return 0;
+        }
+
+        double db = 20 * Math.Log10(Math.Min(1, peak));
+        return (float)Math.Clamp(1 + (db / -QuietestLevelDb), 0, 1);
     }
 
     /// <summary>

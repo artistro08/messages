@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using GMessages.Protocol.Proto;
 
 namespace GMessages.Presentation.Messaging;
@@ -20,7 +21,7 @@ public sealed partial class ChatStore
     {
         ConversationInfo info = WithSnippetMedia(ConversationInfo.From(c));
         SaveConversation(c, generation);
-        if (Upsert(info))
+        if (Upsert(info, live: false))
         {
             ConversationChanged?.Invoke(this, info);
         }
@@ -58,10 +59,15 @@ public sealed partial class ChatStore
         return media is null ? info : info with { SnippetMedia = ChatFormat.MediaLabel(media) };
     }
 
-    // Stores A Conversation; True When It Differs From What Was Cached (Participants Compared By Value)
-    private bool Upsert(ConversationInfo info)
+    // Stores A Conversation; True When It Differs From What Was Cached (Participants Compared By Value). A Live Change
+    // (Not A Fetched Copy) Is Timed, So A List Page Asked For Before It Doesn't Put The Older Copy Back (LoadFolderAsync)
+    private bool Upsert(ConversationInfo info, bool live = true)
     {
         _me ??= info.Participants.FirstOrDefault(p => p.IsMe);
+        if (live)
+        {
+            _liveAt[info.Id] = Stopwatch.GetTimestamp();
+        }
 
         ConversationInfo? old = _cache.GetValueOrDefault(info.Id);
         _cache[info.Id]       = info;

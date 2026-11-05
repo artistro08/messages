@@ -1500,6 +1500,71 @@ public sealed class ChatViewModelTests
         return chat;
     }
 
+    /// <summary>
+    /// A group's name change shows as a system line in Google's words, and the status stays on the newest real message;
+    /// other system lines (encryption) stay hidden.
+    /// </summary>
+    [TestMethod]
+    public async Task GroupRename_ShowsAsLine_OthersHidden()
+    {
+        using var rig            = new MainRig();
+        Message encrypted        = Msg("t1", string.Empty, status: MessageStatusType.TombstoneProtocolSwitchToEncryptedRcs, ts: 1_000_000);
+        Message mine             = Mine("m1", "one", "x1", MessageStatusType.OutgoingDelivered);
+        Message renamed          = Msg("t2", "Group name changed to \"Team\"", status: MessageStatusType.TombstoneGroupRenamedLocal);
+        renamed.Timestamp        = mine.Timestamp + 1;
+        using ChatViewModel chat = NewChat(rig, null, encrypted, mine, renamed);
+        await chat.LoadAsync();
+
+        Assert.HasCount(2, chat.Messages);
+        Assert.IsFalse(chat.Messages[0].IsSystemLine);
+        Assert.IsTrue(chat.Messages[1].IsSystemLine);
+        Assert.AreEqual("Group name changed to \"Team\"", chat.Messages[1].Text);
+        Assert.IsTrue(chat.Messages[0].ShowsStatusRow);
+        Assert.IsFalse(chat.Messages[1].ShowsStatusRow);
+    }
+
+    /// <summary>
+    /// Delete asks the phone, and the bubble goes once it says it did; when it says no, the bubble stays.
+    /// </summary>
+    [TestMethod]
+    public async Task Delete_RemovesTheBubble_OnlyWhenThePhoneDid()
+    {
+        using var rig            = new MainRig();
+        using ChatViewModel chat = NewChat(rig, null, Msg("m1", "one"), Msg("m2", "two"));
+        await chat.LoadAsync();
+
+        rig.Client.DeleteSucceeds = false;
+        Assert.IsFalse(await chat.DeleteAsync(chat.Messages[0]));
+        Assert.HasCount(2, chat.Messages);
+
+        rig.Client.DeleteSucceeds = true;
+        Assert.IsTrue(await chat.DeleteAsync(chat.Messages[0]));
+        Assert.HasCount(1, chat.Messages);
+        Assert.AreEqual("m2", chat.Messages[0].Id);
+        Assert.IsTrue(rig.Client.Deletes.All(id => id == "m1") && rig.Client.Deletes.Count == 2, "The phone wasn't asked to delete m1 twice.");
+        Assert.IsFalse(rig.Store.CachedMessages("a")!.Any(m => m.Id == "m1"), "The kept page still had the deleted message.");
+    }
+
+    /// <summary>
+    /// The empty message box reads "RCS Message" in an RCS chat and "Text message" once it is SMS, with a change raised.
+    /// </summary>
+    [TestMethod]
+    public async Task DraftPlaceholder_FollowsTheChatType()
+    {
+        using var rig            = new MainRig();
+        using ChatViewModel chat = await RcsChat(rig, TimeProvider.System);
+        Assert.AreEqual(ChatCopy.RcsMessage, chat.DraftPlaceholder);
+
+        // Back To SMS: The Placeholder Follows, With A Change Raised
+        var raised            = new List<string?>();
+        chat.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+        Conversation sms      = MainRig.Conv("a", "Ann");
+        sms.Type              = ConversationType.Sms;
+        await rig.Live(sms);
+        Assert.AreEqual(ChatCopy.TextMessage, chat.DraftPlaceholder);
+        CollectionAssert.Contains(raised, nameof(ChatViewModel.DraftPlaceholder));
+    }
+
     [TestMethod]
     public async Task TypingIn_ClearsAfter15Seconds()
     {
@@ -1869,18 +1934,22 @@ public sealed class ChatViewModelTests
     }
 
     /// <summary>
-    /// In an encrypted chat the newest bubble's caption row shows the lock, a received one too; the others show none.
+    /// In an encrypted chat every RCS bubble has the lock (the newest's caption row, the others' clicked time), mine or
+    /// received; one that fell back to SMS has none.
     /// </summary>
     [TestMethod]
-    public async Task Lock_OnlyOnNewestBubble_MineOrReceived()
+    public async Task Lock_OnEveryRcsBubble_NotOneSentAsSms()
     {
         using var rig            = new MainRig();
         Message on               = Msg("t1", string.Empty, status: MessageStatusType.TombstoneProtocolSwitchToEncryptedRcs, ts: 1_000_000);
-        using ChatViewModel chat = await RcsChat(rig, TimeProvider.System, on, Mine("m1", "one", "x1", MessageStatusType.OutgoingComplete), Msg("m2", "two"));
+        Message sms              = Msg("m2", "fell back");
+        sms.Type                 = 1;
+        using ChatViewModel chat = await RcsChat(rig, TimeProvider.System, on, Mine("m1", "one", "x1", MessageStatusType.OutgoingComplete), sms, Msg("m3", "three"));
 
-        Assert.IsFalse(chat.Messages[0].ShowsLock);
-        Assert.IsTrue(chat.Messages[1].ShowsLock);
-        Assert.IsTrue(chat.Messages[1].ShowsStatusRow);
+        Assert.IsTrue(chat.Messages[0].ShowsLock);
+        Assert.IsFalse(chat.Messages[1].ShowsLock);
+        Assert.IsTrue(chat.Messages[2].ShowsLock);
+        Assert.IsTrue(chat.Messages[2].ShowsStatusRow);
     }
 
     /// <summary>

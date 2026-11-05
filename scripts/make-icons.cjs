@@ -1,12 +1,11 @@
-// Renders Kaituro's icons from assets-src into src/GMessages.App/Assets (run by scripts/Make-Icons.ps1). Ported from
+// Renders the app's icons from assets-src into src/GMessages.App/Assets (run by scripts/Make-Icons.ps1). Ported from
 // Leaf Calendar's tools/make-icons.cjs:
 //   - every MSIX visual asset (Square44x44Logo with its target sizes, Square150x150Logo, Wide310x150Logo, StoreLogo, each
-//     at scale 100/125/150/200/400) and the window/exe icon (AppIcon.ico) from Kaituro.svg;
-//   - the tray icons (TrayLight.ico, black for light taskbars; TrayDark.ico, white for dark ones) from Kaituro-mono.svg,
+//     at scale 100/125/150/200/400) and the window/exe icon (AppIcon.ico) from Messages.svg;
+//   - the tray icons (TrayLight.ico, black for light taskbars; TrayDark.ico, white for dark ones) from Messages-mono.svg,
 //     at every small-icon size Windows uses from 100% to 400% display scale, so the taskbar never scales one.
-// The logo carries an embedded shadow image that the renderer shrinks in one step (stray pixels at taskbar sizes), so
-// each of its images is drawn at least 1024 px across and averaged down to its exact size. The tray outline is a plain
-// shape and is drawn at its exact size.
+// Each logo image is drawn at least 1024 px across and averaged down to its exact size, so its curves stay smooth at
+// taskbar sizes. The tray outline is a plain shape and is drawn at its exact size.
 // Usage: node make-icons.cjs <assets-src> <Assets>   (needs @resvg/resvg-js resolvable from the working folder)
 
 const fs = require('fs');
@@ -20,7 +19,7 @@ const [sourceDir, assets] = process.argv.slice(2);
 // =========================================================================
 
 // The logo's inner markup, so it can be placed on a larger canvas
-const source = fs.readFileSync(path.join(sourceDir, 'Kaituro.svg'), 'utf8');
+const source = fs.readFileSync(path.join(sourceDir, 'Messages.svg'), 'utf8');
 const open = source.match(/<svg\b[^>]*>/)[0];
 const viewBox = open.match(/viewBox="([^"]+)"/)[1];
 const style = (open.match(/style="([^"]+)"/) || [, ''])[1];
@@ -185,7 +184,7 @@ writeIco('AppIcon.ico', icoSizes, icoSizes.map(size => size >= 256 ? logo(size, 
 
 // Tray Icons: the outline black for light taskbars, white for dark ones, at SM_CXSMICON for 100% to 400% scale
 const traySizes = [16, 20, 24, 28, 32, 36, 40, 48, 56, 64];
-const mono = fs.readFileSync(path.join(sourceDir, 'Kaituro-mono.svg'), 'utf8');
+const mono = fs.readFileSync(path.join(sourceDir, 'Messages-mono.svg'), 'utf8');
 for (const [file, color] of [['TrayLight.ico', '#000000'], ['TrayDark.ico', '#FFFFFF']]) {
     const images = traySizes.map(size => {
         const shape = new Resvg(mono.replace('fill="#000000"', `fill="${color}"`), { fitTo: { mode: 'width', value: size } }).render();

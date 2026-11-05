@@ -21,7 +21,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $root   = Split-Path $PSScriptRoot -Parent
 $fonts  = Join-Path $root 'src/GMessages.App/Assets/Fonts'
-$work   = Join-Path ([IO.Path]::GetTempPath()) 'kaituro-make-emoji-font'
+$work   = Join-Path ([IO.Path]::GetTempPath()) 'messages-make-emoji-font'
 $tools  = Join-Path $work 'fonttools'
 $commit = 'b7fc5ad4ceb3c7d665087040073d4b64490af96f'
 $source = "https://raw.githubusercontent.com/tetunori/fluent-emoji-webfont/$commit"

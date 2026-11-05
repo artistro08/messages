@@ -18,6 +18,70 @@ namespace GMessages.App.UITests;
 public sealed class ChatTests : UiTest
 {
     /// <summary>
+    /// Right-clicking a misspelled word in the message box offers Windows' spelling fixes at the top of the app's menu:
+    /// picking one fixes the word, and Ignore leaves a word unmarked.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task RightClick_MisspelledWord_OffersTheFix()
+    {
+        await OpenAnnAsync();
+        AutomationElement draft = App.Find("Chat.Draft");
+        draft.Focus();
+
+        // Typed, Not Set: Windows Marks Only Typed Words
+        Keyboard.Type("helo there ");
+        PickSpellItem(draft, "hello");
+        Wait.Until(() => draft.Patterns.Value.Pattern.Value.Value == "hello there ", AppDriver.DefaultTimeout,
+            () => $"The box read '{draft.Patterns.Value.Pattern.Value.Value}', not 'hello there '.");
+
+        // Ignore: The Word Offers No Fixes After
+        draft.Patterns.Value.Pattern.SetValue(string.Empty);
+        draft.Focus();
+        Keyboard.Type("qwrtzk ");
+        PickSpellItem(draft, "Ignore");
+        RightClickFirstWord(draft);
+        Thread.Sleep(1000);
+        Assert.IsNotNull(App.TryFindWhere(e => AppDriver.SafeName(e) == "Paste"), "The menu didn't open after Ignore.");
+        Assert.IsNull(App.TryFindWhere(e => AppDriver.SafeName(e) == "Ignore"), "An ignored word still offered fixes.");
+        Keyboard.Press(VirtualKeyShort.ESCAPE);
+    }
+
+    // Right-Clicks The Box's First Word Until Windows Has Marked It And The Item Shows, Then Picks It (Through UI
+    // Automation: A Synthetic Click Doesn't Reach A Menu Opened From A Text Box). The Menu Closing Mid-Call Is Fine
+    private void PickSpellItem(AutomationElement draft, string name)
+    {
+        AutomationElement? item = null;
+        Wait.Until(() =>
+        {
+            RightClickFirstWord(draft);
+            Thread.Sleep(1000);
+            item = App.TryFindWhere(e => AppDriver.SafeName(e) == name && e.Properties.ControlType.ValueOrDefault == FlaUI.Core.Definitions.ControlType.MenuItem);
+            if (item is null)
+            {
+                Keyboard.Press(VirtualKeyShort.ESCAPE);
+            }
+
+            return item is not null;
+        }, AppDriver.DefaultTimeout, () => $"Right-clicking the word showed no '{name}'.");
+
+        try
+        {
+            item!.Patterns.Invoke.Pattern.Invoke();
+        }
+        catch (FlaUI.Core.Exceptions.ElementNotAvailableException)
+        {
+        }
+    }
+
+    // Right-Clicks Near The Box's Left Edge, On Its First Word
+    private static void RightClickFirstWord(AutomationElement draft)
+    {
+        System.Drawing.Rectangle box = draft.BoundingRectangle;
+        FlaUI.Core.Input.Mouse.RightClick(new System.Drawing.Point(box.Left + 20, box.Top + (box.Height / 2)));
+    }
+
+    /// <summary>
     /// Opening Ann's unread chat shows her three messages, tells the phone it was read, and her row stops being bold.
     /// </summary>
     /// <returns>A task for the test.</returns>

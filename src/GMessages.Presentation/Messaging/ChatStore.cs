@@ -85,6 +85,9 @@ public sealed partial class ChatStore : IDisposable
     // When The Conversation Turns Read
     private readonly ConcurrentDictionary<string, ImmutableList<string>> _unreadTexts = new();
 
+    // When Each Conversation Last Changed Live (A Stopwatch Timestamp), So A List Page Asked For Before That Keeps It
+    private readonly ConcurrentDictionary<string, long> _liveAt = new();
+
     // Each Conversation's Unsent Draft, Loaded From And Saved To The Database So It Outlives The Window And The App, And
     // The Files Picked To Send With It (Memory Only)
     private readonly ConcurrentDictionary<string, string> _drafts                               = new(StringComparer.Ordinal);
@@ -266,8 +269,12 @@ public sealed partial class ChatStore : IDisposable
     /// <see cref="ChatFormat.EncryptionOf"/>), kept in the database so the lock shows after a restart.
     /// </remarks>
     /// <param name="conversationId">The conversation ID.</param>
-    /// <returns>True when the newest such line says encrypted; false when it says not, or none was seen.</returns>
-    public bool IsEncrypted(string conversationId) => _encryption.TryGetValue(conversationId, out (bool Encrypted, long At) state) && state.Encrypted;
+    /// <returns>
+    /// What the conversation itself says (<see cref="ConversationInfo.IsEncrypted"/>, current and on every chat), else
+    /// true when the newest such line says encrypted; false when it says not, or none was seen.
+    /// </returns>
+    public bool IsEncrypted(string conversationId) =>
+        Find(conversationId)?.IsEncrypted ?? (_encryption.TryGetValue(conversationId, out (bool Encrypted, long At) state) && state.Encrypted);
 
     /// <summary>
     /// Gets a conversation from the cache, fetching it from the phone when it is not cached.
@@ -374,6 +381,7 @@ public sealed partial class ChatStore : IDisposable
         };
 
         int generation                     = Generation;
+        long asked                         = Stopwatch.GetTimestamp();
         ListConversationsResponse response = await client.ListConversationsAsync(protocolFolder, PageSize, cursor, ct);
 
         // Unpaired Or Signed Out Meanwhile: The Old Account's Page Is Dropped
@@ -386,10 +394,13 @@ public sealed partial class ChatStore : IDisposable
         LogConversationPage(folder, PageSize, cursor is not null, response.Conversations.Count, response.Cursor is not null);
 
         // No ConfigureAwait(false) Here: ConversationChanged Must Be Raised On The Caller Thread
+        // A Conversation That Changed Live While The Page Was On Its Way (Read, A New Message) Keeps That: The Page Was
+        // Made Before It, And Put It Back Unread With Its Last Message Gone Until The Next Update
         List<ConversationInfo> result = [];
         foreach (Conversation c in response.Conversations)
         {
-            result.Add(CacheConversation(c, generation));
+            bool newerHere = _liveAt.TryGetValue(c.ConversationID, out long changed) && changed > asked;
+            result.Add(newerHere && Find(c.ConversationID) is { } kept ? kept : CacheConversation(c, generation));
         }
 
         // No Cursor Back: The Next Page Starts At This Page's Last (Oldest) Conversation, Its Time In Milliseconds, As
@@ -794,6 +805,52 @@ public sealed partial class ChatStore : IDisposable
 
         ConversationInfo conversation = await RequireConversationAsync(client, conversationId, Generation, ct).ConfigureAwait(false);
         await client.SetTypingAsync(conversationId, SimOf(conversation), ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Deletes a message from the phone, then from the kept page and the database.
+    /// </summary>
+    /// <remarks>Only this side's copy goes; the other side keeps theirs. The phone updates the conversation's snippet itself.</remarks>
+    /// <param name="conversationId">The conversation ID.</param>
+    /// <param name="messageId">The message ID.</param>
+    /// <param name="ct">Cancels the wait.</param>
+    /// <returns>True when the phone deleted it; false when it said no.</returns>
+    /// <exception cref="ArgumentException"><paramref name="conversationId"/> or <paramref name="messageId"/> is empty.</exception>
+    /// <exception cref="MessagingUnavailableException">Not connected.</exception>
+    public async Task<bool> DeleteMessageAsync(string conversationId, string messageId, CancellationToken ct)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(conversationId);
+        ArgumentException.ThrowIfNullOrEmpty(messageId);
+
+        IMessagingClient client = RequireClient();
+
+        int generation               = Generation;
+        DeleteMessageResponse answer = await client.DeleteMessageAsync(messageId, ct).ConfigureAwait(false);
+        if (!answer.Success || generation != Generation)
+        {
+            return answer.Success;
+        }
+
+        lock (_pagesLock)
+        {
+            if (_pages.TryGetValue(conversationId, out List<ChatMessage>? page))
+            {
+                page.RemoveAll(m => m.Id == messageId);
+            }
+        }
+
+        if (_database is not null)
+        {
+            _ = EnqueueAsync(database =>
+            {
+                if (generation == Generation)
+                {
+                    database.DeleteMessage(conversationId, messageId);
+                }
+            });
+        }
+
+        return true;
     }
 
     // Looks Up The Conversation, Fetching It When Not Cached. No ConfigureAwait(false): ConversationChanged Must Be

@@ -29,6 +29,9 @@ public interface IMessagingClient
     /// <summary>Adds, switches or removes a reaction on a message.</summary>
     Task<SendReactionResponse> SendReactionAsync(SendReactionRequest request, CancellationToken ct);
 
+    /// <summary>Deletes a message from the phone (the other side keeps theirs).</summary>
+    Task<DeleteMessageResponse> DeleteMessageAsync(string messageId, CancellationToken ct);
+
     /// <summary>Tells the other side of a conversation that the user is typing; waits for no answer.</summary>
     Task SetTypingAsync(string conversationId, SIMPayload? sim, CancellationToken ct);
 

@@ -87,6 +87,8 @@ internal unsafe class XamlWindow
     private bool _layoutPending;
     private nint _lastSize;
     private bool _maximizeOnShow;
+    private bool _shownOnce;
+    private Windows.System.DispatcherQueueTimer? _uncloakAnyway;
     private bool _destroyed;
     private int _minWidth;
     private int _minHeight;
@@ -154,6 +156,11 @@ internal unsafe class XamlWindow
     /// Raised once the window is closed (by <see cref="Close"/> or by the person), while its content still exists.
     /// </summary>
     public event EventHandler? Closed;
+
+    /// <summary>
+    /// Raised when the person closes the window; cancel it to keep the window (<see cref="Close"/> doesn't raise it).
+    /// </summary>
+    public event EventHandler<System.ComponentModel.CancelEventArgs>? Closing;
 
     /// <summary>
     /// Raised after the window moved, resized, or was maximized, minimized or restored.
@@ -331,11 +338,56 @@ internal unsafe class XamlWindow
 
         if (!IsWindowVisible(Hwnd))
         {
+            // The First Show Stays Cloaked Until Its First Frame Is Drawn: Building A Fresh Window Takes A Second Under
+            // Memory Pressure, Which Showed As A Blank Window (WinUI 3 Windows Do The Same). XAML Draws Only When Something
+            // Changed, So Rendering Is Subscribed Too: That Asks For A Frame Every Tick Until One Is Drawn. XAML Can Also
+            // Hold Its Frames For A Window It Takes For Hidden (A UI Test Once Waited 20 s), So Half A Second Shows It Anyway
+            if (!_shownOnce)
+            {
+                _shownOnce = true;
+                SetCloak(true);
+                CompositionTarget.Rendering += OnFirstFrameRendering;
+                CompositionTarget.Rendered  += OnFirstFrameRendered;
+                _uncloakAnyway               = Windows.System.DispatcherQueue.GetForCurrentThread().CreateTimer();
+                _uncloakAnyway.Interval      = TimeSpan.FromMilliseconds(500);
+                _uncloakAnyway.IsRepeating   = false;
+                _uncloakAnyway.Tick         += (_, _) => Uncloak();
+                _uncloakAnyway.Start();
+            }
+
             _ = ShowWindow(Hwnd, _maximizeOnShow ? SW_SHOWMAXIMIZED : SW_SHOW);
             _maximizeOnShow = false;
         }
 
         _ = SetForegroundWindow(Hwnd);
+    }
+
+    // Empty On Purpose: While Anything Listens To Rendering, XAML Draws A Frame Every Tick, So The First One Comes
+    private static void OnFirstFrameRendering(object? sender, object e)
+    {
+    }
+
+    // The First Frame Is Drawn: The Window Shows
+    private void OnFirstFrameRendered(object? sender, RenderedEventArgs e) => Uncloak();
+
+    // Shows The Cloaked Window And Stops Asking For Frames (The First Frame, The Half-Second Fallback, Or The Close)
+    private void Uncloak()
+    {
+        CompositionTarget.Rendering -= OnFirstFrameRendering;
+        CompositionTarget.Rendered  -= OnFirstFrameRendered;
+        _uncloakAnyway?.Stop();
+        _uncloakAnyway = null;
+        if (!_destroyed)
+        {
+            SetCloak(false);
+        }
+    }
+
+    // Hides Or Shows The Window Through DWM, Which Still Lets It Draw While Hidden
+    private void SetCloak(bool cloaked)
+    {
+        int value = cloaked ? 1 : 0;
+        _ = DwmSetWindowAttribute(Hwnd, DWMWA_CLOAK, &value, sizeof(int));
     }
 
     /// <summary>
@@ -570,6 +622,17 @@ internal unsafe class XamlWindow
                 BoundsChanged?.Invoke(this, EventArgs.Empty);
                 return result;
 
+            // The Person Closed It (Close Button, Alt+F4, The Taskbar): The Owner May Hide It Instead
+            case WM_CLOSE:
+                var closing = new System.ComponentModel.CancelEventArgs();
+                Closing?.Invoke(this, closing);
+                if (closing.Cancel)
+                {
+                    return 0;
+                }
+
+                break;
+
             case WM_DESTROY:
                 OnDestroyed();
                 return 0;
@@ -583,6 +646,7 @@ internal unsafe class XamlWindow
     {
         _destroyed = true;
         CompositionTarget.Rendered -= OnResizedFrameRendered;
+        Uncloak();
         Closed?.Invoke(this, EventArgs.Empty);
 
         Content = null;

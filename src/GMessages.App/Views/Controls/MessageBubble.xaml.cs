@@ -274,6 +274,7 @@ public sealed partial class MessageBubble : UserControl
         // Behavior. The Parts A Message Doesn't Use (Quote, Photo, Video, File Card, Voice, Upload Bar, Preview Card, Pill,
         // Retry Footer, Caption Row) Aren't Made (x:Load), So Their Own Wiring Sits On Them In The XAML, Made With Them
         Back.AddHandler(TappedEvent, new TappedEventHandler(OnBackTapped), handledEventsToo: true);
+        Row.Tapped += OnRowTapped;
 
         // A Playing Video Stops When The Bubble Leaves The Tree
         Unloaded += (_, _) => ReleaseVideo();
@@ -367,6 +368,12 @@ public sealed partial class MessageBubble : UserControl
 
     /// <summary>Gets the caption row lock's tooltip and name.</summary>
     public static string EncryptedText => ChatCopy.EndToEndEncrypted;
+
+    /// <summary>Gets the caption row's word for a message sent as SMS.</summary>
+    public static string SmsText => ChatCopy.Sms;
+
+    /// <summary>Gets the bubble menu's Delete.</summary>
+    public static string DeleteText => ChatCopy.Delete;
 
     /// <summary>Gets the colored back, which the reaction picker opens over.</summary>
     internal FrameworkElement Anchor => Back;
@@ -1440,6 +1447,21 @@ public sealed partial class MessageBubble : UserControl
 
             Bubble?.ToggleTime();
         });
+    }
+
+    // The Row Beside The Bubble (Its Empty Width, The Avatar, The Time) Toggles The Time Too; The Bubble Has Its Own
+    // Handler Above, And A Button (The Hover Strip, The Pill) Handles Its Own Tap
+    private void OnRowTapped(object sender, TappedRoutedEventArgs e)
+    {
+        for (DependencyObject? at = e.OriginalSource as DependencyObject; at is not null && !ReferenceEquals(at, Row); at = VisualTreeHelper.GetParent(at))
+        {
+            if (ReferenceEquals(at, Back))
+            {
+                return;
+            }
+        }
+
+        Bubble?.ToggleTime();
     }
 
     // Opens The Link In The Default Browser

@@ -40,11 +40,12 @@ public sealed class VoiceWaveTests
     }
 
     /// <summary>
-    /// The live level of a frame of 32-bit float samples is its loudest sample: a 440 Hz sine at 0.5 reads 0.5,
+    /// The live level of a frame of 32-bit float samples is its loudest sample in decibels, from -50 dB (0) to full scale
+    /// (1): a 440 Hz sine at 0.5 (-6 dB) reads 0.88, speech-like 0.1 (-20 dB) reads 0.6, -50 dB and under read 0,
     /// clipping caps at 1, and silence, no samples or a partial sample read 0.
     /// </summary>
     [TestMethod]
-    public void Level_LoudestFloatSample()
+    public void Level_LoudestFloatSample_InDecibels()
     {
         // A 440 Hz Sine At Half Volume, 48 kHz Stereo, 10 ms
         float[] sine = new float[480 * 2];
@@ -53,8 +54,9 @@ public sealed class VoiceWaveTests
             sine[i] = (float)(0.5 * Math.Sin(2 * Math.PI * 440 * (i / 2) / 48000.0));
         }
 
-        Assert.AreEqual(0.5f, VoiceWave.LevelOf(Floats(sine)), 0.01f);
-        Assert.AreEqual(0.8f, VoiceWave.LevelOf(Floats(0.1f, -0.8f, 0.3f)), 0.0001f);
+        Assert.AreEqual(0.88f, VoiceWave.LevelOf(Floats(sine)), 0.01f);
+        Assert.AreEqual(0.6f, VoiceWave.LevelOf(Floats(0.1f, -0.05f)), 0.001f);
+        Assert.AreEqual(0f, VoiceWave.LevelOf(Floats(0.003f)));
         Assert.AreEqual(1f, VoiceWave.LevelOf(Floats(1.7f, -0.2f)));
         Assert.AreEqual(0f, VoiceWave.LevelOf(Floats(0f, 0f)));
         Assert.AreEqual(0f, VoiceWave.LevelOf([]));
