@@ -189,11 +189,12 @@ public sealed partial class StoreScreenshots : UiTest
     // FILES
     // =========================================================================
 
+    // The Repository Above The Test Build: A Folder With .git, Which Is A File In A Git Worktree
     private static string RepoRoot()
     {
         for (DirectoryInfo? dir = new(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
         {
-            if (Directory.Exists(Path.Combine(dir.FullName, ".git")))
+            if (Path.Exists(Path.Combine(dir.FullName, ".git")))
             {
                 return dir.FullName;
             }
