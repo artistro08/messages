@@ -10,6 +10,8 @@
    Google messages but Native. 
 </p>
 
+> Messages is an independent app. It isn't affiliated with, endorsed by or sponsored by Google in any way. Google, Google Messages and the Google Messages icon are trademarks of Google LLC.
+
 ![Messages showing a chat with a photo, reactions and a reply, in dark mode](docs/screenshots/01-chat-dark.png)
 
 ## Why? 
@@ -75,7 +77,7 @@ dotnet test src/GMessages.App.UITests -p:Platform=x64
 ### Change The Icon Or Screenshots
 
 - `.\scripts\Make-Icons.ps1` redraws every icon size and the tray icons from `assets-src/Messages.svg`.
-- The store screenshots in `docs/screenshots` come from a mock phone. Retake them with:
+- The screenshots in `docs/screenshots` come from a mock phone. Retake them with:
 
 ```powershell
 $env:MESSAGES_SCREENSHOTS = 1; dotnet test src/GMessages.App.UITests -p:Platform=x64 --filter StoreScreenshots
