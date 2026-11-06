@@ -315,6 +315,7 @@
                         <Button
                             x:Name="Photo"
                             Padding="0"
+                            HorizontalAlignment="Stretch"
                             BorderThickness="0"
                             HorizontalContentAlignment="Stretch"
                             VerticalContentAlignment="Stretch"
