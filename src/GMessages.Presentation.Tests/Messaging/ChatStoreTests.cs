@@ -211,6 +211,54 @@ public sealed class ChatStoreTests
     }
 
     /// <summary>
+    /// The one-on-one chat the phone makes for a group MMS sender holds only its created line once the message moved
+    /// into the group: raised, but out of the main list (the phone shows it nowhere). My first message in it shows it
+    /// at once, without waiting for the phone's update.
+    /// </summary>
+    [TestMethod]
+    public async Task EmptyOneOnOneChat_HiddenUntilAMessageLandsInIt()
+    {
+        using var rig = new Rig();
+        List<ConversationInfo> raised = [];
+        rig.Store.ConversationChanged += (_, c) => raised.Add(c);
+
+        Conversation c         = Conv("c1");
+        c.LatestMessageID      = "t1";
+        c.LastMessageTimestamp = 1_761_700_000_000_000;
+        c.LatestMessage        = new LatestMessage { DisplayContent = "You started this chat", LatestMessageStatus = new LatestMessageStatus { Status = MessageStatusType.TombstoneOneOnOneSmsCreated } };
+        await rig.Store.HandleEventAsync(new ConversationUpdated(c));
+
+        Assert.AreEqual(1, raised.Count);
+        Assert.IsTrue(raised[0].IsEmpty);
+        Assert.IsFalse(raised[0].IsMainView);
+
+        await rig.Store.HandleEventAsync(new MessageReceived(Msg("m1", "c1", "hey", ts: 1_761_700_001_000_000), false));
+
+        Assert.IsTrue(rig.Store.Find("c1")?.IsMainView);
+        Assert.IsTrue(raised[^1].IsMainView, "shown as soon as my message lands");
+    }
+
+    /// <summary>
+    /// A live system line (someone joined, a chat created) isn't mine, but it's nothing to read: it neither turns the
+    /// chat unread nor adds to its live unread count.
+    /// </summary>
+    [TestMethod]
+    public async Task LiveSystemLine_DoesNotTurnTheChatUnread()
+    {
+        using var rig = new Rig();
+        await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1")));
+        Conversation unread = Conv("c2");
+        unread.Unread       = true;
+        await rig.Store.HandleEventAsync(new ConversationUpdated(unread));
+
+        await rig.Store.HandleEventAsync(new MessageReceived(new Message { MessageID = "t1", ConversationID = "c1", Timestamp = 1_761_700_000_000_000, MessageStatus = new MessageStatus { Status = MessageStatusType.TombstoneParticipantJoined } }, false));
+        await rig.Store.HandleEventAsync(new MessageReceived(new Message { MessageID = "t2", ConversationID = "c2", Timestamp = 1_761_700_000_000_000, MessageStatus = new MessageStatus { Status = MessageStatusType.TombstoneParticipantJoined } }, false));
+
+        Assert.IsFalse(rig.Store.Find("c1")?.Unread);
+        Assert.AreEqual(0, rig.Store.LiveUnreadTexts("c2").Count);
+    }
+
+    /// <summary>
     /// After an unpair (Reset) a newly paired phone whose conversation IDs collide with the old phone's sees none of
     /// the old conversations, owner, SIMs or notified IDs.
     /// </summary>
