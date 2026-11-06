@@ -57,4 +57,30 @@ public sealed class ConversationInfoTests
         Assert.IsTrue(ConversationInfo.From(new Conversation { Status = ConversationStatus.Active }).IsMainView);
         Assert.IsFalse(ConversationInfo.From(new Conversation { Status = ConversationStatus.SpamFolder }).IsMainView);
     }
+
+    /// <summary>
+    /// An active one-on-one chat whose newest message is its own "conversation created" line holds nothing: the phone
+    /// shows it nowhere (the chat it makes for a group MMS sender), so it is empty and out of the main list. A group's
+    /// created line, or any real message, keeps the chat in the list.
+    /// </summary>
+    [TestMethod]
+    public void IsEmpty_WhenOnlyTheOneOnOneCreatedLineIsLeft()
+    {
+        static ConversationInfo With(MessageStatusType status) => ConversationInfo.From(new Conversation
+        {
+            Status        = ConversationStatus.Active,
+            LatestMessage = new LatestMessage { LatestMessageStatus = new LatestMessageStatus { Status = status } },
+        });
+
+        Assert.IsTrue(With(MessageStatusType.TombstoneOneOnOneSmsCreated).IsEmpty);
+        Assert.IsTrue(With(MessageStatusType.TombstoneOneOnOneRcsCreated).IsEmpty);
+        Assert.IsTrue(With(MessageStatusType.TombstoneEncryptedOneOnOneRcsCreated).IsEmpty);
+        Assert.IsFalse(With(MessageStatusType.TombstoneOneOnOneSmsCreated).IsMainView);
+
+        Assert.IsFalse(With(MessageStatusType.TombstoneRcsGroupCreated).IsEmpty);
+        Assert.IsFalse(With(MessageStatusType.IncomingComplete).IsEmpty);
+        Assert.IsTrue(With(MessageStatusType.IncomingComplete).IsMainView);
+        Assert.AreEqual(MessageStatusType.IncomingComplete, With(MessageStatusType.IncomingComplete).LatestMessageStatus);
+        Assert.IsFalse(ConversationInfo.From(new Conversation { Status = ConversationStatus.Active }).IsEmpty, "no newest message known");
+    }
 }
