@@ -33,8 +33,24 @@ public sealed record ConversationInfo(
     string DefaultOutgoingId,
     string LatestMessageId)
 {
-    /// <summary>True for conversations in the main list (not archived, spam or deleted).</summary>
-    public bool IsMainView => Status == ConversationStatus.Active;
+    /// <summary>True for conversations in the main list (not archived, spam or deleted), and not <see cref="IsEmpty"/>.</summary>
+    public bool IsMainView => Status == ConversationStatus.Active && !IsEmpty;
+
+    /// <summary>
+    /// True when the chat holds no message, only the "conversation created" system line of a one-on-one chat: the
+    /// phone keeps the conversation but shows it nowhere, and neither does the app.
+    /// </summary>
+    /// <remarks>
+    /// A group MMS from someone not on RCS first lands, undownloaded, in a one-on-one chat the phone makes for them
+    /// (just this line and the stand-in); the phone then moves the message into the group and leaves the chat active
+    /// with the line as its newest message. A new group's own created line keeps the group visible, as on the phone.
+    /// </remarks>
+    public bool IsEmpty => LatestMessageStatus is MessageStatusType.TombstoneOneOnOneSmsCreated
+        or MessageStatusType.TombstoneOneOnOneRcsCreated
+        or MessageStatusType.TombstoneEncryptedOneOnOneRcsCreated;
+
+    /// <summary>Gets the phone's status of the newest message (its delivery state, or the system line it is), or unknown.</summary>
+    public MessageStatusType LatestMessageStatus { get; init; }
 
     /// <summary>Gets whether the conversation is an RCS (chat) conversation rather than SMS.</summary>
     public bool IsRcs { get; init; }
@@ -80,10 +96,11 @@ public sealed record ConversationInfo(
             c.DefaultOutgoingID,
             c.LatestMessageID)
         {
-            IsRcs         = c.Type == ConversationType.Rcs,
-            IsEncrypted   = c.EncryptionState?.Encrypted,
-            SnippetSender = c.LatestMessage?.DisplayName ?? string.Empty,
-            IsMuted       = MutedOf(c),
+            IsRcs               = c.Type == ConversationType.Rcs,
+            IsEncrypted         = c.EncryptionState?.Encrypted,
+            SnippetSender       = c.LatestMessage?.DisplayName ?? string.Empty,
+            IsMuted             = MutedOf(c),
+            LatestMessageStatus = c.LatestMessage?.LatestMessageStatus?.Status ?? MessageStatusType.StatusUnknown,
         };
     }
 
