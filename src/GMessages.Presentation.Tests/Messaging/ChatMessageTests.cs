@@ -21,6 +21,21 @@ public sealed class ChatMessageTests
 
     private static MessageInfo Media(MediaFormats f) => new() { MediaContent = new MediaContent { Format = f } };
 
+    // Undownloaded MMS And Deletion Notices Are Hidden; The Same Status With Content, Or A Plain Message, Shows
+    [TestMethod]
+    [DataRow(MessageStatusType.IncomingAutoDownloading, false, true)]
+    [DataRow(MessageStatusType.IncomingAwaitingAutoDownload, false, true)]
+    [DataRow(MessageStatusType.MessageDeleted, false, true)]
+    [DataRow(MessageStatusType.IncomingAutoDownloading, true, false)]
+    [DataRow(MessageStatusType.IncomingComplete, false, false)]
+    public void IsPlaceholder_HidesStandIns(MessageStatusType status, bool hasText, bool hidden)
+    {
+        ChatMessage m = ChatMessage.From(Make(status, hasText ? Text("hi") : null));
+
+        Assert.AreEqual(hidden, m.IsPlaceholder);
+        Assert.AreEqual(hidden, ChatFormat.IsHiddenLine(m));
+    }
+
     [TestMethod]
     public void From_Text()
     {

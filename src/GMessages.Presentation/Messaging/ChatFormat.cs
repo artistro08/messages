@@ -437,17 +437,18 @@ public static class ChatFormat
         new[] { p?.FullName, p?.FirstName, p?.FormattedNumber }.FirstOrDefault(n => !string.IsNullOrEmpty(n)) ?? string.Empty;
 
     /// <summary>
-    /// Whether a message stays out of the chat: a system line, except a group's name change (changed or cleared, in
-    /// Google's own words), which shows as a centered gray line. The others only steer the lock (<see cref="EncryptionOf"/>).
+    /// Whether a message stays out of the chat: a placeholder (<see cref="ChatMessage.IsPlaceholder"/>), or a system line,
+    /// except a group's name change (changed or cleared, in Google's own words), which shows as a centered gray line. The
+    /// others only steer the lock (<see cref="EncryptionOf"/>).
     /// </summary>
     /// <param name="m">The message.</param>
-    /// <returns>True for a hidden system line.</returns>
+    /// <returns>True for a hidden placeholder or system line.</returns>
     public static bool IsHiddenLine(ChatMessage m)
     {
         ArgumentNullException.ThrowIfNull(m);
 
-        return m.Kind == MessageKind.Tombstone
-            && !(m.Text.Length > 0 && m.Status is MessageStatusType.TombstoneGroupRenamedLocal or MessageStatusType.TombstoneGroupRenamedGlobal or MessageStatusType.TombstoneGroupNameClearedGlobal);
+        return m.IsPlaceholder || (m.Kind == MessageKind.Tombstone
+            && !(m.Text.Length > 0 && m.Status is MessageStatusType.TombstoneGroupRenamedLocal or MessageStatusType.TombstoneGroupRenamedGlobal or MessageStatusType.TombstoneGroupNameClearedGlobal));
     }
 
     /// <summary>

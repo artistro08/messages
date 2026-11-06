@@ -40,6 +40,19 @@ public sealed record ChatMessage(
         or MessageStatusType.MessageStatusOutgoingFailedEmergencyProtocolDeterminationMessage
         or MessageStatusType.OutgoingFailedToEncrypt;
 
+    /// <summary>
+    /// True for a stand-in the phone shows nowhere: an MMS it is still downloading (no text or media yet), or a
+    /// deletion notice.
+    /// </summary>
+    /// <remarks>
+    /// A group MMS first lands, undownloaded, in the sender's one-on-one chat; once downloaded, the phone moves it (same
+    /// ID) into the group, or turns it into a reaction (an iPhone tapback), and drops the stand-in without saying so.
+    /// </remarks>
+    public bool IsPlaceholder => Status == MessageStatusType.MessageDeleted
+        || (Kind == MessageKind.Other && Status is MessageStatusType.IncomingAutoDownloading
+            or MessageStatusType.IncomingRetryingAutoDownload
+            or MessageStatusType.IncomingAwaitingAutoDownload);
+
     /// <summary>Gets the reactions on the message, one per emoji.</summary>
     public IReadOnlyList<ReactionInfo> Reactions { get; init; } = [];
 

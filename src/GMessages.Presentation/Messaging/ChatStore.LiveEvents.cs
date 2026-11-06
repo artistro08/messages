@@ -104,17 +104,29 @@ public sealed partial class ChatStore
     private async Task HandleMessageAsync(MessageReceived received)
     {
         ChatMessage message = ChatMessage.From(received.Message);
+        int generation      = Generation;
+
+        // A Live Stand-In The Phone Shows Nowhere: Not Saved, Shown Or Notified, And Its ID Isn't Marked Notified, So The
+        // Real Message (Same ID, Often Moved Into A Group) Still Notifies. A Deletion Notice Drops The Kept Copy
+        if (message.IsPlaceholder)
+        {
+            if (message.Status == MessageStatusType.MessageDeleted && message.Id.Length > 0)
+            {
+                ForgetMessage(message.ConversationId, message.Id, generation);
+            }
+
+            return;
+        }
 
         // No ConfigureAwait(false) Below: Events Must Be Raised On The Thread That Delivered The Client Event
         // Decide IsNew Before Any Await, So Two Quick Events Of One Message Can't Both Be New. A Message Older Than A Day
         // Is Never New Either: A Reaction Or Status Update To It Must Not Notify (mautrix-gmessages, GetReactions). Nor
         // Is A Message Already In Its Cached Page, Or One Carrying My Own Reaction: Both Are The Phone Echoing An Update
         // (A Reaction Made Here Or On The Phone), Which The Notified Ring Misses After A Restart. Others' Reactions Don't Count
-        int generation = Generation;
-        bool isNew     = MarkNotified(message.Id)
-                         && !HasMyReaction(message)
-                         && !IsCached(message)
-                         && message.Time >= _time.GetUtcNow() - NewMessageAge;
+        bool isNew = MarkNotified(message.Id)
+                     && !HasMyReaction(message)
+                     && !IsCached(message)
+                     && message.Time >= _time.GetUtcNow() - NewMessageAge;
 
         // A New Received Message Adds One To Its Conversation's Unread Count, Only While The Phone Says It's Unread (Its
         // Conversation Update Comes First): One Read Meanwhile Mustn't Carry Into The Next Count. Since That Update Was
@@ -143,8 +155,10 @@ public sealed partial class ChatStore
         // Time), Sent Or Received, Without Waiting For Google's Conversation Update, Which Doesn't Always Come. A Received
         // One's Update Comes First With Its Snippet; For One Of Mine It Often Never Came (The Row Kept The Old Snippet), So
         // Mine Brings Its Own (A System Line Keeps It). A Received One Makes The Chat Unread: When It Beats The Update, The
-        // Cached Copy Is Still Read, And Raising That Would Take This Message's Toast With It. The Update, When It Comes,
-        // Has The Last Word. A Conversation Fetched Below Is Already Current
+        // Cached Copy Is Still Read, And Raising That Would Take This Message's Toast With It. Only A New One Does: The
+        // Phone Re-Sends A Message It Read (A Status Update), And An MMS's Whole-Second Time Can Sit A Millisecond Past
+        // The Conversation's, Which Turned A Chat Read On The Phone Unread Again. The Update, When It Comes, Has The Last
+        // Word. A Conversation Fetched Below Is Already Current
         if (!received.IsOld && conversation is not null && message.Time > conversation.LastMessageTime)
         {
             conversation = message.FromMe && message.Kind is not (MessageKind.Tombstone or MessageKind.Other)
@@ -156,7 +170,7 @@ public sealed partial class ChatStore
                     SnippetMedia    = message.Media is { } snippetMedia ? ChatFormat.MediaLabel(snippetMedia) : string.Empty,
                     LatestMessageId = message.Id,
                 }
-                : conversation with { LastMessageTime = message.Time, Unread = conversation.Unread || !message.FromMe };
+                : conversation with { LastMessageTime = message.Time, Unread = conversation.Unread || (!message.FromMe && isNew) };
             if (Upsert(conversation))
             {
                 ConversationChanged?.Invoke(this, conversation);
