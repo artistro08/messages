@@ -161,15 +161,18 @@ public sealed partial class ChatStore
         // Phone Re-Sends A Message It Read (A Status Update), And An MMS's Whole-Second Time Can Sit A Millisecond Past
         // The Conversation's, Which Turned A Chat Read On The Phone Unread Again. The Update, When It Comes, Has The Last
         // Word. A Conversation Fetched Below Is Already Current. The Message's Status Becomes The Newest One's, So A Chat
-        // That Held Only Its Created Line (Hidden, ConversationInfo.IsEmpty) Shows As Soon As A Message Lands In It
+        // That Held Only Its Created Line (Hidden, ConversationInfo.IsEmpty) Shows As Soon As A Message Lands In It;
+        // That One Brings Its Snippet Too, Mine Or Not, So The Row Doesn't Show The Created Line's Until The Update
         if (!received.IsOld && conversation is not null && message.Time > conversation.LastMessageTime)
         {
-            conversation = message.FromMe && message.Kind is not (MessageKind.Tombstone or MessageKind.Other)
+            bool bringsSnippet = (message.FromMe || conversation.IsEmpty) && message.Kind is not (MessageKind.Tombstone or MessageKind.Other);
+            conversation       = bringsSnippet
                 ? conversation with
                 {
                     LastMessageTime     = message.Time,
+                    Unread              = conversation.Unread || receivedNew,
                     Snippet             = message.Text,
-                    SnippetFromMe       = true,
+                    SnippetFromMe       = message.FromMe,
                     SnippetMedia        = message.Media is { } snippetMedia ? ChatFormat.MediaLabel(snippetMedia) : string.Empty,
                     LatestMessageId     = message.Id,
                     LatestMessageStatus = message.Status,

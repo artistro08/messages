@@ -236,6 +236,38 @@ public sealed class ChatStoreTests
 
         Assert.IsTrue(rig.Store.Find("c1")?.IsMainView);
         Assert.IsTrue(raised[^1].IsMainView, "shown as soon as my message lands");
+        Assert.AreEqual("hey", raised[^1].Snippet);
+        Assert.IsTrue(raised[^1].SnippetFromMe);
+    }
+
+    /// <summary>
+    /// Someone texts me in such a chat and the message beats the phone's update: the chat shows at once, unread, with
+    /// that message as its snippet rather than the created line's.
+    /// </summary>
+    [TestMethod]
+    public async Task EmptyOneOnOneChat_ReceivedMessageShowsItWithItsSnippet()
+    {
+        using var rig = new Rig();
+        Conversation c         = Conv("c1");
+        c.LatestMessageID      = "t1";
+        c.LastMessageTimestamp = 1_761_700_000_000_000;
+        c.LatestMessage        = new LatestMessage { DisplayContent = "You started this chat", LatestMessageStatus = new LatestMessageStatus { Status = MessageStatusType.TombstoneOneOnOneSmsCreated } };
+        await rig.Store.HandleEventAsync(new ConversationUpdated(c));
+        List<ConversationInfo> raised = [];
+        rig.Store.ConversationChanged += (_, c) => raised.Add(c);
+
+        Message theirs                = Msg("m1", "c1", "hi there", ts: 1_761_700_001_000_000);
+        theirs.ParticipantID          = "p-ann";
+        theirs.MessageStatus.Status   = MessageStatusType.IncomingComplete;
+        await rig.Store.HandleEventAsync(new MessageReceived(theirs, false));
+
+        ConversationInfo? shown = rig.Store.Find("c1");
+        Assert.IsTrue(shown?.IsMainView);
+        Assert.IsTrue(shown?.Unread);
+        Assert.AreEqual("hi there", shown?.Snippet);
+        Assert.IsFalse(shown?.SnippetFromMe);
+        Assert.AreEqual("m1", shown?.LatestMessageId);
+        Assert.AreEqual(1, raised.Count);
     }
 
     /// <summary>
