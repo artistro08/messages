@@ -831,6 +831,13 @@ public sealed partial class ChatStore : IDisposable
             return answer.Success;
         }
 
+        ForgetMessage(conversationId, messageId, generation);
+        return true;
+    }
+
+    // Drops A Message From The Kept Page And The Database
+    private void ForgetMessage(string conversationId, string messageId, int generation)
+    {
         lock (_pagesLock)
         {
             if (_pages.TryGetValue(conversationId, out List<ChatMessage>? page))
@@ -849,8 +856,6 @@ public sealed partial class ChatStore : IDisposable
                 }
             });
         }
-
-        return true;
     }
 
     // Looks Up The Conversation, Fetching It When Not Cached. No ConfigureAwait(false): ConversationChanged Must Be

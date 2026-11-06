@@ -159,6 +159,58 @@ public sealed class ChatStoreTests
     }
 
     /// <summary>
+    /// Read on the phone, then the phone re-sends the message (a status update) whose whole-second MMS time sits a
+    /// millisecond past the conversation's: the chat stays read.
+    /// </summary>
+    [TestMethod]
+    public async Task ReadOnPhone_ThenTheMessageAgain_StaysRead()
+    {
+        using var rig = new Rig();
+        Conversation c = Conv("c1");
+        c.LastMessageTimestamp = 1_761_699_999_999_000;
+        c.Unread               = true;
+        await rig.Store.HandleEventAsync(new ConversationUpdated(c));
+
+        Message m = Msg("m1", "c1");
+        m.MessageStatus.Status = MessageStatusType.IncomingComplete;
+        await rig.Store.HandleEventAsync(new MessageReceived(m, false));
+
+        Conversation read = c.Clone();
+        read.Unread       = false;
+        await rig.Store.HandleEventAsync(new ConversationUpdated(read));
+        await rig.Store.HandleEventAsync(new MessageReceived(m, false));
+
+        Assert.IsFalse(rig.Store.Find("c1")?.Unread);
+    }
+
+    /// <summary>
+    /// A group MMS first lands undownloaded in the sender's one-on-one chat, then moves (same ID) into the group: the
+    /// stand-in raises nothing, and the real message still notifies.
+    /// </summary>
+    [TestMethod]
+    public async Task UndownloadedMms_IsSkipped_AndTheMovedMessageStillNotifies()
+    {
+        using var rig = new Rig();
+        await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1")));
+        await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c2")));
+        var got = new List<MessageArrivedEventArgs>();
+        rig.Store.MessageArrived += (_, e) => got.Add(e);
+
+        var stub = new Message { MessageID = "m1", ConversationID = "c1", Timestamp = 1_761_700_000_000_000, MessageStatus = new MessageStatus { Status = MessageStatusType.IncomingAutoDownloading } };
+        stub.MessageInfo.Add(new MessageInfo { ActionMessageID = "a1" });
+        await rig.Store.HandleEventAsync(new MessageReceived(stub, false));
+        await rig.Store.HandleEventAsync(new MessageReceived(new Message { MessageID = "m0", ConversationID = "c1", MessageStatus = new MessageStatus { Status = MessageStatusType.MessageDeleted } }, false));
+
+        Message real = Msg("m1", "c2", "Thanks!");
+        real.MessageStatus.Status = MessageStatusType.IncomingComplete;
+        await rig.Store.HandleEventAsync(new MessageReceived(real, false));
+
+        Assert.AreEqual(1, got.Count);
+        Assert.AreEqual("c2", got[0].Message.ConversationId);
+        Assert.IsTrue(got[0].IsNew);
+    }
+
+    /// <summary>
     /// After an unpair (Reset) a newly paired phone whose conversation IDs collide with the old phone's sees none of
     /// the old conversations, owner, SIMs or notified IDs.
     /// </summary>
@@ -211,7 +263,7 @@ public sealed class ChatStoreTests
         List<ConversationInfo> raised  = [];
         rig.Store.ConversationChanged += (_, c) => raised.Add(c);
 
-        Message received              = Msg("m1", "c1", ts: 2_000);
+        Message received              = Msg("m1", "c1");
         received.ParticipantID        = "p-ann";
         received.MessageStatus.Status = MessageStatusType.IncomingComplete;
         await rig.Store.HandleEventAsync(new MessageReceived(received, false));
