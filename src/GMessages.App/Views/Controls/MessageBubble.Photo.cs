@@ -111,7 +111,9 @@ public sealed partial class MessageBubble
         return ++_photoLoad;
     }
 
-    // The Photo's Or Video's Size From Its Dimensions, Fitted To The Bubble (See MessageBubbleViewModel.PhotoSize)
+    // The Photo's Or Video's Size From Its Dimensions, Fitted To The Bubble (See MessageBubbleViewModel.PhotoSize). A
+    // Photo's Width Is Its Least: A Wider Caption Or Quote Stretches It To The Bubble's Width, Cropped To Its Height
+    // (Issue #30). A Video Keeps Its Size
     private void SizePhoto()
     {
         if (Bubble is not { FillsBubble: true, Media: { } media } bubble)
@@ -126,11 +128,16 @@ public sealed partial class MessageBubble
             return;
         }
 
-        if (shown.Width != width || shown.Height != height)
+        if (bubble.HasVideo)
         {
-            shown.Width  = width;
-            shown.Height = height;
+            shown.Width = width;
         }
+        else
+        {
+            shown.MinWidth = width;
+        }
+
+        shown.Height = height;
     }
 
     // Blurred First, Then Sharp. A Thumbnail-Only Photo Asks The Phone For Its Full Size Instead, Which Comes Back As A New
@@ -206,7 +213,7 @@ public sealed partial class MessageBubble
             }
 
             // Its Size Read From The Same Stream It Decodes From, Then Decoded To Fill The Box
-            double boxWidth  = Photo.Width;
+            double boxWidth  = Math.Max(Photo.ActualWidth, Photo.MinWidth);
             double boxHeight = Photo.Height;
             (ImageSource? fitted, int pixelWidth, int pixelHeight, int decodeWidth) =
                 await Avatar.ToFittedImageAsync(full, (w, h) => MessageBubbleViewModel.FillDecodeWidth(w, h, boxWidth, boxHeight));
