@@ -83,6 +83,27 @@ public sealed class ChatViewModelTests
     }
 
     /// <summary>
+    /// A rename on the phone while the chat is open changes the name and the letter in the header.
+    /// </summary>
+    [TestMethod]
+    public async Task Header_FollowsARename()
+    {
+        using var rig            = new MainRig();
+        using ChatViewModel chat = NewChat(rig, null, Msg("m1", "one"));
+        await chat.LoadAsync();
+        List<string?> raised = [];
+        chat.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+
+        Conversation renamed = rig.Client.Conversations["a"].Clone();
+        renamed.Name         = "Book club";
+        await rig.Live(renamed);
+
+        Assert.AreEqual("Book club", chat.Title);
+        Assert.AreEqual("B", chat.Initial);
+        Assert.IsTrue(raised.Any(n => n is "" or nameof(ChatViewModel.Title)), "the header was not told");
+    }
+
+    /// <summary>
     /// A too-short list fills with older pages only while they work: a failed older load (phone silent) stops the
     /// pane's fill after one try instead of asking forever, and the next good newest page re-arms it.
     /// </summary>

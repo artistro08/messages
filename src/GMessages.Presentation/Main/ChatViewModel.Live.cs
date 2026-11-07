@@ -105,9 +105,17 @@ public sealed partial class ChatViewModel
             return;
         }
 
-        bool couldMute   = CanMute;
-        string wasHolder = DraftPlaceholder;
-        Conversation     = c;
+        bool couldMute    = CanMute;
+        string wasHolder  = DraftPlaceholder;
+        AvatarParts shown = new(Initial, AvatarColor, PhotoId, SecondInitial, SecondColor, SecondPhotoId);
+
+        // A rename or a new avatar changes the header. Only then do all the properties raise.
+        if (c.Name != Title || AvatarParts.Of(c) != shown)
+        {
+            ApplyConversation(c);
+        }
+
+        Conversation = c;
 
         // Turned RCS Or Back To SMS: The Placeholder Follows
         if (wasHolder != DraftPlaceholder)
