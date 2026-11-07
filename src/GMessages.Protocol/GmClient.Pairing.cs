@@ -22,7 +22,7 @@ public sealed partial class GmClient
     /// that the user must tap on the phone, then waits for the tap. Session saves stop during the pairing. After the
     /// pairing, the method stops the pairing long poll and waits for it. Then it saves the session, raises
     /// <see cref="PairSuccessful"/> and reconnects logged in. That is Go's <c>Reconnect</c>, without a token refresh.
-    /// On a failure, <see cref="AuthData.ClearPairing"/> clears the half-set pairing data and nothing is saved. A
+    /// On a failure, <see cref="AuthData.ClearPairing"/> clears the half-set pairing data and the method saves nothing. A
     /// connected client throws. Disconnect first.
     /// </remarks>
     /// <param name="showEmoji">Shows the emoji to the user.</param>

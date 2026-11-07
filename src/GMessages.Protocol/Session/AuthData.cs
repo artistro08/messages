@@ -73,7 +73,7 @@ public sealed class AuthData
     /// </summary>
     /// <remarks>
     /// C#-only. A single write with a memory barrier swaps the 3 parts. Thus a save or a request on a different thread
-    /// sees the old token or the new token, never a mix. This is also true on ARM64. Write tokens through this
+    /// sees the old token or the new token. It never sees a mix. This is also true on ARM64. Write tokens through this
     /// property, because it swaps all 3 parts at once.
     /// </remarks>
     public TachyonToken Tachyon

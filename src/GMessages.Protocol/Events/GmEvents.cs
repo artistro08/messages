@@ -132,7 +132,7 @@ public sealed record HackySetActiveMayFail;
 /// The session save to disk failed. The app uses it to warn the user that a restart can require a new pairing.
 /// </summary>
 /// <remarks>
-/// C#-only, because Go keeps the session in the bridge database. It occurs for each failed save, also for the save
+/// This event is C#-only, because Go keeps the session in the bridge database. It occurs for each failed save, also for the save
 /// right after pairing. It carries only the type name of the exception, never its message. The message can hold a
 /// path or session data.
 /// </remarks>

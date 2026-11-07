@@ -88,9 +88,9 @@ public sealed partial class SessionStore(string filePath, ILogger? logger = null
     /// Reads and decrypts the session.
     /// </summary>
     /// <remarks>
-    /// The method returns null and does not throw when the file is missing or cut off. It also returns null when the
-    /// file is not DPAPI data, is from a different user, is not valid JSON or has no required keys. The caller then
-    /// treats the result as "not logged in".
+    /// The method returns null and does not throw when the file is missing or cut off. It also returns null in 4 other
+    /// cases. The file is not DPAPI data, is from a different user, is not valid JSON or has no required keys. The
+    /// caller then treats the result as "not logged in".
     /// </remarks>
     /// <returns>The session, or null.</returns>
     public AuthData? Load()

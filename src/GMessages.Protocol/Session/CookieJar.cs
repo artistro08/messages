@@ -158,7 +158,7 @@ public sealed class CookieJar
     /// </summary>
     /// <remarks>
     /// The value is <c>SAPISIDHASH {ts}_{sha1hex}</c>. The hash covers <c>"{ts} {sapisid} {origin}"</c>. The Google
-    /// protocol requires SHA-1. This app does not use it for security. Ported from <c>SAPISIDHash</c> in
+    /// protocol requires SHA-1 here. This app does not choose the hash. Ported from <c>SAPISIDHash</c> in
     /// <see href="https://github.com/mautrix/gmessages/blob/ba33f4875a491f5cb47db8a6baf42a8869f5f383/pkg/libgm/http.go">http.go</see>.
     /// </remarks>
     /// <param name="origin">The origin string, for example <c>https://messages.google.com</c>.</param>

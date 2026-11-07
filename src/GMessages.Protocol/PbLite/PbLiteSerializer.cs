@@ -603,7 +603,6 @@ public static class PbLiteSerializer
     // HELPERS
     // =========================================================================
 
-    // A field with the pblite_binary option holds base64 binary.
     private static bool IsPbliteBinary(FieldDescriptor field)
     {
         FieldOptions? options = field.GetOptions();

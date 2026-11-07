@@ -85,7 +85,6 @@ public sealed class AesCtrHelper(byte[] aesKey, byte[] hmacKey)
         return plaintext;
     }
 
-    // The method XORs the input with the CTR keystream that starts at the IV.
     private void Xor(ReadOnlySpan<byte> input, Span<byte> output, ReadOnlySpan<byte> iv)
     {
         using Aes aes      = Aes.Create();

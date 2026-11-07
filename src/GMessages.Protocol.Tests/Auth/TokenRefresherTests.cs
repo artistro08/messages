@@ -82,7 +82,7 @@ public class TokenRefresherTests
     }
 
     /// <summary>
-    /// A refresh stores the token, expiry and TTL as 1 new value, and the text of that value never shows the token.
+    /// A refresh stores the token, expiry and TTL as 1 new value. The text of that value never shows the token.
     /// This check is C#-only. The refresher does 1 swap, so a concurrent save cannot tear the values.
     /// </summary>
     [TestMethod]

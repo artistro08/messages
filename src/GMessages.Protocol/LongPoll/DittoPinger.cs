@@ -15,8 +15,8 @@ namespace GMessages.Protocol.LongPoll;
 /// first unanswered ping raises <see cref="PhoneNotResponding"/>. After that, only <see cref="AlertTimeoutCount"/>
 /// misses in a row raise it, because phones doze all the time. While the phone is silent, a recovery loop pings again
 /// on doubling intervals, from 1 minute up to 64 minutes. It re-arms the event subscription after 2 misses and
-/// reconnects after 3 misses. When pings failed, an answer or data from the phone raises
-/// <see cref="PhoneRespondingAgain"/>. The wait for a ping never blocks the main loop. The main loop also runs the
+/// reconnects after 3 misses. A ping answer after failed pings raises <see cref="PhoneRespondingAgain"/>. Data from
+/// the phone raises it only after <see cref="PhoneNotResponding"/>. The wait for a ping never blocks the main loop. The main loop also runs the
 /// data-receive check. That check sends an extra update request when no data arrived for a long time. Each wait uses
 /// the <see cref="TimeProvider"/>. 1 pinger lives for 1 <see cref="LongPollLoop.RunAsync"/>. Its counters are in
 /// <see cref="PhoneLiveness"/>, which the loop owns. Thus the counters outlive the pinger, as in Go.
@@ -138,8 +138,8 @@ internal sealed partial class DittoPinger(
     /// Counts data from the phone outside of pings as a sign of life.
     /// </summary>
     /// <remarks>
-    /// Ported from <c>onPhoneActivity</c>. When pings failed, the method stops the recovery. When
-    /// <see cref="PhoneNotResponding"/> was raised, it also raises <see cref="PhoneRespondingAgain"/>.
+    /// Ported from <c>onPhoneActivity</c>. When pings failed, the method stops the recovery. After the pinger raised
+    /// <see cref="PhoneNotResponding"/>, it also raises <see cref="PhoneRespondingAgain"/>.
     /// </remarks>
     /// <param name="source">What arrived, for the log.</param>
     public void OnPhoneActivity(string source)

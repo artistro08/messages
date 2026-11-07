@@ -61,9 +61,9 @@ public sealed partial class GaiaPairing(GaiaSignIn signIn, RpcSession rpc, LongP
     /// Ported from <c>StartGaiaPairing</c>. The method sorts several phones by last-seen time, newest first. When the
     /// account has an earlier pairing, <see cref="AuthData.DestPhoneId"/> is set, and the method keeps only that phone.
     /// The chosen phone becomes <see cref="AuthData.DestRegId"/>. The method sends a cancel request when the phone does
-    /// not answer within 20 seconds. A bad answer also causes a cancel request. Unlike Go, the method stops the long poll when the
-    /// start fails, because nothing else stops it. Go leaves that to the context of the caller. Also unlike Go, a long
-    /// poll that ends before its connect fails the start. Go waits forever then.
+    /// not answer within 20 seconds. A bad answer also causes a cancel request. Unlike Go, the method stops the long
+    /// poll when the start fails, because nothing else stops it. Go leaves that to the context of the caller. Also
+    /// unlike Go, a long poll that ends before its connect fails the start. Go waits forever then.
     /// </remarks>
     /// <param name="ct">Cancels the start.</param>
     /// <returns>The emoji that the user must tap on the phone, and the session for <see cref="FinishAsync"/>.</returns>
@@ -144,7 +144,8 @@ public sealed partial class GaiaPairing(GaiaSignIn signIn, RpcSession rpc, LongP
     /// port also ends the wait in 2 C#-only cases. First, the long poll of <see cref="StartAsync"/> ends, so the answer
     /// cannot arrive. The method then throws the error of the long poll, or a <see cref="PairingException"/> when there
     /// is none. Second, the 300 second TTL of the finish message ends, and the server drops the request. The method
-    /// then throws <see cref="PairingFailure.Timeout"/>. Both cases also send the cancel request.
+    /// then throws a <see cref="PairingException"/> with <see cref="PairingFailure.Timeout"/>. Both cases also send
+    /// the cancel request.
     /// </remarks>
     /// <param name="session">The session from <see cref="StartAsync"/>.</param>
     /// <param name="ct">Cancels the wait.</param>

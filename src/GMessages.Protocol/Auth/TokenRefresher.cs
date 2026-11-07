@@ -132,7 +132,7 @@ public sealed partial class TokenRefresher(GmHttpClient http, AuthData auth, GmE
 
         TimeSpan validFor = data.TTL == 0 ? DefaultValidFor : TimeSpan.FromMicroseconds(data.TTL);
 
-        // 1 swap, so a concurrent save never sees a new token with an old expiry.
+        // The method writes 1 value, so a concurrent save never sees a new token with an old expiry.
         auth.Tachyon = new TachyonToken(data.TachyonAuthToken.ToByteArray(), time.GetUtcNow() + validFor, (long)validFor.TotalMicroseconds);
     }
 

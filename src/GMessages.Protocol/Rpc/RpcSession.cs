@@ -299,7 +299,7 @@ public sealed partial class RpcSession(GmHttpClient http, AuthData auth, GmEndpo
     /// <remarks>
     /// Ported from <c>receiveResponse</c>. When the account has cookies, the method ignores messages with unencrypted
     /// data and no encrypted data. These odd messages come before the real answers. Go calls this check "very hacky".
-    /// The 2 Google pairing actions are not ignored.
+    /// The method does not ignore the 2 Google pairing actions.
     /// </remarks>
     /// <param name="msg">The decoded incoming message.</param>
     /// <returns>True when a waiting request took the message.</returns>
@@ -407,7 +407,7 @@ public sealed partial class RpcSession(GmHttpClient http, AuthData auth, GmEndpo
     /// Sends all queued acks in one request.
     /// </summary>
     /// <remarks>
-    /// Ported from <c>sendAckRequest</c>. On a failure, the batch goes back in front of newer acks, so messages with
+    /// Ported from <c>sendAckRequest</c>. On a failure, the batch goes back in front of newer acks. Thus messages with
     /// no ack do not stop the delivery. When the queue then has more than 1024 acks, the method drops the batch. The
     /// method logs failures and does not throw them. It throws only when <paramref name="ct"/> is canceled.
     /// </remarks>

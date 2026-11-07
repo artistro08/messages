@@ -39,7 +39,7 @@ public sealed class PhoneNotRespondingException : Exception
 }
 
 /// <summary>
-/// The exception that is thrown when no connection is open, or the connection closes while a request waits for an answer.
+/// The exception that is thrown when no connection is open. It is also thrown when the connection closes while a request waits.
 /// </summary>
 /// <remarks>
 /// Ported from <c>ErrConnectionClosed</c> in

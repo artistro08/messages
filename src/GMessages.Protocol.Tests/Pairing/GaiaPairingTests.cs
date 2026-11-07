@@ -44,10 +44,10 @@ public class GaiaPairingTests
 
         public required SignalingTimeProvider Time { get; init; }
 
-        // ReceiveMessages Answer; Null Means An Open Quiet Stream
+        // The ReceiveMessages answer. Null means an open, quiet stream.
         public Func<HttpResponseMessage>? Receive { get; set; }
 
-        // Response Bytes Delivered For Each Pairing Action; Missing Means The Phone Stays Quiet
+        // The answer bytes for each pairing action. For a missing action, the phone stays quiet.
         public Dictionary<ActionType, byte[]> Responses { get; } = [];
 
         public ActionType[] SentActions()
@@ -151,7 +151,7 @@ public class GaiaPairingTests
         return rig;
     }
 
-    // A Valid Server Init From A Fresh Server Key
+    // A valid server init from a new server key.
     internal static byte[] ServerInit(int verificationVersion, int keyDerivationVersion)
     {
         using var server = System.Security.Cryptography.ECDiffieHellman.Create(System.Security.Cryptography.ECCurve.NamedCurves.nistP256);
@@ -193,7 +193,7 @@ public class GaiaPairingTests
     }
 
     /// <summary>
-    /// The server refuses the client init, and the 20 second init timer runs out during the cancel request. The start
+    /// The server refuses the client init, and the 20 second init timer ends during the cancel request. The start
     /// throws the refusal, not an init timeout.
     /// </summary>
     [TestMethod]

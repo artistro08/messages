@@ -142,6 +142,7 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
     /// <exception cref="PbLiteException">A PBLite response body is invalid.</exception>
     /// <exception cref="InvalidProtocolBufferException">A protobuf response body is invalid.</exception>
     /// <exception cref="HttpRequestException">The request failed before any response arrived.</exception>
+    /// <exception cref="IOException">The body ended before its declared length.</exception>
     public async Task<T> PostTypedAsync<T>(Uri url, IMessage body, GmContentType type, CancellationToken ct)
         where T : IMessage<T>, new()
     {
@@ -165,6 +166,7 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
     /// <exception cref="PbLiteException">A PBLite response body is invalid.</exception>
     /// <exception cref="InvalidProtocolBufferException">A protobuf response body is invalid.</exception>
     /// <exception cref="HttpRequestException">The request failed before any response arrived.</exception>
+    /// <exception cref="IOException">The body ended before its declared length.</exception>
     public async Task<T> GetTypedAsync<T>(Uri url, CancellationToken ct)
         where T : IMessage<T>, new()
     {
@@ -208,6 +210,7 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
     /// <exception cref="GmRequestException">The status was not 200 (<paramref name="requireOk"/>) or not 2xx.</exception>
     /// <exception cref="InvalidDataException">The body is larger than <see cref="MaxMediaBodyBytes"/>.</exception>
     /// <exception cref="HttpRequestException">The request failed before any response arrived.</exception>
+    /// <exception cref="IOException">The body ended before its declared length.</exception>
     /// <exception cref="OperationCanceledException"><paramref name="ct"/> was canceled.</exception>
     public async Task<GmMediaResponse> SendMediaAsync(HttpMethod method, Uri url, IEnumerable<KeyValuePair<string, string>> headers, HttpContent? content, bool requireOk, CancellationToken ct)
     {

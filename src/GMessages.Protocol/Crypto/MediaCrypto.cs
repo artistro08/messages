@@ -16,7 +16,7 @@ namespace GMessages.Protocol.Crypto;
 /// <c>nonce (12) || ciphertext || tag (16)</c> follow. Each raw chunk is 32768 bytes, with 32740 bytes of plaintext.
 /// Only the last chunk can be shorter. Each chunk has a new random nonce. The AAD of a chunk is 5 bytes. The first
 /// byte is <c>1</c> for the last chunk, else <c>0</c>. The zero-based chunk index follows as a big-endian uint32.
-/// Thus nobody can reorder, drop or cut chunks. Keys and media bytes never go in a log.
+/// Thus Decrypt detects a reordered, dropped or cut chunk. Keys and media bytes never go in a log.
 /// </remarks>
 public static class MediaCrypto
 {
@@ -98,7 +98,7 @@ public static class MediaCrypto
     /// <param name="data">The encrypted file.</param>
     /// <param name="key">The 32-byte key from the message's <c>MediaContent</c>.</param>
     /// <returns>The media bytes.</returns>
-    /// <exception cref="CryptographicException">The header is bad, a chunk is truncated, or a tag doesn't match (tampered, reordered or cut data, or the wrong key).</exception>
+    /// <exception cref="CryptographicException">The header is bad, a chunk is truncated, or a tag does not match. The data changed, or the key is wrong.</exception>
     public static byte[] Decrypt(ReadOnlySpan<byte> data, ReadOnlySpan<byte> key)
     {
         // As in Go, the data passes through.
