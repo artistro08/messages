@@ -356,10 +356,12 @@ public sealed partial class GaiaPairing(GaiaSignIn signIn, RpcSession rpc, LongP
             {
                 serverInit = await SendGaiaPairingMessageAsync(session, ActionType.CreateGaiaPairingClientInit, clientInit, linked.Token).ConfigureAwait(false);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
                 // Read the timer before the cancel request. That request can take 10 seconds, and the timer can end meanwhile.
-                bool timedOut = timeout.IsCancellationRequested && !ct.IsCancellationRequested;
+                // As in Go, only a canceled wait is a timeout.
+                // A refusal stays a refusal when the timer ends before this catch.
+                bool timedOut = ex is OperationCanceledException && timeout.IsCancellationRequested && !ct.IsCancellationRequested;
                 await TryCancelAsync(session).ConfigureAwait(false);
                 if (timedOut)
                 {
