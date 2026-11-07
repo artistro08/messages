@@ -7,8 +7,9 @@
     xmlns:main="using:GMessages.Presentation.Main"
     xmlns:muxc="using:Microsoft.UI.Xaml.Controls">
 
-    <!-- Panes: the list is the SplitView's pane, so ☰ slides it in and out the way Windows does; the chat is its content.
-         A narrow window widens the pane to the whole window (set in code) and closes it while the chat shows -->
+    <!-- The list is the pane of the SplitView, so ☰ slides it in and out as Windows does. The chat is its content.
+         A narrow window widens the pane to the whole window and closes it while the chat shows. The code sets the
+         width. -->
     <SplitView
         x:Name="Panes"
         CompactPaneLength="0"
@@ -18,8 +19,9 @@
         PaneBackground="Transparent"
         SizeChanged="OnSizeChanged">
 
-        <!-- List Pane: on the Mica. Held at the pane's width: the SplitView first measures its pane at the chat's width, then
-             at its own, so without it every row laid out twice per window resize step -->
+        <!-- The list pane sits on the Mica, held at the width of the pane. The SplitView first measures its pane at
+             the width of the chat, then at its own width. Without the hold, every row laid out twice per resize step
+             of the window. -->
         <SplitView.Pane>
             <Grid x:Name="ListPane" Width="{x:Bind Panes.OpenPaneLength, Mode=OneWay}">
                 <Grid.RowDefinitions>
@@ -30,7 +32,8 @@
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
-                <!-- Folder Header: Archived or Spam & blocked (the title bar's Back returns to the inbox) -->
+                <!-- The folder header shows Archived or Spam & blocked. The Back of the title bar returns to the
+                     inbox. -->
                 <TextBlock
                     Margin="16,8,12,8"
                     AutomationProperties.AutomationId="Main.ListTitle"
@@ -38,7 +41,7 @@
                     Text="{x:Bind local:ChatsView.FolderTitle(ViewModel.IsArchivedView), Mode=OneWay}"
                     Visibility="{x:Bind ViewModel.IsFolderView, Mode=OneWay, FallbackValue=Collapsed}" />
 
-                <!-- Connection Banner: hidden while connected -->
+                <!-- The connection banner hides while the app is connected. -->
                 <TextBlock
                     Grid.Row="1"
                     Margin="16,0,16,8"
@@ -47,9 +50,9 @@
                     Text="{x:Bind ViewModel.StatusBanner, Mode=OneWay}"
                     Visibility="{x:Bind ViewModel.HasStatusBanner, Mode=OneWay}" />
 
-                <!-- Action Failure Banner: a conversation action the phone didn't make; closing it dismisses it. Collapsed
-                     while closed: a closed InfoBar still keeps its margin, which pushed the list below the chat island's
-                     top edge -->
+                <!-- The failure banner shows a conversation action that the phone did not make. A close dismisses
+                     it. The banner collapses while closed, because a closed InfoBar still keeps its margin. That
+                     margin pushed the list below the top edge of the chat island. -->
                 <muxc:InfoBar
                     Grid.Row="2"
                     Margin="16,0,16,8"
@@ -61,8 +64,8 @@
                     Severity="Error"
                     Visibility="{x:Bind ViewModel.HasActionError, Mode=OneWay, FallbackValue=Collapsed}" />
 
-                <!-- Phone Battery Banner: only after a live low battery alert; closing it hides it until the next one.
-                     Collapsed while closed, as above -->
+                <!-- The battery banner shows only after a live low battery alert. A close hides it until the next
+                     alert. It collapses while closed, as the banner above does. -->
                 <muxc:InfoBar
                     Grid.Row="3"
                     Margin="16,0,16,8"
@@ -74,9 +77,10 @@
                     Title="{x:Bind local:ChatsView.BatteryTitle}"
                     Visibility="{x:Bind ViewModel.IsPhoneBatteryLow, Mode=OneWay, FallbackValue=Collapsed}" />
 
-                <!-- Conversations: room at the bottom so Start chat, and the Undo bar above it while it shows, never cover the
-                     last row (ListPadding). No lane on the right: the scrollbar floats over the rows' own right padding, so
-                     the rows sit as far from the chat island as from the window's left edge (owner) -->
+                <!-- The list keeps room at the bottom. Thus Start chat and the Undo bar above it never cover the last
+                     row. See ListPadding. The list has no lane on the right. The scrollbar floats over the right
+                     padding of the rows. The owner chose equal gaps from the rows to the chat island and to the left
+                     edge of the window. -->
                 <ListView
                     x:Name="ConversationList"
                     Grid.Row="4"
@@ -88,11 +92,13 @@
                     SelectionChanged="OnSelectionChanged"
                     SelectionMode="Single"
                     SizeChanged="OnConversationListSizeChanged">
-                    <!-- Rows: a click opens the chat without taking the focus, so the message box keeps it and never shows its
-                         unfocused look between chats (the owner saw that as a flash). Tab and the arrow keys still reach the rows -->
+                    <!-- A click on a row opens the chat without taking the focus. Thus the message box keeps the
+                         focus and never shows its unfocused look between chats. The owner saw that look as a flash.
+                         Tab and the arrow keys still reach the rows. -->
 
-                    <!-- No Transitions Here: loads, pages and folder switches never animate. The code turns on Windows' add,
-                         remove and reorder motion only for a live change (a new message lifting a row, see OnRowsChanging) -->
+                    <!-- The list has no item transitions, so loads, pages and folder switches never animate. The code
+                         turns on the add, remove and reorder motion of Windows only for a live change. A new message
+                         that lifts a row is a live change. See OnRowsChanging. -->
                     <ListView.ItemContainerTransitions>
                         <TransitionCollection />
                     </ListView.ItemContainerTransitions>
@@ -100,7 +106,7 @@
                     <ListView.ItemContainerStyle>
                         <Style BasedOn="{StaticResource DefaultListViewItemStyle}" TargetType="ListViewItem">
                             <Setter Property="AllowFocusOnInteraction" Value="False" />
-                            <!-- Every row spans the list, so each row's time ends at the same right edge -->
+                            <!-- Every row spans the list, so the time of each row ends at the same right edge. -->
                             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                         </Style>
                     </ListView.ItemContainerStyle>
@@ -113,11 +119,12 @@
                         </DataTemplate>
                     </ListView.ItemTemplate>
 
-                    <!-- Pinned Grid: with Settings' "Show pinned chats as a grid" on, the inbox's pinned chats sit above
-                         the rows as large pictures with their names, like iMessage, and scroll with the list. Collapsed
-                         while there are none (set in code). It has no scroller of its own (a nested one kept the list's
-                         scrollbar showing): it is as tall as its tiles, and the list scrolls it. Its sides (with the
-                         tiles' own 3 px margins) line up with the rows', and the code splits its width into even columns -->
+                    <!-- With "Show pinned chats as a grid" on in Settings, the pinned chats of the inbox sit above the
+                         rows. They show as large pictures with their names, as in iMessage, and scroll with the list.
+                         The code collapses the grid while there are none. The grid has no scroller of its own, because
+                         a nested scroller kept the scrollbar of the list on screen. The grid is as tall as its tiles,
+                         and the list scrolls it. Its sides, with the 3 px margins of the tiles, align with the rows.
+                         The code splits its width into even columns, 3 or more. -->
                     <ListView.Header>
                         <GridView
                             x:Name="PinnedGrid"
@@ -134,10 +141,10 @@
                                 </ControlTemplate>
                             </GridView.Template>
 
-                            <!-- Selected Tile: no accent outline (Windows' tile look), but the rows' selected fills (by
-                                 color, so they follow a theme switch), with the pill at the tile's bottom (SelectionPill
-                                 below). Default serves Light and Dark; the empty HighContrast falls through to Windows'
-                                 own outline and colors -->
+                            <!-- A selected tile has no accent outline, the tile look of Windows. It takes the
+                                 selected fills of the rows instead, by color, so they follow a theme switch. The pill
+                                 at the bottom of the tile is SelectionPill below. Default serves Light and Dark. The
+                                 empty HighContrast falls through to the outline and colors of Windows. -->
                             <GridView.Resources>
                                 <ResourceDictionary>
                                     <ResourceDictionary.ThemeDictionaries>
@@ -154,14 +161,13 @@
                                     </ResourceDictionary.ThemeDictionaries>
                                 </ResourceDictionary>
                             </GridView.Resources>
-                            <!-- /Selected Tile -->
 
-                            <!-- No Transitions: tiles land in place, like the rows' loads -->
+                            <!-- The tiles have no transitions. They land in place, as the rows do on a load. -->
                             <GridView.ItemContainerTransitions>
                                 <TransitionCollection />
                             </GridView.ItemContainerTransitions>
 
-                            <!-- Tiles: even columns from the left edge (ItemWidth set in code) -->
+                            <!-- The tiles fill even columns from the left edge. The code sets ItemWidth. -->
                             <GridView.ItemsPanel>
                                 <ItemsPanelTemplate>
                                     <ItemsWrapGrid Orientation="Horizontal" />
@@ -172,17 +178,20 @@
                                 <Style BasedOn="{StaticResource DefaultGridViewItemStyle}" TargetType="GridViewItem">
                                     <Setter Property="AllowFocusOnInteraction" Value="False" />
                                     <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                                    <!-- Gap: 6 px between tiles, so their hover and selected fills don't touch (owner) -->
+                                    <!-- The owner chose a 6 px gap between tiles, so their hover and selected fills
+                                         do not touch. -->
                                     <Setter Property="Margin" Value="3" />
                                     <Setter Property="MinWidth" Value="0" />
                                 </Style>
                             </GridView.ItemContainerStyle>
 
-                            <!-- Tile: the picture (drawn at 52 px, its photo decoded to match) with the unread badge,
-                                 the name below (bold while unread), and the selection pill at the bottom -->
+                            <!-- A tile shows the picture with the unread badge, the name below and the selection pill
+                                 at the bottom. The picture draws at 52 px, and its photo decodes to match. The name
+                                 is bold while unread. -->
                             <GridView.ItemTemplate>
                                 <DataTemplate x:DataType="main:ConversationRowViewModel">
-                                    <!-- The Tile's Tooltip: always, since a tile shows no snippet and trims its name -->
+                                    <!-- A tile always has a tooltip, because it shows no snippet and trims its
+                                         name. -->
                                     <Grid ToolTipService.ToolTip="{x:Bind HoverText, Mode=OneWay}">
                                         <StackPanel Padding="4,8" Spacing="6">
                                             <Grid HorizontalAlignment="Center">
@@ -197,9 +206,10 @@
                                                         SecondPhotoId="{x:Bind SecondPhotoId, Mode=OneWay}" />
                                                 </Viewbox>
 
-                                                <!-- Unread Badge: the system accent pill at the picture's top right, with
-                                                     the short newest message or the unread count (ChatFormat.UnreadBadge).
-                                                     It hangs past the picture's edge, and grows left for a word or two -->
+                                                <!-- The unread badge is the system accent pill at the top right of
+                                                     the picture. It shows the short newest message or the unread
+                                                     count. See ChatFormat.UnreadBadge. It hangs past the edge of the
+                                                     picture and grows to the left for 1 or 2 words. -->
                                                 <Border
                                                     MinWidth="20"
                                                     MaxWidth="88"
@@ -234,10 +244,11 @@
                                                 TextTrimming="CharacterEllipsis" />
                                         </StackPanel>
 
-                                        <!-- Selection Pill: the rows' accent pill laid flat at the tile's bottom. Scaled to
-                                             nothing until the tile is picked; the code grows it in from its middle, as
-                                             Windows grows a row's (ShowPinnedPills). Its scale and middle are set from code
-                                             as it loads: Windows' XAML ignores them in markup (every tile showed its pill) -->
+                                        <!-- The selection pill is the accent pill of the rows, laid flat at the bottom
+                                             of the tile. Its scale is 0 until the user picks the tile. The code then
+                                             grows it in from its middle, as Windows grows the pill of a row. See
+                                             ShowPinnedPills. The code sets its scale and middle as it loads. The XAML
+                                             of Windows ignores them in markup, and every tile showed its pill. -->
                                         <Border
                                             x:Name="SelectionPill"
                                             Width="16"
@@ -253,24 +264,23 @@
                                     </Grid>
                                 </DataTemplate>
                             </GridView.ItemTemplate>
-                            <!-- /Tile -->
                         </GridView>
                     </ListView.Header>
-                    <!-- /Pinned Grid -->
 
-                    <!-- Loading More Room: below the last row while the next page loads, where the ring below shows once
-                         the list is scrolled to its end -->
+                    <!-- The footer keeps room below the last row while the next page loads. The ring below shows there
+                         when the list is at its end. -->
                     <ListView.Footer>
                         <Border Height="40" Visibility="{x:Bind ViewModel.CurrentList.IsLoadingMore, Mode=OneWay, FallbackValue=Collapsed}" />
                     </ListView.Footer>
                 </ListView>
 
-                <!-- Loading More: a small ring in a raised circle near the list's bottom while the next page loads (scrolling
-                     near the bottom asks for it, see the code), in the room the footer keeps at the end, the same circle
-                     as the chat's top ring. Outside the list: the list's edge fade redraws its content through a copy,
-                     which drew the ring with no smoothing (jagged). 24 px, not 20: the ring's animation is drawn for
-                     32 px with a 4 px stroke and stretched, so 20 px gave a 2.5 px stroke whose edges never land on
-                     whole pixels; 24 px gives a whole 3 px -->
+                <!-- A small ring in a raised circle shows near the bottom of the list while the next page loads. A
+                     scroll near the bottom asks for the page, as the code shows. The ring sits in the room that the
+                     footer keeps. Its circle matches the top ring of the chat. The ring is outside the list,
+                     because the edge fade of the list redraws its content through a copy. That copy drew the ring
+                     jagged, with no smoothing. The ring is 24 px, not 20 px. Its animation draws for 32 px with a
+                     4 px stroke and then stretches. At 20 px the stroke was 2.5 px, and its edges never landed on
+                     whole pixels. At 24 px the stroke is a whole 3 px. -->
                 <Border
                     Grid.Row="4"
                     Width="40"
@@ -294,8 +304,9 @@
                         IsActive="{x:Bind ViewModel.CurrentList.IsLoadingMore, Mode=OneWay, FallbackValue=False}" />
                 </Border>
 
-                <!-- Loading: while an empty list (the inbox, Archived or Spam & blocked) loads; the standard 32 px (a whole
-                     4 px stroke), stated so a style change can't make it fractional -->
+                <!-- This ring shows while an empty list loads: the inbox, Archived or Spam & blocked. It has the
+                     standard 32 px for a whole 4 px stroke. The size is explicit, so a style change cannot make the
+                     stroke fractional. -->
                 <muxc:ProgressRing
                     Grid.Row="4"
                     Width="32"
@@ -305,21 +316,24 @@
                     AutomationProperties.AutomationId="Main.ListLoading"
                     IsActive="{x:Bind ViewModel.CurrentList.IsLoadingFirstPage, Mode=OneWay}" />
 
-                <!-- Bottom Row: the Undo bar across the list's width, with Start chat below it at the right, floating over the
-                     rows. No background, so clicks around them still reach the rows. A stack, so a hidden Start chat (in a
-                     folder) leaves no gap under Undo. 22 px up from the bottom: the chat island's 8 px gap plus the message
-                     box's inset, so Start chat's bottom lines up with the message box's (owner, measured) -->
+                <!-- The bottom row floats over the rows. The Undo bar spans the width of the list, and Start chat
+                     sits below it at the right. The row has no background, so clicks around them still reach the
+                     rows. A stack leaves no gap under Undo when Start chat hides in a folder. The row sits 22 px up
+                     from the bottom: the 8 px island gap plus the message box inset. The owner
+                     measured that the bottom of Start chat then aligns with the bottom of the message box. -->
                 <StackPanel
                     Grid.Row="4"
                     Margin="16,0,16,22"
                     VerticalAlignment="Bottom"
                     Spacing="8">
 
-                    <!-- Undo: after an archive (only: owner), for a few seconds (the view model hides it), as wide as the list
-                         above Start chat (owner); Undo puts the conversation back, the X hides it. Solid and lifted like
-                         Start chat, with room above and below its text; a narrow list cuts the notice short with "…". It
-                         never takes the focus (Tab reaches it), and Narrator announces the notice (see AnnounceUndo).
-                         When scrolling slides Start chat away, Undo slides down into its place (set from code) -->
+                    <!-- The owner chose that the Undo bar shows only after an archive. It shows for a few seconds,
+                         and the view model hides it. The owner chose that it is as wide as the list, above Start
+                         chat. Undo puts the conversation back, and the X hides the bar. The bar is solid and lifted
+                         as Start chat is, with room above and below its text. A narrow list cuts the notice short
+                         with "…". The bar never takes the focus, but Tab reaches it. Narrator announces the notice.
+                         See AnnounceUndo. When a scroll slides Start chat away, the code slides Undo down into its
+                         place. -->
                     <Grid
                         x:Name="UndoBar"
                         Padding="12,8,8,8"
@@ -360,7 +374,7 @@
                             Content="{x:Bind local:ChatsView.UndoText}"
                             GettingFocus="OnUndoGettingFocus" />
 
-                        <!-- Close: a bare X right by Undo -->
+                        <!-- The close button is a bare X next to Undo. -->
                         <Button
                             Grid.Column="2"
                             Width="24"
@@ -376,12 +390,11 @@
                             <FontIcon FontSize="10" Glyph="&#xE8BB;" />
                         </Button>
                     </Grid>
-                    <!-- /Undo -->
 
-                    <!-- Start Chat: floats at the bottom right over the inbox, the standard accent button's size; scrolling
-                         down slides it away, scrolling up brings it back (set from code on the backing, animated by its
-                         transitions). The backing is solid: Windows' hover, pressed and disabled accent fills are
-                         see-through, and the rows showed through the button -->
+                    <!-- Start chat floats at the bottom right over the inbox, with the size of the standard accent
+                         button. A scroll down slides it away, and a scroll up brings it back. The code sets this on
+                         the backing, and its transitions animate it. The backing is solid, because the hover, pressed
+                         and disabled accent fills of Windows are see-through. The rows showed through the button. -->
                     <Grid
                         x:Name="StartChatHost"
                         HorizontalAlignment="Right"
@@ -409,22 +422,21 @@
                             </StackPanel>
                         </Button>
                     </Grid>
-                    <!-- /Start Chat -->
                 </StackPanel>
-                <!-- /Bottom Row -->
             </Grid>
         </SplitView.Pane>
-        <!-- /List Pane -->
 
-        <!-- Chat Pane: the island, with the list's resize edge in the gap to its left. The gap is there with the list
-             open, collapsed (☰) or in a narrow window, so the island always sits clear of the window's edges -->
+        <!-- The chat pane holds the island, with the resize edge of the list in the gap to its left. The gap is there
+             with the list open, collapsed by ☰ or in a narrow window. Thus the island always sits clear of the window
+             edges. -->
         <Grid>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="{x:Bind local:ChatsView.GapWidth(ViewModel.IsNarrow, ViewModel.IsListCollapsed), Mode=OneWay}" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
-            <!-- Resize Edge: drag (or arrow keys once focused) to resize the list; wide windows with the list open only -->
+            <!-- A drag or the arrow keys on the resize edge resize the list. The edge shows only in a wide window
+                 with the list open. -->
             <controls:PaneSplitter
                 x:Name="ListSplitter"
                 AutomationProperties.AutomationId="Main.ListSplitter"
@@ -432,8 +444,9 @@
                 ResizeCompleted="OnListResizeCompleted"
                 Visibility="{x:Bind local:ChatsView.SplitterVisibility(ViewModel.IsNarrow, ViewModel.IsListCollapsed), Mode=OneWay}" />
 
-            <!-- Chat Island: the empty state, the open conversation or Start chat, above the Mica like Windows' own apps
-                 (Settings, File Explorer): rounded, the same gap on its left, right and bottom -->
+            <!-- The chat island holds the empty state, the open conversation or Start chat. It sits above the Mica, as
+                 in Settings and File Explorer of Windows. It is rounded, with the same gap on its left, right and
+                 bottom. -->
             <Grid
                 x:Name="ChatArea"
                 Grid.Column="1"
@@ -444,7 +457,7 @@
                 CornerRadius="8"
                 Visibility="{x:Bind local:ChatsView.ChatVisibility(ViewModel.IsNarrow, ViewModel.ShowChatPane, ViewModel.IsListCollapsed), Mode=OneWay}">
 
-                <!-- Empty State: a large chat glyph above the prompt -->
+                <!-- The empty state shows a large chat glyph above the prompt. -->
                 <StackPanel
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center"
@@ -462,21 +475,17 @@
                         Style="{StaticResource SubtitleTextBlockStyle}" />
                 </StackPanel>
 
-                <!-- Conversation -->
                 <local:ChatPane
                     x:Name="ChatView"
                     Chat="{x:Bind ViewModel.Chat, Mode=OneWay}"
                     Visibility="{x:Bind ViewModel.IsChatOpen, Mode=OneWay}" />
 
-                <!-- Start Chat -->
                 <local:StartChatPane
                     x:Name="StartChatView"
                     StartChat="{x:Bind ViewModel.StartChat, Mode=OneWay}"
                     Started="OnChatStarted"
                     Visibility="{x:Bind ViewModel.IsStartChatOpen, Mode=OneWay}" />
             </Grid>
-            <!-- /Chat Island -->
         </Grid>
-        <!-- /Chat Pane -->
     </SplitView>
 </UserControl>

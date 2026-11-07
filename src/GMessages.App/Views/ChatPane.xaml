@@ -11,10 +11,11 @@
 
     <UserControl.Resources>
 
-        <!-- Bubble Menu: one for every bubble, opened on the bubble it was asked for by a right-click (at the pointer), the
-             Application key or Shift + F10 (over the back), or the hover strip's ⋮ (see OnMessageListContextRequested).
-             Items show for the bubble it opens on: no Copy on a photo or file without a caption, and no Open on a received
-             program or script; Open with shows on every attachment, those included (owner) -->
+        <!-- One bubble menu serves every bubble. A right-click opens it at the pointer. The Application key or
+             Shift + F10 opens it over the back of the bubble. The ⋮ of the hover strip also opens it. See
+             OnMessageListContextRequested. The items match the bubble that the menu opens on. A photo or file
+             without a caption has no Copy. A received program or script has no Open. The owner chose that Open with
+             shows on every attachment, those included. -->
         <MenuFlyout x:Name="BubbleMenu">
             <MenuFlyoutItem
                 x:Name="BubbleMenuCopy"
@@ -90,9 +91,8 @@
                 </MenuFlyoutItem.Icon>
             </MenuFlyoutItem>
         </MenuFlyout>
-        <!-- /Bubble Menu -->
 
-        <!-- Preview Card Menu: a link preview card's own, in place of the bubble menu, with Copy link -->
+        <!-- A link preview card opens this menu with Copy link in place of the bubble menu. -->
         <MenuFlyout x:Name="PreviewMenu">
             <MenuFlyoutItem
                 AutomationProperties.AutomationId="Preview.CopyLink"
@@ -114,7 +114,8 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- Header: avatar and name (a narrow window's back is the title bar's), and the ⋮ at the right edge. Transparent, so a right-click anywhere on it opens the same menu -->
+        <!-- The header shows the avatar and the name, and the ⋮ at the right edge. A narrow window uses the Back of
+             the title bar. The header is transparent, so a right-click anywhere on it opens the same menu. -->
         <Grid
             x:Name="HeaderBar"
             Padding="12,8,8,8"
@@ -148,8 +149,8 @@
                 Text="{x:Bind Chat.Title, Mode=OneWay, FallbackValue=''}"
                 TextTrimming="CharacterEllipsis" />
 
-            <!-- Mute: the bell shows the chat's state (crossed out while muted) and flips it, as the ⋮ menu's Mute or
-                 Unmute does; hidden where the menu has neither (spam and blocked) -->
+            <!-- The bell shows the mute state of the chat, crossed out while muted. A click flips the state, as Mute
+                 or Unmute of the ⋮ menu does. The bell hides where the menu has neither, in spam and blocked. -->
             <Button
                 x:Name="MuteButton"
                 Grid.Column="2"
@@ -166,7 +167,7 @@
                 <FontIcon FontSize="16" Glyph="{x:Bind local:ChatPane.MuteGlyph(Chat.IsMuted), Mode=OneWay, FallbackValue=''}" />
             </Button>
 
-            <!-- More Options: the ⋮, styled like a list row's -->
+            <!-- The ⋮ has the style of the ⋮ of a list row. -->
             <Button
                 x:Name="MoreButton"
                 Grid.Column="3"
@@ -181,11 +182,11 @@
                 <FontIcon FontSize="16" Glyph="&#xE712;" />
             </Button>
         </Grid>
-        <!-- /Header -->
 
-        <!-- Messages: oldest at the top, kept scrolled to the newest; reaching the top loads older ones. The list runs down
-             under the typing bubble, the chips and the message box, which float over it (owner): its bottom padding keeps the
-             newest bubble clear of them (set from code, see KeepComposerClear), and its bottom fades out behind them -->
+        <!-- The oldest message is at the top, and the list stays at the newest message. The top loads older
+             messages. The owner chose that the typing bubble, the chips and the message box float over the list.
+             The bottom padding of the list keeps the newest bubble clear of them. The code sets it in
+             KeepComposerClear. The bottom of the list fades out behind them. -->
         <ListView
             x:Name="MessageList"
             Grid.Row="1"
@@ -199,13 +200,15 @@
             PreviewKeyDown="OnMessageListKeyDown"
             SelectionMode="None"
             ShowsScrollingPlaceholders="False">
-            <!-- No scrolling placeholders: the jump to the newest message on a chat switch counted as fast scrolling, so the
-                 list painted its gray placeholder over every row for a frame or two (the flash between chats) -->
-            <!-- KeepItemsInView, not KeepLastItemInView: that one puts the last bubble at the bottom edge without the list's
-                 bottom padding, scrolling a just-opened chat 8 px short of its end. Staying on
-                 the newest message is ChatPane's pin -->
-            <!-- Reaction Picker: LibGM's seven reactions in enum order, then More reactions (the buttons are added from code
-                 and styled by the panel), opened over a bubble by its menu's React, its hover strip's React or Shift + + -->
+            <!-- The list has no scrolling placeholders. The jump to the newest message on a chat switch counted as a
+                 fast scroll. The list then painted its gray placeholder over every row for 1 or 2 frames. That was
+                 the flash between chats. -->
+            <!-- The list uses KeepItemsInView, not KeepLastItemInView. KeepLastItemInView puts the last bubble at the
+                 bottom edge without the bottom padding of the list. A chat that just opened then stops 8 px short of
+                 its end. The pin of ChatPane keeps the list on the newest message. -->
+            <!-- The reaction picker shows the 7 reactions of LibGM in enum order, then More reactions. The code adds
+                 the buttons, and the panel styles them. React in the bubble menu or the hover strip opens the
+                 picker over a bubble, as does Shift + +. -->
             <FlyoutBase.AttachedFlyout>
                 <Flyout x:Name="ReactionPicker" Placement="Top">
                     <Flyout.FlyoutPresenterStyle>
@@ -233,14 +236,16 @@
                             </Style>
                             <Style BasedOn="{StaticResource ReactionButtonStyle}" TargetType="Button" />
 
-                            <!-- My Reaction: the same soft accent fill as my reaction pill, on the fill behind the button, set from
-                                 code when the picker opens. Behind it, the button's hover only tints it; on the button itself the
-                                 hover swapped it for the hover fill through the 83 ms brush transition (the flicker) -->
+                            <!-- My reaction gets the soft accent fill of my reaction pill. The fill sits behind the
+                                 button, and the code sets it when the picker opens. Behind the button, the hover only
+                                 tints the fill. On the button itself, the hover swapped the fill for the hover fill.
+                                 That swap ran through the 83 ms brush transition and caused the flicker. -->
                             <Style x:Key="ReactionSelectedBackStyle" TargetType="Border">
                                 <Setter Property="Background" Value="{ThemeResource ReactionPillMineBrush}" />
                             </Style>
 
-                            <!-- Emoji Picker: a category's name over its emoji, and the empty search's note (built in code) -->
+                            <!-- The emoji picker uses this style for the name of a category over its emoji. The note of
+                                 an empty search also uses it. The code builds both. -->
                             <Style
                                 x:Key="EmojiPickerNoteStyle"
                                 BasedOn="{StaticResource CaptionTextBlockStyle}"
@@ -251,25 +256,26 @@
                     </StackPanel>
                 </Flyout>
             </FlyoutBase.AttachedFlyout>
-            <!-- No Transitions: no entrance or reorder animation on the bubbles, so an older page goes in above without the
-                 shown ones fading or sliding (Google Messages for web doesn't animate history either) -->
+            <!-- The bubbles have no entrance or reorder animation. Thus an older page goes in above, and the shown
+                 bubbles do not fade or slide. Google Messages for web does not animate the history either. -->
             <ListView.ItemContainerTransitions>
                 <TransitionCollection />
             </ListView.ItemContainerTransitions>
             <ListView.ItemsPanel>
                 <ItemsPanelTemplate>
-                    <!-- KeepItemsInView: the first shown bubble stays put as rows measure. While an older page goes in above,
-                         the code switches to KeepLastItemInView: at the list's top, KeepItemsInView let the page take the
-                         view (it anchored the first row, which the page's first row became), and the chat jumped to the
-                         page's top -->
+                    <!-- With KeepItemsInView, the first shown bubble stays in place as rows measure. While an older
+                         page goes in above, the code switches to KeepLastItemInView. At the top of the list,
+                         KeepItemsInView let the page take the view. It anchored the first row, which became the
+                         first row of the page. The chat then jumped to the top of the page. -->
                     <ItemsStackPanel
                         VerticalAlignment="Bottom"
                         CacheLength="1"
                         ItemsUpdatingScrollMode="KeepItemsInView" />
                 </ItemsPanelTemplate>
             </ListView.ItemsPanel>
-            <!-- Rows: no system focus visual across the whole row; a focused bubble rings itself instead (owner request).
-                 High contrast puts the system visual back from code (see ShowFocusRing in ChatPane.xaml.cs) -->
+            <!-- The rows have no system focus visual across the whole row. The owner asked that a focused bubble
+                 rings itself instead. In high contrast the code puts the system visual back. See ShowFocusRing in
+                 ChatPane.xaml.cs. -->
             <ListView.ItemContainerStyle>
                 <Style TargetType="ListViewItem">
                     <Setter Property="FocusVisualPrimaryThickness" Value="0" />
@@ -294,7 +300,7 @@
             </ListView.ItemTemplate>
         </ListView>
 
-        <!-- Loading: the history with nothing cached to show yet -->
+        <!-- This ring shows while the history loads with nothing in the cache to show yet. -->
         <muxc:ProgressRing
             Grid.Row="1"
             HorizontalAlignment="Center"
@@ -302,7 +308,7 @@
             AutomationProperties.AutomationId="Chat.Loading"
             IsActive="{x:Bind Chat.IsLoadingHistory, Mode=OneWay, FallbackValue=False}" />
 
-        <!-- Top Ring: a ring in a small raised circle at the top while older messages load -->
+        <!-- A ring in a small raised circle shows at the top while older messages load. -->
         <Border
             Grid.Row="1"
             AutomationProperties.AutomationId="Chat.TopRing"
@@ -320,7 +326,8 @@
             <Border.Shadow>
                 <ThemeShadow />
             </Border.Shadow>
-            <!-- 24 px: a whole 3 px stroke, as the chat list's ring (20 px drew a jagged 2.5 px one) -->
+            <!-- At 24 px the ring draws a whole 3 px stroke, as the ring of the chat list does. At 20 px it drew a
+                 jagged 2.5 px stroke. -->
             <muxc:ProgressRing
                 Width="24"
                 Height="24"
@@ -328,8 +335,9 @@
                 IsActive="{x:Bind Chat.IsLoadingOlder, Mode=OneWay, FallbackValue=False}" />
         </Border>
 
-        <!-- Scroll To Bottom: floats just above the message box, fading in once the newest messages are a screen or more
-             below (set from code). The hand shows over it, as over a link (LinkCardButton) -->
+        <!-- The scroll-to-bottom arrow floats just above the message box. It fades in when the newest messages are
+             1 screen or more below, and the code sets that. The hand cursor shows over it, as over a link. See
+             LinkCardButton. -->
         <controls:LinkCardButton
             x:Name="ScrollToBottomButton"
             Grid.Row="1"
@@ -350,8 +358,8 @@
             IsTabStop="False"
             Opacity="0">
 
-            <!-- No Hover Or Press Background (Task 22): the circle keeps its own fill and edge; high contrast keeps the
-                 system's own hover and press colors -->
+            <!-- The owner chose no hover or press background in Task 22. The circle keeps its own fill and edge.
+                 High contrast keeps the hover and press colors of the system. -->
             <controls:LinkCardButton.Resources>
                 <ResourceDictionary>
                     <ResourceDictionary.ThemeDictionaries>
@@ -379,8 +387,9 @@
             <FontIcon FontSize="16" Glyph="&#xE74B;" />
         </controls:LinkCardButton>
 
-        <!-- Typing: the typer's avatar, then a received-style bubble with three dots while they type; outside the list, so
-             it never moves the scroll. The dots bounce in turn while it shows (started from code) -->
+        <!-- While the other person types, their avatar shows beside a received bubble with 3 dots. The bubble is
+             outside the list, so it never moves the scroll. The dots bounce in turn while it shows. The code starts
+             the bounce. -->
         <StackPanel
             x:Name="TypingBubble"
             Grid.Row="2"
@@ -389,7 +398,7 @@
             Orientation="Horizontal"
             Spacing="8"
             Visibility="{x:Bind Chat.IsTyping, Mode=OneWay, FallbackValue=Collapsed}">
-            <!-- Typer: the same 28 px avatar received bubbles show, centered on the dots' bubble -->
+            <!-- The avatar has the same 28 px as on received bubbles, centered on the bubble of the dots. -->
             <Viewbox
                 Width="28"
                 Height="28"
@@ -428,7 +437,7 @@
                             Fill="{ThemeResource TextFillColorSecondaryBrush}" />
                     </StackPanel>
 
-                    <!-- Name: "Ann is typing" for screen readers and the tests; draws nothing -->
+                    <!-- This element gives "Ann is typing" to screen readers and the tests. It draws nothing. -->
                     <TextBlock
                         AutomationProperties.AccessibilityView="Content"
                         AutomationProperties.AutomationId="Chat.Typing"
@@ -437,12 +446,11 @@
                 </Grid>
             </Border>
         </StackPanel>
-        <!-- /Typing -->
 
-        <!-- Over The Message Box: the too-big note, then the reply chip and the attachment chips, stacked and joined to the
-             top of the message box as one control -->
+        <!-- The note for a refused file, the reply chip and the attachment chips sit over the message box. They
+             stack and join the top of the message box as 1 control. -->
         <StackPanel Grid.Row="3">
-            <!-- Attach Error: shows over the chips when a picked file was refused -->
+            <!-- The note shows over the chips when the pane refused a picked file. -->
             <TextBlock
                 Margin="12,8,12,0"
                 AutomationProperties.AutomationId="Chat.AttachError"
@@ -453,9 +461,10 @@
                 TextWrapping="Wrap"
                 Visibility="{x:Bind Chat.HasAttachError, Mode=OneWay, FallbackValue=Collapsed}" />
 
-            <!-- Replying To: joined to the top of the message box as one control (the same width and left edge, rounded on top
-                 only, while the box squares its top corners): an accent bar, the quoted text (for a photo, video or file its
-                 thumbnail or icon and "Image", "Video", "GIF" in italic, or the file name) and a button to drop the reply -->
+            <!-- The reply chip joins the top of the message box as 1 control. It has the same width and left edge.
+                 It is rounded only on top, while the box squares its top corners. The chip shows an accent bar, the
+                 quoted text and a button that drops the reply. For a photo, video or file, the quote shows its
+                 thumbnail or icon. It also shows "Image", "Video" or "GIF" in italic, or the file name. -->
             <Grid
                 Margin="12,8,12,0"
                 Padding="8,6,4,6"
@@ -509,11 +518,11 @@
                     <FontIcon FontSize="12" Glyph="&#xE711;" />
                 </Button>
             </Grid>
-            <!-- /Replying To -->
 
-            <!-- Attachments: joined like the reply chip (under it when both show, its top border the line between them): the
-                 voice preview first, then a chip per picked or pasted photo (the photo itself), video (its frame, when Windows
-                 has one) or file (its icon and name), in send order, each with a button to drop it -->
+            <!-- The attachment chips join the box as the reply chip does. When both show, the strip sits under the
+                 reply chip, and its top border is the line between them. The voice preview comes first. Then each
+                 picked or pasted file gets a chip in send order, with a button that drops it. A photo chip shows the
+                 photo. A video chip shows its frame when Windows has one. A file chip shows its icon and name. -->
             <Border
                 Margin="{x:Bind local:ChatPane.StripMargin(Chat.IsReplying), Mode=OneWay}"
                 Background="{ThemeResource SolidBackgroundFillColorTertiaryBrush}"
@@ -529,8 +538,9 @@
                     VerticalScrollBarVisibility="Disabled"
                     VerticalScrollMode="Disabled">
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                        <!-- Voice Preview: the recording waiting for Send, the first chip since it sends first, with play or pause,
-                             its waveform (a click or the arrow keys seek), its length and the chip's remove button (which deletes it) -->
+                        <!-- The voice preview holds the recording that waits for Send. It is the first chip, because
+                             it sends first. It has play or pause, its waveform, its length and a remove button. A
+                             click or the arrow keys on the waveform seek. The remove button deletes the recording. -->
                         <Grid
                             Height="64"
                             MinWidth="64"
@@ -583,7 +593,6 @@
                                 <FontIcon FontSize="10" Glyph="&#xE711;" />
                             </Button>
                         </Grid>
-                        <!-- /Voice Preview -->
 
                         <ItemsControl x:Name="AttachmentList" AutomationProperties.AutomationId="Chat.Attachments">
                             <ItemsControl.ItemsPanel>
@@ -637,9 +646,10 @@
                                             Style="{StaticResource IconButtonStyle}"
                                             ToolTipService.ToolTip="{x:Bind local:ChatPane.RemoveAttachmentText}">
 
-                                            <!-- Hover And Press: the round fill stays (the icon style clears it); pressing shrinks
-                                                 the circle and releasing springs it back (IconPress, with animation effects on).
-                                                 High contrast keeps the system's own colors -->
+                                            <!-- The round fill stays on hover and press, though the icon style
+                                                 clears it. A press shrinks the circle, and a release springs it
+                                                 back. IconPress does this with the animation effects on. High
+                                                 contrast keeps the colors of the system. -->
                                             <Button.Resources>
                                                 <ResourceDictionary>
                                                     <ResourceDictionary.ThemeDictionaries>
@@ -663,13 +673,12 @@
                     </StackPanel>
                 </ScrollViewer>
             </Border>
-            <!-- /Attachments -->
         </StackPanel>
 
-        <!-- Compose: the message box (Enter sends, Shift + Enter adds a line), with the emoji icon, the paperclip and the
-             voice message waveform inside it on the right (owner), then send, icons only. Its right padding (140: four 32 px
-             buttons and their 6 px inset, plus a gap) keeps the text clear of them. Under the reply chip or the attachment
-             chips it meets them with square top corners -->
+        <!-- In the message box, Enter sends and Shift + Enter adds a line. The owner chose the icons inside the box on
+             the right: emoji, the paperclip, the voice message waveform and Send. The right
+             padding of 140 keeps the text clear of them. That is 4 buttons of 32 px, their 6 px inset and a gap.
+             Under the reply chip or the attachment chips, the box meets them with square top corners. -->
         <Grid Grid.Row="4" Padding="{x:Bind local:ChatPane.ComposePadding(Chat.IsReplying, Chat.HasAttachments, Chat.Voice.IsPreview), Mode=OneWay}">
             <TextBox
                 x:Name="DraftBox"
@@ -687,11 +696,11 @@
                 TextChanged="OnDraftTextChanged"
                 TextWrapping="Wrap">
 
-                <!-- One Solid Color: the box keeps one fill at rest, on hover and focused, so it never changes color, and a
-                     solid one, so the list fading out behind it never shows through (owner): Windows' dark input fill is
-                     see-through, so the dark box takes the solid base instead (its light one is already solid white). The
-                     border and the bottom accent line keep their normal Fluent focus look. High contrast keeps the system's
-                     own TextBox colors -->
+                <!-- The box keeps 1 fill at rest, on hover and with focus, so it never changes color. The owner chose
+                     a solid fill, so the list that fades out behind the box never shows through. The dark input
+                     fill of Windows is see-through, so the dark box takes the solid base instead. The light fill is
+                     already solid white. The border and the bottom accent line keep their normal Fluent focus look.
+                     High contrast keeps the TextBox colors of the system. -->
                 <TextBox.Resources>
                     <ResourceDictionary>
                         <ResourceDictionary.ThemeDictionaries>
@@ -714,14 +723,15 @@
                 </TextBox.Resources>
             </TextBox>
 
-            <!-- Compose Buttons: one row inside the box's bottom right, 6 px in from its edges, 32 px each, no gaps -->
+            <!-- The compose buttons sit in 1 row inside the bottom right of the box, 6 px in from its edges. Each
+                 button is 32 px, with no gaps. -->
             <StackPanel
                 Margin="0,0,6,6"
                 HorizontalAlignment="Right"
                 VerticalAlignment="Bottom"
                 Orientation="Horizontal">
 
-                <!-- Emoji: opens Windows' emoji panel (Ctrl + Shift + e) -->
+                <!-- This button opens the emoji panel of Windows, as Ctrl + Shift + e does. -->
                 <Button
                     Width="32"
                     Height="32"
@@ -736,7 +746,8 @@
                         Glyph="&#xE76E;" />
                 </Button>
 
-                <!-- Attach: the paperclip, opens the file picker for any files (Ctrl + Shift + a; Ctrl + Shift + p for photos) -->
+                <!-- The paperclip opens the file picker for any files, as Ctrl + Shift + a does. Ctrl + Shift + p
+                     opens it for photos. -->
                 <Button
                     Width="32"
                     Height="32"
@@ -751,8 +762,9 @@
                         Glyph="&#xE723;" />
                 </Button>
 
-                <!-- Record: a voice message, always there. A waveform: five rounded bars on the 16 px grid, Fluent's 1.5 px
-                     stroke. Not a mic, which reads as speech to text (owner); Segoe Fluent Icons has no waveform glyph -->
+                <!-- This button records a voice message and always shows. Its icon is a waveform: 5 rounded bars on
+                     the 16 px grid, with the 1.5 px stroke of Fluent. The owner chose no mic, which reads as speech
+                     to text. Segoe Fluent Icons has no waveform glyph. -->
                 <Button
                     Width="32"
                     Height="32"
@@ -768,7 +780,6 @@
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 </Button>
 
-                <!-- Send -->
                 <Button
                     Width="32"
                     Height="32"
@@ -777,7 +788,8 @@
                     Click="OnSendClick"
                     IsEnabled="{x:Bind Chat.CanSend, Mode=OneWay, FallbackValue=False}"
                     Style="{StaticResource IconButtonStyle}">
-                    <!-- Dimmed While Disabled: the icon keeps its own accent color, so the button's disabled color can't reach it -->
+                    <!-- The icon keeps its own accent color, so the disabled color of the button cannot reach it. Thus
+                         the opacity dims it while the button is disabled. -->
                     <FontIcon
                         FontSize="16"
                         Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
@@ -785,18 +797,19 @@
                         Opacity="{x:Bind local:ChatPane.EnabledOpacity(Chat.CanSend), Mode=OneWay, FallbackValue=0.4}" />
                 </Button>
             </StackPanel>
-            <!-- /Compose Buttons -->
 
-            <!-- Recording: over the message box while the mic records, a red dot, the running time, the live waveform of the
-                 input level, then Cancel recording (deletes it), Pause or Resume (glyph and name set in code) and Done (a check mark; keeps it for the preview chip). On a solid base, since
-                 the box's fill lets what is under it show -->
+            <!-- While the mic records, the recording bar covers the message box. It shows a red dot, the running
+                 time and the live waveform of the input level. Then come Cancel recording, Pause or Resume, and Done.
+                 Cancel recording deletes the recording. The code sets the glyph and name of Pause or Resume. Done is
+                 a check mark and keeps the recording for the preview chip. The bar sits on a solid base, because the
+                 fill of the box lets the content under it show. -->
             <Border
                 Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
                 CornerRadius="{x:Bind local:ChatPane.DraftCorners(Chat.IsReplying, Chat.HasAttachments, Chat.Voice.IsPreview), Mode=OneWay}"
                 Visibility="{x:Bind Chat.Voice.IsCapturing, Mode=OneWay, FallbackValue=Collapsed}">
-                <!-- Spacing: the buttons sit like the message box's own (emoji, paperclip, voice message, Send): 32 px each, side by
-                     side with no gap, 6 px in from the box's right edge (5 px padding inside the 1 px border). The waveform
-                     fills everything between the timer and Cancel recording -->
+                <!-- The buttons sit as the buttons of the message box do: 32 px each, side by side with no gap. They
+                     sit 6 px in from the right edge of the box: 5 px padding inside the 1 px border. The
+                     waveform fills the space between the timer and Cancel recording. -->
                 <Grid
                     Padding="12,0,5,0"
                     Background="{ThemeResource ControlFillColorInputActiveBrush}"
@@ -815,8 +828,9 @@
                         Height="8"
                         VerticalAlignment="Center"
                         Fill="{ThemeResource SystemFillColorCriticalBrush}" />
-                    <!-- Timer: tabular digits, at least as wide as an unseen 00:00, so counting never nudges the waveform or the buttons.
-                         Tight to the digits' ink (no room for descenders), so they center on the dot and the waveform -->
+                    <!-- The timer uses tabular digits and is at least as wide as a hidden 00:00. Thus the count never
+                         moves the waveform or the buttons. The timer is tight to the ink of the digits, with no room
+                         for descenders. Thus the digits center on the dot and the waveform. -->
                     <Grid Grid.Column="1" VerticalAlignment="Center">
                         <TextBlock
                             AutomationProperties.AccessibilityView="Raw"
@@ -836,7 +850,8 @@
                         AutomationProperties.AutomationId="Chat.RecordWave"
                         VerticalAlignment="Center"
                         BarBrush="{ThemeResource TextFillColorSecondaryBrush}" />
-                    <!-- Recording Buttons: side by side like the message box's, so no column spacing between them -->
+                    <!-- The recording buttons sit side by side as the buttons of the message box do. They have no
+                         column spacing between them. -->
                     <StackPanel
                         Grid.Column="3"
                         VerticalAlignment="Center"
@@ -881,10 +896,8 @@
                                 Glyph="&#xE73E;" />
                         </Button>
                     </StackPanel>
-                    <!-- /Recording Buttons -->
                 </Grid>
             </Border>
-            <!-- /Recording -->
         </Grid>
     </Grid>
 </UserControl>

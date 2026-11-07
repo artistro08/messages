@@ -15,7 +15,7 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- Search: the name or number box and Go (a narrow window's back is the title bar's) -->
+        <!-- The search row holds the name or number box and Go. A narrow window uses the Back of the title bar. -->
         <Grid
             Padding="12,8,16,8"
             BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
@@ -29,7 +29,7 @@
                 x:Name="QueryBox"
                 AutomationProperties.AutomationId="StartChat.Query"
                 Text="{x:Bind StartChat.Query, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, FallbackValue=''}" />
-            <!-- Go: "Start Chat" with an arrow after it -->
+            <!-- Go shows "Start chat" with an arrow after it. -->
             <Button
                 Grid.Column="1"
                 Height="32"
@@ -50,7 +50,7 @@
             </Button>
         </Grid>
 
-        <!-- Start Failed (R11): shown until the next Go -->
+        <!-- The start failure of requirement R11 shows until the next Go. -->
         <TextBlock
             Grid.Row="1"
             Margin="16,8,16,0"
@@ -60,10 +60,10 @@
             TextWrapping="Wrap"
             Visibility="{x:Bind StartChat.HasError, Mode=OneWay, FallbackValue=Collapsed}" />
 
-        <!-- Picked: one chip per person in a row under the box (scrolling sideways when they don't fit), each a rounded
-             pill on the control fill with its stroke, so it stands apart from the pane: the avatar, the name, then a ×. A click, Enter
-             or Space on a chip removes it, and the person goes back to the list below. Each chip keeps its own width (a
-             grid would size them all like the first) -->
+        <!-- Each picked person gets a chip in a row under the box. The row scrolls sideways when the chips do not
+             fit. Each chip is a rounded pill on the control fill with its stroke, so it stands apart from the pane. It
+             shows the avatar, the name, then a ×. A click, Enter or Space on a chip removes it. The person then goes
+             back to the list below. Each chip keeps its own width. A grid sizes them all as the first chip. -->
         <ListView
             x:Name="PickedList"
             Grid.Row="2"
@@ -79,7 +79,7 @@
             SelectionMode="None"
             Visibility="{x:Bind StartChat.CanStart, Mode=OneWay, FallbackValue=Collapsed}">
             <ListView.Resources>
-                <!-- The Chip Is The Look: The Row Itself Gets No Hover Or Press Fill Around It -->
+                <!-- The chip gives the look, so the row itself gets no hover or press fill around it. -->
                 <SolidColorBrush x:Key="ListViewItemBackgroundPointerOver" Color="Transparent" />
                 <SolidColorBrush x:Key="ListViewItemBackgroundPressed" Color="Transparent" />
             </ListView.Resources>
@@ -107,7 +107,7 @@
                         BorderThickness="1"
                         CornerRadius="16">
                         <StackPanel Orientation="Horizontal" Spacing="8">
-                            <!-- Avatar: the person's letter circle, shrunk to fit inside the chip's height -->
+                            <!-- The letter circle of the person shrinks to fit inside the height of the chip. -->
                             <Viewbox
                                 Width="24"
                                 Height="24"
@@ -131,9 +131,10 @@
             </ListView.ItemTemplate>
         </ListView>
 
-        <!-- Contacts: a "Send to" row for a typed number first, then top contacts, then everyone else. A picked row fades
-             out and the rows below slide up (the list's own transitions; the rows change in place). The list slides down,
-             not jumps, when the chip row first shows above it -->
+        <!-- The contacts list shows a "Send to" row for a typed number first, then top contacts, then all other
+             contacts. A picked row fades out, and the rows below slide up. The transitions of the list do that, and
+             the rows change in place. The list slides down when the chip row first shows above it. It does not
+             jump. -->
         <ListView
             x:Name="ContactList"
             Grid.Row="3"
@@ -174,7 +175,7 @@
             </ListView.ItemTemplate>
         </ListView>
 
-        <!-- Loading: while the contacts load, and while Go looks up the conversation -->
+        <!-- This ring shows while the contacts load and while Go looks up the conversation. -->
         <muxc:ProgressRing
             Grid.Row="3"
             HorizontalAlignment="Center"

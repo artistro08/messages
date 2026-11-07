@@ -6,8 +6,8 @@
     xmlns:muxc="using:Microsoft.UI.Xaml.Controls">
 
     <UserControl.Resources>
-        <!-- Settings Card: Windows Settings' card, from Magic Buds' SettingsCardStyle (icon, header and description
-             on the left, the control on the right) -->
+        <!-- The card of Windows Settings, from SettingsCardStyle of Magic Buds. The icon, the header and the
+             description sit on the left, and the control sits on the right. -->
         <Style x:Key="SettingsCardStyle" TargetType="Border">
             <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
             <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
@@ -17,7 +17,7 @@
             <Setter Property="MinHeight" Value="68" />
         </Style>
 
-        <!-- Clickable Card: the whole card is the button, like Windows Settings' cards that open something -->
+        <!-- The whole card is the button, as on the cards of Windows Settings that open something. -->
         <Style
             x:Key="SettingsCardButtonStyle"
             BasedOn="{StaticResource DefaultButtonStyle}"
@@ -31,7 +31,7 @@
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
         </Style>
 
-        <!-- Card Switch: no On/Off text beside it, so the switch sits flush right like the other controls on a card -->
+        <!-- The switch has no On/Off text beside it. Thus it sits flush right, as the other controls on a card do. -->
         <Style
             x:Key="CardToggleSwitchStyle"
             BasedOn="{StaticResource DefaultToggleSwitchStyle}"
@@ -42,13 +42,12 @@
             <Setter Property="OffContent" Value="" />
         </Style>
 
-        <!-- Card Icon -->
         <Style x:Key="CardIconStyle" TargetType="FontIcon">
             <Setter Property="FontSize" Value="20" />
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
 
-        <!-- Group Header: above each group of cards -->
+        <!-- This header sits above each group of cards. -->
         <Style
             x:Key="GroupHeaderStyle"
             BasedOn="{StaticResource BodyStrongTextBlockStyle}"
@@ -56,7 +55,6 @@
             <Setter Property="Margin" Value="0,20,0,4" />
         </Style>
 
-        <!-- Card Description -->
         <Style
             x:Key="CardDescriptionStyle"
             BasedOn="{StaticResource CaptionTextBlockStyle}"
@@ -66,8 +64,8 @@
         </Style>
     </UserControl.Resources>
 
-    <!-- Page: the whole window's width; the cards center at up to 1000 wide like Windows Settings, and the scrollbar
-         stays on the window edge -->
+    <!-- The page fills the width of the window. The cards center at up to 1000 wide, as in Windows Settings. The
+         scrollbar stays on the window edge. -->
     <ScrollViewer>
         <Grid Padding="36,4,36,36">
             <StackPanel
@@ -75,7 +73,6 @@
                 HorizontalAlignment="Stretch"
                 Spacing="4">
 
-                <!-- Appearance -->
                 <TextBlock Style="{StaticResource GroupHeaderStyle}" Text="Appearance" />
                 <Border Style="{StaticResource SettingsCardStyle}">
                     <Grid ColumnSpacing="16">
@@ -103,7 +100,8 @@
                     </Grid>
                 </Border>
 
-                <!-- Pinned Grid: pinned chats as large pictures above the inbox, like iMessage; off by default -->
+                <!-- This switch shows the pinned chats as large pictures above the inbox, as in iMessage. It is off
+                     by default. -->
                 <Border Style="{StaticResource SettingsCardStyle}">
                     <Grid ColumnSpacing="16">
                         <Grid.ColumnDefinitions>
@@ -125,7 +123,6 @@
                     </Grid>
                 </Border>
 
-                <!-- Startup -->
                 <TextBlock Style="{StaticResource GroupHeaderStyle}" Text="Startup" />
                 <Border Style="{StaticResource SettingsCardStyle}">
                     <Grid ColumnSpacing="16">
@@ -138,7 +135,7 @@
                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
                             <TextBlock Text="Start with Windows" />
 
-                            <!-- Startup Refused: why the switch went back off -->
+                            <!-- This text tells why the switch went back off when Windows refused the startup. -->
                             <TextBlock
                                 AutomationProperties.AutomationId="Settings.StartupMessage"
                                 Foreground="{ThemeResource SystemFillColorCautionBrush}"
@@ -155,7 +152,8 @@
                     </Grid>
                 </Border>
 
-                <!-- Run In Background: off, closing the window quits; separate from the tray icon -->
+                <!-- With Run in background off, a close of the window quits. The switch is separate from the tray
+                     icon. -->
                 <Border Style="{StaticResource SettingsCardStyle}">
                     <Grid ColumnSpacing="16">
                         <Grid.ColumnDefinitions>
@@ -180,7 +178,7 @@
                     </Grid>
                 </Border>
 
-                <!-- Tray Icon: off, Start opens the app and the account menu quits it -->
+                <!-- With the tray icon off, Start opens the app and the account menu quits it. -->
                 <Border Style="{StaticResource SettingsCardStyle}">
                     <Grid ColumnSpacing="16">
                         <Grid.ColumnDefinitions>
@@ -205,7 +203,6 @@
                     </Grid>
                 </Border>
 
-                <!-- Notifications -->
                 <TextBlock Style="{StaticResource GroupHeaderStyle}" Text="Notifications" />
                 <Border Style="{StaticResource SettingsCardStyle}">
                     <Grid ColumnSpacing="16">
@@ -250,7 +247,8 @@
                     </Grid>
                 </Border>
 
-                <!-- Copy Codes: a one-time passcode in a new message goes to the clipboard; off by default -->
+                <!-- This switch puts a one-time passcode from a new message on the clipboard. It is off by
+                     default. -->
                 <Border Style="{StaticResource SettingsCardStyle}">
                     <Grid ColumnSpacing="16">
                         <Grid.ColumnDefinitions>
@@ -275,7 +273,7 @@
                     </Grid>
                 </Border>
 
-                <!-- Snooze Length: how long a notification's Snooze waits -->
+                <!-- The snooze length is the wait of Snooze on a notification. -->
                 <Border Style="{StaticResource SettingsCardStyle}">
                     <Grid ColumnSpacing="16">
                         <Grid.ColumnDefinitions>
@@ -298,7 +296,6 @@
                     </Grid>
                 </Border>
 
-                <!-- Link Previews -->
                 <TextBlock Style="{StaticResource GroupHeaderStyle}" Text="Privacy" />
                 <Border Style="{StaticResource SettingsCardStyle}">
                     <Grid ColumnSpacing="16">
@@ -322,10 +319,9 @@
                     </Grid>
                 </Border>
 
-                <!-- Voice Messages -->
                 <TextBlock Style="{StaticResource GroupHeaderStyle}" Text="Voice messages" />
 
-                <!-- Microphone: "Windows default", then each active microphone by name -->
+                <!-- The box offers "Windows default", then each active microphone by name. -->
                 <Border Style="{StaticResource SettingsCardStyle}">
                     <Grid ColumnSpacing="16">
                         <Grid.ColumnDefinitions>
@@ -349,10 +345,9 @@
                     </Grid>
                 </Border>
 
-                <!-- Account And Logs -->
                 <TextBlock Style="{StaticResource GroupHeaderStyle}" Text="Account" />
 
-                <!-- Unpair: hidden once unpaired, busy with a ring while it runs -->
+                <!-- Unpair hides after the unpair and shows a busy ring while it runs. -->
                 <Button
                     AutomationProperties.AutomationId="Settings.Unpair"
                     AutomationProperties.Name="Unpair this PC"
@@ -366,7 +361,8 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <!-- Phone With A Slash: Material Symbols' mobile_off (Apache 2.0), outlined, drawn on 20 px -->
+                        <!-- The phone with a slash is mobile_off of Material Symbols, Apache 2.0, outlined and drawn on
+                             20 px. -->
                         <PathIcon
                             Width="20"
                             Height="20"
@@ -385,7 +381,7 @@
                     </Grid>
                 </Button>
 
-                <!-- Logs Folder: opens in File Explorer -->
+                <!-- This card opens the logs folder in File Explorer. -->
                 <Button
                     AutomationProperties.AutomationId="Settings.OpenLogs"
                     AutomationProperties.Name="Open logs folder"
@@ -409,10 +405,10 @@
                     </Grid>
                 </Button>
 
-                <!-- About: from Magic Buds' About page -->
+                <!-- About comes from the About page of Magic Buds. -->
                 <TextBlock Style="{StaticResource GroupHeaderStyle}" Text="About" />
 
-                <!-- App: name, version and who made it -->
+                <!-- This card shows the name, the version and the maker of the app. -->
                 <Border Style="{StaticResource SettingsCardStyle}">
                     <Grid ColumnSpacing="16">
                         <Grid.ColumnDefinitions>
@@ -442,7 +438,6 @@
                     </Grid>
                 </Border>
 
-                <!-- Repository -->
                 <Border Style="{StaticResource SettingsCardStyle}">
                     <Grid ColumnSpacing="16">
                         <Grid.ColumnDefinitions>
@@ -464,7 +459,6 @@
                             NavigateUri="https://github.com/artistro08/messages" />
                     </Grid>
                 </Border>
-                <!-- /About -->
             </StackPanel>
         </Grid>
     </ScrollViewer>

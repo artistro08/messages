@@ -20,26 +20,26 @@ using Windows.UI.Xaml.Media.Imaging;
 namespace GMessages.App.Views;
 
 /// <summary>
-/// The main window: the title bar with ☰ and the profile menu, and below it the pairing steps until the app is paired,
-/// then the chats. Settings opens as a page over both.
+/// Shows the main window: the title bar with ☰ and the profile menu, and the body below it. The body shows the pairing
+/// steps until the app is paired, then the chats. Settings opens as a page over both.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Made when asked for and destroyed on close (the App then trims memory). The App picks the body with
-/// <see cref="ShowPairing"/> or <see cref="ShowChats"/> and switches it in place when pairing ends or the phone is
-/// unpaired. Dropping the body (a switch or the close) cancels a running pairing or disposes the
-/// <see cref="MainViewModel"/>, which unhooks its lists from the store that outlives the window.
+/// The App makes the window on request and destroys it on close, then trims memory. The App picks the body with
+/// <see cref="ShowPairing"/> or <see cref="ShowChats"/>. It switches the body in place when pairing ends or the phone
+/// unpairs. A drop of the body on a switch or the close cancels a running pairing or disposes the
+/// <see cref="MainViewModel"/>. That unhooks its lists from the store that outlives the window.
 /// </para>
 /// <para>
-/// The settings page covers the body but keeps it running (a sign-in in progress, the open chat), so Back returns to it
-/// as it was. ☰ and the profile picture hide while pairing, since there is nothing for them yet. On Settings, Archived
-/// and Spam &amp; blocked the title bar's own Back button shows in place of ☰, carrying the AutomationId
-/// <c>Settings.Back</c>, <c>Main.ArchivedBack</c> or <c>Main.SpamBack</c>. ☰ is the title bar's own pane toggle too,
-/// carrying <c>Main.MenuButton</c>, so both have Windows' spacing and animated icons.
+/// The settings page covers the body but keeps it running, such as a sign-in in progress or the open chat. Thus Back
+/// returns to the body as it was. ☰ and the profile picture hide while pairing. They have nothing to show yet.
+/// On Settings, Archived and Spam &amp; blocked, the Back button of the title bar shows in place of ☰. It carries the
+/// AutomationId <c>Settings.Back</c>, <c>Main.ArchivedBack</c> or <c>Main.SpamBack</c>. ☰ is the pane toggle of the
+/// title bar and carries <c>Main.MenuButton</c>. Thus both buttons have the spacing and animated icons of Windows.
 /// </para>
 /// <para>
-/// WinUI 2.8: the window is a <see cref="XamlWindow"/> (a Win32 window hosting this content in a XAML Island, with
-/// synced resizing and Mica), and the title bar is the app's own <see cref="TitleBar"/>.
+/// In WinUI 2.8 the window is a <see cref="XamlWindow"/>: a Win32 window that hosts this content in a XAML Island.
+/// It has synced resizing and Mica. The title bar is the <see cref="TitleBar"/> of the app.
 /// </para>
 /// </remarks>
 public sealed partial class MainWindow : UserControl
@@ -50,7 +50,7 @@ public sealed partial class MainWindow : UserControl
     private readonly AppSettings _appSettings;
     private readonly AvatarCache _avatars;
 
-    // The Body (Pairing Or Chats, Never Both) And The Settings Page Over It While Open
+    // The body is pairing or chats, never both. The settings page sits over it while open.
     private PairingPage? _pairing;
     private ChatsView? _chats;
     private SettingsPage? _settingsPage;
@@ -58,23 +58,29 @@ public sealed partial class MainWindow : UserControl
 
     private bool _isActive;
 
-    // The Owner's Photo Is Asked For Once A Load Names The Owner, And Again After An Answer Without One
+    // The window asks for the photo of the owner when a load names the owner. It asks again after an answer with no
+    // photo.
     private bool _profileAsked;
 
-    // The Least Window Size, In Effective Pixels: The Chat List's Least Width; The Title Bar, A Few Rows And The Message Box
+    // The least window size, in effective pixels. The width is the least width of the chat list. The height holds the
+    // title bar, a few rows and the message box.
     private const double MinWindowWidth  = ChatsView.MinListPaneWidth;
     private const double MinWindowHeight = 500;
 
-    // The Last Download's File, For Show In Folder, And The Timer That Closes Its Confirmation
+    // The file of the last download for Show in folder, and the timer that closes its confirmation.
     private static readonly TimeSpan DownloadedShownFor = TimeSpan.FromSeconds(6);
     private string? _downloadedPath;
     private DispatcherQueueTimer? _downloadedTimer;
 
     /// <summary>
-    /// Creates the window with an empty body; the App then calls <see cref="ShowPairing"/> or <see cref="ShowChats"/>.
+    /// Creates the window with an empty body. The App then calls <see cref="ShowPairing"/> or <see cref="ShowChats"/>.
     /// </summary>
-    /// <param name="settings">The settings page's state, also doing the profile menu's Unpair; the window disposes it on close.</param>
-    /// <param name="avatars">The window's photo cache; the window clears it on close and on going back to pairing.</param>
+    /// <param name="settings">
+    /// The state of the settings page, which also runs Unpair of the profile menu. The window disposes it on close.
+    /// </param>
+    /// <param name="avatars">
+    /// The photo cache of the window. The window clears it on close and when it goes back to pairing.
+    /// </param>
     /// <param name="appSettings">The stored settings, where the window keeps its place and size.</param>
     public MainWindow(SettingsViewModel settings, AvatarCache avatars, AppSettings appSettings)
     {
@@ -84,7 +90,7 @@ public sealed partial class MainWindow : UserControl
         Avatar.Cache = avatars;
         InitializeComponent();
 
-        // Window: this content in the window's island, the title bar in its title bar row
+        // This content goes in the island of the window, and the title bar goes in its title bar row.
         _window.Content   = this;
         _window.Title     = AppInfo.WindowTitle;
         AppTitleBar.Title = AppInfo.WindowTitle;
@@ -97,11 +103,9 @@ public sealed partial class MainWindow : UserControl
         RestoreWindowBounds();
         _window.BoundsChanged += (_, _) => OnBoundsChanged();
 
-        // Copy
         ProfileArchived.Text    = ChatCopy.Archived;
         ProfileSpamBlocked.Text = ChatCopy.SpamAndBlocked;
 
-        // Behavior
         RootGrid.Loaded += (_, _) =>
         {
             ApplyMinimumSize();
@@ -114,7 +118,7 @@ public sealed partial class MainWindow : UserControl
         };
         RootGrid.ActualThemeChanged += (_, _) => ApplyFrameTheme();
 
-        // The Photo Viewer Takes The Title Bar Row While Open: Its Toolbar Is The Row's Only Click-Through Hole Then
+        // The open photo viewer covers the title bar row. Its toolbar is then the only click-through hole of the row.
         PhotoViewer.IsOpenChanged += (_, _) => ShowViewerTitleBar();
         AppTitleBar.SizeChanged   += (_, _) =>
         {
@@ -124,8 +128,8 @@ public sealed partial class MainWindow : UserControl
             }
         };
 
-        // Inactive, Only The Title Bar Dims, As In Windows' Own Apps: Fading The Content Faded Each Element On Its Own, So
-        // Overlapping Ones (A Photo Over Its Letter, Start Chat Over The Rows) Showed Through Each Other
+        // In an inactive window only the title bar dims, as in the apps of Windows. A fade of the content faded each
+        // element by itself. Thus overlapped elements showed through each other, such as a photo over its letter.
         _window.Activated += (_, active) =>
         {
             _isActive = active;
@@ -145,40 +149,40 @@ public sealed partial class MainWindow : UserControl
     }
 
     /// <summary>
-    /// Raised once the window is closed (by <see cref="Close"/> or by the person); the window is gone after this.
+    /// Occurs after the window closes, by <see cref="Close"/> or by the user. The window is gone after this event.
     /// </summary>
     public event EventHandler? Closed;
 
     /// <summary>
-    /// Gets the window's handle.
+    /// Gets the handle of the window.
     /// </summary>
     public nint Hwnd => _window.Hwnd;
 
     /// <summary>
-    /// Shows the window and brings it forward.
+    /// Shows the window and brings it to the front.
     /// </summary>
     public void Activate() => _window.Activate();
 
     /// <summary>
-    /// Closes the window (<see cref="Closed"/> is raised).
+    /// Closes the window and raises <see cref="Closed"/>.
     /// </summary>
     public void Close() => _window.Close();
 
     /// <summary>
-    /// Raised when the person closes the window; cancel it to keep the window.
+    /// Occurs when the user closes the window. A cancel keeps the window.
     /// </summary>
-    public event EventHandler<System.ComponentModel.CancelEventArgs>? Closing
+    public event EventHandler<CancelEventArgs>? Closing
     {
         add    => _window.Closing += value;
         remove => _window.Closing -= value;
     }
 
     /// <summary>
-    /// Hides the window, kept for a quick reopen; what the open chat plays or records stops.
+    /// Hides the window and keeps it for a quick reopen. The playback or recording of the open chat stops.
     /// </summary>
     /// <remarks>
-    /// It comes back as a new window would: no settings or photo over it, and the inbox, without a chat opened from
-    /// another folder.
+    /// The window comes back as a new window does: no settings or photo over it, and the inbox. A chat opened from
+    /// another folder does not come back.
     /// </remarks>
     public void Hide()
     {
@@ -186,7 +190,8 @@ public sealed partial class MainWindow : UserControl
         CloseSettings();
         PhotoViewer.Close();
 
-        // ponytail: any chat open in a folder view closes, even an inbox one left beside it; a new window kept that one
+        // ponytail: an open chat in a folder view closes, also an inbox chat left beside it. A new window kept that
+        // inbox chat.
         if (ViewModel is { IsFolderView: true } chats)
         {
             chats.ExitConversation();
@@ -197,71 +202,75 @@ public sealed partial class MainWindow : UserControl
     }
 
     /// <summary>
-    /// Asks the App to open the settings page (the profile menu's Settings, Ctrl + ,).
+    /// Asks the App to open the settings page, from Settings of the profile menu or Ctrl + ,.
     /// </summary>
     public event EventHandler? SettingsRequested;
 
     /// <summary>
-    /// Asks the App to quit (the profile menu's Quit, shown while the tray icon is off).
+    /// Asks the App to quit, from Quit of the profile menu. Quit shows while the tray icon is off.
     /// </summary>
     public event EventHandler? QuitRequested;
 
     /// <summary>
-    /// Gets the chats' state, or null while the window shows pairing.
+    /// Gets the state of the chats, or null while the window shows pairing.
     /// </summary>
     public MainViewModel? ViewModel => _chats?.ViewModel;
 
     /// <summary>
-    /// Gets whether the window shows the pairing steps.
+    /// Gets a value that tells whether the window shows the pairing steps.
     /// </summary>
     public bool IsPairing => _pairing is not null;
 
     /// <summary>
-    /// Gets the conversation that was open when the chats were last dropped (the window closed), or null, so the App can
-    /// open it again in the next window.
+    /// Gets the conversation that was open at the last drop of the chats, or null. The App opens it again in the next
+    /// window.
     /// </summary>
     public string? LastConversationId { get; private set; }
 
     /// <summary>
-    /// Gets the settings state the profile menu's Unpair binds to.
+    /// Gets the settings state that Unpair of the profile menu binds to.
     /// </summary>
     public SettingsViewModel Settings => _settings;
 
-    /// <summary>Gets the download confirmation's title.</summary>
+    /// <summary>Gets the title of the download confirmation.</summary>
     public static string SavedToDownloadsText => ChatCopy.SavedToDownloads;
 
-    /// <summary>Gets the download confirmation's Show in folder text.</summary>
+    /// <summary>Gets the Show in folder text of the download confirmation.</summary>
     public static string ShowInFolderText => ChatCopy.ShowInFolder;
 
     /// <summary>
-    /// Shows a photo in the in-window viewer, over both panes (see <see cref="PhotoViewer"/>).
+    /// Shows a photo in the viewer of the window, over both panes. See <see cref="PhotoViewer"/>.
     /// </summary>
-    /// <param name="part">The photo's media part.</param>
-    /// <param name="messageId">The message's ID.</param>
-    /// <param name="name">What Narrator calls the photo: its caption, or "Photo".</param>
-    /// <param name="returnFocus">The photo in the chat, focused again when the viewer closes.</param>
+    /// <param name="part">The media part of the photo.</param>
+    /// <param name="messageId">The ID of the message.</param>
+    /// <param name="name">The name that Narrator reads for the photo: its caption, or "Photo".</param>
+    /// <param name="returnFocus">The photo in the chat, which gets focus again when the viewer closes.</param>
     public void ShowPhoto(MediaPart part, string messageId, string name, Control returnFocus) =>
         _ = PhotoViewer.ShowAsync(part, messageId, name, returnFocus);
 
     /// <summary>
-    /// Plays a video in the in-window viewer, over both panes (see <see cref="PhotoViewer.ShowVideoAsync"/>).
+    /// Plays a video in the viewer of the window, over both panes. See <see cref="PhotoViewer.ShowVideoAsync"/>.
     /// </summary>
-    /// <param name="part">The video's media part.</param>
-    /// <param name="messageId">The message's ID.</param>
-    /// <param name="name">What Narrator calls the video: its caption, or "Video".</param>
-    /// <param name="returnFocus">The video's frame in the chat, focused again when the viewer closes.</param>
-    /// <param name="returnState">How the clicked button had focus, given back the same way on close.</param>
-    /// <param name="start">Where to start playing (where the bubble's player got to).</param>
-    /// <param name="play">True to play from there, false to stay paused there (as the bubble's player was).</param>
-    /// <param name="frame">The bubble's still frame, grown in its place before the player shows; null when none showed.</param>
-    /// <param name="closed">Given the viewer's position and whether it was playing when it closes; null when nothing carries on.</param>
+    /// <param name="part">The media part of the video.</param>
+    /// <param name="messageId">The ID of the message.</param>
+    /// <param name="name">The name that Narrator reads for the video: its caption, or "Video".</param>
+    /// <param name="returnFocus">The video frame in the chat, which gets focus again when the viewer closes.</param>
+    /// <param name="returnState">The focus state of the clicked button, which the close gives back.</param>
+    /// <param name="start">The start position, where the player of the bubble got to.</param>
+    /// <param name="play">True to play from there. False to stay paused there, as the player of the bubble was.</param>
+    /// <param name="frame">
+    /// The still frame of the bubble, which grows in its place before the player shows. Null when no frame showed.
+    /// </param>
+    /// <param name="closed">
+    /// Gets the position of the viewer and its play state when it closes. Null when nothing carries on.
+    /// </param>
     public void ShowVideo(MediaPart part, string messageId, string name, Control returnFocus, FocusState returnState, TimeSpan start, bool play, ImageSource? frame, Action<TimeSpan, bool>? closed) =>
         _ = PhotoViewer.ShowVideoAsync(part, messageId, name, returnFocus, returnState, start, play, frame, closed);
 
     /// <summary>
-    /// Shows the "Saved to Downloads" confirmation for a few seconds; its Show in folder opens File Explorer on the file.
+    /// Shows the "Saved to Downloads" confirmation for a few seconds. Show in folder opens File Explorer on the file.
     /// </summary>
-    /// <param name="path">The saved file's full path.</param>
+    /// <param name="path">The full path of the saved file.</param>
     public void ShowDownloaded(string path)
     {
         _downloadedPath      = path;
@@ -275,7 +284,6 @@ public sealed partial class MainWindow : UserControl
         _downloadedTimer.Start();
     }
 
-    // The Confirmation Closes Itself
     private void OnDownloadedTimerTick(DispatcherQueueTimer sender, object args) => DownloadedBar.IsOpen = false;
 
     private void OnShowInFolderClick(object sender, RoutedEventArgs e)
@@ -288,12 +296,11 @@ public sealed partial class MainWindow : UserControl
     }
 
     /// <summary>
-    /// Sets the window's light or dark look from the app theme.
+    /// Sets the light or dark look of the window from the app theme.
     /// </summary>
     /// <param name="theme">The app theme setting.</param>
     public void ApplyTheme(AppTheme theme)
     {
-        // Page Colors
         RootGrid.RequestedTheme = theme switch
         {
             AppTheme.Light => ElementTheme.Light,
@@ -301,22 +308,23 @@ public sealed partial class MainWindow : UserControl
             _              => ElementTheme.Default,
         };
 
-        // Caption Buttons: Drawn In The Title Bar, So They Follow The Page Colors; Dark While The Photo Viewer's Scrim Is
-        // Under Them
+        // The title bar draws the caption buttons, so they follow the page colors. They are dark while the scrim of the
+        // photo viewer is under them.
         AppTitleBar.CaptionTheme = PhotoViewer.IsOpen ? ElementTheme.Dark : ElementTheme.Default;
         ApplyFrameTheme();
     }
 
-    // The Window's Border And Mica Take The Dark Tint When The Page Is Dark (DWM Can't Tell On Its Own)
+    // The border and the Mica of the window take the dark tint when the page is dark. DWM cannot tell by itself.
     private void ApplyFrameTheme() => _window.SetDarkFrame(RootGrid.ActualTheme == ElementTheme.Dark);
 
     // =========================================================================
     // PHOTO VIEWER TITLE BAR
     // =========================================================================
 
-    // The Photo Viewer Opened Or Closed. Open: Its Scrim Tints The Title Bar Row Too, The Caption Buttons Turn Dark To Read
-    // On It, And Clicks Go Through Only Where Its Toolbar Is (The Rest Of The Row Still Drags The Window). Closed: The
-    // Caption Buttons Follow The App Theme Again, And The Title Bar Gets Its Own Click-Through Holes Back
+    // The photo viewer opened or closed. While it is open, its scrim also tints the title bar row. The caption buttons
+    // turn dark, so they read on the scrim. Clicks go through only where its toolbar is, and the rest of the row still
+    // drags the window. After the close, the caption buttons follow the app theme again. The title bar then gets its
+    // own click-through holes back.
     private void ShowViewerTitleBar()
     {
         AppTitleBar.CaptionTheme = PhotoViewer.IsOpen ? ElementTheme.Dark : ElementTheme.Default;
@@ -329,15 +337,8 @@ public sealed partial class MainWindow : UserControl
         PunchViewerToolbar();
     }
 
-    // The Title Bar's Click-Through Holes: Its Own Buttons', Then (While The Photo Viewer Is Open) Only Its Toolbar's
-    private void RecomputeTitleBarRegions()
-    {
-        AppTitleBar.RecomputeDragRegions();
-        PunchViewerToolbar();
-    }
-
-    // While The Photo Viewer Is Open: Its Toolbar Sits In The Row's Top-Left Corner And Becomes The Title Bar's Only
-    // Click-Through Hole, In Place Of ☰, Back And The Profile, Which The Scrim Covers
+    // While the photo viewer is open, its toolbar sits in the top-left corner of the row. It becomes the only
+    // click-through hole of the title bar. It replaces ☰, Back and the profile, which the scrim covers.
     private void PunchViewerToolbar()
     {
         if (!PhotoViewer.IsOpen || RootGrid.XamlRoot is null)
@@ -355,12 +356,14 @@ public sealed partial class MainWindow : UserControl
     // =========================================================================
 
     /// <summary>
-    /// Shows the pairing steps in place of the chats (or the empty body), and closes the settings page.
+    /// Shows the pairing steps in place of the chats or the empty body, and closes the settings page.
     /// </summary>
     /// <remarks>
-    /// The chats are dropped first, and nothing of the old phone stays: its photos and the owner's picture go too.
+    /// The method drops the chats first. Nothing of the old phone stays: its photos and the owner picture go too.
     /// </remarks>
-    /// <param name="page">The pairing page, which starts its sign-in when made; the window closes it when dropped.</param>
+    /// <param name="page">
+    /// The pairing page, which starts its sign-in when it is made. The window closes it when it drops the page.
+    /// </param>
     public void ShowPairing(PairingPage page)
     {
         ArgumentNullException.ThrowIfNull(page);
@@ -373,16 +376,16 @@ public sealed partial class MainWindow : UserControl
         ProfilePicture.ProfilePicture = null;
         AutomationProperties.SetItemStatus(ProfileButton, string.Empty);
 
-        _pairing            = page;
+        _pairing              = page;
         page.CancelRequested += OnPairingCancel;
         BodyHost.Child        = page;
         ShowTitleBarButtons();
     }
 
     /// <summary>
-    /// Shows the chats in place of the pairing steps (or the empty body) and starts loading the inbox.
+    /// Shows the chats in place of the pairing steps or the empty body, and starts the load of the inbox.
     /// </summary>
-    /// <param name="viewModel">The chats' state; the window disposes it when the chats are dropped.</param>
+    /// <param name="viewModel">The state of the chats. The window disposes it when it drops the chats.</param>
     public void ShowChats(MainViewModel viewModel)
     {
         ArgumentNullException.ThrowIfNull(viewModel);
@@ -396,14 +399,14 @@ public sealed partial class MainWindow : UserControl
         ShowTitleBarButtons();
         ShowChatFocus();
 
-        // The List Can Show From The Store's Cache Before These Handlers Exist, And An Unchanged Refresh Moves No Row,
-        // So Ask For The Owner's Photo Now Too
+        // The list can show from the cache of the store before these handlers exist. A refresh with no change moves no
+        // row. Thus the window also asks for the photo of the owner now.
         _ = ShowProfilePhotoAsync();
     }
 
     /// <summary>
-    /// Opens a conversation asked for from outside the window (a toast click): closes the settings page so the chat
-    /// shows. Does nothing while pairing.
+    /// Opens a conversation for a request from outside the window, such as a toast click. The method closes the
+    /// settings page, so the chat shows. It does nothing while pairing.
     /// </summary>
     /// <param name="conversationId">The conversation ID.</param>
     public void SelectConversation(string conversationId)
@@ -418,7 +421,7 @@ public sealed partial class MainWindow : UserControl
     }
 
     /// <summary>
-    /// Opens the settings page over the body. Does nothing when it is already open.
+    /// Opens the settings page over the body. The method does nothing when the page is already open.
     /// </summary>
     public void ShowSettings()
     {
@@ -427,10 +430,10 @@ public sealed partial class MainWindow : UserControl
             return;
         }
 
-        // Settings (From The Tray) Replaces The Photo Viewer
+        // Settings from the tray replaces the photo viewer.
         PhotoViewer.Close();
 
-        // Back Puts Keyboard Focus Where It Was
+        // Back puts the keyboard focus where it was.
         _focusBeforeSettings = RootGrid.XamlRoot is { } root ? FocusManager.GetFocusedElement(root) as UIElement : null;
 
         _settingsPage                  = new SettingsPage(_settings);
@@ -439,11 +442,11 @@ public sealed partial class MainWindow : UserControl
         BodyHost.Visibility            = Visibility.Collapsed;
         ShowChatFocus();
 
-        // Keyboard Focus Moves To Back, So Tab Doesn't Start In The Hidden Body
+        // The keyboard focus moves to Back, so Tab does not start in the hidden body.
         ShowTitleBarButtons()?.Focus(FocusState.Programmatic);
     }
 
-    // Back (Or A Switch To Pairing): The Body Shows Again
+    // Back or a switch to pairing shows the body again.
     private void CloseSettings()
     {
         if (_settingsPage is not { } page)
@@ -459,7 +462,7 @@ public sealed partial class MainWindow : UserControl
         ShowChatFocus();
         ShowTitleBarButtons();
 
-        // System XAML's UIElement Has No Focus(), So The Focus Manager Moves It
+        // The UIElement of system XAML has no Focus(), so the focus manager moves the focus.
         if (_focusBeforeSettings is { } previous)
         {
             _ = FocusManager.TryFocusAsync(previous, FocusState.Programmatic);
@@ -468,10 +471,10 @@ public sealed partial class MainWindow : UserControl
         _focusBeforeSettings = null;
     }
 
-    // Cancels A Running Pairing Or Disposes The Chats' View Model
+    // Cancels a running pairing or disposes the view model of the chats.
     private void DropBody()
     {
-        // The Photo Goes With The Chats (Sign-Out, Unpair Or The Close)
+        // The photo goes with the chats on a sign-out, an unpair or the close.
         PhotoViewer.Close();
 
         if (_pairing is { } pairing)
@@ -494,9 +497,10 @@ public sealed partial class MainWindow : UserControl
         BodyHost.Child = null;
     }
 
-    // ☰ And The Profile Picture Have Nothing To Show While Pairing. A Narrow Window Has No ☰ (It Shows One Pane, So There
-    // Is No List To Hide). Settings, Archived, Spam & Blocked And A Narrow Window's Open Chat Show The Title Bar's Back In
-    // Place Of ☰, Named For The Page It Leaves (The Tests Find It By That). Returns Back While It Shows
+    // ☰ and the profile picture have nothing to show while pairing. A narrow window shows 1 pane and has no list to
+    // hide, so it has no ☰. Settings, Archived, Spam & blocked and the open chat of a narrow window show Back in place
+    // of ☰. Back carries the name of the page that it leaves, and the tests find it by that name. The method returns
+    // Back while it shows.
     private Button? ShowTitleBarButtons()
     {
         bool showBack = ShowsBack();
@@ -506,12 +510,14 @@ public sealed partial class MainWindow : UserControl
         ProfileButton.Visibility              = _chats is not null ? Visibility.Visible : Visibility.Collapsed;
         NameTitleBarButtons();
 
-        // The Title Bar Only Lets Clicks Through Where Its Buttons Are When It Computes Its Regions
-        RecomputeTitleBarRegions();
+        // The title bar lets clicks through where its buttons are only when it computes its regions. While the photo
+        // viewer is open, only its toolbar lets clicks through.
+        AppTitleBar.RecomputeDragRegions();
+        PunchViewerToolbar();
         return showBack ? AppTitleBar.Back : null;
     }
 
-    // Gives Back And ☰ The Names The Tests And Narrator Know Them By: Back's Is The Page It Leaves
+    // Gives Back and ☰ the names that the tests and Narrator know. The name of Back is the page that it leaves.
     private void NameTitleBarButtons()
     {
         if (AppTitleBar.IsBackButtonVisible)
@@ -524,28 +530,29 @@ public sealed partial class MainWindow : UserControl
         ToolTipService.SetToolTip(AppTitleBar.PaneToggle, ChatCopy.ShowOrHideConversations);
     }
 
-    // ☰ Shows Once Paired, Where Back Doesn't, In A Wide Window (A Narrow One Shows One Pane, So There Is No List To Hide)
+    // ☰ shows after pairing in a wide window, where Back does not show.
     private bool ShowsMenu(bool showBack) => _chats is not null && !showBack && ViewModel?.IsNarrow != true;
 
-    // Back Shows On Settings, In A Folder (Archived, Spam & Blocked) And Over A Narrow Window's Open Chat
+    // Back shows on Settings, in a folder and over the open chat of a narrow window.
     private bool ShowsBack() => _settingsPage is not null || ViewModel?.IsFolderView == true || ViewModel?.ShowChatPane == true;
 
-    // Back's AutomationId, For The Page It Leaves
+    // The AutomationId of Back, for the page that it leaves.
     private string BackId() =>
         _settingsPage is not null ? "Settings.Back"
         : ViewModel?.ShowChatPane == true ? "Chat.Back"
         : ViewModel?.IsArchivedView == true ? "Main.ArchivedBack"
         : "Main.SpamBack";
 
-    // The Open Chat Counts As Viewed Only While The Window Is Active And Settings Doesn't Cover It
+    // The open chat counts as viewed only while the window is active and Settings does not cover it.
     private void ShowChatFocus()
     {
         if (_chats is { } chats)
         {
             chats.ViewModel.IsWindowFocused = _isActive && _settingsPage is null;
 
-            // Back On The Open Chat (Switched Windows, Restored Or Left Settings): Its Toasts Are Read Now, Even Those Kept
-            // While It Was On Screen With "Notify for the chat I'm viewing" On
+            // The user is back on the open chat after a window switch, a restore or a close of Settings. Its toasts
+            // count as read now. That includes toasts kept while the chat was on screen with "Notify for the chat I'm
+            // viewing" on.
             if (chats.ViewModel is { IsWindowFocused: true, SelectedConversationId: { } viewed })
             {
                 (Application.Current as App)?.Notifications?.RemoveConversation(viewed);
@@ -561,18 +568,19 @@ public sealed partial class MainWindow : UserControl
     /// Hides an element while the flag is set.
     /// </summary>
     /// <param name="hidden">True to hide.</param>
-    /// <returns>Collapsed when set.</returns>
+    /// <returns>Collapsed when set, else Visible.</returns>
     public static Visibility HiddenIf(bool hidden) => hidden ? Visibility.Collapsed : Visibility.Visible;
 
     // =========================================================================
     // EVENT HANDLERS
     // =========================================================================
 
-    // Where The Window Was Last Left (Owner): Its Place And Size Go Back, When They Still Land On A Display (A Monitor
-    // Unplugged Since Leaves The Default), And Maximized Again If It Was
+    // The owner chose that the window opens where it was last left. Its place and size come back when they still land
+    // on a display. An unplugged monitor leaves the default. The window maximizes again when it was maximized.
     private unsafe void RestoreWindowBounds()
     {
-        // Bounds Only Once Moved Or Sized Restored (Maximized Straight Away, There Are None, But It Still Maximizes)
+        // Bounds exist only after a move or a resize of the restored window. A window maximized at once has none, but
+        // it still maximizes.
         if (_appSettings.WindowBounds is { } saved)
         {
             var bounds = new WindowInterop.RECT { Left = saved.Left, Top = saved.Top, Right = saved.Left + saved.Width, Bottom = saved.Top + saved.Height };
@@ -590,8 +598,8 @@ public sealed partial class MainWindow : UserControl
         }
     }
 
-    // Every Move Or Resize Of The Shown Window Is Kept; Maximized Or Minimized, Only That State Is (The Bounds Stay Those
-    // Of The Restored Window)
+    // The settings keep every move or resize of the shown window. While maximized or minimized, they keep only that
+    // state, and the bounds stay those of the restored window.
     private void OnBoundsChanged()
     {
         if (!_window.IsVisible)
@@ -611,12 +619,13 @@ public sealed partial class MainWindow : UserControl
         }
     }
 
-    // The Window Never Shrinks Below The Chat List's Narrowest Layout (Its Least Width, Shown Alone In A Narrow Window)
-    // Or Below Room For The Title Bar, A Few Rows And The Message Box. The Window Takes Physical Pixels Of The Whole
-    // Window, So The Minimum Is Scaled By The Display's Scale (Again When It Changes) And The Frame's Width Is Added
+    // The window never shrinks below the narrowest layout of the chat list, which shows alone in a narrow window. It
+    // also keeps room for the title bar, a few rows and the message box. The window takes physical pixels of the
+    // whole window. Thus the method scales the minimum by the display scale, again on each change, and adds the frame.
     private void ApplyMinimumSize()
     {
-        // Minimized Or Maximized, The Window's Rect Isn't The Restored Frame's; The Restore Comes Back Here
+        // While minimized or maximized, the rect of the window is not that of the restored frame. The restore calls
+        // this method again.
         if (RootGrid.XamlRoot is not { } root || _window.IsMinimized || _window.IsMaximized)
         {
             return;
@@ -630,11 +639,12 @@ public sealed partial class MainWindow : UserControl
         _window.SetMinimumSize((int)Math.Ceiling(MinWindowWidth * scale) + frameWidth, (int)Math.Ceiling(MinWindowHeight * scale) + frameHeight);
     }
 
-    // A Folder Opened Or Closed, The Window Went Narrow Or Wide, Or A Narrow Window's Chat Opened Or Closed: Back
-    // Or ☰ (Other Changes Leave The Title Bar Alone)
+    // A folder, a width change or the chat of a narrow window can switch between Back and ☰. Other changes leave the
+    // title bar alone.
     private void OnChatsChanged(object? sender, PropertyChangedEventArgs e)
     {
-        // The View Model Raises Everything At Once (An Empty Name), So The Title Bar Is Only Touched When It Would Change
+        // The view model raises all properties at once with an empty name. Thus the method changes the title bar only
+        // when its buttons change.
         bool showBack = ShowsBack();
         if (AppTitleBar.IsBackButtonVisible != showBack || AppTitleBar.IsPaneToggleButtonVisible != ShowsMenu(showBack)
             || (showBack && AutomationProperties.GetAutomationId(AppTitleBar.Back) != BackId()))
@@ -643,7 +653,7 @@ public sealed partial class MainWindow : UserControl
         }
     }
 
-    // The Title Bar's Back: Leaves Settings, Else A Narrow Window's Chat (Back To The List), Else Archived Or Spam & Blocked
+    // Back leaves Settings. Else it leaves the chat of a narrow window for the list. Else it leaves the folder.
     private void OnTitleBarBackRequested(object? sender, EventArgs args)
     {
         if (_settingsPage is not null)
@@ -661,18 +671,18 @@ public sealed partial class MainWindow : UserControl
         ViewModel?.BackToInbox();
     }
 
-    // Rows Came In, So A Conversation May Now Name The Owner: Show Their Photo
+    // New rows can name the owner now, so the window shows the photo of the owner.
     private void OnInboxRowsChanged(object? sender, NotifyCollectionChangedEventArgs e) => _ = ShowProfilePhotoAsync();
 
-    // Back Online: Photos That Failed While The Phone Was Away Are Asked For Again
+    // Back online, the window asks again for the photos that failed while the phone was away.
     private void OnConnected(object? sender, EventArgs e)
     {
         Avatar.ReloadMissing(RootGrid);
         _ = ShowProfilePhotoAsync();
     }
 
-    // PersonPicture Keeps Its Glyph Without A Photo. No Answer (No Photo, Or The Phone Didn't Answer) Lets The Next
-    // Load Or Reconnect Ask Again; The Cache Remembers "No Photo", So That Costs The Phone Nothing
+    // PersonPicture keeps its glyph without a photo. When no photo comes, the next load or reconnect asks again. The
+    // cache remembers "no photo", so the second request costs the phone nothing.
     private async Task ShowProfilePhotoAsync()
     {
         if (_profileAsked || ViewModel?.MeId is not { } meId)
@@ -687,21 +697,20 @@ public sealed partial class MainWindow : UserControl
             return;
         }
 
-        // Back To Pairing Meanwhile: The Old Phone's Owner Must Not Show
+        // After a switch back to pairing meanwhile, the owner of the old phone must not show.
         if (_chats is null)
         {
             return;
         }
 
-        // UI Automation Can't See A Picture, So The Button Says It Shows One
+        // UI Automation cannot see a picture, so the button status tells that it shows one.
         ProfilePicture.ProfilePicture = await Avatar.ToImageAsync(photo);
         AutomationProperties.SetItemStatus(ProfileButton, "Photo");
     }
 
-    // ☰: Collapses Or Expands The List
     private void OnPaneToggleRequested(object? sender, EventArgs args) => ViewModel?.ToggleList();
 
-    // Archived And Spam & Blocked Are Lists, So They Close Settings To Show Them
+    // Archived and Spam & blocked are lists, so they close Settings to show.
     private void OnArchivedClick(object sender, RoutedEventArgs e)
     {
         PhotoViewer.Close();
@@ -720,15 +729,15 @@ public sealed partial class MainWindow : UserControl
 
     private void OnQuitClick(object sender, RoutedEventArgs e) => QuitRequested?.Invoke(this, EventArgs.Empty);
 
-    // Pairing's Cancel Closes The Window, Which Cancels The Pairing
+    // Cancel of pairing closes the window, which cancels the pairing.
     private void OnPairingCancel(object? sender, EventArgs e) => Close();
 
     private void OnUnpairClick(object sender, RoutedEventArgs e) => ConfirmUnpair();
 
     private void OnSettingsUnpair(object? sender, EventArgs e) => ConfirmUnpair();
 
-    // Confirm, Then Unpair: The App Switches This Window To Pairing On NotPaired. Async Void Like A Click Handler, So A
-    // Failure Reaches The App's Unhandled Error Log
+    // Asks for a confirm, then unpairs. The App switches this window to pairing on NotPaired. The method is async void
+    // as a click handler is. Thus a failure reaches the unhandled error log of the app.
     private async void ConfirmUnpair()
     {
         UnpairDialog.RequestedTheme = RootGrid.RequestedTheme;
@@ -739,12 +748,14 @@ public sealed partial class MainWindow : UserControl
     // KEYBOARD SHORTCUTS
     // =========================================================================
 
-    // Every Key Press In The Window Passes Here First. Handled Only When A Shortcut Ran, So Other Keys (And A Shortcut
-    // With Nothing To Do, Like "r" With No Chat Open) Reach The Controls. Only For The Chats (Not Pairing Or Settings),
-    // And Skipped While A Dialog Or Menu Is Open. An Open Tooltip Doesn't Count; It Is Told Apart By Its Automation Type,
-    // Not A Type Test (The Native AOT Build Can Hand A Popup's Child Back As A Base Type)
+    // Every key press in the window comes here first. The method handles a key only when a shortcut ran. Thus other
+    // keys reach the controls. A shortcut with nothing to do also reaches them, such as "r" with no chat open.
+    // Shortcuts run only for the chats, not for pairing or Settings. They do not run while a dialog or a menu is open.
+    // An open tooltip does not count. The method tells it apart by its automation type, not a type test. The Native
+    // AOT build can give back the child of a popup as a base type.
     private void OnRootPreviewKeyDown(object sender, KeyRoutedEventArgs e)
-    {        // The Photo Viewer Takes Escape (So The Chat Stays Open), And No Shortcut Runs Under It
+    {
+        // The photo viewer takes Escape, so the chat stays open. No shortcut runs under the viewer.
         if (PhotoViewer.IsOpen)
         {
             if (e.Key == VirtualKey.Escape)
@@ -763,8 +774,8 @@ public sealed partial class MainWindow : UserControl
             return;
         }
 
-        // Matched By Name, Not By Type (The Native AOT Build Can Hand The Box Back As A Base Type). These Are The App's
-        // Only Text Boxes: A New One Must Be Added Here
+        // The method matches the box by name, not by type. The Native AOT build can give back the box as a base type.
+        // These names are the only text boxes of the app, and a new text box must go here.
         bool focusInTextBox = FocusManager.GetFocusedElement(RootGrid.XamlRoot) is FrameworkElement { Name: "DraftBox" or "QueryBox" };
         if (ShortcutMap.Resolve(e.Key, UiHelpers.IsDown(VirtualKey.Control), UiHelpers.IsDown(VirtualKey.Shift), UiHelpers.IsDown(VirtualKey.Menu), focusInTextBox, UiHelpers.IsDown(VirtualKey.RightMenu)) is { } command)
         {
@@ -772,7 +783,7 @@ public sealed partial class MainWindow : UserControl
         }
     }
 
-    // Settings And Help Belong To The Window; The Rest To The Chats
+    // The window runs Settings and Help. The chats run the other shortcuts.
     private bool Run(ChatsView chats, ShortcutCommand command)
     {
         switch (command)

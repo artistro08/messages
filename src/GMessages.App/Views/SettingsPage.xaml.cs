@@ -11,31 +11,30 @@ using Windows.UI.Xaml.Controls;
 namespace GMessages.App.Views;
 
 /// <summary>
-/// The settings page, shown over the whole main window below the title bar: theme, Start with Windows, notification
-/// switches and the snooze length, the microphone for voice messages, unpair, the logs folder and About, each on a
-/// Windows Settings card.
+/// Shows the settings over the main window below the title bar, each on a Windows Settings card. The cards include
+/// the theme, Start with Windows, notifications, the microphone, unpair, the logs and About.
 /// </summary>
 /// <remarks>
-/// Adapted from Magic Buds' <c>SettingsWindow</c>, its cards and its About page. Made when opened and dropped on the
-/// title bar's Back (or with the window). The view model belongs to the main window, so the page never disposes it.
-/// Unpair asks the window, which owns the confirm dialog; once unpaired the App switches the window to pairing.
+/// The page adapts the <c>SettingsWindow</c> of Magic Buds, its cards and its About page. The window makes the page on
+/// open and drops it on Back or with the window. The main window owns the view model, so the page never disposes it.
+/// Unpair asks the window, which owns the confirm dialog. After the unpair the App switches the window to pairing.
 /// </remarks>
 public sealed partial class SettingsPage : UserControl
 {
     /// <summary>
     /// Creates the page and reads the Start with Windows state.
     /// </summary>
-    /// <param name="viewModel">The settings state (owned by the main window).</param>
+    /// <param name="viewModel">The settings state, which the main window owns.</param>
     public SettingsPage(SettingsViewModel viewModel)
     {
         ViewModel = viewModel;
 
-        // Forget The Last Page's Microphones: This Box Holds Only "Windows Default" Until They're Found Again, And A
-        // Saved Index Past It Throws (ArgumentException) Out Of The First Binding Pass, Leaving Every Dropdown Blank
+        // The page forgets the microphones of the last page. This box holds only "Windows default" until the search
+        // finds them again. A saved index past it throws ArgumentException out of the first binding pass. That left
+        // every dropdown blank.
         ViewModel.SetMicrophones([]);
         InitializeComponent();
 
-        // Copy
         PinnedGridHeader.Text      = ChatCopy.ShowPinnedGrid;
         PinnedGridDescription.Text = ChatCopy.ShowPinnedGridDescription;
         AutomationProperties.SetName(PinnedGridSwitch, ChatCopy.ShowPinnedGrid);
@@ -48,13 +47,14 @@ public sealed partial class SettingsPage : UserControl
         MicrophoneDescription.Text = ChatCopy.MicrophoneDescription;
         AutomationProperties.SetName(MicrophoneBox, ChatCopy.Microphone);
 
-        // Snooze Choices: Added Here, Before The Bindings Select One (A .NET List Isn't A XAML ItemsSource Under AOT)
+        // The page adds the snooze choices here, before the bindings select one. Under AOT a .NET list is not a XAML
+        // ItemsSource.
         foreach (string choice in ViewModel.SnoozeChoices)
         {
             SnoozeBox.Items.Add(choice);
         }
 
-        // Microphones: "Windows Default" Now, Windows' Active Microphones Once Found
+        // The box holds "Windows default" now, and the active microphones of Windows after the search.
         MicrophoneBox.Items.Add(ChatCopy.WindowsDefault);
         _ = LoadMicrophonesAsync();
 
@@ -62,38 +62,39 @@ public sealed partial class SettingsPage : UserControl
     }
 
     /// <summary>
-    /// Asks the window to confirm and unpair (Unpair this PC).
+    /// Asks the window to confirm and unpair, from Unpair this PC.
     /// </summary>
     public event EventHandler? UnpairRequested;
 
     /// <summary>
-    /// Gets the settings state the view binds to.
+    /// Gets the settings state that the view binds to.
     /// </summary>
     public SettingsViewModel ViewModel { get; }
 
-    /// <summary>Gets the app's name for About.</summary>
+    /// <summary>Gets the name of the app for About.</summary>
     public static string AppName => AppInfo.DisplayName;
 
     /// <summary>Gets "Version 1.2.3" for About.</summary>
     public static string VersionText => $"Version {AppInfo.Version}";
 
-    /// <summary>Gets the repository card's text for About.</summary>
+    /// <summary>Gets the text of the repository card for About.</summary>
     public static string RepositoryText => $"{AppInfo.DisplayName} source code, releases and issues.";
 
     /// <summary>
-    /// Flips a flag for a binding (the Unpair button is enabled while no unpair runs).
+    /// Flips a flag for a binding. The Unpair button is enabled while no unpair runs.
     /// </summary>
     /// <param name="value">The flag.</param>
     /// <returns>The opposite.</returns>
     public static bool Not(bool value) => !value;
 
     /// <summary>
-    /// Stops the page's bindings once the window drops it, so the long-lived view model no longer updates it.
+    /// Stops the bindings of the page after the window drops it, so the long-lived view model stops its updates.
     /// </summary>
     public void Close() => Bindings.StopTracking();
 
-    // Finds Windows' Active Microphones Each Time The Page Opens. Their Items Go In Before The View Model Gets Them, So
-    // The Saved One Is In The Box When The Binding Selects It; A Failed Search Leaves Only "Windows Default"
+    // Finds the active microphones of Windows each time the page opens. Their items go in before the view model gets
+    // them. Thus the saved microphone is in the box when the binding selects it. A failed search leaves only "Windows
+    // default".
     private async Task LoadMicrophonesAsync()
     {
         List<(string Id, string Name)> microphones;
@@ -113,7 +114,7 @@ public sealed partial class SettingsPage : UserControl
             MicrophoneBox.Items.Add(name);
         }
 
-        // "Windows Default" Names The Microphone It Means Today, So It's Clear Which One Records
+        // "Windows default" names the microphone that it means today, so the user sees which microphone records.
         string defaultId = MediaDevice.GetDefaultAudioCaptureId(AudioDeviceRole.Default);
         if (microphones.FindIndex(mic => string.Equals(mic.Id, defaultId, StringComparison.OrdinalIgnoreCase)) is var index and >= 0)
         {

@@ -28,47 +28,44 @@ using Muxc = Microsoft.UI.Xaml.Controls;
 namespace GMessages.App.Views;
 
 /// <summary>
-/// The open conversation: the header with the lock, the message bubbles, the typing dots, and the compose area: the
-/// reply chip, the chips (the voice preview, then the attachments), and the message box with its emoji, attach and mic
-/// buttons, the recording bar over it, and Send. The reply chip and the chips are joined to the box's top.
+/// Shows the open conversation: the header with the lock, the message bubbles, the typing dots and the compose area.
+/// The reply chip and the attachment chips join the top of the message box.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Shows whatever <see cref="Chat"/> holds; the main window sets it from <see cref="MainViewModel.Chat"/>. The bubbles
-/// are wrapped with <see cref="BindableList"/> (see there for why), and the list stays scrolled to the newest bubble
-/// as messages arrive. Scrolling to the top loads the older page; a page too short to scroll loads the next older one
-/// on its own, until the list scrolls or no older pages are left.
+/// The pane shows the chat in <see cref="Chat"/>, which the main window sets from <see cref="MainViewModel.Chat"/>.
+/// <see cref="BindableList"/> wraps the bubbles, and that class tells why. The list stays at the newest bubble as
+/// messages arrive. A scroll to the top loads the older page. A page too short to scroll loads the next older page.
+/// That repeats until the list can scroll or no older pages are left.
 /// </para>
 /// <para>
-/// Opening a chat puts the cursor in the message box. Enter sends the draft and Shift + Enter adds a line. The emoji
-/// button opens the Windows emoji panel on the message box. While replying, the reply chip and the message box join into
-/// one control.
+/// A chat that opens puts the cursor in the message box. Enter sends the draft, and Shift + Enter adds a line. The
+/// emoji button opens the Windows emoji panel on the message box.
 /// </para>
 /// <para>
-/// The paperclip inside the box's right edge (<c>Chat.Attach</c>, or Ctrl + Shift + a; Ctrl + Shift + p for photos)
-/// opens the file picker; each picked file becomes a chip above the box, read only at Send. The mic beside it
-/// (<c>Chat.Record</c>) records a voice message: the recording bar covers the box with the time, the live waveform,
-/// Cancel recording and Done (a check mark). A finished recording waits as the first chip (the voice preview, which plays and seeks)
-/// and sends first.
+/// The paperclip <c>Chat.Attach</c> and Ctrl + Shift + a open the file picker. Ctrl + Shift + p opens it for photos.
+/// Each picked file becomes a chip above the box, and Send reads it. The mic <c>Chat.Record</c> records a voice
+/// message. The recording bar then covers the box with the time, the live waveform, Cancel recording and Done. A
+/// finished recording waits as the first chip, which plays and seeks, and it sends first.
 /// </para>
 /// <para>
-/// One reaction picker (<c>ReactionPicker</c>, buttons <c>ReactionPicker.1</c> to <c>.7</c>) serves every bubble: a
-/// bubble's menu, or Shift + + on its row, opens it over that bubble (its hover strip's React, over that
-/// button). A bubble's Reply, or Ctrl + Enter on its row, starts the reply and moves to the message box.
+/// One reaction picker <c>ReactionPicker</c> serves every bubble, with the buttons <c>ReactionPicker.1</c> to
+/// <c>.7</c>. The menu of a bubble or Shift + + on its row opens the picker over that bubble. The React button of the
+/// hover strip opens it over that button. Reply or Ctrl + Enter on a row starts the reply and moves to the message box.
 /// </para>
 /// <para>
-/// One bubble menu (<c>BubbleMenu</c>) serves every bubble too: a right-click on a bubble opens it at the pointer, the
-/// Application key or Shift + F10 on its row over its back, and its hover strip's ⋮ at the ⋮. Its items call the bubble
-/// it opened on. A link preview card opens its own menu (<c>PreviewMenu</c>, with Copy link) instead.
+/// One bubble menu <c>BubbleMenu</c> also serves every bubble. A right-click opens it at the pointer. The Application
+/// key or Shift + F10 on a row opens it over the back of the bubble. The ⋮ of the hover strip opens it at the ⋮. Its
+/// items act on the bubble that it opened on. A link preview card opens its own menu <c>PreviewMenu</c> with Copy link.
 /// </para>
 /// <para>
-/// The header's ⋮ (<c>Chat.More</c>), or a right-click on the header, raises <see cref="MenuRequested"/>; the chats
-/// show the conversation's menu.
+/// The ⋮ <c>Chat.More</c> of the header or a right-click on the header raises <see cref="MenuRequested"/>. The chats
+/// then show the menu of the conversation.
 /// </para>
 /// <para>
-/// While the other person types, the typing bubble (<c>Chat.Typing</c>) shows three dots that bounce in turn, like Google
-/// Messages and Teams: a Composition loop that runs only while the bubble shows, and not at all when Windows' animation
-/// effects are off.
+/// While the other person types, the typing bubble <c>Chat.Typing</c> shows 3 dots that bounce in turn. Google
+/// Messages and Teams do the same. A Composition loop moves them only while the bubble shows. The loop does not run
+/// when the animation effects of Windows are off.
 /// </para>
 /// </remarks>
 public sealed partial class ChatPane : UserControl
@@ -77,37 +74,35 @@ public sealed partial class ChatPane : UserControl
     public static readonly DependencyProperty ChatProperty =
         DependencyProperty.Register(nameof(Chat), typeof(ChatViewModel), typeof(ChatPane), new PropertyMetadata(null, OnChatChanged));
 
-    // LibGM's Reactions: EmojiType 1 To 7
+    // The reactions of LibGM are EmojiType 1 to 7.
     private const int ReactionCount = 7;
 
-    // A Picker Button's Corners, Its Hover Tint's And Its Selected Fill's Alike (ReactionButtonStyle In ChatPane.xaml)
+    // A picker button, its hover tint and its selected fill share these corners. See ReactionButtonStyle in the XAML.
     private const double ReactionCorner = 8;
 
-    // More Reactions: Its Button's Size, And The Emoji Picker's Columns And Scrolling Height
     private const double MoreReactionsSize = 40;
     private const int EmojiPickerColumns   = 8;
     private const double EmojiPickerHeight = 280;
     private const double EmojiCellSize     = 44;
 
-    // The Message Box's Corners (Windows' Control Corner Radius) And The Compose Area's Padding
+    // The corners of the message box match the control corner radius of Windows.
     private const double DraftCorner  = 4;
     private const double ComposeInset = 12;
     private const double ComposeTop   = 8;
 
-    // A Disabled Icon That Keeps Its Own Color Shows At This Opacity
+    // An icon that keeps its own color shows at this opacity while its button is disabled.
     private const double DisabledOpacity = 0.4;
 
-    // A Photo Chip's Side, In Effective Pixels
+    // The side of a photo chip, in effective pixels.
     private const int ChipSide = 64;
 
-    // The Recording Preview's Name In The Voice Player
+    // The name of the recording preview in the voice player.
     private const string PreviewKey = "Chat.VoicePreview";
 
-    // How Often The Recording's Time And Level Update
     private static readonly TimeSpan RecordTick = TimeSpan.FromMilliseconds(50);
 
-    // The Photo Picker's Types (The Spec's Photos) With Their Mime Types: Windows Doesn't Always Know Them (A PC Whose
-    // Registry Has No Content Type For .png Reports None)
+    // The photo types of the spec, with their MIME types. Windows does not always know them. A PC whose registry has
+    // no content type for .png reports none.
     private static readonly Dictionary<string, string> PhotoMimes = new(StringComparer.OrdinalIgnoreCase)
     {
         [".jpg"]  = "image/jpeg",
@@ -120,8 +115,8 @@ public sealed partial class ChatPane : UserControl
     };
     private static readonly string[] AnyType = ["*"];
 
-    // Videos And Audio By Their Type, For A PC Whose Registry Has No Content Type For Them: The Phone Then Shows A Video As A
-    // Video (MediaFormatsMap Falls Back On The Part Before The Slash)
+    // Video and audio types for a PC whose registry has no content type for them. With these, the phone shows a video
+    // as a video. MediaFormatsMap falls back on the part before the slash.
     private static readonly Dictionary<string, string> MediaMimes = new(StringComparer.OrdinalIgnoreCase)
     {
         [".mp4"]  = "video/mp4",
@@ -140,8 +135,8 @@ public sealed partial class ChatPane : UserControl
         [".wav"]  = "audio/wav",
     };
 
-    // A Picture Pasted In Its Own Clipboard Format (Before The Plain Bitmap), With The Mime Type And Name It Sends As: A GIF
-    // Keeps Its Frames, A PNG Its Transparency
+    // A pasted picture in its own clipboard format, with the MIME type and the name that it sends as. The paste checks
+    // these formats before the plain bitmap. Thus a GIF keeps its frames and a PNG keeps its transparency.
     private static readonly (string Format, string Mime, string Name)[] PastedPictures =
     [
         ("GIF", "image/gif", "image.gif"),
@@ -150,59 +145,61 @@ public sealed partial class ChatPane : UserControl
         ("image/png", "image/png", "image.png"),
     ];
 
-    // A Pasted Bitmap (A Screenshot, A Browser's Copy Image) Is Sent As A PNG Under This Name, A Web GIF (The Emoji Panel's)
-    // As A GIF Under This One
+    // A pasted bitmap such as a screenshot sends as a PNG with this name. A web GIF from the emoji panel sends as a GIF
+    // with the second name.
     private const string PastedBitmapName = "image.png";
     private const string PastedGifName    = "image.gif";
 
-    // Typing Dots: Each Rises This Far And Back Within Its Beat (See TypingCycle)
+    // Each typing dot rises this far and back within its beat.
     private const float TypingRise = 4;
 
-    // Another Chat Fades In Over WinUI's Faster Control Animation Time: The Normal 250 ms Made Switching Feel Slow
+    // A chat switch fades in over the faster control animation time of WinUI. The normal 250 ms felt slow.
     private static readonly TimeSpan ChatFadeIn = TimeSpan.FromMilliseconds(83);
 
-    // Typing Dots: Each Rises (TypingRise) Within Its Beat, The Next Starting This Much Later, Every Cycle
+    // Each typing dot rises within its beat of every cycle. The next dot starts its beat after the stagger.
     private static readonly TimeSpan TypingCycle   = TimeSpan.FromMilliseconds(1200);
     private static readonly TimeSpan TypingStagger = TimeSpan.FromMilliseconds(150);
 
-    // Windows' Own Focus Visual: A 2 px Outer Ring And A 1 px Inner One, Put Back On A Focused Row In High Contrast
+    // The focus visual of Windows has a 2 px outer ring and a 1 px inner ring. High contrast puts it back on a
+    // focused row.
     private static readonly Thickness SystemFocusPrimary   = new(2);
     private static readonly Thickness SystemFocusSecondary = new(1);
 
-    // Reads The Windows Animation Setting Live (Settings > Accessibility > Visual Effects)
+    // Reads the animation setting of Windows live: Settings > Accessibility > Visual effects.
     private static readonly UISettings Ui = new();
 
-    // Reads Whether High Contrast Is On (Settings > Accessibility > Contrast Themes)
+    // Reads the high contrast state: Settings > Accessibility > Contrast themes.
     private static readonly AccessibilitySettings Access = new();
 
     private ScrollViewer? _scroller;
 
-    // The List's Bottom Fade (Behind The Message Box), And How Much Of The List The Typing Bubble, The Chips And The
-    // Message Box Cover
+    // The bottom fade of the list behind the message box. The height is how much of the list the typing bubble, the
+    // chips and the message box cover.
     private ScrollFade? _fade;
     private double _composerHeight = -1;
 
-    // The Rows' Panel Hands Focus Scrolls To OnBubbleBringIntoView (Hooked Once), Which Keeps A Shown Bubble This Far
-    // From The View's Edge
+    // OnBubbleBringIntoView keeps a bubble that takes focus this far from the edge of the view.
     private const double BringMargin = 8;
     private bool _bringHooked;
 
-    // Pinned To The Newest Message (See ChatScroll.StaysPinned), And The Content And View Heights Last Seen
+    // True while the list stays at the newest message. See ChatScroll.StaysPinned.
     private bool _pinned = true;
 
-    // The Opened Chat Whose First Drawn Bubbles Are Still To Be Logged, Or Null
+    // The opened chat whose first drawn bubbles the log still waits for, or null.
     private ChatViewModel? _firstDrawFor;
+
+    // The content and view heights that the list last had.
     private double _lastExtent;
     private double _lastViewport;
 
-    // The Bubble The Reaction Picker Is Open For, Its View (Whose Hover Strip Stays While The Picker Is Open), And What
-    // The Picker Opened Over
+    // The bubble that the reaction picker is open for, and its view. The hover strip of the view stays while the picker
+    // is open. The anchor is the element that the picker opened over.
     private MessageBubbleViewModel? _reactTarget;
     private MessageBubble? _reactView;
     private FrameworkElement? _reactAnchor;
 
-    // The Emoji Picker (Made On First Use), Its Search Box, Its Rows (Virtualized: Only Those In View Are Made), Its Empty
-    // Note, The Bubble It Picks A Reaction For, And How Many Times It Has Opened (For The Timing Log)
+    // The emoji picker, which the pane makes on first use. Its rows are virtualized, so it makes only the rows in view.
+    // The pane counts the opens for the timing log.
     private Flyout? _emojiPicker;
     private TextBox? _emojiSearch;
     private Muxc.ItemsRepeater? _emojiRows;
@@ -212,29 +209,32 @@ public sealed partial class ChatPane : UserControl
     private MessageBubbleViewModel? _emojiTarget;
     private int _emojiOpens;
 
-    // More Reactions Picked: What The Emoji Picker Opens For Once The Reaction Picker Has Closed
+    // The bubble that More reactions picked. The emoji picker opens for it after the reaction picker closes.
     private (MessageBubbleViewModel Bubble, MessageBubble View, FrameworkElement Anchor)? _emojiPending;
 
-    // The Bubble The Bubble Menu Or Preview Card Menu Last Opened On (Its Items Act On It); Let Go On A Chat Switch
+    // The bubble that the bubble menu or the preview card menu last opened on. The menu items act on it. A chat switch
+    // clears it.
     private MessageBubble? _menuView;
 
-    // The Picker's Buttons With The Fill Behind Each And Their Emoji, So The One Matching My Reaction Can Show Selected
+    // The picker buttons with the fill behind each button and its emoji. The button that matches my reaction shows
+    // selected.
     private readonly List<(Button Button, Border Back, string Emoji)> _reactionButtons = [];
 
-    // On The Way To The Newest Message (See ScrollToNewest)
+    // True while the list scrolls to the newest message. See ScrollToNewest.
     private bool _toNewest;
 
-    // The Next Chat Opens From The List's Arrow Keys: The Focus Stays On The List (See KeepFocusOnNextOpen)
+    // True when the arrow keys of the list open the next chat. The focus then stays on the list.
     private bool _keepFocus;
 
-    // A File Picker Is Open (Or Its Files Are Being Added): Another Ask Waits For It To Finish
+    // True while a file picker is open or the pane adds its files. Another request waits until it ends.
     private bool _picking;
 
-    // Plays The Chat's Voice Messages, One At A Time; Made On The First Play, Let Go On A Chat Switch Or Unload
+    // Plays the voice messages of the chat, one at a time. The first play makes it. A chat switch or an unload
+    // releases it.
     private VoicePlayer? _voice;
 
-    // Recording: The Recorder And Its File While One Runs, And The Timer That Shows Its Time And Level. The Time Is
-    // What Was Recorded Before The Last Pause, Plus The Run Since It Started Or Resumed
+    // The recorder and its file while a recording runs, and the timer that shows its time and level. The time is the
+    // length before the last pause, plus the run since the start or the resume.
     private VoiceRecorder? _recorder;
     private ChatViewModel? _recordChat;
     private string _recordPath = string.Empty;
@@ -249,11 +249,12 @@ public sealed partial class ChatPane : UserControl
     {
         InitializeComponent();
 
-        // Scroll To Bottom Floats Over The Bubbles With Its Shadow. Set Here: XAML Can't Set Translation On A Custom Button
-        ScrollToBottomButton.Translation = new System.Numerics.Vector3(0, 0, 16);
+        // The scroll-to-bottom button floats over the bubbles with its shadow. XAML cannot set Translation on a custom
+        // button, so the code sets it.
+        ScrollToBottomButton.Translation = new Vector3(0, 0, 16);
 
-        // Reaction Picker: One Button Per Reaction In Enum Order, Labeled With Its Emoji (Styled By The Panel), Over A Fill
-        // That Shows My Reaction Selected; Love Shows Google's Red Heart Instead Of Heart Eyes
+        // The reaction picker has a button per reaction in enum order, over a fill that shows my reaction selected. The
+        // panel styles the buttons. Love shows the red heart of Google instead of heart eyes.
         for (int i = 1; i <= ReactionCount; i++)
         {
             EmojiType type = (EmojiType)i == EmojiType.Love ? EmojiType.RedHeart : (EmojiType)i;
@@ -266,7 +267,7 @@ public sealed partial class ChatPane : UserControl
             _reactionButtons.Add((button, back, emoji));
         }
 
-        // More Reactions: Any Emoji, From The App's Emoji Picker
+        // More reactions opens the emoji picker of the app, which offers any emoji.
         var more = new Button
         {
             Width   = MoreReactionsSize,
@@ -279,7 +280,7 @@ public sealed partial class ChatPane : UserControl
         more.Click += (_, _) => OnMoreReactionsClick();
         ReactionButtons.Children.Add(more);
 
-        // The Bubble Menu Closed: Its Bubble's Hover Strip Hides Unless The Pointer Is On It
+        // When the bubble menu closes, the hover strip of its bubble hides unless the pointer is on it.
         BubbleMenu.Closed += (_, _) => _menuView?.KeepShown(false);
 
         ReactionPicker.Closed += (_, _) =>
@@ -287,7 +288,7 @@ public sealed partial class ChatPane : UserControl
             _reactView?.KeepShown(false);
             _reactView = null;
 
-            // More Reactions Was Picked: The Emoji Picker Opens Now (See OnMoreReactionsClick)
+            // When More reactions closed the picker, the emoji picker opens now. See OnMoreReactionsClick.
             if (_emojiPending is { } pending)
             {
                 _emojiPending = null;
@@ -295,14 +296,14 @@ public sealed partial class ChatPane : UserControl
             }
         };
 
-        // The Message Box's Right-Click Menu; Its Paste Takes A Copied Picture Or File Too
+        // The Paste of the right-click menu of the message box also takes a copied picture or file.
         TextMenu.Attach(DraftBox, PasteMediaFromMenu);
 
-        // Typing Dots Bounce Only While Their Bubble Shows, And Follow Windows' Animation Setting As It Changes (Raised Off The
-        // UI Thread)
+        // The typing dots bounce only while their bubble shows.
         TypingBubble.RegisterPropertyChangedCallback(VisibilityProperty, (_, _) => AnimateTypingDots(TypingBubble.Visibility == Visibility.Visible));
 
-        // The Static Settings' Events Hold The Pane Only While It Is Loaded, So A Closed Window's Pane Isn't Kept Alive
+        // The events of the static settings hold the pane only while it is loaded. Thus they do not keep the pane of a
+        // closed window alive.
         Loaded += (_, _) =>
         {
             Ui.AnimationsEnabledChanged -= OnAnimationsEnabledChanged;
@@ -318,10 +319,9 @@ public sealed partial class ChatPane : UserControl
             DropRecorder();
         };
 
-        // A Recycled Row Starts Below Its Neighbors Again (A Focused Row Was Raised For Its Ring), And Lets Go Of Its Media
         MessageList.ContainerContentChanging += OnMessageContainerChanging;
 
-        // Recording: The Time And The Input Level, 20 Times A Second, Over A Live Waveform As Wide As The Bar Allows
+        // The recording bar shows the time and the input level 20 times a second. The live waveform fills the bar.
         RecordBars.FillsWidth = true;
         _recordTimer          = XamlHost.Dispatcher.CreateTimer();
         _recordTimer.Interval = RecordTick;
@@ -334,49 +334,50 @@ public sealed partial class ChatPane : UserControl
     /// Exposes the pane to UI Automation as <c>Chat.Pane</c>.
     /// </summary>
     /// <remarks>
-    /// A user control has no automation peer of its own, so the pane's bounds (the chat card's, inside its 1 px border)
-    /// couldn't be read; the layout tests line the conversation list up against them.
+    /// A user control has no automation peer of its own. Thus UI Automation could not read the bounds of the pane. The
+    /// bounds are those of the chat card inside its 1 px border. The layout tests align the conversation list with
+    /// them.
     /// </remarks>
-    /// <returns>The pane's peer.</returns>
+    /// <returns>The peer of the pane.</returns>
     protected override AutomationPeer OnCreateAutomationPeer() => new FrameworkElementAutomationPeer(this);
 
-    /// <summary>Gets the reply chip's close button name.</summary>
+    /// <summary>Gets the name of the close button of the reply chip.</summary>
     public static string CancelReplyText => ChatCopy.CancelReply;
 
-    /// <summary>Gets the ＋ button's tooltip and name.</summary>
+    /// <summary>Gets the tooltip and name of the attach button.</summary>
     public static string AttachText => ChatCopy.Attach;
 
-    /// <summary>Gets a chip's remove button tooltip and name.</summary>
+    /// <summary>Gets the tooltip and name of the remove button of a chip.</summary>
     public static string RemoveAttachmentText => ChatCopy.RemoveAttachment;
 
-    /// <summary>Gets the header ⋮'s tooltip and name.</summary>
+    /// <summary>Gets the tooltip and name of the ⋮ of the header.</summary>
     public static string MoreOptionsText => ChatCopy.MoreOptions;
 
-    /// <summary>Gets the header mute button's tooltip and name: what a click does.</summary>
-    /// <param name="isMuted">Whether the chat is muted.</param>
+    /// <summary>Gets the tooltip and name of the mute button of the header, which tell what a click does.</summary>
+    /// <param name="isMuted">True while the chat is muted.</param>
     /// <returns>Unmute while muted, else Mute.</returns>
     public static string MuteText(bool isMuted) => isMuted ? ChatCopy.Unmute : ChatCopy.Mute;
 
-    /// <summary>Gets the header mute button's icon: the chat's state, as the ⋮ menu's icons.</summary>
-    /// <param name="isMuted">Whether the chat is muted.</param>
+    /// <summary>Gets the icon of the mute button. It shows the state of the chat as the ⋮ menu does.</summary>
+    /// <param name="isMuted">True while the chat is muted.</param>
     /// <returns>The crossed-out bell while muted, else the bell.</returns>
     public static string MuteGlyph(bool isMuted) => isMuted ? "" : "";
 
-    /// <summary>Raised when the header's mute button is clicked; the chats mute or unmute the open chat.</summary>
+    /// <summary>Occurs on a click of the mute button. The chats then mute or unmute the open chat.</summary>
     public event EventHandler? MuteRequested;
 
-    /// <summary>Gets the mic button's tooltip and name.</summary>
+    /// <summary>Gets the tooltip and name of the mic button.</summary>
     public static string RecordText => ChatCopy.RecordVoiceMessage;
 
-    /// <summary>Gets the recording's Done tooltip and name.</summary>
+    /// <summary>Gets the tooltip and name of the Done button of the recording.</summary>
     public static string DoneText => ChatCopy.Done;
 
-    /// <summary>Gets the recording's Cancel recording tooltip and name.</summary>
+    /// <summary>Gets the tooltip and name of the Cancel recording button.</summary>
     public static string CancelRecordingText => ChatCopy.CancelRecording;
 
     /// <summary>
-    /// Raised when the header's ⋮ is clicked or the header is right-clicked (or gets the Application key or Shift + F10);
-    /// the chats show the conversation's menu at the target, at the point when there is one.
+    /// Occurs on a click of the header ⋮ or a right-click on the header. The Application key and Shift + F10 there also
+    /// raise it. The chats show the menu of the conversation at the target, and at the point when there is one.
     /// </summary>
     public event EventHandler<(FrameworkElement Target, Windows.Foundation.Point? Position)>? MenuRequested;
 
@@ -388,25 +389,25 @@ public sealed partial class ChatPane : UserControl
     }
 
     /// <summary>
-    /// Puts the cursor in the message box (the "r" shortcut).
+    /// Puts the cursor in the message box for the "r" shortcut.
     /// </summary>
-    /// <returns>True when the box took focus (false while no chat shows).</returns>
+    /// <returns>True when the box took focus. False while no chat shows.</returns>
     public bool FocusDraft() => DraftBox.Focus(FocusState.Keyboard);
 
     /// <summary>
-    /// Moves focus to the message bubbles (the Ctrl + j shortcut).
+    /// Moves focus to the message bubbles for the Ctrl + j shortcut.
     /// </summary>
-    /// <returns>True when the list took focus (false while no chat shows).</returns>
+    /// <returns>True when the list took focus. False while no chat shows.</returns>
     public bool FocusMessages() => MessageList.Focus(FocusState.Keyboard);
 
     /// <summary>
-    /// Opens the reaction picker over the bubble whose row has focus (the Shift + + shortcut).
+    /// Opens the reaction picker over the bubble whose row has focus, for the Shift + + shortcut.
     /// </summary>
     /// <returns>True when a bubble row had focus.</returns>
     public bool OpenReactionsForFocused() => FocusedBubbleView() is { } view && OpenReactionPicker(view, view.Anchor);
 
     /// <summary>
-    /// Starts a reply to the bubble whose row has focus and moves to the message box (the Ctrl + Enter shortcut).
+    /// Starts a reply to the bubble whose row has focus and moves to the message box. Ctrl + Enter calls it.
     /// </summary>
     /// <returns>True when a bubble row had focus.</returns>
     public bool ReplyToFocused()
@@ -421,16 +422,16 @@ public sealed partial class ChatPane : UserControl
     }
 
     /// <summary>
-    /// Opens (or, pressed again, closes) the Windows emoji panel on the message box: the emoji button and the
-    /// Ctrl + Shift + e shortcut.
+    /// Opens the Windows emoji panel on the message box, or closes it on a second press. The emoji button and the
+    /// Ctrl + Shift + e shortcut call this method.
     /// </summary>
     /// <remarks>
-    /// The panel types into whatever has focus, so the message box is focused first. It is opened with the Win +
-    /// Period shortcut: <c>CoreInputView.GetForCurrentView().TryShow(Emoji)</c> needs a CoreWindow, which a WinUI 3
-    /// desktop window doesn't have, and showed nothing when tried. The shortcut waits a turn: sent before the box has
-    /// taken focus, Windows ignores it.
+    /// The panel types into the element that has focus, so the method focuses the message box first. The method sends
+    /// the Win + Period shortcut. <c>CoreInputView.GetForCurrentView().TryShow(Emoji)</c> needs a CoreWindow, which a
+    /// desktop window does not have, and it showed nothing in a test. The shortcut waits 1 dispatcher turn, because
+    /// Windows ignores it before the box has focus.
     /// </remarks>
-    /// <returns>True when the panel was asked for (false while no chat shows).</returns>
+    /// <returns>True when the method sent the request. False while no chat shows.</returns>
     public bool ToggleEmojiPanel()
     {
         if (Chat is null || !DraftBox.Focus(FocusState.Programmatic))
@@ -442,16 +443,17 @@ public sealed partial class ChatPane : UserControl
     }
 
     /// <summary>
-    /// Opens the file picker over this window and adds what is picked as chips (the ＋ button, Ctrl + Shift + a and
-    /// Ctrl + Shift + p).
+    /// Opens the file picker over this window and adds the picked files as chips. The attach button,
+    /// Ctrl + Shift + a and Ctrl + Shift + p call this method.
     /// </summary>
     /// <remarks>
-    /// Several files may be picked. Each one's size is checked, and none is read until Send: a file over 100 MB, or one
-    /// taking the chips past 200 MB, is refused with a note. Only one picker opens at a time. Under the test hooks the
-    /// picked files come from the test (see <see cref="TestHooks.PickFiles"/>) and no picker opens.
+    /// The user can pick several files. The method checks the size of each file, and Send reads the files. The method
+    /// refuses a file over 100 MB with a note. It also refuses a file that takes the chips past 200 MB. Only 1 picker
+    /// opens at a time.
+    /// Under the test hooks, the test gives the files through <see cref="TestHooks.PickFiles"/> and no picker opens.
     /// </remarks>
-    /// <param name="photos">True for the photo picker (the spec's photo types only).</param>
-    /// <returns>True when the picker was asked for (false while no chat shows or a picker is already open).</returns>
+    /// <param name="photos">True for the photo picker, which offers only the photo types of the spec.</param>
+    /// <returns>True when the picker opened. False while no chat shows or a picker is already open.</returns>
     public bool OpenAttachPicker(bool photos)
     {
         if (Chat is not { } chat || _picking)
@@ -469,19 +471,20 @@ public sealed partial class ChatPane : UserControl
     // =========================================================================
 
     /// <summary>
-    /// Gives a chip part's AutomationId: the prefix and the chip's number.
+    /// Gets the AutomationId of a chip part: the prefix and the number of the chip.
     /// </summary>
     /// <param name="prefix">The prefix, such as <c>Chat.Attachment.</c>.</param>
-    /// <param name="id">The chip's number.</param>
+    /// <param name="id">The number of the chip.</param>
     /// <returns>The AutomationId.</returns>
     public static string ChipIdOf(string prefix, int id) => prefix + id.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
     /// <summary>
-    /// Gives a photo chip its picture, decoded small straight from the file (never read whole), and a video chip its
-    /// thumbnail when Windows had one; the image fills in once decoded. A file chip gets none.
+    /// Gets the image of a chip. A photo chip decodes its picture small from the file and never reads it whole. A video
+    /// chip shows the thumbnail of Windows when there is one, and a file chip shows none.
     /// </summary>
-    /// <param name="open">Opens the picked file (<see cref="PendingAttachment.Open"/>).</param>
-    /// <param name="thumbnail">Opens the file's thumbnail (<see cref="PendingAttachment.Thumbnail"/>), or null.</param>
+    /// <remarks>The image fills in when the decode ends.</remarks>
+    /// <param name="open">Opens the picked file. See <see cref="PendingAttachment.Open"/>.</param>
+    /// <param name="thumbnail">Opens the thumbnail, or null. See <see cref="PendingAttachment.Thumbnail"/>.</param>
     /// <param name="isPhoto">True for a photo.</param>
     /// <returns>The image, or null for a file without a thumbnail.</returns>
     public static ImageSource? ChipImage(Func<Task<Stream>> open, Func<Task<Stream>>? thumbnail, bool isPhoto)
@@ -498,9 +501,9 @@ public sealed partial class ChatPane : UserControl
     }
 
     /// <summary>
-    /// Gives a chip without a picture its icon: a video's, an audio file's, or a document's.
+    /// Gets the icon of a chip without a picture: the icon of a video, an audio file or a document.
     /// </summary>
-    /// <param name="kind">What the attachment sends as.</param>
+    /// <param name="kind">The kind that the attachment sends as.</param>
     /// <returns>The Segoe Fluent Icons glyph.</returns>
     public static string ChipGlyph(MessageKind kind) => kind switch
     {
@@ -510,7 +513,7 @@ public sealed partial class ChatPane : UserControl
     };
 
     /// <summary>
-    /// Shows the chip strip while a recording waits in the preview chip or any attachment does.
+    /// Shows the chip strip while a recording waits in the preview chip or an attachment waits.
     /// </summary>
     /// <param name="hasAttachments">True while attachments wait.</param>
     /// <param name="isPreview">True while a recording waits.</param>
@@ -526,10 +529,10 @@ public sealed partial class ChatPane : UserControl
     public static Visibility Not(bool value) => value ? Visibility.Collapsed : Visibility.Visible;
 
     /// <summary>
-    /// Gives the compose area's padding: none on top while the reply chip or the attachment chips sit over the message
-    /// box, so the box meets them.
+    /// Gets the padding of the compose area. The top padding is 0 while chips sit over the message box, so the box
+    /// meets them.
     /// </summary>
-    /// <param name="isReplying">True while a reply is being written.</param>
+    /// <param name="isReplying">True while the user writes a reply.</param>
     /// <param name="hasAttachments">True while attachments wait.</param>
     /// <param name="isPreview">True while a recording waits.</param>
     /// <returns>The padding.</returns>
@@ -537,10 +540,10 @@ public sealed partial class ChatPane : UserControl
         new(ComposeInset, isReplying || hasAttachments || isPreview ? 0 : ComposeTop, ComposeInset, ComposeInset);
 
     /// <summary>
-    /// Gives the message box's corners: square on top while the reply chip or the attachment chips sit over it, so they
-    /// and the box read as one control.
+    /// Gets the corners of the message box. The top corners are square while chips sit over the box. Thus the chips
+    /// and the box look like 1 control.
     /// </summary>
-    /// <param name="isReplying">True while a reply is being written.</param>
+    /// <param name="isReplying">True while the user writes a reply.</param>
     /// <param name="hasAttachments">True while attachments wait.</param>
     /// <param name="isPreview">True while a recording waits.</param>
     /// <returns>The corners.</returns>
@@ -548,41 +551,40 @@ public sealed partial class ChatPane : UserControl
         isReplying || hasAttachments || isPreview ? new CornerRadius(0, 0, DraftCorner, DraftCorner) : new CornerRadius(DraftCorner);
 
     /// <summary>
-    /// Gives the attachment chips' strip its margin: joined under the reply chip while replying, else with the compose
-    /// area's gap above it.
+    /// Gets the margin of the strip of attachment chips. While a reply waits, the strip joins the bottom of the reply
+    /// chip. Otherwise the gap of the compose area sits above it.
     /// </summary>
-    /// <param name="isReplying">True while a reply is being written.</param>
+    /// <param name="isReplying">True while the user writes a reply.</param>
     /// <returns>The margin.</returns>
     public static Thickness StripMargin(bool isReplying) => new(ComposeInset, isReplying ? 0 : ComposeTop, ComposeInset, 0);
 
     /// <summary>
-    /// Gives the attachment chips' strip its corners: square under the reply chip, else rounded on top like the reply chip.
+    /// Gets the corners of the strip of attachment chips. They are square under the reply chip, else rounded on top.
     /// </summary>
-    /// <param name="isReplying">True while a reply is being written.</param>
+    /// <param name="isReplying">True while the user writes a reply.</param>
     /// <returns>The corners.</returns>
     public static CornerRadius StripCorners(bool isReplying) =>
         isReplying ? new CornerRadius(0) : new CornerRadius(DraftCorner, DraftCorner, 0, 0);
 
     /// <summary>
-    /// Dims an icon that keeps its own color (send's accent) while its button is disabled, as the icon buttons did before
-    /// they took the shared icon button style.
+    /// Dims an icon that keeps its own color while its button is disabled, such as the accent icon of Send.
     /// </summary>
     /// <param name="isEnabled">True while the button is enabled.</param>
-    /// <returns>The icon's opacity.</returns>
+    /// <returns>The opacity of the icon.</returns>
     public static double EnabledOpacity(bool isEnabled) => isEnabled ? 1 : DisabledOpacity;
 
     // =========================================================================
     // EVENT HANDLERS
     // =========================================================================
 
-    // Windows' Animation Setting Changed (Raised Off The UI Thread): The Typing Dots Follow It
+    // Windows raises this event off the UI thread. The typing dots follow the animation setting as it changes.
     private void OnAnimationsEnabledChanged(UISettings sender, UISettingsAnimationsEnabledChangedEventArgs args) =>
         XamlHost.Dispatcher.TryEnqueue(() => AnimateTypingDots(TypingBubble.Visibility == Visibility.Visible));
 
-    // High Contrast Turned On Or Off: The Focused Row Swaps Between Its Bubble's Ring And The System Visual. Windows
-    // Changes Its Colors Then (Raised Off The UI Thread); AccessibilitySettings.HighContrastChanged Can't Be Used, As
-    // Subscribing To It Crashes A Desktop App's Window. The High-Contrast Flag Can Lag The Colors, So It Is Checked Once
-    // More On A Low-Priority Pass
+    // When high contrast turns on or off, the focused row swaps between its bubble ring and the system visual.
+    // Windows changes its colors then and raises this event off the UI thread. The app cannot use
+    // AccessibilitySettings.HighContrastChanged, because a subscription crashes the window of a desktop app. The high
+    // contrast flag can lag the colors, so a low-priority pass checks it again.
     private void OnColorValuesChanged(UISettings sender, object args) =>
         XamlHost.Dispatcher.TryEnqueue(() =>
         {
@@ -590,7 +592,6 @@ public sealed partial class ChatPane : UserControl
             XamlHost.Dispatcher.TryEnqueue(DispatcherQueuePriority.Low, RecheckFocusRing);
         });
 
-    // The Focused Row's Ring Or System Visual, For The Current High-Contrast Setting
     private void RecheckFocusRing()
     {
         if (XamlRoot is { } root && FocusManager.GetFocusedElement(root) is { } focused)
@@ -599,9 +600,9 @@ public sealed partial class ChatPane : UserControl
         }
     }
 
-    // A Row Leaves The List Or Gets A Message. Leaving (The Recycle Queue): It Starts Below Its Neighbors Again (A Focused
-    // Row Was Raised For Its Ring) And Lets Go Of Its Media. Getting One: Its Media Loads In Phase 1, Once x:Bind Has
-    // Given It The Message (A Row Given The Same Message Back Gets No Bubble Change, So Its Released Media Loads Here)
+    // A row in the recycle queue goes back below its neighbors, because a focused row rises for its ring. It also
+    // releases its media. A row that gets a message loads its media in phase 1, after x:Bind gives it the message. A
+    // row that gets the same message back sees no bubble change, so its released media loads here.
     private static void OnMessageContainerChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
     {
         Canvas.SetZIndex(args.ItemContainer, 0);
@@ -622,7 +623,7 @@ public sealed partial class ChatPane : UserControl
     private static void OnMessageContainerPhase(ListViewBase sender, ContainerContentChangingEventArgs args) =>
         (args.ItemContainer.ContentTemplateRoot as MessageBubble)?.LoadMedia();
 
-    // Another Chat Opened: Show Its Bubbles And Follow Their Changes
+    // Shows the bubbles of the new chat and follows their changes.
     private static void OnChatChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         var pane = (ChatPane)d;
@@ -649,8 +650,8 @@ public sealed partial class ChatPane : UserControl
         pane._pinned       = true;
         pane._toNewest     = false;
 
-        // The Last Chat's Content Height Means Nothing Here: Unset, The First Look Counts As A Content Change, Not As The
-        // Person Scrolling (Two Chats Of The Same Height Would Otherwise Unpin On The Offset Reset To The Top)
+        // The content height of the last chat means nothing here. With no height, the first look counts as a content
+        // change, not as a scroll. Otherwise 2 chats of the same height unpin when the offset resets to the top.
         pane._lastExtent   = -1;
         pane._lastViewport = -1;
         pane._reactTarget  = null;
@@ -662,13 +663,13 @@ public sealed partial class ChatPane : UserControl
             pane._firstDrawFor               = chat;
             pane.LogFirstDraw();
 
-            // The Chat Is On Screen, So Its Toasts Are Read
+            // The chat is on screen, so its toasts count as read.
             (Application.Current as App)?.Notifications?.RemoveConversation(chat.ConversationId);
 
-            // Ready To Type: The Message Box Takes Focus Once The Pane Shows (A Turn Later; A Hidden Box Can't Take It). This
-            // Is Focus Inside The Window Only: It Never Activates The Window Or Takes The Foreground, So A Window Opened In The
-            // Background Stays There, And Shows The Cursor In The Box Once The Person Brings It Up. Browsing The List With
-            // The Arrow Keys Opens Each Chat But Keeps The Focus On The List
+            // The message box takes focus 1 dispatcher turn later, when the pane shows. A hidden box cannot take focus.
+            // This focus stays inside the window: it never activates the window or takes the foreground. Thus a window
+            // that opened in the background stays there. When the user activates the window, the cursor shows in the
+            // box. The arrow keys of the list open each chat but keep the focus on the list.
             bool keepFocus = pane._keepFocus;
             XamlHost.Dispatcher.TryEnqueue(DispatcherQueuePriority.Low, () =>
             {
@@ -682,8 +683,9 @@ public sealed partial class ChatPane : UserControl
         pane._keepFocus = false;
     }
 
-    // The Frame That Draws The Opened Chat's First Bubbles: They Fade In From There, And The Open-Timing Log Takes Its Last
-    // Step (Once Per Chat, Milliseconds And Counts Only). Called On Open And On Each Change Of The Bubbles Until Then
+    // Waits for the frame that draws the first bubbles of the opened chat. The bubbles fade in from that frame. The
+    // open-timing log then takes its last step, once per chat, with milliseconds and counts only. The pane calls this
+    // method on open and on each change of the bubbles until that frame.
     private void LogFirstDraw()
     {
         if (_firstDrawFor is not { Messages.Count: > 0 } chat || chat != Chat)
@@ -706,7 +708,8 @@ public sealed partial class ChatPane : UserControl
         Windows.UI.Xaml.Media.CompositionTarget.Rendering += OnRendering;
     }
 
-    // The New Chat's Bubbles Stay Clear Until Their First Frame, So No Frame Shows The Last Chat's Or Them Being Laid Out
+    // The bubbles of the new chat stay clear until their first frame. Thus no frame shows the last chat or the
+    // layout pass.
     private void HideMessages()
     {
         Visual visual = ElementCompositionPreview.GetElementVisual(MessageList);
@@ -714,9 +717,10 @@ public sealed partial class ChatPane : UserControl
         visual.Opacity = 0;
     }
 
-    // Then They Fade In From Clear, Already Pinned To The Newest, Starting With The Frame That Draws Them (The Gray Frame
-    // The Owner Saw Was The List's Scrolling Placeholders, Now Off In The XAML). A Composition Animation, Not The Opacity
-    // Property, So It Starts In That Same Frame. A Chat With No Bubbles Stays Clear Until Its First One Comes
+    // The bubbles fade in from clear, from the frame that draws them. The list is already at the newest message then.
+    // A Composition animation starts in that same frame, but the Opacity property does not. The gray frame that the
+    // owner saw came from the scrolling placeholders of the list. The XAML now turns them off. A chat with no bubbles
+    // stays clear until its first bubble comes.
     private void FadeInMessages()
     {
         Visual visual = ElementCompositionPreview.GetElementVisual(MessageList);
@@ -727,8 +731,8 @@ public sealed partial class ChatPane : UserControl
         visual.StartAnimation(nameof(Visual.Opacity), fade);
     }
 
-    // Starts The Dots' Loop (Each Rises And Falls, Brightening On The Way Up, A Beat After The One Before) Or Stops It And
-    // Puts Them Back At Rest. With Animation Effects Off They Stay Still
+    // Starts the loop of the dots, or stops it and puts the dots back at rest. Each dot rises, falls and brightens on
+    // the way up, 1 beat after the dot before it. With the animation effects off, the dots stay still.
     private void AnimateTypingDots(bool run)
     {
         Ellipse[] dots = [TypingDot1, TypingDot2, TypingDot3];
@@ -773,15 +777,15 @@ public sealed partial class ChatPane : UserControl
     }
 
     /// <summary>
-    /// Leaves the focus where it is when the next chat opens (the conversation list's arrow keys open each chat they pass,
-    /// and the person is still browsing).
+    /// Leaves the focus where it is when the next chat opens.
     /// </summary>
+    /// <remarks>The arrow keys of the conversation list open each chat that they pass.</remarks>
     public void KeepFocusOnNextOpen() => _keepFocus = true;
 
-    // A Bubble Added At The Bottom (Sent, Arrived Or The First Page) Comes Into View; Older Pages Go In Above. The List
-    // Scrolls To Its End Instead Of ScrollIntoView: On This Bottom-Aligned List, ScrollIntoView Made The Panel Realize
-    // Its Rows Again, So Every Bubble Above The New One Replayed Its Entrance (The Whole Chat Seemed To Reload On Send).
-    // Already At The End (The Usual Case), KeepPinned Has Done It And Nothing Moves
+    // A bubble added at the bottom comes into view: a sent or arrived message, or the first page. Older pages go in
+    // above. The list scrolls to its end instead of ScrollIntoView. On this bottom-aligned list, ScrollIntoView made
+    // the panel realize its rows again. Every bubble above the new bubble then replayed its entrance, so the chat
+    // seemed to reload on Send. When the list is already at the end, KeepPinned did the work and nothing moves.
     private void OnMessagesChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         LogFirstDraw();
@@ -792,7 +796,7 @@ public sealed partial class ChatPane : UserControl
             return;
         }
 
-        // After The List Has Measured The New Bubble
+        // This runs after the list measures the new bubble.
         XamlHost.Dispatcher.TryEnqueue(() =>
         {
             MessageList.UpdateLayout();
@@ -803,16 +807,16 @@ public sealed partial class ChatPane : UserControl
         });
     }
 
-    // The Scroller Is Hooked As Soon As The List Has Its Template, So Scrolling Up Loads Older Even Before Any Page Ends
+    // The pane hooks the scroller when the list has its template. Thus a scroll up loads older pages at once.
     private void OnMessageListLoaded(object sender, RoutedEventArgs e)
     {
         _ = Scroller();
         FillWithOlder();
     }
 
-    // The List's Own Scroller Tells When The Top Is Reached. Found On First Need: While The Pane Is Still Collapsed At
-    // Load, The List Has No Template Yet, So There Is No Scroller To Find. The List's Edges Fade Like The Chat List's,
-    // The Bottom Always, Behind The Message Box (Owner)
+    // The scroller of the list tells when the list reaches the top. The pane finds it on first need. While the pane is
+    // still collapsed at load, the list has no template and thus no scroller. The edges of the list fade as in the
+    // conversation list. The owner chose that the bottom always fades, behind the message box.
     private ScrollViewer? Scroller()
     {
         if (_scroller is null && UiHelpers.FindScroller(MessageList) is { } found)
@@ -823,7 +827,8 @@ public sealed partial class ChatPane : UserControl
             PaneGrid.LayoutUpdated    += (_, _) => KeepComposerClear();
         }
 
-        // The Fade Needs The Scroller's Own Template, Which Can Come After The Scroller Itself: Tried Until It Takes
+        // The fade needs the template of the scroller, which can come after the scroller. Each call tries until the
+        // fade attaches.
         if (_scroller is not null && _fade is null && ScrollFade.Attach(_scroller, bottomAlways: true) is { } fade)
         {
             _fade           = fade;
@@ -831,8 +836,8 @@ public sealed partial class ChatPane : UserControl
             KeepComposerClear();
         }
 
-        // Bubbles Brought Into View By Focus (Moving Between Messages With The Keyboard) Scroll Smoothly. Hooked On The
-        // Rows' Panel: The Request Reaches The Scroller Before The List, So It Must Be Taken Below It
+        // A bubble that takes focus from the keyboard scrolls into view smoothly. The request reaches the scroller
+        // before the list. Thus the pane must take it below the scroller, on the panel of the rows.
         if (_scroller is not null && !_bringHooked && MessageList.ItemsPanelRoot is { } panel)
         {
             _bringHooked                  = true;
@@ -842,8 +847,8 @@ public sealed partial class ChatPane : UserControl
         return _scroller;
     }
 
-    // A Bubble Asked To Be Seen (It Took Focus): The Scroller's Own Jump Is Taken Over By The Shared Smooth Scroll, Just
-    // Far Enough To Show The Whole Bubble, 8 px Clear Of The Edge
+    // A bubble that took focus asks to show. The shared smooth scroll replaces the jump of the scroller. It scrolls
+    // only far enough to show the whole bubble, 8 px clear of the edge.
     private void OnBubbleBringIntoView(UIElement sender, BringIntoViewRequestedEventArgs args)
     {
         if (_scroller is not { } scroller || args.TargetElement is null)
@@ -875,7 +880,7 @@ public sealed partial class ChatPane : UserControl
         _ = ScrollSmoothlyAsync(scroller, offset);
     }
 
-    // A Page Finished Loading: Too Short To Scroll Means There Is No Top To Reach, So Load Older Here
+    // When a page load ends and the list is too short to scroll, there is no top to reach. Thus older pages load here.
     private void OnChatPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(ChatViewModel.IsLoading) && sender == Chat && Chat is { IsLoading: false })
@@ -883,8 +888,9 @@ public sealed partial class ChatPane : UserControl
             XamlHost.Dispatcher.TryEnqueue(FillWithOlder);
         }
 
-        // An Older Page Goes In Above: The Last Shown Bubble Holds Its Place While It Does (See The Rows' Panel In The
-        // XAML), And The First Shown One Again Once The List Has Laid The Page Out (Measured Here, Before The Mode Goes Back)
+        // While an older page goes in above, the last shown bubble holds its place. See the panel of the rows in the
+        // XAML. After the list lays out the page, the first shown bubble holds its place again. The pane measures the
+        // page here, before the mode goes back.
         if (e.PropertyName == nameof(ChatViewModel.IsLoadingOlder) && sender == Chat && Chat is { } loading
             && MessageList.ItemsPanelRoot?.As<ItemsStackPanel>() is { } panel)
         {
@@ -896,7 +902,7 @@ public sealed partial class ChatPane : UserControl
             panel.ItemsUpdatingScrollMode = loading.IsLoadingOlder ? ItemsUpdatingScrollMode.KeepLastItemInView : ItemsUpdatingScrollMode.KeepItemsInView;
         }
 
-        // The Recording Moved On: The Preview Chip Shows Its Waveform, And Stops Playing Once Sent Or Removed
+        // When the recording changes state, the preview chip shows its waveform. A send or a remove stops its playback.
         if (e.PropertyName == nameof(ChatViewModel.Voice) && sender == Chat && Chat is { } chat)
         {
             PreviewBars.Show(chat.Voice.Wave?.Peaks);
@@ -908,8 +914,9 @@ public sealed partial class ChatPane : UserControl
         }
     }
 
-    // Each Older Page Ends In Another IsLoading Change, So This Repeats While The List Is Too Short To Scroll Or Still
-    // Near Its Top, Until No Pages Are Left, A Page Adds Nothing Or A Load Fails (See ChatViewModel.CanFillOlder)
+    // Each older page ends in another IsLoading change. Thus this method repeats while the list is too short to scroll
+    // or still near its top. It stops when no pages are left, a page adds nothing or a load fails. See
+    // ChatViewModel.CanFillOlder.
     private void FillWithOlder()
     {
         if (Chat is not { IsLoading: false, CanFillOlder: true } chat)
@@ -917,7 +924,7 @@ public sealed partial class ChatPane : UserControl
             return;
         }
 
-        // Measure The New Bubbles Now, So The Scroll Height Is Current
+        // The layout measures the new bubbles now, so the scroll height is current.
         MessageList.UpdateLayout();
         if (Scroller() is { } scroller && ChatScroll.ShouldLoadOlder(scroller.VerticalOffset, scroller.ScrollableHeight, scroller.ViewportHeight))
         {
@@ -925,8 +932,8 @@ public sealed partial class ChatPane : UserControl
         }
     }
 
-    // Nearing The Top Starts The Older Page (Mid-Scroll Too, So It Is Usually In Before The Top), And The Scroll-To-Bottom
-    // Button Follows How Far Up The List Is. LoadOlderAsync Ignores Calls While A Page Loads
+    // A scroll near the top starts the older page, also during the scroll. Thus the page is usually in before the top.
+    // The scroll-to-bottom button follows the distance from the bottom. LoadOlderAsync ignores calls during a load.
     private void OnScrolled(object? sender, ScrollViewerViewChangedEventArgs e)
     {
         if (_scroller is not { } scroller || Chat is null)
@@ -934,7 +941,8 @@ public sealed partial class ChatPane : UserControl
             return;
         }
 
-        // The Same Content Height Means The Person (Or The Arrow) Moved The List; A New One Is Bubbles Measuring Or A Page
+        // With the same content height, the user or the arrow moved the list. A new height comes from bubbles that
+        // measure or from a page.
         bool contentChanged  = ContentChanged(scroller);
         bool wasPinned       = _pinned;
         _pinned              = ChatScroll.StaysPinned(_pinned, contentChanged, scroller.VerticalOffset, scroller.ScrollableHeight);
@@ -944,8 +952,8 @@ public sealed partial class ChatPane : UserControl
             KeepPinned(scroller);
         }
 
-        // Come To Rest After Scrolling To The Newest Message: Pinned There, And Put Right At It If Rows Measured On The
-        // Way Grew The Content Past Where The Scroll Was Headed
+        // When the scroll to the newest message stops, the list pins there. Rows that measured on the way can grow the
+        // content past the target. KeepPinned then puts the list at the end.
         if (_toNewest && !e.IsIntermediate)
         {
             _toNewest = false;
@@ -953,8 +961,8 @@ public sealed partial class ChatPane : UserControl
             KeepPinned(scroller);
         }
 
-        // Back At The Newest Message After Scrolling Up: The Older Pages Above The Newest 200 Bubbles Go (Scrolling Up
-        // Again Loads Them Back)
+        // When the list comes back to the newest message, the chat drops the older pages above the newest 200 bubbles.
+        // Another scroll up loads them again.
         if (!wasPinned && _pinned)
         {
             Chat.TrimToNewest();
@@ -979,9 +987,9 @@ public sealed partial class ChatPane : UserControl
         }
     }
 
-    // Bubbles Measure Their Real Heights After They Show (The List Only Estimates Them First), So A Just-Opened Chat Would
-    // Stop A Few Pixels Short Of Its Newest Message. While Pinned, Each Change In Content Height
-    // Puts It Back At The Bottom. Scrolling (Same Height) Is Left To OnScrolled
+    // Bubbles measure their real heights after they show, because the list first estimates them. Thus a chat that just
+    // opened can stop a few pixels short of its newest message. While pinned, each change in content height puts the
+    // list back at the bottom. OnScrolled handles a scroll, which keeps the same height.
     private void OnMessageListLayoutUpdated(object? sender, object e)
     {
         if (_scroller is not { } scroller)
@@ -1000,9 +1008,9 @@ public sealed partial class ChatPane : UserControl
         }
     }
 
-    // Enter Or Space On A Focused Bubble Shows Or Hides Its Time, Like A Click (Not On Its Retry Link, Which Has Focus Then).
-    // The Row Is Matched As A ContentControl Holding A Bubble: In The Native AOT Build It Arrives As A ContentControl, Not
-    // A ListViewItem (See UiHelpers.FindScroller)
+    // Enter or Space on a focused bubble shows or hides its time, as a click does. The retry link has its own focus, so
+    // the keys do not reach this method there. The method matches the row as a ContentControl that holds a bubble. In
+    // the Native AOT build the row arrives as a ContentControl, not a ListViewItem. See UiHelpers.FindScroller.
     private void OnMessageListKeyDown(object sender, KeyRoutedEventArgs e)
     {
         if (e.Key is not (VirtualKey.Enter or VirtualKey.Space) || e.OriginalSource is not ContentControl { Content: MessageBubbleViewModel bubble })
@@ -1016,8 +1024,8 @@ public sealed partial class ChatPane : UserControl
 
     private void OnSendClick(object sender, RoutedEventArgs e) => _ = Chat?.SendAsync();
 
-    // The Box Emptied (Sent, Or Cleared): Its Text's Own Scroller Goes Back To The Top. Left Scrolled Down From Lines Since
-    // Gone, It Showed Only The Top Of The Cursor (Owner Report)
+    // When a send or a clear empties the box, the text scroller of the box goes back to the top. The owner reported
+    // that a scroller left down from lines now gone showed only the top of the cursor.
     private void OnDraftTextChanged(object sender, TextChangedEventArgs e)
     {
         if (DraftBox.Text.Length == 0 && UiHelpers.FindPart<ScrollViewer>(DraftBox, "ContentElement") is { } text)
@@ -1026,11 +1034,11 @@ public sealed partial class ChatPane : UserControl
         }
     }
 
-    // Enter Sends; Shift + Enter Is Left To The Box, Which Adds A Line. Ctrl + V Or Shift + Insert With Media On The
-    // Clipboard Pastes It As Chips (The Box Would Ignore A Picture)
+    // Enter sends. The box handles Shift + Enter and adds a line. With media on the clipboard, Ctrl + V or
+    // Shift + Insert pastes the media as chips. The box ignores a picture.
     private void OnDraftKeyDown(object sender, KeyRoutedEventArgs e)
     {
-        // Test Run: Every Paste Is Ours At Once; The Hook's Clipboard Is Built After This Event
+        // In a test run, the pane takes every paste at once. The test hook builds its clipboard after this event.
         if (IsPasteKey(e.Key) && TestHooks.BlockLaunches)
         {
             e.Handled = true;
@@ -1038,14 +1046,14 @@ public sealed partial class ChatPane : UserControl
             return;
         }
 
-        if (IsPasteKey(e.Key) && ClipboardView() is { } view && OwnsPaste(view))
+        if (IsPasteKey(e.Key) && ClipboardView() is { } view && CarriesMedia(view))
         {
             e.Handled = true;
             Paste(view, owned: true);
             return;
         }
 
-        if (e.Key != VirtualKey.Enter || IsShiftDown() || Chat is null)
+        if (e.Key != VirtualKey.Enter || UiHelpers.IsDown(VirtualKey.Shift) || Chat is null)
         {
             return;
         }
@@ -1062,7 +1070,7 @@ public sealed partial class ChatPane : UserControl
         }
     }
 
-    // A Bubble's Play, Pause Or Seek: One Message Plays At A Time
+    // A play, pause or seek of a bubble. Only 1 message plays at a time.
     private void OnVoiceRequested(object? sender, VoiceRequest request)
     {
         _voice ??= new VoicePlayer(XamlHost.Dispatcher);
@@ -1070,7 +1078,7 @@ public sealed partial class ChatPane : UserControl
     }
 
     /// <summary>
-    /// Stops what plays or records: the voice message, the inline video and a recording (the window was hidden).
+    /// Stops the voice message, the inline video and a recording. The window calls this method when it hides.
     /// </summary>
     internal void StopMedia()
     {
@@ -1079,14 +1087,13 @@ public sealed partial class ChatPane : UserControl
         DropRecorder();
     }
 
-    // Stops The Playing Voice Message And Lets Go Of The Player
     private void StopVoice()
     {
         _voice?.Dispose();
         _voice = null;
     }
 
-    // A Bubble's Menu's React Or Its Hover Strip's React: The Picker Opens Over The Element Given
+    // The React item of the bubble menu or the React button of the hover strip. The picker opens over the anchor.
     private void OnReactRequested(object? sender, FrameworkElement anchor)
     {
         if (sender is MessageBubble view)
@@ -1095,7 +1102,6 @@ public sealed partial class ChatPane : UserControl
         }
     }
 
-    // A Bubble Menu's Reply Or Its Hover Strip's Reply
     private void OnReplyRequested(object? sender, EventArgs e)
     {
         if (sender is MessageBubble { Bubble: { } bubble })
@@ -1104,9 +1110,10 @@ public sealed partial class ChatPane : UserControl
         }
     }
 
-    // A Reply Quote's Click, Enter Or Space: Scroll To The Quoted Message (Paging Older Until It Shows, Up To A Cap), With
-    // No Pulse (Owner, Plan 10). Not Found, Or The Chat Changed Meanwhile: Nothing Happens. Async Void Like A Click Handler, So A Failure
-    // Reaches The App's Unhandled Error Log
+    // A click, Enter or Space on a reply quote scrolls to the quoted message. The chat loads older pages until the
+    // message shows, up to a cap. The owner chose no pulse in Plan 10. When the chat does not find the message or the
+    // chat changes meanwhile, nothing happens. The method is async void as a click handler is. Thus a failure reaches
+    // the unhandled error log of the app.
     private async void OnQuoteRequested(object? sender, EventArgs e)
     {
         if (sender is not MessageBubble { Bubble.ReplyToId: { Length: > 0 } id } || Chat is not { } chat)
@@ -1120,11 +1127,11 @@ public sealed partial class ChatPane : UserControl
             return;
         }
 
-        // Off The Newest Messages: Nothing Pins The View Back Down
+        // The view leaves the newest messages, so nothing pins it back down.
         _pinned = false;
 
-        // Where It Sits Centered In The View (Where It Fits): Found By Bringing Its Row In, Then The View Goes Back Where
-        // The Person Was Before Anything Draws, And Scrolls There Smoothly
+        // The target offset centers the message in the view when the message fits. The pane finds the offset with a
+        // jump to the row. The view then goes back to its start before anything draws, and scrolls there smoothly.
         double from = scroller.VerticalOffset;
         MessageList.ScrollIntoView(target);
         MessageList.UpdateLayout();
@@ -1140,17 +1147,16 @@ public sealed partial class ChatPane : UserControl
         TestHooks.NoteState("reply-jump", target.Id);
     }
 
-    // The Reply Chip's Close: Its Button Goes With It, So Focus Goes Back To The Message Box
+    // The close button of the reply chip goes with the chip, so focus goes back to the message box.
     private void OnCancelReplyClick(object sender, RoutedEventArgs e)
     {
         Chat?.CancelReply();
         DraftBox.Focus(FocusState.Programmatic);
     }
 
-    // The ＋: Any Files
     private void OnAttachClick(object sender, RoutedEventArgs e) => OpenAttachPicker(photos: false);
 
-    // A Chip's Remove Button: That Attachment Goes, And The Cursor Goes Back To The Message Box
+    // The remove button of a chip drops that attachment and puts the cursor back in the message box.
     private void OnRemoveAttachmentClick(object sender, RoutedEventArgs e)
     {
         if (sender.As<FrameworkElement>().DataContext is PendingAttachment attachment && Chat is not null)
@@ -1164,9 +1170,8 @@ public sealed partial class ChatPane : UserControl
     // BUBBLE MENU
     // =========================================================================
 
-    // A Right-Click On A Bubble, Or The Application Key Or Shift + F10 On Its Row Or Inside It, Opens The Bubble Menu On
-    // That Bubble; On A Link Preview Card, The Card's Menu. A Right-Click Opens It At The Pointer, The Keyboard Over The
-    // Bubble's Back (Or The Card)
+    // A right-click on a bubble opens the bubble menu at the pointer. The Application key or Shift + F10 in its row
+    // opens the menu over the back of the bubble. On a link preview card, the menu of the card opens instead.
     private void OnMessageListContextRequested(UIElement sender, ContextRequestedEventArgs e)
     {
         if (e.OriginalSource is null)
@@ -1193,7 +1198,7 @@ public sealed partial class ChatPane : UserControl
         ShowBubbleMenu(view, pointer ? view : view.Anchor, pointer ? at : null);
     }
 
-    // A Bubble's Hover Strip ⋮, Or Its ShowMenu
+    // The ⋮ of the hover strip of a bubble, or its ShowMenu.
     private void OnMenuRequested(object? sender, FrameworkElement anchor)
     {
         if (sender is MessageBubble view)
@@ -1202,10 +1207,11 @@ public sealed partial class ChatPane : UserControl
         }
     }
 
-    // Opens The Bubble Menu On A Bubble, With The Items It Takes, Keeping Its Hover Strip Shown Until The Menu Closes
+    // Opens the bubble menu with the items that the bubble takes. The hover strip of the bubble stays until the menu
+    // closes.
     private void ShowBubbleMenu(MessageBubble view, FrameworkElement anchor, Windows.Foundation.Point? at)
     {
-        // A System Line (A Group Rename) Has No Menu
+        // A system line such as a group rename has no menu.
         if (view.Bubble is not { IsSystemLine: false } bubble)
         {
             return;
@@ -1219,7 +1225,8 @@ public sealed partial class ChatPane : UserControl
         _menuView = view;
         view.KeepShown(true);
 
-        // Open On A Photo, Video Or Voice Message Is The App's Own Viewer Or Player; On A File, Only A Type Safe To Launch
+        // Open on a photo, video or voice message uses the viewer or player of the app. On a file, Open shows only for
+        // a type that is safe to launch.
         bool canOpen = bubble.HasPhoto || bubble.HasVideo || bubble.HasVoice || bubble.CanOpenMedia;
 
         BubbleMenuCopy.Visibility     = bubble.HasCopyText ? Visibility.Visible : Visibility.Collapsed;
@@ -1231,7 +1238,7 @@ public sealed partial class ChatPane : UserControl
         ShowMenuAt(BubbleMenu, anchor, at);
     }
 
-    // A Menu At A Point On The Element (A Right-Click), Else At The Element Itself
+    // Opens a menu at a point on the element for a right-click, else at the element.
     private static void ShowMenuAt(MenuFlyout menu, FrameworkElement anchor, Windows.Foundation.Point? at)
     {
         if (at is { } point)
@@ -1243,8 +1250,9 @@ public sealed partial class ChatPane : UserControl
         menu.ShowAt(anchor);
     }
 
-    // The Bubble An Element Sits In, And The Link Preview Card It Sits On (Null Off The Card): Found Going Up By Name, As
-    // UiHelpers.FindPart Goes Down (AOT Safe). A Link In The Text Isn't In The Visual Tree, So Its Text Stands In For It
+    // Finds the bubble that an element sits in, and the link preview card that the element sits on. The card is null
+    // off a card. The search goes up by name, as UiHelpers.FindPart goes down, so it is AOT safe. A link in the text
+    // is not in the visual tree, so the search starts from its text.
     private static (MessageBubble? View, FrameworkElement? Card) BubbleViewAround(DependencyObject element)
     {
         FrameworkElement? card = null;
@@ -1269,8 +1277,8 @@ public sealed partial class ChatPane : UserControl
         return (null, null);
     }
 
-    // The Menus' Items Act On The Bubble The Menu Opened On. It Stays Set After The Menu Closes, Since An Item's Click Can
-    // Come After The Close
+    // The menu items act on the bubble that the menu opened on. The bubble stays set after the menu closes, because the
+    // click of an item can come after the close.
     private void OnBubbleMenuCopyClick(object sender, RoutedEventArgs e) => _menuView?.Copy();
 
     private void OnBubbleMenuOpenClick(object sender, RoutedEventArgs e) => _menuView?.Open();
@@ -1285,7 +1293,7 @@ public sealed partial class ChatPane : UserControl
 
     private void OnBubbleMenuReplyClick(object sender, RoutedEventArgs e) => _menuView?.Reply();
 
-    // Delete, Once Confirmed (Enter Picks Cancel, So Nothing Goes By Accident): Only This Side's Copy Goes
+    // Delete runs after a confirm. Enter picks Cancel, so no message goes by accident. Only the copy on this side goes.
     private async void OnBubbleMenuDeleteClick(object sender, RoutedEventArgs e)
     {
         if (_menuView?.Bubble is not { } bubble || Chat is not { } chat || XamlRoot is not { } root)
@@ -1302,12 +1310,12 @@ public sealed partial class ChatPane : UserControl
 
     private void OnPreviewMenuCopyLinkClick(object sender, RoutedEventArgs e) => _menuView?.CopyLink();
 
-    // The Header's ⋮: The Menu Opens Below It
+    // The menu opens below the ⋮ of the header.
     private void OnMoreClick(object sender, RoutedEventArgs e) => MenuRequested?.Invoke(this, (MoreButton, null));
 
     private void OnMuteClick(object sender, RoutedEventArgs e) => MuteRequested?.Invoke(this, EventArgs.Empty);
 
-    // Right-Click On The Header Opens The Menu At The Pointer; From The Keyboard (The ⋮ Focused) It Opens Below The ⋮
+    // A right-click on the header opens the menu at the pointer. The keyboard on the focused ⋮ opens it below the ⋮.
     private void OnHeaderContextRequested(UIElement sender, ContextRequestedEventArgs e)
     {
         e.Handled = true;
@@ -1316,8 +1324,8 @@ public sealed partial class ChatPane : UserControl
 
     private void OnEmojiClick(object sender, RoutedEventArgs e) => ToggleEmojiPanel();
 
-    // Win + Period, Pressed And Released. Ctrl And Shift Still Held From The Ctrl + Shift + e Shortcut Are Let Go First:
-    // Windows Opens Nothing For Win + Ctrl + Shift + Period. True When Windows Took Every Key
+    // Presses and releases Win + Period. Windows opens nothing for Win + Ctrl + Shift + Period. Thus the method first
+    // releases Ctrl and Shift that the Ctrl + Shift + e shortcut still holds. True when Windows took every key.
     private static bool SendEmojiShortcut()
     {
         List<NativeMethods.KEYBOARD_INPUT> keys = [];
@@ -1338,9 +1346,9 @@ public sealed partial class ChatPane : UserControl
         return SendKeys(keys);
     }
 
-    // Presses And Releases Keys In One Go. A Refused Send (Another App Holds The Input) Just Does Nothing. Cut Short, Any
-    // Key It Pressed But Didn't Release (Win Above All) Is Released, So No Key Is Left Held Down. True When Windows Took
-    // Every Key
+    // Presses and releases the keys in 1 call. When another app holds the input, Windows refuses the send and nothing
+    // happens. After a partial send, the method releases each key that it pressed but did not release, Win above all.
+    // Thus no key stays down. True when Windows took every key.
     private static bool SendKeys(List<NativeMethods.KEYBOARD_INPUT> keys)
     {
         int size = Marshal.SizeOf<NativeMethods.KEYBOARD_INPUT>();
@@ -1368,9 +1376,9 @@ public sealed partial class ChatPane : UserControl
     // HELPERS
     // =========================================================================
 
-    // Notes The Content And View Heights; True When Either Differs From The Last One Seen. The View Shrinks Or Grows When
-    // The Typing Dots, The Reply Chip Or A Longer Draft Come And Go Below The List: Not The Person Scrolling, So A Pinned
-    // List Stays On The Newest Message
+    // Notes the content and view heights. True when either height differs from the last height seen. The view height
+    // changes when the typing dots, the reply chip or a longer draft show or hide. That change is not a
+    // scroll, so a pinned list stays on the newest message.
     private bool ContentChanged(ScrollViewer scroller)
     {
         bool changed  = Math.Abs(scroller.ExtentHeight - _lastExtent) >= 0.5 || Math.Abs(scroller.ViewportHeight - _lastViewport) >= 0.5;
@@ -1379,7 +1387,7 @@ public sealed partial class ChatPane : UserControl
         return changed;
     }
 
-    // A Row Gained Or Lost Focus (Or Something Inside One, Which Is Ignored)
+    // A row gained or lost focus. ShowFocusRing ignores an element inside a row.
     private void OnMessageListFocusChanged(object sender, RoutedEventArgs e)
     {
         if (e.OriginalSource is not null)
@@ -1388,8 +1396,9 @@ public sealed partial class ChatPane : UserControl
         }
     }
 
-    // A Row With Keyboard Or Programmatic Focus Rings Its Bubble, Raised Over Its Neighbors So They Don't Cover The Ring;
-    // A Click Doesn't. In High Contrast The Row's System Focus Visual Shows Instead (See MessageBubbleViewModel.ShowsFocusRing)
+    // A row with keyboard or programmatic focus rings its bubble. The row rises over its neighbors, so they do not
+    // cover the ring. A click does not ring the bubble. In high contrast the system focus visual of the row shows
+    // instead. See MessageBubbleViewModel.ShowsFocusRing.
     private void ShowFocusRing(DependencyObject element)
     {
         if (RowBubbleView(element) is not { } view)
@@ -1416,16 +1425,17 @@ public sealed partial class ChatPane : UserControl
         view.ShowFocusRing(shown, highContrast);
     }
 
-    // The Bubble Of The Row With Keyboard Focus, Or Null When Focus Is Elsewhere (Also On A Link Inside A Row)
+    // The bubble of the row with keyboard focus. Null when focus is elsewhere, a link inside a row included.
     private MessageBubble? FocusedBubbleView() =>
         XamlRoot is { } root && FocusManager.GetFocusedElement(root) is { } focused ? RowBubbleView(focused.As<DependencyObject>()) : null;
 
-    // A Row's Bubble, Or Null When The Element Isn't One Of The List's Rows. Found By Its Name (See UiHelpers.FindPart)
+    // The bubble of a row, or null when the element is not a row of the list. The search goes by name. See
+    // UiHelpers.FindPart.
     private MessageBubble? RowBubbleView(DependencyObject element) =>
         MessageList.IndexFromContainer(element) >= 0 ? UiHelpers.FindPart<MessageBubble>(element, "BubbleView") : null;
 
-    // Opens The Reaction Picker Over A Bubble's Part; Not For A Bubble The Phone Hasn't Reported Yet (Nothing To React
-    // To). The Bubble's Hover Strip Stays Until The Picker Closes
+    // Opens the reaction picker over a part of a bubble. A bubble that the phone did not report yet has nothing to
+    // react to, so the picker does not open. The hover strip of the bubble stays until the picker closes.
     private bool OpenReactionPicker(MessageBubble view, FrameworkElement anchor)
     {
         if (view.Bubble is not { Id.Length: > 0 } bubble)
@@ -1439,7 +1449,7 @@ public sealed partial class ChatPane : UserControl
         _reactAnchor = anchor;
         view.KeepShown(true);
 
-        // My Reaction Shows Selected: The Pill's Accent Fill Behind Its Button, And Narrator Reads "Selected"
+        // My reaction shows selected with the accent fill of the pill behind its button. Narrator reads "Selected".
         Style selected = ReactionButtons.Resources["ReactionSelectedBackStyle"].As<Style>();
         foreach ((Button button, Border back, string emoji) in _reactionButtons)
         {
@@ -1459,7 +1469,8 @@ public sealed partial class ChatPane : UserControl
         return true;
     }
 
-    // A Picker Button: Closes The Picker And Sends The Reaction (Add, Switch Or Remove; See ChatViewModel.ReactAsync)
+    // A picker button closes the picker and sends the reaction: an add, a switch or a remove. See
+    // ChatViewModel.ReactAsync.
     private void React(string emoji)
     {
         ReactionPicker.Hide();
@@ -1469,9 +1480,9 @@ public sealed partial class ChatPane : UserControl
         }
     }
 
-    // The Picker's More Reactions: Closes The Picker, Then (A Turn Later, Once It Has Closed) Opens The Emoji Picker Where
-    // It Was. The Windows Emoji Panel Isn't Used: It Types Into A Text Box, And Aimed At A Hidden One It Neither Reacted Nor
-    // Closed (Owner's Report)
+    // More reactions closes the picker. After the close, the emoji picker opens in the same place. The pane does not
+    // use the Windows emoji panel, which types into a text box. The owner reported that the panel neither reacted nor
+    // closed when it aimed at a hidden box.
     private void OnMoreReactionsClick()
     {
         MessageBubbleViewModel? bubble = _reactTarget;
@@ -1483,17 +1494,19 @@ public sealed partial class ChatPane : UserControl
             return;
         }
 
-        // Opened Once The Reaction Picker's Closed Has Run: Before That, Its Close Hides The Hover Strip The Picker Opens Over,
-        // And The Emoji Picker Didn't Show (Seen On A Cold First Run)
+        // The emoji picker opens after the Closed handler of the reaction picker runs. Before that, the close hides the
+        // hover strip that the picker opens over. On a cold first run the emoji picker then did not show.
         _emojiPending = (bubble, view, anchor);
     }
 
-    // The Emoji Picker: A Search Box Over The Catalog's Emoji By Category, Scrolling, In A Flyout Where The Reaction Picker Was
-    // (EmojiPicker; Buttons EmojiPicker.{Code Points In Hex}). A Click Sends That Emoji As The Reaction And Closes It; Escape
-    // Or A Click Outside Closes It. Focus Starts In The Search Box. The Bubble's Hover Strip Stays Until It Closes
+    // Shows the emoji picker EmojiPicker in a flyout where the reaction picker was. A search box sits over the emoji of
+    // the catalog, by category, in a scroller. The buttons are EmojiPicker.{code points in hex}. A click sends that
+    // emoji as the reaction and closes the picker. Escape or a click outside also closes it. Focus starts in the search
+    // box. The hover strip of the bubble stays until the picker closes.
     private void ShowEmojiPicker(MessageBubbleViewModel bubble, MessageBubble view, FrameworkElement anchor)
     {
-        // Timed (Milliseconds Only): The First Open Froze The App When It Drew Every Emoji At Once (See EmojiRowFactory)
+        // The log times the open in milliseconds only. The first open froze the app when it drew every emoji at once.
+        // See EmojiRowFactory.
         long start     = System.Diagnostics.Stopwatch.GetTimestamp();
         Flyout picker  = _emojiPicker ??= BuildEmojiPicker();
         long built     = System.Diagnostics.Stopwatch.GetTimestamp();
@@ -1510,7 +1523,7 @@ public sealed partial class ChatPane : UserControl
         picker.Closed += OnClosed;
         picker.ShowAt(anchor);
 
-        // Timed For Two Seconds From The Open: The Longest Gap Between Frames Is How Long The App Stood Still
+        // The timing runs for 2 seconds from the open. The longest gap between frames is how long the app stood still.
         long last  = System.Diagnostics.Stopwatch.GetTimestamp();
         long stall = 0;
         Windows.UI.Xaml.Media.CompositionTarget.Rendering += OnRendering;
@@ -1539,27 +1552,25 @@ public sealed partial class ChatPane : UserControl
         }
     }
 
-    // Builds The Emoji Picker Once: Its Search Box, Its Empty Note, And Its Rows In A Scroller. The Rows Are Virtualized
-    // (An ItemsRepeater), So Only Those In View Are Made, Then Reused As They Scroll Out. The Rows Fill The Picker's Width,
-    // Edge To Edge With The Search Box; The Scroll Bar Overlays Them The Windows Way
+    // Builds the emoji picker once: its search box, its empty note and its rows in a scroller. An ItemsRepeater
+    // virtualizes the rows, so it makes only the rows in view and reuses them as they scroll out. The rows fill the
+    // width of the picker, edge to edge with the search box. The scroll bar overlays them, as in Windows.
     private Flyout BuildEmojiPicker()
     {
         Style buttonStyle  = ReactionButtons.Resources["ReactionButtonStyle"].As<Style>();
         Style noteStyle    = ReactionButtons.Resources["EmojiPickerNoteStyle"].As<Style>();
         var flyout         = new Flyout { Placement = Windows.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.Top };
 
-        // Search Box
         _emojiSearch = new TextBox { PlaceholderText = ChatCopy.SearchEmoji, Margin = new Thickness(0, 0, 0, 8) };
         AutomationProperties.SetAutomationId(_emojiSearch, "EmojiPicker.Search");
         AutomationProperties.SetName(_emojiSearch, ChatCopy.SearchEmoji);
         _emojiSearch.TextChanged += (_, _) => FilterEmoji();
 
-        // Empty Search
         _emojiEmpty = new TextBlock { Text = ChatCopy.NoEmojiFound, Margin = new Thickness(4, 8, 0, 8), Style = noteStyle, Visibility = Visibility.Collapsed };
 
-        // Rows: About Half A Screen Above And Below The View Is Made Ahead
-        _emojiFactory = new EmojiRowFactory(EmojiPickerColumns, EmojiCellSize, buttonStyle, noteStyle, PickEmoji);
-        _emojiRows    = new Muxc.ItemsRepeater { ItemTemplate = _emojiFactory, VerticalCacheLength = 1 };
+        // The repeater makes about half a screen of rows ahead, above and below the view.
+        _emojiFactory  = new EmojiRowFactory(EmojiPickerColumns, EmojiCellSize, buttonStyle, noteStyle, PickEmoji);
+        _emojiRows     = new Muxc.ItemsRepeater { ItemTemplate = _emojiFactory, VerticalCacheLength = 1 };
         _emojiScroller = new ScrollViewer { Content = _emojiRows, Height = EmojiPickerHeight, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
 
         var root = new StackPanel { Width = EmojiPickerColumns * EmojiCellSize, Children = { _emojiSearch, _emojiEmpty, _emojiScroller } };
@@ -1569,8 +1580,8 @@ public sealed partial class ChatPane : UserControl
         return flyout;
     }
 
-    // The Search Box's Words (See EmojiCatalog.Search): The Matching Categories, Each A Name Row Over Rows Of Up To Eight
-    // Emoji, From The Top. Nothing Typed Shows Them All; No Match At All Shows The Empty Note
+    // Shows the categories that match the words of the search box. See EmojiCatalog.Search. Each category is a name
+    // row over rows of up to 8 emoji, from the top. An empty box shows all categories. No match shows the empty note.
     private void FilterEmoji()
     {
         if (_emojiRows is null || _emojiEmpty is null)
@@ -1593,27 +1604,19 @@ public sealed partial class ChatPane : UserControl
         _emojiScroller?.ChangeView(null, 0, null, disableAnimation: true);
     }
 
-    // A Picked Emoji: Closes The Picker And Sends It As The Reaction (Custom When It Isn't One Of The Seven)
+    // A picked emoji closes the picker and sends as the reaction. It is a custom reaction when it is not 1 of the 7.
     private void PickEmoji(string emoji)
     {
         MessageBubbleViewModel? bubble = _emojiTarget;
         _emojiPicker?.Hide();
-        if (bubble is not null)
-        {
-            SendReaction(bubble, emoji);
-        }
-    }
-
-    // Sends A Reaction For A Bubble (Add, Switch Or Remove; See ChatViewModel.ReactAsync)
-    private void SendReaction(MessageBubbleViewModel bubble, string emoji)
-    {
-        if (Chat is { } chat)
+        if (bubble is not null && Chat is { } chat)
         {
             _ = chat.ReactAsync(bubble, emoji);
         }
     }
 
-    // Starts The Reply, Then Moves To The Message Box A Turn Later: A Closing Menu Puts Focus Back Where It Was First
+    // Starts the reply, then moves to the message box 1 dispatcher turn later. A menu that closes first puts focus back
+    // where it was.
     private void StartReply(MessageBubbleViewModel bubble)
     {
         if (Chat is not { } chat)
@@ -1625,13 +1628,14 @@ public sealed partial class ChatPane : UserControl
         XamlHost.Dispatcher.TryEnqueue(DispatcherQueuePriority.Low, () => DraftBox.Focus(FocusState.Keyboard));
     }
 
-    // A Bubble's Row Top In The View, Or Null While Its Row Isn't Realized
+    // The top of the row of a bubble in the view, or null while the row is not realized.
     private double? RowTop(ScrollViewer scroller, MessageBubbleViewModel bubble) =>
         MessageList.ContainerFromItem(bubble)?.As<UIElement>().TransformToVisual(scroller).TransformPoint(default).Y;
 
-    // The List's Bottom Padding Keeps The Newest Bubble Above What Floats Over It (The Typing Bubble, The Chips, The Message
-    // Box: The Pane's Last Three Rows), And The Bottom Fade Covers Just That. Runs After Every Layout, So Only A Change
-    // Sets Anything (Padding Changes The Content Height, Which KeepPinned Follows)
+    // The bottom padding of the list keeps the newest bubble above the elements that float over it. These are the
+    // typing bubble, the chips and the message box, in the last 3 rows of the pane. The bottom fade covers only that
+    // height. The method runs after every layout, so it sets values only on a change. The padding changes the content
+    // height, which KeepPinned follows.
     private void KeepComposerClear()
     {
         double below = PaneGrid.RowDefinitions[2].ActualHeight + PaneGrid.RowDefinitions[3].ActualHeight + PaneGrid.RowDefinitions[4].ActualHeight;
@@ -1645,7 +1649,7 @@ public sealed partial class ChatPane : UserControl
         _fade?.SetBottomFade(below + 8);
     }
 
-    // Back To The Newest Message At Once (No Animation) While Pinned And Short Of It
+    // While pinned and short of the newest message, the list jumps there with no animation.
     private void KeepPinned(ScrollViewer scroller)
     {
         if (_pinned && !ChatScroll.IsAtBottom(scroller.VerticalOffset, scroller.ScrollableHeight))
@@ -1654,18 +1658,18 @@ public sealed partial class ChatPane : UserControl
         }
     }
 
-    // Scrolls (Animated) To The Newest Message. The List Only Estimates The Heights Of Rows Not Yet Shown, So The Content
-    // Can Grow Past The Scroll's Target While It Runs; OnScrolled Finishes The Job Where It Comes To Rest
+    // Scrolls with animation to the newest message. The list only estimates the heights of rows not yet shown. Thus the
+    // content can grow past the target during the scroll. OnScrolled finishes the scroll where it stops.
     private void ScrollToNewest(ScrollViewer scroller)
     {
         _toNewest = true;
         _         = ScrollSmoothlyAsync(scroller, scroller.ScrollableHeight);
     }
 
-    // Every Jump The Chat Makes On Its Own (To The Newest Message, To A Reply's Original) Goes Through Here: A Smooth
-    // Scroll, Like CSS's scroll-behavior: smooth, Or At Once With Windows' Animation Effects Off. The Task Ends When The
-    // View Comes To Rest (At Most 1.5 s). Not For The Chat's First Place At The Bottom Or The Quiet Corrections That Keep
-    // The View Still (KeepPinned), Which Stays Instant
+    // Every jump that the chat makes by itself goes through here, such as to the newest or a quoted message.
+    // The scroll is smooth, as with scroll-behavior: smooth in CSS. With the animation effects of Windows off, it jumps
+    // at once. The task ends when the view stops, after 1.5 s at most. The first place of a chat at the bottom and the
+    // quiet corrections of KeepPinned do not use this method. They stay instant.
     private static async Task ScrollSmoothlyAsync(ScrollViewer scroller, double offset)
     {
         offset = Math.Clamp(offset, 0, scroller.ScrollableHeight);
@@ -1697,13 +1701,12 @@ public sealed partial class ChatPane : UserControl
         scroller.ViewChanged -= OnViewChanged;
     }
 
-    // Fades The Scroll-To-Bottom Button In Or Out (Its OpacityTransition Animates It); Hidden, It Takes No Clicks Or Focus
+    // Fades the scroll-to-bottom button in or out, which its OpacityTransition animates. A hidden button takes no
+    // clicks and no focus.
     private void ShowScrollToBottom(bool show)
     {
         ScrollToBottomButton.Opacity          = show ? 1 : 0;
         ScrollToBottomButton.IsHitTestVisible = show;
         ScrollToBottomButton.IsTabStop        = show;
     }
-
-    private static bool IsShiftDown() => UiHelpers.IsDown(VirtualKey.Shift);
 }

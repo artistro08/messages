@@ -1,5 +1,6 @@
-<!-- Shortcut Help: the wired shortcuts, action left and its keys right as key caps (Layers' shortcut sheet look). No
-     button row: the X beside the title, Escape, or a click on the dimmed window around it closes it -->
+<!-- The shortcut help lists the wired shortcuts, with the look of the shortcut sheet of Layers. The action sits at
+     the left and its keys sit at the right as key caps. The dialog has no button row. The X beside the title,
+     Escape or a click on the dimmed window around the dialog closes it. -->
 <ContentDialog
     x:Class="GMessages.App.Views.ShortcutHelpDialog"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -10,7 +11,7 @@
     Opened="OnOpened">
 
     <ContentDialog.Resources>
-        <!-- Key Cap: Layers' key chip (a quiet control fill, a 1 px divider stroke, radius 4) -->
+        <!-- A key cap copies the key chip of Layers: quiet control fill, 1 px divider stroke and radius 4. -->
         <Style x:Key="KeyCapStyle" TargetType="Border">
             <Setter Property="MinWidth" Value="28" />
             <Setter Property="Padding" Value="8,4" />
@@ -20,7 +21,7 @@
             <Setter Property="CornerRadius" Value="4" />
         </Style>
 
-        <!-- Row: a divider line above it (the first row's is turned off in code) -->
+        <!-- A row has a divider line above it. The code turns off the line of the first row. -->
         <Style x:Key="ShortcutRowStyle" TargetType="Grid">
             <Setter Property="Padding" Value="0,8" />
             <Setter Property="ColumnSpacing" Value="16" />
@@ -28,16 +29,17 @@
             <Setter Property="BorderThickness" Value="0,1,0,0" />
         </Style>
 
-        <!-- Joiner: the "+" between key caps -->
+        <!-- The "+" between key caps uses this style. -->
         <Style x:Key="KeyJoinerStyle" TargetType="TextBlock">
             <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
         </Style>
     </ContentDialog.Resources>
 
-    <!-- Title: the heading, and the X in the top right corner, its top lined up with the heading's. Raised by the empty
-         space above the 20 px heading's letters in its line, so the gap over them matches the gap beside them. The X's
-         negative right margin puts its glyph as far in from the right edge as the heading is from the left -->
+    <!-- The title holds the heading and the X in the top right corner, with their tops aligned. The title rises by
+         the empty space above the letters of the 20 px heading in its line. Thus the gap over the letters matches the
+         gap beside them. The negative right margin of the X puts its glyph in from the right edge. That inset
+         matches the inset of the heading from the left edge. -->
     <ContentDialog.Title>
         <Grid Margin="0,-7,0,0">
             <Grid.ColumnDefinitions>
@@ -61,9 +63,9 @@
         </Grid>
     </ContentDialog.Title>
 
-    <!-- Rows: filled from ShortcutMap.HelpRows in code, a divider between each, reaching both edges. The scroller runs out
-         into the dialog's 24 px right padding and the rows keep clear of it, so the scroll bar sits in that gutter, never
-         over the keys -->
+    <!-- The code fills the rows from ShortcutMap.HelpRows, with a divider between rows that reaches both edges. The
+         scroller runs out into the 24 px right padding of the dialog, and the rows keep clear of it. Thus the scroll
+         bar sits in that gutter and never covers the keys. -->
     <ScrollViewer Margin="0,0,-24,0">
         <StackPanel x:Name="RowsPanel" Margin="0,0,24,0" />
     </ScrollViewer>
