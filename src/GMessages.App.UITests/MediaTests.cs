@@ -592,7 +592,7 @@ public sealed partial class MediaTests : UiTest
 
     /// <summary>
     /// A GIF in a bubble moves. Its full image is an Image, because an ImageBrush shows only the first frame, and the
-    /// decoded picture is animated.
+    /// decoded picture is animated. A GIF with no caption keeps its own shape and does not fill the width of the row.
     /// </summary>
     [TestMethod]
     public async Task GifBubble_Animates()
@@ -601,6 +601,9 @@ public sealed partial class MediaTests : UiTest
         Message message         = Server.Phone.PushIncomingMedia("c-media", "image/gif", TwoFrameGif, "party.gif");
         AutomationElement photo = App.Find("Bubble.Photo." + message.MessageID);
         WaitForStatus(photo, Full);
+        Thread.Sleep(500);
+        System.Drawing.Rectangle box = photo.BoundingRectangle;
+        Assert.AreEqual(1.0, (double)box.Width / box.Height, 0.03, $"The square GIF's box {box} isn't square.");
 
         string animated = Path.Combine(App.DataDir, "animated-photo.txt");
         Wait.Until(() => File.Exists(animated), AppDriver.DefaultTimeout, () => "The GIF's bubble shows a still picture.");
