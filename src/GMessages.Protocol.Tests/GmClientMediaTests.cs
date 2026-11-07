@@ -232,6 +232,24 @@ public class GmClientMediaTests
     }
 
     /// <summary>
+    /// The client reads a body with no declared length to its end. A body of 2 full chunks fills the buffer exactly, and
+    /// a body of 1.5 chunks does not.
+    /// </summary>
+    [TestMethod]
+    public async Task ReadCapped_UnknownLength_ReadsAll()
+    {
+        foreach (int size in new[] { 2 * 81920, 81920 + 40960 })
+        {
+            using var content = new StreamContent(new ExactStream(long.MaxValue, size));
+
+            byte[] body = await GmHttpClient.ReadCappedAsync(content, GmHttpClient.MaxMediaBodyBytes, CancellationToken.None);
+
+            Assert.HasCount(size, body);
+            Assert.IsTrue(body.All(b => b == 7));
+        }
+    }
+
+    /// <summary>
     /// A body shorter than its declared length throws. The client does not return zeros at the end.
     /// </summary>
     [TestMethod]

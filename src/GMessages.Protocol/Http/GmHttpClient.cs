@@ -287,7 +287,8 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
             buffer.Write(chunk, 0, read);
         }
 
-        return buffer.ToArray();
+        // A full buffer goes back without a copy. Otherwise ToArray copies the body 1 time.
+        return buffer.TryGetBuffer(out ArraySegment<byte> filled) && filled.Array is { } all && all.Length == filled.Count ? all : buffer.ToArray();
     }
 
     // This method ports util.BuildRelayHeaders. The caller adds the Content-Type.
