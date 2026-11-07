@@ -1,7 +1,6 @@
 using GMessages.App.Media;
 using GMessages.Presentation.Messaging;
 using Windows.UI.Xaml;
-using Windows.UI.Xaml.Controls;
 
 namespace GMessages.App.Views.Controls;
 
@@ -35,10 +34,14 @@ public sealed partial class MessageBubble
         {
             OpenVideoInViewer(VideoFrame);
         }
-        else if (Bubble?.Media is { IsPending: false } part && ((Control?)Photo ?? VoicePlay) is { } from)
+        else if (Bubble?.HasVoice == true)
         {
-            // A Photo, Or A Voice Message (Whose Bubble Has No Photo Part, So Focus Goes Back To Its Play Button)
-            ShowInViewer(part, from);
+            // The photo viewer cannot show audio, so Open plays or pauses a voice message as its play button does.
+            RequestVoice(null);
+        }
+        else if (Bubble?.Media is { IsPending: false } part && Photo is not null)
+        {
+            ShowInViewer(part, Photo);
         }
     }
 
