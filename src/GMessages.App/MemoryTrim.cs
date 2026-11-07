@@ -30,19 +30,14 @@ internal sealed class MemoryTrim
     }
 
     /// <summary>
-    /// Trims in 5 seconds, and starts the wait again when a trim is already pending.
-    /// </summary>
-    public void Schedule() => Schedule(TimeSpan.FromSeconds(5));
-
-    /// <summary>
     /// Trims after a given wait, and starts the wait again when a trim is already pending. Thus a burst of calls ends
     /// in a single trim.
     /// </summary>
-    /// <param name="delay">The wait before the trim.</param>
-    public void Schedule(TimeSpan delay)
+    /// <param name="delay">The wait before the trim. The default is 5 seconds.</param>
+    public void Schedule(TimeSpan? delay = null)
     {
         _timer.Stop();
-        _timer.Interval = delay;
+        _timer.Interval = delay ?? TimeSpan.FromSeconds(5);
         _timer.Start();
     }
 

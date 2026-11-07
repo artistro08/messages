@@ -8,7 +8,7 @@ namespace GMessages.App;
 /// Keeps the settings in the local app data of the package. It needs package identity, so only the installed MSIX
 /// uses it. Ported from Magic Buds.
 /// </summary>
-public sealed class LocalSettingsStore : ISettingsStore
+internal sealed class LocalSettingsStore : ISettingsStore
 {
     private readonly IPropertySet _values = ApplicationData.Current.LocalSettings.Values;
 
