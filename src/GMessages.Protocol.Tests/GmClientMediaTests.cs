@@ -15,11 +15,11 @@ namespace GMessages.Protocol.Tests;
 /// Checks the media requests on <see cref="GmClient"/>: upload start and finalize, and download.
 /// </summary>
 /// <remarks>
-/// C#-only. The expected headers and bodies were read from <c>StartUploadMedia</c>, <c>FinalizeUploadMedia</c> and
-/// <c>DownloadMedia</c> in
+/// These tests have no Go golden file. The expected headers and bodies come from <c>StartUploadMedia</c>,
+/// <c>FinalizeUploadMedia</c> and <c>DownloadMedia</c> in
 /// <see href="https://github.com/mautrix/gmessages/blob/ba33f4875a491f5cb47db8a6baf42a8869f5f383/pkg/libgm/media.go">media.go</see>
-/// and <c>NewMediaUploadHeaders</c> and <c>BuildUploadHeaders</c> in util/func.go. The account has cookies, so a
-/// missing cookie header proves media requests never carry them.
+/// and from <c>NewMediaUploadHeaders</c> and <c>BuildUploadHeaders</c> in util/func.go. The account has cookies, so a
+/// missing cookie header proves that media requests never carry cookies.
 /// </remarks>
 [TestClass]
 public class GmClientMediaTests
@@ -52,7 +52,7 @@ public class GmClientMediaTests
         return new Rig { Client = client, Handler = handler, SessionPath = path };
     }
 
-    // The Start Answer: Upload URL And Granularity, Unless Left Out
+    // The start answer holds the upload URL and the chunk granularity. A test can leave out the granularity.
     private static HttpResponseMessage StartAnswer(bool withGranularity = true)
     {
         HttpResponseMessage res = FakeHttpHandler.Response(HttpStatusCode.OK);
@@ -74,8 +74,8 @@ public class GmClientMediaTests
     }
 
     /// <summary>
-    /// Upload starts with LibGM's headers and a base64 start request, finalizes the encrypted file at the given URL
-    /// with a base64 answer, and never sends the api key, x-user-agent or cookies.
+    /// The upload starts with the LibGM headers and a base64 start request. It finalizes the encrypted file at the
+    /// given URL with a base64 answer. It never sends the API key, x-user-agent or cookies.
     /// </summary>
     [TestMethod]
     public async Task Upload_SendsLibGmHeaders_NoCookies()
@@ -88,7 +88,6 @@ public class GmClientMediaTests
 
         MediaContent media = await rig.Client.UploadMediaAsync(plain, "photo.png", "image/png", new SyncProgress(progress.Add), CancellationToken.None);
 
-        // Start
         RecordedRequest start = rig.Handler.Requests[0];
         RecordedRequest final = rig.Handler.Requests[1];
         string size           = final.Body.Length.ToString(System.Globalization.CultureInfo.InvariantCulture);
@@ -109,7 +108,6 @@ public class GmClientMediaTests
         Assert.AreEqual("golden-src", startRequest.Mobile.SourceID);
         AssertNoCredentials(start);
 
-        // Finalize
         Assert.AreEqual(UploadUrl, final.Url);
         Assert.AreEqual("upload, finalize", final.Headers["x-goog-upload-command"]);
         Assert.AreEqual("0", final.Headers["x-goog-upload-offset"]);
@@ -117,7 +115,7 @@ public class GmClientMediaTests
         Assert.AreEqual(size, final.Headers["x-goog-upload-header-content-length"]);
         AssertNoCredentials(final);
 
-        // Result: The Key Opens What Was Uploaded
+        // The returned key must open the uploaded file.
         Assert.AreEqual("media-1", media.MediaID);
         Assert.AreEqual(MediaFormats.ImagePng, media.Format);
         Assert.AreEqual("photo.png", media.MediaName);
@@ -128,7 +126,7 @@ public class GmClientMediaTests
     }
 
     /// <summary>
-    /// A raw (not base64) finalize answer is read too, as Go does.
+    /// The client also reads a raw finalize answer that is not base64, as Go does.
     /// </summary>
     [TestMethod]
     public async Task Upload_RawAnswer_IsRead()
@@ -143,7 +141,7 @@ public class GmClientMediaTests
     }
 
     /// <summary>
-    /// A start answer without the chunk granularity fails the upload before anything is finalized.
+    /// A start answer without the chunk granularity fails the upload before the client finalizes anything.
     /// </summary>
     [TestMethod]
     public async Task Upload_MissingGranularity_Throws()
@@ -155,9 +153,9 @@ public class GmClientMediaTests
     }
 
     /// <summary>
-    /// Upload start needs exactly HTTP 200, as Go's does: another 2xx fails before anything is finalized.
+    /// The upload start needs exactly HTTP 200, as in Go. Another 2xx status fails before the client finalizes anything.
     /// </summary>
-    /// <param name="status">The start answer's status.</param>
+    /// <param name="status">The status of the start answer.</param>
     [TestMethod]
     [DataRow(201)]
     [DataRow(204)]
@@ -176,7 +174,7 @@ public class GmClientMediaTests
     }
 
     /// <summary>
-    /// A finalize answer that looks like base64 but has bad padding fails as invalid data, not a format error.
+    /// A finalize answer that looks like base64 but has bad padding fails as invalid data. It does not fail as a format error.
     /// </summary>
     [TestMethod]
     public async Task Upload_BadBase64Padding_ThrowsInvalidData()
@@ -187,7 +185,7 @@ public class GmClientMediaTests
     }
 
     /// <summary>
-    /// A download whose declared length is over the cap fails before the body is read.
+    /// A download with a declared length over the cap fails before the client reads the body.
     /// </summary>
     [TestMethod]
     public async Task Download_DeclaredOverCap_Throws()
@@ -203,7 +201,7 @@ public class GmClientMediaTests
     }
 
     /// <summary>
-    /// A streamed download with no declared length fails once it crosses the cap.
+    /// A streamed download with no declared length fails when it crosses the cap.
     /// </summary>
     [TestMethod]
     public async Task Download_StreamedOverCap_Throws()
@@ -219,7 +217,7 @@ public class GmClientMediaTests
     }
 
     /// <summary>
-    /// A body with a declared length is read into one array of exactly that size, never reading past it.
+    /// The client reads a body with a declared length into one array of exactly that size. It never reads past that length.
     /// </summary>
     [TestMethod]
     public async Task ReadCapped_KnownLength_ReadsExactly()
@@ -234,7 +232,7 @@ public class GmClientMediaTests
     }
 
     /// <summary>
-    /// A body shorter than its declared length throws instead of returning zeros at the end.
+    /// A body shorter than its declared length throws. The client does not return zeros at the end.
     /// </summary>
     [TestMethod]
     public async Task ReadCapped_ShortBody_Throws()
@@ -246,7 +244,7 @@ public class GmClientMediaTests
     }
 
     /// <summary>
-    /// A refused download throws with its status instead of decrypting an error page.
+    /// A refused download throws with its status. The client does not decrypt an error page.
     /// </summary>
     [TestMethod]
     public async Task Download_Non200_Throws()
@@ -258,8 +256,8 @@ public class GmClientMediaTests
     }
 
     /// <summary>
-    /// A download sends the metadata header (the attachment ID, encrypted, with auth data) and LibGM's headers only,
-    /// and returns the decrypted body.
+    /// A download sends the metadata header and the LibGM headers only, and returns the decrypted body. The metadata
+    /// header holds the encrypted attachment ID with the auth data.
     /// </summary>
     [TestMethod]
     public async Task Download_DecryptsBody()
@@ -285,7 +283,7 @@ public class GmClientMediaTests
     }
 
     /// <summary>
-    /// The mime table falls back to the part before the slash, and the reverse table is fixed where Go's is random.
+    /// The MIME table falls back to the part before the slash. The reverse table is fixed, where the Go table is random.
     /// </summary>
     [TestMethod]
     public void MediaFormatsMap_FollowsLibGm()
@@ -302,13 +300,13 @@ public class GmClientMediaTests
         Assert.IsNull(MediaFormatsMap.ToMime(MediaFormats.ImageUnspecified));
     }
 
-    // Progress<T> Posts To The Thread Pool; This One Records In Order, On The Spot
+    // Progress<T> posts to the thread pool. This class records each value at once and in order.
     private sealed class SyncProgress(Action<double> report) : IProgress<double>
     {
         public void Report(double value) => report(value);
     }
 
-    // A Non-Seekable Stream Of Sevens That Ends After "Sent" Bytes, And Fails Any Read Once "Declared" Bytes Were Read
+    // A stream that cannot seek and holds the byte 7. It ends after "sent" bytes and fails any read after "declared" bytes.
     private sealed class ExactStream(long declared, long sent) : Stream
     {
         private long _read;
@@ -347,7 +345,7 @@ public class GmClientMediaTests
         public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 
-    // A Non-Seekable Stream Of Zeros With No Declared Length
+    // A stream that cannot seek, holds zeros and has no declared length.
     private sealed class ZeroStream(long length) : Stream
     {
         private long _left = length;

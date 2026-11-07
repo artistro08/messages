@@ -17,9 +17,9 @@ namespace GMessages.Protocol.Tests.Rpc;
 /// Checks waiting, timeouts and ack retry of <see cref="RpcSession"/>.
 /// </summary>
 /// <remarks>
-/// C#-only behavior: the Go behavior was read from session_handler.go (60 s hard timeout, 5 s slow notice for
-/// user-initiated sends, acks re-queued up to 1024) and the timings are driven by a fake clock, not copied from a
-/// golden file. See <see href="https://github.com/mautrix/gmessages/blob/ba33f4875a491f5cb47db8a6baf42a8869f5f383/pkg/libgm/session_handler.go"/>.
+/// These tests have no Go golden file. The expected behavior comes from the Go session_handler.go: a hard timeout
+/// of 60 seconds, a slow notice after 5 seconds for user-initiated sends, and up to 1024 acks queued again. A fake
+/// clock drives the timings. See <see href="https://github.com/mautrix/gmessages/blob/ba33f4875a491f5cb47db8a6baf42a8869f5f383/pkg/libgm/session_handler.go"/>.
 /// </remarks>
 [TestClass]
 public class RpcSessionTimingTests
@@ -54,7 +54,7 @@ public class RpcSessionTimingTests
     };
 
     /// <summary>
-    /// A delivered response with the matching request ID completes the send; a second delivery finds no waiter.
+    /// A response with the matching request ID completes the send. A second delivery finds no waiter.
     /// </summary>
     [TestMethod]
     public async Task Send_ResolvesWhenMatchingResponseDelivered()
@@ -139,7 +139,7 @@ public class RpcSessionTimingTests
     }
 
     /// <summary>
-    /// A user-initiated send ended by FailAllWaiters never raises the slow notice later.
+    /// A user-initiated send that FailAllWaiters ends never raises the slow notice later.
     /// </summary>
     [TestMethod]
     public async Task Send_UserInitiated_ConnectionClosedEarly_NeverRaisesPhoneSlow()
@@ -178,7 +178,7 @@ public class RpcSessionTimingTests
     }
 
     /// <summary>
-    /// Failing all waiters ends waiting sends, with or without a timeout, with <see cref="ConnectionClosedException"/>.
+    /// FailAllWaiters ends the waiting sends with <see cref="ConnectionClosedException"/>, with or without a timeout.
     /// </summary>
     [TestMethod]
     public async Task FailAllWaiters_ThrowsConnectionClosed()
@@ -195,7 +195,7 @@ public class RpcSessionTimingTests
     }
 
     /// <summary>
-    /// A rejected request leaves no waiter behind.
+    /// A request that the server rejects leaves no waiter.
     /// </summary>
     [TestMethod]
     public async Task Send_RejectedRequest_ThrowsAndRemovesWaiter()
@@ -209,7 +209,7 @@ public class RpcSessionTimingTests
     }
 
     /// <summary>
-    /// With cookies, unencrypted-only messages are ignored except for the two Google pairing actions.
+    /// With cookies, the session ignores unencrypted-only messages. The two Google pairing actions are the exception.
     /// </summary>
     [TestMethod]
     public async Task TryDeliverResponse_IgnoresUnencryptedOnlyExceptGaiaPairing()
@@ -230,7 +230,7 @@ public class RpcSessionTimingTests
     }
 
     /// <summary>
-    /// A failed ack request puts the batch back in front of newer acks, and a later flush sends them in that order.
+    /// A failed ack request puts the batch in front of the newer acks. A later flush sends them in that order.
     /// </summary>
     [TestMethod]
     public async Task FlushAcks_FailedPost_Requeues()
@@ -252,7 +252,7 @@ public class RpcSessionTimingTests
     }
 
     /// <summary>
-    /// A failed batch that would push the queue over 1024 is dropped instead of re-queued.
+    /// The session drops a failed batch that would push the queue over 1024 acks. It does not queue the batch again.
     /// </summary>
     [TestMethod]
     public async Task FlushAcks_FailedPost_OverCap_DropsBatch()

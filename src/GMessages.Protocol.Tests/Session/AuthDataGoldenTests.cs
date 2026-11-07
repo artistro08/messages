@@ -21,11 +21,11 @@ public class AuthDataGoldenTests
     private static byte[] Seq(int start, int count) => [.. Enumerable.Range(start, count).Select(i => (byte)i)];
 
     /// <summary>
-    /// Builds the same fixed AuthData the Go exporter uses, plus the extra fields it sets before clearing.
+    /// Builds the fixed AuthData of the Go exporter, with the extra fields that it sets before the clear.
     /// </summary>
     internal static AuthData BuildGolden()
     {
-        // Fixed Refresh Key (Scalar 0x01..0x20)
+        // The refresh key scalar is the bytes 0x01 to 0x20, as in the Go exporter.
         using ECDsa ecdsa = ECDsa.Create(new ECParameters { Curve = ECCurve.NamedCurves.nistP256, D = Seq(1, 32) });
         ECParameters p    = ecdsa.ExportParameters(true);
 
@@ -86,7 +86,7 @@ public class AuthDataGoldenTests
     }
 
     /// <summary>
-    /// CopyForRepair keeps cookies and DestPhoneId only; keys are fresh and random in both Go and C#.
+    /// CopyForRepair keeps only the cookies and DestPhoneId. The keys are new and random, as in Go.
     /// </summary>
     [TestMethod]
     public void CopyForRepair_MatchesGo()

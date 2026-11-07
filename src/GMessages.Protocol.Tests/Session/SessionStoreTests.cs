@@ -5,7 +5,7 @@ using GMessages.Protocol.Session;
 namespace GMessages.Protocol.Tests.Session;
 
 /// <summary>
-/// Tests the DPAPI session file. These behaviors are C#-only (Go has no equivalent), so expectations are hand-written.
+/// Tests the DPAPI session file. Go has no equivalent, so the expectations are hand-written.
 /// </summary>
 [TestClass]
 public class SessionStoreTests
@@ -54,7 +54,7 @@ public class SessionStoreTests
     }
 
     /// <summary>
-    /// A QR-paired session (no cookie map) stays "no cookies" after a round trip.
+    /// A QR-paired session has no cookie map, and it still has none after a round trip.
     /// </summary>
     [TestMethod]
     public void SaveThenLoad_NoCookieMap_StaysNull()
@@ -66,7 +66,7 @@ public class SessionStoreTests
     }
 
     /// <summary>
-    /// A session with no Tachyon token stays token-less after a round trip (null, not an empty array).
+    /// A session with no Tachyon token still has none after a round trip. The token is null, not an empty array.
     /// </summary>
     [TestMethod]
     public void SaveThenLoad_NoToken_StaysNull()
@@ -172,7 +172,7 @@ public class SessionStoreTests
         Assert.IsNull(new SessionStore(FilePath).Load());
     }
 
-    /// <summary>An empty cookie map stays empty (not "no cookies").</summary>
+    /// <summary>An empty cookie map stays empty and does not become a missing cookie map.</summary>
     [TestMethod]
     public void SaveThenLoad_EmptyCookieMap_StaysEmpty()
     {
@@ -200,7 +200,7 @@ public class SessionStoreTests
         Assert.AreEqual(ulong.MaxValue, store.Load()!.DestPhoneId);
     }
 
-    /// <summary>A leftover .tmp from a crash does not break Save.</summary>
+    /// <summary>A .tmp file left by a crash does not stop Save.</summary>
     [TestMethod]
     public void Save_LeftoverTmp_StillSaves()
     {

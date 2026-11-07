@@ -19,9 +19,9 @@ namespace GMessages.Protocol.Tests.Rpc;
 /// Checks the RPC session against requests and decrypt results from the Go LibGM, using <c>rpc.json</c>.
 /// </summary>
 /// <remarks>
-/// Go's encryption uses a random IV, so encrypted requests are compared by decrypting Go's payload and checking the
-/// plaintext, with the encrypted field normalized away before comparing the rest. The ack request carries a random
-/// request ID, which is copied from Go's request before comparing. Everything else is compared exactly.
+/// Go encrypts with a random IV. The test decrypts the Go payload and checks the plaintext. It then clears the
+/// encrypted field and compares the rest. The ack request carries a random request ID. The test copies it from the
+/// Go request before the comparison. The test compares everything else exactly.
 /// See <see href="https://github.com/mautrix/gmessages/blob/ba33f4875a491f5cb47db8a6baf42a8869f5f383/pkg/libgm/session_handler.go"/>.
 /// </remarks>
 [TestClass]
@@ -33,7 +33,7 @@ public class RpcGoldenTests
 
     private static readonly string[] TtlCases = ["customTtl", "omitTtl", "gaia2"];
 
-    // Same fixed account as Go's golden client; the options pick which URL rules apply.
+    // Same fixed account as the Go golden client. The options select the URL rules.
     private static AuthData BuildAuth(bool cookies = true, bool google = true)
     {
         AuthData golden = AuthDataGoldenTests.BuildGolden();
@@ -79,7 +79,7 @@ public class RpcGoldenTests
     };
 
     /// <summary>
-    /// An unencrypted request with a fixed ID is byte-for-byte what Go builds.
+    /// An unencrypted request with a fixed ID is byte-for-byte the request that Go builds.
     /// </summary>
     [TestMethod]
     public void Build_DontEncrypt_MatchesGoExactly()
@@ -93,7 +93,7 @@ public class RpcGoldenTests
     }
 
     /// <summary>
-    /// An encrypted request differs from Go's only by the random IV: the decrypted payload and all other fields are equal.
+    /// An encrypted request differs from the Go request only by the random IV. The decrypted payload and all other fields are equal.
     /// </summary>
     [TestMethod]
     public void Build_Encrypted_SameFieldsAsGo_AndPlaintextMatches()
@@ -111,7 +111,7 @@ public class RpcGoldenTests
         CollectionAssert.AreEqual(expectedPlain, auth.RequestCrypto.Decrypt(csInner.EncryptedProtoData.Span), "C# plaintext");
         Assert.IsTrue(csInner.UnencryptedProtoData.IsEmpty);
 
-        // Normalize The Random Ciphertext, Then Everything Else Must Be Equal
+        // The ciphertext is random, so clear it before the comparison.
         goInner.EncryptedProtoData = ByteString.Empty;
         csInner.EncryptedProtoData  = ByteString.Empty;
         go.Data.MessageData         = goInner.ToByteString();
@@ -135,7 +135,7 @@ public class RpcGoldenTests
     }
 
     /// <summary>
-    /// The send URL follows the cookie rule: Google host with cookies (and for non-Google accounts), QR host otherwise.
+    /// The send URL depends on the cookies. A Google account with cookies, and a non-Google account, use the Google host. Other accounts use the QR host.
     /// </summary>
     [TestMethod]
     public async Task SendUrl_MatchesGoWithAndWithoutCookies()
@@ -159,7 +159,7 @@ public class RpcGoldenTests
     }
 
     /// <summary>
-    /// Queued acks (a1, a2, a1) are deduplicated and the ack request equals Go's apart from its random request ID.
+    /// The session removes the duplicate from the queued acks a1, a2 and a1. The ack request equals the Go request except for the random request ID.
     /// </summary>
     [TestMethod]
     public async Task Acks_DedupedAndShapedLikeGo()
@@ -179,17 +179,16 @@ public class RpcGoldenTests
         Assert.AreEqual(2, csBody.Acks.Count);
         Assert.IsTrue(Guid.TryParse(csBody.AuthData.RequestID, out _));
 
-        // Random Request ID Copied From Go
         csBody.AuthData.RequestID = goBody.AuthData.RequestID;
         Assert.AreEqual(goBody, csBody);
 
-        // Queue Is Empty Afterwards
+        // The flush empties the queue, so a second flush sends nothing.
         await session.FlushAcksAsync(CancellationToken.None);
         Assert.AreEqual(1, handler.Requests.Count);
     }
 
     /// <summary>
-    /// Messages Go encrypted decode to the same bytes and message type as Go's <c>decryptInternalMessage</c>.
+    /// Messages that Go encrypted decode to the same bytes and message type as in Go <c>decryptInternalMessage</c>.
     /// </summary>
     [TestMethod]
     public void Decode_GoEncryptedMessages_MatchGo()
@@ -213,7 +212,7 @@ public class RpcGoldenTests
     }
 
     /// <summary>
-    /// The action-to-response-type table equals Go's <c>responseType</c> map.
+    /// The table of response types per action equals the Go <c>responseType</c> map.
     /// </summary>
     [TestMethod]
     public void ResponseTable_MatchesGo()
