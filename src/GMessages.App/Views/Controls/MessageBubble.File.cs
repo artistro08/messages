@@ -1,3 +1,4 @@
+using GMessages.App.Media;
 using GMessages.Presentation.Main;
 using GMessages.Presentation.Messaging;
 using Windows.UI.Xaml;
@@ -6,19 +7,13 @@ using Windows.UI.Xaml.Media;
 namespace GMessages.App.Views.Controls;
 
 /// <summary>
-/// The bubble's file card: the name, size and thumbnail, and the click that downloads and opens it.
+/// Shows the file card of the bubble with the name, the size and the thumbnail. A click downloads and opens the file.
 /// </summary>
 /// <remarks>
-/// Part of <see cref="MessageBubble"/>; the other members are in MessageBubble.xaml.cs.
+/// This file is a part of <see cref="MessageBubble"/>. The other members are in MessageBubble.xaml.cs.
 /// </remarks>
 public sealed partial class MessageBubble
 {
-
-    // =========================================================================
-    // FILE CARD
-    // =========================================================================
-
-    // Another File: Its Size, And Its Thumbnail When One Came
     private async void ShowFile()
     {
         MediaPart? part = Bubble is { HasFileCard: true } bubble ? bubble.Media : null;
@@ -27,7 +22,7 @@ public sealed partial class MessageBubble
             return;
         }
 
-        // The Echo Of A File Sent From Here: Keep The Card As It Is
+        // The echo of a file sent from here keeps the card as it is.
         if (part is not null && Bubble is not null && ReferenceEquals(Bubble, _fileBubble) && KeepSentMedia(_filePart, part))
         {
             _filePart = part;
@@ -39,7 +34,7 @@ public sealed partial class MessageBubble
         _fileOpening = false;
         _fileFailed  = false;
 
-        // No File: The Card Unloads (x:Load)
+        // With no file, x:Load unloads the card.
         if (part is null)
         {
             return;
@@ -53,7 +48,7 @@ public sealed partial class MessageBubble
             return;
         }
 
-        // A Thumbnail That Won't Load Leaves The Icon
+        // A thumbnail that does not load leaves the icon.
         try
         {
             byte[] bytes      = await media.GetAsync(part, thumbnail: true, CancellationToken.None);
@@ -69,7 +64,6 @@ public sealed partial class MessageBubble
         }
     }
 
-    // The Line Under The Name: Downloading, The Failure, Or The Size
     private void ShowFileDetail()
     {
         (FileDetail.Text, string state) = (_fileOpening, _fileFailed) switch
@@ -81,7 +75,7 @@ public sealed partial class MessageBubble
         TestHooks.ShowState(FileCard, state);
     }
 
-    // Downloads, Then Opens In The Default App; Once At A Time
+    // The file downloads, then opens in its default app. Only 1 open runs at a time.
     private async void OnFileClick(object sender, RoutedEventArgs e)
     {
         if (_filePart is not { IsPending: false } part || _fileOpening)
@@ -94,7 +88,7 @@ public sealed partial class MessageBubble
         ShowFileDetail();
 
         MessageBubbleViewModel? bubble = _fileBubble;
-        bool opened                    = await OpenMediaAsync(part);
+        bool opened                    = await MediaActions.OpenAsync(XamlRoot, part, Bubble?.Id ?? string.Empty);
         if (!ReferenceEquals(bubble, _fileBubble))
         {
             return;

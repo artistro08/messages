@@ -12,21 +12,17 @@ using WinRT;
 namespace GMessages.App.Views.Controls;
 
 /// <summary>
-/// The bubble's photo: loading, sizing and clipping it, a GIF's pause when out of sight, and opening the viewer.
+/// Loads, sizes and clips the photo of the bubble, pauses a GIF out of sight, and opens the viewer.
 /// </summary>
 /// <remarks>
-/// Part of <see cref="MessageBubble"/>; the other members are in MessageBubble.xaml.cs.
+/// This file is a part of <see cref="MessageBubble"/>. The other members are in MessageBubble.xaml.cs.
 /// </remarks>
 public sealed partial class MessageBubble
 {
-
-    // =========================================================================
-    // PHOTO
-    // =========================================================================
-
-    // Another Photo, Or The Same One With Its Full Size Now (The Phone's Edit Swaps The Media Part): Load It. The Same
-    // Message Keeps Its Blurred Look While The Full Image Loads; Another One Starts Clear. The Echo Of A Photo Sent From
-    // Here Keeps What Shows: Its Bytes Are The Photo, So They Go In The Cache Under Its New Media ID Instead Of A Download
+    // Loads another photo, or the same photo when its full size arrives. The edit of the phone then swaps the media
+    // part. The same message keeps its blurred look while the full image loads. Another message starts clear. The echo
+    // of a photo sent from here keeps what shows. Its bytes are the photo, so they go in the cache under its new media
+    // ID, and nothing downloads.
     private void ShowPhoto()
     {
         MediaPart? part = Bubble is { HasPhoto: true } bubble ? bubble.Media : null;
@@ -35,7 +31,8 @@ public sealed partial class MessageBubble
             return;
         }
 
-        // No Photo: The Part Unloads With Its Images (x:Load), And A GIF's Clip Visual With It; A Load Still Running Stops
+        // With no photo, x:Load unloads the part with its images and the clip visual of a GIF. A load that still runs
+        // stops.
         if (part is null)
         {
             _photoPart       = null;
@@ -52,8 +49,8 @@ public sealed partial class MessageBubble
         bool sameMessage = Bubble is not null && ReferenceEquals(Bubble, _photoBubble);
         if (sameMessage && KeepSentMedia(_photoPart, part))
         {
-            // An Echo With Only A Thumbnail (An MMS Photo's) Keeps The Sent Bytes On Show: Loading It Showed The Tiny
-            // Thumbnail Blurred, Waiting For A Full Size That May Never Come
+            // An echo with only a thumbnail, as for an MMS photo, keeps the sent bytes on show. A load of the echo
+            // showed the tiny thumbnail blurred. It then waited for a full size that can never come.
             _photoPart = part.MediaId.Length > 0 ? part : _photoPart;
             SizePhoto();
             return;
@@ -64,7 +61,7 @@ public sealed partial class MessageBubble
         _photoFailed = false;
         int load     = NextPhotoLoad();
 
-        // Another Message, Or None (A Bubble Without A Photo): Let Go Of The Old Images
+        // For another message, the bubble releases the old images.
         if (!sameMessage)
         {
             PhotoBlur.Background        = null;
@@ -82,16 +79,16 @@ public sealed partial class MessageBubble
         _ = LoadPhotoAsync(part, load, again: false);
     }
 
-    // The Same Media Though The Bubble's Update Built A New Part (A Status Or Reaction Change): Nothing To Load Again.
-    // Inline Bytes Count By Reference, So Two Pending Parts With One Name Still Differ
+    // Returns true when 2 parts hold the same media, so that nothing loads again. A status or reaction change makes a
+    // new part with the same media. Inline bytes compare by reference, so 2 pending parts with 1 name still differ.
     private static bool SameMedia(MediaPart? a, MediaPart? b) =>
         a is null || b is null ? a is null && b is null
             : a.MediaId == b.MediaId && a.ThumbnailId == b.ThumbnailId && a.Name == b.Name
               && (ReferenceEquals(a.InlineData, b.InlineData) || (a.InlineData.Length == 0 && b.InlineData.Length == 0));
 
-    // The Echo Of An Attachment Sent From Here: The Shown Part Held Its Bytes, And The New One Has The Media ID They
-    // Uploaded As (The Bytes Go In The Cache Under That ID, So Nothing Downloads Again), Or Only A Thumbnail (The Bytes
-    // Keep Showing); True When So
+    // Returns true for the echo of an attachment sent from here. The shown part held the bytes. The echo has the media
+    // ID of the upload or only a thumbnail. The bytes go in the cache under that ID, so nothing downloads again. With
+    // only a thumbnail, the bytes keep showing.
     private static bool KeepSentMedia(MediaPart? shown, MediaPart? echo)
     {
         if (shown is not { InlineData.Length: > 0 } local || echo is not { InlineData.Length: 0 } || echo is { MediaId.Length: 0, ThumbnailId.Length: 0 })
@@ -103,7 +100,7 @@ public sealed partial class MessageBubble
         return true;
     }
 
-    // Starts A Photo Load: Its Number, With An Older Load's Wait For The Full Size Cancelled
+    // Starts a photo load and gives its number. The method cancels the wait of an older load for the full size.
     private int NextPhotoLoad()
     {
         _cancelPhotoWait?.Invoke();
@@ -111,9 +108,9 @@ public sealed partial class MessageBubble
         return ++_photoLoad;
     }
 
-    // The Photo's Or Video's Size From Its Dimensions, Fitted To The Bubble (See MessageBubbleViewModel.PhotoSize). A
-    // Photo's Width Is Its Least: A Wider Caption Or Quote Stretches It To The Bubble's Width, Cropped To Its Height
-    // (Issue #30). A Video Keeps Its Size
+    // Sizes the photo or the video from its dimensions, fitted to the bubble. See MessageBubbleViewModel.PhotoSize. The
+    // width of a photo is its minimum. A wider caption or quote stretches the photo to the width of the bubble, cropped
+    // to its height. See issue #30. A video keeps its size.
     private void SizePhoto()
     {
         if (Bubble is not { FillsBubble: true, Media: { } media } bubble)
@@ -140,9 +137,9 @@ public sealed partial class MessageBubble
         shown.Height = height;
     }
 
-    // Blurred First, Then Sharp. A Thumbnail-Only Photo Asks The Phone For Its Full Size Instead, Which Comes Back As A New
-    // Media Part (ShowPhoto Then Loads Again); If It Never Comes, The Photo Offers To Try Again. Any Failure Keeps What
-    // Shows And Says So; A Click Tries Again
+    // Shows the photo blurred first, then sharp. A thumbnail-only photo asks the phone for its full size instead. The
+    // full size arrives as a new media part, and ShowPhoto then loads again. When it never comes, the photo offers
+    // to try again. Any failure keeps what shows and says so, and a click tries again.
     private async Task LoadPhotoAsync(MediaPart part, int load, bool again)
     {
         if (part.IsPending)
@@ -158,7 +155,8 @@ public sealed partial class MessageBubble
 
         try
         {
-            // Blurred: The Thumbnail (Or The Photo Itself When No Thumbnail Came), Decoded Tiny And Stretched
+            // The blurred look is the thumbnail, decoded tiny and stretched. With no thumbnail, the photo itself takes
+            // its place.
             if (PhotoBlur.Background is null)
             {
                 byte[] small     = await media.GetAsync(part, thumbnail: true, CancellationToken.None);
@@ -172,7 +170,8 @@ public sealed partial class MessageBubble
                 TestHooks.ShowState(Photo, "Blurred");
             }
 
-            // Only The Thumbnail Came: Ask For The Full Size, And Offer To Try Again If It Doesn't Come
+            // Only the thumbnail came, so the bubble asks for the full size. When it does not come, the photo offers to
+            // try again.
             if (part is { MediaId.Length: 0, ThumbnailId.Length: > 0 })
             {
                 await bubble.RequestFullSizeAsync(media, again);
@@ -202,7 +201,8 @@ public sealed partial class MessageBubble
                 return;
             }
 
-            // Sharp: Decoded At The Photo's Size. One Already In Memory (A Recycled Row Showing It Again) Shows At Once
+            // The sharp image decodes at the size of the photo. An image already in memory shows at once with no fade,
+            // as on a recycled row that shows it again.
             Task<byte[]> fullTask  = media.GetAsync(part, thumbnail: false, CancellationToken.None);
             bool atOnce            = fullTask.IsCompleted;
             byte[] full            = await fullTask;
@@ -212,7 +212,8 @@ public sealed partial class MessageBubble
                 return;
             }
 
-            // Its Size Read From The Same Stream It Decodes From, Then Decoded To Fill The Box
+            // The decoder reads the size from the stream that it decodes. The photo then decodes to fill the box, at
+            // the box width, so it is not blurred.
             double boxWidth  = Math.Max(Photo.ActualWidth, Photo.MinWidth);
             double boxHeight = Photo.Height;
             (ImageSource? fitted, int pixelWidth, int pixelHeight, int decodeWidth) =
@@ -225,8 +226,8 @@ public sealed partial class MessageBubble
                 return;
             }
 
-            // A Moving GIF Plays In An Image (A Brush Shows Only Its First Frame; Test Runs Note It); A Still Photo Is The
-            // Layer's Brush, Which The Border's Corners Clip With No Composition Clip
+            // A moving GIF plays in an Image, because a brush shows only its first frame. Test runs note a GIF. A still
+            // photo is the brush of the layer. The corners of the Border clip it with no Composition clip.
             BitmapImage? gif            = image.As<BitmapImage>() is { IsAnimatedBitmap: true } moving ? moving : null;
             bool animated               = gif is not null;
             _photoAnimated              = animated;
@@ -254,13 +255,14 @@ public sealed partial class MessageBubble
         }
     }
 
-    // A GIF's Image Clipped To The Photo's Rounded Corners (An Image Isn't Clipped By Its Border's Corners); A Still
-    // Photo's Brush Needs No Clip, So Any Left From A GIF This Container Showed Goes.
-    // The Clip Goes On The Image, Never On PhotoFull: PhotoFull Fades In Through OpacityTransition, A XAML Implicit
-    // Transition, And Windows Refuses The Composition Visual Of An Element That Uses One (E_ACCESSDENIED, Reproduced By
-    // ManyPhotos_FastScroll_NoCrash: Every Failure Was A Faded-In GIF's PhotoFull, Loaded And Laid Out). In 0.6.2 That
-    // Throw Escaped SizeChanged And x:Bind Callbacks Into XAML And Crashed The App (0xc000027b). The Visual Is Taken Once,
-    // For A GIF, On Loaded Or When It Arrives; Size And Corner Changes Only Reshape The Clip
+    // Clips the Image of a GIF to the rounded corners of the photo. The corners of its Border do not clip an Image. A
+    // still photo is a brush and needs no clip. Thus the method removes a clip that a GIF of this container left.
+    // The clip goes on the Image, never on PhotoFull. PhotoFull fades in through OpacityTransition, a XAML implicit
+    // transition. Windows refuses the Composition visual of an element that uses one, with E_ACCESSDENIED.
+    // ManyPhotos_FastScroll_NoCrash reproduced it: every failure was the PhotoFull of a faded-in GIF, loaded and laid
+    // out. In 0.6.2 that throw escaped SizeChanged and x:Bind callbacks into XAML and crashed the app with 0xc000027b.
+    // The method takes the visual once for a GIF, on Loaded or when the GIF arrives. Changes of size and corners only
+    // reshape the clip.
     private void ClipPhotoFull(bool mayTake = false)
     {
         if (PhotoFullImage is null || Bubble is not { } bubble || (_photoFullVisual is null && (!mayTake || !_photoAnimated || !PhotoFullImage.IsLoaded)))
@@ -273,8 +275,8 @@ public sealed partial class MessageBubble
             _photoFullVisual ??= ElementCompositionPreview.GetElementVisual(PhotoFullImage);
             Visual visual      = _photoFullVisual;
 
-            // The Photo's Corners From The Bubble Itself, Not The Bound Ones, Which May Not Have Caught Up With A Change Yet.
-            // Not Laid Out Yet: Its SizeChanged Clips It Later
+            // The corners come from the bubble itself, not from the bound corners. The bound corners can still show the
+            // state before a change. An image that is not laid out yet gets its clip later from SizeChanged.
             CornerRadius r = PhotoCorners(bubble.FromMe, bubble.IsFirstInGroup, bubble.IsLastInGroup, bubble.HasBodyText);
             if (!_photoAnimated || !ClipRounded(visual, PhotoFullImage, r))
             {
@@ -283,14 +285,14 @@ public sealed partial class MessageBubble
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            // Square Corners Beat A Crash; The Next Size Change Tries Again
+            // Square corners are better than a crash. The next size change tries again.
             AppLog.MediaFailed(App.ShellLog, "clip", Bubble?.Id ?? string.Empty, ex.GetType().Name);
         }
     }
 
-    // Rounds A Visual To An Element's Size With The Given Corners; False When The Element Isn't Laid Out Yet (Nothing
-    // Changed). A Corner Can't Be Rounder Than Half The Shorter Side, Or The Clip Is Refused (Which Crashed The App On
-    // Opening A Chat)
+    // Rounds a visual to the size of an element with the given corners. Returns false and changes nothing when the
+    // element is not laid out yet. A corner radius must not be more than half the shorter side. Windows refuses such a
+    // clip, and that refusal crashed the app when a chat opened.
     private static bool ClipRounded(Visual visual, FrameworkElement element, CornerRadius corners)
     {
         float width  = (float)element.ActualWidth;
@@ -309,8 +311,8 @@ public sealed partial class MessageBubble
         static Vector2 Corner(double radius, float most) => new(Math.Min((float)radius, most));
     }
 
-    // Follows Where The Moving GIF Shown Is (Null For None), So It Pauses Off Screen (A Realized Row Off Screen Isn't
-    // Recycled At Once, And Its GIF Kept Playing)
+    // Follows the position of the moving GIF on show, so that it pauses off screen. Null means no GIF. The list does
+    // not recycle a realized row off screen at once, and its GIF kept playing.
     private void WatchGif(BitmapImage? gif)
     {
         if (ReferenceEquals(gif, _gif))
@@ -331,8 +333,8 @@ public sealed partial class MessageBubble
         _gifPaused = false;
     }
 
-    // Off Screen: The GIF Pauses; Back On Screen, One Paused Here Plays Again (One Windows Never Played, With Animation
-    // Effects Off, Stays Still)
+    // An animated GIF pauses off screen and plays again on screen. Only a GIF that this method paused plays again. With
+    // animation effects off, Windows never plays a GIF, and the GIF stays still.
     private void OnGifViewportChanged(FrameworkElement sender, EffectiveViewportChangedEventArgs args)
     {
         if (_gif is not { } gif)
@@ -353,7 +355,7 @@ public sealed partial class MessageBubble
         }
     }
 
-    // Whether None Of The Bubble Is In The Viewport Seen
+    // Returns true when no part of the bubble is in the effective viewport.
     private bool OutOfSight(Windows.Foundation.Rect seen) =>
         seen.Width <= 0 || seen.Height <= 0 || seen.Bottom <= 0 || seen.Top >= ActualHeight || seen.Right <= 0 || seen.Left >= ActualWidth;
 
@@ -363,7 +365,7 @@ public sealed partial class MessageBubble
         ShowPhotoNote(ChatCopy.PhotoLoadFailed, "Failed");
     }
 
-    // The Note Over The Photo (Waiting, Or Failed), Or None
+    // Shows the note over the photo for a wait or a failure, or no note.
     private void ShowPhotoNote(string? text, string state)
     {
         PhotoNote.Text           = text ?? string.Empty;
@@ -371,8 +373,8 @@ public sealed partial class MessageBubble
         TestHooks.ShowState(Photo, state);
     }
 
-    // After A Failure, Try Again (Asking The Phone Again For A Full Size That Never Came); While Waiting For The Phone,
-    // Nothing; Otherwise Show It In The Window's Photo Viewer
+    // After a failure, a click tries again and asks the phone again for a missing full size. While the photo waits for
+    // the phone, a click does nothing. Else the photo shows in the photo viewer of the window.
     private void OnPhotoClick(object sender, RoutedEventArgs e)
     {
         if (_photoPart is not { IsPending: false } part || sender is not Control photo)
@@ -391,7 +393,8 @@ public sealed partial class MessageBubble
         ShowInViewer(part, photo);
     }
 
-    // The Photo Over The Whole Window, Named As The Bubble's Photo Is; Focus Goes Back To The Part It Opened From
+    // Shows the photo over the whole window with the name of the photo in the bubble. Focus returns to the part that it
+    // opened from.
     private void ShowInViewer(MediaPart part, Control from) =>
         (Application.Current as App)?.MainWindow?.ShowPhoto(part, Bubble?.Id ?? string.Empty, Bubble?.PhotoName ?? ChatCopy.Photo, from);
 }

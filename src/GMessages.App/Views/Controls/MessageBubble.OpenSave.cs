@@ -5,24 +5,16 @@ using Windows.UI.Xaml;
 namespace GMessages.App.Views.Controls;
 
 /// <summary>
-/// The bubble menu's Open, Open with, Save as and Download.
+/// Runs Open, Open with, Save as and Download from the bubble menu.
 /// </summary>
 /// <remarks>
-/// Part of <see cref="MessageBubble"/>; the other members are in MessageBubble.xaml.cs.
+/// This file is a part of <see cref="MessageBubble"/>. The other members are in MessageBubble.xaml.cs.
 /// </remarks>
 public sealed partial class MessageBubble
 {
-
-    // =========================================================================
-    // OPEN AND SAVE
-    // =========================================================================
-
-    // Opens The File In Its Default App (See MediaActions.OpenAsync). True When Opened Or Offered For Saving
-    private Task<bool> OpenMediaAsync(MediaPart part) => MediaActions.OpenAsync(XamlRoot, part, Bubble?.Id ?? string.Empty);
-
     /// <summary>
-    /// The bubble menu's Open: as a click on the photo (the viewer), the video's frame, the voice message, or the file
-    /// card (its default app).
+    /// Runs Open from the bubble menu. Open does what a click on the photo, video frame, voice message or file card
+    /// does.
     /// </summary>
     public void Open()
     {
@@ -46,7 +38,7 @@ public sealed partial class MessageBubble
     }
 
     /// <summary>
-    /// The bubble menu's Open with: the photo, video, voice message or file with Windows' app picker.
+    /// Runs Open with from the bubble menu. The app picker of Windows opens the photo, video, voice message or file.
     /// </summary>
     public void OpenWith()
     {
@@ -57,7 +49,7 @@ public sealed partial class MessageBubble
     }
 
     /// <summary>
-    /// The bubble menu's Save as: the Windows Save dialog for the photo or file.
+    /// Runs Save as from the bubble menu with the Save dialog of Windows.
     /// </summary>
     public void SaveAs()
     {
@@ -68,7 +60,7 @@ public sealed partial class MessageBubble
     }
 
     /// <summary>
-    /// The bubble menu's Download: into the Downloads folder, with the window's confirmation.
+    /// Runs Download from the bubble menu. The file goes to the Downloads folder, and the window confirms it.
     /// </summary>
     public void Download()
     {

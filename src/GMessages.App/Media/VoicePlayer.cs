@@ -6,34 +6,35 @@ using Windows.System;
 namespace GMessages.App.Media;
 
 /// <summary>
-/// A request to play, pause or seek a voice message (a bubble's, or the recording's preview chip).
+/// Holds a request to play, pause or seek a voice message. The message is in a bubble or in the recording preview.
 /// </summary>
-/// <param name="Key">Names the message, so the player knows whether it is the one playing.</param>
-/// <param name="Audio">The audio file's bytes.</param>
-/// <param name="Length">How long it plays (from its waveform).</param>
-/// <param name="SeekTo">Where to seek, from 0 to 1; null to play or pause.</param>
-/// <param name="Show">Shows the message's state: whether it plays, and how much has played (0 to 1).</param>
+/// <param name="Key">The name of the message, so that the player knows whether this message plays now.</param>
+/// <param name="Audio">The bytes of the audio file.</param>
+/// <param name="Length">The length of the message, from its waveform.</param>
+/// <param name="SeekTo">Where to seek, from 0 to 1, or null to play or pause.</param>
+/// <param name="Show">Shows whether the message plays, and how much of it has played, from 0 to 1.</param>
 public sealed record VoiceRequest(string Key, byte[] Audio, TimeSpan Length, double? SeekTo, Action<bool, double> Show);
 
 /// <summary>
-/// Plays voice messages for one chat pane: one <see cref="MediaPlayer"/>, so starting one message stops the other.
+/// Plays the voice messages of a chat pane with 1 <see cref="MediaPlayer"/>, so a message that starts stops the last
+/// message.
 /// </summary>
 /// <remarks>
 /// <para>
-/// The audio plays from memory (never from disk). While a message plays, its <see cref="VoiceRequest.Show"/> hears how
-/// much has played ten times a second; when it pauses, ends or another message starts, it hears that too. The player
-/// stays off the system media controls, so no message shows there. It plays as media, so it reaches the default
-/// speakers (a communications stream goes to the default communications device instead). A test run plays muted, and
-/// notes the player's real state for the tests (<see cref="TestHooks.NoteState"/>).
+/// The audio plays from memory, never from disk. While a message plays, its <see cref="VoiceRequest.Show"/> gets the
+/// played share 10 times a second. It also gets a pause, the end and the start of another message. The player stays
+/// off the system media controls, so no message shows there. It plays as media, so the sound reaches the default
+/// speakers. A communications stream goes to the default communications device instead. A test run plays muted and
+/// notes the real state of the player for the tests. See <see cref="TestHooks.NoteState"/>.
 /// </para>
 /// <para>
-/// The pane disposes it on a chat switch and when it unloads, which stops the playing message and lets go of the
-/// player and its audio.
+/// The pane disposes the player on a chat switch and when the pane unloads. That stops the message that plays and
+/// releases the player and its audio.
 /// </para>
 /// </remarks>
 internal sealed class VoicePlayer : IDisposable
 {
-    // How Often A Playing Message Hears How Far It Got
+    // How often a message that plays gets its played share.
     private static readonly TimeSpan Tick = TimeSpan.FromMilliseconds(100);
 
     private readonly DispatcherQueue _queue;
@@ -42,18 +43,17 @@ internal sealed class VoicePlayer : IDisposable
     private MediaSource? _source;
     private IRandomAccessStream? _stream;
 
-    // Whether The Loaded Message Plays (Asked For: The Player's Own State Lags)
+    // The play state that the request asked for. The state of the player itself lags.
     private bool _playing;
 
-    // The Message Loaded In The Player, Its Length And Who Shows Its State
     private string _key = string.Empty;
     private TimeSpan _length;
     private Action<bool, double>? _show;
 
     /// <summary>
-    /// Creates the player; nothing loads until the first request.
+    /// Creates the player. Nothing loads before the first request.
     /// </summary>
-    /// <param name="queue">The UI thread's queue, where every state change is shown.</param>
+    /// <param name="queue">The queue of the UI thread, where every state change shows.</param>
     public VoicePlayer(DispatcherQueue queue)
     {
         ArgumentNullException.ThrowIfNull(queue);
@@ -64,19 +64,21 @@ internal sealed class VoicePlayer : IDisposable
         _timer.Tick    += (_, _) => ShowState();
     }
 
-    /// <summary>Gets the key of the message loaded in the player, or empty.</summary>
+    /// <summary>Gets the key of the message in the player, or an empty string.</summary>
     public string Key => _key;
 
     /// <summary>
-    /// Plays or pauses a message, or seeks in it: another message stops first.
+    /// Plays or pauses a message, or seeks in it. Another message that plays stops first.
     /// </summary>
-    /// <remarks>A seek in a message not loaded starts it there; a seek in the loaded one keeps it playing or paused.</remarks>
+    /// <remarks>
+    /// A seek in a message that is not loaded starts it there. A seek in the loaded message keeps its play or pause
+    /// state.
+    /// </remarks>
     /// <param name="request">The request.</param>
     public void Handle(VoiceRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        // Another Message: Stop The Last, Load This One At The Seek
         if (request.Key != _key || _player is null)
         {
             Stop();
@@ -101,7 +103,7 @@ internal sealed class VoicePlayer : IDisposable
     }
 
     /// <summary>
-    /// Stops the playing message (it shows stopped) and unloads it.
+    /// Stops the message that plays, shows it stopped and unloads it.
     /// </summary>
     public void Stop()
     {
@@ -130,9 +132,9 @@ internal sealed class VoicePlayer : IDisposable
     /// <inheritdoc/>
     public void Dispose() => Stop();
 
-    // A New Player Over The Audio In Memory, Starting At The Seek (Off The System Media Controls; Muted In A Test Run).
-    // Media, Not Communications: Windows Sends A Communications Stream To The Default Communications Device (Often A
-    // Headset Or A USB Microphone's Jack), So It Was Silent On The Speakers
+    // The command manager is off, so the player stays off the system media controls. The audio category is Media, not
+    // Communications. Windows sends a communications stream to the default communications device. That device is
+    // often a headset or the jack of a USB microphone. Thus the message was silent on the speakers.
     private void Load(VoiceRequest request)
     {
         _key    = request.Key;
@@ -152,11 +154,11 @@ internal sealed class VoicePlayer : IDisposable
         _player.MediaFailed             += OnMediaFailed;
     }
 
-    // Raised Off The UI Thread: The Audio Couldn't Play
+    // Windows raises this event off the UI thread when the audio cannot play.
     private void OnMediaFailed(MediaPlayer sender, MediaPlayerFailedEventArgs args) =>
         TestHooks.NoteState("voice-failed", FormattableString.Invariant($"{args.Error} 0x{args.ExtendedErrorCode?.HResult ?? 0:X8}"));
 
-    // Raised Off The UI Thread: Back To The Start, Shown Stopped
+    // Windows raises this event off the UI thread. The message returns to the start and shows stopped.
     private void OnMediaEnded(MediaPlayer sender, object args) => _queue.TryEnqueue(() =>
     {
         if (!ReferenceEquals(sender, _player))
@@ -171,7 +173,6 @@ internal sealed class VoicePlayer : IDisposable
         _show?.Invoke(false, 0);
     });
 
-    // Plays Or Pauses The Loaded Message, Following It Ten Times A Second While It Plays
     private void Play(bool play)
     {
         if (_player is not { } player)
@@ -194,7 +195,6 @@ internal sealed class VoicePlayer : IDisposable
         ShowState();
     }
 
-    // Whether It Plays, And How Much Has Played
     private void ShowState()
     {
         if (_player is not { } player || _show is not { } show)
@@ -203,7 +203,8 @@ internal sealed class VoicePlayer : IDisposable
         }
 
 #if EnableTestHooks
-        // Test Run: The Player's Real State, Position And Length (Seconds); Never Built Ten Times A Second Outside One
+        // A test run notes the real state, position and length of the player in seconds. Other runs never build this
+        // string 10 times a second.
         MediaPlaybackSession session = player.PlaybackSession;
         TestHooks.NoteState("voice-player", FormattableString.Invariant($"{session.PlaybackState} {session.Position.TotalSeconds:0.00} {session.NaturalDuration.TotalSeconds:0.00} {player.AudioCategory}"));
 #endif
@@ -212,7 +213,7 @@ internal sealed class VoicePlayer : IDisposable
         show(_playing, total > 0 ? player.PlaybackSession.Position.TotalSeconds / total : 0);
     }
 
-    // The Player's Own Length Once Opened, Else The Waveform's
+    // The length of the player after it opens, else the length of the waveform.
     private TimeSpan Duration() =>
         _player?.PlaybackSession.NaturalDuration is { Ticks: > 0 } natural ? natural : _length;
 }
