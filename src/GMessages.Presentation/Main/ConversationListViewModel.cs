@@ -41,7 +41,6 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
     // Null means that no more pages are left.
     private Cursor? _next;
     private bool _isLoading;
-    private bool _isLoadingMore;
 
     // Live changes animate only after the first load ends, with a page or with a failure.
     private bool _hasLoaded;
@@ -153,22 +152,9 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
     public bool IsLoadingFirstPage => _isLoading && Rows.Count == 0 && Pinned.Count == 0;
 
     /// <summary>
-    /// Gets whether the next page is loading below the rows. The small ring at the bottom of the list then shows.
+    /// Gets whether older pages are left to load. The placeholder rows at the end of the list then show.
     /// </summary>
-    public bool IsLoadingMore
-    {
-        get => _isLoadingMore;
-        private set
-        {
-            if (_isLoadingMore == value)
-            {
-                return;
-            }
-
-            _isLoadingMore = value;
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsLoadingMore)));
-        }
-    }
+    public bool HasMorePages => _next is not null;
 
     /// <summary>
     /// Loads the newest page in place of the rows.
@@ -209,13 +195,14 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
             DropUnlisted(Pinned, kept);
             DropUnlisted(Rows, kept);
 
-            _next = next;
             _paged.Clear();
             _paged.UnionWith(listed);
             foreach (ConversationInfo c in page)
             {
                 Apply(c, live: false);
             }
+
+            SetNext(next);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -237,35 +224,37 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
     /// <remarks>
     /// <para>
     /// Call it on the UI thread. The call does nothing when no more pages are left. A call during a load runs when that
-    /// load ends. The view asks when the last row shows. A row that showed during a load does not show again until it
-    /// scrolls out of view and back in. Without the wait, the paging sometimes stopped.
+    /// load ends. The view asks only while the list is at its bottom. Live updates can show all rows of a page before
+    /// the page arrives. The page then adds nothing below, the list stays at its bottom, and the view asks again.
     /// </para>
     /// <para>
     /// A page with no conversation that the earlier pages did not list ends the paging. Such a page is empty, or the
-    /// phone ignored the cursor. Thus the scroll never asks for the same page forever. Live updates can show all rows
-    /// of a page before the page arrives. The last row then does not change, so the next page loads at once.
+    /// phone ignored the cursor. Thus the scroll never asks for the same page forever.
     /// </para>
     /// </remarks>
-    /// <returns>A task that completes when the page is shown.</returns>
-    public async Task LoadMoreAsync()
+    /// <returns>
+    /// A task that completes when the page is shown. Its result is true when a page came, and false when the call
+    /// waited for a load, no pages were left or the page failed.
+    /// </returns>
+    public async Task<bool> LoadMoreAsync()
     {
         if (IsLoading)
         {
             _morePending = true;
-            return;
+            return false;
         }
 
         if (_next is null)
         {
-            return;
+            return false;
         }
 
         // The set must hold the rows from before the page. The load raises live updates that add the rows of the page
         // before the load returns.
         HashSet<string> shown = [.. Pinned.Select(r => r.Id), .. Rows.Select(r => r.Id)];
 
-        IsLoading     = true;
-        IsLoadingMore = true;
+        bool loaded = false;
+        IsLoading   = true;
         try
         {
             (IReadOnlyList<ConversationInfo> page, Cursor? next) = await _store.LoadFolderAsync(_folder, _next, CancellationToken.None);
@@ -276,18 +265,18 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
                 isNew |= _paged.Add(c.Id);
             }
 
-            _next = isNew ? next : null;
             foreach (ConversationInfo c in page)
             {
                 Apply(c, live: false);
+                if (!shown.Contains(c.Id))
+                {
+                    Find(c.Id)?.MarkPaged();
+                }
             }
 
-            // Live updates showed each row of the page before the page came. The last row did not change, so it does
-            // not show again to ask for the next page. The list asks now.
-            if (_next is not null && page.All(c => shown.Contains(c.Id)))
-            {
-                _morePending = true;
-            }
+            // The placeholder rows leave only after the rows of the page are in, so the list does not jump up.
+            SetNext(isNew ? next : null);
+            loaded = true;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -296,11 +285,21 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
         }
         finally
         {
-            IsLoading     = false;
-            IsLoadingMore = false;
+            IsLoading = false;
         }
 
         await RunPendingReloadAsync();
+        return loaded;
+    }
+
+    private void SetNext(Cursor? next)
+    {
+        bool had = HasMorePages;
+        _next    = next;
+        if (had != HasMorePages)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HasMorePages)));
+        }
     }
 
     // A resync or a reload during a load can make the page stale, so the list loads again. A next page that a caller

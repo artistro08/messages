@@ -455,11 +455,11 @@ public sealed class ConversationListViewModelTests
 
     /// <summary>
     /// The conversations of the next page can reach the list first as live updates, which the phone pushes. That page
-    /// is still new to the paging, so the paging continues. The rows were already on screen, so the last row never
-    /// changed to ask for the next page. The next page loads at once instead.
+    /// is still new to the paging, so the paging continues. The next page does not load by itself. The view asks for
+    /// it while the list stays at its bottom.
     /// </summary>
     [TestMethod]
-    public async Task LoadMore_PageAlreadyShownByLiveUpdates_KeepsPaging()
+    public async Task LoadMore_PageAlreadyShownByLiveUpdates_KeepsPaging_NoAutoLoad()
     {
         using var rig = new MainRig();
         rig.Page(MainRig.Conv("a", "Ann"));
@@ -479,8 +479,12 @@ public sealed class ConversationListViewModelTests
         rig.Client.NextPages.Enqueue(page3);
         rig.Page();
 
-        await list.LoadMoreAsync();
+        Assert.IsTrue(await list.LoadMoreAsync(), "A page that added no row didn't count as a page.");
+        Assert.AreEqual("a,b", Ids(list));
+        Assert.AreEqual(2, rig.Client.ListCalls.Count, "The next page loaded with no ask.");
+        Assert.IsTrue(list.HasMorePages);
 
+        await list.LoadMoreAsync();
         Assert.AreEqual("a,b,c", Ids(list));
         Assert.AreEqual(3, rig.Client.ListCalls.Count);
         Assert.AreEqual("p3", rig.Client.ListCursors[2]?.LastItemID);
@@ -491,31 +495,59 @@ public sealed class ConversationListViewModelTests
     }
 
     /// <summary>
-    /// The bottom ring shows only while the next page loads, not while the list reloads.
+    /// Only a row that a later page adds fades in, and only 1 time. Rows of the first page and rows that showed
+    /// before the page do not fade.
     /// </summary>
     [TestMethod]
-    public async Task IsLoadingMore_OnlyWhileTheNextPageLoads()
+    public async Task LoadMore_NewRowsFadeInOnce()
     {
         using var rig = new MainRig();
         rig.Page(MainRig.Conv("a", "Ann"));
         using var list = NewList(rig);
         await list.LoadAsync();
 
-        var reload          = new TaskCompletionSource();
-        rig.Client.ListGate = reload;
-        Task again          = list.LoadAsync();
-        Assert.IsFalse(list.IsLoadingMore);
-        reload.SetResult();
-        await again;
+        rig.Page(MainRig.Conv("a", "Ann"), MainRig.Conv("b", "Bo", minutesAgo: 30));
+        await list.LoadMoreAsync();
+
+        ConversationRowViewModel ann = list.Rows.Single(r => r.Id == "a");
+        ConversationRowViewModel bo  = list.Rows.Single(r => r.Id == "b");
+        Assert.IsFalse(ann.TakeFadeIn(), "A row from before the page faded in.");
+        Assert.IsTrue(bo.TakeFadeIn());
+        Assert.IsFalse(bo.TakeFadeIn(), "The row faded in a second time.");
+    }
+
+    /// <summary>
+    /// The placeholder rows show while older pages are left. They stay through a page load and leave after the last
+    /// page, with 1 change notice for each change.
+    /// </summary>
+    [TestMethod]
+    public async Task HasMorePages_FollowsTheCursor()
+    {
+        using var rig = new MainRig();
+        rig.Page(MainRig.Conv("a", "Ann"));
+        rig.Client.ConversationsPage.Cursor = new Cursor { LastItemID = "next" };
+        using var list = NewList(rig);
+        int notices    = 0;
+        list.PropertyChanged += (_, e) => notices += e.PropertyName == nameof(ConversationListViewModel.HasMorePages) ? 1 : 0;
+        Assert.IsFalse(list.HasMorePages);
+
+        await list.LoadAsync();
+        Assert.IsTrue(list.HasMorePages);
+        Assert.AreEqual(1, notices);
 
         rig.Page(MainRig.Conv("b", "Bo", minutesAgo: 30));
         var gate            = new TaskCompletionSource();
         rig.Client.ListGate = gate;
         Task more           = list.LoadMoreAsync();
-        Assert.IsTrue(list.IsLoadingMore);
+        Assert.IsTrue(list.HasMorePages, "The placeholder rows left before the page came.");
         gate.SetResult();
         await more;
-        Assert.IsFalse(list.IsLoadingMore);
+        Assert.IsTrue(list.HasMorePages);
+
+        // A page with no new conversation is the last page.
+        await list.LoadMoreAsync();
+        Assert.IsFalse(list.HasMorePages);
+        Assert.AreEqual(2, notices);
     }
 
     /// <summary>
@@ -542,15 +574,14 @@ public sealed class ConversationListViewModelTests
         Assert.HasCount(2, rig.Client.ListCalls);
         Assert.AreEqual("next", rig.Client.ListCursors[1]?.LastItemID);
         Assert.IsFalse(list.IsLoading);
-        Assert.IsFalse(list.IsLoadingMore);
 
         rig.Page(MainRig.Conv("a", "Ann"), MainRig.Conv("b", "Bo", minutesAgo: 30));
         rig.Client.ConversationsPage.Cursor = new Cursor { LastItemID = "next" };
         await list.LoadAsync();
         rig.Client.ListThrows = new TimeoutException();
-        await list.LoadMoreAsync();
+        Assert.IsFalse(await list.LoadMoreAsync(), "A failed page counted as a page.");
         Assert.IsFalse(list.IsLoading);
-        Assert.IsFalse(list.IsLoadingMore);
+        Assert.IsTrue(list.HasMorePages, "A failed page ended the paging.");
         rig.Client.ListThrows = null;
         int calls = rig.Client.ListCalls.Count;
         await list.LoadMoreAsync();
