@@ -681,7 +681,7 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
 
         RefreshGroups(c, at - 1, at + 1);
         RefreshQuotes(c);
-        RefreshStatus(encrypted, from);
+        RefreshStatus(encrypted, Math.Min(from, at));
         RefreshPreviews(c);
         IsEncrypted = encrypted;
     }

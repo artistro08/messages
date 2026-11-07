@@ -1953,6 +1953,22 @@ public sealed class ChatViewModelTests
     }
 
     /// <summary>
+    /// In an encrypted chat, an older message that comes in live goes in above the last 2 bubbles. It gets the lock.
+    /// </summary>
+    [TestMethod]
+    public async Task Lock_OnOlderLiveMessage()
+    {
+        using var rig            = new MainRig();
+        Message on               = Msg("t1", string.Empty, status: MessageStatusType.TombstoneProtocolSwitchToEncryptedRcs, ts: 1_000_000);
+        using ChatViewModel chat = await RcsChat(rig, TimeProvider.System, on, Msg("m3", "three"), Msg("m4", "four"), Msg("m5", "five"));
+
+        await rig.Store.HandleEventAsync(new MessageReceived(Msg("m2", "two", ts: 1_761_699_000_000_000), true));
+
+        Assert.AreEqual("m2", chat.Messages[0].Id);
+        Assert.IsTrue(chat.Messages[0].ShowsLock);
+    }
+
+    /// <summary>
     /// A bubble whose time was shown by a click forgets it once it becomes the newest (newer bubbles dropped by a
     /// reload), so hiding its caption row hides the time too instead of showing the footer time in its place.
     /// </summary>
