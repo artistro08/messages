@@ -113,10 +113,10 @@ internal sealed partial class TrayMenuWindow : XamlWindow
     // Open, Settings, Separator, Quit
     private void BuildItems()
     {
-        _menu.Items.Add(CreateItem("Open", "", "TrayMenu.Open", () => OpenRequested?.Invoke(this, EventArgs.Empty)));
-        _menu.Items.Add(CreateItem("Settings", "", "TrayMenu.Settings", () => SettingsRequested?.Invoke(this, EventArgs.Empty)));
+        _menu.Items.Add(CreateItem("Open", "\uE8A7", "TrayMenu.Open", () => OpenRequested?.Invoke(this, EventArgs.Empty)));
+        _menu.Items.Add(CreateItem("Settings", "\uE713", "TrayMenu.Settings", () => SettingsRequested?.Invoke(this, EventArgs.Empty)));
         _menu.Items.Add(new MenuFlyoutSeparator());
-        _menu.Items.Add(CreateItem("Quit", "", "TrayMenu.Quit", () => QuitRequested?.Invoke(this, EventArgs.Empty)));
+        _menu.Items.Add(CreateItem("Quit", "\uE7E8", "TrayMenu.Quit", () => QuitRequested?.Invoke(this, EventArgs.Empty)));
     }
 
     // Closes the menu and hides its host window directly, rather than waiting for the menu's Closed event. An item
