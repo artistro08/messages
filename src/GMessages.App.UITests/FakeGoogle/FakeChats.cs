@@ -10,14 +10,14 @@ namespace GMessages.App.UITests.FakeGoogle;
 /// </summary>
 /// <remarks>
 /// The store starts with 3 conversations. <c>c-ann</c> is Ann Lee, one on one over RCS, with an encrypted-chat
-/// tombstone and 3 unread messages. <c>c-team</c> is Team, a pinned SMS/MMS group with Bo and Cy.
+/// tombstone and 3 messages. The conversation is unread. <c>c-team</c> is Team, a pinned SMS/MMS group with Bo and Cy.
 /// <c>c-spam</c> is Prize Bot, in the spam folder. The contacts are Ann, Bo and Cy.
 /// A text in an RCS conversation has message type 4. A text in an SMS conversation has type 2, a downloaded MMS,
 /// as <c>Message.type</c> in conversations.proto documents.
 /// Use <see cref="Clear"/>, <see cref="Add"/> and <see cref="AddContact"/> to seed other data.
 /// Every conversation has the participant of the phone (<see cref="MyParticipantId"/>, <c>IsMe</c>).
 /// That ID is also the default outgoing ID. Timestamps are microseconds since the epoch.
-/// Any thread can use the store. Every object that the store hands out is a copy.
+/// Any thread can use the store. Every object that the store returns is a copy.
 /// </remarks>
 public sealed partial class FakeChats
 {
@@ -200,7 +200,7 @@ public sealed partial class FakeChats
     // Returns one page of the conversations of a folder, newest first, after the conversation of the cursor.
     // A count of 0 returns all of them. Inbox is Active, Archive is Archived or KeepArchived, and
     // SpamBlocked is the spam or blocked folder. Like the message pages, the page sends no cursor back.
-    // The app pages on from the last conversation that it got, and an empty page is the end.
+    // The app requests the next page after the last conversation that it got, and an empty page is the end.
     internal List<Conversation> List(ListConversationsRequest.Types.Folder folder, long count = 0, Cursor? cursor = null)
     {
         lock (_lock)
@@ -234,7 +234,7 @@ public sealed partial class FakeChats
     }
 
     // Returns one page of messages, newest first, after the cursor. Like Google, the page sends no cursor back.
-    // The app must page on from the oldest message that it got, and an empty page is the end.
+    // The app must request the next page after the oldest message that it got, and an empty page is the end.
     internal (List<Message> Page, Cursor? Next) Page(string conversationId, long count, Cursor? cursor)
     {
         lock (_lock)

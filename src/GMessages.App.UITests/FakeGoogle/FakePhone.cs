@@ -15,7 +15,8 @@ namespace GMessages.App.UITests.FakeGoogle;
 /// The phone keeps the commitment of the client init. Its answer is a server init with a fresh P-256 key of the phone,
 /// 32 random bytes, and verification and key-derivation versions 1 and 1.
 /// The phone checks the client finished message against the commitment.
-/// The shared secret is the SHA-256 of the raw ECDH X coordinate of the phone key with the public key of the client.
+/// The phone computes the raw ECDH X coordinate from its own key and the public key of the client.
+/// The shared secret is the SHA-256 of this coordinate.
 /// HKDF over the secret, with the client init and server init messages as info, gives the auth key.
 /// The first 4 bytes of the auth key pick <see cref="ShownEmoji"/>. The next key gives the request keys.
 /// The finish answer waits for <see cref="Tap"/>.
@@ -34,7 +35,7 @@ namespace GMessages.App.UITests.FakeGoogle;
 /// <see cref="FailSends"/> is set.
 /// A reaction gets a success answer, then the phone sends the message again with the updated reactions.
 /// Typing updates go to <see cref="Typing"/> and never get an answer.
-/// A <c>SettingsEvent</c> with one SIM goes out after every <c>GET_UPDATES</c>.
+/// A <c>SettingsEvent</c> with one SIM follows every <c>GET_UPDATES</c>.
 /// </para>
 /// <para>
 /// <see cref="PushIncoming"/> sends a live message.
@@ -115,7 +116,7 @@ public sealed class FakePhone
     public bool FailConversationUpdates { get; set; }
 
     /// <summary>
-    /// Gets or sets how long every <c>ListMessages</c> answer waits before it goes out. The default is zero.
+    /// Gets or sets how long every <c>ListMessages</c> answer waits before it sends. The default is zero.
     /// </summary>
     public TimeSpan MessagesDelay { get; set; }
 

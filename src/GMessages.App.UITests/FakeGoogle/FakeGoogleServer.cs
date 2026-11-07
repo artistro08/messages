@@ -194,7 +194,7 @@ public sealed class FakeGoogleServer : IAsyncDisposable
     }
 
     /// <summary>
-    /// Gets or sets whether the start-up of the app is slow. The server hands out tokens with 30 minutes left, so every
+    /// Gets or sets whether the start-up of the app is slow. The server issues tokens with 30 minutes left, so every
     /// start refreshes first, and the server answers each refresh 3 s late.
     /// </summary>
     /// <remarks>
@@ -479,7 +479,7 @@ public sealed class FakeGoogleServer : IAsyncDisposable
             kill = _killStatus;
             if (kill <= 0)
             {
-                // The newest long poll takes over. It gets the unread payloads of the old one first, then everything
+                // The newest long poll replaces the old one. It gets the unread payloads of the old one first, then everything
                 // queued while no long poll was open.
                 if (_stream is { } old)
                 {

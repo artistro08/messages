@@ -503,9 +503,11 @@ public sealed class AppDriver : IAsyncDisposable
         return File.Exists(errorFile) ? File.ReadAllText(errorFile) : "(no error file)";
     }
 
-    // Deletes sign-in profiles that this test created and the app could not delete, for example after a quit during
-    // sign-in or after a kill. Older profiles belong to other runs. The WebView2 browser processes outlive the app
-    // briefly, so the method retries locked folders for up to 5 s.
+    // Deletes the sign-in profiles that this test created and the app could not delete.
+    // This happens, for example, after a quit during sign-in or after a kill.
+    // Older profiles belong to other runs.
+    // The WebView2 browser processes outlive the app briefly.
+    // The method therefore retries locked folders for up to 5 s.
     private async Task DeleteLeftoverSignInProfilesAsync()
     {
         string pattern = $"{AppInfo.DisplayName}.Test-signin-*";
