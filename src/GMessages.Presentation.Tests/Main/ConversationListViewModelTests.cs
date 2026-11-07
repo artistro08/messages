@@ -29,7 +29,7 @@ public sealed class ConversationListViewModelTests
         Assert.IsFalse(list.IsLoading);
         Assert.AreEqual("P", list.Rows[0].Initial);
         Assert.IsTrue(list.Rows[0].IsPinned);
-        Assert.AreEqual("p-pin", list.Rows[0].ParticipantIds.Single());
+        Assert.AreEqual("p-pin", list.Rows[0].PhotoId);
     }
 
     /// <summary>

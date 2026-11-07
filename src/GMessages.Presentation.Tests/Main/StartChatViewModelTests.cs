@@ -22,7 +22,7 @@ public sealed class StartChatViewModelTests
         rig.Client.ContactsAnswer.Contacts.Add(Person("c2", "Bob Stone", "+1 (555) 020-0002"));
         rig.Client.ContactsAnswer.Contacts.Add(Person("c3", "annabel", "+1 (555) 030-0003"));
 
-        var vm = new StartChatViewModel(rig.Store, a => a());
+        var vm = new StartChatViewModel(rig.Store);
         await vm.LoadAsync();
         return vm;
     }
@@ -243,7 +243,7 @@ public sealed class StartChatViewModelTests
         rig.Client.TopContactsAnswer.Contacts.Add(Person("c1", "Ann Lee", "+1 (555) 010-0001"));
         rig.Client.ContactsAnswer.Contacts.Add(Person("c2", "Bob Stone", "+1 (555) 020-0002"));
         rig.Client.ContactsThrows = new ConnectionClosedException();
-        var vm = new StartChatViewModel(rig.Store, a => a());
+        var vm = new StartChatViewModel(rig.Store);
 
         await vm.LoadAsync();
         Assert.AreEqual("Ann Lee", Names(vm));
@@ -281,7 +281,7 @@ public sealed class StartChatViewModelTests
     {
         using var rig = new MainRig();
         rig.Client.TopContactsAnswer.Contacts.Add(Person("c1", "Ann Lee", "+1 (555) 010-0001"));
-        var vm                     = new StartChatViewModel(rig.Store, a => a());
+        var vm                     = new StartChatViewModel(rig.Store);
         var contactsGate           = new TaskCompletionSource();
         rig.Client.TopContactsGate  = contactsGate;
 

@@ -6,17 +6,14 @@ using GMessages.Protocol.Proto;
 namespace GMessages.Presentation.Main;
 
 /// <summary>
-/// One person (or one typed number) in the Start chat list and its chips.
+/// Shows 1 person or 1 typed number in the Start chat list and its chips.
 /// </summary>
 public sealed class ContactRowViewModel
 {
-    // Gray Used When The Phone Gives No Avatar Color
-    private const uint FallbackColor = 0xFF5F6368;
-
     private static readonly CompositeFormat SendToFormat = CompositeFormat.Parse(ChatCopy.SendToFormat);
 
     /// <summary>
-    /// Creates a row for a typed phone number or email: "Send to {query}".
+    /// Creates the "Send to {query}" row for a typed phone number or email address.
     /// </summary>
     /// <param name="query">What the user typed.</param>
     public ContactRowViewModel(string query)
@@ -27,7 +24,7 @@ public sealed class ContactRowViewModel
         Number      = query.Trim();
         Digits      = DigitsOf(Number);
         Initial     = string.Empty;
-        AvatarColor = FallbackColor;
+        AvatarColor = AvatarParts.FallbackColor;
         IsSendTo    = true;
     }
 
@@ -39,31 +36,29 @@ public sealed class ContactRowViewModel
     {
         ArgumentNullException.ThrowIfNull(contact);
 
-        ContactId   = contact.ContactID;
         Name        = contact.Name;
         Number      = contact.Number?.Number ?? string.Empty;
         Digits      = DigitsOf(Number);
         Initial     = ChatFormat.Initial(contact.Name);
-        AvatarColor = ChatFormat.ColorFromHex(contact.AvatarHexColor, FallbackColor);
+        AvatarColor = ChatFormat.ColorFromHex(contact.AvatarHexColor, AvatarParts.FallbackColor);
         Subtitle    = string.IsNullOrEmpty(contact.Number?.FormattedNumber) ? Number : contact.Number.FormattedNumber;
     }
-
-    /// <summary>Gets the contact ID, or empty for a typed number.</summary>
-    public string ContactId { get; } = string.Empty;
 
     /// <summary>Gets the name, or "Send to {query}" for a typed number.</summary>
     public string Name { get; }
 
-    /// <summary>Gets the number (or email) the chat is started with.</summary>
+    /// <summary>Gets the number or email address that starts the chat.</summary>
     public string Number { get; }
 
-    /// <summary>Gets the number as shown under the name.</summary>
+    /// <summary>Gets the number that shows under the name.</summary>
     public string Subtitle { get; } = string.Empty;
 
     /// <summary>Gets only the digits of <see cref="Number"/>, for matching.</summary>
     public string Digits { get; }
 
-    /// <summary>Gets the avatar letter, or empty for no name (a typed or unsaved number), which shows the person icon.</summary>
+    /// <summary>
+    /// Gets the avatar letter, or empty for the person icon. A typed or unsaved number has no letter.
+    /// </summary>
     public string Initial { get; }
 
     /// <summary>Gets the avatar color as opaque ARGB.</summary>
@@ -75,7 +70,10 @@ public sealed class ContactRowViewModel
     /// <summary>
     /// Gives the name.
     /// </summary>
-    /// <remarks>A XAML list item reads its item's <c>ToString()</c> as its UI Automation name, so screen readers hear this.</remarks>
+    /// <remarks>
+    /// A XAML list item reads the <c>ToString()</c> of its item as its UI Automation name. Screen readers then read
+    /// this name.
+    /// </remarks>
     /// <returns>The name.</returns>
     public override string ToString() => Name;
 
