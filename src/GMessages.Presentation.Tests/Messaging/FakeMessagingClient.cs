@@ -268,9 +268,17 @@ internal sealed class FakeMessagingClient : IMessagingClient
 
     public List<IReadOnlyList<string>> ThumbnailCalls { get; } = [];
 
-    public Task<GetThumbnailResponse> GetParticipantThumbnailAsync(IReadOnlyList<string> participantIds, CancellationToken ct)
+    /// <summary>When set, the next thumbnail call gives its answer after this completes.</summary>
+    public TaskCompletionSource? ThumbnailGate { get; set; }
+
+    public async Task<GetThumbnailResponse> GetParticipantThumbnailAsync(IReadOnlyList<string> participantIds, CancellationToken ct)
     {
         ThumbnailCalls.Add([.. participantIds]);
+        if (ThumbnailGate is { } gate)
+        {
+            ThumbnailGate = null;
+            await gate.Task;
+        }
 
         var response = new GetThumbnailResponse();
         foreach (string id in participantIds.Where(Photos.ContainsKey))
@@ -278,7 +286,7 @@ internal sealed class FakeMessagingClient : IMessagingClient
             response.Thumbnail.Add(new GetThumbnailResponse.Types.Thumbnail { Identifier = id, Data = new ThumbnailData { ImageBuffer = Google.Protobuf.ByteString.CopyFrom(Photos[id]) } });
         }
 
-        return Task.FromResult(response);
+        return response;
     }
 
     public Task<GetThumbnailResponse> GetContactThumbnailAsync(IReadOnlyList<string> contactIds, CancellationToken ct) => throw new NotSupportedException();

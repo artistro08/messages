@@ -109,4 +109,25 @@ public sealed class AvatarCacheTests
 
         Assert.IsNull(await rig.Cache.GetFileUriAsync("p-bo", Ct));
     }
+
+    /// <summary>
+    /// A sign-out clears the cache while a batch waits on the old phone. The batch still answers its callers, but the
+    /// cache does not remember that answer.
+    /// </summary>
+    [TestMethod]
+    public async Task Clear_DuringABatch_ForgetsItsAnswer()
+    {
+        using var rig            = new Rig();
+        var gate                 = new TaskCompletionSource();
+        rig.Client.ThumbnailGate = gate;
+
+        Task<byte[]?> first = rig.Cache.GetAsync("p-ann", Ct);
+        Assert.IsTrue(SpinWait.SpinUntil(() => rig.Client.ThumbnailCalls.Count == 1, TimeSpan.FromSeconds(10)), "batch sent");
+        rig.Cache.Clear();
+        gate.SetResult();
+        CollectionAssert.AreEqual(AnnPhoto, await first);
+
+        await rig.Cache.GetAsync("p-ann", Ct);
+        Assert.HasCount(2, rig.Client.ThumbnailCalls, "the cleared batch must not fill the cache");
+    }
 }

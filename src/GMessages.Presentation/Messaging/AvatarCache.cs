@@ -40,6 +40,9 @@ public sealed class AvatarCache
     private readonly Dictionary<string, TaskCompletionSource<byte[]?>> _pending = [];
     private List<string>? _batch;
 
+    // Each Clear adds 1. A batch sent before a Clear does not remember its answer.
+    private int _generation;
+
     /// <summary>
     /// Creates the cache.
     /// </summary>
@@ -136,12 +139,13 @@ public sealed class AvatarCache
     }
 
     /// <summary>
-    /// Forgets every photo in memory. The files stay.
+    /// Forgets every photo in memory, also the answer of a batch that still runs. The files stay.
     /// </summary>
     public void Clear()
     {
         lock (_lock)
         {
+            _generation++;
             _recent.Clear();
             _byId.Clear();
         }
@@ -153,10 +157,12 @@ public sealed class AvatarCache
         await Task.Delay(BatchWindow).ConfigureAwait(false);
 
         List<string> ids;
+        int generation;
         lock (_lock)
         {
-            ids    = _batch!;
-            _batch = null;
+            ids        = _batch!;
+            _batch     = null;
+            generation = _generation;
         }
 
         // Any failure answers null, and the cache does not remember it.
@@ -186,7 +192,7 @@ public sealed class AvatarCache
             foreach (string id in ids)
             {
                 byte[]? photo = photos.GetValueOrDefault(id);
-                if (asked)
+                if (asked && generation == _generation)
                 {
                     Remember(id, photo);
                 }
