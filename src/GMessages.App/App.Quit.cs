@@ -60,40 +60,29 @@ public sealed partial class App
         long savesMs      = 0;
         bool savesDone    = false;
 
-        // Let the client close its long poll and flush a save (while the log is still open), but never hang the quit on it
+        // The client closes its long poll and writes a pending session save while the log is still open.
+        // Each step has its own limit, so a step that fails or hangs does not skip the steps after it.
         try
         {
-            // Test Runs Take Their Toasts With Them, So None Leak Into The Next Test; Real Runs Keep Theirs
-            if (Program.IsTestRun && _notifications is not null)
+            // Test runs remove their toasts, so no toast leaks into the next test. Real runs keep their toasts.
+            if (Program.IsTestRun && _notifications is { } notifications)
             {
-                await _notifications.RemoveAllAsync().WaitAsync(TimeSpan.FromSeconds(5));
+                await QuitStepAsync(notifications.RemoveAllAsync, TimeSpan.FromSeconds(5));
             }
 
             long step = Stopwatch.GetTimestamp();
-            if (_connection is not null)
+            if (_connection is { } connection)
             {
-                await _connection.DisposeAsync().AsTask().WaitAsync(ConnectionLimit);
+                await QuitStepAsync(() => connection.DisposeAsync().AsTask(), ConnectionLimit);
             }
 
             connectionMs = (long)Stopwatch.GetElapsedTime(step).TotalMilliseconds;
 
-            // The Message Saves Still Queued (After A Catch-Up There Can Be Hundreds) Are Written Before The Exit, Up To
-            // A Limit: The Database Is A Cache, So A Save Cut Off Is Fetched Again From The Phone
-            step = Stopwatch.GetTimestamp();
-            if (_store is not null)
-            {
-                await _store.FlushAsync().WaitAsync(SavesLimit);
-                savesDone = true;
-            }
-
-            savesMs = (long)Stopwatch.GetElapsedTime(step).TotalMilliseconds;
-        }
-#pragma warning disable CA1031 // Quitting regardless
-        catch (Exception ex)
-#pragma warning restore CA1031
-        {
-            // Nothing Left To Do But Exit; Only The Type Is Logged
-            AppLog.QuitStepFailed(_logger, ex.GetType().Name);
+            // After a catch-up, the queue can hold hundreds of message saves. The database is a cache.
+            // When the limit cuts off a save, the app fetches that message again from the phone.
+            step      = Stopwatch.GetTimestamp();
+            savesDone = _store is { } store && await QuitStepAsync(store.FlushAsync, SavesLimit);
+            savesMs   = (long)Stopwatch.GetElapsedTime(step).TotalMilliseconds;
         }
         finally
         {
@@ -105,6 +94,22 @@ public sealed partial class App
             Dispose();
             XamlWindow.ExitMessageLoop();
             ExitSoon();
+        }
+    }
+
+    // Returns false when the step fails or passes its limit. The log holds the error type only.
+    private async Task<bool> QuitStepAsync(Func<Task> step, TimeSpan limit)
+    {
+        try
+        {
+            await step().WaitAsync(limit);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            // Nothing is left to do but exit.
+            AppLog.QuitStepFailed(_logger, ex.GetType().Name);
+            return false;
         }
     }
 
