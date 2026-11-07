@@ -11,8 +11,9 @@ using Keyboard = FlaUI.Core.Input.Keyboard;
 namespace GMessages.App.UITests;
 
 /// <summary>
-/// Conversation actions from the list: the row menu (right-click, the hover ⋮, Shift + F10), archive and the Archived
-/// view, mute, block &amp; report spam, move to trash, their confirm dialogs and the failure banner.
+/// Conversation actions from the list. The row menu opens with a right-click, the hover ⋮ button or Shift + F10.
+/// The tests cover archive and the Archived view, mute, block &amp; report spam and move to trash.
+/// They also cover the confirm dialogs and the failure banner.
 /// </summary>
 [TestClass]
 [TestCategory("UI")]
@@ -21,8 +22,7 @@ public sealed class ConversationActionTests : UiTest
 {
     private const string AnnPhone = "+15550000001";
 
-    // The right padding of a row. This is the largest distance from the right edge of the row to the time of a row
-    // that has no hover.
+    // The right padding of a row. A row without a hover has its time at most this far from the right edge.
     private const int RowRightPadding = 16;
 
     // The time that a test watches for a toast from a message that must not notify.
@@ -96,7 +96,7 @@ public sealed class ConversationActionTests : UiTest
         AutomationElement more = ShownMore("Row.More.c-ann");
         PointerInput.Hover(more.BoundingRectangle);
 
-        // The wait lets the ⋮ button fade in (167 ms). The fade-in turns on its clicks.
+        // The wait lets the ⋮ button fade in, which takes 167 ms. The button takes clicks only after the fade-in ends.
         Thread.Sleep(500);
 
         Assert.AreEqual(ChatCopy.MoreOptions, AppDriver.SafeName(more));
@@ -106,8 +106,8 @@ public sealed class ConversationActionTests : UiTest
     }
 
     /// <summary>
-    /// A move from the name of Ann onto blank space beside the time keeps the ⋮ button, because the exit from the
-    /// name is not the exit from the row. A click on the button opens her menu and not her chat.
+    /// The pointer moves from the name of Ann onto blank space beside the time, and the ⋮ button stays. The exit from
+    /// the name is not the exit from the row. A click on the button opens her menu and not her chat.
     /// </summary>
     [TestMethod]
     public async Task RowHover_NameToBlankSpace_KeepsMoreButton()
@@ -127,7 +127,7 @@ public sealed class ConversationActionTests : UiTest
         System.Drawing.Rectangle rowRect   = row.BoundingRectangle;
         PointerInput.Hover(new System.Drawing.Rectangle(moreRect.Left - 20, rowRect.Bottom - 16, 2, 2));
 
-        // The wait lets any fade (167 ms) end before the click.
+        // The wait lets any fade end before the click. The fade takes 167 ms.
         Thread.Sleep(500);
         more.Click();
 
@@ -161,8 +161,8 @@ public sealed class ConversationActionTests : UiTest
     }
 
     /// <summary>
-    /// With no row hovered, the time of Ann sits at the right edge of the row, within the right padding of the row.
-    /// Her ⋮ button is collapsed: it takes no space and is not in the UI Automation tree.
+    /// With no row hovered, the time of Ann sits at the right edge of the row, inside the right padding.
+    /// Her ⋮ button is collapsed. It takes no space and is not in the UI Automation tree.
     /// </summary>
     [TestMethod]
     public async Task Row_TimeAtRightEdge()
@@ -178,8 +178,7 @@ public sealed class ConversationActionTests : UiTest
     }
 
     /// <summary>
-    /// With no row hovered, the times of Team and Ann end at the same x position, although the names have different
-    /// lengths.
+    /// With no row hovered, the times of Team and Ann end at the same x position. The names have different lengths.
     /// </summary>
     [TestMethod]
     public async Task Row_TimesRightAlign_WhateverTheName()
@@ -244,8 +243,8 @@ public sealed class ConversationActionTests : UiTest
     }
 
     /// <summary>
-    /// The bell in the chat header mutes the chat: the phone gets a mute and the row shows the muted icon. The bell
-    /// then reads Unmute and unmutes the chat again.
+    /// The bell in the chat header mutes the chat. The phone gets a mute and the row shows the muted icon.
+    /// The bell then reads Unmute and unmutes the chat again.
     /// </summary>
     [TestMethod]
     public async Task HeaderBell_MutesThenUnmutes()
@@ -424,7 +423,7 @@ public sealed class ConversationActionTests : UiTest
     // =========================================================================
 
     /// <summary>
-    /// The ⋮ button in the chat header, named More options, opens the menu of Ann with Details first and then her
+    /// The ⋮ button in the chat header, named More options, opens the menu of Ann. Details is first, then her
     /// actions. A right-click on the header opens the same menu.
     /// </summary>
     [TestMethod]
@@ -501,7 +500,8 @@ public sealed class ConversationActionTests : UiTest
     }
 
     /// <summary>
-    /// The Details of Team list Bo and Cy with their numbers, show Mute off and offer no Block &amp; report spam.
+    /// The Details of Team list Bo and Cy with their numbers and show Mute off. They offer no Block &amp; report
+    /// spam.
     /// </summary>
     [TestMethod]
     public async Task Details_Team_ListsBoAndCy_NoBlock()

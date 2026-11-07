@@ -218,7 +218,8 @@ public sealed class SettingsTests : UiTest
             () => $"'{automationId}' is {last}, not {wanted}.");
     }
 
-    // Opens the tray menu, measures the average brightness (0 to 255) of its Open item on screen and closes the menu.
+    // Opens the tray menu and measures the average brightness of its Open item on screen. The scale is 0 to 255.
+    // Then it closes the menu.
     // UI Automation has no theme property, so the pixels are the check.
     // A light menu is near white, and a dark menu is near black.
     private double TrayMenuBrightness()
@@ -277,7 +278,8 @@ public sealed class SettingsTests : UiTest
         }, TimeSpan.FromSeconds(5), () => $"The title bar icon area looks blank (brightness spread {spread:0}).");
     }
 
-    // The background is the corner pixel of the strip. The glyph is its darkest pixel (light) or lightest pixel (dark).
+    // The background is the corner pixel of the strip. In the light theme, the glyph is its darkest pixel.
+    // In the dark theme, the glyph is its lightest pixel.
     private static (double Background, double Glyph) Extremes(Rectangle area, bool light)
     {
         using CaptureImage capture = Capture.Rectangle(area);

@@ -9,8 +9,8 @@ using GMessages.Protocol.Proto;
 namespace GMessages.App.UITests;
 
 /// <summary>
-/// The main window's shell: the conversation list, the ☰ toggle, the profile menu, Spam &amp; blocked, live updates
-/// and the narrow one-pane layout.
+/// The shell of the main window. The tests cover the conversation list, the ☰ toggle and the profile menu.
+/// They also cover Spam &amp; blocked, live updates and the narrow one-pane layout.
 /// </summary>
 [TestClass]
 [TestCategory("UI")]
@@ -37,8 +37,8 @@ public sealed class MainWindowTests : UiTest
     }
 
     /// <summary>
-    /// The snippet and time of an unread row use the primary text color. The unread time and snippet of Ann contrast
-    /// with their background more than the secondary ones of the read row of Team.
+    /// The snippet and time of an unread row use the primary text color. The unread time and snippet of Ann
+    /// contrast more with the background. The read row of Team uses secondary text.
     /// </summary>
     [TestMethod]
     public async Task UnreadRow_SnippetAndTimeArePrimaryText()
@@ -55,9 +55,9 @@ public sealed class MainWindowTests : UiTest
     }
 
     /// <summary>
-    /// The content of the window stays the same while the window is inactive, for example when the tray menu takes
-    /// the activation. Only the title bar dims, as in the apps of Windows. The owner reported a bug: fading the content
-    /// faded each element on its own, so overlapping elements showed through each other. A photo over its letter and
+    /// The content of the window stays the same while the window is inactive. The tray menu takes the activation.
+    /// Only the title bar dims, as in the apps of Windows. The owner reported a bug. Fading the content faded each
+    /// element on its own. Overlapping elements then showed through each other. A photo over its letter and
     /// Start chat over the rows are examples.
     /// </summary>
     [TestMethod]
@@ -251,7 +251,7 @@ public sealed class MainWindowTests : UiTest
 
     /// <summary>
     /// The pinned grid is off by default. Turning it on in Settings moves pinned Team from the rows to a tile above
-    /// them, and the tile opens its chat. Turning it off puts Team back at the top of the rows.
+    /// them. The tile opens its chat. Turning it off puts Team back at the top of the rows.
     /// </summary>
     [TestMethod]
     public async Task PinnedGrid_Switch_MovesPinnedChatIntoTiles()
@@ -473,8 +473,8 @@ public sealed class MainWindowTests : UiTest
     }
 
     /// <summary>
-    /// A new message in the open conversation lifts its row with the motion of the list, if animations are on, and
-    /// with no flash. The row stays selected and its chat stays open.
+    /// A new message in the open conversation lifts its row with no flash. If animations are on, the row moves with
+    /// the motion of the list. The row stays selected and its chat stays open.
     /// </summary>
     [TestMethod]
     public async Task LiveMessage_OpenRowMovesToTop_StaysSelected()
@@ -496,8 +496,8 @@ public sealed class MainWindowTests : UiTest
     }
 
     /// <summary>
-    /// The window stops shrinking at its minimum size. The minimum is the narrowest width of the chat list, 300 px, by
-    /// 500 px at the display scale, plus the frame.
+    /// The window stops shrinking at its minimum size. The minimum width is the narrowest chat list, 300 px.
+    /// The minimum height is 500 px. Both values use the display scale and add the frame.
     /// </summary>
     [TestMethod]
     public async Task Window_ResizeBelowMinimum_StopsAtMinimum()
@@ -552,7 +552,8 @@ public sealed class MainWindowTests : UiTest
     /// <summary>
     /// The first row of the list starts level with the card of the open chat. The card is the rounded island around
     /// the header and the messages. The owner reported that the chat list did not line up with the message window.
-    /// The chat pane (<c>Chat.Pane</c>) fills the island inside its 1 px border, so its top is the top of the card.
+    /// The chat pane, <c>Chat.Pane</c>, fills the island inside its 1 px border. Its top is therefore the top of the
+    /// card.
     /// </summary>
     [TestMethod]
     public async Task ConversationList_FirstRow_LinesUpWithChatIsland()

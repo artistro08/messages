@@ -18,8 +18,8 @@ namespace GMessages.App.UITests;
 public sealed class ChatTests : UiTest
 {
     /// <summary>
-    /// A right-click on a misspelled word in the message box offers the spelling fixes of Windows at the top of the
-    /// app menu. A pick fixes the word, and Ignore leaves the word unmarked.
+    /// A right-click on a misspelled word in the message box puts the Windows spelling fixes first in the app menu.
+    /// A click on a fix corrects the word, and Ignore leaves the word unmarked.
     /// </summary>
     [TestMethod]
     public async Task RightClick_MisspelledWord_OffersTheFix()
@@ -46,8 +46,8 @@ public sealed class ChatTests : UiTest
         Keyboard.Press(VirtualKeyShort.ESCAPE);
     }
 
-    // Right-clicks the first word of the box until Windows marks it and the item shows. Then it picks the item
-    // through UI Automation, because a synthetic click does not reach a menu that opens from a text box.
+    // Right-clicks the first word of the box until Windows marks it and the item shows. Then it invokes the item
+    // through UI Automation. A synthetic click does not reach a menu that opens from a text box.
     // The menu can close during the call, and that is fine.
     private void PickSpellItem(AutomationElement draft, string name)
     {
@@ -294,8 +294,9 @@ public sealed class ChatTests : UiTest
     }
 
     /// <summary>
-    /// Switching back to a chat shows its kept bubbles at once, well under 1 s, while the phone takes 3 s to answer
-    /// for its page. The log records the time of each step of the open, with milliseconds and counts only.
+    /// When the user switches back to a chat, the app shows the kept bubbles at once, well under 1 s. The phone takes
+    /// 3 s to answer for its page. The log records the time of each step of the open, with milliseconds and counts
+    /// only.
     /// </summary>
     [TestMethod]
     public async Task SwitchChats_ShowsKeptBubbles_BeforeThePhoneAnswers()
@@ -317,8 +318,9 @@ public sealed class ChatTests : UiTest
     }
 
     /// <summary>
-    /// The picks in Start chat are chips. A pick of Ann moves her from the list to a chip above it, which is a
-    /// filled pill that stands out from the pane. Go reads Start Chat. A click on the chip puts her back in the list.
+    /// The picks in Start chat are chips. When the user picks Ann, she moves from the list to a chip above it. The chip
+    /// is a filled pill that stands out from the pane. Go reads Start Chat. A click on the chip puts her back in the
+    /// list.
     /// </summary>
     [TestMethod]
     public async Task StartChat_PickedPersonIsAChip_LeavesTheList_ComesBack()
@@ -353,8 +355,8 @@ public sealed class ChatTests : UiTest
     }
 
     /// <summary>
-    /// A first page that does not fill the list loads older pages on its own, because there is nothing to scroll up
-    /// to. In this test, the first page has only system lines, which show no bubble.
+    /// A first page that does not fill the list loads older pages on its own. There is nothing to scroll up to.
+    /// In this test, the first page has only system lines, which show no bubble.
     /// </summary>
     [TestMethod]
     public async Task ShortFirstPage_LoadsOlderUntilItScrolls()
@@ -516,8 +518,8 @@ public sealed class ChatTests : UiTest
     }
 
     /// <summary>
-    /// After a page up past 200 bubbles, a return to the newest message drops the older bubbles and keeps the newest
-    /// 200. A new scroll up brings the older bubbles back from the phone, page by page.
+    /// The user pages up past 200 bubbles and then returns to the newest message. The app drops the older bubbles and
+    /// keeps the newest 200. A new scroll up brings the older bubbles back from the phone, page by page.
     /// </summary>
     [TestMethod]
     public async Task BackAtNewest_KeepsNewest200_ScrollUpBringsOlderBack()
@@ -708,14 +710,14 @@ public sealed class ChatTests : UiTest
     }
 
     /// <summary>
-    /// While an older page loads and lands, the bubbles on screen stay where they are, with no blanking and no jump.
-    /// The oldest shown bubble keeps its place on screen, within 4 px, from the time the loading ring shows until 1 s
-    /// after the page lands.
+    /// While an older page loads and lands, the bubbles on screen stay where they are. They do not blank or jump.
+    /// The oldest shown bubble keeps its place on screen within 4 px. This holds from the time the loading ring shows
+    /// until 1 s after the page lands.
     /// </summary>
     [TestMethod]
     public async Task OlderPage_KeepsVisibleBubblesInPlace()
     {
-        // The older pages of this long chat take 2 s, so the baseline settles within 1 s before the page lands.
+        // The older pages of this long chat take 2 s. The baseline settles within 1 s before the page lands.
         Server.Phone.Chats.AddLongChat();
         Server.Phone.OlderPagesDelay = TimeSpan.FromSeconds(2);
         const string Oldest          = "Bubble.c-history-096";
@@ -726,7 +728,8 @@ public sealed class ChatTests : UiTest
         Wait.Until(() => Bubbles().Any(b => b.Text.StartsWith("long 120", StringComparison.Ordinal)), AppDriver.DefaultTimeout,
             () => $"The long chat didn't show 'long 120'; bubbles: [{string.Join(", ", Bubbles().Select(b => b.Id))}].");
 
-        // The test scrolls up until the app asks for the older page. The page lands without a move of the shown bubbles.
+        // The test scrolls up until the app asks for the older page.
+        // The page lands without a move of the shown bubbles.
         AutomationElement list = App.Find("Chat.Messages");
         var scroll             = list.Patterns.Scroll.Pattern;
         AssertOlderPageKeepsInPlace(list, Oldest, () => scroll.SetScrollPercent(-1, 0));
@@ -745,9 +748,9 @@ public sealed class ChatTests : UiTest
     }
 
     /// <summary>
-    /// The same check with the mouse wheel in a chat like a real one: mostly one-liners, some wrapping and a few very
-    /// tall. The older pages take as long as the older pages of a real phone. The shown bubbles stay in place. No
-    /// second page follows at once after the page that landed while the view still sits at its top.
+    /// The same check with the mouse wheel in a chat like a real one. Most messages are one-liners, some wrap and a
+    /// few are very tall. The older pages take as long as the older pages of a real phone. The shown bubbles stay in
+    /// place. No second page follows at once after the page that landed while the view still sits at its top.
     /// </summary>
     [TestMethod]
     public async Task OlderPage_WheelInMixedChat_KeepsVisibleBubblesInPlace()
@@ -763,9 +766,9 @@ public sealed class ChatTests : UiTest
         App.Find("Row.c-mixed").Patterns.SelectionItem.Pattern.Select();
         Wait.Until(() => Bubbles().Any(b => b.Id == $"Bubble.m-{Count:000}"), AppDriver.DefaultTimeout, () => "The mixed chat didn't show its newest bubble.");
 
-        // The wheel scrolls up over the bubbles until the app asks for the older page. The app asks half a screen
-        // short of the top, so the oldest bubble of the page can still sit above the view, past the tall m-077.
-        // The watched bubble is the topmost shown one.
+        // The wheel scrolls up over the bubbles until the app asks for the older page.
+        // The app asks half a screen short of the top. The oldest bubble of the page can then still sit above the
+        // view, past the tall m-077. The watched bubble is the topmost shown one.
         AutomationElement list        = App.Find("Chat.Messages");
         System.Drawing.Rectangle over = list.BoundingRectangle;
         FlaUI.Core.Input.Mouse.MoveTo(over.X + (over.Width / 2), over.Y + (over.Height / 2));
@@ -909,7 +912,7 @@ public sealed class ChatTests : UiTest
 
     /// <summary>
     /// Scroll to bottom, pressed while an older page is still loading, ends on the newest message. The list stays
-    /// there after the page lands, because the anchoring of the older page does not pull the list back up.
+    /// there after the page lands. The anchoring of the older page does not pull the list back up.
     /// </summary>
     [TestMethod]
     public async Task ScrollToNewest_WhileOlderPageLoads_EndsAtNewest()
@@ -980,8 +983,8 @@ public sealed class ChatTests : UiTest
     }
 
     /// <summary>
-    /// After a restart, a chat that the user opened before shows its bubbles from the encrypted database before the
-    /// phone answers.
+    /// After a restart, a chat that the user opened before shows its bubbles from the encrypted database.
+    /// This happens before the phone answers.
     /// </summary>
     [TestMethod]
     public async Task Restart_OpensChatFromDatabase_BeforePhoneAnswers()
@@ -1072,10 +1075,10 @@ public sealed class ChatTests : UiTest
         Wait.Until(() => App.TryFind($"Bubble.{id}-{ChatStore.PageSize * 2}") is not null, AppDriver.DefaultTimeout, () => $"Chat {id} didn't show its newest bubble.");
 
     // Clicks the row of a chat with real input and reads the screen about every 8 ms for 800 ms.
-    // Each reading holds the brightness of the message box and the difference in brightness between the empty
-    // middle of the list and its left padding, averaged down the list. The gray placeholders cover the rows but
-    // not the padding. The middle column holds no bubble here, because received bubbles sit left and sent bubbles
-    // sit right. Before the click, both areas read the same.
+    // Each reading holds two values. The first is the brightness of the message box. The second is the difference
+    // in brightness between the empty middle of the list and its left padding. The code averages it down the list.
+    // The gray placeholders cover the rows but not the padding. The middle column holds no bubble here,
+    // because received bubbles sit left and sent bubbles sit right. Before the click, both areas read the same.
     private void AssertNoFlash(string id)
     {
         App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout).SetForeground();
@@ -1154,9 +1157,10 @@ public sealed class ChatTests : UiTest
         return capture.Bitmap.GetPixel(0, 0);
     }
 
-    // Scrolls up until the loading ring shows. Then it checks every 50 ms that the bubble stays in place, within
-    // 4 px of its settled place, until the ring has been gone for 1 s. The page lands above without a move of the
-    // bubble, without a blank list and without a request for another page before the view is put back.
+    // Scrolls up until the loading ring shows. Then it checks every 50 ms that the bubble stays in place.
+    // The limit is 4 px from its settled place, until the ring has been gone for 1 s. The page lands above.
+    // The bubble must not move. The list must not blank. The app must not ask for another page
+    // before the view is put back.
     private void AssertOlderPageKeepsInPlace(AutomationElement list, string? watched, Action scrollUp)
     {
         Wait.Until(() =>
@@ -1187,10 +1191,10 @@ public sealed class ChatTests : UiTest
             int? y   = BubbleTop(list, watched);
             bool any = AnyBubble(list);
 
-            // UI Automation can see the list with no rows for a moment while the page goes in, although the screen
-            // never stops showing them. Frames that were captured every 8 ms around six such readings all showed the
-            // bubbles in place. A reading with no bubbles counts when 3 readings 50 ms apart agree.
-            // The sample list marks such a sample with "~".
+            // UI Automation can see the list with no rows for a moment while the page goes in.
+            // The screen never stops showing the rows. Frames that were captured every 8 ms around six such
+            // readings all showed the bubbles in place. A reading with no bubbles counts when 3 readings 50 ms
+            // apart agree. The sample list marks such a sample with "~".
             string mark = "";
             if (!any)
             {
@@ -1215,7 +1219,7 @@ public sealed class ChatTests : UiTest
         TestContext.WriteLine($"{watched} tops: {string.Join(" ", samples)}");
     }
 
-    // Reads again every 50 ms until 3 readings in a row agree, for up to 1 s, and returns the last reading.
+    // Reads again every 50 ms until 3 readings in a row agree. It waits up to 1 s and returns the last reading.
     private static T Settled<T>(Func<T> read)
     {
         T last         = read();
@@ -1232,9 +1236,9 @@ public sealed class ChatTests : UiTest
         return last;
     }
 
-    // One wheel notch up moves the bubble down the screen a little, or off the bottom when it starts near the bottom.
+    // One wheel notch up moves the bubble down the screen a little. A bubble near the bottom can leave the screen.
     // The bubble never moves up, because that means the list moved back down. It never moves by hundreds of pixels.
-    // It never leaves the bottom from the upper half, because that means an older page took the view and pushed the
+    // A bubble in the upper half never leaves the bottom. That means an older page took the view and pushed the
     // bubbles off.
     private static void AssertNotchKeptPlace(AutomationElement list, (string? Id, int? Top) before, int? after, int notch, List<string> trace)
     {
@@ -1295,8 +1299,8 @@ public sealed class ChatTests : UiTest
             .DefaultIfEmpty(int.MaxValue)
             .Min();
 
-    // Asserts that the message list sits on its newest message: less than 1 px short of its end, so no bottom fade
-    // or arrow shows.
+    // Asserts that the message list sits on its newest message. The list must be less than 1 px short of its end,
+    // so no bottom fade or arrow shows.
     private void AssertAtNewest(string what)
     {
         AutomationElement list = App.Find("Chat.Messages");
@@ -1315,8 +1319,8 @@ public sealed class ChatTests : UiTest
         App.Find("Row.c-ann").Patterns.SelectionItem.Pattern.Select();
         Wait.Until(() => Bubbles().Count == 3, AppDriver.DefaultTimeout, () => $"Ann's chat showed {Bubbles().Count} bubbles, not 3.");
 
-        // Opening the chat puts the cursor in the message box. The test waits for that with the window in front,
-        // so the box cannot take the focus from a row later.
+        // Opening the chat puts the cursor in the message box. The test waits for that with the window in front.
+        // The box then cannot take the focus from a row later.
         App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout).SetForeground();
         Wait.Until(() => App.Find("Chat.Draft").Properties.HasKeyboardFocus.ValueOrDefault, AppDriver.DefaultTimeout, () => "Opening Ann's chat didn't focus the message box.");
     }

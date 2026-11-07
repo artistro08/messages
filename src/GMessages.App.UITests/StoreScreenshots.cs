@@ -10,7 +10,8 @@ namespace GMessages.App.UITests;
 
 /// <summary>
 /// Takes the store and README screenshots into <c>docs/screenshots</c> at 1920 x 1080. The app shows a mock phone
-/// (<see cref="FakeGoogle.FakeChats.AddScreenshotChats"/>) with the Unsplash photos in <c>Screenshots/Photos</c>.
+/// from <see cref="FakeGoogle.FakeChats.AddScreenshotChats"/>. The phone uses the Unsplash photos in
+/// <c>Screenshots/Photos</c>.
 /// </summary>
 /// <remarks>
 /// A normal run skips this class. The test runs only when the <c>MESSAGES_SCREENSHOTS</c> environment variable is 1,
@@ -32,8 +33,8 @@ public sealed partial class StoreScreenshots : UiTest
     private static readonly string[] ThemeNames = ["Use system setting", "Light", "Dark"];
 
     /// <summary>
-    /// Takes every screenshot: the chat, a group, the photo viewer and the shortcut help in the dark theme, then the
-    /// chat and settings in the light theme.
+    /// Takes every screenshot. The dark theme shows the chat, a group, the photo viewer and the shortcut help.
+    /// The light theme shows the chat and settings.
     /// </summary>
     [TestMethod]
     [TestCategory("Screenshots")]
@@ -201,7 +202,7 @@ public sealed partial class StoreScreenshots : UiTest
         return (bytes, image.Width, image.Height);
     }
 
-    // Cuts a 256 px square contact photo from a picture. The point (x, y) is the center, as fractions of the
+    // Cuts a 256 px square contact photo from a picture. The values x and y give the center as fractions of the
     // width and height. The side of the square is a fraction of the shorter side.
     private static byte[] Avatar(string folder, string file, double x, double y, double side)
     {

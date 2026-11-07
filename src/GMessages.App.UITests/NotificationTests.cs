@@ -13,7 +13,7 @@ namespace GMessages.App.UITests;
 /// </summary>
 /// <remarks>
 /// These tests show real toasts on the desktop, so Windows notifications must be on. The app removes its toasts when
-/// it quits in a test run, so no toast carries over to the next test. A test that expects no toast follows up with a
+/// it quits in a test run. No toast carries over to the next test. A test that expects no toast follows up with a
 /// live message that must toast. That test cannot pass only because toasts never show.
 /// </remarks>
 [TestClass]
@@ -144,7 +144,7 @@ public sealed class NotificationTests : UiTest
     }
 
     /// <summary>
-    /// The chat that is open in the focused window does not notify until the setting "Notify for the chat I'm
+    /// The chat in the focused window does not notify. This holds until the setting "Notify for the chat I'm
     /// viewing" is on.
     /// </summary>
     [TestMethod]
@@ -188,14 +188,15 @@ public sealed class NotificationTests : UiTest
     }
 
     /// <summary>
-    /// Status updates of one incoming message, as the real phone sends them, do not show its toast again while the
-    /// toast shows. The app logs one toast for the message.
+    /// The real phone sends status updates for one incoming message. These updates do not show its toast again while
+    /// the toast shows. The app logs one toast for the message.
     /// </summary>
     /// <remarks>
-    /// A repeat show reuses the tag of the toast, so it replaces the toast on screen and does not add one. The
+    /// A repeat show reuses the tag of the toast. It replaces the toast on screen and does not add one. The
     /// "Toast shown" log line of the app tells the two cases apart. The live message arrives behind the updates, so
-    /// when it toasts, the app has handled the updates. The test dismisses the first banner before then. Windows shows
-    /// the next banner only when the first one leaves, and on an unattended machine it never leaves by itself.
+    /// when it toasts, the app has handled the updates. The test dismisses the first banner before then.
+    /// Windows shows the next banner only when the first one leaves. On an unattended machine, it never leaves by
+    /// itself.
     /// </remarks>
     [TestMethod]
     public async Task RepeatedUpdates_ShowOneToast()
@@ -349,8 +350,8 @@ public sealed class ManualNotificationTests : UiTest
 
     /// <summary>
     /// The toast of a message leaves the screen and goes to the Notification Center. This happens within the Windows
-    /// "Dismiss notifications after" time plus 5 s, which is 10 s at the default of 5 s. Toasts of other apps do the
-    /// same. The run needs real user input, as the remarks of the class explain.
+    /// "Dismiss notifications after" time plus 5 s. At the default of 5 s, the limit is 10 s. Toasts of other apps
+    /// do the same. The run needs real user input, as the remarks of the class explain.
     /// </summary>
     /// <remarks>
     /// The test reads the setting and never writes it. If no keyboard or mouse input comes after the toast shows,

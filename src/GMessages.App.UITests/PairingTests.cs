@@ -64,8 +64,8 @@ public sealed class PairingTests : UiTest
         Server.Phone.Tap(false);
         App.WaitForText("Pairing.Message", WrongEmojiText);
 
-        // Try again starts a new browser. The test waits for the page load through UI Automation:
-        // a WebView2 that gets a request while its browser still starts stays an empty pane for good.
+        // Try again starts a new browser. The test waits for the page load through UI Automation.
+        // A WebView2 that gets a request while its browser still starts stays an empty pane for good.
         int pageLoads = Server.RequestedPaths.Count(p => p == "/web/authentication");
         App.Find("Pairing.TryAgain").Patterns.Invoke.Pattern.Invoke();
         Wait.Until(() => Server.RequestedPaths.Count(p => p == "/web/authentication") > pageLoads, AppDriver.DefaultTimeout,

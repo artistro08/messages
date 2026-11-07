@@ -149,8 +149,8 @@ public sealed class ShortcutTests : UiTest
     }
 
     /// <summary>
-    /// Ctrl + Shift + / (Ctrl + ?) opens the help dialog with every wired shortcut. Start new conversation is first,
-    /// and its keys show as the caps Ctrl and K.
+    /// Ctrl + Shift + /, which is Ctrl + ?, opens the help dialog with every wired shortcut.
+    /// Start new conversation is first, and its keys show as the caps Ctrl and K.
     /// </summary>
     [TestMethod]
     public async Task CtrlQuestion_ShowsHelpWithRows()
