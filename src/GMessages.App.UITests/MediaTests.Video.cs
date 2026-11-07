@@ -183,8 +183,8 @@ public sealed partial class MediaTests
 
     /// <summary>
     /// A video that plays in its bubble shows its frames with the rounded corners of the bubble. The app draws the
-    /// frames, because the own picture of the player ignored the corners on the install of the owner. The middle of
-    /// the box shows the clip, and the bottom right corner of the box shows the chat behind it.
+    /// frames. The picture that the player draws ignored the corners on the install of the owner. The middle of the
+    /// box shows the clip. The bottom right corner of the box shows the chat behind it.
     /// </summary>
     [TestMethod]
     public async Task Video_InlinePlay_ShowsFramesWithRoundedCorners()
@@ -219,8 +219,9 @@ public sealed partial class MediaTests
         Server.Phone.PushIncomingMedia("c-media", "video/mp4", File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Fixtures", file)), file);
 
     /// <summary>
-    /// Expand on a video that plays in its bubble carries on in the viewer from the position that the video reached.
-    /// Close on the viewer carries on in the bubble from the position that the viewer reached. The video still plays.
+    /// Expand on a video that plays in its bubble carries on in the viewer. It starts at the position that the video
+    /// reached. Close on the viewer carries on in the bubble from the position that the viewer reached. The video
+    /// still plays.
     /// </summary>
     [TestMethod]
     public async Task Video_ExpandAndClose_KeepThePosition()
@@ -266,8 +267,8 @@ public sealed partial class MediaTests
     // Each read moves the pointer 1 px the other way, so the move is always real.
     private static int s_nudge = 1;
 
-    // The bar is the same in the bubble and in the viewer: play or pause on the left, the seek bar, and volume on the
-    // right. It has nothing else, so it has no cast button and no full window button.
+    // The bar is the same in the bubble and in the viewer. Play or pause is on the left, then the seek bar, and volume
+    // is on the right. The bar has nothing else, so it has no cast button and no full window button.
     private static void AssertCompactBar(AutomationElement player)
     {
         AutomationElement? Part(string id) => AppDriver.Search(player, e => e.Properties.AutomationId.ValueOrDefault == id);
@@ -313,7 +314,7 @@ public sealed partial class MediaTests
         WaitForStatus(player, expected);
     }
 
-    // The own state and the audio category of the video player, as the app noted them.
+    // The state and the audio category of the video player, as the app noted them.
     private void WaitForVideoPlayer(string expected)
     {
         string state  = Path.Combine(App.DataDir, "video-player.txt");

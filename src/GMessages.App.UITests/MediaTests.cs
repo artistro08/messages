@@ -11,8 +11,8 @@ using Mouse = FlaUI.Core.Input.Mouse;
 namespace GMessages.App.UITests;
 
 /// <summary>
-/// Photos, videos and files in the chat: the photo bubble (blurred, then sharp), its reserved size, its failure and
-/// retry, its caption, and the file card that opens in its app.
+/// Photos, videos and files in the chat. The photo bubble shows blurred, then sharp. The tests cover its reserved
+/// size, its failure and retry, and its caption. They also cover the file card that opens in its app.
 /// </summary>
 [TestClass]
 [TestCategory("UI")]
@@ -27,7 +27,7 @@ public sealed partial class MediaTests : UiTest
     // A complete 1 x 1 GIF89a for a pasted GIF.
     private static readonly byte[] OnePixelGif = Convert.FromHexString("4749463839610100010080000000FFFFFF00000021F90400000000002C00000000010001000002024401003B");
 
-    // A 1 x 1 GIF89a that moves: two frames (black, then white), 100 ms each, looping.
+    // A 1 x 1 GIF89a that moves. It has two frames, black and then white. Each frame lasts 100 ms, and the GIF loops.
     private static readonly byte[] TwoFrameGif = Convert.FromHexString(
         "47494638396101000100800000000000FFFFFF"
         + "21FF0B4E45545343415045322E30030100000"
@@ -153,7 +153,7 @@ public sealed partial class MediaTests : UiTest
 
     /// <summary>
     /// A received file shows as a card with its name and size. A click downloads the file, writes it to the private
-    /// temp folder and opens it, and the test hook notes the path instead. The file holds the bytes sent.
+    /// temp folder and opens it. The test hook notes the path instead. The file holds the bytes sent.
     /// </summary>
     [TestMethod]
     public async Task ReceivedFile_Card_OpensDownloaded()
@@ -178,7 +178,7 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// Save as in the photo menu writes the photo bytes to the picked file and marks the file as downloaded from the
+    /// Save as in the photo menu writes the photo bytes to the picked file. It marks the file as downloaded from the
     /// internet. The test hook picks the path, but the app still creates and sets up the dialog.
     /// </summary>
     [TestMethod]
@@ -223,9 +223,9 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// Download in the menu saves a photo and a file to the Downloads folder of the test hook, with the bytes and the
-    /// mark of the web. A second copy gets the name "name (1)". The "Saved to Downloads" note shows, and its Show in
-    /// folder button opens the folder. The test hook notes the folder.
+    /// Download in the menu saves a photo and a file to the Downloads folder of the test hook. The saved files hold
+    /// the bytes and the mark of the web. A second copy gets the name "name (1)". The "Saved to Downloads" note shows.
+    /// Its Show in folder button opens the folder, and the test hook notes the folder.
     /// </summary>
     [TestMethod]
     public async Task Download_FromMenu_SavesToDownloads()
@@ -327,9 +327,9 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// A picked photo shows as a chip. Send uploads the photo, and the phone gets a media message and then the text as
-    /// its own message, because Mia's chat is RCS and RCS refuses captions. The bubble shows the photo in its shape
-    /// and the chip is gone.
+    /// A picked photo shows as a chip. Send uploads the photo. The phone gets a media message and then the text as a
+    /// separate message. The chat of Mia is RCS, and RCS refuses captions. The bubble shows the photo in its
+    /// shape, and the chip is gone.
     /// </summary>
     [TestMethod]
     public async Task Attach_Photo_SendsAndShows()
@@ -568,9 +568,9 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// The GIF tab of the Windows emoji panel hands over HTML and a bitmap of the first frame, with no GIF or file
-    /// format. The HTML has an <c>img</c> of the GIF on Tenor. The owner log showed this. The paste becomes the linked
-    /// GIF, fetched, and sends as <c>image/gif</c> byte for byte, not as a still PNG of the bitmap.
+    /// The GIF tab of the Windows emoji panel hands over HTML and a bitmap of the first frame. It hands over no GIF
+    /// or file format. The HTML has an <c>img</c> of the GIF on Tenor. The owner log showed this. The paste becomes
+    /// the linked GIF, which the app fetches. It sends as <c>image/gif</c> byte for byte, not as a still PNG.
     /// </summary>
     [TestMethod]
     public async Task Paste_EmojiPanelGif_SendsTheLinkedGif()
@@ -629,16 +629,17 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// Fast scrolling up and down in a chat full of photos and GIFs neither crashes the app nor logs an unhandled
-    /// error. Rows recycle and photos resize. Version 0.6.2 crashed here with 0xc000027b. Windows refused the visual
-    /// of the photo clip with E_ACCESSDENIED inside SizeChanged and x:Bind callbacks on recycled rows.
+    /// The chat has 30 photos, and every fifth message is a GIF. Fast scrolling up and down does not crash the app
+    /// and does not log an unhandled error. Rows recycle and photos resize. Version 0.6.2 crashed here with
+    /// 0xc000027b. Windows refused the visual of the photo clip with E_ACCESSDENIED inside SizeChanged and x:Bind
+    /// callbacks on recycled rows.
     /// </summary>
     [TestMethod]
     public async Task ManyPhotos_FastScroll_NoCrash()
     {
         await OpenMediaChatAsync();
 
-        // Every fifth message is a GIF. The photos have mixed shapes.
+        // The loop pushes 30 messages. Every fifth message is a GIF. The photos have mixed shapes.
         Message last = null!;
         for (int i = 0; i < 30; i++)
         {
@@ -680,8 +681,8 @@ public sealed partial class MediaTests : UiTest
 
     /// <summary>
     /// Bubbles load only the parts that their message uses, and rows recycle between messages. A chat has a photo, a
-    /// voice message and 40 texts. After a scroll away and back, the photo and the voice message still show their
-    /// parts, and no text bubble shows a part.
+    /// voice message and 40 texts. The test scrolls away and back. The photo and the voice message still show their
+    /// parts. No text bubble shows a part.
     /// </summary>
     [TestMethod]
     public async Task Bubble_Recycled_ShowsRightParts()
@@ -755,7 +756,7 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// A GIF on the clipboard in its own format pastes as that GIF, not as the flat bitmap. A browser copies an image
+    /// A GIF on the clipboard in the GIF format pastes as that GIF, not as the flat bitmap. A browser copies an image
     /// this way, beside the plain bitmap.
     /// </summary>
     [TestMethod]
@@ -927,7 +928,7 @@ public sealed partial class MediaTests : UiTest
     /// </summary>
     /// <remarks>
     /// The level of the fake microphone follows a wave, so both a quiet and a loud level come by. The app test hook
-    /// (<c>record-drift.txt</c>) reports the drift of the bars. It measures the drift on every tick from the last
+    /// writes the drift of the bars to <c>record-drift.txt</c>. It measures the drift on every tick from the last
     /// layout.
     /// </remarks>
     [TestMethod]
@@ -1304,8 +1305,8 @@ public sealed partial class MediaTests : UiTest
     [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
     private static partial bool UnregisterHotKey(IntPtr window, int id);
 
-    // The test hook clipboard (see TestHooks.PasteContentAsync) holds the lines. Then Ctrl + V pastes in the message
-    // box.
+    // The test hook clipboard holds the lines. TestHooks.PasteContentAsync reads them. Then Ctrl + V pastes in the
+    // message box.
     private void PasteIntoDraft(params string[] clipboard)
     {
         File.WriteAllLines(Path.Combine(App.DataDir, "paste.txt"), clipboard);
@@ -1430,7 +1431,7 @@ public sealed partial class MediaTests : UiTest
     /// <returns>The bytes of the PNG file.</returns>
     internal static byte[] Png(int width, int height, Func<int, int, int, (byte R, byte G, byte B)> color)
     {
-        // Each row is a filter byte (None), then RGB.
+        // Each row is one filter byte, set to None, and then the RGB bytes.
         byte[] raw = new byte[height * ((width * 3) + 1)];
         for (int y = 0, at = 0; y < height; y++)
         {

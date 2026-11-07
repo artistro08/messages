@@ -10,8 +10,8 @@ using Keyboard = FlaUI.Core.Input.Keyboard;
 namespace GMessages.App.UITests;
 
 /// <summary>
-/// RCS in the chat pane: the status line, RCS and SMS bubbles, the lock, reactions, replies, the hover strip and
-/// typing.
+/// RCS in the chat pane. The tests cover the status line, RCS and SMS bubbles, the lock, reactions, replies, the
+/// hover strip and typing.
 /// </summary>
 [TestClass]
 [TestCategory("UI")]
@@ -94,7 +94,7 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// My bubble sits on the right and the bubble of Ann sits on the left. Every bubble showed on the left while the
+    /// My bubble sits on the right and the bubble of Ann sits on the left. Every bubble showed on the left before. The
     /// visual states of the side sat below the root element of the bubble, where GoToState never finds them.
     /// </summary>
     [TestMethod]
@@ -153,7 +153,7 @@ public sealed class RcsTests : UiTest
         System.Drawing.Rectangle where = link.BoundingRectangle;
         Assert.IsTrue(where.Height > 30, $"The link ({where}) didn't wrap.");
 
-        // The click lands on the empty end of the first line of the link, just inside the right edge of the text.
+        // The click lands on the empty end of the first line of the link. That point is just inside the text edge.
         FlaUI.Core.Input.Mouse.Click(new System.Drawing.Point(text.Right - 2, where.Top + 6));
         Thread.Sleep(600);
         Assert.IsFalse(ReadLog().Contains("Link opened", StringComparison.Ordinal), "A click past the link's letters opened it.");
@@ -164,8 +164,9 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// A link in an inbox chat gets a preview card named by the <c>og:title</c> of the linked page and the host of the
-    /// link. When the card shows, it takes the place of the link, and the text reads without the address.
+    /// A link in an inbox chat gets a preview card. The card is named by the <c>og:title</c> of the linked page and
+    /// the host of the link. When the card shows, it takes the place of the link. The text reads without the
+    /// address.
     /// </summary>
     [TestMethod]
     public async Task LinkMessage_ShowsPreviewCard_TextDropsTheLink()
@@ -232,7 +233,7 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// A link whose preview fails, because the page is not there, gets no card and keeps its link in the text.
+    /// A link whose preview fails gets no card, because the page is not there. The link stays in the text.
     /// </summary>
     [TestMethod]
     public async Task LinkPreviewFails_KeepsTheLink()
@@ -294,7 +295,7 @@ public sealed class RcsTests : UiTest
 
     /// <summary>
     /// A right-click on the selectable text of a message opens the bubble menu with React and Reply, at the pointer.
-    /// The own Copy and Select all menu of the text does not open.
+    /// The Copy and Select all menu that the text draws does not open.
     /// </summary>
     [TestMethod]
     public async Task RightClickOnText_OpensBubbleMenu()
@@ -383,8 +384,9 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// On a sent message wider than twice the pill, the left edge of the pill lines up with the left edge of the text,
-    /// 12 px in from the left of the back. This mirrors the pill of a received bubble, as the owner asked.
+    /// A sent message is wider than twice the pill. The left edge of the pill lines up with the left edge of the text.
+    /// That edge is 12 px in from the left of the back. This mirrors the pill of a received bubble. The owner asked
+    /// for it.
     /// </summary>
     [TestMethod]
     public async Task ReactionPill_LongSentMessage_SitsBottomLeft()
@@ -422,8 +424,8 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// On a wide sent message, the pill and the time both fit under the text, so a reaction does not push the time
-    /// down. The gap from the text to the time is the same, within 2 px, before and after the reaction.
+    /// On a wide sent message, the pill and the time both fit under the text. A reaction does not push the time down.
+    /// The gap from the text to the time stays the same, within 2 px, before and after the reaction.
     /// </summary>
     [TestMethod]
     public async Task ReactionPill_WideSentMessage_TimeStaysClose()
@@ -495,8 +497,8 @@ public sealed class RcsTests : UiTest
 
     /// <summary>
     /// More reactions in the picker opens the emoji picker of the app. Focus is in its search box, and its emoji fill
-    /// its width. The text "eyes" shows 👀. The text "fire" leaves 🔥. A click on 🔥 closes the picker and sends the
-    /// phone an Add of 🔥 as a custom reaction, and the pill shows it.
+    /// its width. The text "eyes" shows 👀. The text "fire" leaves 🔥. A click on 🔥 closes the picker. The phone gets
+    /// an Add of 🔥 as a custom reaction, and the pill shows it.
     /// </summary>
     [TestMethod]
     public async Task MoreReactions_Picker_SearchAndPick_SendsCustomEmoji()
@@ -513,7 +515,7 @@ public sealed class RcsTests : UiTest
         AutomationElement search = App.Find("EmojiPicker.Search");
         Wait.Until(() => search.Properties.HasKeyboardFocus.ValueOrDefault, AppDriver.DefaultTimeout, () => "The search box didn't take focus.");
 
-        // The first row fills the picker edge to edge, lined up with the search box: 😀 is first and 😂 is eighth.
+        // The first row fills the picker edge to edge and lines up with the search box. 😀 is first and 😂 is eighth.
         System.Drawing.Rectangle box    = search.BoundingRectangle;
         System.Drawing.Rectangle first  = App.Find("EmojiPicker.1F600").BoundingRectangle;
         System.Drawing.Rectangle eighth = App.Find("EmojiPicker.1F602").BoundingRectangle;
@@ -597,8 +599,8 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// In the group Team, a click on the reaction pill of a message lists who reacted, in the order of the pill. 👍
-    /// comes from Bo and from me, shown as "You". Then 😂 comes from Cy.
+    /// In the group Team, a click on the reaction pill of a message lists who reacted. The list follows the order of
+    /// the pill. 👍 comes from Bo and from me, shown as "You". Then 😂 comes from Cy.
     /// </summary>
     [TestMethod]
     public async Task GroupPill_Click_ListsWhoReacted()
@@ -644,7 +646,7 @@ public sealed class RcsTests : UiTest
 
     /// <summary>
     /// In the one-on-one chat with Ann, the reaction pill lists who reacted, as in a group. It never opens the
-    /// reaction picker. The owner asked for this in Plan 7.
+    /// reaction picker. The owner asked for this. Plan 7 records the request.
     /// </summary>
     [TestMethod]
     public async Task OneOnOnePill_Click_ListsWhoReacted()
@@ -686,7 +688,7 @@ public sealed class RcsTests : UiTest
 
     /// <summary>
     /// A reaction pill does not push the time of the newest bubble down. The gap from the text of the bubble to the
-    /// time under it is the same, within 2 px, before and after Ann reacts.
+    /// time under it stays the same, within 2 px. This holds before and after Ann reacts.
     /// </summary>
     [TestMethod]
     public async Task ReactionPill_KeepsTheTimeUnderTheBubble()
@@ -933,8 +935,8 @@ public sealed class RcsTests : UiTest
 
     /// <summary>
     /// The space of the hover strip is always kept. A hover on my bubble does not move it, and the strip is on its
-    /// left. A hover on the newest bubble of Ann moves neither that bubble nor the bubble above it in its group, and
-    /// the strip is on its right. React in the strip then opens the picker, so the hover took effect.
+    /// left. A hover on the newest bubble of Ann moves neither that bubble nor the bubble above it in its group. The
+    /// strip is on its right. React in the strip then opens the picker, so the hover took effect.
     /// </summary>
     [TestMethod]
     public async Task HoverStrip_DoesNotMoveBubbles()
@@ -978,7 +980,7 @@ public sealed class RcsTests : UiTest
 
     /// <summary>
     /// My failed bubble takes no strip. The test retries it with the pointer resting on it. The strip shows when the
-    /// phone echoes the message, with no pointer move, and its ⋮ button opens the bubble menu.
+    /// phone echoes the message, with no pointer move. Its ⋮ button opens the bubble menu.
     /// </summary>
     [TestMethod]
     public async Task HoverBubble_SentWhileHovered_ShowsStrip()
@@ -1046,8 +1048,8 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// A click on the quote of a reply scrolls smoothly to the quoted message, which newer messages scrolled out of
-    /// view. The original does not pulse. Enter on the focused quote does the same.
+    /// Newer messages scroll the quoted message out of view. A click on the quote of a reply scrolls smoothly to the
+    /// quoted message. The quoted message does not pulse. Enter on the focused quote does the same.
     /// </summary>
     [TestMethod]
     public async Task ReplyQuote_Click_ScrollsToTheOriginal()
@@ -1136,7 +1138,7 @@ public sealed class RcsTests : UiTest
 
     /// <summary>
     /// A plain text bubble has no preview card. The card of a link message loads into its bubble when the preview
-    /// arrives. The card is named by the title of the page and the host of the link, and the text drops the link.
+    /// arrives. The title of the page and the host of the link name the card. The text drops the link.
     /// </summary>
     [TestMethod]
     public async Task Bubble_TextThenLinkPreview_ShowsCard()
@@ -1156,7 +1158,7 @@ public sealed class RcsTests : UiTest
 
     /// <summary>
     /// A bubble with no reactions has no pill. The 👍 of Ann brings a pill in on the bottom edge of the bubble. On
-    /// another bubble, my own 👍 brings a pill in, taking it back removes the pill, and a new reaction brings it back.
+    /// another bubble, my own 👍 brings a pill in. Taking it back removes the pill. A new reaction brings it back.
     /// </summary>
     [TestMethod]
     public async Task Bubble_ReceivesReaction_ShowsPill()
@@ -1240,7 +1242,7 @@ public sealed class RcsTests : UiTest
     }
 
     // Opens the main window and the chat of a row. The method waits for the bubbles and brings the window to the
-    // front, because a real right-click lands on the window that is on top. The cursor ends in the message box.
+    // front. A real right-click lands on the window that is on top. The cursor ends in the message box.
     private async Task OpenChatAsync(string rowId)
     {
         await OpenMainAsync();
@@ -1266,9 +1268,8 @@ public sealed class RcsTests : UiTest
         return button;
     }
 
-    // The text of a bubble fills its box edge to edge. The padding of the back is the same on both sides. So the
-    // insets of the text are equal only when the text box, stretched across the back, is as wide as the text drawn in
-    // it.
+    // The text of a bubble fills its box edge to edge. The padding of the back is the same on both sides. The text
+    // box stretches across the back. The insets of the text are equal only when that box is as wide as the text.
     private void AssertTextFits(string messageId)
     {
         Thread.Sleep(300);
@@ -1286,8 +1287,8 @@ public sealed class RcsTests : UiTest
     // Reads one pixel of a selected fill, near the left end and clear of the emoji. The first read comes before the
     // pointer arrives. Then a second thread reads about every 8 ms for 600 ms, from a real move onto the fill. The
     // second thread keeps the pace of the readings. Every reading must sit between the color before and the settled
-    // hover color, with 4 levels of slack. The hover must keep the accent: at least half of the color strength of the
-    // fill, which is the spread of its channels.
+    // hover color, with 4 levels of slack. The hover must keep the accent. That means at least half of the color
+    // strength of the fill, which is the spread of its channels.
     private void AssertSteadyHover(string name, System.Drawing.Rectangle box)
     {
         System.Drawing.Rectangle spot = new(box.Left + 5, box.Top + (box.Height / 2), 1, 1);

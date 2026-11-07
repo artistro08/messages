@@ -214,7 +214,7 @@ public sealed partial class MediaTests
     }
 
     /// <summary>
-    /// Open in Photos in the toolbar opens the temp copy of the photo in its app, and the test hook notes the open.
+    /// Open in Photos in the toolbar opens the temp copy of the photo in its app. The test hook notes the open.
     /// Download saves the photo to the Downloads folder. Save as writes the picked file.
     /// </summary>
     [TestMethod]
@@ -245,7 +245,7 @@ public sealed partial class MediaTests
     }
 
     /// <summary>
-    /// Open with in the toolbar launches the temp copy of the photo with the Windows app picker, and the viewer stays
+    /// Open with in the toolbar launches the temp copy of the photo with the Windows app picker. The viewer stays
     /// open. The test hook notes the path and the word <c>picker</c> instead.
     /// </summary>
     [TestMethod]
@@ -265,7 +265,7 @@ public sealed partial class MediaTests
     }
 
     /// <summary>
-    /// The toolbar sits in the top-left corner of the title bar row, in this order: Close, Open in Photos, Open with,
+    /// The toolbar sits in the top-left corner of the title bar row. The order is Close, Open in Photos, Open with,
     /// Download and Save as. It takes real mouse clicks there. The scrim tints the title bar row too, so the title and
     /// the profile picture read dark. Close puts the row back.
     /// </summary>
@@ -287,7 +287,7 @@ public sealed partial class MediaTests
             System.Drawing.Rectangle button = App.Find(id).BoundingRectangle;
             Assert.IsTrue(button.Top >= bar.Top && button.Bottom <= bar.Bottom, $"{id} ({button}) isn't in the title bar row ({bar}).");
             Assert.IsTrue(button.Left >= leftEdge, $"{id} ({button}) is out of order (Close, Open, Open with, Download, Save as from the left).");
-            // The 5 buttons end 289 px in at 125% scaling on the test machine: 224 epx plus the edge of the window.
+            // The 5 buttons end 289 px in at 125% scaling on the test machine. That is 224 epx plus the window edge.
             Assert.IsTrue(button.Right <= window.Left + 295, $"{id} ({button}) isn't in the top-left corner (window {window}).");
             leftEdge = button.Right;
         }
@@ -304,7 +304,7 @@ public sealed partial class MediaTests
         Mouse.Click(new System.Drawing.Point(close.Left + (close.Width / 2), close.Top + (close.Height / 2)));
         WaitForGone("PhotoViewer.Photo");
 
-        // The own buttons of the title bar take clicks again: the profile menu opens.
+        // The title bar buttons take clicks again. The profile menu opens.
         profile.Click();
         App.Find("Main.Profile.Settings");
         Keyboard.Type(VirtualKeyShort.ESCAPE);
