@@ -346,8 +346,8 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged, IDisposa
     // =========================================================================
 
     /// <summary>
-    /// Gets or sets whether the app starts with Windows. A set asks the startup service, then shows the state that took
-    /// effect.
+    /// Gets or sets whether the app starts with Windows. A change asks the startup service, then shows the state that
+    /// took effect.
     /// </summary>
     public bool StartWithWindows
     {

@@ -37,7 +37,8 @@ public static class AppInfo
     private static string ReadVersion()
     {
         Assembly assembly     = typeof(AppInfo).Assembly;
-        string? informational = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+        string? informational = assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
         if (!string.IsNullOrEmpty(informational))
         {
             int plus = informational.IndexOf('+', StringComparison.Ordinal);

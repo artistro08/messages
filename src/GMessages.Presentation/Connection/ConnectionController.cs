@@ -12,21 +12,21 @@ namespace GMessages.Presentation.Connection;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>UI thread.</b> The controller raises every event (<see cref="StateChanged"/> and <see cref="ClientEvent"/>)
-/// through the <c>post</c> callback. The app wires that callback to <c>DispatcherQueue.TryEnqueue</c>.
+/// <b>UI thread.</b> The controller raises <see cref="StateChanged"/> and <see cref="ClientEvent"/> through the
+/// <c>post</c> callback. The app wires that callback to <c>DispatcherQueue.TryEnqueue</c>.
 /// <see cref="State"/> changes at once on the thread that makes the change, so a handler always reads the newest
 /// state. The event only tells the handler to read the state again.
 /// </para>
 /// <para>
-/// <b>Serialization.</b> Start, pair, unpair, reconnect, sign-out and dispose run one at a time behind one async gate
-/// (<see cref="SemaphoreSlim"/>). Thus the operations never use the client at the same time. A plain lock guards the
+/// <b>Serialization.</b> Start, pair, unpair, reconnect, sign-out and dispose run one at a time behind one async gate,
+/// a <see cref="SemaphoreSlim"/>. Thus the operations never use the client at the same time. A plain lock guards the
 /// small state fields: <see cref="State"/> and the current client. The controller holds that lock only for the field
 /// writes. It never holds the lock across an await, a <see cref="GmClient"/> call or <c>post</c>. Thus the event
 /// thread of the client can move between Connected and Reconnecting without a wait on the gate.
 /// </para>
 /// <para>
 /// <b>Sign-out.</b> <see cref="ListenFatalError"/> or <see cref="GaiaLoggedOut"/> sends the work to the thread pool
-/// (<see cref="Task.Run(Func{Task})"/>). The client raises some events under its own lifecycle lock.
+/// through <see cref="Task.Run(Func{Task})"/>. The client raises some events under its own lifecycle lock.
 /// <see cref="GmClient.DisposeAsync"/> waits for the long poll that raises the event, so an inline dispose can
 /// deadlock. The pool task takes the gate and ignores a stale or repeated event. For the current client, the task
 /// disposes the client, because a finished client cannot be used again. The task then deletes the dead session file

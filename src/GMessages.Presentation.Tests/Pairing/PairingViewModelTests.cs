@@ -217,7 +217,7 @@ public sealed class PairingViewModelTests
 
     /// <summary>
     /// After a sign-out, an unpair cancels the pairing while the emoji waits. The window goes back to the sign-in and
-    /// shows no failure.
+    /// shows no failure, also while the unpair still waits for the gate.
     /// </summary>
     [TestMethod]
     public async Task UnpairDuringPairing_AfterSignOut_IsNotGenericFailure()
@@ -232,12 +232,33 @@ public sealed class PairingViewModelTests
 
         Task pairing = watched.ViewModel.OnCookiesCapturedAsync(Shared.PairCookies);
         Shared.WaitUntil(() => watched.ViewModel.Step == PairingStep.ShowingEmoji, "emoji shown");
-        await rig.Controller.UnpairAsync().WaitAsync(Shared.HangGuard);
-        await pairing.WaitAsync(Shared.HangGuard);
 
-        Assert.AreEqual(PairingStep.SigningIn, watched.ViewModel.Step);
-        Assert.IsNull(watched.ViewModel.Message);
-        Assert.IsFalse(watched.Steps.Contains(PairingStep.Failed), "no failure shown");
+        // A start on a locked session file takes the gate before the unpair. The start holds the gate on its 1 s wait.
+        File.WriteAllBytes(rig.Paths.SessionFile, []);
+        var locked     = new FileStream(rig.Paths.SessionFile, FileMode.Open, FileAccess.Read, FileShare.None);
+        int retryWaits = rig.Time.CountTimers(TimeSpan.FromSeconds(1));
+        Task start     = rig.Controller.StartAsync();
+        Task unpair    = rig.Controller.UnpairAsync();
+
+        // The page settles while the unpair still waits for the gate.
+        await pairing.WaitAsync(Shared.HangGuard);
+        PairingStep step  = watched.ViewModel.Step;
+        string? message   = watched.ViewModel.Message;
+        bool failedShown  = watched.Steps.Contains(PairingStep.Failed);
+        bool unpairWaited = !unpair.IsCompleted;
+        bool startOnLock  = SpinWait.SpinUntil(() => rig.Time.CountTimers(TimeSpan.FromSeconds(1)) > retryWaits, Shared.HangGuard);
+
+        // The test frees the gate before any assert, so the rig can dispose.
+        await locked.DisposeAsync();
+        rig.Time.Advance(TimeSpan.FromSeconds(3));
+        await start.WaitAsync(Shared.HangGuard);
+        await unpair.WaitAsync(Shared.HangGuard);
+
+        Assert.AreEqual(PairingStep.SigningIn, step);
+        Assert.IsNull(message);
+        Assert.IsFalse(failedShown, "no failure shown");
+        Assert.IsTrue(unpairWaited, "unpair still waited for the gate");
+        Assert.IsTrue(startOnLock, "start waited on the lock");
         Assert.AreEqual(ConnectionState.NotPaired, rig.Controller.State);
     }
 

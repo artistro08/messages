@@ -55,7 +55,7 @@ public sealed class AppPaths
     /// Picks the data folder.
     /// </summary>
     /// <remarks>
-    /// A set <paramref name="testDataDir"/> comes first. Otherwise a packaged app uses
+    /// A <paramref name="testDataDir"/> value comes first. Otherwise a packaged app uses
     /// <paramref name="packagedLocalFolder"/>, which is the LocalState folder of the package. The App gives that folder
     /// from <c>ApplicationData.Current.LocalFolder</c>, so this project needs no WinRT. Any other run uses
     /// <c>%LOCALAPPDATA%\{AppInfo.DisplayName}</c>.
