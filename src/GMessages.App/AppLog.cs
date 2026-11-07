@@ -81,6 +81,9 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 924, Level = LogLevel.Information, Message = "Bubble animated in ({MessageId})")]
     public static partial void BubbleAnimatedIn(ILogger logger, string messageId);
 
+    [LoggerMessage(EventId = 937, Level = LogLevel.Information, Message = "Row faded in ({ConversationId})")]
+    public static partial void RowFadedIn(ILogger logger, string conversationId);
+
     [LoggerMessage(EventId = 925, Level = LogLevel.Information, Message = "Taskbar badge set to {Count}")]
     public static partial void BadgeSet(ILogger logger, int count);
 

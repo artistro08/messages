@@ -10,13 +10,17 @@ public sealed class ChatFormatTests
     private static readonly CultureInfo EnUs = CultureInfo.GetCultureInfo("en-US");
 
     /// <summary>
-    /// The badge of a pinned tile shows the message when it is the one unread message and has 1 or 2 words.
-    /// Otherwise the badge shows the unread count. A read chat has no badge.
+    /// The badge of a pinned tile shows the message when it is the one unread message and has 1 or 2 words, and does
+    /// not start with a link. Otherwise the badge shows the unread count. A read chat has no badge.
     /// </summary>
     [TestMethod]
     [DataRow(false, 3, "hi", "")]
     [DataRow(true, 1, "hi", "hi")]
     [DataRow(true, 0, "  sounds   good ", "sounds good")]
+    [DataRow(true, 1, "https://music.youtube.com/watch?v=wK7FwO8XCS0", "1")]
+    [DataRow(true, 0, " www.example.com nice", "1")]
+    [DataRow(true, 1, "(https://example.com)", "1")]
+    [DataRow(true, 1, "look https://example.com", "look https://example.com")]
     [DataRow(true, 1, "see you soon", "1")]
     [DataRow(true, 1, "", "1")]
     [DataRow(true, 2, "hi", "2")]
