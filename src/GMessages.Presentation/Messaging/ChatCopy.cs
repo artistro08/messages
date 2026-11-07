@@ -25,6 +25,10 @@ public static class ChatCopy
     public const string MoveToTrash        = "Move to trash";
     public const string Details            = "Details";
 
+    // The controller wrote the screen reader name of the placeholder rows at the end of the list. The owner approves
+    // it.
+    public const string LoadingMoreConversations = "Loading more conversations";
+
     // The controller wrote the copy of the hover buttons and icons. The owner approves it.
     public const string MoreOptions = "More options";
     public const string Muted       = "Muted";

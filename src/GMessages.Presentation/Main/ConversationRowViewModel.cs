@@ -18,6 +18,13 @@ public sealed class ConversationRowViewModel : INotifyPropertyChanged
     // The tooltip lists this number of the newest unread messages at most.
     private const int MaxHoverLines = 10;
 
+    // A row from a page fades in only when it shows this soon after the page. A later scroll into view does not fade
+    // it.
+    private const long FadeWindowMs = 1000;
+
+    // MarkPaged keeps its Environment.TickCount64 value here for TakeFadeIn. The value 0 means no mark.
+    private long _pagedAt;
+
     /// <summary>
     /// Creates the row from a conversation.
     /// </summary>
@@ -125,6 +132,22 @@ public sealed class ConversationRowViewModel : INotifyPropertyChanged
         Fill(c, now, unreadTexts ?? [], draft);
         PropertyChanged?.Invoke(this, AllChanged);
     }
+
+    /// <summary>
+    /// Tells 1 time whether the row fades in. It is true for a row that a page added and that shows within 1 second of
+    /// the page.
+    /// </summary>
+    /// <remarks>The flag clears, so a recycled container never fades the row again.</remarks>
+    /// <returns>True the first time that a new row from a page shows.</returns>
+    public bool TakeFadeIn()
+    {
+        bool fade = _pagedAt != 0 && Environment.TickCount64 - _pagedAt <= FadeWindowMs;
+        _pagedAt  = 0;
+        return fade;
+    }
+
+    /// <summary>Marks the row as added by a page, for <see cref="TakeFadeIn"/>.</summary>
+    internal void MarkPaged() => _pagedAt = Environment.TickCount64;
 
     /// <summary>
     /// Gives the accessible name of the row: the conversation name, and "Unread" while the conversation has unread

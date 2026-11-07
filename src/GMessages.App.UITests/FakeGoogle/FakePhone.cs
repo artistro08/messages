@@ -66,6 +66,7 @@ public sealed class FakePhone
     private readonly List<SendReactionRequest> _reactions = [];
     private readonly List<TypingUpdateRequest> _typing    = [];
     private readonly List<UpdateConversationRequest> _conversationUpdates = [];
+    private int _conversationPagesAsked;
     private AesCtrHelper? _derivedCrypto;
     private TaskCompletionSource _finishReceived = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private ECParameters _key;
@@ -131,6 +132,17 @@ public sealed class FakePhone
     /// full media ID. The default is zero.
     /// </summary>
     public TimeSpan FullSizeDelay { get; set; }
+
+    /// <summary>
+    /// Gets or sets how long the phone waits before it answers a request for a later page of the conversation list.
+    /// The default is zero.
+    /// </summary>
+    public TimeSpan ConversationPagesDelay { get; set; }
+
+    /// <summary>
+    /// Gets how many times the app asked for a later page of the conversation list. Such a request carries a cursor.
+    /// </summary>
+    public int ConversationPagesAsked => Volatile.Read(ref _conversationPagesAsked);
 
     /// <summary>
     /// Gets every <c>SendMessage</c> request so far, in arrival order.
@@ -307,7 +319,17 @@ public sealed class FakePhone
 
             case ActionType.ListConversations when RequestCrypto is not null:
                 var list = Open(data, ListConversationsRequest.Parser);
-                Reply(data.RequestID, data.Action, new ListConversationsResponse { Conversations = { Chats.List(list.Folder, list.Count, list.Cursor) } }, encrypt: true);
+                var chats = new ListConversationsResponse { Conversations = { Chats.List(list.Folder, list.Count, list.Cursor) } };
+                if (list.Cursor is null)
+                {
+                    Reply(data.RequestID, data.Action, chats, encrypt: true);
+                    break;
+                }
+
+                // A later page waits off the request thread, so the phone answers other requests in the meantime.
+                Interlocked.Increment(ref _conversationPagesAsked);
+                string listId = data.RequestID;
+                _ = Task.Delay(ConversationPagesDelay).ContinueWith(_ => Reply(listId, ActionType.ListConversations, chats, encrypt: true), TaskScheduler.Default);
                 break;
 
             case ActionType.ListMessages when RequestCrypto is not null:
