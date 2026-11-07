@@ -656,6 +656,11 @@ public sealed partial class ChatPane : UserControl
         pane._lastViewport = -1;
         pane._reactTarget  = null;
 
+        // An open emoji picker closes, so a pick never sends a reaction for a bubble of the last chat.
+        pane._emojiPicker?.Hide();
+        pane._emojiTarget  = null;
+        pane._emojiPending = null;
+
         if (chat is not null)
         {
             chat.Messages.CollectionChanged += pane.OnMessagesChanged;
