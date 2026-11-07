@@ -45,9 +45,8 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
     // Live changes animate only after the first load ends, with a page or with a failure.
     private bool _hasLoaded;
 
-    // A reload or a next page that a caller asks for during a load runs when that load ends.
+    // A reload that a caller asks for during a load runs when that load ends.
     private bool _reloadPending;
-    private bool _morePending;
 
     private bool _pinnedApart;
 
@@ -223,8 +222,8 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Call it on the UI thread. The call does nothing when no more pages are left. A call during a load runs when that
-    /// load ends. The view asks only while the list is at its bottom. Live updates can show all rows of a page before
+    /// Call it on the UI thread. The call does nothing during a load or when no more pages are left. The view asks only
+    /// while the list is at its bottom, and again when each load ends. Live updates can show all rows of a page before
     /// the page arrives. The page then adds nothing below, the list stays at its bottom, and the view asks again.
     /// </para>
     /// <para>
@@ -233,14 +232,13 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
     /// </para>
     /// </remarks>
     /// <returns>
-    /// A task that completes when the page is shown. Its result is true when a page came. It is false when a load ran,
-    /// so the ask waits for that load to end, when no pages were left or when the page failed.
+    /// A task that completes when the page is shown. Its result is true when a page came. It is false during a load,
+    /// when no pages were left or when the page failed.
     /// </returns>
     public async Task<bool> LoadMoreAsync()
     {
         if (IsLoading)
         {
-            _morePending = true;
             return false;
         }
 
@@ -302,21 +300,13 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
         }
     }
 
-    // A resync or a reload during a load can make the page stale, so the list loads again. A next page that a caller
-    // asked for runs after that.
+    // A resync or a reload during a load can make the page stale, so the list loads again.
     private async Task RunPendingReloadAsync()
     {
         if (_reloadPending)
         {
             _reloadPending = false;
             await LoadAsync();
-            return;
-        }
-
-        if (_morePending)
-        {
-            _morePending = false;
-            await LoadMoreAsync();
         }
     }
 
