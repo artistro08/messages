@@ -176,8 +176,8 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
     /// <remarks>
     /// Call it on the UI thread. An empty list first shows the conversations that the store already has, so the list
     /// never waits on the phone. The store has them when the window opens again. The page then updates those rows in
-    /// place and drops the rows that it does not list. A row that changed live during the load stays. A call during a
-    /// load runs when that load ends. When the load fails, the rows stay as they were. A load can fail with no
+    /// place and drops the rows that it does not list. A row that got a new message or first showed during the load
+    /// stays. A call during a load runs when that load ends. When the load fails, the rows stay as they were. A load can fail with no
     /// connection, no answer or a network error.
     /// </remarks>
     /// <returns>A task that completes when the page is shown.</returns>
@@ -337,7 +337,8 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
     // a load.
     private void OnConversationChanged(object? sender, ConversationInfo c)
     {
-        if (IsLoading)
+        // Only a new message keeps a row that the page does not list. A mark-read keeps no row of a deleted chat.
+        if (IsLoading && (Find(c.Id) is not { } row || c.LastMessageTime > row.LastMessageTime))
         {
             _changedMidLoad.Add(c.Id);
         }

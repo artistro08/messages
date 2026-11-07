@@ -715,4 +715,30 @@ public sealed class ConversationListViewModelTests
 
         Assert.AreEqual("n,a", Ids(list));
     }
+
+    /// <summary>
+    /// The phone deleted a chat, and a mark-read of that chat comes while a reload waits on the phone. The mark-read
+    /// brings no new message, so the row goes when the page does not list the chat.
+    /// </summary>
+    [TestMethod]
+    public async Task Load_ChatReadMidLoad_NotListed_LosesItsRow()
+    {
+        using var rig  = new MainRig();
+        Conversation d = MainRig.Conv("d", "Dee", minutesAgo: 1);
+        d.Unread       = true;
+        rig.Page(MainRig.Conv("a", "Ann", minutesAgo: 5), d);
+        using var list = NewList(rig);
+        await list.LoadAsync();
+        Assert.AreEqual("d,a", Ids(list));
+
+        rig.Page(MainRig.Conv("a", "Ann", minutesAgo: 5));
+        var gate            = new TaskCompletionSource();
+        rig.Client.ListGate = gate;
+        Task reload         = list.LoadAsync();
+        await rig.Live(MainRig.Conv("d", "Dee", minutesAgo: 1));
+        gate.SetResult();
+        await reload;
+
+        Assert.AreEqual("a", Ids(list));
+    }
 }
