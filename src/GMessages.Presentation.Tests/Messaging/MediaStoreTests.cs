@@ -254,6 +254,24 @@ public sealed class MediaStoreTests
     }
 
     /// <summary>
+    /// A seed for a media ID that is still downloading does not fail the download. The download gives its bytes.
+    /// </summary>
+    [TestMethod]
+    public async Task Seed_DuringDownload_DownloadStillAnswers()
+    {
+        using var rig           = new Rig();
+        rig.Client.Media["m-1"] = [1, 2, 3];
+        rig.Client.DownloadGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        Task<byte[]> download = rig.Store.GetAsync(Part("m-1"), thumbnail: false, Ct);
+        rig.Store.Seed("m-1", [4, 5]);
+        rig.Client.DownloadGate.SetResult();
+
+        CollectionAssert.AreEqual(new byte[] { 1, 2, 3 }, await download);
+        CollectionAssert.AreEqual(new byte[] { 4, 5 }, await rig.Store.GetAsync(Part("m-1"), thumbnail: false, Ct));
+    }
+
+    /// <summary>
     /// ClearMemory empties the memory cache: the next ask downloads again.
     /// </summary>
     [TestMethod]

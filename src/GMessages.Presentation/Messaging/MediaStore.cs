@@ -727,12 +727,11 @@ public sealed partial class MediaStore : IDisposable
     // Adds To The Memory Cache, Dropping The Least Recently Used Past The Cap; A File Over The Cap Is Not Kept
     private void Keep(string id, byte[] bytes)
     {
-        if (bytes.LongLength > MemoryCapBytes)
+        if (bytes.LongLength > MemoryCapBytes || !_cache.TryAdd(id, bytes))
         {
             return;
         }
 
-        _cache.Add(id, bytes);
         _cachedBytes += bytes.LongLength;
         while (_cachedBytes > MemoryCapBytes)
         {
