@@ -1,5 +1,5 @@
 using System.Text;
-using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using GMessages.Protocol.PbLite;
 using GMessages.Protocol.Proto;
 using Google.Protobuf;
@@ -103,36 +103,15 @@ public class PbLiteGoldenTests
 
         string actual = Encoding.UTF8.GetString(PbLiteSerializer.Serialize(message));
 
-        Assert.AreEqual(TrimTrailingEmptySlots(expectedPbLite), TrimTrailingEmptySlots(actual));
-    }
-
-    // Field 39 of Conversation exists only in the C# proto, so C# writes more trailing empty slots than Go.
-    // PBLite reads a missing trailing slot and an empty trailing slot the same way.
-    private static string TrimTrailingEmptySlots(string pblite)
-    {
-        var node = JsonNode.Parse(pblite);
-
-        Trim(node);
-
-        return node!.ToJsonString();
-
-        static void Trim(JsonNode? n)
+        // The field encryptionState = 39 of Conversation is C#-only, so C# writes more empty slots at the end than Go.
+        // PBLite reads a missing slot at the end and an empty slot at the end the same way.
+        if (type == "conversations.Conversation")
         {
-            if (n is not JsonArray array)
-            {
-                return;
-            }
-
-            foreach (var item in array)
-            {
-                Trim(item);
-            }
-
-            while (array.Count > 0 && array[^1] is null)
-            {
-                array.RemoveAt(array.Count - 1);
-            }
+            expectedPbLite = Regex.Replace(expectedPbLite, @"(,null)+\]$", "]");
+            actual         = Regex.Replace(actual, @"(,null)+\]$", "]");
         }
+
+        Assert.AreEqual(expectedPbLite, actual);
     }
 
     /// <summary>
