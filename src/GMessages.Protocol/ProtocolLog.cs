@@ -26,7 +26,7 @@ internal static partial class ProtocolLog
     }
 
     /// <summary>
-    /// Logs that a subscriber of an event threw. The other subscribers still get the event.
+    /// Logs that a subscriber of an event threw. That subscriber stops the delivery to the subscribers after it.
     /// </summary>
     /// <param name="logger">The logger.</param>
     /// <param name="exception">What the subscriber threw.</param>

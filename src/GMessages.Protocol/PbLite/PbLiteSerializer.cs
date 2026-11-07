@@ -299,7 +299,8 @@ public static class PbLiteSerializer
 
     // The method formats a double as the Go json.Marshal does. Go uses the shortest digits that round-trip. It uses
     // plain notation from 1e-6 up to 1e21, and exponent notation out of that range. A negative exponent has no zero
-    // padding: 1e-7, 1e+21. The .NET round-trip text gives the shortest digits, and this method changes their layout.
+    // padding: 1e-7. A positive exponent has at least 2 digits: 1e+21. The .NET round-trip text gives the shortest
+    // digits, and this method changes their layout.
     // As with the Go reflection, a float becomes a double first. NaN or infinity throws a PbLiteException.
     private static string FormatDouble(double value, FieldDescriptor field)
     {
