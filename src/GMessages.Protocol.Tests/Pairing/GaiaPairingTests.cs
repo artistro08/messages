@@ -176,6 +176,29 @@ public class GaiaPairingTests
     }
 
     /// <summary>
+    /// The server refuses the client init, and the 20 second init timer runs out during the cancel request. The start
+    /// throws the refusal, not an init timeout.
+    /// </summary>
+    [TestMethod]
+    public async Task Start_InitRefused_TimerEndsDuringCancel_ThrowsRefusal()
+    {
+        Rig rig              = CreateRig();
+        rig.Auth.DestPhoneId = 0;
+        rig.Handler.Hang     = req => req.Url.EndsWith("/SendMessage", StringComparison.Ordinal) && ActionOf(req) == ActionType.CancelGaiaPairing;
+        Func<int, RecordedRequest, HttpResponseMessage> respond = rig.Handler.Respond;
+        rig.Handler.Respond  = (index, req) => req.Url.EndsWith("/SendMessage", StringComparison.Ordinal) && ActionOf(req) == ActionType.CreateGaiaPairingClientInit
+            ? FakeHttpHandler.Response(HttpStatusCode.BadRequest)
+            : respond(index, req);
+
+        Task<(string, PairingSession)> start = rig.Pairing.StartAsync(CancellationToken.None);
+        Assert.IsTrue(SpinWait.SpinUntil(() => rig.SentActions().Contains(ActionType.CancelGaiaPairing), HangGuard), "cancel request");
+        rig.Time.Advance(TimeSpan.FromSeconds(GaiaPairing.GaiaInitTimeoutSeconds));
+
+        var ex = await Assert.ThrowsExactlyAsync<GmRequestException>(() => start.WaitAsync(HangGuard));
+        Assert.AreEqual(400, ex.StatusCode);
+    }
+
+    /// <summary>
     /// With several phones the newest one is used; the full start and finish then store the keys, the pairing ID and
     /// the phone ID like Go (phone C has no timestamp, so its unknown int forms the phone ID).
     /// </summary>

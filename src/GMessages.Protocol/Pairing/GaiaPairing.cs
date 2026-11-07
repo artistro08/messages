@@ -366,8 +366,10 @@ public sealed partial class GaiaPairing(GaiaSignIn signIn, RpcSession rpc, LongP
             }
             catch (Exception)
             {
+                // Read the timer before the cancel request. That request can take 10 seconds, and the timer can end meanwhile.
+                bool timedOut = timeout.IsCancellationRequested && !ct.IsCancellationRequested;
                 await TryCancelAsync(session).ConfigureAwait(false);
-                if (timeout.IsCancellationRequested && !ct.IsCancellationRequested)
+                if (timedOut)
                 {
                     throw new PairingException(PairingFailure.InitTimeout, deviceCount > 1 ? "client init timed out (had multiple primary-looking devices)" : "client init timed out");
                 }
