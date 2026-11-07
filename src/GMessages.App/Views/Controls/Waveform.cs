@@ -352,8 +352,14 @@ public sealed partial class Waveform : UserControl
     // width, not of the control width.
     private void OnTapped(object sender, TappedRoutedEventArgs e)
     {
+        double x = e.GetPosition(this).X;
+        if (_played.Width is not > 0 || x > _played.Width)
+        {
+            return;
+        }
+
         e.Handled = true;
         _seeking  = true;
-        SeekRequested?.Invoke(this, Math.Clamp(e.GetPosition(this).X / _played.Width, 0, 1));
+        SeekRequested?.Invoke(this, Math.Clamp(x / _played.Width, 0, 1));
     }
 }
