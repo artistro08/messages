@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json.Nodes;
 using GMessages.Protocol.PbLite;
 using GMessages.Protocol.Proto;
 using Google.Protobuf;
@@ -100,7 +101,38 @@ public class PbLiteGoldenTests
     {
         IMessage message = ParserFor(type).ParseFrom(binary);
 
-        Assert.AreEqual(expectedPbLite, Encoding.UTF8.GetString(PbLiteSerializer.Serialize(message)));
+        string actual = Encoding.UTF8.GetString(PbLiteSerializer.Serialize(message));
+
+        Assert.AreEqual(TrimTrailingEmptySlots(expectedPbLite), TrimTrailingEmptySlots(actual));
+    }
+
+    // Field 39 of Conversation exists only in the C# proto, so C# writes more trailing empty slots than Go.
+    // PBLite reads a missing trailing slot and an empty trailing slot the same way.
+    private static string TrimTrailingEmptySlots(string pblite)
+    {
+        var node = JsonNode.Parse(pblite);
+
+        Trim(node);
+
+        return node!.ToJsonString();
+
+        static void Trim(JsonNode? n)
+        {
+            if (n is not JsonArray array)
+            {
+                return;
+            }
+
+            foreach (var item in array)
+            {
+                Trim(item);
+            }
+
+            while (array.Count > 0 && array[^1] is null)
+            {
+                array.RemoveAt(array.Count - 1);
+            }
+        }
     }
 
     /// <summary>
