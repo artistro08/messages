@@ -6,22 +6,18 @@ using Google.Protobuf;
 namespace GMessages.Protocol.Tests.PbLite;
 
 /// <summary>
-/// Checks the PBLite serializer against what Go's pblite package writes and reads.
+/// Checks the PBLite serializer against the output and input of the Go pblite package.
 /// </summary>
 /// <remarks>
-/// Encode cases are real gmproto messages: the exact PBLite string must match, and Go's own output must decode back
-/// to an equal message. Decode cases are hand-written lenient inputs; the decoded message must equal Go's result.
-/// See <see href="https://github.com/mautrix/go-util/tree/main/pblite"/>.
+/// The encode cases are real gmproto messages. The PBLite string must be exactly the same, and the Go output must
+/// decode back to an equal message. The decode cases are hand-written lenient inputs. The decoded message must be
+/// equal to the Go result. See <see href="https://github.com/mautrix/go-util/tree/main/pblite"/>.
 /// </remarks>
 [TestClass]
 public class PbLiteGoldenTests
 {
-    // =========================================================================
-    // GOLDEN DATA
-    // =========================================================================
-
     /// <summary>
-    /// Encode cases from <c>pblite.json</c>: type, binary protobuf, Go's PBLite text.
+    /// Gets the encode cases from <c>pblite.json</c>: the type, the binary protobuf and the Go PBLite text.
     /// </summary>
     public static IEnumerable<object[]> EncodeCases()
     {
@@ -32,7 +28,7 @@ public class PbLiteGoldenTests
     }
 
     /// <summary>
-    /// Decode cases from <c>pblite.json</c>: type, lenient input, Go's binary result.
+    /// Gets the decode cases from <c>pblite.json</c>: the type, the lenient input and the Go binary result.
     /// </summary>
     public static IEnumerable<object[]> DecodeCases()
     {
@@ -46,7 +42,7 @@ public class PbLiteGoldenTests
     /// Gets the parser for a proto full name used in <c>pblite.json</c>.
     /// </summary>
     /// <remarks>
-    /// An explicit switch keeps the test AOT safe and fails loudly when the exporter adds a type.
+    /// An explicit switch keeps the test safe for AOT. It fails clearly when the exporter adds a type.
     /// </remarks>
     private static MessageParser ParserFor(string type) => type switch
     {
@@ -85,12 +81,8 @@ public class PbLiteGoldenTests
         _                                           => throw new AssertFailedException("unknown type " + type),
     };
 
-    // =========================================================================
-    // TESTS
-    // =========================================================================
-
     /// <summary>
-    /// A silently dropped case must fail: the exporter currently writes 15 encode and 10 decode cases.
+    /// A lost case must make the test fail. The exporter writes 15 encode cases and 10 decode cases.
     /// </summary>
     [TestMethod]
     public void GoldenFile_HasEveryCase()
@@ -100,7 +92,7 @@ public class PbLiteGoldenTests
     }
 
     /// <summary>
-    /// Serializing the message Go marshalled gives Go's exact PBLite text.
+    /// The serialized Go message gives exactly the Go PBLite text.
     /// </summary>
     [TestMethod]
     [DynamicData(nameof(EncodeCases))]
@@ -112,7 +104,7 @@ public class PbLiteGoldenTests
     }
 
     /// <summary>
-    /// Deserializing Go's PBLite text gives a message equal to the one Go marshalled.
+    /// The deserialized Go PBLite text gives a message equal to the message that Go marshaled.
     /// </summary>
     [TestMethod]
     [DynamicData(nameof(EncodeCases))]
@@ -124,7 +116,7 @@ public class PbLiteGoldenTests
     }
 
     /// <summary>
-    /// Lenient inputs (strings as ints, bool as 1, override object, nulls, short or long arrays) decode like Go.
+    /// Lenient inputs decode as in Go: strings as ints, a bool as 1, an override object, nulls, and short or long arrays.
     /// </summary>
     [TestMethod]
     [DynamicData(nameof(DecodeCases))]
@@ -136,7 +128,7 @@ public class PbLiteGoldenTests
     }
 
     /// <summary>
-    /// C#-only: doubles print the way Go's json.Marshal prints them (Go semantics, no golden because gmproto has no float fields).
+    /// This test is C#-only. Doubles print as the Go json.Marshal prints them. No golden exists, because gmproto has no float fields.
     /// </summary>
     [TestMethod]
     [DataRow(0.5, "[0.5]")]

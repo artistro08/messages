@@ -14,13 +14,14 @@ using Microsoft.Extensions.Time.Testing;
 namespace GMessages.Protocol.Tests.Http;
 
 /// <summary>
-/// Checks the HTTP layer against requests the Go LibGM itself sent (captured by the golden exporter).
+/// Checks the HTTP layer against the requests that the Go LibGM sent. The golden exporter captured them.
 /// </summary>
 /// <remarks>
-/// Header names are compared case-insensitively and only for headers libgm sets (the capture does not see headers Go's
-/// transport adds, such as Content-Length). Go's cookie order comes from a random map iteration, so the Cookie header
-/// is compared as a set. The SAPISIDHASH timestamp is time-based, so the fake clock is set to the one in Go's value.
-/// The "retry delays are 1 s then 2 s" check and the long-poll timeout are C#-only behavior driven by a fake clock.
+/// The tests compare header names without case, and only for the headers that libgm sets. The capture does not see
+/// the headers that the Go transport adds, such as Content-Length. The Go cookie order comes from a random map
+/// iteration, so the tests compare the Cookie header as a set. The SAPISIDHASH timestamp comes from the time. Thus
+/// the tests set the fake clock to the timestamp in the Go value. The retry wait check of 1 s, then 2 s, and the
+/// long-poll timeout check are C#-only. A fake clock drives them.
 /// See <see href="https://github.com/mautrix/gmessages/blob/ba33f4875a491f5cb47db8a6baf42a8869f5f383/pkg/libgm/http.go"/>.
 /// </remarks>
 [TestClass]
@@ -28,8 +29,7 @@ public class GmHttpClientTests
 {
     private static readonly Dictionary<string, string> GoCookies = new() { ["SAPISID"] = "fake-sapisid", ["SID"] = "fake-sid" };
 
-
-    // Response that remembers whether it was disposed.
+    // This response records whether something disposed it.
     private sealed class TrackingResponse(HttpStatusCode status) : HttpResponseMessage(status)
     {
         public bool IsDisposed { get; private set; }
@@ -59,7 +59,7 @@ public class GmHttpClientTests
     }
 
     /// <summary>
-    /// A response that sets cookies logs their names and expiry times, never the values.
+    /// A response that sets cookies writes their names and expiry times to the log, but never the values.
     /// </summary>
     [TestMethod]
     public async Task SetCookie_LogsNamesAndExpiry_NeverValues()
@@ -80,7 +80,7 @@ public class GmHttpClientTests
     }
 
     /// <summary>
-    /// Two identical Set-Cookie responses log the cookie line once; a changed expiry logs again.
+    /// 2 identical Set-Cookie responses write the cookie line 1 time. A changed expiry writes it again.
     /// </summary>
     [TestMethod]
     public async Task SetCookie_SameResponseTwice_LogsOnce()
@@ -100,7 +100,7 @@ public class GmHttpClientTests
     }
 
     /// <summary>
-    /// An absurd Max-Age or Expires never throws into the request; the cookie is logged with an unknown expiry.
+    /// A Max-Age or Expires out of range never makes the request throw. The log shows the cookie with an unknown expiry.
     /// </summary>
     [TestMethod]
     public async Task SetCookie_AbsurdExpiry_DoesNotFailTheRequest()
@@ -120,7 +120,7 @@ public class GmHttpClientTests
     }
 
     /// <summary>
-    /// A typed API answer that declares a body over the 16 MiB cap is refused before it is read.
+    /// A typed API answer that declares a body over the 16 MiB limit throws before the client reads the body.
     /// </summary>
     [TestMethod]
     public async Task ReadTyped_OverCap_Throws()
@@ -165,7 +165,7 @@ public class GmHttpClientTests
     }
 
     /// <summary>
-    /// Every constant equals Go's.
+    /// Each constant is equal to the Go value.
     /// </summary>
     [TestMethod]
     public void Constants_MatchGo()
@@ -183,7 +183,7 @@ public class GmHttpClientTests
     }
 
     /// <summary>
-    /// Every URL in Go's paths.go is reproduced by the production endpoints.
+    /// The production endpoints give each URL in the Go paths.go.
     /// </summary>
     [TestMethod]
     public void Endpoints_Production_MatchGoPaths()
@@ -214,13 +214,13 @@ public class GmHttpClientTests
         Assert.AreEqual(go.EnumerateObject().Count(), expected.Count);
         foreach (var (key, uri) in expected)
         {
-            // The origin has no path, so Go's string has no trailing slash
+            // The origin has no path, so the Go string has no trailing slash.
             Assert.AreEqual(go.GetProperty(key).GetString(), key == "messagesBase" ? uri.GetLeftPart(UriPartial.Authority) : uri.AbsoluteUri, key);
         }
     }
 
     /// <summary>
-    /// The relay POST has Go's exact headers, cookies, Authorization and body.
+    /// The relay POST has exactly the Go headers, cookies, Authorization and body.
     /// </summary>
     [TestMethod]
     public async Task RelayRequest_HeadersCookiesAuthorizationAndBody_MatchGo()
@@ -236,7 +236,7 @@ public class GmHttpClientTests
     }
 
     /// <summary>
-    /// The config GET has Go's headers (same-origin, no x-user-agent or origin) and decodes the PBLite response.
+    /// The config GET has the Go headers: same-origin, no x-user-agent and no origin. It decodes the PBLite response.
     /// </summary>
     [TestMethod]
     public async Task ConfigRequest_HeadersMatchGo()
@@ -254,7 +254,7 @@ public class GmHttpClientTests
     }
 
     /// <summary>
-    /// Every SAPISIDHASH Go produced is reproduced from its own timestamp.
+    /// The C# code gives each Go SAPISIDHASH again from its own timestamp.
     /// </summary>
     [TestMethod]
     public void SapisidHash_ReproducesEveryGoOutput()
@@ -268,14 +268,13 @@ public class GmHttpClientTests
     }
 
     /// <summary>
-    /// Set-Cookie values overwrite by name like Go's AuthData; a jar without cookies stays that way and sends none.
+    /// Set-Cookie values replace cookies by name, as in the Go AuthData. A jar without cookies stays empty and sends none.
     /// </summary>
     [TestMethod]
     public async Task SetCookie_UpdatesJarLikeGo()
     {
         var go = Golden.Load("http").GetProperty("setCookie");
 
-        // With Cookies
         Rig rig = CreateRig(GoCookies);
         int changed = 0;
         rig.Jar.Changed += (_, _) => changed++;
@@ -288,7 +287,6 @@ public class GmHttpClientTests
         CollectionAssert.AreEquivalent(expected, rig.Jar.Snapshot().ToDictionary());
         Assert.AreEqual(1, changed);
 
-        // Without Cookies
         Rig empty = CreateRig();
         empty.Handler.Respond = (_, _) => FakeHttpHandler.Response(HttpStatusCode.OK, null, null, "SIDCC=new; Path=/");
         using (await empty.Client.PostAsync(GmEndpoints.Production.SignInGaia, RelayBody, GmContentType.PbLite, false, CancellationToken.None))
@@ -304,12 +302,12 @@ public class GmHttpClientTests
     }
 
     /// <summary>
-    /// Attempt counts and final statuses match Go for every scripted case; waits are exactly 1 s then 2 s.
+    /// The attempt counts and final statuses are the same as in Go for each scripted case. The waits are exactly 1 s, then 2 s.
     /// </summary>
     /// <remarks>
-    /// The waits and the disposal of retried responses are C#-only checks. No real sleeping: the test waits for the
-    /// client to create its retry timer, advances the fake clock by exactly the expected delay, and repeats. The
-    /// 10 s real timeout is only a hang guard.
+    /// The wait checks and the dispose checks of retried responses are C#-only. The test does not sleep. It waits for
+    /// the client to create its retry timer, moves the fake clock by exactly the expected wait, and repeats. The real
+    /// 10 s timeout only stops a hang.
     /// </remarks>
     [TestMethod]
     public async Task Retry_AttemptCountsMatchGo_DelaysAre1sThen2s()
@@ -331,7 +329,7 @@ public class GmHttpClientTests
 
             Task<HttpResponseMessage> task = rig.Client.PostAsync(GmEndpoints.Production.SignInGaia, RelayBody, GmContentType.PbLite, false, CancellationToken.None);
 
-            // One Wait Per Retry: Timer Appears, Then Advance Exactly Attempt x 1 s
+            // Each retry has 1 wait. The timer appears, then the test moves the clock by exactly attempt x 1 s.
             for (int attempt = 1; attempt < expectedAttempts; attempt++)
             {
                 await rig.Time.TimerCreated.WaitAsync(guard.Token);
@@ -344,13 +342,12 @@ public class GmHttpClientTests
             Assert.AreEqual(expectedAttempts, rig.Handler.Requests.Count);
             Assert.AreEqual(go.GetProperty("finalStatus").GetInt32(), (int)res.StatusCode);
 
-            // Exact Gaps Between Attempts
             for (int i = 1; i < rig.Handler.Requests.Count; i++)
             {
                 Assert.AreEqual(TimeSpan.FromSeconds(i), rig.Handler.Requests[i].At - rig.Handler.Requests[i - 1].At, $"gap {i}");
             }
 
-            // Every Retried Response Was Disposed; The Returned One Was Not
+            // The client disposes each retried response, but not the returned response.
             Assert.AreEqual(expectedAttempts, responses.Count);
             Assert.IsTrue(responses.Take(expectedAttempts - 1).All(r => r.IsDisposed), "retried responses disposed");
             Assert.IsFalse(responses[^1].IsDisposed);
@@ -362,7 +359,7 @@ public class GmHttpClientTests
     }
 
     /// <summary>
-    /// Long polls use the long-poll client and are never retried (Go case: one attempt on 503).
+    /// A long poll uses the long-poll client, and the client never retries it. The Go case has 1 attempt on 503.
     /// </summary>
     [TestMethod]
     public async Task LongPoll_IsNotRetried()
@@ -377,13 +374,13 @@ public class GmHttpClientTests
         Assert.AreEqual(0, rig.Handler.Requests.Count);
         Assert.AreEqual(go.GetProperty("finalStatus").GetInt32(), (int)res.StatusCode);
 
-        // C#-only: the long-poll client has a 30 minute timeout
+        // This check is C#-only. The long-poll client has a 30 minute timeout.
         using HttpClient longPoll = GmHttpClient.CreateLongPollClient(new FakeHttpHandler());
         Assert.AreEqual(TimeSpan.FromMinutes(30), longPoll.Timeout);
     }
 
     /// <summary>
-    /// Error bodies decode into <see cref="GmRequestException"/> exactly when Go decodes them.
+    /// An error body decodes into the <see cref="GmRequestException"/> exactly when Go decodes it.
     /// </summary>
     [TestMethod]
     public async Task ErrorBodies_DecodeLikeGo_IntoGmRequestException()
@@ -420,7 +417,7 @@ public class GmHttpClientTests
     }
 
     /// <summary>
-    /// C#-only: a protobuf POST sends binary and the typed response decodes by content type.
+    /// This test is C#-only. A protobuf POST sends binary, and the typed response decodes by content type.
     /// </summary>
     [TestMethod]
     public async Task PostTyped_Protobuf_RoundTrips()

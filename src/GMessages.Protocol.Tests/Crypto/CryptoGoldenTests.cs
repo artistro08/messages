@@ -5,11 +5,11 @@ using GMessages.Protocol.Crypto;
 namespace GMessages.Protocol.Tests.Crypto;
 
 /// <summary>
-/// Checks the C# crypto helpers against golden vectors produced by the Go LibGM.
+/// Checks the C# crypto helpers against golden vectors from the Go LibGM.
 /// </summary>
 /// <remarks>
-/// Go's ECDSA signatures and AES-CTR IVs are random, so signatures are cross-verified and IVs are
-/// exercised through decryption instead of being compared byte for byte.
+/// The Go ECDSA signatures and AES-CTR IVs are random. Thus the tests verify each signature with the other key, and
+/// they test the IVs through decryption. They do not compare these values byte for byte.
 /// See <see href="https://github.com/mautrix/gmessages/blob/ba33f4875a491f5cb47db8a6baf42a8869f5f383/pkg/libgm/crypto/aesctr.go"/>.
 /// </remarks>
 [TestClass]
@@ -19,7 +19,7 @@ public class CryptoGoldenTests
         new(Golden.Hex(aes.GetProperty("aesKeyHex")), Golden.Hex(aes.GetProperty("hmacKeyHex")));
 
     /// <summary>
-    /// Every ciphertext Go produced decrypts to its plaintext.
+    /// Each Go ciphertext decrypts to its plaintext.
     /// </summary>
     [TestMethod]
     public void Decrypt_EveryGoCiphertext_ReturnsPlaintext()
@@ -34,12 +34,12 @@ public class CryptoGoldenTests
             count++;
         }
 
-        // 6 Go-encrypted cases plus 2 stdlib-CTR counter-carry cases
+        // The file has 6 cases that Go encrypted and 2 counter-carry cases from the standard library CTR.
         Assert.AreEqual(8, count);
     }
 
     /// <summary>
-    /// Encrypt output decrypts back and is 48 bytes (IV plus MAC) longer than the input.
+    /// The Encrypt output decrypts back. It is 48 bytes longer than the input: the IV and the MAC.
     /// </summary>
     [TestMethod]
     public void EncryptThenDecrypt_RoundTrips_AndLengthIsPlainPlus48()
@@ -59,7 +59,7 @@ public class CryptoGoldenTests
     }
 
     /// <summary>
-    /// A flipped byte fails the MAC check.
+    /// A changed byte fails the MAC check.
     /// </summary>
     [TestMethod]
     public void Decrypt_TamperedGoCiphertext_ThrowsHmacMismatch()
@@ -73,7 +73,7 @@ public class CryptoGoldenTests
     }
 
     /// <summary>
-    /// Input shorter than IV plus MAC is rejected.
+    /// An input shorter than the IV and the MAC throws.
     /// </summary>
     [TestMethod]
     public void Decrypt_Under48Bytes_ThrowsTooShort()
@@ -85,7 +85,7 @@ public class CryptoGoldenTests
     }
 
     /// <summary>
-    /// The Java-style hash matches Go for every input.
+    /// The Java-style hash is the same as in Go for each input.
     /// </summary>
     [TestMethod]
     public void ByteHash_MatchesGoForEveryInput()
@@ -101,7 +101,7 @@ public class CryptoGoldenTests
     }
 
     /// <summary>
-    /// <see cref="HKDF"/> with SHA-256 and a 32-byte output matches Go's <c>doHKDF</c>.
+    /// <see cref="HKDF"/> with SHA-256 and a 32-byte output gives the same result as the Go <c>doHKDF</c>.
     /// </summary>
     [TestMethod]
     public void Hkdf_MatchesGoForEveryCase()
@@ -123,7 +123,7 @@ public class CryptoGoldenTests
     }
 
     /// <summary>
-    /// A key rebuilt from Go's d/x/y produces Go's SPKI bytes.
+    /// A key from the Go d, x and y gives the Go SPKI bytes.
     /// </summary>
     [TestMethod]
     public void RefreshKey_FromGoJwk_SpkiMatchesGo()
@@ -135,7 +135,7 @@ public class CryptoGoldenTests
     }
 
     /// <summary>
-    /// Go's signature verifies with the C# key, and a C# signature verifies with a key imported from Go's SPKI.
+    /// The Go signature verifies with the C# key. A C# signature verifies with a key from the Go SPKI.
     /// </summary>
     [TestMethod]
     public void GoSignature_VerifiesWithCSharpKey_AndCSharpSignature_VerifiesWithGoSpki()
@@ -144,21 +144,19 @@ public class CryptoGoldenTests
         var key = RefreshKey.FromJwk(Golden.Hex(jwk.GetProperty("dHex")), Golden.Hex(jwk.GetProperty("xHex")), Golden.Hex(jwk.GetProperty("yHex")));
         byte[] signed = Encoding.UTF8.GetBytes(jwk.GetProperty("signedText").GetString()!);
 
-        // Go Signature, C# Key
         using ECDsa csKey = key.ToECDsa();
         Assert.IsTrue(csKey.VerifyData(signed, Golden.Hex(jwk.GetProperty("signatureHex")), HashAlgorithmName.SHA256, DSASignatureFormat.Rfc3279DerSequence));
 
-        // C# Signature, Go SPKI
         using ECDsa goPublic = ECDsa.Create();
         goPublic.ImportSubjectPublicKeyInfo(Golden.Hex(jwk.GetProperty("spkiHex")), out _);
         Assert.IsTrue(goPublic.VerifyData(signed, key.SignSha256Der(signed), HashAlgorithmName.SHA256, DSASignatureFormat.Rfc3279DerSequence));
     }
 
     /// <summary>
-    /// Short JWK parts are left-padded to 32 bytes.
+    /// The key pads short JWK parts on the left to 32 bytes.
     /// </summary>
     /// <remarks>
-    /// C#-only behavior (Go pads the same way); hand-written expectation.
+    /// This check is C#-only, with a hand-written expectation. Go pads in the same way.
     /// </remarks>
     [TestMethod]
     public void FromJwk_ShortParts_AreLeftPaddedTo32()
@@ -175,7 +173,7 @@ public class CryptoGoldenTests
     }
 
     /// <summary>
-    /// A part longer than 32 bytes is rejected.
+    /// A part longer than 32 bytes throws.
     /// </summary>
     [TestMethod]
     public void FromJwk_33BytePart_Throws()

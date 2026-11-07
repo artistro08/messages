@@ -5,13 +5,13 @@ using GMessages.Protocol.Crypto;
 namespace GMessages.Protocol.Tests.Crypto;
 
 /// <summary>
-/// Checks <see cref="MediaCrypto"/> against LibGM's chunked AES-GCM layout.
+/// Checks <see cref="MediaCrypto"/> against the chunked AES-GCM layout of LibGM.
 /// </summary>
 /// <remarks>
-/// Go isn't installed on the build machine, so there is no Go-encrypted golden vector yet; these structural tests
-/// rebuild the layout by hand from
-/// <see href="https://github.com/mautrix/gmessages/blob/ba33f4875a491f5cb47db8a6baf42a8869f5f383/pkg/libgm/crypto/aesgcm.go">crypto/aesgcm.go</see>:
-/// header <c>{0, log2(chunk)}</c>, chunks of <c>nonce || ct || tag</c>, AAD <c>[last, BE index]</c>.
+/// Go is not installed on the build machine, so no golden vector that Go encrypted exists yet. These tests build the
+/// layout by hand from
+/// <see href="https://github.com/mautrix/gmessages/blob/ba33f4875a491f5cb47db8a6baf42a8869f5f383/pkg/libgm/crypto/aesgcm.go">crypto/aesgcm.go</see>.
+/// The header is <c>{0, log2(chunk)}</c>, the chunks are <c>nonce || ct || tag</c>, and the AAD is <c>[last, BE index]</c>.
 /// </remarks>
 [TestClass]
 public class MediaCryptoTests
@@ -25,7 +25,7 @@ public class MediaCryptoTests
         return bytes;
     }
 
-    // Encrypts One Chunk By Hand, As Go's encryptChunk Does
+    // The method encrypts 1 chunk by hand, as the Go encryptChunk does.
     private static byte[] HandChunk(AesGcm gcm, ReadOnlySpan<byte> plain, uint index, bool last)
     {
         byte[] aad = new byte[5];
@@ -39,7 +39,7 @@ public class MediaCryptoTests
     }
 
     /// <summary>
-    /// Every size round-trips, including chunk boundaries, and the output is the header plus 28 bytes per chunk.
+    /// Each size round-trips, also at the chunk limits. The output is the header plus 28 bytes for each chunk.
     /// </summary>
     [TestMethod]
     public void RoundTrip_Sizes()
@@ -59,7 +59,7 @@ public class MediaCryptoTests
     }
 
     /// <summary>
-    /// A file built by hand the way Go builds it (three chunks, Go's AAD) decrypts.
+    /// A file that the test builds by hand in the Go way decrypts. It has 3 chunks and the Go AAD.
     /// </summary>
     [TestMethod]
     public void Decrypt_GoLayoutByHand()
@@ -77,8 +77,8 @@ public class MediaCryptoTests
     }
 
     /// <summary>
-    /// A Go-layout file whose plaintext fills exactly two chunks decrypts: the last chunk is a full 32768 raw bytes
-    /// with the last-chunk flag set.
+    /// A file in the Go layout whose plaintext fills exactly 2 chunks decrypts. The last chunk has the full 32768 raw
+    /// bytes and the last-chunk flag.
     /// </summary>
     [TestMethod]
     public void Decrypt_GoLayout_FullLastChunk()
@@ -97,26 +97,24 @@ public class MediaCryptoTests
     }
 
     /// <summary>
-    /// The header is <c>{0, 15}</c> on encrypt; decrypt accepts another chunk size from the header and refuses one
-    /// above <c>1 &lt;&lt; 22</c> or a non-zero first byte.
+    /// Encrypt writes the header <c>{0, 15}</c>. Decrypt accepts a different chunk size from the header. It throws on
+    /// a size above <c>1 &lt;&lt; 22</c> or on a first byte that is not 0.
     /// </summary>
     [TestMethod]
     public void Header_ChunkSize()
     {
         byte[] key = MediaCrypto.GenerateKey();
 
-        // Outgoing Header
         byte[] encrypted = MediaCrypto.Encrypt(RandomBytes(10), key);
         Assert.AreEqual(0, encrypted[0]);
         Assert.AreEqual(15, encrypted[1]);
 
-        // A 1 KiB Chunk Size From The Header
+        // The header 10 gives a 1 KiB chunk size.
         byte[] plain = RandomBytes(1500);
         using var gcm = new AesGcm(key, 16);
         byte[] small = [0, 10, .. HandChunk(gcm, plain.AsSpan(0, 1024 - 28), 0, false), .. HandChunk(gcm, plain.AsSpan(1024 - 28), 1, true)];
         CollectionAssert.AreEqual(plain, MediaCrypto.Decrypt(small, key));
 
-        // Too Large, Or A Bad Signature
         byte[] tooLarge  = [.. encrypted];
         tooLarge[1]      = 23;
         Assert.ThrowsExactly<CryptographicException>(() => MediaCrypto.Decrypt(tooLarge, key));
@@ -127,7 +125,7 @@ public class MediaCryptoTests
     }
 
     /// <summary>
-    /// Empty input or a key that isn't 32 bytes comes back unchanged, as in Go.
+    /// As in Go, Decrypt returns empty input, or data with a key that is not 32 bytes, unchanged.
     /// </summary>
     [TestMethod]
     public void Decrypt_EmptyOrShortKey_PassesThrough()
@@ -140,7 +138,7 @@ public class MediaCryptoTests
     }
 
     /// <summary>
-    /// A flipped ciphertext bit fails the tag check.
+    /// A changed ciphertext bit fails the tag check.
     /// </summary>
     [TestMethod]
     public void Tampered_Throws()
@@ -153,7 +151,7 @@ public class MediaCryptoTests
     }
 
     /// <summary>
-    /// Swapping two full chunks fails, because the AAD carries the chunk index.
+    /// A swap of 2 full chunks fails, because the AAD holds the chunk index.
     /// </summary>
     [TestMethod]
     public void Reordered_Throws()
@@ -168,7 +166,7 @@ public class MediaCryptoTests
     }
 
     /// <summary>
-    /// A cut last chunk fails, whether bytes are cut from it, the whole last chunk is dropped, or less than a tag is left.
+    /// A cut last chunk fails. The test cuts bytes from it, drops the whole last chunk, and leaves less than a tag.
     /// </summary>
     [TestMethod]
     public void TruncatedLastChunk_Throws()
