@@ -38,7 +38,8 @@ public sealed class ConversationInfoTests
     }
 
     /// <summary>
-    /// The phone's mute field as the Plan 5 probe saw it: 7 = 1 (varint) when muted, absent when not.
+    /// A conversation with field 7 set to 1 (varint) is muted. A conversation without field 7 is not muted.
+    /// The Plan 5 probe showed this phone behavior.
     /// </summary>
     [TestMethod]
     public void From_MuteField_SetsIsMuted()
@@ -59,9 +60,9 @@ public sealed class ConversationInfoTests
     }
 
     /// <summary>
-    /// An active one-on-one chat whose newest message is its own "conversation created" line holds nothing: the phone
-    /// shows it nowhere (the chat it makes for a group MMS sender), so it is empty and out of the main list. A group's
-    /// created line, or any real message, keeps the chat in the list.
+    /// An active one-on-one chat with only a "conversation created" line is empty and not in the main list.
+    /// The phone creates this chat for a group MMS sender and shows it nowhere.
+    /// A group with a created line, or a chat with a real message, stays in the list.
     /// </summary>
     [TestMethod]
     public void IsEmpty_WhenOnlyTheOneOnOneCreatedLineIsLeft()

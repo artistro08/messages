@@ -13,7 +13,8 @@ public sealed class NotificationXmlTests
         XDocument.Parse(NotificationXml.Build(new NotificationContent("m1", "c1", title, body, "p1"), avatar, Send));
 
     /// <summary>
-    /// A toast whose one-time code was copied says so in Windows' small line under the text; any other has no such line.
+    /// A toast with a copied one-time code says so in the small attribution line of Windows under the text.
+    /// Any other toast has no such line.
     /// </summary>
     [TestMethod]
     public void Build_CodeCopied_SaysSoUnderTheText()
@@ -27,6 +28,9 @@ public sealed class NotificationXmlTests
         Assert.IsFalse(XDocument.Parse(NotificationXml.Build(content, null, Send)).Descendants("text").Any(t => t.Attribute("placement") is not null));
     }
 
+    /// <summary>
+    /// The toast escapes markup characters in the title and the body, so they show as text.
+    /// </summary>
     [TestMethod]
     public void Build_EscapesMarkupInTitleAndBody()
     {
@@ -53,7 +57,7 @@ public sealed class NotificationXmlTests
     {
         var actions = Doc().Descendants("action").ToList();
 
-        // Snooze: The App's Own Button (The Length Is A Setting), Parsed Back To The Toast's Conversation And Message
+        // The snooze button belongs to the app. Its arguments parse back to the conversation and message of the toast.
         XElement snooze = actions.Single(a => NotificationArgs.Parse((string?)a.Attribute("arguments") ?? "")?.Action == "snooze");
         Assert.AreEqual(new NotificationArgs("snooze", "c1", "m1"), NotificationArgs.Parse((string)snooze.Attribute("arguments")!));
         Assert.AreEqual("Snooze", (string?)snooze.Attribute("content"));
@@ -68,7 +72,8 @@ public sealed class NotificationXmlTests
     [TestMethod]
     public void Build_ReplyIsWindowsQuickReply()
     {
-        // Microsoft's Quick Reply: A Text Input And A Button Tied To It With hint-inputId, Its Icon From imageUri
+        // This is the quick reply of Microsoft. The button links to the text input with hint-inputId.
+        // The icon of the button comes from imageUri.
         XElement reply = Doc().Descendants("action").First();
 
         Assert.AreEqual("reply", (string?)reply.Attribute("hint-inputId"));
@@ -79,7 +84,8 @@ public sealed class NotificationXmlTests
     [TestMethod]
     public void Build_InputsComeBeforeActions()
     {
-        // The Toast Schema Is A Sequence: Every <input> Before Any <action>; Otherwise Windows Shows "New notification"
+        // The toast schema is a sequence. Every input must come before any action.
+        // Otherwise Windows shows "New notification" instead of the toast.
         var names = Doc().Descendants("actions").Single().Elements().Select(e => e.Name.LocalName).ToList();
 
         Assert.AreEqual(names.LastIndexOf("input") + 1, names.IndexOf("action"));
@@ -111,7 +117,8 @@ public sealed class NotificationXmlTests
     [TestMethod]
     public void Build_All_MatchesThePlan3Shape()
     {
-        // The Plan 3 Toast, Character For Character: Quick Reply, The App's Own Snooze (R25) And Windows' Dismiss
+        // The Plan 3 toast, character for character: the quick reply, the snooze of the app (R25) and the dismiss
+        // of Windows.
         const string Expected = "<toast launch=\"action=open&amp;conversation=c1\"><visual><binding template=\"ToastGeneric\"><text>Ann</text><text>hi</text></binding></visual>"
             + "<actions><input id=\"reply\" type=\"text\" placeHolderContent=\"Reply\" />"
             + "<action content=\"\" hint-inputId=\"reply\" activationType=\"foreground\" arguments=\"action=reply&amp;conversation=c1&amp;message=m1\" imageUri=\"file:///send.png\" hint-toolTip=\"Send\" />"

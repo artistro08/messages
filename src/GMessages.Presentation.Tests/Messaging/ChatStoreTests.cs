@@ -21,7 +21,7 @@ public sealed class ChatStoreTests
     // RIG
     // =========================================================================
 
-    // The Default Message Time Below (Msg), So Default Messages Are Recent
+    // This is the default message time of Msg. It makes the default messages recent.
     private static readonly DateTimeOffset Now = DateTimeOffset.FromUnixTimeSeconds(1_761_700_000);
 
     private sealed class Rig : IDisposable
@@ -106,8 +106,8 @@ public sealed class ChatStoreTests
     }
 
     /// <summary>
-    /// A message sent here moves its row and shows as the snippet at once, without Google's conversation update (which
-    /// doesn't always come).
+    /// A message sent here moves its row and shows as the snippet at once. It does not wait for the conversation
+    /// update from Google, because that update does not always come.
     /// </summary>
     [TestMethod]
     public async Task LiveSentMessage_BringsItsOwnSnippet()
@@ -159,8 +159,8 @@ public sealed class ChatStoreTests
     }
 
     /// <summary>
-    /// Read on the phone, then the phone re-sends the message (a status update) whose whole-second MMS time sits a
-    /// millisecond past the conversation's: the chat stays read.
+    /// The user reads a chat on the phone. The phone then sends the message again as a status update. The whole-second
+    /// MMS time of the message is 1 millisecond later than the time of the conversation. The chat stays read.
     /// </summary>
     [TestMethod]
     public async Task ReadOnPhone_ThenTheMessageAgain_StaysRead()
@@ -184,8 +184,8 @@ public sealed class ChatStoreTests
     }
 
     /// <summary>
-    /// A group MMS first lands undownloaded in the sender's one-on-one chat, then moves (same ID) into the group: the
-    /// stand-in raises nothing, and the real message still notifies.
+    /// A group MMS first arrives undownloaded in the one-on-one chat of the sender. It then moves, with the same ID,
+    /// into the group. The stand-in raises nothing, and the real message still notifies.
     /// </summary>
     [TestMethod]
     public async Task UndownloadedMms_IsSkipped_AndTheMovedMessageStillNotifies()
@@ -211,9 +211,9 @@ public sealed class ChatStoreTests
     }
 
     /// <summary>
-    /// The one-on-one chat the phone makes for a group MMS sender holds only its created line once the message moved
-    /// into the group: raised, but out of the main list (the phone shows it nowhere). My first message in it shows it
-    /// at once, without waiting for the phone's update.
+    /// The phone makes a one-on-one chat for the sender of a group MMS. After the message moves into the group, this
+    /// chat holds only its created line. The store raises the chat but keeps it out of the main list, because the phone
+    /// shows it nowhere. My first message in the chat shows it at once, with no wait for the update of the phone.
     /// </summary>
     [TestMethod]
     public async Task EmptyOneOnOneChat_HiddenUntilAMessageLandsInIt()
@@ -241,8 +241,8 @@ public sealed class ChatStoreTests
     }
 
     /// <summary>
-    /// Someone texts me in such a chat and the message beats the phone's update: the chat shows at once, unread, with
-    /// that message as its snippet rather than the created line's.
+    /// Someone texts me in such a chat, and the message arrives before the update of the phone. The chat shows at once
+    /// as unread. Its snippet is that message, not the created line.
     /// </summary>
     [TestMethod]
     public async Task EmptyOneOnOneChat_ReceivedMessageShowsItWithItsSnippet()
@@ -271,8 +271,8 @@ public sealed class ChatStoreTests
     }
 
     /// <summary>
-    /// A live system line (someone joined, a chat created) isn't mine, but it's nothing to read: it neither turns the
-    /// chat unread nor adds to its live unread count.
+    /// A live system line, such as "someone joined" or "chat created", is not from me, but it has nothing to read.
+    /// It does not turn the chat unread and does not add to the live unread count.
     /// </summary>
     [TestMethod]
     public async Task LiveSystemLine_DoesNotTurnTheChatUnread()
@@ -291,15 +291,14 @@ public sealed class ChatStoreTests
     }
 
     /// <summary>
-    /// After an unpair (Reset) a newly paired phone whose conversation IDs collide with the old phone's sees none of
-    /// the old conversations, owner, SIMs or notified IDs.
+    /// An unpair calls Reset. A newly paired phone can use conversation IDs that the old phone used. The new phone
+    /// sees none of the old conversations, owner, SIMs or notified IDs.
     /// </summary>
     [TestMethod]
     public async Task Reset_NewPhoneSeesNothingOfTheOldOne()
     {
         using var rig = new Rig();
 
-        // The Old Phone
         await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1", "Old Ann", outgoing: "me1")));
         var settings = new GMessages.Protocol.Proto.Settings();
         settings.SIMCards.Add(Sim("me1", "old"));
@@ -312,7 +311,7 @@ public sealed class ChatStoreTests
         Assert.IsNull(rig.Store.Find("c1"));
         Assert.IsNull(rig.Store.Me);
 
-        // The New Phone Reuses ID c1 (And A Message ID The Old One Notified)
+        // The new phone reuses ID c1 and a message ID that the old phone notified.
         var fresh = new Conversation { ConversationID = "c1", Name = "New Bo", DefaultOutgoingID = "me2", Status = ConversationStatus.Active };
         fresh.Participants.Add(new Participant { ID = new SmallInfo { ParticipantID = "me2" }, IsMe = true, FullName = "Me Too" });
         rig.Client.Conversations["c1"] = fresh;
@@ -332,8 +331,8 @@ public sealed class ChatStoreTests
     }
 
     /// <summary>
-    /// A received message that beats the phone's conversation update moves a read chat up as unread: raised as read, it
-    /// would take the toast just made for that message with it.
+    /// A received message can arrive before the conversation update of the phone. It moves a read chat up as unread.
+    /// If the store raised the chat as read, the chat would remove the toast that the message just made.
     /// </summary>
     [TestMethod]
     public async Task ReceivedBeforeConversationUpdate_ReadChatTurnsUnread()
@@ -380,7 +379,7 @@ public sealed class ChatStoreTests
         Assert.IsNotNull(got);
         Assert.IsNull(got.Conversation);
 
-        // A Missing Conversation (Null Answer) Is The Same As A Failed Fetch
+        // A missing conversation, which is a null answer, has the same result as a failed fetch.
         rig.Client.GetConversationThrows = false;
         got = null;
         await rig.Store.HandleEventAsync(new MessageReceived(Msg("m2", "c9"), false));
@@ -409,7 +408,7 @@ public sealed class ChatStoreTests
     {
         var page = new ListMessagesResponse();
 
-        // The Phone Answers Newest First
+        // The phone answers with the newest message first.
         page.Messages.AddRange(oldestFirst.Reverse());
         return page;
     }
@@ -417,7 +416,7 @@ public sealed class ChatStoreTests
     private static string Ids(IReadOnlyList<ChatMessage>? messages) => messages is null ? "(none)" : string.Join(",", messages.Select(m => m.Id.Length > 0 ? m.Id : m.TmpId));
 
     /// <summary>
-    /// The newest page of a conversation is kept in memory; an older page is not.
+    /// The store keeps the newest page of a conversation in memory. It does not keep an older page.
     /// </summary>
     [TestMethod]
     public async Task LoadMessages_NewestPageIsCached_OlderPageIsNot()
@@ -435,8 +434,8 @@ public sealed class ChatStoreTests
     }
 
     /// <summary>
-    /// A message that arrives updates the cached page: a new one goes in by time, a known one is replaced, and the
-    /// echo of a sent message replaces its pending copy.
+    /// An arriving message updates the cached page. A new message goes in by time. A known message is replaced.
+    /// The echo of a sent message replaces its pending copy.
     /// </summary>
     [TestMethod]
     public async Task Arrival_UpdatesCachedPage()
@@ -446,15 +445,12 @@ public sealed class ChatStoreTests
         rig.Client.MessagesPage = PageOf(Msg("m1", "c1", ts: 1_000), Msg("m2", "c1", ts: 2_000));
         await rig.Store.LoadMessagesAsync("c1", null, Ct);
 
-        // New
         await rig.Store.HandleEventAsync(new MessageReceived(Msg("m3", "c1", "three", ts: 3_000), false));
         Assert.AreEqual("m1,m2,m3", Ids(rig.Store.CachedMessages("c1")));
 
-        // Known: Replaced
         await rig.Store.HandleEventAsync(new MessageReceived(Msg("m2", "c1", "edited", ts: 2_000), false));
         Assert.AreEqual("edited", rig.Store.CachedMessages("c1")![1].Text);
 
-        // Sent, Then Its Echo
         await rig.Store.SendTextAsync("c1", "mine", "tmp-9", null, Ct);
         Assert.AreEqual("m1,m2,m3,tmp-9", Ids(rig.Store.CachedMessages("c1")));
         Message echo = Msg("m4", "c1", "mine", ts: 4_000);
@@ -462,14 +458,14 @@ public sealed class ChatStoreTests
         await rig.Store.HandleEventAsync(new MessageReceived(echo, false));
         Assert.AreEqual("m1,m2,m3,m4", Ids(rig.Store.CachedMessages("c1")));
 
-        // Another Conversation's Message Isn't Cached (It Was Never Opened)
+        // The store does not cache a message of another conversation, because the user never opened that conversation.
         await rig.Store.HandleEventAsync(new MessageReceived(Msg("x1", "c2"), false));
         Assert.IsNull(rig.Store.CachedMessages("c2"));
     }
 
     /// <summary>
-    /// After a full-size request the phone sends the same message again with its full media ID: the cached copy and the
-    /// raised message carry the new media part, and it is not new a second time.
+    /// After a full-size request, the phone sends the same message again with its full media ID. The cached copy and
+    /// the raised message have the new media part. The message is not new a second time.
     /// </summary>
     [TestMethod]
     public async Task MediaEdit_ReplacesMediaId()
@@ -481,7 +477,6 @@ public sealed class ChatStoreTests
         var raised = new List<MessageArrivedEventArgs>();
         rig.Store.MessageArrived += (_, e) => raised.Add(e);
 
-        // Thumbnail Only, Then The Same ID With Its Full Media ID
         await rig.Store.HandleEventAsync(new MessageReceived(Photo("m2", new MediaContent { Format = MediaFormats.ImageJpeg, ThumbnailMediaID = "thumb-1" }), false));
         await rig.Store.HandleEventAsync(new MessageReceived(Photo("m2", new MediaContent { Format = MediaFormats.ImageJpeg, ThumbnailMediaID = "thumb-1", MediaID = "full-1" }), false));
 
@@ -511,7 +506,7 @@ public sealed class ChatStoreTests
         await rig.Store.LoadMessagesAsync("c1", null, Ct);
         await rig.Store.HandleEventAsync(new MessageReceived(MediaMsg("m2", format), false));
 
-        // The Phone's Snippet For Media With No Caption Is Empty
+        // The phone gives an empty snippet for media with no caption.
         Conversation update = Conv("c1");
         update.LatestMessageID = "m2";
         update.LatestMessage   = new LatestMessage { FromMe = 1 };
@@ -532,7 +527,7 @@ public sealed class ChatStoreTests
         var raised = new List<ConversationInfo>();
         rig.Store.ConversationChanged += (_, c) => raised.Add(c);
 
-        // Not Opened, So No Page In Memory: The Message Itself Names It
+        // The chat is not open, so no page is in memory. The message itself gives the media name.
         await rig.Store.HandleEventAsync(new MessageReceived(MediaMsg("m2", MediaFormats.ImageJpeg), false));
 
         Assert.AreEqual("Image", rig.Store.Find("c1")?.SnippetMedia);
@@ -540,8 +535,8 @@ public sealed class ChatStoreTests
     }
 
     /// <summary>
-    /// Opening a chat reads its saved page at once, never behind the saves still queued (a catch-up's hundreds): with the
-    /// queue held up, the saved page still comes back.
+    /// Opening a chat reads its saved page at once. The read never waits behind the queued saves, which can number
+    /// hundreds after a catch-up. With a held queue, the saved page still comes back.
     /// </summary>
     [TestMethod]
     public async Task SavedPage_ReadsAheadOfQueuedSaves()
@@ -551,7 +546,7 @@ public sealed class ChatStoreTests
         await rig.Store.LoadMessagesAsync("c1", null, Ct);
         await rig.Store.FlushAsync();
 
-        // A Fresh Store On The Same File (Nothing In Memory), Its Queue Held Up By A Slow Save
+        // A fresh store uses the same file and has nothing in memory. A slow save holds its queue.
         using var reopened = new ChatStore(rig.Controller, () => rig.Client, NullLogger.Instance, rig.Database, rig.Time, rig.Media);
         using var gate     = new ManualResetEventSlim();
         Task held          = reopened.EnqueueAsync(_ => gate.Wait(TimeSpan.FromSeconds(10)));
@@ -573,7 +568,8 @@ public sealed class ChatStoreTests
     }
 
     /// <summary>
-    /// The cache keeps the last 20 opened conversations: loading a 21st drops the one used longest ago.
+    /// The cache keeps the last 20 opened conversations. Loading a 21st conversation drops the one that the user
+    /// used longest ago.
     /// </summary>
     [TestMethod]
     public async Task Cache_DropsTheLeastRecentlyUsed()
@@ -585,7 +581,7 @@ public sealed class ChatStoreTests
             await rig.Store.LoadMessagesAsync("c" + i, null, Ct);
         }
 
-        // Opening c0 Again Makes c1 The Oldest
+        // Opening c0 again makes c1 the oldest conversation.
         Assert.IsNotNull(rig.Store.CachedMessages("c0"));
         await rig.Store.LoadMessagesAsync("c-new", null, Ct);
 
@@ -595,8 +591,8 @@ public sealed class ChatStoreTests
     }
 
     /// <summary>
-    /// The phone's echo can arrive before the send call returns; the pending copy cached after it must not replace
-    /// the delivered one.
+    /// The echo of the phone can arrive before the send call returns. The pending copy that the store caches after
+    /// the echo must not replace the delivered copy.
     /// </summary>
     [TestMethod]
     public async Task EchoBeforeSendReturns_KeepsDeliveredCopy()
@@ -606,7 +602,7 @@ public sealed class ChatStoreTests
         rig.Client.MessagesPage = PageOf(Msg("m1", "c1", ts: 1_000));
         await rig.Store.LoadMessagesAsync("c1", null, Ct);
 
-        // The Echo Lands While The Send Is Still Waiting For Its Answer
+        // The echo arrives while the send still waits for its answer.
         Message echo = Msg("m2", "c1", "mine", ts: 2_000);
         echo.TmpID   = "tmp-9";
         rig.Client.SendAnswerGate = new TaskCompletionSource();
@@ -621,7 +617,7 @@ public sealed class ChatStoreTests
     }
 
     /// <summary>
-    /// A message that arrives while the newest page is being fetched stays cached when the (older) page lands.
+    /// A message that arrives during the fetch of the newest page stays cached when the older page arrives.
     /// </summary>
     [TestMethod]
     public async Task ArrivalDuringFetch_StaysCached()
@@ -657,7 +653,8 @@ public sealed class ChatStoreTests
     }
 
     /// <summary>
-    /// Reset (sign-out or unpair) clears the decrypted media: memory and the temp folder (Review Focus 3).
+    /// Reset, on sign-out or unpair, clears the decrypted media in memory and in the temp folder. Review Focus 3
+    /// requires this.
     /// </summary>
     [TestMethod]
     public async Task Reset_Clears()
@@ -679,7 +676,7 @@ public sealed class ChatStoreTests
     // =========================================================================
 
     /// <summary>
-    /// Saved conversations fill the cache (so the list shows at once after a restart) without raising anything.
+    /// Saved conversations fill the cache, so that the list shows at once after a restart. The load raises no event.
     /// </summary>
     [TestMethod]
     public async Task LoadSaved_FillsConversations_NoEvents()
@@ -697,7 +694,7 @@ public sealed class ChatStoreTests
     }
 
     /// <summary>
-    /// Saved drafts come back after a restart.
+    /// Saved drafts return after a restart.
     /// </summary>
     [TestMethod]
     public async Task LoadSaved_PutsBackDrafts()
@@ -712,8 +709,8 @@ public sealed class ChatStoreTests
     }
 
     /// <summary>
-    /// An unpair or sign-out while the saved conversations wait their turn on the queue: the old account's rows never
-    /// reach memory.
+    /// An unpair or sign-out can happen while the saved conversations wait in the queue.
+    /// The rows of the old account never reach memory.
     /// </summary>
     [TestMethod]
     public async Task Reset_WhileLoadSavedQueued_LoadsNothing()
@@ -721,7 +718,7 @@ public sealed class ChatStoreTests
         using var rig = new Rig(withDatabase: true);
         rig.Database!.SaveConversation(Conv("c1", "Old Ann"));
 
-        // Another Process Holds The File, So A Save Blocks The Queue And The Load Waits Behind It
+        // Another process holds the file. A save blocks the queue, and the load waits behind the save.
         using (var holder = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = rig.DatabasePath, Pooling = false }.ToString()))
         {
             holder.Open();
@@ -747,7 +744,8 @@ public sealed class ChatStoreTests
     }
 
     /// <summary>
-    /// A conversation with no page in memory shows the database's newest messages, which then sit in memory.
+    /// A conversation with no page in memory shows the newest messages of the database. These messages then stay in
+    /// memory.
     /// </summary>
     [TestMethod]
     public async Task CachedMessages_MemoryMiss_ReadsDatabase()
@@ -762,7 +760,7 @@ public sealed class ChatStoreTests
     }
 
     /// <summary>
-    /// Dropping the pages loses nothing: the newest page reads back the same from the database.
+    /// Dropping the pages loses nothing. The newest page reads back unchanged from the database.
     /// </summary>
     [TestMethod]
     public async Task DropPages_ThenCachedMessages_ReadsSameFromDatabase()
@@ -780,7 +778,7 @@ public sealed class ChatStoreTests
     }
 
     /// <summary>
-    /// A pending send and a failed send exist only in memory, so their page survives the drop.
+    /// A pending send and a failed send exist only in memory, so their page stays after the drop.
     /// </summary>
     [TestMethod]
     public async Task DropPages_KeepsPendingAndFailedSends()
@@ -805,8 +803,8 @@ public sealed class ChatStoreTests
     }
 
     /// <summary>
-    /// A message that was in a dropped page is still not new when the phone echoes it after, even when it is not in the
-    /// notified ring (a page loaded it; the ring never saw it).
+    /// A message in a dropped page is not new when the phone echoes it later. This holds when the message is not in
+    /// the notified ring, because a page loaded the message and the ring never saw it.
     /// </summary>
     [TestMethod]
     public async Task DropPages_KeepsNotificationDeDup()
@@ -860,7 +858,7 @@ public sealed class ChatStoreTests
         await rig.Store.FlushAsync();
         Assert.IsTrue(File.Exists(rig.DatabasePath));
 
-        // A Chat Opened While Unpairing: Its Read Must Not Recreate The File
+        // A chat opens during the unpair. Its read must not create the file again.
         Task<IReadOnlyList<ChatMessage>?> read = rig.Store.CachedMessagesAsync("c1");
         rig.Store.Reset();
         Assert.IsNull(await read);
@@ -870,8 +868,8 @@ public sealed class ChatStoreTests
     }
 
     /// <summary>
-    /// A fetch that started before an unpair or sign-out drops its result: nothing of the old account reaches memory
-    /// or the database, and nothing is raised.
+    /// A fetch that starts before an unpair or sign-out drops its result. Nothing of the old account reaches memory
+    /// or the database, and the store raises no event.
     /// </summary>
     [TestMethod]
     public async Task Reset_DuringFetch_WritesNothing()
@@ -881,20 +879,18 @@ public sealed class ChatStoreTests
         rig.Store.ConversationChanged += (_, _) => raised++;
         rig.Store.MessageArrived      += (_, _) => raised++;
 
-        // Messages
         var fetchGate           = new TaskCompletionSource();
         rig.Client.MessagesPage = PageOf(Msg("m1", "c1"));
         rig.Client.FetchGate    = fetchGate;
         Task<(IReadOnlyList<ChatMessage> Messages, Cursor? Older)> messages = rig.Store.LoadMessagesAsync("c1", null, Ct);
 
-        // Conversations
         var listGate                 = new TaskCompletionSource();
         rig.Client.ConversationsPage = new ListConversationsResponse();
         rig.Client.ConversationsPage.Conversations.Add(Conv("c2", "Ann"));
         rig.Client.ListGate = listGate;
         Task<(IReadOnlyList<ConversationInfo> Conversations, Cursor? Next)> folder = rig.Store.LoadFolderAsync(ConversationFolder.Inbox, null, Ct);
 
-        // A Live Message Whose Conversation Is Still Being Fetched
+        // A live message arrives while the store still fetches its conversation.
         var conversationGate           = new TaskCompletionSource();
         rig.Client.Conversations["c3"] = Conv("c3", "Bo");
         rig.Client.GetConversationGate = conversationGate;
@@ -919,8 +915,9 @@ public sealed class ChatStoreTests
     }
 
     /// <summary>
-    /// A status or reaction update for a message older than a day, never seen before (or out of the 256-ID ring),
-    /// is not new, so it never toasts (the mautrix-gmessages rule for reactions to old messages).
+    /// A status or reaction update is not new when its message is older than 1 day and the store never saw it before,
+    /// or the message left the 256-ID ring. Such an update never makes a toast. This is the rule of mautrix-gmessages
+    /// for reactions to old messages.
     /// </summary>
     [TestMethod]
     public async Task ReactionOnDayOldMessage_IsNotNew()
@@ -938,8 +935,9 @@ public sealed class ChatStoreTests
     }
 
     /// <summary>
-    /// The phone echoing a recent incoming message with my reaction on it (after a restart, so the notified ring
-    /// doesn't know it) is not new and doesn't toast. Nor is a status echo of a message already in the cached page.
+    /// The phone can echo a recent incoming message that has my reaction on it, after a restart, when the notified
+    /// ring does not know the message. This echo is not new and makes no toast. A status echo of a message in the
+    /// cached page is not new either.
     /// </summary>
     [TestMethod]
     public async Task MyReaction_NoToast()
@@ -949,17 +947,14 @@ public sealed class ChatStoreTests
         var got = new List<MessageArrivedEventArgs>();
         rig.Store.MessageArrived += (_, e) => got.Add(e);
 
-        // The Reaction Echo, Never Seen Before
         Message reacted = Incoming("m1");
         reacted.Reactions.Add(new ReactionEntry { Data = new ReactionData { Type = EmojiType.Like }, ParticipantIDs = { "me1" } });
         await rig.Store.HandleEventAsync(new MessageReceived(reacted, false));
 
-        // A Message In The Cached Page, Echoed Again
         rig.Client.MessagesPage = PageOf(Incoming("m2"));
         await rig.Store.LoadMessagesAsync("c1", null, Ct);
         await rig.Store.HandleEventAsync(new MessageReceived(Incoming("m2"), false));
 
-        // A Live Message Still Notifies
         await rig.Store.HandleEventAsync(new MessageReceived(Incoming("m3"), false));
 
         Assert.HasCount(3, got);
@@ -978,7 +973,8 @@ public sealed class ChatStoreTests
     }
 
     /// <summary>
-    /// A first-seen message carrying only someone else's reaction still toasts: only my own reaction marks it as an echo.
+    /// A first-seen message with only the reaction of another person still makes a toast. Only my own reaction marks
+    /// the message as an echo.
     /// </summary>
     [TestMethod]
     public async Task FirstSeen_WithOthersReaction_Toasts()
@@ -999,7 +995,7 @@ public sealed class ChatStoreTests
     }
 
     /// <summary>
-    /// After a restart the seen ring is empty; the phone echoing a message that carries my reaction is not new.
+    /// After a restart, the seen ring is empty. A phone echo of a message with my reaction is not new.
     /// </summary>
     [TestMethod]
     public async Task Echo_OfMyReaction_AfterRestart_NoToast()
@@ -1107,7 +1103,8 @@ public sealed class ChatStoreTests
     }
 
     /// <summary>
-    /// An attachment uploads, then goes as the first MessageInfo with the caption as a second one (SMS and MMS).
+    /// An attachment uploads, then goes as the first MessageInfo. For SMS and MMS, the caption is the second
+    /// MessageInfo.
     /// </summary>
     [TestMethod]
     public async Task SendMedia_BuildsMediaMessageInfo()
@@ -1133,7 +1130,7 @@ public sealed class ChatStoreTests
     }
 
     /// <summary>
-    /// RCS refuses captions on media: the media goes alone, and the caption follows as its own text message.
+    /// RCS refuses captions on media. The media goes alone, and the caption follows as its own text message.
     /// </summary>
     [TestMethod]
     public async Task SendMedia_RcsCaption_SeparateText()
@@ -1146,7 +1143,7 @@ public sealed class ChatStoreTests
         ChatMessage sent = await SendMediaAsync(rig, [1], "a.pdf", "application/pdf", "read this");
 
         Assert.HasCount(2, rig.Client.Sent);
-        Assert.AreEqual(1,rig.Client.Sent[0].MessagePayload.MessageInfo.Count);
+        Assert.AreEqual(1, rig.Client.Sent[0].MessagePayload.MessageInfo.Count);
         Assert.AreEqual("media-1", rig.Client.Sent[0].MessagePayload.MessageInfo[0].MediaContent.MediaID);
         Assert.AreEqual("read this", rig.Client.Sent[1].MessagePayload.MessageInfo.Single().MessageContent.Content);
         Assert.AreNotEqual("tmp-1", rig.Client.Sent[1].TmpID);
@@ -1154,8 +1151,8 @@ public sealed class ChatStoreTests
     }
 
     /// <summary>
-    /// When only the RCS caption's own message fails, the media still counts as sent (no throw), so it is never sent
-    /// twice by a retry.
+    /// When only the RCS caption message fails, the media still counts as sent and nothing throws. A retry then
+    /// never sends the media twice.
     /// </summary>
     [TestMethod]
     public async Task SendMedia_RcsCaptionFails_MediaStillSent()
@@ -1173,7 +1170,7 @@ public sealed class ChatStoreTests
     }
 
     /// <summary>
-    /// A file over 100 MiB is refused before anything uploads or sends.
+    /// The store refuses a file over 100 MiB before it uploads or sends anything.
     /// </summary>
     [TestMethod]
     public async Task SendMedia_TooBig_Refused()
@@ -1188,14 +1185,14 @@ public sealed class ChatStoreTests
         Assert.IsEmpty(rig.Client.Sent);
     }
 
-    // Uploads, then sends in chat c1 with the temporary ID tmp-1, as the chat view does.
+    // This method uploads the file, then sends it in chat c1 with the temporary ID tmp-1, as the chat view does.
     private static async Task<ChatMessage> SendMediaAsync(Rig rig, byte[] bytes, string fileName, string mime, string? caption, IProgress<double>? progress = null)
     {
         MediaContent media = await rig.Store.UploadAttachmentAsync(bytes, fileName, mime, progress, Ct);
         return await rig.Store.SendUploadedMediaAsync("c1", media, caption, "tmp-1", null, Ct);
     }
 
-    // Reports As It Is Called, Unlike Progress<T>, Which Posts
+    // This progress reports at the time of the call. Progress<T> posts the report to a context instead.
     private sealed class InlineProgress(Action<double> report) : IProgress<double>
     {
         public void Report(double value) => report(value);
@@ -1246,7 +1243,7 @@ public sealed class ChatStoreTests
     private static Participant Person(string id, string number, bool isMe = false, bool isVisible = true) =>
         new() { ID = new SmallInfo { ParticipantID = id, Number = number }, IsMe = isMe, IsVisible = isVisible };
 
-    // A One-On-One Chat: Me, Then The Other Person, Both Visible With Numbers
+    // This is a one-on-one chat. Me and the other person are both visible and have numbers.
     private static ConversationInfo Dm()
     {
         var c = new Conversation { ConversationID = "c1", Status = ConversationStatus.Active };
@@ -1256,9 +1253,9 @@ public sealed class ChatStoreTests
     }
 
     /// <summary>
-    /// Each action builds the LibGM request: archive and mute fill <c>UpdateData</c> only (conversation_builder.go),
-    /// delete, block and unblock fill <c>DeleteData</c> with the other person's number (methods.go, handlematrix.go),
-    /// and only a block carries <c>Action5</c>.
+    /// Each action builds the LibGM request. Archive and mute fill only <c>UpdateData</c> (conversation_builder.go).
+    /// Delete, block and unblock fill <c>DeleteData</c> with the number of the other person (methods.go,
+    /// handlematrix.go). Only a block has <c>Action5</c>.
     /// </summary>
     [TestMethod]
     [DataRow(ConversationAction.Archive, UpdateConversationRequest.DataOneofCase.UpdateData, ConversationActionStatus.UnknownActionStatus, false, "Status=Archived")]
@@ -1286,7 +1283,7 @@ public sealed class ChatStoreTests
             : $"Phone={request.DeleteData.Phone}";
         Assert.AreEqual(inner, got);
 
-        // Archive And Mute Leave The Top-Level ID Unset; The Others Set It Twice
+        // Archive and mute leave the top-level ID empty. The other actions set the ID twice.
         if (data == UpdateConversationRequest.DataOneofCase.UpdateData)
         {
             Assert.AreEqual("c1", request.UpdateData.ConversationID);
@@ -1316,7 +1313,7 @@ public sealed class ChatStoreTests
     [TestMethod]
     public void BuildRequest_Unmute_SerializesMuteField()
     {
-        // Unmute Is Proto3's Zero Value; Inside A Oneof It Must Still Go On The Wire
+        // Unmute is the zero value of proto3. Inside a oneof, the zero value must still go on the wire.
         byte[] wire = ChatStore.BuildRequest(Dm(), ConversationAction.Unmute).ToByteArray();
 
         UpdateConversationRequest parsed = UpdateConversationRequest.Parser.ParseFrom(wire);
@@ -1328,7 +1325,8 @@ public sealed class ChatStoreTests
     [TestMethod]
     public void BuildRequest_Group_NoPhone()
     {
-        // Members With Visible Numbers: Only The Group Check Leaves The Phone Unset (findPhoneForConversation Is DM Only)
+        // All members have visible numbers. Only the group check leaves the phone empty,
+        // because findPhoneForConversation works for a one-on-one chat only.
         var c = new Conversation { ConversationID = "g1", IsGroupChat = true };
         c.Participants.Add(Person("me1", "+15550000", isMe: true));
         c.Participants.Add(Person("p1", "+15550001"));
@@ -1342,7 +1340,7 @@ public sealed class ChatStoreTests
     [TestMethod]
     public void BuildRequest_DmHiddenOrMe_SkipsThem()
     {
-        // Me First, Then A Hidden Participant, Then A Visible One With No Number, Then The Other Person
+        // The order is: me, a hidden participant, a visible participant with no number, the other person.
         var c = new Conversation { ConversationID = "c1" };
         c.Participants.Add(Person("me1", "+15550000", isMe: true));
         c.Participants.Add(Person("p0", "+15550009", isVisible: false));
@@ -1370,8 +1368,8 @@ public sealed class ChatStoreTests
     }
 
     /// <summary>
-    /// A chat archived or muted here stays that way after a restart: the saved row changes too, so it doesn't show in
-    /// its old place until the phone's page arrives.
+    /// A chat archived or muted here stays archived or muted after a restart. The saved row changes too, so the chat
+    /// does not show in its old place before the page of the phone arrives.
     /// </summary>
     [TestMethod]
     public async Task Update_ArchiveAndMute_SavedSoReopenedStoreLoadsThem()
@@ -1392,7 +1390,7 @@ public sealed class ChatStoreTests
     }
 
     /// <summary>
-    /// A chat deleted here leaves the database with its messages; unmuting is saved too.
+    /// A chat deleted here leaves the database with its messages. The store saves an unmute too.
     /// </summary>
     [TestMethod]
     public async Task Update_DeleteAndUnmute_Saved()
@@ -1419,7 +1417,7 @@ public sealed class ChatStoreTests
     }
 
     /// <summary>
-    /// Replying from a toast makes my reply the newest message; marking the chat read then still saves it read.
+    /// A reply from a toast makes my reply the newest message. Marking the chat read then still saves it as read.
     /// </summary>
     [TestMethod]
     public async Task MarkRead_NewestIsMyReply_SavesRead()
@@ -1472,8 +1470,8 @@ public sealed class ChatStoreTests
     }
 
     /// <summary>
-    /// An unpair or sign-out while the phone is answering applies nothing, even to a new phone's conversation with
-    /// the same ID.
+    /// An unpair or sign-out can happen while the phone answers. The answer then changes nothing, even in a
+    /// conversation of a new phone that has the same ID.
     /// </summary>
     /// <param name="action">A status action, or mute.</param>
     [TestMethod]
@@ -1515,7 +1513,8 @@ public sealed class ChatStoreTests
     }
 
     /// <summary>
-    /// A message in a chat muted here doesn't notify; once it's unmuted here, the next one does (Review Focus 3).
+    /// A message in a chat muted here does not notify. After the user unmutes the chat here, the next message
+    /// notifies. Review Focus 3 requires this.
     /// </summary>
     [TestMethod]
     public async Task Unmuted_NotifiesAgain()
@@ -1539,7 +1538,7 @@ public sealed class ChatStoreTests
     }
 
     /// <summary>
-    /// The phone's own word wins: its echo (or a mute made on the phone) sets the state.
+    /// The phone has the final word. Its echo, or a mute that the user makes on the phone, sets the state.
     /// </summary>
     [TestMethod]
     public async Task PhoneEcho_MuteField_SetsIsMuted()
@@ -1586,7 +1585,8 @@ public sealed class ChatStoreTests
     [TestMethod]
     public async Task LoadMessages_NoCursorFromPhone_OlderCursorIsTheOldestMessage()
     {
-        // Google Usually Sends No Cursor; Like mautrix-gmessages, The Oldest Message (Its Time In Milliseconds) Is One
+        // Google usually sends no cursor. As mautrix-gmessages does, the store uses the oldest message as the cursor.
+        // The cursor time is in milliseconds.
         using var rig = new Rig();
         rig.Client.MessagesPage = new ListMessagesResponse();
         rig.Client.MessagesPage.Messages.Add(Msg("m3", "c1", ts: 3_000_000));
@@ -1612,7 +1612,7 @@ public sealed class ChatStoreTests
     [TestMethod]
     public async Task LoadMessages_OlderPage_DropsTheCursorMessageAndNewer()
     {
-        // The Phone Can Answer With The Cursor's Own Message, Or Newer Ones, Already Shown Below
+        // The phone can answer with the message of the cursor, or with newer messages that the chat already shows.
         using var rig = new Rig();
         rig.Client.MessagesPage = new ListMessagesResponse();
         rig.Client.MessagesPage.Messages.Add(Msg("m3", "c1", ts: 3_000_000));
@@ -1657,18 +1657,17 @@ public sealed class ChatStoreTests
 
         await rig.Store.MarkReadAsync("c1", "m1", Ct);
 
-        // The Row Stops Being Bold Without Waiting For The Phone To Send The Conversation Back
+        // The row stops being bold at once. It does not wait for the phone to send the conversation back.
         Assert.IsFalse(rig.Store.Find("c1")?.Unread);
         Assert.IsFalse(raised.Single().Unread);
 
-        // Already Read: Nothing Changes, Nothing Raised
         await rig.Store.MarkReadAsync("c1", "m1", Ct);
         Assert.AreEqual(1, raised.Count);
     }
 
     /// <summary>
-    /// A chat read here stays read after a restart: the saved row is marked read, so the list doesn't show it unread
-    /// until the phone's page arrives.
+    /// A chat read here stays read after a restart. The saved row is marked read, so the list does not show the
+    /// chat as unread before the page of the phone arrives.
     /// </summary>
     [TestMethod]
     public async Task MarkRead_SavesRead_SoReopenedStoreLoadsItRead()
@@ -1682,15 +1681,14 @@ public sealed class ChatStoreTests
         await rig.Store.MarkReadAsync("c1", "m1", Ct);
         await rig.Store.FlushAsync();
 
-        // A Fresh Store On The Same File Loads It Read
         using var reopened = new ChatStore(rig.Controller, () => rig.Client, NullLogger.Instance, rig.Database, rig.Time, rig.Media);
         await reopened.LoadSavedAsync();
         Assert.IsFalse(reopened.Find("c1")?.Unread);
     }
 
     /// <summary>
-    /// A message newer than the one read (it came in while the phone was being told) keeps the saved row unread, so a
-    /// restart never hides a message that wasn't seen.
+    /// A message newer than the read message can arrive while the store tells the phone. This message keeps the saved
+    /// row unread, so a restart never hides a message that the user did not see.
     /// </summary>
     [TestMethod]
     public async Task MarkRead_NewerMessageCameIn_KeepsSavedUnread()
@@ -1734,7 +1732,6 @@ public sealed class ChatStoreTests
         Assert.AreEqual(1, raised.Count);
     }
 
-    // A Single-Threaded Context That Runs Posted Work On One Dedicated Thread
     private sealed class OneThreadContext : SynchronizationContext, IDisposable
     {
         private readonly System.Collections.Concurrent.BlockingCollection<(SendOrPostCallback, object?)> _queue = [];
@@ -1818,21 +1815,22 @@ public sealed class ChatStoreTests
         await rig.Store.LoadMessagesAsync("c1", null, Ct);
         Assert.IsFalse(rig.Store.IsEncrypted("c1"));
 
-        // A Newer Switch Arrives Live, Then An Older One Replays: The Newer Stays
+        // A newer switch arrives live, then an older switch replays. The newer switch stays.
         await rig.Store.HandleEventAsync(new MessageReceived(Tomb("t3", "c1", MessageStatusType.TombstoneProtocolSwitchToEncryptedRcs, 3_000_000), false));
         await rig.Store.HandleEventAsync(new MessageReceived(Tomb("t1", "c1", MessageStatusType.TombstoneProtocolSwitchToText, 1_000_000), true));
         Assert.IsTrue(rig.Store.IsEncrypted("c1"));
         await rig.Store.FlushAsync();
 
-        // After A Restart The Lock Comes Back From The Database
+        // After a restart, the lock comes back from the database.
         using var restarted = new ChatStore(rig.Controller, () => null, NullLogger.Instance, rig.Database);
         await restarted.LoadSavedAsync();
         Assert.IsTrue(restarted.IsEncrypted("c1"));
     }
 
     /// <summary>
-    /// A list page asked for before a live update (the chat read while the page was on its way) doesn't put the older,
-    /// unread copy back; a conversation that didn't change takes the page's copy.
+    /// A list page can be requested before a live update, for example when the user reads the chat while the page is
+    /// on its way. The older, unread copy of the page does not replace the live copy.
+    /// A conversation that did not change takes the copy of the page.
     /// </summary>
     [TestMethod]
     public async Task ListPage_AskedBeforeALiveChange_KeepsTheLiveCopy()
@@ -1850,7 +1848,6 @@ public sealed class ChatStoreTests
         rig.Client.ListGate          = listGate;
         Task<(IReadOnlyList<ConversationInfo> Conversations, Cursor? Next)> folder = rig.Store.LoadFolderAsync(ConversationFolder.Inbox, null, Ct);
 
-        // Read Live While The Page Is On Its Way
         await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1")));
         listGate.SetResult();
         (IReadOnlyList<ConversationInfo> page, _) = await folder;
@@ -1861,19 +1858,20 @@ public sealed class ChatStoreTests
     }
 
     /// <summary>
-    /// The conversation's own encryption flag (field 39) decides the lock; without it, the newest encryption line does.
+    /// The encryption flag of the conversation (field 39) decides the lock. Without the flag, the newest encryption
+    /// line decides.
     /// </summary>
     [TestMethod]
     public async Task Store_IsEncrypted_TheConversationsOwnFlagWins()
     {
         using var rig = new Rig();
 
-        // No Flag: The Tombstone Says Encrypted
+        // The conversation has no flag, and the tombstone says encrypted.
         await rig.Store.HandleEventAsync(new MessageReceived(Tomb("t1", "c1", MessageStatusType.TombstoneEncryptedOneOnOneRcsCreated, 1_000_000), true));
         await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1")));
         Assert.IsTrue(rig.Store.IsEncrypted("c1"));
 
-        // The Phone Says Not Encrypted On The Conversation, Then Encrypted
+        // The phone first says the conversation is not encrypted, then says it is encrypted.
         Conversation plain    = Conv("c1");
         plain.EncryptionState = new EncryptionState { Encrypted = false };
         await rig.Store.HandleEventAsync(new ConversationUpdated(plain));
@@ -1899,7 +1897,7 @@ public sealed class ChatStoreTests
     }
 
     /// <summary>
-    /// An empty ID finds nothing, not a still-sending message (which has no ID yet).
+    /// An empty ID finds nothing. It does not find a message that is still sending, because that message has no ID yet.
     /// </summary>
     [TestMethod]
     public async Task Store_FindMessage_EmptyId_FindsNothing()
@@ -1914,7 +1912,7 @@ public sealed class ChatStoreTests
     }
 
     /// <summary>
-    /// A page that lands after a reset leaves no lock state of the old account.
+    /// A page that arrives after a reset leaves no lock state of the old account.
     /// </summary>
     [TestMethod]
     public async Task Store_IsEncrypted_ResetMidLoad_KeepsNoLock()

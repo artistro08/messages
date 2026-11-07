@@ -5,8 +5,8 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace GMessages.Presentation.Tests.Messaging;
 
 /// <summary>
-/// Checks <see cref="MediaStore"/>: the source order, the memory cache and shared downloads, the temp folder and its
-/// file names, the full-size ask, and clearing.
+/// Tests <see cref="MediaStore"/>: the source order, the memory cache, shared downloads, the temp folder,
+/// the file names, the full-size request, and the clear.
 /// </summary>
 [TestClass]
 public sealed class MediaStoreTests
@@ -43,7 +43,7 @@ public sealed class MediaStoreTests
         new(id, string.Empty, "c1", "p1", DateTimeOffset.UnixEpoch, false, MessageKind.Photo, string.Empty, MessageStatusType.IncomingComplete) { Media = media };
 
     /// <summary>
-    /// Two callers asking for one media ID at once share one download, and a later ask comes from memory.
+    /// Two callers that ask for one media ID at the same time share one download. A later request uses the memory.
     /// </summary>
     [TestMethod]
     public async Task Get_CachesAndDedupes()
@@ -52,20 +52,19 @@ public sealed class MediaStoreTests
         rig.Client.Media["m-1"] = [1, 2, 3];
         rig.Client.DownloadGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        // Two At Once, One Download
         Task<byte[]> first  = rig.Store.GetAsync(Part("m-1"), thumbnail: false, Ct);
         Task<byte[]> second = rig.Store.GetAsync(Part("m-1"), thumbnail: false, Ct);
         rig.Client.DownloadGate.SetResult();
         CollectionAssert.AreEqual(new byte[] { 1, 2, 3 }, await first);
         CollectionAssert.AreEqual(new byte[] { 1, 2, 3 }, await second);
 
-        // From Memory
         CollectionAssert.AreEqual(new byte[] { 1, 2, 3 }, await rig.Store.GetAsync(Part("m-1"), thumbnail: false, Ct));
         Assert.HasCount(1, rig.Client.DownloadCalls);
     }
 
     /// <summary>
-    /// The full file is preferred, else the thumbnail; asking for the thumbnail prefers it.
+    /// The store prefers the full file and uses the thumbnail when no full file exists. A request for the thumbnail
+    /// prefers the thumbnail.
     /// </summary>
     [TestMethod]
     public async Task Get_SourceOrder()
@@ -80,7 +79,7 @@ public sealed class MediaStoreTests
     }
 
     /// <summary>
-    /// Inline data comes back as it is, with no download; a pending part throws.
+    /// Inline data returns unchanged and needs no download. A pending part throws.
     /// </summary>
     [TestMethod]
     public async Task Get_InlineData_NoDownload()
@@ -94,7 +93,7 @@ public sealed class MediaStoreTests
     }
 
     /// <summary>
-    /// A failed download is not remembered: the next ask tries again.
+    /// The store does not remember a failed download. The next request tries again.
     /// </summary>
     [TestMethod]
     public async Task Get_FailedDownload_TriesAgain()
@@ -108,7 +107,7 @@ public sealed class MediaStoreTests
     }
 
     /// <summary>
-    /// A file written to the temp folder carries the mark of the web, as a browser download does.
+    /// A file in the temp folder has the mark of the web, as a browser download has.
     /// </summary>
     [TestMethod]
     public async Task SaveToTemp_WritesMarkOfTheWeb()
@@ -123,8 +122,8 @@ public sealed class MediaStoreTests
     }
 
     /// <summary>
-    /// Download writes the file into the folder under its own name, then "name (1)" and "name (2)" when taken, each
-    /// with the bytes and the mark of the web.
+    /// A download writes the file to the folder under its own name. When the name is taken, the names are
+    /// "name (1)" and "name (2)". Each file has the bytes and the mark of the web.
     /// </summary>
     [TestMethod]
     public async Task SaveToFolder_UniqueNamesAndMark()
@@ -149,7 +148,7 @@ public sealed class MediaStoreTests
     }
 
     /// <summary>
-    /// Clear empties memory (the next ask downloads again) and the temp folder.
+    /// Clear empties the memory and the temp folder. The next request downloads again.
     /// </summary>
     [TestMethod]
     public async Task Clear_EmptiesMemoryAndTemp()
@@ -168,8 +167,8 @@ public sealed class MediaStoreTests
     }
 
     /// <summary>
-    /// A Clear (sign-out) during a download aborts its request: the caller gets a cancel, nothing is kept, and the next
-    /// ask downloads again.
+    /// A Clear during a download, as on sign-out, aborts the request. The caller gets a cancel and the store keeps
+    /// nothing. The next request downloads again.
     /// </summary>
     [TestMethod]
     public async Task Clear_DuringDownload_CancelsRequest()
@@ -188,8 +187,8 @@ public sealed class MediaStoreTests
     }
 
     /// <summary>
-    /// A download that never answers gives up after the download timeout with a <see cref="TimeoutException"/> (which
-    /// the photo shows as failed), and a later ask tries again.
+    /// A download that never answers ends after the download timeout with a <see cref="TimeoutException"/>. The photo
+    /// shows this as failed. A later request tries again.
     /// </summary>
     [TestMethod]
     public async Task StalledDownload_TimesOut()
@@ -208,8 +207,8 @@ public sealed class MediaStoreTests
     }
 
     /// <summary>
-    /// Google answers with nothing until the sender's upload is done (a video just arriving): the empty answer isn't kept,
-    /// and the store asks again until the file is there.
+    /// Google answers with nothing until the upload of the sender is done, for example for a video that just arrives.
+    /// The store does not keep the empty answer and asks again until the file is there.
     /// </summary>
     [TestMethod]
     public async Task NotReadyYet_AsksAgain_KeepsNothingEmpty()
@@ -241,7 +240,7 @@ public sealed class MediaStoreTests
     }
 
     /// <summary>
-    /// Seeded bytes answer their media ID with no download.
+    /// Seeded bytes answer their media ID and need no download.
     /// </summary>
     [TestMethod]
     public async Task Seed_AnswersWithoutDownload()
@@ -254,7 +253,7 @@ public sealed class MediaStoreTests
     }
 
     /// <summary>
-    /// A seed for a media ID that is still downloading does not fail the download. The download gives its bytes.
+    /// A seed for a media ID that is still downloading does not fail the download. The download gives its own bytes.
     /// </summary>
     [TestMethod]
     public async Task Seed_DuringDownload_DownloadStillAnswers()
@@ -272,7 +271,7 @@ public sealed class MediaStoreTests
     }
 
     /// <summary>
-    /// ClearMemory empties the memory cache: the next ask downloads again.
+    /// ClearMemory empties the memory cache. The next request downloads again.
     /// </summary>
     [TestMethod]
     public async Task ClearMemory_EmptiesCache()
@@ -288,7 +287,7 @@ public sealed class MediaStoreTests
     }
 
     /// <summary>
-    /// A Clear (sign-out) during a save's download means no decrypted file is written.
+    /// A Clear during the download of a save, as on sign-out, stops the store from writing a decrypted file.
     /// </summary>
     [TestMethod]
     public async Task SaveToTemp_AfterClear_WritesNothing()
@@ -306,7 +305,7 @@ public sealed class MediaStoreTests
     }
 
     /// <summary>
-    /// Saved files land in their own folder under the temp folder, with a safe name.
+    /// A saved file goes to its own folder under the temp folder and has a safe name.
     /// </summary>
     [TestMethod]
     public async Task SaveToTemp_SanitizesName()
@@ -321,9 +320,9 @@ public sealed class MediaStoreTests
     }
 
     /// <summary>
-    /// File names: separators and refused characters, device names, length, and an empty name.
+    /// The safe name handles separators, refused characters, device names, long names and an empty name.
     /// </summary>
-    /// <param name="name">The sender's name.</param>
+    /// <param name="name">The name that the sender gives.</param>
     /// <param name="mime">The mime type.</param>
     /// <param name="expected">The safe name.</param>
     [TestMethod]
@@ -348,7 +347,7 @@ public sealed class MediaStoreTests
         Assert.AreEqual(expected, MediaStore.SanitizeName(name, mime));
 
     /// <summary>
-    /// Programs, scripts, installers and shortcuts never open, however the name hides the extension; other files do.
+    /// A program, script, installer or shortcut never opens, even when the name hides the extension. Other files open.
     /// </summary>
     [TestMethod]
     [DataRow("setup.exe", "application/octet-stream", false)]
@@ -379,7 +378,7 @@ public sealed class MediaStoreTests
         Assert.AreEqual(expected, MediaStore.CanOpen(name, mime));
 
     /// <summary>
-    /// Every extension the mime table can give, except SVG, opens.
+    /// Every extension that the mime table can give opens, except SVG.
     /// </summary>
     [TestMethod]
     [DataRow("image/jpeg")]
@@ -482,15 +481,15 @@ public sealed class MediaStoreTests
         Assert.IsFalse(MediaStore.CanOpen("file" + extension, "application/octet-stream"));
 
     /// <summary>
-    /// A right-to-left override can't disguise an extension: the control character is gone from the name.
+    /// A right-to-left override cannot disguise an extension, because the name loses the control character.
     /// </summary>
     [TestMethod]
     public void SanitizeName_StripsBidiOverride() =>
         Assert.DoesNotContain("‮", MediaStore.SanitizeName("photo‮gpj.exe", "image/jpeg"));
 
     /// <summary>
-    /// A mime type's extension, as Save as offers it: the usual one for each common photo, video and audio type, and none
-    /// for a type with no short one.
+    /// The extension of a mime type, as Save as offers it. Each common photo, video and audio type has its usual
+    /// extension. A type with no short extension has none.
     /// </summary>
     /// <param name="mime">The mime type.</param>
     /// <param name="expected">The extension.</param>
@@ -535,7 +534,8 @@ public sealed class MediaStoreTests
     }
 
     /// <summary>
-    /// A thumbnail-only photo asks the phone for its full size once; a full one or a repeat asks nothing.
+    /// A photo with only a thumbnail asks the phone for the full size one time. A full photo, or a repeat request,
+    /// asks nothing.
     /// </summary>
     [TestMethod]
     public async Task FullSize_RequestedOnce()
@@ -552,15 +552,14 @@ public sealed class MediaStoreTests
         Assert.HasCount(1, rig.Client.FullSizeCalls);
         Assert.AreEqual(("m-1", "a-1"), rig.Client.FullSizeCalls[0]);
 
-        // Asked Again After A Clear
         rig.Store.Clear();
         await rig.Store.RequestFullSizeAsync(photo);
         Assert.HasCount(2, rig.Client.FullSizeCalls);
     }
 
     /// <summary>
-    /// A video without the phone's thumbnail has its frame made once from its bytes and kept as a file; asking again
-    /// reads the file (nothing made or downloaded again), and a clear deletes it.
+    /// A video without a thumbnail from the phone gets one frame, made one time from its bytes and kept as a file.
+    /// A repeat request reads the file and makes or downloads nothing. A clear deletes the file.
     /// </summary>
     [TestMethod]
     public async Task Frame_MadeOnce_KeptUntilClear()
@@ -586,8 +585,8 @@ public sealed class MediaStoreTests
     }
 
     /// <summary>
-    /// The phone's thumbnail is the frame when it sent one, and a video still on its way is made from its own bytes;
-    /// neither is kept as a file.
+    /// The thumbnail from the phone is the frame when the phone sent one. A video that is still on its way gets a frame
+    /// from its own bytes. The store keeps neither frame as a file.
     /// </summary>
     [TestMethod]
     public async Task Frame_PhoneThumbnail_ThenInlineBytes()

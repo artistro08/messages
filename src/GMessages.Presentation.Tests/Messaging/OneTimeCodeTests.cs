@@ -6,8 +6,8 @@ namespace GMessages.Presentation.Tests.Messaging;
 public sealed class OneTimeCodeTests
 {
     /// <summary>
-    /// A message that says it carries a code gives the code's digits (the number nearest the word); any other message
-    /// gives none.
+    /// A message that says it carries a code gives the digits of the code. The code is the number nearest the word
+    /// "code". Any other message gives no code.
     /// </summary>
     [TestMethod]
     [DataRow("Your verification code is 482913", "482913")]

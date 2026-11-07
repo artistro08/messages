@@ -6,7 +6,7 @@ using Microsoft.Extensions.Time.Testing;
 namespace GMessages.Presentation.Tests.Notifications;
 
 /// <summary>
-/// Checks <see cref="UnreadBadge"/>: what counts, the 250 ms debounce, and clearing on sign-out.
+/// Tests <see cref="UnreadBadge"/>: what the badge counts, the 250 ms debounce, and the clear on sign-out.
 /// </summary>
 [TestClass]
 public sealed class UnreadBadgeTests
@@ -15,7 +15,7 @@ public sealed class UnreadBadgeTests
         new(id, "Ann", false, status, unread, false, DateTimeOffset.UnixEpoch, "", false, "", [], "me", "m1");
 
     /// <summary>
-    /// Only unread, unmuted conversations in the main view count.
+    /// The badge counts only unread, unmuted conversations in the main view.
     /// </summary>
     [TestMethod]
     public void Count_UnreadInboxUnmutedOnly()
@@ -35,7 +35,8 @@ public sealed class UnreadBadgeTests
     }
 
     /// <summary>
-    /// A burst of updates hands the sink one count after 250 ms; with nothing unread that count is 0, which clears.
+    /// A burst of updates gives the sink one count after 250 ms.
+    /// When nothing is unread, the count is 0 and clears the badge.
     /// </summary>
     [TestMethod]
     public void Count_Zero_Clears()
@@ -57,7 +58,7 @@ public sealed class UnreadBadgeTests
     }
 
     /// <summary>
-    /// Sign-out clears the badge at once, and a count still pending never shows.
+    /// Sign-out clears the badge at once. A count that is still pending never shows.
     /// </summary>
     [TestMethod]
     public void SignOut_ClearsBadge()

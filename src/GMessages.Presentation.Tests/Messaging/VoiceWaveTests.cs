@@ -6,28 +6,26 @@ namespace GMessages.Presentation.Tests.Messaging;
 [TestClass]
 public sealed class VoiceWaveTests
 {
-    // Expected Bars
     private static readonly float[] LoudThenHalf = [1f, 0.5f];
     private static readonly float[] HalfThenLoud = [0.5f, 1f];
     private static readonly float[] LoudThenFlat = [1f, 0f, 0f];
 
     /// <summary>
-    /// Each bar is its slice's loudest sample, scaled so the loudest bar is 1; a stereo frame counts its louder channel.
+    /// Each bar is the loudest sample of its slice, scaled so that the loudest bar is 1.
+    /// A stereo frame counts its louder channel.
     /// </summary>
     [TestMethod]
     public void Peaks_LoudestPerSlice_ScaledToLoudest()
     {
-        // Four Mono Frames, Two Bars: |1000|-4000| Then |2000|500|
         float[] mono = VoiceWave.PeaksOf(Pcm(1000, -4000, 2000, 500), channels: 1, bars: 2);
         CollectionAssert.AreEqual(LoudThenHalf, mono);
 
-        // Two Stereo Frames, Two Bars: The Louder Channel Of Each
         float[] stereo = VoiceWave.PeaksOf(Pcm(100, -800, 400, 0), channels: 2, bars: 2);
         CollectionAssert.AreEqual(LoudThenHalf, stereo);
     }
 
     /// <summary>
-    /// Silence gives flat bars, and fewer frames than bars leaves the rest at 0, without dividing by zero.
+    /// Silence gives flat bars. Fewer frames than bars leave the other bars at 0, with no division by zero.
     /// </summary>
     [TestMethod]
     public void Peaks_SilenceAndShortAudio()
@@ -40,14 +38,16 @@ public sealed class VoiceWaveTests
     }
 
     /// <summary>
-    /// The live level of a frame of 32-bit float samples is its loudest sample in decibels, from -50 dB (0) to full scale
-    /// (1): a 440 Hz sine at 0.5 (-6 dB) reads 0.88, speech-like 0.1 (-20 dB) reads 0.6, -50 dB and under read 0,
-    /// clipping caps at 1, and silence, no samples or a partial sample read 0.
+    /// The level of a frame of 32-bit float samples is its loudest sample in decibels.
+    /// The scale goes from -50 dB (0) to full scale (1).
+    /// A 440 Hz sine at 0.5 (-6 dB) gives 0.88. A speech-like 0.1 (-20 dB) gives 0.6.
+    /// A level of -50 dB or less gives 0, and clipping gives 1.
+    /// Silence, no samples and a partial sample give 0.
     /// </summary>
     [TestMethod]
     public void Level_LoudestFloatSample_InDecibels()
     {
-        // A 440 Hz Sine At Half Volume, 48 kHz Stereo, 10 ms
+        // The sine is 48 kHz stereo and lasts 10 ms.
         float[] sine = new float[480 * 2];
         for (int i = 0; i < sine.Length; i++)
         {
@@ -64,7 +64,8 @@ public sealed class VoiceWaveTests
     }
 
     /// <summary>
-    /// A WAV file gives its bars and its length from the sample rate; an unfinished one (data size 0) reads to the end.
+    /// A WAV file gives its bars, and its length from the sample rate.
+    /// An unfinished file (data size 0) is read to the end.
     /// </summary>
     [TestMethod]
     public void FromWav_BarsAndLength()
@@ -81,7 +82,7 @@ public sealed class VoiceWaveTests
     }
 
     /// <summary>
-    /// Anything but a 16-bit PCM WAV file is refused.
+    /// A file that is not a 16-bit PCM WAV file throws an InvalidDataException.
     /// </summary>
     [TestMethod]
     public void FromWav_NotWav_Throws()
@@ -93,7 +94,7 @@ public sealed class VoiceWaveTests
     }
 
     /// <summary>
-    /// A length reads as minutes and two-digit seconds, rounded, and never 0:00 for audio that plays.
+    /// A length shows as minutes and 2-digit seconds, rounded. Audio that plays never shows 0:00.
     /// </summary>
     [TestMethod]
     public void LengthText_MinutesAndSeconds()
@@ -104,7 +105,6 @@ public sealed class VoiceWaveTests
         Assert.AreEqual("12:30", VoiceWave.LengthText(TimeSpan.FromSeconds(750)));
     }
 
-    // 16-Bit Little-Endian Samples
     private static byte[] Pcm(params short[] samples)
     {
         byte[] bytes = new byte[samples.Length * 2];
@@ -116,11 +116,10 @@ public sealed class VoiceWaveTests
         return bytes;
     }
 
-    // 32-Bit Float Samples, As An Audio Graph's Frame Holds Them
     private static byte[] Floats(params float[] samples) =>
         System.Runtime.InteropServices.MemoryMarshal.AsBytes(samples.AsSpan()).ToArray();
 
-    // A Mono 16-Bit PCM WAV File, With A LIST Chunk Before The Samples As Some Writers Add
+    // Some writers add a LIST chunk before the samples. This WAV file has one.
     private static byte[] Wav(byte[] samples, int rate, uint dataSize)
     {
         using var wav    = new MemoryStream();

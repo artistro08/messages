@@ -54,7 +54,7 @@ public sealed class LinkPreviewerTests
     // LINKS IN TEXT
     // =========================================================================
 
-    // Each Link As "Start:Shown Text>Url", Joined By Spaces
+    // Each link has the form "Start:Shown Text>Url". A space joins the links.
     private static string Links(string text) =>
         string.Join(" ", LinkPreviewer.FindLinks(text).Select(l => $"{l.Start}:{text.Substring(l.Start, l.Length)}>{l.Url.AbsoluteUri}"));
 
@@ -89,7 +89,7 @@ public sealed class LinkPreviewerTests
     public void FindLinks_None(string text) => Assert.AreEqual(string.Empty, Links(text));
 
     /// <summary>
-    /// Review Focus 5: only HTTPS to a named public host is fetched.
+    /// The previewer fetches only HTTPS to a named public host. Review Focus 5 requires this rule.
     /// </summary>
     [TestMethod]
     [DataRow("http://example.com/")]
@@ -118,7 +118,7 @@ public sealed class LinkPreviewerTests
     }
 
     /// <summary>
-    /// Review Focus 5: one address per refused range.
+    /// The previewer refuses each of these addresses, one for each refused range. Review Focus 5 requires this rule.
     /// </summary>
     [TestMethod]
     [DataRow("127.0.0.1")]
@@ -214,8 +214,8 @@ public sealed class LinkPreviewerTests
     }
 
     /// <summary>
-    /// A host with non-ASCII letters (a Cyrillic look-alike of google.com) shows in its punycode form, so it can't
-    /// pass as the real site.
+    /// A host with non-ASCII letters shows in punycode form, so that it cannot pass as the real site.
+    /// The test host is a Cyrillic look-alike of google.com.
     /// </summary>
     [TestMethod]
     public void ParseHead_NonAsciiHost_ShowsPunycode()
@@ -260,7 +260,7 @@ public sealed class LinkPreviewerTests
     // FETCHING
     // =========================================================================
 
-    // A Page Whose Card Image Is The Given Bytes
+    // This page has the given bytes as its card image.
     private static FakeHttpHandler ImagePage(byte[] png) => new()
     {
         Respond = (_, r) => r.Url.EndsWith(".png", StringComparison.Ordinal)
@@ -268,7 +268,7 @@ public sealed class LinkPreviewerTests
             : HtmlResponse(Html.Replace("</head>", "<meta property=\"og:image\" content=\"https://cdn.example.com/c.png\"></head>", StringComparison.Ordinal)),
     };
 
-    // A PNG Of The Given Size, Opaque Or Half See-Through
+    // The alpha value makes the PNG opaque (255) or half see-through (128).
     private static async Task<byte[]> MakePngAsync(uint width, uint height, byte alpha)
     {
         byte[] pixels = new byte[width * height * 4];
@@ -284,7 +284,7 @@ public sealed class LinkPreviewerTests
         return output.ToArray();
     }
 
-    // The Image's Decoder, To Read Its Size And Format
+    // The decoder gives the size and the format of the image.
     private static async Task<BitmapDecoder> DecodeAsync(byte[] bytes) =>
         await BitmapDecoder.CreateAsync(new MemoryStream(bytes, writable: false).AsRandomAccessStream());
 
@@ -307,7 +307,7 @@ public sealed class LinkPreviewerTests
     }
 
     /// <summary>
-    /// A wide opaque card image is kept at most 480 pixels wide, as JPEG, with its shape.
+    /// A wide opaque card image is stored as JPEG, at most 480 pixels wide, with the same aspect ratio.
     /// </summary>
     [TestMethod]
     public async Task Preview_LargeImage_StoredAtMost480Wide()
@@ -324,7 +324,7 @@ public sealed class LinkPreviewerTests
     }
 
     /// <summary>
-    /// A card image over 16 million pixels (each side within 8192) is dropped; the card keeps its text.
+    /// A card image over 16 million pixels is dropped, although each side is within 8192. The card keeps its text.
     /// </summary>
     [TestMethod]
     public async Task Preview_HugePixelCount_Rejected()
@@ -341,7 +341,7 @@ public sealed class LinkPreviewerTests
     }
 
     /// <summary>
-    /// A narrow card image taller than 8192 pixels is dropped, though it is narrow enough to keep as sent.
+    /// A narrow card image taller than 8192 pixels is dropped, although the width alone would allow it.
     /// </summary>
     [TestMethod]
     public async Task Preview_TallNarrow_Rejected()
@@ -357,7 +357,7 @@ public sealed class LinkPreviewerTests
     }
 
     /// <summary>
-    /// A wide card image with transparency is scaled down but stays PNG.
+    /// A wide card image with transparency is scaled down and stays PNG.
     /// </summary>
     [TestMethod]
     public async Task Preview_TransparentPng_StaysPng()
@@ -464,7 +464,8 @@ public sealed class LinkPreviewerTests
     }
 
     /// <summary>
-    /// Review fix: a link the system would send through a proxy gets no preview, so the user's proxy is never bypassed.
+    /// A link that the system sends through a proxy gets no preview, so the previewer never bypasses the proxy of the
+    /// user. This rule came from a review fix.
     /// </summary>
     [TestMethod]
     public async Task Get_SystemProxy_NoRequest()
@@ -533,12 +534,12 @@ public sealed class LinkPreviewerTests
 }
 
 /// <summary>
-/// A system proxy for tests: one that sends everything through a proxy, or <see cref="Direct"/> for none.
+/// A system proxy for tests. It sends all requests through a proxy, or it uses <see cref="Direct"/> for no proxy.
 /// </summary>
 /// <param name="via">The proxy, or null to connect directly.</param>
 internal sealed class TestProxy(Uri? via) : IWebProxy
 {
-    /// <summary>Gets a proxy setting that connects directly.</summary>
+    /// <summary>Gets a proxy setting that connects without a proxy.</summary>
     public static TestProxy Direct { get; } = new(null);
 
     public ICredentials? Credentials { get; set; }
