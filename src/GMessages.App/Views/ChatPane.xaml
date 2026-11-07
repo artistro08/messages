@@ -183,8 +183,8 @@
             </Button>
         </Grid>
 
-        <!-- The oldest message is at the top, and the list stays at the newest message. The top loads older
-             messages. The owner chose that the typing bubble, the chips and the message box float over the list.
+        <!-- The oldest message is at the top, and the list stays at the newest message. A scroll to the top loads
+             older messages. The owner chose that the typing bubble, the chips and the message box float over the list.
              The bottom padding of the list keeps the newest bubble clear of them. The code sets it in
              KeepComposerClear. The bottom of the list fades out behind them. -->
         <ListView

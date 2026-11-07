@@ -85,7 +85,8 @@ public sealed partial class ChatPane : UserControl
     private const double EmojiPickerHeight = 280;
     private const double EmojiCellSize     = 44;
 
-    // The corners of the message box match the control corner radius of Windows.
+    // The corners of the message box match the control corner radius of Windows. ComposeInset and ComposeTop are the
+    // padding of the compose area.
     private const double DraftCorner  = 4;
     private const double ComposeInset = 12;
     private const double ComposeTop   = 8;
@@ -1609,7 +1610,8 @@ public sealed partial class ChatPane : UserControl
         _emojiScroller?.ChangeView(null, 0, null, disableAnimation: true);
     }
 
-    // A picked emoji closes the picker and sends as the reaction. It is a custom reaction when it is not 1 of the 7.
+    // The method closes the picker and sends the picked emoji as the reaction. It is a custom reaction when it is not
+    // 1 of the 7.
     private void PickEmoji(string emoji)
     {
         MessageBubbleViewModel? bubble = _emojiTarget;

@@ -116,7 +116,7 @@ public sealed partial class SettingsPage : UserControl
         }
 
         // A search that ends after the page closed changes nothing. A new page can have reset the list of the shared
-        // view model, and a stale list then throws out of its first binding pass.
+        // view model. A stale list then throws out of its first binding pass.
         if (_closed)
         {
             return;

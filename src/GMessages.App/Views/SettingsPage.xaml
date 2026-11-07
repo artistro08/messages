@@ -6,8 +6,8 @@
     xmlns:muxc="using:Microsoft.UI.Xaml.Controls">
 
     <UserControl.Resources>
-        <!-- The card of Windows Settings, from SettingsCardStyle of Magic Buds. The icon, the header and the
-             description sit on the left, and the control sits on the right. -->
+        <!-- The card copies the Windows Settings look from SettingsCardStyle of Magic Buds. The icon, the header and
+             the description sit on the left, and the control sits on the right. -->
         <Style x:Key="SettingsCardStyle" TargetType="Border">
             <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
             <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />

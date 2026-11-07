@@ -710,7 +710,7 @@ public sealed partial class MainWindow : UserControl
 
     private void OnPaneToggleRequested(object? sender, EventArgs args) => ViewModel?.ToggleList();
 
-    // Archived and Spam & blocked are lists, so they close Settings to show.
+    // The folder buttons close Settings, so the folder list shows.
     private void OnArchivedClick(object sender, RoutedEventArgs e)
     {
         PhotoViewer.Close();
