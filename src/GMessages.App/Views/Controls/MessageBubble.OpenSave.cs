@@ -13,8 +13,8 @@ namespace GMessages.App.Views.Controls;
 public sealed partial class MessageBubble
 {
     /// <summary>
-    /// Runs Open from the bubble menu. A photo or a video opens in the viewer. A voice message plays or pauses. A file
-    /// card opens its file.
+    /// Runs Open from the bubble menu. A photo or a video opens in the viewer. A voice message opens in the default
+    /// audio app. A file card opens its file.
     /// </summary>
     public void Open()
     {
@@ -28,8 +28,11 @@ public sealed partial class MessageBubble
         }
         else if (Bubble?.HasVoice == true)
         {
-            // The photo viewer cannot show audio, so Open plays or pauses a voice message as its play button does.
-            RequestVoice(null);
+            // The owner wants a voice message to open in the default audio app, as a file does.
+            if (Bubble.Media is { IsPending: false } voice)
+            {
+                _ = MediaActions.OpenAsync(XamlRoot, voice, Bubble.Id);
+            }
         }
         else if (Bubble?.Media is { IsPending: false } part && Photo is not null)
         {
