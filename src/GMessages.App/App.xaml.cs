@@ -506,7 +506,10 @@ public sealed partial class App : Application, IDisposable
                     return;
                 }
 
-                _ = DropThenTrimAsync();
+                if (!_quitting)
+                {
+                    _ = DropThenTrimAsync();
+                }
             };
         }
 
