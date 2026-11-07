@@ -136,9 +136,13 @@ public sealed partial class ChatStore
         }
     }
 
-    // True When One Of The Message's Reactions Is Mine (My Participant ID Is Known Once Any Conversation Has Loaded)
-    private bool HasMyReaction(ChatMessage message) =>
-        _me is { } me && message.Reactions.Any(r => r.ParticipantIds.Contains(me.Id));
+    // Each SIM has its own participant ID for me, so the check uses the chat's own IDs as the bubble view does.
+    private bool HasMyReaction(ChatMessage message)
+    {
+        ConversationInfo? conversation = Find(message.ConversationId);
+        return message.Reactions.Any(r => r.ParticipantIds.Any(id => id == _me?.Id
+            || (conversation is not null && (id == conversation.DefaultOutgoingId || conversation.FindParticipant(id)?.IsMe == true))));
+    }
 
     // True When A Message With This ID Is Already In Its Conversation's Cached Page
     private bool IsCached(ChatMessage message)

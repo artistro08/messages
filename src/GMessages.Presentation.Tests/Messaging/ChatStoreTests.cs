@@ -1019,6 +1019,31 @@ public sealed class ChatStoreTests
         Assert.IsFalse(got.IsNew);
     }
 
+    /// <summary>
+    /// On a phone with 2 SIMs, each chat has its own participant ID for me. The echo of my reaction in a chat on the
+    /// second SIM is not new.
+    /// </summary>
+    [TestMethod]
+    public async Task Echo_OfMyReaction_OnTheSecondSim_NoToast()
+    {
+        using var rig = new Rig();
+        await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1")));
+        Conversation second                     = Conv("c2", outgoing: "me2");
+        second.Participants[0].ID.ParticipantID = "me2";
+        await rig.Store.HandleEventAsync(new ConversationUpdated(second));
+        MessageArrivedEventArgs? got = null;
+        rig.Store.MessageArrived += (_, e) => got = e;
+
+        Message m              = Msg("m1", "c2");
+        m.ParticipantID        = "p-ann";
+        m.MessageStatus.Status = MessageStatusType.IncomingComplete;
+        m.Reactions.Add(new ReactionEntry { Data = new ReactionData { Type = EmojiType.Like }, ParticipantIDs = { "me2" } });
+        await rig.Store.HandleEventAsync(new MessageReceived(m, false));
+
+        Assert.IsNotNull(got);
+        Assert.IsFalse(got.IsNew);
+    }
+
     // =========================================================================
     // SENDING
     // =========================================================================
