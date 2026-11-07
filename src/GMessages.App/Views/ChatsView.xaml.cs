@@ -463,13 +463,14 @@ public sealed partial class ChatsView : UserControl
         }
     }
 
-    // A flip between narrow and wide with an open chat opens or closes the pane. Without this step, the pane
-    // animation of Windows slides the chat and the list by the list width while the window edge moves. The pane goes
-    // to its next state here without a transition. The SplitView then finds that state in place and plays nothing.
-    // ☰ and a pick in a narrow window keep the animation. The state names come from the SplitView template of Windows.
+    // A flip between narrow and wide can open or close the pane, for example with an open chat. Without this step, the
+    // pane animation of Windows slides the chat and the list by the list width while the window edge moves. The pane
+    // goes to its next state here without a transition. The SplitView then finds that state in place and plays
+    // nothing. The step runs on every flip. A flip that keeps the pane state does nothing visible. ☰ and a pick in a
+    // narrow window keep the animation. The state names come from the SplitView template of Windows.
     private void SkipPaneAnimation(bool isNarrow)
     {
-        bool open = IsListOpen(ViewModel.IsListCollapsed, isNarrow && (ViewModel.IsChatOpen || ViewModel.IsStartChatOpen));
+        bool open = IsListOpen(ViewModel.IsListCollapsed, ViewModel.ShowsChatPane(isNarrow));
         _ = VisualStateManager.GoToState(Panes, open ? "OpenInlineLeft" : "Closed", useTransitions: false);
     }
 

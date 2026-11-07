@@ -874,6 +874,34 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
+    /// Open on a playing voice message stops the player of the chat. The app then opens the audio file in the default
+    /// app. The test hook notes the path instead.
+    /// </summary>
+    [TestMethod]
+    public async Task Open_Voice_StopsPlayerAndLaunchesFile()
+    {
+        await OpenMediaChatAsync();
+
+        Message message          = Server.Phone.PushIncomingMedia("c-media", "audio/mp4", await VoiceFixtureAsync(), "Voice message.m4a");
+        AutomationElement length = App.Find("Bubble.Voice." + message.MessageID);
+        WaitForStatus(length, "Ready");
+        AutomationElement play = App.Find("Voice.Play." + message.MessageID);
+        play.Patterns.Invoke.Pattern.Invoke();
+        WaitForStatus(play, "Playing");
+
+        OpenMenu(length);
+        App.Find("Bubble.Open").Patterns.Invoke.Pattern.Invoke();
+
+        string launched = Path.Combine(App.DataDir, "launched.txt");
+        Wait.Until(() => File.Exists(launched), AppDriver.DefaultTimeout, () => "Open on the voice message launched nothing.");
+        string path = File.ReadAllLines(launched)[^1];
+        Assert.IsFalse(path.EndsWith(" picker", StringComparison.Ordinal), "Open showed the app picker.");
+        Assert.AreEqual(".m4a", Path.GetExtension(path), "The launched file is not the audio of the voice message.");
+        Assert.IsTrue(path.StartsWith(App.DataDir, StringComparison.OrdinalIgnoreCase), $"The file was written outside the app's private folder: {path}.");
+        Wait.Until(() => AppDriver.SafeName(play) == ChatCopy.Play, AppDriver.DefaultTimeout, () => "The player of the chat kept playing after Open.");
+    }
+
+    /// <summary>
     /// The mic records, and the microphone of the test hook copies the fixture. Stop puts the recording in the preview
     /// chip with its length, joined to the top of the message box. Send sends it as "Voice message.m4a" with type
     /// audio/mp4, and the temp file is gone after.

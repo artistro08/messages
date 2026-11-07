@@ -1233,9 +1233,9 @@ public sealed partial class ChatPane : UserControl
         _menuView = view;
         view.KeepShown(true);
 
-        // Open on a photo, video or voice message uses the viewer or player of the app. On a file, Open shows only for
-        // a type that is safe to launch.
-        bool canOpen = bubble.HasPhoto || bubble.HasVideo || bubble.HasVoice || bubble.CanOpenMedia;
+        // Open on a photo or a video uses the viewer of the app. On a voice message or a file, Open launches an app,
+        // so it shows only for a type that is safe to launch.
+        bool canOpen = bubble.HasPhoto || bubble.HasVideo || bubble.CanOpenMedia;
 
         BubbleMenuCopy.Visibility     = bubble.HasCopyText ? Visibility.Visible : Visibility.Collapsed;
         BubbleMenuOpen.Visibility     = canOpen ? Visibility.Visible : Visibility.Collapsed;
@@ -1289,7 +1289,16 @@ public sealed partial class ChatPane : UserControl
     // click of an item can come after the close.
     private void OnBubbleMenuCopyClick(object sender, RoutedEventArgs e) => _menuView?.Copy();
 
-    private void OnBubbleMenuOpenClick(object sender, RoutedEventArgs e) => _menuView?.Open();
+    // A voice message opens in an app outside, so the player of the chat stops first. Two players never sound at once.
+    private void OnBubbleMenuOpenClick(object sender, RoutedEventArgs e)
+    {
+        if (_menuView?.Bubble?.HasVoice == true)
+        {
+            StopVoice();
+        }
+
+        _menuView?.Open();
+    }
 
     private void OnBubbleMenuOpenWithClick(object sender, RoutedEventArgs e) => _menuView?.OpenWith();
 
