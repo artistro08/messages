@@ -11,21 +11,22 @@ namespace GMessages.Protocol.LongPoll;
 /// <remarks>
 /// Ported from <c>dittoPinger</c>, <c>onPhoneActivity</c> and <c>requestUpdatesAfterGap</c> in
 /// <see href="https://github.com/mautrix/gmessages/blob/ba33f4875a491f5cb47db8a6baf42a8869f5f383/pkg/libgm/longpoll.go">longpoll.go</see>.
-/// A ping goes out every minute, and right away when a request the user waits on is slow. The first unanswered ping
-/// raises <see cref="PhoneNotResponding"/>; after that only <see cref="AlertTimeoutCount"/> misses in a row do, since
-/// phones doze constantly. While the phone is silent, a recovery loop re-pings on doubling intervals (1 minute up
-/// to 64), re-arms the event subscription after 2 misses, and reconnects after 3. Any answer or data from the phone
-/// raises <see cref="PhoneRespondingAgain"/> when things were failing. Waiting for a ping never blocks the main loop,
-/// which also runs the data-receive check: an extra update request when nothing arrived for a long time. Every wait
-/// uses the <see cref="TimeProvider"/>. One pinger lives for one <see cref="LongPollLoop.RunAsync"/>; the counters it
-/// works on are in <see cref="PhoneLiveness"/>, which the loop owns, so they outlive the pinger as in Go.
+/// A ping goes out each minute. A ping also goes out at once when a request that the user waits on is slow. The
+/// first unanswered ping raises <see cref="PhoneNotResponding"/>. After that, only <see cref="AlertTimeoutCount"/>
+/// misses in a row raise it, because phones doze all the time. While the phone is silent, a recovery loop pings again
+/// on doubling intervals, from 1 minute up to 64 minutes. It re-arms the event subscription after 2 misses and
+/// reconnects after 3 misses. A ping answer after failed pings raises <see cref="PhoneRespondingAgain"/>. Data from
+/// the phone raises it only after <see cref="PhoneNotResponding"/>. The wait for a ping never blocks the main loop. The main loop also runs the
+/// data-receive check. That check sends an extra update request when no data arrived for a long time. Each wait uses
+/// the <see cref="TimeProvider"/>. 1 pinger lives for 1 <see cref="LongPollLoop.RunAsync"/>. Its counters are in
+/// <see cref="PhoneLiveness"/>, which the loop owns. Thus the counters outlive the pinger, as in Go.
 /// </remarks>
-/// <param name="rpc">Sends pings and update requests.</param>
+/// <param name="rpc">Sends the pings and the update requests.</param>
 /// <param name="liveness">The shared phone liveness state.</param>
-/// <param name="time">The clock for every wait.</param>
+/// <param name="time">The clock for each wait.</param>
 /// <param name="log">The logger.</param>
-/// <param name="setActiveSession">Re-arms the phone's event subscription (Go: <c>SetActiveSession</c>).</param>
-/// <param name="reconnect">Drops and reopens the long poll (Go: <c>Reconnect</c>).</param>
+/// <param name="setActiveSession">Re-arms the event subscription of the phone. Go uses <c>SetActiveSession</c>.</param>
+/// <param name="reconnect">Drops the long poll and opens it again. Go uses <c>Reconnect</c>.</param>
 internal sealed partial class DittoPinger(
     RpcSession rpc,
     PhoneLiveness liveness,
@@ -34,26 +35,32 @@ internal sealed partial class DittoPinger(
     Func<CancellationToken, Task> setActiveSession,
     Func<Task> reconnect)
 {
-    /// <summary>Go: <c>defaultPingTimeout</c>.</summary>
+    /// <summary>Ported from <c>defaultPingTimeout</c>.</summary>
     public static readonly TimeSpan DefaultPingTimeout = TimeSpan.FromMinutes(1);
 
-    /// <summary>Go: <c>shortPingTimeout</c>.</summary>
+    /// <summary>Ported from <c>shortPingTimeout</c>.</summary>
     public static readonly TimeSpan ShortPingTimeout = TimeSpan.FromSeconds(10);
 
-    /// <summary>Go: <c>minPingInterval</c>.</summary>
+    /// <summary>Ported from <c>minPingInterval</c>.</summary>
     public static readonly TimeSpan MinPingInterval = TimeSpan.FromSeconds(30);
 
-    /// <summary>Go: <c>initialRecoveryInterval</c>.</summary>
+    /// <summary>Ported from <c>initialRecoveryInterval</c>.</summary>
     public static readonly TimeSpan InitialRecoveryInterval = TimeSpan.FromMinutes(1);
 
-    /// <summary>Go: <c>maxRepingTickerTime</c>.</summary>
+    /// <summary>Ported from <c>maxRepingTickerTime</c>.</summary>
     public static readonly TimeSpan MaxRecoveryInterval = TimeSpan.FromMinutes(64);
 
-    /// <summary>Go: <c>setActiveSessionAfterTimeouts</c>.</summary>
+    /// <summary>The time without data before an extra update request. Ported from <c>DefaultBugleDefaultCheckInterval</c>.</summary>
+    public static readonly TimeSpan DataReceiveCheckInterval = TimeSpan.FromHours(2) + TimeSpan.FromMinutes(55);
+
+    /// <summary>Ported from <c>setActiveSessionAfterTimeouts</c>.</summary>
     public const int SetActiveSessionAfterTimeouts = 2;
 
-    /// <summary>Go: <c>reconnectAfterTimeouts</c>.</summary>
+    /// <summary>Ported from <c>reconnectAfterTimeouts</c>.</summary>
     public const int ReconnectAfterTimeouts = 3;
+
+    /// <summary>The misses in a row before <see cref="PhoneNotResponding"/>. The Go client default is 4.</summary>
+    public const int AlertTimeoutCount = 4;
 
     private int _recovering;
     private long _pingId;
@@ -61,33 +68,27 @@ internal sealed partial class DittoPinger(
     private TaskCompletionSource? _shortCircuit;
     private CancellationToken _stopToken;
 
-    /// <summary>Raised for pinger events: <see cref="PhoneNotResponding"/>, <see cref="PhoneRespondingAgain"/>, <see cref="PingFailed"/>, <see cref="NoDataReceived"/>.</summary>
+    /// <summary>Occurs for the pinger events: <see cref="PhoneNotResponding"/>, <see cref="PhoneRespondingAgain"/>, <see cref="PingFailed"/>, <see cref="NoDataReceived"/>.</summary>
     public event Action<object>? EventRaised;
 
-    /// <summary>How often to ping normally (Go client default: 1 minute).</summary>
+    /// <summary>Gets how often the pinger pings normally. The Go client default is 1 minute.</summary>
     public TimeSpan PingInterval { get; init; } = TimeSpan.FromMinutes(1);
 
-    /// <summary>Misses in a row before <see cref="PhoneNotResponding"/> (Go client default: 4).</summary>
-    public int AlertTimeoutCount { get; init; } = 4;
-
-    /// <summary>How long without data before an extra update request (Go: <c>DefaultBugleDefaultCheckInterval</c>, 2 h 55 min).</summary>
-    public TimeSpan DataReceiveCheckInterval { get; init; } = TimeSpan.FromHours(2) + TimeSpan.FromMinutes(55);
-
-    /// <summary>Gets how many pings were answered and fully handled; lets tests wait for an answer deterministically.</summary>
+    /// <summary>Gets how many pings got an answer that the pinger handled in full. Tests use it to wait for an answer.</summary>
     internal int AnsweredPings => Volatile.Read(ref _answeredPings);
 
-    /// <summary>Gets whether the recovery loop is running.</summary>
+    /// <summary>Gets whether the recovery loop runs now.</summary>
     internal bool IsRecovering => Volatile.Read(ref _recovering) != 0;
 
     /// <summary>
     /// Runs the ping loop until <paramref name="ct"/> is canceled.
     /// </summary>
     /// <remarks>
-    /// Ported from <c>dittoPinger.Loop</c>. <paramref name="ct"/> also stops every request the pinger sends in the
+    /// Ported from <c>dittoPinger.Loop</c>. <paramref name="ct"/> also stops each request that the pinger sends in the
     /// background, such as <see cref="RequestUpdatesAfterGapAsync"/>.
     /// </remarks>
-    /// <param name="ct">Stops the loop, every pending ping wait and the recovery loop.</param>
-    /// <returns>A task that completes when stopped; stopping is not an error.</returns>
+    /// <param name="ct">Stops the loop, each pending ping wait and the recovery loop.</param>
+    /// <returns>A task that completes after a stop. A stop is not an error.</returns>
     public async Task RunAsync(CancellationToken ct)
     {
         _stopToken = ct;
@@ -105,7 +106,7 @@ internal sealed partial class DittoPinger(
             bool recovering = Volatile.Read(ref _recovering) != 0;
             if (!elapsed && recovering)
             {
-                // A User Waits During Recovery: Do Not Make Them Wait Out The Backoff For A Notice
+                // A user waits during the recovery. Do not make the user wait for the end of the backoff for a notice.
                 if (liveness.ShouldMarkNotResponding(AlertTimeoutCount))
                 {
                     Raise(new PhoneNotResponding());
@@ -129,14 +130,17 @@ internal sealed partial class DittoPinger(
     }
 
     /// <summary>
-    /// Pings right away, if the loop is waiting; dropped otherwise (Go's non-blocking channel send).
+    /// Pings at once when the loop waits. Otherwise the call does nothing, as the non-blocking channel send of Go does.
     /// </summary>
     public void ShortCircuit() => Volatile.Read(ref _shortCircuit)?.TrySetResult();
 
     /// <summary>
     /// Counts data from the phone outside of pings as a sign of life.
     /// </summary>
-    /// <remarks>Ported from <c>onPhoneActivity</c>. Stops recovery and raises <see cref="PhoneRespondingAgain"/> when the phone was considered silent.</remarks>
+    /// <remarks>
+    /// Ported from <c>onPhoneActivity</c>. When pings failed, the method stops the recovery. After the pinger raised
+    /// <see cref="PhoneNotResponding"/>, it also raises <see cref="PhoneRespondingAgain"/>.
+    /// </remarks>
     /// <param name="source">What arrived, for the log.</param>
     public void OnPhoneActivity(string source)
     {
@@ -160,21 +164,21 @@ internal sealed partial class DittoPinger(
     }
 
     /// <summary>
-    /// Pushes the next data-receive check out to at least <paramref name="after"/> from now.
+    /// Moves the next data-receive check to at least <paramref name="after"/> from now.
     /// </summary>
     /// <remarks>Ported from <c>bumpNextDataReceiveCheck</c>.</remarks>
-    /// <param name="after">The delay; null means <see cref="DataReceiveCheckInterval"/>.</param>
+    /// <param name="after">The delay. Null means <see cref="DataReceiveCheckInterval"/>.</param>
     public void BumpDataReceiveCheck(TimeSpan? after = null) => liveness.BumpDataReceiveCheck(after ?? DataReceiveCheckInterval);
 
     /// <summary>
-    /// Raises <see cref="NoDataReceived"/> and asks the phone to resend updates.
+    /// Raises <see cref="NoDataReceived"/> and asks the phone to send the updates again.
     /// </summary>
     /// <remarks>
-    /// Ported from <c>requestUpdatesAfterGap</c>. Failures are logged, never thrown. The request uses the run's stop
-    /// token, so nothing is posted after a disconnect or dispose.
+    /// Ported from <c>requestUpdatesAfterGap</c>. The method logs failures and never throws them. The request uses the
+    /// stop token of the run. Thus no request goes out after a disconnect or a dispose.
     /// </remarks>
-    /// <param name="reason">Why, for the log.</param>
-    /// <returns>A task that completes when the request was sent, failed or was stopped.</returns>
+    /// <param name="reason">The reason, for the log.</param>
+    /// <returns>A task that completes when the request goes out, fails or stops.</returns>
     public async Task RequestUpdatesAfterGapAsync(string reason)
     {
         CancellationToken ct = _stopToken;
@@ -186,7 +190,7 @@ internal sealed partial class DittoPinger(
         }
         catch (Exception) when (ct.IsCancellationRequested)
         {
-            // Stopped: Not A Failure
+            // A stop is not a failure.
         }
         catch (Exception ex)
         {
@@ -198,7 +202,7 @@ internal sealed partial class DittoPinger(
     // PINGS
     // =========================================================================
 
-    // Port Of dittoPinger.Ping: Send, Then Wait In The Background
+    // Port of dittoPinger.Ping. The method sends the ping, then waits for the answer in the background.
     private async Task PingAsync(TimeSpan timeout, PingResetter reset, CancellationToken ct)
     {
         long pingId = Interlocked.Increment(ref _pingId);
@@ -221,7 +225,7 @@ internal sealed partial class DittoPinger(
         {
             waitCts.Dispose();
 
-            // Stopping: Whatever The Send Failed With, It Is Not A Ping Failure
+            // During a stop, a failed send is not a ping failure.
             if (ct.IsCancellationRequested)
             {
                 return;
@@ -236,7 +240,7 @@ internal sealed partial class DittoPinger(
         _ = WaitForResponseAsync(pingId, start, wait, waitCts, timeout, reset, ct);
     }
 
-    // Port Of dittoPinger.WaitForResponse
+    // Port of dittoPinger.WaitForResponse.
     private async Task WaitForResponseAsync(long pingId, DateTimeOffset start, Task<IncomingRpc> wait, CancellationTokenSource waitCts, TimeSpan timeout, PingResetter reset, CancellationToken ct)
     {
         using (waitCts)
@@ -244,19 +248,19 @@ internal sealed partial class DittoPinger(
             Task timer = Task.Delay(timeout, time, waitCts.Token);
             Task first = await Task.WhenAny(wait, timer, reset.Task).ConfigureAwait(false);
 
-            // Stop Waiting (Cancels The Waiter And The Timer); A Late Answer Still Counts Through OnPhoneActivity
+            // Stop the wait. This cancels the waiter and the timer. A late answer still counts through OnPhoneActivity.
             await waitCts.CancelAsync().ConfigureAwait(false);
 
-            // Observe A Faulted Wait (Connection Closed), Now Or Later, So It Is Never An Unobserved Task Exception
+            // Observe a faulted wait now or later, so that a closed connection never gives an unobserved task exception.
             _ = wait.ContinueWith(static t => _ = t.Exception, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
             if (ct.IsCancellationRequested)
             {
                 return;
             }
 
-            // Note: A Faulted Waiter (Connection Closed) Is Not An Answer. Go's `<-ping.ch` reads a closed channel as
-            // one, but that is accidental: session_handler.go:215-217 treats a closed channel as ErrConnectionClosed,
-            // and client.go:383 closes the waiters precisely because no answer can arrive any more.
+            // A faulted waiter after a closed connection is not an answer. Go reads a closed channel in <-ping.ch as an
+            // answer. That is an accident: session_handler.go lines 215 to 217 treat a closed channel as
+            // ErrConnectionClosed. client.go line 383 closes the waiters because no answer can arrive any more.
             if (first == wait && wait.IsCompletedSuccessfully)
             {
                 OnRespond(pingId, time.GetUtcNow() - start, reset);
@@ -305,7 +309,7 @@ internal sealed partial class DittoPinger(
         }
     }
 
-    // Port Of dittoPinger.recoveryLoop: Re-Ping On Doubling Intervals, Escalating To Re-Arm, Then Reconnect
+    // Port of dittoPinger.recoveryLoop. It pings again on doubling intervals, then re-arms, then reconnects.
     private async Task RecoveryLoopAsync(PingResetter reset)
     {
         CancellationToken ct = _stopToken;
@@ -325,7 +329,6 @@ internal sealed partial class DittoPinger(
                     return;
                 }
 
-                // Escalate
                 bool reconnected = false;
                 if (timeouts >= ReconnectAfterTimeouts && liveness.CanDoRecovery())
                 {
@@ -359,11 +362,11 @@ internal sealed partial class DittoPinger(
         }
         catch (Exception) when (ct.IsCancellationRequested)
         {
-            // Stopped: Whatever Failed, It Is Not A Recovery Failure
+            // During a stop, a failure is not a recovery failure.
         }
         catch (Exception ex)
         {
-            // Go: A Failed Reconnect Ends Recovery
+            // As in Go, a failed reconnect ends the recovery.
             LogRecoveryFailed(log, ex);
         }
         finally
@@ -376,7 +379,7 @@ internal sealed partial class DittoPinger(
     // HELPERS
     // =========================================================================
 
-    // Waits For The Delay Or The Other Task; True When The Delay Elapsed First
+    // Waits for the delay or the other task. Returns true when the delay ends first.
     private async Task<bool> DelayOrAsync(TimeSpan delay, Task other, CancellationToken ct)
     {
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -386,17 +389,7 @@ internal sealed partial class DittoPinger(
         return first == timer && timer.IsCompletedSuccessfully;
     }
 
-    private void Raise(object evt)
-    {
-        try
-        {
-            EventRaised?.Invoke(evt);
-        }
-        catch (Exception ex)
-        {
-            ProtocolLog.LogHandlerFailed(log, ex, evt.GetType().Name);
-        }
-    }
+    private void Raise(object evt) => ProtocolLog.Raise(log, EventRaised, evt);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Skipping ping {PingId} since last one was too recently")]
     private static partial void LogPingSkipped(ILogger logger, long pingId);

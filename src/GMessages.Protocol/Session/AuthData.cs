@@ -1,4 +1,5 @@
 using GMessages.Protocol.Crypto;
+using GMessages.Protocol.Http;
 using GMessages.Protocol.Proto;
 
 namespace GMessages.Protocol.Session;
@@ -9,23 +10,21 @@ namespace GMessages.Protocol.Session;
 /// <remarks>
 /// Ports <c>AuthData</c> from
 /// <see href="https://github.com/mautrix/gmessages/blob/ba33f4875a491f5cb47db8a6baf42a8869f5f383/pkg/libgm/client.go">client.go</see>.
-/// An account with a non-empty <see cref="DestRegId"/> is a Google account (paired by signing in); otherwise it is a
-/// QR-paired session with no cookies. Where Go stores <c>uuid.UUID</c> bytes, this class uses <see cref="Guid"/> and
-/// persistence uses RFC 4122 byte order. Everything in here is secret and must never be logged.
+/// An account with a non-empty <see cref="DestRegId"/> is a Google account, paired by a sign-in. Any other account
+/// is a QR-paired session with no cookies. Where Go stores <c>uuid.UUID</c> bytes, this class uses
+/// <see cref="Guid"/>. The saved file uses RFC 4122 byte order. All of this data is secret and must never go in a log.
 /// </remarks>
 public sealed class AuthData
 {
-    private const string GoogleNetwork = "GDitto";
-
     private TachyonToken _tachyon = TachyonToken.None;
 
     /// <summary>
-    /// Gets or sets the keys used to encrypt communication with the phone.
+    /// Gets or sets the keys that encrypt the communication with the phone.
     /// </summary>
     public required AesCtrHelper RequestCrypto { get; set; }
 
     /// <summary>
-    /// Gets or sets the key used to sign requests that refresh the Tachyon token.
+    /// Gets or sets the key that signs the requests that refresh the Tachyon token.
     /// </summary>
     public required RefreshKey RefreshKey { get; set; }
 
@@ -40,7 +39,7 @@ public sealed class AuthData
     public Device? Mobile { get; set; }
 
     /// <summary>
-    /// Gets the token used to authenticate with the server, or null when not paired.
+    /// Gets the token that authenticates with the server, or null when not paired.
     /// </summary>
     /// <remarks>Part of <see cref="Tachyon"/>.</remarks>
     public byte[]? TachyonAuthToken
@@ -50,7 +49,7 @@ public sealed class AuthData
     }
 
     /// <summary>
-    /// Gets when the Tachyon token expires; <c>default</c> means unset.
+    /// Gets when the Tachyon token expires. <c>default</c> means not set.
     /// </summary>
     /// <remarks>Part of <see cref="Tachyon"/>.</remarks>
     public DateTimeOffset TachyonExpiry
@@ -73,9 +72,9 @@ public sealed class AuthData
     /// Gets or sets the Tachyon token, its expiry and its TTL as one value.
     /// </summary>
     /// <remarks>
-    /// C#-only. The three parts are swapped in a single write with a memory barrier, so a save or request running on
-    /// another thread at the same time sees either the old token or the new one, never a mix (ARM64 included). Write
-    /// tokens through this property; it swaps all three parts at once.
+    /// C#-only. A single write with a memory barrier swaps the 3 parts. Thus a save or a request on a different thread
+    /// sees the old token or the new token. It never sees a mix. This is also true on ARM64. Write tokens through this
+    /// property, because it swaps all 3 parts at once.
     /// </remarks>
     public TachyonToken Tachyon
     {
@@ -84,7 +83,7 @@ public sealed class AuthData
     }
 
     /// <summary>
-    /// Gets or sets an unknown encryption key the server sends; Go keeps it but never uses it.
+    /// Gets or sets an unknown encryption key that the server sends. Go keeps it but never uses it.
     /// </summary>
     public byte[]? WebEncryptionKey { get; set; }
 
@@ -94,7 +93,7 @@ public sealed class AuthData
     public Guid SessionId { get; set; }
 
     /// <summary>
-    /// Gets or sets the destination registration ID; non-empty means a Google account.
+    /// Gets or sets the destination registration ID. A non-empty value means a Google account.
     /// </summary>
     public Guid DestRegId { get; set; }
 
@@ -109,7 +108,7 @@ public sealed class AuthData
     public Guid PairingId { get; set; }
 
     /// <summary>
-    /// Gets the account cookies. An unset jar means "no cookies".
+    /// Gets the account cookies. A jar that is not set means "no cookies".
     /// </summary>
     public CookieJar Cookies { get; } = new();
 
@@ -119,22 +118,22 @@ public sealed class AuthData
     public bool IsGoogleAccount => DestRegId != Guid.Empty;
 
     /// <summary>
-    /// Gets the network name for this account: <c>GDitto</c> for Google accounts, otherwise empty.
+    /// Gets the network name of the account: <c>GDitto</c> for a Google account, otherwise empty.
     /// </summary>
-    public string AuthNetwork => IsGoogleAccount ? GoogleNetwork : "";
+    public string AuthNetwork => IsGoogleAccount ? GmConstants.GoogleNetwork : "";
 
     /// <summary>
     /// Gets whether the account has the cookies it needs.
     /// </summary>
     /// <remarks>
-    /// Mirrors Go exactly: non-Google accounts never need cookies, so this is true for them.
+    /// The same as Go. An account that is not a Google account never needs cookies, so the value is true for it.
     /// </remarks>
     public bool HasCookies => !IsGoogleAccount || Cookies.HasCookies;
 
     /// <summary>
-    /// Creates auth data with fresh random keys and nothing else.
+    /// Creates auth data with new random keys and nothing else.
     /// </summary>
-    /// <remarks>Mirrors <c>NewAuthData</c>.</remarks>
+    /// <remarks>Ported from <c>NewAuthData</c>.</remarks>
     /// <returns>A new instance.</returns>
     public static AuthData CreateNew() => new()
     {
@@ -143,29 +142,9 @@ public sealed class AuthData
     };
 
     /// <summary>
-    /// Makes auth data for pairing again: cookies and <see cref="DestPhoneId"/> are kept, everything else is new.
+    /// Clears the pairing: devices, token, expiry, TTL, web key and pairing ID. It keeps the keys, the other IDs and the cookies.
     /// </summary>
-    /// <remarks>
-    /// Mirrors <c>CopyForRepair</c>. The keys are newly generated, so the old pairing cannot be reused. A jar that was
-    /// never set stays unset.
-    /// </remarks>
-    /// <returns>A new instance.</returns>
-    public AuthData CopyForRepair()
-    {
-        AuthData copy = CreateNew();
-        if (Cookies.HasCookies)
-        {
-            copy.Cookies.Set(Cookies.Snapshot());
-        }
-
-        copy.DestPhoneId = DestPhoneId;
-        return copy;
-    }
-
-    /// <summary>
-    /// Clears the pairing (devices, token, expiry, TTL, web key and pairing ID) but keeps keys, IDs and cookies.
-    /// </summary>
-    /// <remarks>Mirrors <c>ClearPairing</c>.</remarks>
+    /// <remarks>Ported from <c>ClearPairing</c>.</remarks>
     public void ClearPairing()
     {
         Browser          = null;
@@ -177,16 +156,16 @@ public sealed class AuthData
 }
 
 /// <summary>
-/// The Tachyon auth token with its expiry and lifetime, kept together so they always match.
+/// The Tachyon auth token with its expiry and lifetime. They stay together, so they always match.
 /// </summary>
 /// <remarks>
-/// C#-only: Go stores the three as separate <c>AuthData</c> fields in
+/// C#-only. Go stores the 3 values as separate <c>AuthData</c> fields in
 /// <see href="https://github.com/mautrix/gmessages/blob/ba33f4875a491f5cb47db8a6baf42a8869f5f383/pkg/libgm/client.go">client.go</see>
-/// and guards them with the client's lock. Here one immutable value is swapped instead. The token is secret and must
-/// never be logged; the record's generated <c>ToString</c> is overridden to leave it out.
+/// and guards them with the lock of the client. Here the code swaps 1 immutable value. The token is secret and must
+/// never go in a log. Thus this record overrides the generated <c>ToString</c> to leave out the token.
 /// </remarks>
 /// <param name="Token">The token, or null when not paired.</param>
-/// <param name="Expiry">When the token expires; <c>default</c> means unset.</param>
+/// <param name="Expiry">When the token expires. <c>default</c> means not set.</param>
 /// <param name="TtlMicros">The token lifetime in microseconds.</param>
 public sealed record TachyonToken(byte[]? Token, DateTimeOffset Expiry, long TtlMicros)
 {
@@ -196,6 +175,6 @@ public sealed record TachyonToken(byte[]? Token, DateTimeOffset Expiry, long Ttl
     /// <summary>
     /// Describes the value without the token.
     /// </summary>
-    /// <returns>The expiry and TTL, and whether a token is set.</returns>
+    /// <returns>The expiry, the TTL and whether a token is set.</returns>
     public override string ToString() => $"TachyonToken {{ HasToken = {Token is not null}, Expiry = {Expiry:O}, TtlMicros = {TtlMicros} }}";
 }

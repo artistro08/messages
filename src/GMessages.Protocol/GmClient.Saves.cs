@@ -3,18 +3,10 @@ using GMessages.Protocol.Events;
 namespace GMessages.Protocol;
 
 /// <summary>
-/// Session saves: writing the session file after a cookie or token change, on a timer that can be suspended.
+/// The session save part of <see cref="GmClient"/>. It writes the session file after a cookie or token change, on a timer that can stop.
 /// </summary>
-/// <remarks>
-/// Part of <see cref="GmClient"/>; the other members are in GmClient.cs.
-/// </remarks>
 public sealed partial class GmClient
 {
-
-    // =========================================================================
-    // SESSION SAVES
-    // =========================================================================
-
     private void OnCookiesChanged(object? sender, EventArgs e) => RequestSave();
 
     private void OnRefresherEvent(object evt)
@@ -25,7 +17,7 @@ public sealed partial class GmClient
         }
     }
 
-    // Saves Now When The Last Save Started 5 s Ago Or More; Otherwise Once At The End Of That Window
+    // The save runs now when the last save started 5 seconds ago or more. Otherwise it runs at the end of that window.
     private void RequestSave()
     {
         lock (_saveLock)
@@ -66,7 +58,7 @@ public sealed partial class GmClient
         WriteSession();
     }
 
-    // Saves Right Away, Closing Any Open Window (After Pairing, And The Flush On Dispose)
+    // The save runs at once and closes an open window. Pairing and dispose use it.
     private void SaveNow()
     {
         lock (_saveLock)
@@ -79,13 +71,13 @@ public sealed partial class GmClient
         WriteSession();
     }
 
-    // One Writer At A Time; A Failure Is Logged And Raised (Outside The Lock), Never Thrown (It May Run On A Timer Thread)
+    // The method can run on a timer thread, so it never throws. It logs a failure and raises it outside the lock.
     private void WriteSession()
     {
         Exception? failure = null;
         lock (_writeLock)
         {
-            // An Immediate Save That Raced The Pairing Pause Must Not Write Mid-Pairing
+            // An immediate save can race the pairing pause. It must not write during the pairing.
             if (Volatile.Read(ref _savesStopped) || Volatile.Read(ref _savesSuspended))
             {
                 return;
@@ -109,7 +101,7 @@ public sealed partial class GmClient
         }
     }
 
-    // Pausing Also Drops An Open Window, So Nothing Saved Before Pairing Is Written Mid-Pairing
+    // The pause also drops an open window, so a save from before the pairing cannot write during the pairing.
     private void SetSavesSuspended(bool suspended)
     {
         lock (_saveLock)

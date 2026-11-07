@@ -3,7 +3,7 @@ namespace GMessages.Protocol.Tests.Fakes;
 /// <summary>
 /// A response body that returns some bytes, then stays open until <see cref="End"/> or cancellation.
 /// </summary>
-/// <remarks>Test-only. Stands in for a long-poll connection that is open but quiet.</remarks>
+/// <remarks>Stands in for a long-poll connection that is open but quiet.</remarks>
 /// <param name="initial">The bytes to return first.</param>
 internal sealed class OpenStream(byte[] initial) : Stream
 {
@@ -29,14 +29,14 @@ internal sealed class OpenStream(byte[] initial) : Stream
     /// <inheritdoc/>
     public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
 
-    /// <summary>Completes once the reader has taken the initial bytes and waits for more.</summary>
+    /// <summary>Gets a task that completes when the reader has taken the initial bytes and waits for more.</summary>
     public Task Waiting => _reading.Task;
 
     /// <summary>
     /// Hands more bytes to the reader.
     /// </summary>
-    /// <param name="bytes">The bytes; must fit in one read.</param>
-    /// <returns>A task that completes once the reader has taken them and started its next read (idle timer reset).</returns>
+    /// <param name="bytes">The bytes. They must fit in one read.</param>
+    /// <returns>A task that completes when the reader has taken the bytes and started its next read. At that point the reader has reset its idle timer.</returns>
     public Task Push(byte[] bytes)
     {
         var taken = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -49,13 +49,13 @@ internal sealed class OpenStream(byte[] initial) : Stream
         return taken.Task;
     }
 
-    /// <summary>Ends the stream: pending and later reads return 0.</summary>
+    /// <summary>Ends the stream. Pending and later reads return 0.</summary>
     public void End() => _ended.TrySetResult();
 
     /// <inheritdoc/>
     public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
     {
-        // A New Read Means The Reader Is Done With The Last Bytes And Has Reset Its Idle Timer
+        // A new read means the reader has finished with the last bytes and has reset its idle timer.
         _takenPending?.TrySetResult();
         _takenPending = null;
         if (_position < initial.Length)

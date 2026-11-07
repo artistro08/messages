@@ -18,12 +18,12 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace GMessages.Protocol.Tests.Auth;
 
 /// <summary>
-/// Checks <see cref="TokenRefresher"/> against Go's <c>refreshAuthToken</c>, using <c>refresh.json</c>.
+/// Checks <see cref="TokenRefresher"/> against the Go <c>refreshAuthToken</c> with <c>refresh.json</c>.
 /// </summary>
 /// <remarks>
-/// The refresh request carries a random request ID, the current time and a random ECDSA signature. Go's signature is
-/// verified with the golden public key; then those three fields are copied from Go's request into the C# one before
-/// comparing the rest exactly. The C# signature is verified on its own.
+/// The refresh request holds a random request ID, the current time and a random ECDSA signature. The test verifies
+/// the Go signature with the golden public key. Then it copies those 3 fields from the Go request into the C# request.
+/// After that, it compares the rest exactly. It verifies the C# signature separately.
 /// See <see href="https://github.com/mautrix/gmessages/blob/ba33f4875a491f5cb47db8a6baf42a8869f5f383/pkg/libgm/client.go"/>.
 /// </remarks>
 [TestClass]
@@ -57,7 +57,7 @@ public class TokenRefresherTests
     }
 
     /// <summary>
-    /// At 30 minutes left, the request matches Go's once the random fields are copied, and both signatures verify.
+    /// With 30 minutes left, the request is the same as the Go request after the copy of the random fields. Both signatures verify.
     /// </summary>
     [TestMethod]
     public async Task Refresh_RequestMatchesGo_AndGoSignatureVerifies()
@@ -73,7 +73,7 @@ public class TokenRefresherTests
         Assert.IsTrue(Verifies(rig.Auth, csReq), "C# signature");
         Assert.AreEqual(rig.Time.GetUtcNow().ToUnixTimeMilliseconds() * 1000, csReq.UnixTimestamp);
 
-        // Normalize Request ID, Timestamp And Signature
+        // The request ID, the timestamp and the signature are random, so the test copies them from Go.
         csReq.MessageAuth.RequestID = goReq.MessageAuth.RequestID;
         csReq.UnixTimestamp         = goReq.UnixTimestamp;
         csReq.Signature             = goReq.Signature;
@@ -82,8 +82,8 @@ public class TokenRefresherTests
     }
 
     /// <summary>
-    /// A refresh stores the token, expiry and TTL as one new value (C#-only: one swap, so a concurrent save can't
-    /// tear them), and that value's text never shows the token.
+    /// A refresh stores the token, expiry and TTL as 1 new value. The text of that value never shows the token.
+    /// This check is C#-only. The refresher does 1 swap, so a concurrent save cannot tear the values.
     /// </summary>
     [TestMethod]
     public async Task Refresh_SwapsTokenExpiryAndTtlAsOneValue()
@@ -103,7 +103,7 @@ public class TokenRefresherTests
     }
 
     /// <summary>
-    /// At 2 hours left nothing is sent, as in Go.
+    /// With 2 hours left, the refresher sends nothing, as in Go.
     /// </summary>
     [TestMethod]
     public async Task Refresh_NotNeededAt2h_NoRequest()
@@ -117,7 +117,7 @@ public class TokenRefresherTests
     }
 
     /// <summary>
-    /// TTL 0 means 24 hours; any other TTL is used as is. Expiry, TTL, token and event match Go.
+    /// A TTL of 0 means 24 hours. The refresher uses each other TTL without a change. The expiry, TTL, token and event are the same as in Go.
     /// </summary>
     [TestMethod]
     public async Task Refresh_TtlHandling_MatchesGo()
@@ -138,7 +138,7 @@ public class TokenRefresherTests
     }
 
     /// <summary>
-    /// A refresh logs the new expiry and TTL, never the token or its base64.
+    /// A refresh writes the new expiry and TTL to the log, but never the token or its base64.
     /// </summary>
     [TestMethod]
     public async Task Refresh_LogsExpiryAndTtl_NeverToken()
@@ -158,7 +158,7 @@ public class TokenRefresherTests
     }
 
     /// <summary>
-    /// A refused refresh logs the error type and the HTTP status.
+    /// A refused refresh writes the error type and the HTTP status to the log.
     /// </summary>
     [TestMethod]
     public async Task Refresh_Failure_LogsStatus()
@@ -173,7 +173,7 @@ public class TokenRefresherTests
     }
 
     /// <summary>
-    /// The same failures Go sees are fatal (or not) here too.
+    /// Each failure is fatal here exactly when it is fatal in Go.
     /// </summary>
     [TestMethod]
     public async Task IsFatal_MatchesGo()
@@ -187,7 +187,7 @@ public class TokenRefresherTests
                 ? throw new HttpRequestException("golden network error")
                 : FakeHttpHandler.Response((HttpStatusCode)status, c.GetProperty("contentType").GetString() is { Length: > 0 } ct ? ct : null, Golden.Hex(c.GetProperty("bodyHex")));
 
-            // 5xx Is Retried With Waits On The Fake Clock; Advance Past Each One
+            // The client retries a 5xx with waits on the fake clock. The test moves the clock past each wait.
             Task refresh = rig.Refresher.RefreshIfNeededAsync(CancellationToken.None);
             for (int i = 0; !refresh.IsCompleted && i < 200; i++)
             {

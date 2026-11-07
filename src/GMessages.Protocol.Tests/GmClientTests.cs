@@ -21,11 +21,11 @@ namespace GMessages.Protocol.Tests;
 /// Checks how <see cref="GmClient"/> wires connect, pairing, unpairing and session saving together.
 /// </summary>
 /// <remarks>
-/// <c>Connect_RequestOrderAndBodies_MatchGo</c> compares with <c>connect.json</c>, which records what Go's
-/// <c>Connect()</c> sends up to <c>postConnect</c>'s <c>GET_UPDATES</c>. Before comparing, the C# test copies Go's
-/// random values over its own: the refresh request ID, timestamp and signature, the listen request ID and the
-/// session ID. The other tests are C#-only: the behavior was read from <c>Connect</c>, <c>Unpair</c>,
-/// <c>DoGaiaPairing</c> and the owner's 5 second save debounce, and is driven by a fake clock.
+/// <c>Connect_RequestOrderAndBodies_MatchGo</c> compares with <c>connect.json</c>. That file records what the Go
+/// <c>Connect()</c> sends up to the <c>GET_UPDATES</c> of <c>postConnect</c>. The test first copies the random values
+/// from Go over the C# values: the refresh request ID, timestamp and signature, the listen request ID and the
+/// session ID. The other tests have no Go golden file. Their expected behavior comes from <c>Connect</c>,
+/// <c>Unpair</c>, <c>DoGaiaPairing</c> and the 5 second save debounce that the owner chose. A fake clock drives them.
 /// See <see href="https://github.com/mautrix/gmessages/blob/ba33f4875a491f5cb47db8a6baf42a8869f5f383/pkg/libgm/client.go"/>.
 /// </remarks>
 [TestClass]
@@ -49,7 +49,7 @@ public class GmClientTests
 
         public List<object> Events { get; } = [];
 
-        // Answer For A Request, Or Null For The Default (An Open Quiet Stream For The Long Poll, "[]" Otherwise)
+        // The answer for a request, or null for the default. The default is an open quiet stream for the long poll and "[]" for other requests.
         public Func<RecordedRequest, HttpResponseMessage?>? Respond { get; set; }
 
         public SessionStore Store => new(SessionPath);
@@ -102,8 +102,8 @@ public class GmClientTests
     // =========================================================================
 
     /// <summary>
-    /// Connect sends the token refresh, opens the long poll, then (after 2 s and 1 s) sends GET_UPDATES, exactly as
-    /// Go's Connect does once the random values are copied.
+    /// Connect sends the token refresh and opens the long poll. After 2 s and 1 s it sends GET_UPDATES. This is
+    /// exactly what the Go Connect does after the test copies the random values.
     /// </summary>
     [TestMethod]
     public async Task Connect_RequestOrderAndBodies_MatchGo()
@@ -133,7 +133,7 @@ public class GmClientTests
 
         await rig.Client.ConnectAsync(CancellationToken.None).WaitAsync(HangGuard);
 
-        // Post-Connect Waits: 2 s, Then 1 s
+        // The post-connect waits are 2 s, then 1 s.
         WaitUntil(() => rig.Time.CountTimers(TimeSpan.FromSeconds(2)) > 0, "2 s post-connect wait");
         rig.Time.Advance(TimeSpan.FromSeconds(2));
         WaitUntil(() => rig.Time.CountTimers(TimeSpan.FromSeconds(1)) > 0, "1 s post-connect wait");
@@ -141,7 +141,6 @@ public class GmClientTests
         WaitUntil(() => rig.Requests("/SendMessage").Length > 0, "GET_UPDATES");
         Assert.IsTrue(rig.Client.IsConnected);
 
-        // Same Order And URLs
         RecordedRequest[] sent;
         lock (rig.Handler.Requests)
         {
@@ -155,7 +154,7 @@ public class GmClientTests
             Assert.AreEqual(goReqs[i].GetProperty("method").GetString(), sent[i].Method.Method, $"request {i} method");
         }
 
-        // Refresh: Copy The Request ID, Timestamp And Signature (Signature Checks Live In The Refresh Tests)
+        // Copy the request ID, timestamp and signature of the refresh. The refresh tests check the signature.
         string goRefreshText    = goReqs[0].GetProperty("bodyText").GetString()!;
         var goRefresh           = PbLiteSerializer.Deserialize<RegisterRefreshRequest>(Encoding.UTF8.GetBytes(goRefreshText));
         var csRefresh           = PbLiteSerializer.Deserialize<RegisterRefreshRequest>(sent[0].Body);
@@ -164,14 +163,12 @@ public class GmClientTests
         csRefresh.Signature             = goRefresh.Signature;
         Assert.AreEqual(goRefreshText, Text(csRefresh), "refresh body");
 
-        // Long Poll: Copy The Listen Request ID
         string goReceiveText   = goReqs[1].GetProperty("bodyText").GetString()!;
         var goReceive          = PbLiteSerializer.Deserialize<ReceiveMessagesRequest>(Encoding.UTF8.GetBytes(goReceiveText));
         var csReceive          = PbLiteSerializer.Deserialize<ReceiveMessagesRequest>(sent[1].Body);
         csReceive.Auth.RequestID = goReceive.Auth.RequestID;
         Assert.AreEqual(goReceiveText, Text(csReceive), "long poll body (new token)");
 
-        // GET_UPDATES: Copy The Session ID
         var csSend   = PbLiteSerializer.Deserialize<OutgoingRPCMessage>(sent[2].Body);
         var inner    = OutgoingRPCData.Parser.ParseFrom(csSend.Data.MessageData);
         Assert.AreEqual(rig.Client.Rpc.SessionId, inner.RequestID, "request ID is the new session ID");
@@ -203,7 +200,7 @@ public class GmClientTests
     }
 
     /// <summary>
-    /// A session with a browser and cookies but no Tachyon token fails with "No auth token." before sending anything.
+    /// A session with a browser and cookies but no Tachyon token fails with "No auth token." before it sends anything.
     /// </summary>
     [TestMethod]
     public async Task Connect_NoToken_Throws()
@@ -219,7 +216,7 @@ public class GmClientTests
     }
 
     /// <summary>
-    /// Without a browser device (never paired), connect fails before sending anything, as Go's checkLoggedIn does.
+    /// Without a browser device (never paired), connect fails before it sends anything, as the Go checkLoggedIn does.
     /// </summary>
     [TestMethod]
     public async Task Connect_NotLoggedIn_Throws()
@@ -252,8 +249,8 @@ public class GmClientTests
     }
 
     /// <summary>
-    /// Two connects at once start exactly one long poll run (one ack timer). The second may make that run reconnect
-    /// once, depending on whether it lands before or after the first stream opens.
+    /// Two connects at once start exactly one long poll run (one ack timer). The second connect can make that run
+    /// reconnect once. This depends on whether it arrives before or after the first stream opens.
     /// </summary>
     [TestMethod]
     public async Task Connect_Concurrent_StartsOneLongPoll()
@@ -268,8 +265,8 @@ public class GmClientTests
     }
 
     /// <summary>
-    /// Connect while the long poll is running makes that run reconnect once, right away, instead of starting a
-    /// second run; the token is not refreshed twice.
+    /// A connect while the long poll runs makes that run reconnect once, at once. It does not start a second run.
+    /// The client does not refresh the token twice.
     /// </summary>
     [TestMethod]
     public async Task Connect_WhileRunning_ReconnectsOnce()
@@ -292,8 +289,8 @@ public class GmClientTests
     }
 
     /// <summary>
-    /// A request that waits for the phone fails at once with <see cref="ConnectionClosedException"/> when not
-    /// connected, instead of waiting 60 seconds and blaming the phone; nothing is sent (C#-only).
+    /// A request that waits for the phone fails at once with <see cref="ConnectionClosedException"/> when the client
+    /// is not connected. It does not wait 60 seconds and blame the phone. The client sends nothing. Go has no such test.
     /// </summary>
     [TestMethod]
     public async Task SendWhileDisconnected_FailsFastWithConnectionClosed()
@@ -308,7 +305,7 @@ public class GmClientTests
     }
 
     /// <summary>
-    /// Connect, disconnect, connect again opens a second long poll; after dispose, connect throws.
+    /// Connect, disconnect and connect again open a second long poll. After dispose, connect throws.
     /// </summary>
     [TestMethod]
     public async Task Connect_Disconnect_Connect_Reconnects()
@@ -333,8 +330,8 @@ public class GmClientTests
     // =========================================================================
 
     /// <summary>
-    /// The first cookie change saves right away; changes inside the next 5 s are saved once, at the end of that
-    /// window; a change right after that save waits for a new window and is flushed on dispose.
+    /// The first cookie change saves at once. The client saves changes in the next 5 s once, at the end of that
+    /// window. A change right after that save waits for a new window, and dispose flushes it.
     /// </summary>
     [TestMethod]
     public async Task CookieChange_SavesSessionDebounced()
@@ -353,7 +350,7 @@ public class GmClientTests
         rig.Time.Advance(TimeSpan.FromMilliseconds(1));
         Assert.AreEqual("newest-sid", rig.Store.Load()!.Cookies.Snapshot()["SID"], "saved at the end of the window");
 
-        // A Change Right After That Save Waits For A New Window; Dispose Flushes It
+        // A change right after that save waits for a new window. Dispose flushes it.
         rig.Auth.Cookies.UpdateFrom(FakeHttpHandler.Response(HttpStatusCode.OK, setCookies: "SID=final-sid; Path=/"));
         Assert.AreEqual("newest-sid", rig.Store.Load()!.Cookies.Snapshot()["SID"], "waits for a new window");
         await rig.Client.DisposeAsync();
@@ -362,7 +359,7 @@ public class GmClientTests
 
     /// <summary>
     /// Dispose still writes a pending debounced save when the background ack flush fails with a non-cancel error
-    /// (the aborted socket) while the long poll stops, and does not throw.
+    /// while the long poll stops. The error is an aborted socket. Dispose does not throw.
     /// </summary>
     [TestMethod]
     public async Task Dispose_BackgroundFlushThrowsDuringStop_StillWritesPendingSave()
@@ -372,7 +369,7 @@ public class GmClientTests
             ? new HttpResponseMessage(HttpStatusCode.OK) { Content = new StreamContent(new FailOnCancelStream()) }
             : null;
 
-        // Connect And Let postConnect Finish (2 s, 1 s, GET_UPDATES)
+        // Let postConnect finish: 2 s, 1 s, then GET_UPDATES.
         await rig.Client.ConnectAsync(CancellationToken.None).WaitAsync(HangGuard);
         WaitUntil(() => rig.Time.CountTimers(TimeSpan.FromSeconds(2)) > 0, "2 s post-connect wait");
         rig.Time.Advance(TimeSpan.FromSeconds(2));
@@ -380,12 +377,11 @@ public class GmClientTests
         rig.Time.Advance(TimeSpan.FromSeconds(1));
         WaitUntil(() => rig.Requests("/SendMessage").Length > 0, "GET_UPDATES");
 
-        // The Ack Timer's Flush Hangs Until Canceled, Then Fails With An IOException
+        // The flush of the ack timer hangs until canceled, then fails with an IOException.
         rig.Client.Rpc.QueueAck("ack-1");
         rig.Time.Advance(TimeSpan.FromSeconds(2));
         WaitUntil(() => rig.Requests("/AckMessages").Length == 1, "ack flush in flight");
 
-        // A Pending Debounced Save
         rig.Auth.Cookies.UpdateFrom(FakeHttpHandler.Response(HttpStatusCode.OK, setCookies: "SID=first-sid; Path=/"));
         rig.Auth.Cookies.UpdateFrom(FakeHttpHandler.Response(HttpStatusCode.OK, setCookies: "SID=pending-sid; Path=/"));
         Assert.AreEqual("first-sid", rig.Store.Load()!.Cookies.Snapshot()["SID"], "only the first change is saved so far");
@@ -396,7 +392,7 @@ public class GmClientTests
         Assert.IsFalse(rig.Client.IsConnected);
     }
 
-    // A Body That Waits Until The Read Is Canceled, Then Fails Like An Aborted Socket
+    // A body that waits until the caller cancels the read, then fails like an aborted socket.
     private sealed class FailOnCancelStream : Stream
     {
         public override bool CanRead => true;
@@ -439,7 +435,7 @@ public class GmClientTests
     }
 
     /// <summary>
-    /// A failed save raises <see cref="SessionSaveFailed"/> with only the exception's type name, and is not thrown.
+    /// A failed save raises <see cref="SessionSaveFailed"/> with only the type name of the exception. The save does not throw.
     /// </summary>
     [TestMethod]
     public async Task SaveFails_RaisesSessionSaveFailed()
@@ -457,7 +453,7 @@ public class GmClientTests
     }
 
     /// <summary>
-    /// A change that arrives while a save is being written leads to a second save at the end of the window.
+    /// A change that arrives during a save leads to a second save at the end of the window.
     /// </summary>
     [TestMethod]
     public async Task ChangeDuringInFlightSave_SavesAgain()
@@ -489,7 +485,7 @@ public class GmClientTests
     // =========================================================================
 
     /// <summary>
-    /// Unpair sends Go's UNPAIR_GAIA_PAIRING request and deletes the saved session.
+    /// Unpair sends the Go UNPAIR_GAIA_PAIRING request and deletes the saved session.
     /// </summary>
     [TestMethod]
     public async Task Unpair_SendsUnpairGaia_AndDeletesSessionFile()
@@ -504,19 +500,18 @@ public class GmClientTests
         Assert.IsFalse(File.Exists(rig.SessionPath));
         Assert.IsFalse(rig.Client.IsLoggedIn, "pairing cleared in memory");
 
-        // The Client Is Finished
         await Assert.ThrowsExactlyAsync<ObjectDisposedException>(() => rig.Client.ConnectAsync(CancellationToken.None));
         await Assert.ThrowsExactlyAsync<ObjectDisposedException>(() => rig.Client.PairAsync(_ => { }, CancellationToken.None));
         await Assert.ThrowsExactlyAsync<ObjectDisposedException>(() => rig.Client.UnpairAsync(CancellationToken.None));
 
-        // No Later Change Brings The File Back
+        // A later cookie change must not write the session file again.
         rig.Auth.Cookies.UpdateFrom(FakeHttpHandler.Response(HttpStatusCode.OK, setCookies: "SID=late-sid; Path=/"));
         rig.Time.Advance(GmClient.SaveDebounce);
         Assert.IsFalse(File.Exists(rig.SessionPath));
     }
 
     /// <summary>
-    /// When the server refuses the unpair request, the local session is still removed and the error is rethrown.
+    /// When the server refuses the unpair request, the client still removes the local session and rethrows the error.
     /// </summary>
     [TestMethod]
     public async Task Unpair_ServerFails_StillDeletesSessionAndRethrows()
@@ -533,7 +528,7 @@ public class GmClientTests
     }
 
     /// <summary>
-    /// A session file that can't be deleted (locked) does not hide the server's error or skip clearing the pairing.
+    /// A locked session file that the client cannot delete does not hide the server error. The client still clears the pairing.
     /// </summary>
     [TestMethod]
     public async Task Unpair_DeleteFails_StillRethrowsServerErrorAndClearsPairing()
@@ -551,8 +546,8 @@ public class GmClientTests
     }
 
     /// <summary>
-    /// Pairing fetches the config, shows the emoji, finishes, stops and awaits the pairing long poll, saves the
-    /// session, raises <see cref="PairSuccessful"/> and reconnects logged in (Go: DoGaiaPairing, then Reconnect).
+    /// Pairing fetches the config, shows the emoji and finishes. It stops the pairing long poll and waits for it,
+    /// saves the session, raises <see cref="PairSuccessful"/> and reconnects logged in. Go does this in DoGaiaPairing, then Reconnect.
     /// </summary>
     [TestMethod]
     public async Task Pair_FinishesSavesAndReconnects()
@@ -605,15 +600,14 @@ public class GmClientTests
             Assert.AreEqual("mixed-case-src/999", rig.Events.OfType<PairSuccessful>().Single().PhoneId);
         }
 
-        // Pairing Poll, Then The Logged-In Poll
         WaitUntil(() => rig.Requests("/ReceiveMessages").Length == 2, "reconnected logged in");
         WaitUntil(() => rig.Client.IsConnected, "connected");
         Assert.IsTrue(rig.Client.IsLoggedIn);
     }
 
     /// <summary>
-    /// A wrong emoji fails the pairing: the half-set pairing is cleared, nothing is saved (not even the cookie change
-    /// that came with the sign-in), and no long poll is left running.
+    /// A wrong emoji fails the pairing. The client clears the half-set pairing and saves nothing, not even the cookie
+    /// change from the sign-in. No long poll keeps running.
     /// </summary>
     [TestMethod]
     public async Task Pair_WrongEmoji_ClearsPairingAndSavesNothing()
@@ -670,8 +664,8 @@ public class GmClientTests
     }
 
     /// <summary>
-    /// Disconnect during the emoji wait cancels the pairing at once (Go: the bridge cancels a login with
-    /// Disconnect): PairAsync fails with a cancellation, the pairing is cleared and no long poll is left running.
+    /// A disconnect during the emoji wait cancels the pairing at once. The Go bridge cancels a login with Disconnect.
+    /// PairAsync fails with a cancellation, the client clears the pairing, and no long poll keeps running.
     /// </summary>
     [TestMethod]
     public async Task Disconnect_DuringEmojiWait_CancelsPairing()
@@ -696,7 +690,7 @@ public class GmClientTests
                 return FakeHttpHandler.Response(HttpStatusCode.OK, PbLiteMime, signInBody);
             }
 
-            // The Phone Answers The Init, Then Stays Quiet (The User Never Taps)
+            // The phone answers the init, then stays quiet. The user never taps.
             if (req.Url.EndsWith("/SendMessage", StringComparison.Ordinal) && ActionOf(req) == ActionType.CreateGaiaPairingClientInit)
             {
                 GaiaPairingTests.Deliver(rig.Client.Rpc, req, serverInit);
@@ -720,8 +714,8 @@ public class GmClientTests
     }
 
     /// <summary>
-    /// The pairing long poll dying during the emoji wait (its reconnect gets a 401) fails PairAsync at once with
-    /// that 401, instead of waiting forever for an answer that can no longer arrive.
+    /// The pairing long poll can end during the emoji wait, because its reconnect gets a 401. PairAsync then fails at
+    /// once with that 401. It does not wait for an answer that cannot arrive.
     /// </summary>
     [TestMethod]
     public async Task Pair_LongPollDiesDuringEmojiWait_FailsWithItsError()
@@ -747,7 +741,7 @@ public class GmClientTests
     }
 
     /// <summary>
-    /// With no answer for 300 seconds (the pairing messages' TTL), PairAsync fails with a timeout and sends a cancel.
+    /// With no answer for 300 seconds (the TTL of the pairing messages), PairAsync fails with a timeout and sends a cancel.
     /// </summary>
     [TestMethod]
     public async Task Pair_NoAnswerIn300s_FailsWithTimeout()
@@ -766,7 +760,7 @@ public class GmClientTests
         AssertPairingCleanedUp(rig);
     }
 
-    // Config, Sign-In And The Init Answer; The Finish Gets No Answer (The User Never Taps)
+    // Answers the config, the sign-in and the init. The finish gets no answer, because the user never taps.
     private static void AnswerUntilEmoji(Rig rig, Func<int, HttpResponseMessage>? receive = null)
     {
         JsonElement signIn  = Golden.Load("signin");
@@ -800,7 +794,7 @@ public class GmClientTests
         };
     }
 
-    // No Pairing Left Behind: Cleared, Not Connected, Nothing Saved, The Attempt Canceled On The Phone
+    // Checks that no pairing remains: it is cleared, the client is not connected, nothing is saved, and the phone has the cancel.
     private static void AssertPairingCleanedUp(Rig rig)
     {
         Assert.IsFalse(rig.Client.IsLoggedIn, "pairing cleared");

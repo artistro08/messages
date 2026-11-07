@@ -13,13 +13,13 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace GMessages.Protocol.Tests;
 
 /// <summary>
-/// Checks the <c>methods.go</c> requests on <see cref="GmClient"/>: what each one sends and what it hands back.
+/// Checks the <c>methods.go</c> requests on <see cref="GmClient"/>: what each one sends and what it returns.
 /// </summary>
 /// <remarks>
-/// C#-only. The expected values (actions, the 1/350/50 contact request, the top contacts count of 8, the annotation on
-/// the first conversation list) were read from methods.go. The client is not connected; the test marks the RPC session
-/// as listening, captures the posted request, decrypts it with the account's keys, and then delivers an encrypted
-/// answer the way the long poll would. See <see href="https://github.com/mautrix/gmessages/blob/ba33f4875a491f5cb47db8a6baf42a8869f5f383/pkg/libgm/methods.go"/>.
+/// These tests have no Go golden file. The expected values come from methods.go: the actions, the 1/350/50 contact
+/// request, the top contacts count of 8, and the annotation on the first conversation list. The client is not
+/// connected. A test marks the RPC session as listening and captures the posted request. It decrypts the request with
+/// the keys of the account. It then delivers an encrypted answer, as the long poll does. See <see href="https://github.com/mautrix/gmessages/blob/ba33f4875a491f5cb47db8a6baf42a8869f5f383/pkg/libgm/methods.go"/>.
 /// </remarks>
 [TestClass]
 public class GmClientMessagingTests
@@ -51,7 +51,7 @@ public class GmClientMessagingTests
         }
     }
 
-    // A Request As The Phone Would See It
+    // A request as the phone sees it.
     private sealed record Sent(OutgoingRPCMessage Message, OutgoingRPCData Data, byte[] Plain)
     {
         public string RequestId => Data.RequestID;
@@ -68,12 +68,12 @@ public class GmClientMessagingTests
         handler.Respond = (_, _) => FakeHttpHandler.Response(HttpStatusCode.OK, "application/json+protobuf", "[]"u8.ToArray());
         var client = GmClient.Create(auth, new SessionStore(path), GmEndpoints.Production, time, NullLoggerFactory.Instance, handler);
 
-        // No Long Poll Here: Answers Are Delivered By Hand
+        // There is no long poll. The tests deliver the answers directly.
         client.Rpc.IsListening = () => true;
         return new Rig { Client = client, Auth = auth, Handler = handler, Time = time, SessionPath = path };
     }
 
-    // Waits For The Nth (Zero-Based) Request, Then Decodes And Decrypts It
+    // Waits for the request at the zero-based index, then decodes and decrypts it.
     private static Sent Captured(Rig rig, int index)
     {
         Assert.IsTrue(SpinWait.SpinUntil(() => rig.RequestCount > index, HangGuard), $"request {index} was not sent");
@@ -89,7 +89,7 @@ public class GmClientMessagingTests
         return new Sent(message, data, rig.Auth.RequestCrypto.Decrypt(data.EncryptedProtoData.Span));
     }
 
-    // Delivers An Encrypted Answer For A Request, As The Long Poll Would
+    // Delivers an encrypted answer for a request, as the long poll does.
     private static void Answer(Rig rig, Sent sent, IMessage response, ActionType? action = null)
     {
         var data = new RPCMessageData
@@ -104,20 +104,18 @@ public class GmClientMessagingTests
     }
 
     /// <summary>
-    /// The first conversation list is sent as an annotation, later ones as normal messages; folder and count are sent.
+    /// The first conversation list goes out as an annotation. Later lists go out as normal messages. Each request carries the folder and the count.
     /// </summary>
     [TestMethod]
     public async Task ListConversations_FirstIsAnnotation_ThenMessage()
     {
         await using Rig rig = CreateRig();
 
-        // First Call
         Task<ListConversationsResponse> first = rig.Client.ListConversationsAsync(ListConversationsRequest.Types.Folder.Inbox, 25, null, CancellationToken.None);
         Sent sentFirst = Captured(rig, 0);
         Answer(rig, sentFirst, new ListConversationsResponse());
         await first.WaitAsync(HangGuard);
 
-        // Second Call
         Task<ListConversationsResponse> second = rig.Client.ListConversationsAsync(ListConversationsRequest.Types.Folder.Inbox, 25, null, CancellationToken.None);
         Sent sentSecond = Captured(rig, 1);
         Answer(rig, sentSecond, new ListConversationsResponse());
@@ -159,7 +157,7 @@ public class GmClientMessagingTests
     }
 
     /// <summary>
-    /// SendMessage is user-initiated: five seconds without an answer raises PhoneSlow once and keeps waiting; the status is returned.
+    /// SendMessage is user-initiated. After 5 seconds without an answer it raises PhoneSlow once and keeps waiting. It returns the status.
     /// </summary>
     [TestMethod]
     public async Task SendMessage_IsUserInitiated_ReturnsStatus()
@@ -171,7 +169,6 @@ public class GmClientMessagingTests
         Task<SendMessageResponse> call = rig.Client.SendMessageAsync(new SendMessageRequest { ConversationID = "c-1", TmpID = "tmp-1" }, CancellationToken.None);
         Sent sent = Captured(rig, 0);
 
-        // Five Seconds With No Answer
         Assert.IsTrue(SpinWait.SpinUntil(() => rig.Time.CountTimers(RpcSession.PhoneSlowTimeout) > 0, HangGuard), "slow timer");
         rig.Time.Advance(RpcSession.PhoneSlowTimeout);
         Assert.IsTrue(SpinWait.SpinUntil(() => Volatile.Read(ref slowCount) > 0, HangGuard), "PhoneSlow raised");
@@ -189,8 +186,8 @@ public class GmClientMessagingTests
     }
 
     /// <summary>
-    /// SendReaction is user-initiated: five seconds without an answer raises PhoneSlow once; the request goes out as
-    /// given and the typed answer is returned.
+    /// SendReaction is user-initiated. After 5 seconds without an answer it raises PhoneSlow once. The request goes
+    /// out unchanged and the method returns the typed answer.
     /// </summary>
     [TestMethod]
     public async Task SendReaction_IsUserInitiated_SendsRequest()
@@ -209,7 +206,6 @@ public class GmClientMessagingTests
         Task<SendReactionResponse> call = rig.Client.SendReactionAsync(request, CancellationToken.None);
         Sent sent = Captured(rig, 0);
 
-        // Five Seconds With No Answer
         Assert.IsTrue(SpinWait.SpinUntil(() => rig.Time.CountTimers(RpcSession.PhoneSlowTimeout) > 0, HangGuard), "slow timer");
         rig.Time.Advance(RpcSession.PhoneSlowTimeout);
         Assert.IsTrue(SpinWait.SpinUntil(() => Volatile.Read(ref slowCount) > 0, HangGuard), "PhoneSlow raised");
@@ -225,8 +221,8 @@ public class GmClientMessagingTests
     }
 
     /// <summary>
-    /// GetFullSizeImage is user-initiated (five seconds without an answer raises PhoneSlow) and sends action 36 with
-    /// both IDs, as in Go's methods.go.
+    /// GetFullSizeImage is user-initiated, so 5 seconds without an answer raises PhoneSlow. It sends action 36 with
+    /// both IDs, as in the Go methods.go.
     /// </summary>
     [TestMethod]
     public async Task GetFullSizeImage_IsUserInitiated()
@@ -238,7 +234,6 @@ public class GmClientMessagingTests
         Task call = rig.Client.GetFullSizeImageAsync("m-7", "a-7", CancellationToken.None);
         Sent sent = Captured(rig, 0);
 
-        // Five Seconds With No Answer
         Assert.IsTrue(SpinWait.SpinUntil(() => rig.Time.CountTimers(RpcSession.PhoneSlowTimeout) > 0, HangGuard), "slow timer");
         rig.Time.Advance(RpcSession.PhoneSlowTimeout);
         Assert.IsTrue(SpinWait.SpinUntil(() => Volatile.Read(ref slowCount) > 0, HangGuard), "PhoneSlow raised");
@@ -252,8 +247,8 @@ public class GmClientMessagingTests
     }
 
     /// <summary>
-    /// UpdateConversation is user-initiated: five seconds without an answer raises PhoneSlow once; the request goes out
-    /// as given and the typed answer is returned.
+    /// UpdateConversation is user-initiated. After 5 seconds without an answer it raises PhoneSlow once. The request
+    /// goes out unchanged and the method returns the typed answer.
     /// </summary>
     [TestMethod]
     public async Task UpdateConversation_IsUserInitiated_SendsRequest()
@@ -270,7 +265,6 @@ public class GmClientMessagingTests
         Task<UpdateConversationResponse> call = rig.Client.UpdateConversationAsync(request, CancellationToken.None);
         Sent sent = Captured(rig, 0);
 
-        // Five Seconds With No Answer
         Assert.IsTrue(SpinWait.SpinUntil(() => rig.Time.CountTimers(RpcSession.PhoneSlowTimeout) > 0, HangGuard), "slow timer");
         rig.Time.Advance(RpcSession.PhoneSlowTimeout);
         Assert.IsTrue(SpinWait.SpinUntil(() => Volatile.Read(ref slowCount) > 0, HangGuard), "PhoneSlow raised");
@@ -286,7 +280,7 @@ public class GmClientMessagingTests
     }
 
     /// <summary>
-    /// SetTyping sends a typing update with the conversation, typing true and the SIM, and completes without an answer.
+    /// SetTyping sends a typing update with the conversation, typing true and the SIM. It completes without an answer.
     /// </summary>
     [TestMethod]
     public async Task SetTyping_SendsTypingUpdatesWithoutWaiting()
@@ -379,7 +373,7 @@ public class GmClientMessagingTests
     }
 
     /// <summary>
-    /// GetOrCreateConversation passes the request through unchanged: numbers and the RCS group name and flag.
+    /// GetOrCreateConversation sends the request unchanged, with the numbers, the RCS group name and the RCS flag.
     /// </summary>
     [TestMethod]
     public async Task GetOrCreateConversation_PassesNumbersAndGroupFlags()
@@ -437,7 +431,7 @@ public class GmClientMessagingTests
     }
 
     /// <summary>
-    /// An answer of another type (here a contacts list for a messages request) throws InvalidDataException.
+    /// An answer of another type throws InvalidDataException. The test answers a messages request with a contacts list.
     /// </summary>
     [TestMethod]
     public async Task WrongResponseType_ThrowsInvalidData()
@@ -453,7 +447,7 @@ public class GmClientMessagingTests
     }
 
     /// <summary>
-    /// Temporary IDs are GUIDs and differ per call.
+    /// Temporary IDs are GUIDs and differ on each call.
     /// </summary>
     [TestMethod]
     public void NewTmpId_IsGuid()

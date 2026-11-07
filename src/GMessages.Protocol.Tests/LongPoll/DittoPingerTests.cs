@@ -18,11 +18,11 @@ namespace GMessages.Protocol.Tests.LongPoll;
 /// Checks the ping timing, recovery ladder and liveness events of <see cref="DittoPinger"/>.
 /// </summary>
 /// <remarks>
-/// C#-only: the behavior was read from <c>dittoPinger</c> and <c>phoneLiveness</c> in longpoll.go (1 minute pings,
-/// 10 s urgent pings, first miss alerts, later only 4 misses in a row do, re-arm after 2 misses, reconnect after 3,
-/// recovery waits doubling from 1 minute) and is driven by a fake clock, not copied from a golden file. Every clock
-/// advance happens only after the code under test has reached the expected state (a timer with the exact due time
-/// exists, an answer was handled, a miss was counted), never on a guess.
+/// These tests have no Go golden file. The expected behavior comes from <c>dittoPinger</c> and <c>phoneLiveness</c>
+/// in longpoll.go. Pings go out every minute. Urgent pings have a 10 second timeout. The first miss alerts. After that,
+/// only 4 misses in a row alert. 2 misses re-arm the session and 3 misses reconnect. The recovery wait doubles from
+/// 1 minute. A fake clock drives the timings. A test advances the clock only after the code under test reaches the
+/// expected state: a timer with the exact due time exists, the code handled an answer, or the code counted a miss.
 /// See <see href="https://github.com/mautrix/gmessages/blob/ba33f4875a491f5cb47db8a6baf42a8869f5f383/pkg/libgm/longpoll.go"/>.
 /// </remarks>
 [TestClass]
@@ -75,7 +75,7 @@ public class DittoPingerTests
         rig = new Rig { Pinger = pinger, Liveness = liveness, Rpc = rpc, Handler = handler, Time = time };
         pinger.EventRaised += e => { lock (rig.Events) { rig.Events.Add(e); } };
 
-        // Like startLongPolling: No Data-Receive Check In The First 10 Minutes
+        // Same as the Go startLongPolling: no data-receive check in the first 10 minutes.
         pinger.BumpDataReceiveCheck(TimeSpan.FromMinutes(10));
         return rig;
     }
@@ -114,7 +114,7 @@ public class DittoPingerTests
         Message = new RPCMessageData { SessionID = requestId, Action = ActionType.NotifyDittoActivity, EncryptedData = ByteString.CopyFromUtf8("x") },
     });
 
-    // Short-Circuits Once The Loop Is Waiting (Its Nth 1-Hour Wait Exists), Then Waits For The Nth Ping And Its 10 s Timer
+    // Short-circuits the loop when it waits (its Nth 1-hour wait exists). Then waits for the Nth ping and its 10 second timer.
     private static void UrgentPing(Rig rig, int loopWaits, int pings, int shortTimers)
     {
         WaitUntil(() => rig.Time.CountTimers(OneHour) == loopWaits, $"loop wait {loopWaits}");
@@ -122,7 +122,7 @@ public class DittoPingerTests
         WaitUntil(() => Pings(rig).Length == pings && rig.Time.CountTimers(DittoPinger.ShortPingTimeout) == shortTimers, $"urgent ping {pings}");
     }
 
-    // Advances, Then Waits Until The Ping Wait Has Counted Another Miss
+    // Advances the clock, then waits until the ping wait counts another miss.
     private static void Miss(Rig rig, TimeSpan advance, int timeouts)
     {
         rig.Time.Advance(advance);
@@ -130,7 +130,7 @@ public class DittoPingerTests
     }
 
     /// <summary>
-    /// A ping goes out every minute; an answered one raises nothing.
+    /// A ping goes out every minute. An answered ping raises no event.
     /// </summary>
     [TestMethod]
     public async Task Ping_EveryMinute_AnsweredRaisesNothing()
@@ -145,7 +145,7 @@ public class DittoPingerTests
         rig.Time.Advance(TimeSpan.FromSeconds(1));
         WaitUntil(() => Pings(rig).Length == 1, "ping at 1 minute");
 
-        // The Answer Must Be Fully Handled (Ping Timer Canceled) Before The Clock Moves
+        // The pinger must handle the answer fully (and cancel the ping timer) before the clock moves.
         Assert.IsTrue(Answer(rig, Pings(rig)[0].RequestID));
         WaitUntil(() => rig.Pinger.AnsweredPings == 1, "answer handled");
         WaitUntil(() => rig.Time.CountTimers(TimeSpan.FromMinutes(1)) == 3, "next loop wait");
@@ -160,8 +160,8 @@ public class DittoPingerTests
     }
 
     /// <summary>
-    /// An urgent ping (from a slow request) that is not answered in 10 s raises <see cref="PhoneNotResponding"/>; the
-    /// recovery ping a minute later is answered, which raises <see cref="PhoneRespondingAgain"/>.
+    /// An urgent ping from a slow request gets no answer in 10 seconds and raises <see cref="PhoneNotResponding"/>.
+    /// The phone answers the recovery ping 1 minute later, and this raises <see cref="PhoneRespondingAgain"/>.
     /// </summary>
     [TestMethod]
     public async Task PingUnanswered_RaisesPhoneNotResponding_ThenRespondingAgain()
@@ -170,19 +170,17 @@ public class DittoPingerTests
         using var cts = new CancellationTokenSource();
         Task run      = rig.Pinger.RunAsync(cts.Token);
 
-        // Urgent Ping, Unanswered
         UrgentPing(rig, 1, 1, 1);
         Miss(rig, DittoPinger.ShortPingTimeout, 1);
         Assert.AreEqual(1, Count<PhoneNotResponding>(rig), "first ping ever alerts at once");
 
-        // Recovery Ping After 1 Minute, Answered
         WaitUntil(() => rig.Time.CountTimers(DittoPinger.InitialRecoveryInterval) == 1, "recovery wait");
         rig.Time.Advance(DittoPinger.InitialRecoveryInterval);
         WaitUntil(() => Pings(rig).Length == 2, "recovery ping");
         Assert.IsTrue(Answer(rig, Pings(rig)[1].RequestID));
         WaitUntil(() => rig.Pinger.AnsweredPings == 1, "answer handled");
 
-        // Not Responding Was Sent, So Go Also Asks For Missed Updates
+        // The pinger sent a not-responding event, so Go also asks for missed updates.
         WaitUntil(() => Count<NoDataReceived>(rig) == 1, "catch-up");
         CollectionAssert.AreEqual(new[] { nameof(PhoneNotResponding), nameof(PhoneRespondingAgain), nameof(NoDataReceived) }, EventNames(rig));
 
@@ -191,7 +189,7 @@ public class DittoPingerTests
     }
 
     /// <summary>
-    /// The recovery ladder: 2 misses re-arm the session once, 3 misses reconnect.
+    /// In the recovery ladder, 2 misses re-arm the session once and 3 misses reconnect.
     /// </summary>
     [TestMethod]
     public async Task Recovery_RearmsAfter2Misses_ReconnectsAfter3()
@@ -200,7 +198,7 @@ public class DittoPingerTests
         using var cts = new CancellationTokenSource();
         Task run      = rig.Pinger.RunAsync(cts.Token);
 
-        // Miss 1 At 10 s, Recovery Ping At 70 s (Next Recovery Wait 2 min), Miss 2 At 130 s
+        // Miss 1 at 10 s. Recovery ping at 70 s (the next recovery wait is 2 minutes). Miss 2 at 130 s.
         UrgentPing(rig, 1, 1, 1);
         Miss(rig, DittoPinger.ShortPingTimeout, 1);
         WaitUntil(() => rig.Time.CountTimers(TimeSpan.FromMinutes(1)) == 1, "recovery wait 1 min");
@@ -209,14 +207,14 @@ public class DittoPingerTests
         Miss(rig, TimeSpan.FromMinutes(1), 2);
         Assert.AreEqual(0, rig.SetActiveSessions);
 
-        // 190 s: 2 Misses Re-Arm Once, Then Re-Ping (Next Recovery Wait 4 min); Miss 3 At 250 s
+        // At 190 s, 2 misses re-arm the session once, then the pinger pings again (the next recovery wait is 4 minutes). Miss 3 at 250 s.
         rig.Time.Advance(TimeSpan.FromMinutes(1));
         WaitUntil(() => Pings(rig).Length == 3 && rig.Time.CountTimers(TimeSpan.FromMinutes(4)) == 1, "recovery ping 3");
         Assert.AreEqual(1, rig.SetActiveSessions);
         Assert.AreEqual(0, rig.Reconnects);
         Miss(rig, TimeSpan.FromMinutes(1), 3);
 
-        // 430 s: 3 Misses Reconnect, Which Ends Recovery
+        // At 430 s, 3 misses reconnect, and this ends the recovery.
         rig.Time.Advance(TimeSpan.FromMinutes(3));
         WaitUntil(() => rig.Reconnects == 1 && !rig.Pinger.IsRecovering, "reconnect");
         Assert.AreEqual(1, rig.SetActiveSessions, "re-armed only once");
@@ -227,7 +225,7 @@ public class DittoPingerTests
     }
 
     /// <summary>
-    /// Once a ping has been answered, misses alert only at the 4th in a row (Go's <c>alertTimeoutCount</c>).
+    /// After the phone answers a ping, misses alert only at the 4th miss in a row. This is the Go <c>alertTimeoutCount</c>.
     /// </summary>
     [TestMethod]
     public async Task AfterFirstAnswer_AlertsOnlyAt4Misses()
@@ -236,13 +234,12 @@ public class DittoPingerTests
         using var cts = new CancellationTokenSource();
         Task run      = rig.Pinger.RunAsync(cts.Token);
 
-        // First Ping Answered
         UrgentPing(rig, 1, 1, 1);
         Assert.IsTrue(Answer(rig, Pings(rig)[0].RequestID));
         WaitUntil(() => rig.Pinger.AnsweredPings == 1, "answer handled");
         rig.Time.Advance(DittoPinger.MinPingInterval);
 
-        // Misses 1-3: Urgent Ping, Then The Recovery Ladder Up To The Reconnect
+        // Misses 1 to 3: an urgent ping, then the recovery ladder up to the reconnect.
         UrgentPing(rig, 2, 2, 2);
         Miss(rig, DittoPinger.ShortPingTimeout, 1);
         WaitUntil(() => rig.Time.CountTimers(TimeSpan.FromMinutes(1)) == 1, "recovery wait 1 min");
@@ -256,7 +253,6 @@ public class DittoPingerTests
         WaitUntil(() => rig.Reconnects == 1 && !rig.Pinger.IsRecovering, "reconnect");
         Assert.AreEqual(0, Count<PhoneNotResponding>(rig), "no alert for misses 1-3");
 
-        // Miss 4 Alerts
         UrgentPing(rig, 3, 5, 3);
         Miss(rig, DittoPinger.ShortPingTimeout, 4);
         WaitUntil(() => Count<PhoneNotResponding>(rig) == 1, "alert at miss 4");
@@ -266,8 +262,8 @@ public class DittoPingerTests
     }
 
     /// <summary>
-    /// A live data event through the dispatcher counts as the phone answering: it clears the misses, raises
-    /// <see cref="PhoneRespondingAgain"/>, asks for missed updates and ends recovery.
+    /// A live data event through the dispatcher counts as an answer from the phone. It clears the misses, raises
+    /// <see cref="PhoneRespondingAgain"/>, asks for missed updates and ends the recovery.
     /// </summary>
     [TestMethod]
     public async Task DispatcherActivity_ClearsFailureState()
@@ -281,7 +277,6 @@ public class DittoPingerTests
         Miss(rig, DittoPinger.ShortPingTimeout, 1);
         Assert.IsTrue(rig.Pinger.IsRecovering);
 
-        // A Live Data Event
         dispatcher.Handle(new IncomingRPCMessage
         {
             ResponseID  = "live-1",
@@ -293,7 +288,7 @@ public class DittoPingerTests
         WaitUntil(() => Count<NoDataReceived>(rig) == 1, "catch-up");
         CollectionAssert.AreEqual(new[] { nameof(PhoneNotResponding), nameof(PhoneRespondingAgain), nameof(NoDataReceived) }, EventNames(rig));
 
-        // The Ping Generation Is Released 5 s Later, Which Ends Recovery
+        // The pinger releases the ping generation 5 s later, and this ends the recovery.
         WaitUntil(() => rig.Time.CountTimers(TimeSpan.FromSeconds(5)) == 1, "release wait");
         rig.Time.Advance(TimeSpan.FromSeconds(5));
         WaitUntil(() => !rig.Pinger.IsRecovering, "recovery ended");
@@ -303,8 +298,8 @@ public class DittoPingerTests
     }
 
     /// <summary>
-    /// After the run stops, a gap update request posts nothing (C#-only: it uses the run's stop token, so nothing
-    /// is sent after a disconnect or dispose).
+    /// After the run stops, a gap update request sends nothing. The request uses the stop token of the run, so the
+    /// pinger sends nothing after a disconnect or dispose. Go has no such behavior.
     /// </summary>
     [TestMethod]
     public async Task RequestUpdatesAfterGap_AfterStop_PostsNothing()

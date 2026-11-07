@@ -1,3 +1,4 @@
+using System.Globalization;
 using GMessages.Protocol.Crypto;
 using GMessages.Protocol.Http;
 using GMessages.Protocol.LongPoll;
@@ -10,80 +11,62 @@ using Microsoft.Extensions.Logging;
 namespace GMessages.Protocol.Pairing;
 
 /// <summary>
-/// Pairs with a Google account: signs in, runs the UKEY2 handshake with the phone, and stores the keys once the user
-/// taps the right emoji.
+/// Pairs with a Google account. It signs in and runs the UKEY2 handshake with the phone. It stores the keys after the
+/// user taps the right emoji.
 /// </summary>
 /// <remarks>
 /// Ported from <c>StartGaiaPairing</c>, <c>FinishGaiaPairing</c>, <c>cancelGaiaPairing</c>,
 /// <c>sendGaiaPairingMessage</c> and <c>UnpairGaia</c> in
 /// <see href="https://github.com/mautrix/gmessages/blob/ba33f4875a491f5cb47db8a6baf42a8869f5f383/pkg/libgm/pair_google.go">pair_google.go</see>.
-/// The phone's answers arrive as data events on a long poll that is not logged in, so <see cref="StartAsync"/> starts
-/// one and waits for it to connect before sending the client init. That long poll keeps running after a successful
-/// start so the finish answer can arrive; the caller stops it with <see cref="StopLongPollAsync"/> (Go's
-/// <c>Reconnect</c> does the same) once pairing is over. Gaia events on the long poll are only logged by the
-/// dispatcher, as in Go; pairing needs nothing from them. Keys, device IDs and the emoji are never logged.
+/// The answers of the phone arrive as data events on a long poll that is not logged in. Thus
+/// <see cref="StartAsync"/> starts a long poll and waits for its connect before it sends the client init. That long
+/// poll continues after a successful start, so that the finish answer can arrive. After the pairing, the caller stops
+/// it with <see cref="StopLongPollAsync"/>. <c>Reconnect</c> in Go does the same. As in Go, the dispatcher only logs
+/// the Gaia events on the long poll. Pairing needs nothing from them. The log never gets the keys, the device IDs or
+/// the emoji.
 /// </remarks>
-/// <param name="signIn">Signs in and lists the account's phones.</param>
+/// <param name="signIn">Signs in and lists the phones of the account.</param>
 /// <param name="rpc">Sends the pairing messages.</param>
-/// <param name="longPoll">The long poll the answers arrive on.</param>
-/// <param name="auth">The account being paired.</param>
+/// <param name="longPoll">The long poll that carries the answers.</param>
+/// <param name="auth">The account to pair.</param>
 /// <param name="time">The clock for the init timeout and the start time.</param>
 /// <param name="log">The logger.</param>
 public sealed partial class GaiaPairing(GaiaSignIn signIn, RpcSession rpc, LongPollLoop longPoll, AuthData auth, TimeProvider time, ILogger log)
 {
-    /// <summary>How long the phone has to answer the client init, in seconds (Go: <c>GaiaInitTimeout</c>).</summary>
+    /// <summary>The time in seconds that the phone has to answer the client init. Ported from <c>GaiaInitTimeout</c>.</summary>
     public const int GaiaInitTimeoutSeconds = 20;
 
-    // Copied Verbatim From sendGaiaPairingMessage
+    // The wording of the owner replaces "user cancelled pairing on phone" from Go. Keep it verbatim.
+    internal const string CanceledOnPhoneMessage = "Pairing on phone was cancelled";
+
+    // A verbatim copy of the text in sendGaiaPairingMessage.
     private const string PrivateApiConfirmation = "This is an undocumented API. Use or access of undocumented Google APIs without express authorization is prohibited per the Google API Terms of Service (https://developers.google.com/terms).";
 
-    // 300 s In Microseconds (Go: (300 * time.Second).Microseconds())
+    // 300 seconds in microseconds, as (300 * time.Second).Microseconds() in Go.
     private const long PairingTtlMicros = 300_000_000;
 
-    /// <summary>The longest wait for the finish answer: the pairing messages' 300 second TTL (C#-only ceiling).</summary>
+    /// <summary>The longest wait for the finish answer: the 300 second TTL of the pairing messages. This limit is C#-only.</summary>
     public static readonly TimeSpan PairingTtl = TimeSpan.FromMicroseconds(PairingTtlMicros);
 
-    // The Long Poll Started By A Successful StartAsync, Until StopLongPollAsync Takes It
-    private Task? _longPoll;
-
-    // Longest Wait For A Best-Effort Cancel Request (C#-Only; Go Has No Limit)
+    // The longest wait for a best-effort cancel request. This limit is C#-only, because Go has no limit.
     private static readonly TimeSpan CancelTimeout = TimeSpan.FromSeconds(10);
 
-    /// <summary>
-    /// Gets or sets which phone to use when there are several, as an index into the newest-first list.
-    /// </summary>
-    /// <remarks>
-    /// Go's <c>GaiaHackyDeviceSwitcher</c>: a manual escape hatch; 0 picks the newest phone. Values past the end wrap
-    /// around. A negative value is refused here, since it would pick no phone at all.
-    /// </remarks>
-    /// <exception cref="ArgumentOutOfRangeException">The value is negative.</exception>
-    public int HackyDeviceSwitcher
-    {
-        get;
-        set
-        {
-            ArgumentOutOfRangeException.ThrowIfNegative(value);
-            field = value;
-        }
-    }
-
-    // =========================================================================
-    // PAIRING
-    // =========================================================================
+    // The long poll of a successful StartAsync, until StopLongPollAsync takes it.
+    private Task? _longPoll;
 
     /// <summary>
-    /// Signs in, picks the phone, starts the long poll and sends the client init; returns the emoji to show.
+    /// Signs in, picks the phone, starts the long poll and sends the client init. Returns the emoji to show.
     /// </summary>
     /// <remarks>
-    /// Ported from <c>StartGaiaPairing</c>. Several phones are sorted newest first by last-seen time. When the account
-    /// was paired before (<see cref="AuthData.DestPhoneId"/> set), only that phone is kept. The chosen phone becomes
-    /// <see cref="AuthData.DestRegId"/>. If the phone does not answer within 20 seconds, or its answer is invalid, a
-    /// cancel request is sent. Unlike Go, the long poll is stopped when the start fails, because nothing else would
-    /// stop it (Go leaves that to the caller's context), and a long poll that ends before connecting fails the start
-    /// instead of waiting forever.
+    /// Ported from <c>StartGaiaPairing</c>. The method sorts several phones by last-seen time, newest first. When the
+    /// account has an earlier pairing, <see cref="AuthData.DestPhoneId"/> is set, and the method keeps only that phone.
+    /// The chosen phone becomes <see cref="AuthData.DestRegId"/>. The method sends a cancel request when the phone does
+    /// not answer within 20 seconds. A bad answer also causes a cancel request. Unlike Go, the method stops the long
+    /// poll when the start fails, because nothing else stops it. Go leaves that to the context of the caller. Also
+    /// unlike Go, a long poll that ends before its connect fails the start. Go waits forever then.
     /// </remarks>
     /// <param name="ct">Cancels the start.</param>
-    /// <returns>The emoji the user must tap on the phone, and the session to pass to <see cref="FinishAsync"/>.</returns>
+    /// <returns>The emoji that the user must tap on the phone, and the session for <see cref="FinishAsync"/>.</returns>
     /// <exception cref="PairingException">No cookies, no phones, the paired phone is gone, or the init timed out.</exception>
     /// <exception cref="InvalidDataException">The phone's ID or answer is invalid.</exception>
     /// <exception cref="InvalidOperationException">The long poll stopped before connecting, or its token refresh failed fatally.</exception>
@@ -97,7 +80,6 @@ public sealed partial class GaiaPairing(GaiaSignIn signIn, RpcSession rpc, LongP
             throw new PairingException(PairingFailure.NoCookies, "gaia pairing requires cookies");
         }
 
-        // Find The Phones
         List<PrimaryDevice> devices = [.. await signIn.GetPrimaryDevicesAsync(ct).ConfigureAwait(false)];
         if (devices.Count == 0)
         {
@@ -107,10 +89,9 @@ public sealed partial class GaiaPairing(GaiaSignIn signIn, RpcSession rpc, LongP
         if (devices.Count > 1)
         {
             devices = [.. devices.OrderByDescending(d => d.LastSeen)];
-            LogMultipleDevices(log, devices.Count, HackyDeviceSwitcher);
+            LogMultipleDevices(log, devices.Count);
         }
 
-        // Keep Only The Previously Paired Phone
         if (auth.DestPhoneId != 0)
         {
             devices.RemoveAll(d => d.UnknownTs != auth.DestPhoneId);
@@ -120,7 +101,7 @@ public sealed partial class GaiaPairing(GaiaSignIn signIn, RpcSession rpc, LongP
             }
         }
 
-        PrimaryDevice dest = devices[HackyDeviceSwitcher % devices.Count];
+        PrimaryDevice dest = devices[0];
         if (!Guid.TryParse(dest.RegId, out Guid destRegId))
         {
             throw new InvalidDataException("failed to parse destination UUID");
@@ -128,14 +109,13 @@ public sealed partial class GaiaPairing(GaiaSignIn signIn, RpcSession rpc, LongP
 
         auth.DestRegId = destRegId;
 
-        // Start The Long Poll And Wait For It To Connect
         var connected    = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         Task longPollRun = longPoll.RunAsync(false, () => connected.TrySetResult(), CancellationToken.None);
         try
         {
             if (await Task.WhenAny(connected.Task, longPollRun).WaitAsync(ct).ConfigureAwait(false) != connected.Task)
             {
-                // Surface The Long Poll's Own Error (Such As A 401) Before The Generic One
+                // Throw the error of the long poll, such as a 401, before the generic error.
                 await longPollRun.ConfigureAwait(false);
                 throw new InvalidOperationException("Long polling stopped before connecting.");
             }
@@ -146,7 +126,7 @@ public sealed partial class GaiaPairing(GaiaSignIn signIn, RpcSession rpc, LongP
         }
         catch
         {
-            // Wait For The Long Poll To End; Its Own Error Must Not Hide This One
+            // Wait for the end of the long poll. Its own error must not hide this error.
             longPoll.Stop();
             await longPollRun.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
             throw;
@@ -157,17 +137,22 @@ public sealed partial class GaiaPairing(GaiaSignIn signIn, RpcSession rpc, LongP
     /// Sends the client finished message, waits for the user to tap an emoji, and stores the new keys.
     /// </summary>
     /// <remarks>
-    /// Ported from <c>FinishGaiaPairing</c>. On success the request keys, <see cref="AuthData.PairingId"/> and
-    /// <see cref="AuthData.DestPhoneId"/> are set. If <paramref name="ct"/> is canceled, a cancel request is sent. Go
-    /// sends it with the already-canceled context, so it never leaves; this port sends it without one, which is what
-    /// Go meant. Unlike Go, which waits as long as its context allows, the wait has two more ends, both C#-only: the
-    /// long poll from <see cref="StartAsync"/> ending (the answer could never arrive; its error is thrown), and the
-    /// 300 second TTL of the finish message passing (the server drops the request then; a
-    /// <see cref="PairingFailure.Timeout"/>). Both also send the cancel request.
+    /// Ported from <c>FinishGaiaPairing</c>. On success, the method sets the request keys,
+    /// <see cref="AuthData.PairingId"/> and <see cref="AuthData.DestPhoneId"/>. When <paramref name="ct"/> is
+    /// canceled, the method sends a cancel request. Go sends that request with the canceled context, so it never goes
+    /// out. This port sends it without the canceled token, as Go intends. Go waits as long as its context allows. This
+    /// port also ends the wait in 2 C#-only cases. First, the long poll of <see cref="StartAsync"/> ends, so the answer
+    /// cannot arrive. The method then throws the error of the long poll, or a <see cref="PairingException"/> when there
+    /// is none. Second, the 300 second TTL of the finish message ends, and the server drops the request. The method
+    /// then throws a <see cref="PairingException"/> with <see cref="PairingFailure.Timeout"/>. Both cases also send
+    /// the cancel request.
     /// </remarks>
     /// <param name="session">The session from <see cref="StartAsync"/>.</param>
     /// <param name="ct">Cancels the wait.</param>
-    /// <returns>The phone ID: the phone's source ID, a slash, and its timestamp (or its unknown int when 0).</returns>
+    /// <returns>
+    /// The phone ID: the source ID of the phone, a slash, and its timestamp. When the timestamp is 0, the unknown int
+    /// replaces it.
+    /// </returns>
     /// <exception cref="PairingException">The phone reported an error, such as the wrong emoji; no answer came within 300 seconds; or the long poll stopped while waiting.</exception>
     /// <exception cref="InvalidDataException">The answer or the key derivation version is invalid.</exception>
     /// <exception cref="GmRequestException">The server refused the request, including the long poll's credentials (401/403) while waiting.</exception>
@@ -182,7 +167,7 @@ public sealed partial class GaiaPairing(GaiaSignIn signIn, RpcSession rpc, LongP
         using (var ttl = new CancellationTokenSource(PairingTtl, time))
         using (var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, ttl.Token))
         {
-            // Wait For The Answer, Unless The Long Poll It Arrives On Ends First
+            // Wait for the answer, unless the long poll that carries it ends first.
             Task<GaiaPairingResponseContainer> send = SendGaiaPairingMessageAsync(session, ActionType.CreateGaiaPairingClientFinished, session.FinishPayload, linked.Token);
             Task? poll                              = Volatile.Read(ref _longPoll);
             if (poll is not null && await Task.WhenAny(send, poll).ConfigureAwait(false) == poll)
@@ -218,7 +203,6 @@ public sealed partial class GaiaPairing(GaiaSignIn signIn, RpcSession rpc, LongP
             throw MapFinishError(response);
         }
 
-        // Store The Keys
         (byte[] aesKey, byte[] hmacKey) = session.DeriveRequestKeys();
         auth.RequestCrypto = new AesCtrHelper(aesKey, hmacKey);
         auth.PairingId     = session.Id;
@@ -229,14 +213,14 @@ public sealed partial class GaiaPairing(GaiaSignIn signIn, RpcSession rpc, LongP
     }
 
     /// <summary>
-    /// Stops the long poll a successful <see cref="StartAsync"/> left running, and waits for it to end.
+    /// Stops the long poll of a successful <see cref="StartAsync"/> and waits for its end.
     /// </summary>
     /// <remarks>
-    /// Go's <c>DoGaiaPairing</c> leaves this to <c>Reconnect</c>, which closes the long poll without waiting. Waiting
-    /// here means a late error from that long poll is observed by the caller instead of being lost. Does nothing when
-    /// no pairing long poll is running.
+    /// Go's <c>DoGaiaPairing</c> leaves this to <c>Reconnect</c>, which closes the long poll and does not wait. Here
+    /// the wait lets the caller see a late error of that long poll. The error is not lost. The method does nothing when
+    /// no pairing long poll runs.
     /// </remarks>
-    /// <returns>A task that completes when the long poll has ended.</returns>
+    /// <returns>A task that completes when the long poll ended.</returns>
     /// <exception cref="GmRequestException">The long poll had ended on refused credentials (401/403).</exception>
     /// <exception cref="InvalidOperationException">The long poll had ended on a fatal token refresh error.</exception>
     public async Task StopLongPollAsync()
@@ -262,19 +246,12 @@ public sealed partial class GaiaPairing(GaiaSignIn signIn, RpcSession rpc, LongP
     public Task UnpairAsync(CancellationToken ct) =>
         rpc.SendNoResponseAsync(new SendParams(ActionType.UnpairGaiaPairing, new RevokeGaiaPairingRequest { PairingAttemptID = auth.PairingId.ToString() }), ct);
 
-    // =========================================================================
-    // HELPERS
-    // =========================================================================
-
-    // Owner Wording: replaces Go's "user cancelled pairing on phone" (owner's choice, kept verbatim)
-    internal const string CanceledOnPhoneMessage = "Pairing on phone was cancelled";
-
     /// <summary>
-    /// Maps a finish answer with an error to Go's error.
+    /// Maps a finish answer with an error to the error of Go.
     /// </summary>
     /// <remarks>
-    /// Ported from the error switch of <c>FinishGaiaPairing</c>. The message is Go's error text, except the
-    /// two phone-cancel cases, which use the owner's wording in <see cref="CanceledOnPhoneMessage"/>.
+    /// Ported from the error switch of <c>FinishGaiaPairing</c>. The message is the error text of Go. The 2
+    /// phone-cancel cases are different: they use the wording of the owner in <see cref="CanceledOnPhoneMessage"/>.
     /// </remarks>
     /// <param name="response">The finish answer, with a non-zero error type.</param>
     /// <returns>The exception to throw.</returns>
@@ -294,18 +271,18 @@ public sealed partial class GaiaPairing(GaiaSignIn signIn, RpcSession rpc, LongP
     }
 
     /// <summary>
-    /// Sends one pairing message and waits for the phone's answer.
+    /// Sends 1 pairing message and waits for the answer of the phone.
     /// </summary>
     /// <remarks>
-    /// Ported from <c>sendGaiaPairingMessage</c>. The message is unencrypted with a 300 s TTL. The client finished
-    /// message goes as a bugle message with the API confirmation text; the others go as Gaia 2 and propose version 1
-    /// for both the verification code and the key derivation.
+    /// Ported from <c>sendGaiaPairingMessage</c>. The message is not encrypted and has a 300 second TTL. The client
+    /// finished message goes as a Bugle message with the API confirmation text. The other messages go as Gaia 2 and
+    /// propose version 1 for the verification code and for the key derivation.
     /// </remarks>
     /// <param name="session">The session.</param>
     /// <param name="action">The pairing action.</param>
     /// <param name="data">The UKEY2 message.</param>
     /// <param name="ct">Cancels the send and the wait.</param>
-    /// <returns>The phone's answer.</returns>
+    /// <returns>The answer of the phone.</returns>
     internal async Task<GaiaPairingResponseContainer> SendGaiaPairingMessageAsync(PairingSession session, ActionType action, byte[] data, CancellationToken ct)
     {
         var container = new GaiaPairingRequestContainer
@@ -342,20 +319,19 @@ public sealed partial class GaiaPairing(GaiaSignIn signIn, RpcSession rpc, LongP
     /// <summary>
     /// Tells the phone to drop this pairing attempt.
     /// </summary>
-    /// <remarks>Ported from <c>cancelGaiaPairing</c>: unencrypted, Gaia 2, 300 s TTL, the session ID as request ID.</remarks>
+    /// <remarks>Ported from <c>cancelGaiaPairing</c>: not encrypted, Gaia 2, a 300 second TTL and the session ID as request ID.</remarks>
     /// <param name="session">The session.</param>
     /// <param name="ct">Cancels the request.</param>
     /// <returns>A task that completes when the server accepted the request.</returns>
     internal Task CancelAsync(PairingSession session, CancellationToken ct) =>
         rpc.SendNoResponseAsync(new SendParams(ActionType.CancelGaiaPairing, RequestId: session.Id.ToString(), CustomTtlMicros: PairingTtlMicros, DontEncrypt: true, MessageType: MessageType.Gaia2), ct);
 
-    // Client Init, Server Init, Emoji; Cancels The Attempt On Timeout Or A Bad Answer
+    // Sends the client init, checks the server init and picks the emoji. A timeout or a bad answer cancels the attempt.
     private async Task<(string Emoji, PairingSession Session)> HandshakeAsync(PrimaryDevice dest, int deviceCount, CancellationToken ct)
     {
         PairingSession session = PairingSession.Create(dest, time);
         (byte[] clientInit, _) = session.PreparePayloads();
 
-        // Send The Client Init With A 20 s Timeout
         GaiaPairingResponseContainer serverInit;
         using (var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(GaiaInitTimeoutSeconds), time))
         using (var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, timeout.Token))
@@ -364,10 +340,14 @@ public sealed partial class GaiaPairing(GaiaSignIn signIn, RpcSession rpc, LongP
             {
                 serverInit = await SendGaiaPairingMessageAsync(session, ActionType.CreateGaiaPairingClientInit, clientInit, linked.Token).ConfigureAwait(false);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                // Read the timer before the cancel request. That request can take 10 seconds, and the timer can end meanwhile.
+                // As in Go, only a canceled wait is a timeout.
+                // A refusal stays a refusal when the timer ends before this catch.
+                bool timedOut = ex is OperationCanceledException && timeout.IsCancellationRequested && !ct.IsCancellationRequested;
                 await TryCancelAsync(session).ConfigureAwait(false);
-                if (timeout.IsCancellationRequested && !ct.IsCancellationRequested)
+                if (timedOut)
                 {
                     throw new PairingException(PairingFailure.InitTimeout, deviceCount > 1 ? "client init timed out (had multiple primary-looking devices)" : "client init timed out");
                 }
@@ -376,7 +356,6 @@ public sealed partial class GaiaPairing(GaiaSignIn signIn, RpcSession rpc, LongP
             }
         }
 
-        // Check The Answer And Pick The Emoji
         LogServerInit(log, serverInit.ConfirmedKeyDerivationVersion, serverInit.ConfirmedVerificationCodeVersion);
         try
         {
@@ -390,7 +369,7 @@ public sealed partial class GaiaPairing(GaiaSignIn signIn, RpcSession rpc, LongP
         }
     }
 
-    // A Failed Cancel Is Only Logged, As In Go; 10 s At Most, So A Bad Network Can't Stall The User
+    // As in Go, the method only logs a failed cancel. The wait is 10 seconds at most, so a bad network cannot stop the user.
     private async Task TryCancelAsync(PairingSession session)
     {
         try
@@ -404,13 +383,13 @@ public sealed partial class GaiaPairing(GaiaSignIn signIn, RpcSession rpc, LongP
         }
     }
 
-    // Go's String() Of The Error Code: The Name, Or The Number When Unknown
+    // Gives the String() of Go for the error code: the name, or the number for an unknown value.
     private static string ErrorCodeName(GaiaPairingErrorCode code) =>
         AuthenticationReflection.Descriptor.EnumTypes.First(e => e.Name == nameof(GaiaPairingErrorCode)).FindValueByNumber((int)code)?.Name
-        ?? ((int)code).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        ?? ((int)code).ToString(CultureInfo.InvariantCulture);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Found {Count} primary-looking devices for gaia pairing, hacky device switcher {Switcher}")]
-    private static partial void LogMultipleDevices(ILogger logger, int count, int switcher);
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Found {Count} primary-looking devices for gaia pairing")]
+    private static partial void LogMultipleDevices(ILogger logger, int count);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Received server init: key derivation version {KeyDerivationVersion}, verification code version {VerificationCodeVersion}")]
     private static partial void LogServerInit(ILogger logger, int keyDerivationVersion, int verificationCodeVersion);

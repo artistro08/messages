@@ -260,7 +260,7 @@ public sealed class FakeGoogleServerTests
     {
         Stream body = await poll.Content.ReadAsStreamAsync();
         var ids     = new List<string>();
-        await foreach (LongPollingPayload payload in LongPollStreamReader.ReadAsync(body, HangGuard, TimeProvider.System, CancellationToken.None))
+        await foreach (LongPollingPayload payload in LongPollStreamReader.ReadAsync(body, HangGuard, TimeProvider.System, null, CancellationToken.None))
         {
             if (payload.Data is null)
             {

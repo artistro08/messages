@@ -21,10 +21,10 @@ namespace GMessages.Protocol.Tests.LongPoll;
 /// Checks the requests and the reconnect timing of <see cref="LongPollLoop"/>.
 /// </summary>
 /// <remarks>
-/// The two request tests compare with <c>longpoll-request.json</c> after copying Go's random request and session IDs.
-/// The timing tests are C#-only: the behavior was read from <c>doLongPoll</c> (401/403 fatal, other errors retried
-/// after <c>(errorCount + 1) × 5</c> s, recovered event, catch-up after a 1 minute gap, acks every 5 s) and is
-/// driven by a fake clock, not copied from a golden file.
+/// The two request tests compare with <c>longpoll-request.json</c> after they copy the random request and session IDs
+/// from Go. The timing tests have no Go golden file. The expected behavior comes from <c>doLongPoll</c>. A 401 or 403
+/// is fatal. The loop retries other errors after <c>(errorCount + 1) × 5</c> seconds. The loop raises a recovered
+/// event, sends a catch-up after a gap of 1 minute, and sends acks every 5 seconds. A fake clock drives the timings.
 /// See <see href="https://github.com/mautrix/gmessages/blob/ba33f4875a491f5cb47db8a6baf42a8869f5f383/pkg/libgm/longpoll.go"/>.
 /// </remarks>
 [TestClass]
@@ -46,10 +46,10 @@ public class LongPollLoopTests
 
         public List<object> Events { get; } = [];
 
-        // Open Quiet Streams Handed Out After The Script, In Order
+        // Open quiet streams, handed out in order after the script ends.
         public List<OpenStream> Streams { get; } = [];
 
-        // ReceiveMessages Answers In Order; After The Script, An Open Quiet Stream
+        // ReceiveMessages answers in order. After the script ends, the answer is an open quiet stream.
         public Queue<Func<HttpResponseMessage>> Script { get; } = new();
 
         public int Count<T>() { lock (Events) { return Events.Count(e => e is T); } }
@@ -100,7 +100,7 @@ public class LongPollLoopTests
 
     private static void WaitUntil(Func<bool> condition, string what) => Assert.IsTrue(SpinWait.SpinUntil(condition, HangGuard), what);
 
-    // The Stream That Ended At Once Is Followed By A 5 s Pause (Logged In, The Ack Timer Is The Other 5 s Timer)
+    // A stream that ends at once is followed by a 5 s pause. When logged in, the ack timer is the other 5 s timer, so the count is 2.
     private static void SkipShortStreamPause(Rig rig)
     {
         WaitUntil(() => rig.Time.CountTimers(LongPollLoop.MinStreamLifetime) == 2, "5 s pause after a short stream");
@@ -115,7 +115,7 @@ public class LongPollLoopTests
     // =========================================================================
 
     /// <summary>
-    /// The ReceiveMessages request matches Go's once the random listen request ID is copied.
+    /// The ReceiveMessages request matches Go after the test copies the random listen request ID.
     /// </summary>
     [TestMethod]
     public async Task ReceiveMessagesRequest_MatchesGo()
@@ -139,7 +139,7 @@ public class LongPollLoopTests
     }
 
     /// <summary>
-    /// SetActiveSession sends Go's GET_UPDATES request once the random session ID is copied.
+    /// SetActiveSession sends the Go GET_UPDATES request after the test copies the random session ID.
     /// </summary>
     [TestMethod]
     public async Task GetUpdatesRequest_MatchesGo()
@@ -156,7 +156,7 @@ public class LongPollLoopTests
         Assert.AreEqual(rig.Rpc.SessionId, inner.RequestID, "request ID is the new session ID");
         Assert.AreEqual(rig.Rpc.SessionId, inner.SessionID);
 
-        // Normalize The Random Session ID
+        // The session ID is random, so copy the Go value before the comparison.
         inner.RequestID           = goId;
         inner.SessionID           = goId;
         csReq.Data.MessageData    = Google.Protobuf.ByteString.CopyFrom(Google.Protobuf.MessageExtensions.ToByteArray(inner));
@@ -224,7 +224,7 @@ public class LongPollLoopTests
     // TIMING (C#-ONLY)
     // =========================================================================
 
-    // Makes RegisterRefresh Answer With A Fresh 24 Hour Token; Everything Else Keeps The Rig's Answers
+    // Makes RegisterRefresh answer with a new 24 hour token. All other requests keep the answers of the rig.
     private static void AnswerRefreshes(Rig rig)
     {
         Func<int, RecordedRequest, HttpResponseMessage> rest = rig.Handler.Respond;
@@ -237,8 +237,8 @@ public class LongPollLoopTests
     }
 
     /// <summary>
-    /// A stream with steady data still ends 30 minutes after its request, then the refresh check runs and a new
-    /// stream opens, without any error (Go's 30 minute client timeout covers the body).
+    /// A stream with steady data still ends 30 minutes after its request. Then the refresh check runs and a new
+    /// stream opens, with no error. The 30 minute client timeout of Go also covers the body.
     /// </summary>
     [TestMethod]
     public async Task StreamWithSteadyData_EndsAt30Minutes_ThenRefreshes()
@@ -249,12 +249,12 @@ public class LongPollLoopTests
         rig.Auth.TachyonExpiry = rig.Time.GetUtcNow() + TimeSpan.FromMinutes(80);
         using var cts          = new CancellationTokenSource();
 
-        // Not Logged In: The Pinger's Own Timers Would Add Reconnects That Have Nothing To Do With The Lifetime
+        // The loop is not logged in. Otherwise the timers of the pinger add reconnects that do not relate to the stream lifetime.
         Task run               = rig.Loop.RunAsync(false, null, cts.Token);
         WaitUntil(() => { lock (rig.Streams) { return rig.Streams.Count == 1; } }, "first stream opened");
         await rig.Streams[0].Waiting.WaitAsync(HangGuard);
 
-        // A Heartbeat Every 30 s Keeps The Stream Alive Until The Lifetime Ends It
+        // A heartbeat every 30 s keeps the stream alive until the lifetime ends it.
         byte[] heartbeat = ",[null,null,[],null,null]"u8.ToArray();
         for (int i = 0; i < 59; i++)
         {
@@ -313,7 +313,7 @@ public class LongPollLoopTests
     }
 
     /// <summary>
-    /// When not logged in (pairing), a 401 has no event to carry it, so the run throws it instead.
+    /// When the loop is not logged in (pairing), a 401 has no event to carry it, so the run throws the error.
     /// </summary>
     [TestMethod]
     public async Task Status401_NotLoggedIn_ThrowsIt()
@@ -328,7 +328,7 @@ public class LongPollLoopTests
     }
 
     /// <summary>
-    /// A run that ends after a newer run started leaves the newer one stoppable.
+    /// A run that ends after a newer run started does not prevent a stop of the newer run.
     /// </summary>
     [TestMethod]
     public async Task OldRunEnding_KeepsNewerRunStoppable()
@@ -347,8 +347,8 @@ public class LongPollLoopTests
     }
 
     /// <summary>
-    /// After a working connection drops, a 500 raises <see cref="ListenTemporaryError"/>, the retry comes exactly
-    /// 10 s later, and the next success raises <see cref="ListenRecovered"/> again.
+    /// After a working connection drops, a 500 raises <see cref="ListenTemporaryError"/>. The retry starts exactly
+    /// 10 s later. The next success raises <see cref="ListenRecovered"/> again.
     /// </summary>
     [TestMethod]
     public async Task Status500_RaisesTemporary_RetriesAfter10s_ThenRecovered()
@@ -374,7 +374,7 @@ public class LongPollLoopTests
     }
 
     /// <summary>
-    /// Reconnecting after more than a minute away sends GET_UPDATES with the session ID; a short gap does not.
+    /// A reconnect after more than 1 minute away sends GET_UPDATES with the session ID.
     /// </summary>
     [TestMethod]
     public async Task DisconnectedOver1Minute_SendsGetUpdatesOnReconnect()
@@ -392,7 +392,7 @@ public class LongPollLoopTests
         Task run      = rig.Loop.RunAsync(true, null, cts.Token);
         SkipShortStreamPause(rig);
 
-        // 70 s Of Failures (75 s Away With The Pause)
+        // 70 s of failures. With the 5 s pause, the loop is away for 75 s.
         foreach (int sleep in sleeps)
         {
             WaitUntil(() => rig.Time.CountTimers(TimeSpan.FromSeconds(sleep)) == 1, $"{sleep} s wait");
@@ -427,7 +427,7 @@ public class LongPollLoopTests
         WaitUntil(() => rig.Time.CountTimers(TimeSpan.FromSeconds(10)) == 1, "10 s retry wait");
         rig.Time.Advance(TimeSpan.FromSeconds(10));
 
-        // The Catch-Up Would Be Started Before Reading, So Once The New Stream Is Being Read, It Would Have Shown
+        // The loop starts a catch-up before it reads. When the new stream is read, a catch-up request would be visible.
         WaitUntil(() => { lock (rig.Streams) { return rig.Streams.Count == 1; } }, "reconnected");
         await rig.Streams[0].Waiting.WaitAsync(HangGuard);
         Assert.AreEqual(0, rig.Count<NoDataReceived>());
@@ -438,7 +438,7 @@ public class LongPollLoopTests
     }
 
     /// <summary>
-    /// The retry wait is Go's <c>(errorCount + 1) × 5</c> seconds, capped at 5 minutes (a C#-only limit).
+    /// The retry wait is the Go <c>(errorCount + 1) × 5</c> seconds. C# adds a cap of 5 minutes.
     /// </summary>
     [TestMethod]
     public void RetryDelay_GrowsLikeGo_CappedAt5Minutes()
@@ -451,8 +451,8 @@ public class LongPollLoopTests
     }
 
     /// <summary>
-    /// A stream that ends at once is followed by a 5 second pause before the next open (C#-only; Go reopens at
-    /// once), so a server that keeps closing right away can't spin the loop.
+    /// A stream that ends at once is followed by a 5 second pause before the next open. Go reopens at once. The
+    /// pause stops a server that closes every stream at once from making the loop spin.
     /// </summary>
     [TestMethod]
     public async Task ShortStream_PausesBeforeReopening()
@@ -473,8 +473,8 @@ public class LongPollLoopTests
     }
 
     /// <summary>
-    /// An open that gets no response headers within a minute (a dead socket) gives up and retries after the normal
-    /// backoff (C#-only; Go waits on the HTTP client's timeout).
+    /// An open that gets no response headers in 1 minute (a dead socket) stops and retries after the normal
+    /// backoff. Go waits for the timeout of the HTTP client.
     /// </summary>
     [TestMethod]
     public async Task OpenStuck_GivesUpAfter1Minute_ThenRetries()
@@ -496,8 +496,8 @@ public class LongPollLoopTests
     }
 
     /// <summary>
-    /// A reconnect request (resume, network back) interrupts an open stuck on a dead socket and starts over at once,
-    /// with no backoff and no temporary error.
+    /// A reconnect request (resume, network back) interrupts an open on a dead socket and starts again at once.
+    /// The loop applies no backoff and raises no temporary error.
     /// </summary>
     [TestMethod]
     public async Task ReconnectDuringOpen_StartsOverAtOnce()

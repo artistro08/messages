@@ -3,11 +3,12 @@ using System.Security.Cryptography;
 namespace GMessages.Protocol.Crypto;
 
 /// <summary>
-/// The P-256 key (a JWK in the saved session) used to sign token refresh requests.
+/// Holds the P-256 key that signs the token refresh requests. The saved session keeps it as a JWK.
 /// </summary>
 /// <remarks>
 /// Ports the <c>JWK</c> type in <see href="https://github.com/mautrix/gmessages/blob/ba33f4875a491f5cb47db8a6baf42a8869f5f383/pkg/libgm/crypto/ecdsa.go"/>.
-/// Values are raw big-endian coordinates; short ones are left-padded to 32 bytes. Key material is never logged.
+/// The values are raw big-endian coordinates. The class pads a short value on the left to 32 bytes. Key material
+/// never goes in a log.
 /// </remarks>
 public sealed class RefreshKey
 {
@@ -19,17 +20,17 @@ public sealed class RefreshKey
     }
 
     /// <summary>
-    /// Gets the private scalar (32 bytes).
+    /// Gets the private scalar, 32 bytes.
     /// </summary>
     public byte[] D { get; }
 
     /// <summary>
-    /// Gets the public X coordinate (32 bytes).
+    /// Gets the public X coordinate, 32 bytes.
     /// </summary>
     public byte[] X { get; }
 
     /// <summary>
-    /// Gets the public Y coordinate (32 bytes).
+    /// Gets the public Y coordinate, 32 bytes.
     /// </summary>
     public byte[] Y { get; }
 
@@ -37,7 +38,7 @@ public sealed class RefreshKey
     /// Generates a new P-256 key.
     /// </summary>
     /// <remarks>
-    /// Mirrors <c>GenerateECDSAKey</c>.
+    /// Ported from <c>GenerateECDSAKey</c>.
     /// </remarks>
     /// <returns>A new key.</returns>
     public static RefreshKey Generate()
@@ -48,10 +49,10 @@ public sealed class RefreshKey
     }
 
     /// <summary>
-    /// Builds a key from stored JWK parts.
+    /// Builds a key from the stored JWK parts.
     /// </summary>
     /// <remarks>
-    /// Parts shorter than 32 bytes are left-padded with zeros, as Go does.
+    /// As in Go, the method pads a part shorter than 32 bytes on the left with zeros.
     /// </remarks>
     /// <param name="d">The private scalar.</param>
     /// <param name="x">The public X coordinate.</param>
@@ -61,10 +62,10 @@ public sealed class RefreshKey
     public static RefreshKey FromJwk(byte[] d, byte[] x, byte[] y) => new(Pad(d), Pad(x), Pad(y));
 
     /// <summary>
-    /// Creates an <see cref="ECDsa"/> holding this key.
+    /// Creates an <see cref="ECDsa"/> that holds this key.
     /// </summary>
     /// <remarks>
-    /// The caller owns and must dispose the result.
+    /// The caller owns the result and must dispose it.
     /// </remarks>
     /// <returns>A new <see cref="ECDsa"/>.</returns>
     public ECDsa ToECDsa() => ECDsa.Create(new ECParameters
@@ -75,10 +76,10 @@ public sealed class RefreshKey
     });
 
     /// <summary>
-    /// Gets the public key as DER SubjectPublicKeyInfo.
+    /// Gets the public key as a DER SubjectPublicKeyInfo.
     /// </summary>
     /// <remarks>
-    /// Matches Go's <c>x509.MarshalPKIXPublicKey</c>.
+    /// The output is the same as from the Go <c>x509.MarshalPKIXPublicKey</c>.
     /// </remarks>
     /// <returns>The SPKI bytes.</returns>
     public byte[] PublicKeySpki()
@@ -91,7 +92,8 @@ public sealed class RefreshKey
     /// Signs <paramref name="data"/> with ECDSA over its SHA-256 hash.
     /// </summary>
     /// <remarks>
-    /// Output is an ASN.1 DER sequence like Go's <c>ecdsa.SignASN1</c>. Signatures are random, so two calls differ.
+    /// The output is an ASN.1 DER sequence, as from the Go <c>ecdsa.SignASN1</c>. The signatures are random, so 2
+    /// calls give different results.
     /// </remarks>
     /// <param name="data">The data to sign.</param>
     /// <returns>The DER signature.</returns>

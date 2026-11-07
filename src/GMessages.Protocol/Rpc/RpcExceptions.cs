@@ -1,12 +1,12 @@
 namespace GMessages.Protocol.Rpc;
 
 /// <summary>
-/// Thrown when the phone did not answer a request within the hard timeout.
+/// The exception that is thrown when the phone does not answer a request within the hard timeout.
 /// </summary>
 /// <remarks>
 /// Ported from <c>ErrPhoneNotResponding</c> in
 /// <see href="https://github.com/mautrix/gmessages/blob/ba33f4875a491f5cb47db8a6baf42a8869f5f383/pkg/libgm/session_handler.go">session_handler.go</see>.
-/// The server already accepted the request, so the phone may still process it when it comes back online.
+/// The server accepted the request, so the phone can still do it when it comes back online.
 /// </remarks>
 public sealed class PhoneNotRespondingException : Exception
 {
@@ -39,7 +39,7 @@ public sealed class PhoneNotRespondingException : Exception
 }
 
 /// <summary>
-/// Thrown for requests that were still waiting for a response when the connection was closed.
+/// The exception that is thrown when no connection is open. It is also thrown when the connection closes while a request waits.
 /// </summary>
 /// <remarks>
 /// Ported from <c>ErrConnectionClosed</c> in

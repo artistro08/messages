@@ -9,17 +9,17 @@ using Microsoft.Extensions.Time.Testing;
 namespace GMessages.Protocol.Tests.LongPoll;
 
 /// <summary>
-/// Checks <see cref="LongPollStreamReader"/> against the payload sequence Go decodes, plus C#-only robustness.
+/// Checks <see cref="LongPollStreamReader"/> against the payload sequence that Go decodes. Other tests check the robustness that only C# has.
 /// </summary>
 /// <remarks>
-/// The Go stream and expected sequence come from <c>longpoll-stream.json</c>. Cutting reads at odd places, brackets
-/// inside strings, bad payloads and the idle timeout are C#-only behavior (Go's reader fails on the first) with
-/// hand-written expectations.
+/// The Go stream and the expected sequence come from <c>longpoll-stream.json</c>. Reads cut at odd places, brackets
+/// inside strings, bad payloads and the idle timeout have no Go equivalent. The Go reader fails on the first of them.
+/// Their expectations are hand-written.
 /// </remarks>
 [TestClass]
 public class LongPollStreamReaderTests
 {
-    // Hands out one queued chunk per read, then ends
+    // Returns one queued chunk for each read, then ends.
     private sealed class ChunkedStream(IEnumerable<byte[]> chunks) : MemoryStream
     {
         private readonly Queue<byte[]> _chunks = new(chunks);
@@ -37,7 +37,7 @@ public class LongPollStreamReaderTests
         }
     }
 
-    // Never Has Data; Waits Until The Read Is Canceled
+    // Never has data. A read waits until the caller cancels it.
     private sealed class SilentStream : MemoryStream
     {
         public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
@@ -65,7 +65,7 @@ public class LongPollStreamReaderTests
     private static async Task<List<LongPollingPayload>> ReadAllAsync(Stream body, ILogger? logger = null)
     {
         var result = new List<LongPollingPayload>();
-        await foreach (LongPollingPayload p in LongPollStreamReader.ReadAsync(body, TimeSpan.FromMinutes(1), TimeProvider.System, CancellationToken.None, logger))
+        await foreach (LongPollingPayload p in LongPollStreamReader.ReadAsync(body, TimeSpan.FromMinutes(1), TimeProvider.System, logger, CancellationToken.None))
         {
             result.Add(p);
         }
@@ -75,7 +75,7 @@ public class LongPollStreamReaderTests
 
     private static async Task DrainAsync(Stream body, TimeSpan idle, TimeProvider time, CancellationToken ct)
     {
-        await foreach (LongPollingPayload _ in LongPollStreamReader.ReadAsync(body, idle, time, ct))
+        await foreach (LongPollingPayload _ in LongPollStreamReader.ReadAsync(body, idle, time, null, ct))
         {
         }
     }
@@ -113,7 +113,7 @@ public class LongPollStreamReaderTests
     }
 
     /// <summary>
-    /// Go's own read pattern (one payload per read) gives the sequence Go decoded.
+    /// The Go read pattern, one payload for each read, gives the sequence that Go decoded.
     /// </summary>
     [TestMethod]
     public async Task GoStream_OnePayloadPerRead_YieldsGoSequence()
@@ -123,7 +123,7 @@ public class LongPollStreamReaderTests
     }
 
     /// <summary>
-    /// C#-only: three bytes per read still gives the Go sequence.
+    /// Reads of three bytes still give the Go sequence. Go has no such test.
     /// </summary>
     [TestMethod]
     public async Task GoStream_ThreeBytesPerRead_YieldsGoSequence()
@@ -133,7 +133,7 @@ public class LongPollStreamReaderTests
     }
 
     /// <summary>
-    /// C#-only: the whole body in one read still gives the Go sequence.
+    /// A read that returns the whole body still gives the Go sequence. Go has no such test.
     /// </summary>
     [TestMethod]
     public async Task GoStream_WholeBodyInOneRead_YieldsGoSequence()
@@ -143,7 +143,7 @@ public class LongPollStreamReaderTests
     }
 
     /// <summary>
-    /// C#-only: brackets, quotes and escapes inside a string do not end a payload early.
+    /// Brackets, quotes and escapes inside a string do not end a payload early. Go has no such test.
     /// </summary>
     [TestMethod]
     public async Task StringContainingBrackets_DoesNotConfuseSplitter()
@@ -158,7 +158,7 @@ public class LongPollStreamReaderTests
     }
 
     /// <summary>
-    /// C#-only: a body that does not start with <c>[[</c> is rejected.
+    /// The reader rejects a body that does not start with <c>[[</c>.
     /// </summary>
     [TestMethod]
     public async Task MissingOpening_Throws()
@@ -167,7 +167,7 @@ public class LongPollStreamReaderTests
     }
 
     /// <summary>
-    /// C#-only: a payload that does not decode is logged by length only and skipped; the next one still comes out.
+    /// The reader logs only the length of a payload that does not decode, and skips it. The next payload still comes out.
     /// </summary>
     [TestMethod]
     public async Task BadPayload_SkippedAndNextStillYielded()
@@ -183,7 +183,7 @@ public class LongPollStreamReaderTests
         Assert.DoesNotContain("secret-text", logger.Messages[0]);
     }
 
-    // Hands out one queued chunk per release, so a test controls when each read completes
+    // Returns one queued chunk for each gate release, so a test controls when each read completes.
     private sealed class GatedStream(IEnumerable<byte[]> chunks) : MemoryStream
     {
         private readonly Queue<byte[]> _chunks = new(chunks);
@@ -205,7 +205,7 @@ public class LongPollStreamReaderTests
     }
 
     /// <summary>
-    /// C#-only: the idle timer restarts on every read, so slow reads that each beat the timeout never time out.
+    /// The idle timer restarts on every read. Slow reads that each end before the timeout never time out.
     /// </summary>
     [TestMethod]
     public async Task IdleTimer_RestartsOnEveryRead()
@@ -218,13 +218,13 @@ public class LongPollStreamReaderTests
 
         Task read = Task.Run(async () =>
         {
-            await foreach (LongPollingPayload p in LongPollStreamReader.ReadAsync(stream, idle, time, CancellationToken.None))
+            await foreach (LongPollingPayload p in LongPollStreamReader.ReadAsync(stream, idle, time, null, CancellationToken.None))
             {
                 result.Add(p);
             }
         });
 
-        // Four Reads, 20 s Each: 80 s Total, Over The 30 s Timeout
+        // Four reads of 20 s each take 80 s in total. This is more than the 30 s timeout.
         for (int i = 0; i < 4; i++)
         {
             Assert.IsTrue(await time.TimerCreated.WaitAsync(TimeSpan.FromSeconds(10)), "idle timer was not created");
@@ -237,7 +237,7 @@ public class LongPollStreamReaderTests
     }
 
     /// <summary>
-    /// C#-only: a stray byte between payloads is rejected.
+    /// The reader rejects a stray byte between payloads.
     /// </summary>
     [TestMethod]
     public async Task JunkBetweenPayloads_Throws()
@@ -247,7 +247,7 @@ public class LongPollStreamReaderTests
     }
 
     /// <summary>
-    /// C#-only: whitespace between payloads is skipped and a trailing override object inside a payload wins.
+    /// The reader skips whitespace between payloads. A trailing override object inside a payload wins.
     /// </summary>
     [TestMethod]
     public async Task WhitespaceBetweenPayloads_AndTrailingObject_Decode()
@@ -262,7 +262,7 @@ public class LongPollStreamReaderTests
     }
 
     /// <summary>
-    /// C#-only: one payload past the cap throws; the cap is small here so the test stays light.
+    /// A payload over the cap throws. The test uses a small cap to stay light.
     /// </summary>
     [TestMethod]
     public async Task OversizedPayload_Throws()
@@ -279,7 +279,7 @@ public class LongPollStreamReaderTests
     }
 
     /// <summary>
-    /// C#-only: ending mid-payload logs the dropped byte count (length only) and yields nothing.
+    /// A stream that ends inside a payload logs the number of dropped bytes, and nothing else. The reader yields no payload.
     /// </summary>
     [TestMethod]
     public async Task EofMidPayload_LogsDroppedLength()
@@ -294,18 +294,18 @@ public class LongPollStreamReaderTests
     }
 
     /// <summary>
-    /// C#-only: a zero or negative idle timeout is rejected up front; infinite is allowed.
+    /// The reader rejects a zero or negative idle timeout at the start. It accepts an infinite timeout.
     /// </summary>
     [TestMethod]
     public void IdleTimeout_MustBePositiveOrInfinite()
     {
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => LongPollStreamReader.ReadAsync(new MemoryStream(), TimeSpan.Zero, TimeProvider.System, CancellationToken.None));
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => LongPollStreamReader.ReadAsync(new MemoryStream(), TimeSpan.FromSeconds(-1), TimeProvider.System, CancellationToken.None));
-        Assert.IsNotNull(LongPollStreamReader.ReadAsync(new MemoryStream(), Timeout.InfiniteTimeSpan, TimeProvider.System, CancellationToken.None));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => LongPollStreamReader.ReadAsync(new MemoryStream(), TimeSpan.Zero, TimeProvider.System, null, CancellationToken.None));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => LongPollStreamReader.ReadAsync(new MemoryStream(), TimeSpan.FromSeconds(-1), TimeProvider.System, null, CancellationToken.None));
+        Assert.IsNotNull(LongPollStreamReader.ReadAsync(new MemoryStream(), Timeout.InfiniteTimeSpan, TimeProvider.System, null, CancellationToken.None));
     }
 
     /// <summary>
-    /// C#-only: no bytes for the idle timeout throws <see cref="TimeoutException"/>; caller cancel stays a cancel.
+    /// No bytes for the idle timeout throws <see cref="TimeoutException"/>. A cancel from the caller stays a cancel.
     /// </summary>
     [TestMethod]
     public async Task NoBytesForIdleTimeout_ThrowsTimeout()
@@ -313,13 +313,11 @@ public class LongPollStreamReaderTests
         var time      = new SignalingTimeProvider();
         TimeSpan idle = TimeSpan.FromSeconds(30);
 
-        // Idle Timeout
         Task read = DrainAsync(new SilentStream(), idle, time, CancellationToken.None);
         Assert.IsTrue(await time.TimerCreated.WaitAsync(TimeSpan.FromSeconds(10)), "idle timer was not created");
         time.Advance(idle);
         await Assert.ThrowsExactlyAsync<TimeoutException>(() => read);
 
-        // Caller Cancellation
         using var cts = new CancellationTokenSource();
         Task canceled = DrainAsync(new SilentStream(), idle, time, cts.Token);
         Assert.IsTrue(await time.TimerCreated.WaitAsync(TimeSpan.FromSeconds(10)), "idle timer was not created");

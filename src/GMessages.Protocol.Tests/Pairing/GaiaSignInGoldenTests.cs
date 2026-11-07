@@ -17,8 +17,8 @@ namespace GMessages.Protocol.Tests.Pairing;
 /// <c>FetchConfig</c>, using <c>signin.json</c>.
 /// </summary>
 /// <remarks>
-/// The sign-in request carries a random request ID. It is copied from Go's request into the C# one before comparing
-/// the rest exactly. The token expiry depends on the clock, so it is compared as an offset from the fake clock.
+/// The sign-in request carries a random request ID. The test copies it from the Go request into the C# request,
+/// then compares the rest exactly. The token expiry depends on the clock, so the test compares it as an offset from the fake clock.
 /// See <see href="https://github.com/mautrix/gmessages/blob/ba33f4875a491f5cb47db8a6baf42a8869f5f383/pkg/libgm/pair_google.go"/>.
 /// </remarks>
 [TestClass]
@@ -41,7 +41,7 @@ public class GaiaSignInGoldenTests
         CreateRig(Encoding.UTF8.GetBytes(Golden.Load("signin").GetProperty("response").GetProperty("bodyText").GetString()!));
 
     /// <summary>
-    /// The device ID is "messages-web-" and the session ID's bytes in RFC 4122 order as lowercase hex.
+    /// The device ID is "messages-web-" followed by the session ID bytes in RFC 4122 order as lowercase hex.
     /// </summary>
     [TestMethod]
     public void DeviceId_MatchesGo()
@@ -52,7 +52,7 @@ public class GaiaSignInGoldenTests
     }
 
     /// <summary>
-    /// The request matches Go's once the random request ID is copied over.
+    /// The request matches Go after the test copies over the random request ID.
     /// </summary>
     [TestMethod]
     public async Task SignInRequest_MatchesGo()
@@ -65,7 +65,6 @@ public class GaiaSignInGoldenTests
         var goReq  = PbLiteSerializer.Deserialize<SignInGaiaRequest>(Encoding.UTF8.GetBytes(go.GetProperty("bodyText").GetString()!));
         var csReq  = PbLiteSerializer.Deserialize<SignInGaiaRequest>(rig.Handler.Requests[0].Body);
 
-        // Normalize Request ID
         Assert.IsTrue(Guid.TryParse(csReq.AuthMessage.RequestID, out _), "request ID is a UUID");
         csReq.AuthMessage.RequestID = goReq.AuthMessage.RequestID;
         Assert.AreEqual(go.GetProperty("bodyText").GetString(), Encoding.UTF8.GetString(PbLiteSerializer.Serialize(csReq)));
@@ -102,7 +101,7 @@ public class GaiaSignInGoldenTests
     }
 
     /// <summary>
-    /// The config fetch sets the session ID from the device info, and the client version parses like Go's.
+    /// The config fetch sets the session ID from the device info. The client version parses like Go.
     /// </summary>
     [TestMethod]
     public async Task FetchConfig_SessionIdAndVersionMatchGo()
@@ -126,8 +125,8 @@ public class GaiaSignInGoldenTests
     }
 
     /// <summary>
-    /// C#-only behavior (no Go vector): an unparseable client version fails the fetch (Go's intent), and an
-    /// unparseable device ID leaves the session ID alone (Go logs it).
+    /// This behavior has no Go golden vector. A client version that does not parse fails the fetch, as Go intends.
+    /// A device ID that does not parse leaves the session ID unchanged, and Go logs it.
     /// </summary>
     [TestMethod]
     public async Task FetchConfig_BadVersionThrows_BadDeviceIdKeepsSession()

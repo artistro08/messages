@@ -9,19 +9,19 @@ using Microsoft.Extensions.Logging;
 namespace GMessages.Protocol.Http;
 
 /// <summary>
-/// How a request body is encoded.
+/// Tells how the client encodes a request body.
 /// </summary>
 public enum GmContentType
 {
     /// <summary>Binary protobuf, <c>application/x-protobuf</c>.</summary>
     Protobuf,
 
-    /// <summary>PBLite (protobuf as a JSON array), <c>application/json+protobuf</c>.</summary>
+    /// <summary>PBLite, a protobuf as a JSON array, <c>application/json+protobuf</c>.</summary>
     PbLite,
 }
 
 /// <summary>
-/// Sends requests to Google the way the web app does: relay headers, cookies, SAPISIDHASH, retries and error decoding.
+/// Sends requests to Google in the same way as the web app: relay headers, cookies, SAPISIDHASH, retries and error decoding.
 /// </summary>
 /// <remarks>
 /// Ported from
@@ -30,58 +30,51 @@ public enum GmContentType
 /// <see href="https://github.com/mautrix/gmessages/blob/ba33f4875a491f5cb47db8a6baf42a8869f5f383/pkg/libgm/util/func.go">util/func.go</see>
 /// and <c>fetchConfig</c> in
 /// <see href="https://github.com/mautrix/gmessages/blob/ba33f4875a491f5cb47db8a6baf42a8869f5f383/pkg/libgm/client.go">client.go</see>.
-/// Every POST gets the relay headers plus the jar's cookies. A 5xx answer is retried up to three attempts in total,
-/// waiting 1 s then 2 s through the <see cref="TimeProvider"/>; long polls and network failures are never retried.
-/// The jar should be the only cookie store: build the <see cref="HttpClient"/> handlers with <c>UseCookies = false</c>
-/// so a handler-level cookie container does not add a second copy. Cookie values and tokens are never logged.
+/// Each POST gets the relay headers and the cookies of the jar. The client sends a request that gets a 5xx answer
+/// up to 3 times in total. Between the attempts, it waits 1 s, then 2 s, on the <see cref="TimeProvider"/>. It never
+/// retries a long poll or a network failure. The jar must be the only cookie store. Thus build the
+/// <see cref="HttpClient"/> handlers with <c>UseCookies = false</c>, so a handler cookie container adds no second copy.
+/// Cookie values and tokens never go in a log.
 /// </remarks>
 /// <param name="http">The client for normal requests.</param>
-/// <param name="longPollHttp">The client for long polls; see <see cref="CreateLongPollClient"/>.</param>
-/// <param name="cookies">The cookie jar shared with the session.</param>
-/// <param name="time">The clock used for SAPISIDHASH and retry delays.</param>
+/// <param name="longPollHttp">The client for long polls, with the <see cref="LongPollTimeout"/> timeout.</param>
+/// <param name="cookies">The cookie jar that the session also uses.</param>
+/// <param name="time">The clock for the SAPISIDHASH and the retry waits.</param>
 /// <param name="log">The logger.</param>
 public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHttp, CookieJar cookies, TimeProvider time, ILogger log)
 {
-    /// <summary>Total attempts for a request that keeps getting 5xx answers.</summary>
+    /// <summary>The total number of attempts for a request that gets only 5xx answers.</summary>
     public const int ServerErrorMaxAttempts = 3;
 
-    /// <summary>The wait before the first retry; attempt N waits N times this.</summary>
+    /// <summary>The wait before the first retry. Attempt N waits N times this value.</summary>
     public static readonly TimeSpan ServerErrorRetryInterval = TimeSpan.FromSeconds(1);
 
-    /// <summary>The long-poll client timeout (Go: <c>WithGlobalTimeout(30 * time.Minute)</c>).</summary>
+    /// <summary>The timeout of the long-poll client. Go sets it with <c>WithGlobalTimeout(30 * time.Minute)</c>.</summary>
     public static readonly TimeSpan LongPollTimeout = TimeSpan.FromMinutes(30);
 
-    /// <summary>The largest media response body read: LibGM's 100 MiB file limit plus 4 MiB for encryption overhead.</summary>
+    /// <summary>The largest media response body that the client reads. It is the 100 MiB LibGM file limit plus 4 MiB for the encryption overhead.</summary>
     public const long MaxMediaBodyBytes = (100L + 4L) * 1024 * 1024;
 
-    /// <summary>The largest API (protobuf) response body read: 16 MiB, far above any real page of conversations or messages.</summary>
+    /// <summary>The largest API response body that the client reads. 16 MiB is far more than any real page of conversations or messages.</summary>
     public const long MaxApiBodyBytes = 16L * 1024 * 1024;
 
     private const string ProtobufMime = "application/x-protobuf";
     private const string PbLiteMime   = "application/json+protobuf";
 
-    // The Last Cookie Line Logged Per Set Of Cookie Names, So An Unchanged Response Stays Quiet
+    // This map keeps the last logged cookie line for each set of cookie names. Thus an unchanged response writes no new line.
     private readonly Dictionary<string, string> _loggedCookies = [];
-
-    /// <summary>
-    /// Creates the client used for long polls.
-    /// </summary>
-    /// <remarks>It only differs from a normal client by its 30 minute timeout.</remarks>
-    /// <param name="handler">The message handler to send through.</param>
-    /// <returns>A new client; the caller owns it.</returns>
-    public static HttpClient CreateLongPollClient(HttpMessageHandler handler) => new(handler) { Timeout = LongPollTimeout };
 
     // =========================================================================
     // PUBLIC API
     // =========================================================================
 
     /// <summary>
-    /// Sends a POST and returns the raw response, retrying 5xx answers.
+    /// Sends a POST and returns the raw response. The method retries 5xx answers.
     /// </summary>
     /// <remarks>
-    /// Returns as soon as the headers arrive so long polls can stream the body. The caller owns and must dispose the
-    /// response. A final 5xx response (after the last attempt) is returned, not thrown. Cookies from every response,
-    /// including ones that are retried, are merged into the jar.
+    /// The method returns when the headers arrive, so a long poll can stream the body. The caller owns the response
+    /// and must dispose it. After the last attempt, the method returns a 5xx response and does not throw. The cookies
+    /// of each response go into the jar, also from a response that the method retries.
     /// </remarks>
     /// <param name="url">The target URL.</param>
     /// <param name="body">The message to send.</param>
@@ -98,7 +91,6 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
         ArgumentNullException.ThrowIfNull(url);
         ArgumentNullException.ThrowIfNull(body);
 
-        // Encode Body Once
         (byte[] bytes, string mime) = type switch
         {
             GmContentType.Protobuf => (body.ToByteArray(), ProtobufMime),
@@ -109,14 +101,13 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
 
         for (int attempt = 1; ; attempt++)
         {
-            // Build Request (A Fresh One Per Attempt); Nothing Leaves Once Canceled
+            // Each attempt gets a new request. After a cancel, no request goes out.
             ct.ThrowIfCancellationRequested();
             using var request = new HttpRequestMessage(HttpMethod.Post, url) { Content = new ByteArrayContent(bytes) };
             AddRelayHeaders(request, "*/*");
             request.Content.Headers.TryAddWithoutValidation("Content-Type", mime);
             cookies.ApplyTo(request, time.GetUtcNow().ToUnixTimeSeconds());
 
-            // Send
             HttpResponseMessage res = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
             cookies.UpdateFrom(res);
             LogSetCookies(res, url.AbsolutePath);
@@ -126,7 +117,6 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
                 return res;
             }
 
-            // Wait And Retry
             TimeSpan retryIn = attempt * ServerErrorRetryInterval;
             LogServerErrorRetry(log, (int)res.StatusCode, url.AbsolutePath, attempt, retryIn);
             res.Dispose();
@@ -138,8 +128,8 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
     /// Sends a POST and decodes the response into a message.
     /// </summary>
     /// <remarks>
-    /// Mirrors Go's <c>typedHTTPResponse</c>: any non-2xx status becomes a <see cref="GmRequestException"/>, with
-    /// Google's <see cref="ErrorResponse"/> attached when the body decodes and has a message.
+    /// Ported from Go <c>typedHTTPResponse</c>. Each non-2xx status throws a <see cref="GmRequestException"/>. The
+    /// exception holds the Google <see cref="ErrorResponse"/> when the body decodes and has a message.
     /// </remarks>
     /// <typeparam name="T">The response message type.</typeparam>
     /// <param name="url">The target URL.</param>
@@ -152,6 +142,7 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
     /// <exception cref="PbLiteException">A PBLite response body is invalid.</exception>
     /// <exception cref="InvalidProtocolBufferException">A protobuf response body is invalid.</exception>
     /// <exception cref="HttpRequestException">The request failed before any response arrived.</exception>
+    /// <exception cref="IOException">The body ended before its declared length.</exception>
     public async Task<T> PostTypedAsync<T>(Uri url, IMessage body, GmContentType type, CancellationToken ct)
         where T : IMessage<T>, new()
     {
@@ -160,11 +151,11 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
     }
 
     /// <summary>
-    /// Sends the web app's config-style GET and decodes the response into a message.
+    /// Sends the config GET of the web app and decodes the response into a message.
     /// </summary>
     /// <remarks>
-    /// The headers match Go's <c>fetchConfig</c>: relay headers with <c>sec-fetch-site: same-origin</c> and without
-    /// <c>x-user-agent</c> and <c>origin</c>. Not retried, as in Go.
+    /// The headers are the same as in Go <c>fetchConfig</c>: the relay headers with <c>sec-fetch-site: same-origin</c>,
+    /// without <c>x-user-agent</c> and without <c>origin</c>. As in Go, the method does not retry.
     /// </remarks>
     /// <typeparam name="T">The response message type.</typeparam>
     /// <param name="url">The target URL.</param>
@@ -175,6 +166,7 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
     /// <exception cref="PbLiteException">A PBLite response body is invalid.</exception>
     /// <exception cref="InvalidProtocolBufferException">A protobuf response body is invalid.</exception>
     /// <exception cref="HttpRequestException">The request failed before any response arrived.</exception>
+    /// <exception cref="IOException">The body ended before its declared length.</exception>
     public async Task<T> GetTypedAsync<T>(Uri url, CancellationToken ct)
         where T : IMessage<T>, new()
     {
@@ -195,27 +187,30 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
     }
 
     /// <summary>
-    /// Sends a raw media request (upload start, upload finalize or download) with only the caller's headers.
+    /// Sends a raw media request with only the headers of the caller: an upload start, an upload finalize or a download.
     /// </summary>
     /// <remarks>
-    /// Media requests carry LibGM's upload headers alone (Go: <c>NewMediaUploadHeaders</c> and <c>BuildUploadHeaders</c>
-    /// in util/func.go): no api key, no <c>x-user-agent</c> and no cookies, so the jar is neither read nor updated. A
-    /// header that belongs on the content, such as <c>content-type</c>, goes there. Unlike Go's download, the status is
-    /// always checked: upload start and finalize need exactly 200, as Go's do, and a download needs any 2xx. A body over
-    /// <see cref="MaxMediaBodyBytes"/> is refused while it is read. Sent on the long-poll client (30 minute timeout),
-    /// since a big file can outlast the normal 100 s. Not retried, as in Go. Bodies and headers are never logged.
+    /// A media request has only the LibGM upload headers, from Go <c>NewMediaUploadHeaders</c> and
+    /// <c>BuildUploadHeaders</c> in util/func.go. It has no API key, no <c>x-user-agent</c> and no cookies. Thus the
+    /// method does not read or update the jar. A content header, such as <c>content-type</c>, goes on the content.
+    /// Go does not check the status of a download, but this method always checks it. An upload start and finalize
+    /// need exactly 200, as in Go. A download needs a 2xx. The method refuses a body over
+    /// <see cref="MaxMediaBodyBytes"/> while it reads it. The request uses the long-poll client with its 30 minute
+    /// timeout. A big file can take longer than the normal 100 s. As in Go, the method does not retry. Bodies and
+    /// headers never go in a log.
     /// </remarks>
     /// <param name="method">The HTTP method.</param>
     /// <param name="url">The target URL.</param>
     /// <param name="headers">Every header to send.</param>
-    /// <param name="content">The body, or null for none; the request disposes it.</param>
-    /// <param name="requireOk">True when only HTTP 200 counts as success (upload start and finalize).</param>
+    /// <param name="content">The body, or null for no body. The request disposes it.</param>
+    /// <param name="requireOk">True when only HTTP 200 is a success, as for an upload start and finalize.</param>
     /// <param name="ct">Cancels the request.</param>
-    /// <returns>The status, the response headers (case-insensitive, content headers included) and the body.</returns>
+    /// <returns>The status, the response headers and the body. The header names are case-insensitive and include the content headers.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="method"/>, <paramref name="url"/> or <paramref name="headers"/> is null.</exception>
     /// <exception cref="GmRequestException">The status was not 200 (<paramref name="requireOk"/>) or not 2xx.</exception>
     /// <exception cref="InvalidDataException">The body is larger than <see cref="MaxMediaBodyBytes"/>.</exception>
     /// <exception cref="HttpRequestException">The request failed before any response arrived.</exception>
+    /// <exception cref="IOException">The body ended before its declared length.</exception>
     /// <exception cref="OperationCanceledException"><paramref name="ct"/> was canceled.</exception>
     public async Task<GmMediaResponse> SendMediaAsync(HttpMethod method, Uri url, IEnumerable<KeyValuePair<string, string>> headers, HttpContent? content, bool requireOk, CancellationToken ct)
     {
@@ -223,7 +218,6 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
         ArgumentNullException.ThrowIfNull(url);
         ArgumentNullException.ThrowIfNull(headers);
 
-        // Build Request: Caller Headers Only
         using var request = new HttpRequestMessage(method, url) { Content = content };
         foreach ((string name, string value) in headers)
         {
@@ -233,7 +227,6 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
             }
         }
 
-        // Send And Read On The Long-Poll Client: A Big File Can Take Longer Than The Normal 100 s Timeout
         using HttpResponseMessage res = await longPollHttp.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
         byte[] body = await ReadCappedAsync(res.Content, MaxMediaBodyBytes, ct).ConfigureAwait(false);
         int status  = (int)res.StatusCode;
@@ -255,9 +248,9 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
     // HELPERS
     // =========================================================================
 
-    // Reads A Body Up To A Cap: A Declared Length Over It Fails At Once, A Streamed One Fails When It Crosses It. A
-    // Declared Length Is Read Straight Into One Array Of That Size (A Short Body Throws EndOfStreamException), So A Big
-    // Video Is Held Once, Not Twice
+    // The method reads a body up to a limit. A declared length over the limit fails at once. A streamed body fails
+    // when it crosses the limit. A declared length goes into 1 array of that size, so a big video is in memory only 1 time.
+    // A body shorter than its declared length throws EndOfStreamException.
     internal static async Task<byte[]> ReadCappedAsync(HttpContent content, long max, CancellationToken ct)
     {
         long? length = content.Headers.ContentLength;
@@ -269,7 +262,6 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
         Stream stream = await content.ReadAsStreamAsync(ct).ConfigureAwait(false);
         await using var streamScope = stream.ConfigureAwait(false);
 
-        // Known Length: Exactly That Many Bytes, Never Read Past
         if (length is { } known)
         {
             byte[] body = new byte[known];
@@ -290,11 +282,11 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
             buffer.Write(chunk, 0, read);
         }
 
-        // Unknown Length Still Copies Once (ToArray) Unless The Buffer Is Exactly Full, When It Is Returned Itself
+        // A full buffer goes back without a copy. Otherwise ToArray copies the body 1 time.
         return buffer.TryGetBuffer(out ArraySegment<byte> filled) && filled.Array is { } all && all.Length == filled.Count ? all : buffer.ToArray();
     }
 
-    // Port Of util.BuildRelayHeaders (Content-Type Is Added By The Caller)
+    // This method ports util.BuildRelayHeaders. The caller adds the Content-Type.
     private static void AddRelayHeaders(HttpRequestMessage req, string accept)
     {
         HttpRequestHeaders h = req.Headers;
@@ -313,7 +305,8 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
         h.TryAddWithoutValidation("accept-language", "en-US,en;q=0.9");
     }
 
-    // Diagnosis: Logs The Names And Expiry Times Of Cookies A Response Sets, Never The Values; Logging Must Never Fail A Request
+    // For diagnosis, the method logs the names and expiry times of the cookies that a response sets. It never logs
+    // the values. The log must never make a request fail.
     private void LogSetCookies(HttpResponseMessage res, string path)
     {
         try
@@ -324,7 +317,7 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
                 return;
             }
 
-            // Only A Change Is News: The Same Cookie Names With The Same Expiry Attributes As Last Time Stay Quiet
+            // Only a change goes in the log. The same cookie names with the same expiry attributes write no new line.
             string nameSet  = string.Join(",", set.Select(c => c.Name).Order(StringComparer.Ordinal));
             string current  = string.Join(",", set.Select(c => $"{c.Name}|{c.Stamp}").Order(StringComparer.Ordinal));
             lock (_loggedCookies)
@@ -347,7 +340,8 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
         }
     }
 
-    // The Name, Readable Expiry And Raw Expiry Attribute Of Each Set-Cookie Line; Values Are Never Read
+    // The method gets the name, the readable expiry and the raw expiry attribute of each Set-Cookie line. It never
+    // reads a value.
     private static List<(string Name, string When, string Stamp)> ParseSetCookies(HttpResponseMessage res, DateTimeOffset now)
     {
         var set = new List<(string Name, string When, string Stamp)>();
@@ -365,7 +359,7 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
                 continue;
             }
 
-            // Max-Age Wins Over Expires, As In RFC 6265; The Raw Attribute Is What Tells Two Responses Apart
+            // As in RFC 6265, Max-Age has priority over Expires. The raw attribute tells 2 responses apart.
             string when  = "session";
             string stamp = "session";
             foreach (string attr in parts.Skip(1).Select(a => a.Trim()))
@@ -390,7 +384,7 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
         return set;
     }
 
-    // An Absurd Expiry (Out Of Range) Is Shown As Unknown Instead Of Throwing
+    // The method shows an expiry out of the DateTimeOffset range as unknown and does not throw.
     private static string FormatExpiry(Func<DateTimeOffset> expires)
     {
         try
@@ -403,23 +397,22 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
         }
     }
 
-    // Port Of typedHTTPResponse
+    // This method ports typedHTTPResponse.
     private async Task<T> ReadTypedAsync<T>(HttpResponseMessage res, CancellationToken ct)
         where T : IMessage<T>, new()
     {
         using (res)
         {
-            byte[] body = await ReadCappedAsync(res.Content, MaxApiBodyBytes, ct).ConfigureAwait(false);
+            byte[] body  = await ReadCappedAsync(res.Content, MaxApiBodyBytes, ct).ConfigureAwait(false);
             string? mime = res.Content.Headers.ContentType?.MediaType;
-            int status = (int)res.StatusCode;
+            int status   = (int)res.StatusCode;
 
-            // Success
             if (status is >= 200 and < 300)
             {
                 return DecodeBody<T>(body, mime);
             }
 
-            // Failure: Attach Google's Error When It Decodes
+            // The exception holds the Google error when the error body decodes.
             ErrorResponse? error = null;
             try
             {
@@ -435,7 +428,7 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
         }
     }
 
-    // Port Of decodeProtoResp (Media Type Without Parameters, Case-Insensitive)
+    // This method ports decodeProtoResp. It compares the media type without parameters and ignores case.
     private static T DecodeBody<T>(byte[] body, string? mime) where T : IMessage<T>, new()
     {
         if (string.IsNullOrEmpty(mime))
@@ -472,9 +465,9 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
 }
 
 /// <summary>
-/// The answer to a raw media request sent with <see cref="GmHttpClient.SendMediaAsync"/>.
+/// The answer to a raw media request from <see cref="GmHttpClient.SendMediaAsync"/>.
 /// </summary>
 /// <param name="StatusCode">The HTTP status, always 2xx.</param>
-/// <param name="Headers">The response and content headers by name, case-insensitive; repeated values are joined with commas.</param>
+/// <param name="Headers">The response and content headers by name, case-insensitive. A comma joins repeated values.</param>
 /// <param name="Body">The response body.</param>
 public sealed record GmMediaResponse(int StatusCode, IReadOnlyDictionary<string, string> Headers, byte[] Body);

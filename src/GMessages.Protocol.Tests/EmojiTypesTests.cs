@@ -6,7 +6,7 @@ namespace GMessages.Protocol.Tests;
 /// Checks <see cref="EmojiTypes"/> against every case of <c>gmproto/emojitype.go</c>, in both directions.
 /// </summary>
 /// <remarks>
-/// C#-only. The pairs were copied from
+/// This test has no Go golden file. The pairs come from
 /// <see href="https://github.com/mautrix/gmessages/blob/ba33f4875a491f5cb47db8a6baf42a8869f5f383/pkg/libgm/gmproto/emojitype.go">emojitype.go</see>.
 /// </remarks>
 [TestClass]
@@ -16,7 +16,7 @@ public class EmojiTypesTests
     /// Each Go case maps the type to its emoji and the emoji back to the type.
     /// </summary>
     /// <param name="type">The emoji type.</param>
-    /// <param name="emoji">Go's emoji for it.</param>
+    /// <param name="emoji">The Go emoji for that type.</param>
     [TestMethod]
     [DataRow(EmojiType.Like, "\U0001F44D")]
     [DataRow(EmojiType.Love, "\U0001F60D")]
@@ -42,7 +42,7 @@ public class EmojiTypesTests
     public void FromUnicode_BareHeart_IsRedHeart() => Assert.AreEqual(EmojiType.RedHeart, EmojiTypes.FromUnicode("❤"));
 
     /// <summary>
-    /// Anything Go has no case for is custom.
+    /// An emoji that Go has no case for gives the custom type.
     /// </summary>
     /// <param name="emoji">An emoji with no case.</param>
     [TestMethod]
@@ -52,7 +52,7 @@ public class EmojiTypesTests
     public void FromUnicode_Unknown_IsCustom(string emoji) => Assert.AreEqual(EmojiType.Custom, EmojiTypes.FromUnicode(emoji));
 
     /// <summary>
-    /// Types with no case give an empty string, as Go's default branch does.
+    /// A type with no case gives an empty string, like the Go default branch.
     /// </summary>
     /// <param name="type">A type with no case.</param>
     [TestMethod]

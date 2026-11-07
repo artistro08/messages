@@ -1,21 +1,22 @@
 namespace GMessages.Protocol.Pairing;
 
 /// <summary>
-/// The emoji lists the phone shows when pairing with a Google account, and the pick of one emoji from a number.
+/// The emoji lists that the phone shows for a Google account pairing. The type also picks 1 emoji from a number.
 /// </summary>
 /// <remarks>
 /// Ported from <c>pairingEmojisV0</c> and <c>init()</c> in
 /// <see href="https://github.com/mautrix/gmessages/blob/ba33f4875a491f5cb47db8a6baf42a8869f5f383/pkg/libgm/pair_google.go">pair_google.go</see>.
-/// <see cref="V0"/> is copied verbatim, duplicates and missing variation selectors included, because the index
-/// into it must match the phone's. <see cref="V1"/> is built the way Go's <c>init()</c> does: V0 without
-/// duplicates (first one kept), plus the added emojis, minus the removed ones. All comparisons are ordinal.
+/// <see cref="V0"/> is a verbatim copy, with its duplicates and missing variation selectors. The index into it must
+/// match the index on the phone. <see cref="V1"/> comes from the same steps as <c>init()</c> in Go. These steps
+/// remove the duplicates of V0 and keep the first one. Then they add the new emojis and remove the dropped ones. All
+/// comparisons are ordinal.
 /// </remarks>
 public static class PairingEmojis
 {
-    // Copied Verbatim From pairingEmojisV0
+    // A verbatim copy of pairingEmojisV0.
     private static readonly string[] V0List = ["😁", "😅", "🤣", "🫠", "🥰", "😇", "🤩", "😘", "😜", "🤗", "🤔", "🤐", "😴", "🥶", "🤯", "🤠", "🥳", "🥸", "😎", "🤓", "🧐", "🥹", "😭", "😱", "😖", "🥱", "😮‍💨", "🤡", "💩", "👻", "👽", "🤖", "😻", "💌", "💘", "💕", "❤", "💢", "💥", "💫", "💬", "🗯", "💤", "👋", "🙌", "🙏", "✍", "🦶", "👂", "🧠", "🦴", "👀", "🧑", "🧚", "🧍", "👣", "🐵", "🐶", "🐺", "🦊", "🦁", "🐯", "🦓", "🦄", "🐑", "🐮", "🐷", "🐿", "🐰", "🦇", "🐻", "🐨", "🐼", "🦥", "🐾", "🐔", "🐥", "🐦", "🕊", "🦆", "🦉", "🪶", "🦩", "🐸", "🐢", "🦎", "🐍", "🐳", "🐬", "🦭", "🐠", "🐡", "🦈", "🪸", "🐌", "🦋", "🐛", "🐝", "🐞", "🪱", "💐", "🌸", "🌹", "🌻", "🌱", "🌲", "🌴", "🌵", "🌾", "☘", "🍁", "🍂", "🍄", "🪺", "🍇", "🍈", "🍉", "🍋", "🍌", "🍍", "🍎", "🍐", "🍒", "🍓", "🥝", "🥥", "🥑", "🥕", "🌽", "🌶", "🫑", "🥦", "🥜", "🍞", "🥐", "🥨", "🧀", "🍗", "🍔", "🍟", "🍕", "🌭", "🌮", "🥗", "🥣", "🍿", "🦀", "🦑", "🍦", "🍩", "🍪", "🍫", "🍰", "🍬", "🍭", "☕", "🫖", "🍹", "🥤", "🧊", "🥢", "🍽", "🥄", "🧭", "🏔", "🌋", "🏕", "🏖", "🪵", "🏗", "🏡", "🏰", "🛝", "🚂", "🛵", "🛴", "🛼", "🚥", "⚓", "🛟", "⛵", "✈", "🚀", "🛸", "🧳", "⏰", "🌙", "🌡", "🌞", "🪐", "🌠", "🌧", "🌀", "🌈", "☂", "⚡", "❄", "⛄", "🔥", "🎇", "🧨", "✨", "🎈", "🎉", "🎁", "🏆", "🏅", "⚽", "⚾", "🏀", "🏐", "🏈", "🎾", "🎳", "🏓", "🥊", "⛳", "⛸", "🎯", "🪁", "🔮", "🎮", "🧩", "🧸", "🪩", "🖼", "🎨", "🧵", "🧶", "🦺", "🧣", "🧤", "🧦", "🎒", "🩴", "👟", "👑", "👒", "🎩", "🧢", "💎", "🔔", "🎤", "📻", "🎷", "🪗", "🎸", "🎺", "🎻", "🥁", "📺", "🔋", "💻", "💿", "☎", "🕯", "💡", "📖", "📚", "📬", "✏", "✒", "🖌", "🖍", "📝", "💼", "📋", "📌", "📎", "🔑", "🔧", "🧲", "🪜", "🧬", "🔭", "🩹", "🩺", "🪞", "🛋", "🪑", "🛁", "🧹", "🧺", "🔱", "🏁", "🐪", "🐘", "🦃", "🍞", "🍜", "🍠", "🚘", "🤿", "🃏", "👕", "📸", "🏷", "✂", "🧪", "🚪", "🧴", "🧻", "🪣", "🧽", "🚸"];
 
-    // Copied Verbatim From init()
+    // A verbatim copy of the lists in init().
     private static readonly string[] AddedV1   = ["🍋‍🟩", "🐦‍🔥", "🐲", "🪅", "🦜", "🏺", "🗿", "🫐", "⛽", "🍱", "🥡", "🧋", "🍼", "📐"];
     private static readonly string[] RemovedV1 = ["💻", "🤗", "💬", "👋", "😁", "😎", "😇", "🥰", "🤓", "🤩"];
 
@@ -33,8 +34,8 @@ public static class PairingEmojis
     /// Picks the emoji for an auth number.
     /// </summary>
     /// <remarks>
-    /// The number is taken modulo the list length. Go converts the <c>uint32</c> to a 64-bit <c>int</c> first, so
-    /// the result is never negative; unsigned math here gives the same index.
+    /// The index is the number modulo the list length. Go converts the <c>uint32</c> to a 64-bit <c>int</c> first, so
+    /// the result is never negative. Unsigned math here gives the same index.
     /// </remarks>
     /// <param name="authNumber">The first four bytes of the UKEY2 auth key, big-endian.</param>
     /// <param name="version">The confirmed verification code version: 0 or 1.</param>
@@ -51,7 +52,7 @@ public static class PairingEmojis
         return list[(int)(authNumber % (uint)list.Count)];
     }
 
-    // Port Of init(): Deduplicate (First Kept), Append Added, Delete Removed
+    // Port of init(). It removes duplicates and keeps the first one, adds the new emojis, then removes the dropped ones.
     private static string[] BuildV1()
     {
         var removed = new HashSet<string>(RemovedV1, StringComparer.Ordinal);
