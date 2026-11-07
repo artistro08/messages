@@ -233,7 +233,8 @@ public sealed partial class ConnectionController : IAsyncDisposable
     /// <remarks>
     /// Builds fresh <see cref="AuthData"/> with the cookies and a fresh client, then pairs. On success the session is
     /// saved and the state is Connected. On failure that client is disposed, the state stays where it was
-    /// (NotPaired or SignedOut) and the error is rethrown for the pairing window to show.
+    /// (NotPaired or SignedOut) and the error is rethrown for the pairing window to show. An unpair that cancels the
+    /// pairing moves the state to NotPaired before the error is rethrown.
     /// </remarks>
     /// <param name="cookies">The Google sign-in cookies.</param>
     /// <param name="showEmoji">Shows the emoji the user must tap on the phone.</param>
@@ -288,6 +289,13 @@ public sealed partial class ConnectionController : IAsyncDisposable
             {
                 SetCurrent(null);
                 await client.DisposeAsync().ConfigureAwait(false);
+
+                // The pairing window reads the state to tell an unpair from a failure.
+                if (pairCts.IsCancellationRequested && !ct.IsCancellationRequested && !IsClosing())
+                {
+                    SetState(ConnectionState.NotPaired);
+                }
+
                 throw;
             }
             finally
@@ -310,6 +318,14 @@ public sealed partial class ConnectionController : IAsyncDisposable
         finally
         {
             _gate.Release();
+        }
+    }
+
+    private bool IsClosing()
+    {
+        lock (_stateLock)
+        {
+            return _closing;
         }
     }
 
