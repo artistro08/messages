@@ -9,30 +9,30 @@ using Windows.UI.Xaml.Media;
 namespace GMessages.App.Views.Controls;
 
 /// <summary>
-/// The edge between the conversation list and the chat: drag it to resize the list.
+/// Shows the edge between the conversation list and the chat. A drag on the edge resizes the list.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Shows the left-right resize cursor on hover. A drag raises <see cref="Resized"/> with how far the pointer has moved
-/// since the press (window coordinates, so the edge moving under the pointer doesn't change it), then
-/// <see cref="ResizeCompleted"/> on release. Focused (Tab), the Left and Right arrow keys resize in steps: each step is
-/// a <see cref="Resized"/> of one step followed by <see cref="ResizeCompleted"/>.
+/// The edge shows the left-right resize cursor on hover. A drag raises <see cref="Resized"/> with the distance of the
+/// pointer from the press. The distance is in window coordinates, so the edge that moves under the pointer does not
+/// change it. The release raises <see cref="ResizeCompleted"/>. With the focus from Tab, the Left and Right arrow keys
+/// resize in steps. Each step raises <see cref="Resized"/> once, then <see cref="ResizeCompleted"/>.
 /// </para>
 /// <para>
-/// The owner (<c>ChatsView</c>) turns the distance into a width, keeps it within its limits and saves it on
-/// completion.
+/// The owner, <c>ChatsView</c>, turns the distance into a list width between the narrowest width and half the window.
+/// It saves the width when the resize completes.
 /// </para>
 /// </remarks>
 public sealed partial class PaneSplitter : UserControl
 {
-    // How Far One Arrow Key Moves The Edge, In Effective Pixels
+    // An arrow key moves the edge by this distance in effective pixels.
     private const double KeyStep = 16;
 
-    // Where The Pointer Was Pressed (Window X), While A Drag Runs
+    // Holds the window X of the press while a drag runs.
     private double? _pressX;
 
     /// <summary>
-    /// Creates the edge: transparent, the full height, with the resize cursor and a tab stop.
+    /// Creates a transparent edge of full height with the resize cursor and a tab stop.
     /// </summary>
     public PaneSplitter()
     {
@@ -41,7 +41,6 @@ public sealed partial class PaneSplitter : UserControl
         UseSystemFocusVisuals = true;
         PointerCursor.Use(this, PointerCursor.SizeWestEast);
 
-        // Behavior
         PointerPressed     += OnPointerPressed;
         PointerMoved       += OnPointerMoved;
         PointerReleased    += OnPointerEnded;
@@ -50,24 +49,20 @@ public sealed partial class PaneSplitter : UserControl
     }
 
     /// <summary>
-    /// Raised while resizing, with how far the edge should move from where the resize started (positive is right).
+    /// Raised during a resize with the distance of the edge from its start. A positive distance is to the right.
     /// </summary>
     public event EventHandler<double>? Resized;
 
     /// <summary>
-    /// Raised once a resize ends (the pointer released, or after each arrow key step).
+    /// Raised when a resize ends: on the pointer release, or after each arrow key step.
     /// </summary>
     public event EventHandler? ResizeCompleted;
 
     /// <summary>
-    /// Shows the edge to UI Automation (a plain user control has no peer of its own), so it can be found and focused.
+    /// Shows the edge to UI Automation, so that a client can find and focus it. A plain user control has no peer.
     /// </summary>
     /// <returns>The peer.</returns>
     protected override AutomationPeer OnCreateAutomationPeer() => new FrameworkElementAutomationPeer(this);
-
-    // =========================================================================
-    // EVENT HANDLERS
-    // =========================================================================
 
     private void OnPointerPressed(object sender, PointerRoutedEventArgs e)
     {
@@ -91,7 +86,7 @@ public sealed partial class PaneSplitter : UserControl
         e.Handled = true;
     }
 
-    // Released Or Capture Lost (Another Window Took It): The Resize Ends Where It Is
+    // A release or a capture loss ends the resize at its current place. Another window can take the capture.
     private void OnPointerEnded(object sender, PointerRoutedEventArgs e)
     {
         if (_pressX is null)

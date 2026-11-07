@@ -1,6 +1,8 @@
 using GMessages.App.Windowing;
 using Windows.Foundation;
 using Windows.UI.Xaml;
+using Windows.UI.Xaml.Automation;
+using Windows.UI.Xaml.Automation.Peers;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Media;
 using static GMessages.App.Windowing.WindowInterop;
@@ -8,21 +10,24 @@ using static GMessages.App.Windowing.WindowInterop;
 namespace GMessages.App.Views.Controls;
 
 /// <summary>
-/// The main window's title bar: Back, ☰, the icon and title, the app's own content, and the caption buttons.
+/// Shows the title bar of the main window: Back, ☰, the icon and title, the app content and the caption buttons.
 /// </summary>
 /// <remarks>
 /// <para>
-/// WinUI 3's TitleBar rebuilt for WinUI 2.8 (which has none), with its look and layout. The window can't draw a system
-/// caption over an island, so the caption buttons are drawn here, and the window's title bar input (see
-/// <see cref="TitleBarInput"/>) gives the row the caption's behavior: after every layout change this tells the window
-/// where the row, the caption buttons and the click-through holes are. Back and ☰ are holes, and so is every element
-/// passed to <see cref="AddPassthrough"/> (the profile picture), or only those passed to
-/// <see cref="SetPassthroughOverride"/> while it's set (the photo viewer's toolbar).
+/// This control rebuilds the TitleBar of WinUI 3 with its look and layout, because WinUI 2.8 has no TitleBar. The
+/// window cannot draw a system caption over an island, so this control draws the caption buttons. The title bar input
+/// of the window, <see cref="TitleBarInput"/>, gives the row the behavior of a caption. After each layout change, the
+/// control sends the window the places of the row, caption buttons and click-through holes.
 /// </para>
 /// <para>
-/// The caption buttons take no pointer input of their own: the input window reports hover and press, and runs the
-/// click as the system command. Their Click handlers are for UI Automation (Narrator, the UI tests), which invokes
-/// them directly.
+/// Back and ☰ are holes, and so is each element from <see cref="AddPassthrough"/>, such as the profile picture. While
+/// <see cref="SetPassthroughOverride"/> has a value, only its elements are holes, such as the toolbar of the photo
+/// viewer.
+/// </para>
+/// <para>
+/// The caption buttons take no pointer input. The input window reports hover and press, and it runs the click as the
+/// system command. The Click handlers are for UI Automation, such as Narrator and the UI tests, which invokes them
+/// directly.
 /// </para>
 /// </remarks>
 public sealed partial class TitleBar : UserControl
@@ -34,7 +39,7 @@ public sealed partial class TitleBar : UserControl
     private bool _isActive = true;
 
     /// <summary>
-    /// Creates the title bar; <see cref="Attach"/> connects it to its window.
+    /// Creates the title bar. <see cref="Attach"/> connects it to its window.
     /// </summary>
     public TitleBar()
     {
@@ -43,17 +48,17 @@ public sealed partial class TitleBar : UserControl
     }
 
     /// <summary>
-    /// The title bar's Back was clicked.
+    /// Raised when the user clicks Back in the title bar.
     /// </summary>
     public event EventHandler? BackRequested;
 
     /// <summary>
-    /// The title bar's ☰ was clicked.
+    /// Raised when the user clicks ☰ in the title bar.
     /// </summary>
     public event EventHandler? PaneToggleRequested;
 
     /// <summary>
-    /// Gets or sets the title beside the icon; UI Automation reads the title bar by it, as WinUI 3's TitleBar.
+    /// Gets or sets the title beside the icon. UI Automation names the title bar by it, as for the TitleBar of WinUI 3.
     /// </summary>
     public string Title
     {
@@ -61,12 +66,12 @@ public sealed partial class TitleBar : UserControl
         set
         {
             TitleText.Text = value;
-            Windows.UI.Xaml.Automation.AutomationProperties.SetName(this, value);
+            AutomationProperties.SetName(this, value);
         }
     }
 
     /// <summary>
-    /// Sets the icon left of the title.
+    /// Gets or sets the icon left of the title.
     /// </summary>
     public ImageSource? Icon
     {
@@ -75,7 +80,7 @@ public sealed partial class TitleBar : UserControl
     }
 
     /// <summary>
-    /// Gets or sets the app's own content, filling the row from the title to the caption buttons.
+    /// Gets or sets the content of the app, which fills the row from the title to the caption buttons.
     /// </summary>
     public UIElement? MainContent
     {
@@ -84,12 +89,12 @@ public sealed partial class TitleBar : UserControl
     }
 
     /// <summary>
-    /// Gets the title bar's Back button (shown with <see cref="IsBackButtonVisible"/>).
+    /// Gets the Back button of the title bar. <see cref="IsBackButtonVisible"/> shows it.
     /// </summary>
     public Button Back => BackButton;
 
     /// <summary>
-    /// Gets the title bar's ☰ button (shown with <see cref="IsPaneToggleButtonVisible"/>).
+    /// Gets the ☰ button of the title bar. <see cref="IsPaneToggleButtonVisible"/> shows it.
     /// </summary>
     public Button PaneToggle => PaneToggleButton;
 
@@ -119,12 +124,13 @@ public sealed partial class TitleBar : UserControl
         }
     }
 
-    // After Back Or ☰ The Icon Sits 2 px On (WinUI 3's NegativeInsetSpacing), Else 14 px From The Edge
+    // After Back or ☰, the icon sits 2 px from the button, as NegativeInsetSpacing of WinUI 3 does. Otherwise it sits
+    // 14 px from the edge.
     private void ShowHeaderSpacing() =>
         LeftHeaderPaddingColumn.Width = new GridLength(IsBackButtonVisible || IsPaneToggleButtonVisible ? 2 : 14);
 
     /// <summary>
-    /// Sets the caption buttons' light or dark look apart from the rest (dark over the photo viewer's scrim).
+    /// Sets the light or dark look of the caption buttons alone, such as dark over the photo viewer scrim.
     /// </summary>
     public ElementTheme CaptionTheme
     {
@@ -132,7 +138,7 @@ public sealed partial class TitleBar : UserControl
     }
 
     /// <summary>
-    /// Makes this the window's title bar: its row drags the window and its caption buttons work.
+    /// Makes this control the title bar of the window. Its row drags the window, and its caption buttons work.
     /// </summary>
     /// <param name="window">The main window.</param>
     internal void Attach(XamlWindow window)
@@ -151,16 +157,17 @@ public sealed partial class TitleBar : UserControl
     }
 
     /// <summary>
-    /// Lets clicks through to an element in the row (it isn't a drag area), for as long as it shows.
+    /// Lets clicks through to an element in the row while the element shows. The element is not a drag area.
     /// </summary>
-    /// <param name="element">An interactive element in the title bar's content.</param>
+    /// <param name="element">An interactive element in the content of the title bar.</param>
     public void AddPassthrough(FrameworkElement element) => _passthrough.Add(element);
 
     /// <summary>
-    /// Lets clicks through only where these elements are, in place of Back, ☰ and the added elements; null puts those
-    /// back. For the photo viewer's toolbar, whose scrim covers the row while it's open.
+    /// Lets clicks through only at these elements, in place of Back, ☰ and the added elements. A null value restores
+    /// those holes.
     /// </summary>
-    /// <param name="elements">The elements taking clicks, or null.</param>
+    /// <remarks>The photo viewer uses it for its toolbar, because its scrim covers the row while it is open.</remarks>
+    /// <param name="elements">The elements that take clicks, or null.</param>
     public void SetPassthroughOverride(IReadOnlyList<FrameworkElement>? elements)
     {
         _passthroughOverride = elements;
@@ -168,8 +175,8 @@ public sealed partial class TitleBar : UserControl
     }
 
     /// <summary>
-    /// Tells the window where the row, the caption buttons and the click-through holes are now. Runs after every layout
-    /// pass, and does nothing unless something moved.
+    /// Sends the window the current places of the row, the caption buttons and the click-through holes. The method runs
+    /// after each layout pass and does nothing unless something moved.
     /// </summary>
     public void RecomputeDragRegions()
     {
@@ -205,7 +212,8 @@ public sealed partial class TitleBar : UserControl
         _window.SetTitleBar(layout);
     }
 
-    // An Element's Bounds In The Window's Client Pixels (The Island Fills The Client Area From Its Top Left)
+    // Gives the bounds of an element in client pixels of the window. The island fills the client area from its top
+    // left.
     private static RECT? ToClient(FrameworkElement element, double scale)
     {
         if (element.ActualWidth <= 0 || element.ActualHeight <= 0)
@@ -223,11 +231,7 @@ public sealed partial class TitleBar : UserControl
         };
     }
 
-    // =========================================================================
-    // CAPTION BUTTONS
-    // =========================================================================
-
-    // Hover And Press, As The Input Window Reports Them; Dimmed While The Window Is Inactive
+    // Shows hover and press as the input window reports them. The glyphs dim while the window is inactive.
     private void ShowCaptionState(int hovered, int pressed)
     {
         ShowCaptionState(MinimizeButton, HTMINBUTTON, hovered, pressed);
@@ -241,13 +245,13 @@ public sealed partial class TitleBar : UserControl
         _ = VisualStateManager.GoToState(button, state, false);
     }
 
-    // Maximize Becomes Restore While Maximized
+    // Maximize becomes Restore while the window is maximized.
     private void ShowMaximized()
     {
         bool maximized              = _window?.IsMaximized == true;
         MaximizeButton.Content      = maximized ? "" : "";
         string name                 = maximized ? "Restore" : "Maximize";
-        Windows.UI.Xaml.Automation.AutomationProperties.SetName(MaximizeButton, name);
+        AutomationProperties.SetName(MaximizeButton, name);
     }
 
     private void OnMinimizeClick(object sender, RoutedEventArgs e) => RunCommand(SC_MINIMIZE);
@@ -265,15 +269,10 @@ public sealed partial class TitleBar : UserControl
     }
 
     /// <summary>
-    /// Gives the title bar its own UI Automation element (a UserControl has none), named by its title.
+    /// Gives the title bar a UI Automation element, named by its title. A UserControl has none.
     /// </summary>
-    /// <returns>The title bar's automation peer.</returns>
-    protected override Windows.UI.Xaml.Automation.Peers.AutomationPeer OnCreateAutomationPeer() =>
-        new Windows.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer(this);
-
-    // =========================================================================
-    // BACK AND ☰
-    // =========================================================================
+    /// <returns>The automation peer of the title bar.</returns>
+    protected override AutomationPeer OnCreateAutomationPeer() => new FrameworkElementAutomationPeer(this);
 
     private void OnBackClick(object sender, RoutedEventArgs e) => BackRequested?.Invoke(this, EventArgs.Empty);
 

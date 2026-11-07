@@ -1,5 +1,5 @@
-<!-- Media Thumb: a 40 px rounded square for a quoted or replied-to message's media. A photo's or video's thumbnail cropped to
-     fill (a GIF still), on a neutral fill until it arrives; a file icon for anything else -->
+<!-- The 40 px rounded square shows the media of a quoted message. A photo or a video shows its thumbnail, cropped to
+     fill, and a GIF shows still. A neutral fill shows until the thumbnail arrives. Other media shows a file icon. -->
 <UserControl
     x:Class="GMessages.App.Views.Controls.MediaThumb"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -7,7 +7,7 @@
     Width="40"
     Height="40">
 
-    <!-- Placeholder Fill, The Icon, Then The Picture Over Them -->
+    <!-- The picture covers the icon, and the icon covers the placeholder fill. -->
     <Grid
         Background="{ThemeResource SubtleFillColorSecondaryBrush}"
         CornerRadius="6">

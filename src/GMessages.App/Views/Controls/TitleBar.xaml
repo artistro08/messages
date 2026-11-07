@@ -6,10 +6,12 @@
     xmlns:muxc="using:Microsoft.UI.Xaml.Controls"
     Height="48">
 
-    <!-- WinUI 3's TitleBar, Rebuilt: its Back and ☰ styles (Windows App SDK 2.3's generic.xaml: 40 px wide, 2 px margin,
-         subtle fills, the animated arrow and lines; square here, 40 px tall, not stretched to the bar's 44), its expanded (48 px) layout, and the caption buttons Windows draws
-         for a tall title bar, drawn here instead. The caption buttons never see the pointer (the window's title bar input
-         sits over them and reports hover and press, see TitleBarInput) -->
+    <!-- This control rebuilds the TitleBar of WinUI 3. The Back and ☰ styles come from generic.xaml of Windows App SDK
+         2.3. They are 40 px wide with a 2 px margin, subtle fills, and the animated arrow and lines. Here they are
+         square and 40 px tall, not stretched to the 44 px of the bar. Back and ☰ keep this default hover and press
+         feedback, unlike the icon buttons. The bar uses the expanded 48 px layout. The caption buttons look as Windows
+         draws them for a tall title bar, but this control draws them. The caption buttons never get the pointer. The
+         title bar input of the window sits over them and reports hover and press, as TitleBarInput shows. -->
     <UserControl.Resources>
         <Style x:Key="TitleBarNavButtonStyle" TargetType="Button">
             <Setter Property="Background" Value="{ThemeResource SubtleFillColorTransparentBrush}" />
@@ -68,8 +70,8 @@
             </Setter>
         </Style>
 
-        <!-- Caption Button: 46 × 48, a 10 px Segoe Fluent Icons glyph; subtle fills on hover and press, dimmed glyph while
-             the window is inactive -->
+        <!-- A caption button is 46 by 48 px with a 10 px Segoe Fluent Icons glyph. It shows subtle fills on hover and
+             press, and a dim glyph while the window is inactive. -->
         <Style x:Key="CaptionButtonStyle" TargetType="Button">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
@@ -119,7 +121,7 @@
             </Setter>
         </Style>
 
-        <!-- Close: Windows' red with a white glyph on hover and press -->
+        <!-- Close shows the red of Windows with a white glyph on hover and press. -->
         <Style
             x:Key="CloseCaptionButtonStyle"
             BasedOn="{StaticResource CaptionButtonStyle}"
@@ -167,7 +169,7 @@
     </UserControl.Resources>
 
     <Grid x:Name="LayoutRoot" Background="Transparent">
-        <!-- Inactive: the title and the content dim, as WinUI 3's TitleBar does -->
+        <!-- While the window is inactive, the title and the content dim, as in the TitleBar of WinUI 3. -->
         <VisualStateManager.VisualStateGroups>
             <VisualStateGroup x:Name="ActivationStates">
                 <VisualState x:Name="Active" />
@@ -184,26 +186,19 @@
         </VisualStateManager.VisualStateGroups>
 
         <Grid.ColumnDefinitions>
-            <!-- 0: Left Padding -->
             <ColumnDefinition Width="2" />
-            <!-- 1: Back -->
             <ColumnDefinition Width="Auto" />
-            <!-- 2: ☰ -->
             <ColumnDefinition Width="Auto" />
-            <!-- 3: Left Header Padding: 2 px after Back or ☰, set from code -->
+            <!-- The code sets this padding to 2 px after Back or ☰. -->
             <ColumnDefinition x:Name="LeftHeaderPaddingColumn" Width="14" />
-            <!-- 4: Icon -->
             <ColumnDefinition Width="Auto" />
-            <!-- 5: Title -->
             <ColumnDefinition Width="Auto" />
-            <!-- 6: Content: right up to the caption buttons. WinUI 3's narrow 8 px drag strip (Leaf Calendar's) sat under
-                 the profile picture, which reached over it to Minimize, so there is none here -->
+            <!-- The content reaches the caption buttons. In Leaf Calendar, the narrow 8 px drag strip of WinUI 3 sat
+                 under the profile picture. The picture reached over the strip to Minimize, so this bar has no strip. -->
             <ColumnDefinition Width="*" />
-            <!-- 7: Caption Buttons -->
             <ColumnDefinition Width="Auto" />
         </Grid.ColumnDefinitions>
 
-        <!-- Back -->
         <Button
             x:Name="BackButton"
             Grid.Column="1"
@@ -224,7 +219,6 @@
             </muxc:AnimatedIcon>
         </Button>
 
-        <!-- ☰ -->
         <Button
             x:Name="PaneToggleButton"
             Grid.Column="2"
@@ -242,7 +236,6 @@
             </muxc:AnimatedIcon>
         </Button>
 
-        <!-- Icon And Title -->
         <Image
             x:Name="IconImage"
             Grid.Column="4"
@@ -260,14 +253,13 @@
             TextTrimming="CharacterEllipsis"
             TextWrapping="NoWrap" />
 
-        <!-- Content: fills the row up to the drag strip before the caption buttons -->
+        <!-- The content fills the row up to the caption buttons. -->
         <ContentPresenter
             x:Name="ContentHost"
             Grid.Column="6"
             HorizontalAlignment="Stretch"
             VerticalAlignment="Center" />
 
-        <!-- Caption Buttons -->
         <StackPanel
             x:Name="CaptionButtons"
             Grid.Column="7"

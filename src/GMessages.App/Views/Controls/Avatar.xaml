@@ -4,10 +4,10 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:GMessages.App.Views.Controls">
 
-    <!-- Avatar: one circle, or two stacked circles for a group -->
+    <!-- The avatar shows 1 circle, or 2 stacked circles for a group. -->
     <Grid Width="40" Height="40">
 
-        <!-- Back Circle (Groups Only): the photo over the colored initial -->
+        <!-- Only a group shows the back circle. Its photo covers the colored initial. -->
         <Grid
             Width="28"
             Height="28"
@@ -33,7 +33,7 @@
             </Ellipse>
         </Grid>
 
-        <!-- Front Circle: the photo over the colored initial (an image brush with no source draws nothing) -->
+        <!-- The photo of the front circle covers the colored initial. An image brush with no source draws nothing. -->
         <Grid
             Width="{x:Bind local:Avatar.FrontSize(SecondColor), Mode=OneWay}"
             Height="{x:Bind local:Avatar.FrontSize(SecondColor), Mode=OneWay}"
@@ -47,7 +47,8 @@
                 Foreground="White"
                 Text="{x:Bind Initial, Mode=OneWay}" />
 
-            <!-- No Name (Just A Number Or A Short Code): The Filled Person Icon In Place Of The Letter -->
+            <!-- A person with no name shows the filled person icon in place of the letter. The phone then has only a
+                 number or a short code. -->
             <FontIcon
                 FontSize="{x:Bind local:Avatar.PersonSize(SecondColor), Mode=OneWay}"
                 Foreground="White"

@@ -10,16 +10,24 @@ using Windows.UI.Xaml.Input;
 namespace GMessages.App.Views.Controls;
 
 /// <summary>
-/// One conversation list row: avatar, name, snippet, time, the pin and muted icons, and the ⋮ shown on hover.
+/// Shows 1 row of the conversation list: avatar, name, snippet, time, the pin and muted icons, and the ⋮ on hover.
 /// </summary>
 /// <remarks>
-/// Unread rows draw the name, snippet and time bold, the snippet and time in primary text (the <c>ReadState</c>
-/// visual states). The row view model raises one change for every update, so every
-/// <c>x:Bind</c> here re-reads it. The ⋮ (<c>Row.More.{id}</c>) is collapsed until the pointer is over the row; then it
-/// takes 32 px at the right edge and fades in while this row's time and icons slide left (the <c>Hover</c> visual states
-/// on the root element, snapped when Windows animations are off). It raises <see cref="MoreRequested"/> when clicked.
-/// Hovering the row shows <see cref="ConversationRowViewModel.HoverText"/> as a tooltip, only when the name or snippet
-/// is cut off or more than one unread message came in, like Windows' own trimmed text.
+/// <para>
+/// An unread row draws the name, snippet and time in bold. The <c>ReadState</c> visual states also draw its snippet and
+/// time in primary text. The row view model raises 1 change for each update, so each <c>x:Bind</c> here reads it
+/// again.
+/// </para>
+/// <para>
+/// The ⋮ <c>Row.More.{id}</c> stays collapsed until the pointer is over the row. Then it takes 32 px at the right edge
+/// and fades in. At the same time, the time and icons of the row slide left. The <c>Hover</c> visual states on the root
+/// element run this, and they snap when the Windows animations are off. A click on the ⋮ raises
+/// <see cref="MoreRequested"/>.
+/// </para>
+/// <para>
+/// A hover on the row shows <see cref="ConversationRowViewModel.HoverText"/> as a tooltip, as Windows does for trimmed
+/// text. The tooltip shows only when the name or snippet is trimmed, or when more than 1 unread message came in.
+/// </para>
 /// </remarks>
 public sealed partial class ConversationRow : UserControl
 {
@@ -27,13 +35,14 @@ public sealed partial class ConversationRow : UserControl
     public static readonly DependencyProperty RowProperty =
         DependencyProperty.Register(nameof(Row), typeof(ConversationRowViewModel), typeof(ConversationRow), new PropertyMetadata(null, OnRowChanged));
 
-    // Reads The Windows Animation Setting Live (Settings > Accessibility > Visual Effects)
+    // Reads the live Windows animation setting under Settings > Accessibility > Visual effects.
     private static readonly UISettings Ui = new();
 
-    // How Far The Time Slides Left For The ⋮ (Its Width)
+    // The time slides left by the width of the ⋮.
     private const double MoreWidth = 32;
 
-    // The Pointer Is Over The Row; The ⋮'s Menu Is Open, So The ⋮ Stays While The Pointer Is In The Menu
+    // _pointerOver is true while the pointer is over the row. _keepShown is true while the menu of the ⋮ is open. The ⋮
+    // then stays while the pointer is in the menu.
     private bool _pointerOver;
     private bool _keepShown;
 
@@ -44,14 +53,13 @@ public sealed partial class ConversationRow : UserControl
     {
         InitializeComponent();
 
-        // Copy
         AutomationProperties.SetName(MoreButton, ChatCopy.MoreOptions);
         ToolTipService.SetToolTip(MoreButton, ChatCopy.MoreOptions);
         AutomationProperties.SetName(MutedIcon, ChatCopy.Muted);
     }
 
     /// <summary>
-    /// Raised when the ⋮ is clicked; the list shows the conversation's menu at <see cref="MoreAnchor"/>.
+    /// Raised when the user clicks the ⋮. The list then shows the menu of the conversation at <see cref="MoreAnchor"/>.
     /// </summary>
     public event EventHandler? MoreRequested;
 
@@ -66,17 +74,17 @@ public sealed partial class ConversationRow : UserControl
     public FrameworkElement MoreAnchor => MoreButton;
 
     /// <summary>
-    /// Gives a row part's AutomationId, such as <c>Row.More.c-ann</c>.
+    /// Gives the AutomationId of a row part, such as <c>Row.More.c-ann</c>.
     /// </summary>
-    /// <param name="prefix">The part's prefix, such as <c>Row.More.</c>.</param>
+    /// <param name="prefix">The prefix of the part, such as <c>Row.More.</c>.</param>
     /// <param name="id">The conversation ID.</param>
     /// <returns>The AutomationId.</returns>
     public static string PartId(string prefix, string id) => prefix + id;
 
     /// <summary>
-    /// Keeps the ⋮ shown while its menu is open (the pointer leaves the row for the menu).
+    /// Keeps the ⋮ on screen while its menu is open. The pointer leaves the row for the menu.
     /// </summary>
-    /// <remarks>Turned off, the ⋮ hides unless the pointer is back over the row.</remarks>
+    /// <remarks>When the value is false, the ⋮ hides unless the pointer is over the row again.</remarks>
     /// <param name="keep">True while the menu is open.</param>
     internal void KeepShown(bool keep)
     {
@@ -87,12 +95,9 @@ public sealed partial class ConversationRow : UserControl
         }
     }
 
-    // =========================================================================
-    // HOVER STATES
-    // =========================================================================
-
-    // Shows The ⋮. From Rest It Takes Its Space At Once, So The Time Starts Where It Was (32 px Right Of Its New Spot) And
-    // Slides Left; Mid Slide-Back The ⋮ Still Has Its Space, So The Slide Just Turns Around From Where The Time Is
+    // Shows the ⋮. From rest, the ⋮ takes its space at once. Thus the time starts at its old place and slides left. The
+    // old place is 32 px right of the new place. During a slide back, the ⋮ still has its space. The slide then changes
+    // direction from the current place of the time.
     private void ShowMore()
     {
         if (MoreButton.Visibility == Visibility.Collapsed)
@@ -103,19 +108,15 @@ public sealed partial class ConversationRow : UserControl
         VisualStateManager.GoToState(this, "Shown", Ui.AnimationsEnabled);
     }
 
-    // Hides The ⋮: The Time Slides Back From Where It Is, And Rests At 0 Once The ⋮ Collapses
+    // Hides the ⋮. The time slides back from its current place. It rests at 0 after the ⋮ collapses.
     private void HideMore(bool useTransitions)
     {
         TimeShift.X = 0;
         VisualStateManager.GoToState(this, "Hidden", useTransitions);
     }
 
-    // =========================================================================
-    // EVENT HANDLERS
-    // =========================================================================
-
-    // A Recycled Row Shows Another Conversation: No ⋮ Left Over From The Last One, And Its Own Read State, Followed
-    // Through Every Update
+    // A recycled row shows another conversation. The ⋮ of the last conversation goes. The row shows the read state of
+    // the new conversation and follows each update.
     private static void OnRowChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         var view          = (ConversationRow)d;
@@ -137,22 +138,22 @@ public sealed partial class ConversationRow : UserControl
         view.ShowToolTip();
     }
 
-    // Every Update Can Change The Read State And The Tooltip's Text
+    // Each update can change the read state and the text of the tooltip.
     private void OnRowUpdated(object? sender, PropertyChangedEventArgs e)
     {
         ShowReadState();
         ShowToolTip();
     }
 
-    // The Name Or Snippet Got Cut Off, Or Fits Again (A Resize Or New Text)
+    // A resize or a new text trims the name or snippet, or makes it fit again.
     private void OnTextTrimmedChanged(TextBlock sender, IsTextTrimmedChangedEventArgs e) => ShowToolTip();
 
-    // The Tooltip: The Whole Name And Snippet When Either Is Cut Off, Or The Unread Messages When More Than One Came In;
-    // Else None
+    // The tooltip shows the full name and snippet when either is trimmed. It shows the unread messages when more than 1
+    // came in. Otherwise the row has no tooltip.
     private void ShowToolTip() =>
         ToolTipService.SetToolTip(Root, Row is { } row && (row.HasUnreadList || NameText.IsTextTrimmed || SnippetText.IsTextTrimmed) ? row.HoverText : null);
 
-    // Unread: The Snippet And Time In Primary Text (See ReadState)
+    // The ReadState group draws the snippet and time of an unread row in primary text.
     private void ShowReadState() => VisualStateManager.GoToState(this, Row?.IsUnread == true ? "Unread" : "Read", false);
 
     private void OnPointerEntered(object sender, PointerRoutedEventArgs e)
@@ -161,9 +162,9 @@ public sealed partial class ConversationRow : UserControl
         ShowMore();
     }
 
-    // The Pointer Left The Row. Moving Between The Name, Avatar And Icons Raises No Exit Here (Checked In The UI Tests),
-    // And No Bounds Check Is Made: Leaving The Window Straight From A Row Reports Its Last Point Inside The Row. While
-    // The Menu Is Open (Its Overlay Takes The Pointer) The ⋮ Waits For The Menu To Close
+    // The pointer left the row. A move between the name, the avatar and the icons raises no exit here. The UI tests
+    // check this. The method makes no bounds check. A direct exit from a row out of the window reports a last point
+    // inside the row. While the menu is open, its overlay takes the pointer. The ⋮ then waits for the menu to close.
     private void OnPointerLeft(object sender, PointerRoutedEventArgs e)
     {
         _pointerOver = false;
