@@ -453,6 +453,12 @@ internal sealed class VideoPlayback : IDisposable
             }
 
             await Frames.SetBitmapAsync(bitmap);
+            if (_disposed)
+            {
+                bitmap.Dispose();
+                return;
+            }
+
             _shown?.Dispose();
             _shown = bitmap;
         }
