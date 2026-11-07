@@ -332,15 +332,12 @@ public sealed partial class Waveform : UserControl
         SeekRequested?.Invoke(this, Math.Clamp(to, 0, 1));
     }
 
+    // A quote or a caption can make the bubble wider than the bars. The bars stay at the left, so the share is of their
+    // width, not of the control width.
     private void OnTapped(object sender, TappedRoutedEventArgs e)
     {
-        if (ActualWidth <= 0)
-        {
-            return;
-        }
-
         e.Handled = true;
         _seeking  = true;
-        SeekRequested?.Invoke(this, Math.Clamp(e.GetPosition(this).X / ActualWidth, 0, 1));
+        SeekRequested?.Invoke(this, Math.Clamp(e.GetPosition(this).X / _played.Width, 0, 1));
     }
 }
