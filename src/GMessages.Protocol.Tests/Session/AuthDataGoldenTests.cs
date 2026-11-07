@@ -10,7 +10,6 @@ namespace GMessages.Protocol.Tests.Session;
 /// Checks <see cref="AuthData"/> against the Go LibGM's <c>AuthData</c> using <c>authdata.json</c>.
 /// </summary>
 /// <remarks>
-/// Go's <c>CopyForRepair</c> creates new random keys, so only the deterministic parts are compared.
 /// See <see href="https://github.com/mautrix/gmessages/blob/ba33f4875a491f5cb47db8a6baf42a8869f5f383/pkg/libgm/client.go"/>.
 /// </remarks>
 [TestClass]
@@ -83,23 +82,6 @@ public class AuthDataGoldenTests
         AssertCommon(go, ad);
         Assert.AreEqual(go.GetProperty("requestCryptoAesHex").GetString(), Convert.ToHexStringLower(ad.RequestCrypto.AesKey));
         Assert.IsNull(ad.WebEncryptionKey);
-    }
-
-    /// <summary>
-    /// CopyForRepair keeps only the cookies and DestPhoneId. The keys are new and random, as in Go.
-    /// </summary>
-    [TestMethod]
-    public void CopyForRepair_MatchesGo()
-    {
-        JsonElement go = Golden.Load("authdata").GetProperty("repaired");
-        AuthData src   = BuildGolden();
-
-        AuthData ad = src.CopyForRepair();
-
-        AssertCommon(go, ad);
-        CollectionAssert.AreNotEqual(src.RequestCrypto.AesKey, ad.RequestCrypto.AesKey);
-        CollectionAssert.AreNotEqual(src.RefreshKey.D, ad.RefreshKey.D);
-        Assert.AreNotSame(src.Cookies, ad.Cookies);
     }
 
     /// <summary>

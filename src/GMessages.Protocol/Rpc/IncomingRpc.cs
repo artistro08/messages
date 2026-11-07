@@ -9,9 +9,8 @@ namespace GMessages.Protocol.Rpc;
 /// <remarks>
 /// Ported from <c>IncomingRPCMessage</c> in
 /// <see href="https://github.com/mautrix/gmessages/blob/ba33f4875a491f5cb47db8a6baf42a8869f5f383/pkg/libgm/event_handler.go">event_handler.go</see>.
-/// The route of <see cref="Raw"/> sets 1 of <see cref="Pair"/>, <see cref="Gaia"/> and <see cref="Message"/>. The
-/// other 2 stay null. <see cref="DecryptedMessage"/> is set only for data events with an action that has a known
-/// response type.
+/// Only a data event sets <see cref="Message"/>. The client decodes a pairing event only to check it.
+/// <see cref="DecryptedMessage"/> is set only for data events with an action that has a known response type.
 /// </remarks>
 public sealed class IncomingRpc
 {
@@ -23,12 +22,6 @@ public sealed class IncomingRpc
 
     /// <summary>Gets the decoded data event, or null for other routes.</summary>
     public RPCMessageData? Message { get; init; }
-
-    /// <summary>Gets the decoded Google account pairing event, or null for other routes.</summary>
-    public RPCGaiaData? Gaia { get; init; }
-
-    /// <summary>Gets the decoded QR pairing event, or null for other routes.</summary>
-    public RPCPairData? Pair { get; init; }
 
     /// <summary>Gets the decrypted payload bytes, or null when the data event had none.</summary>
     public byte[]? DecryptedData { get; init; }

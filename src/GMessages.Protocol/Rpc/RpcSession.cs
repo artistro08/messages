@@ -368,13 +368,19 @@ public sealed partial class RpcSession(GmHttpClient http, AuthData auth, GmEndpo
     {
         ArgumentNullException.ThrowIfNull(raw);
 
-        return raw.BugleRoute switch
+        switch (raw.BugleRoute)
         {
-            BugleRoute.PairEvent => new IncomingRpc { Raw = raw, Pair = Parse(RPCPairData.Parser, raw.MessageData.ToByteArray(), "pair event") },
-            BugleRoute.GaiaEvent => new IncomingRpc { Raw = raw, Gaia = Parse(RPCGaiaData.Parser, raw.MessageData.ToByteArray(), "gaia event") },
-            BugleRoute.DataEvent => DecodeDataEvent(raw),
-            _                    => throw new InvalidDataException($"Unknown bugle route {(int)raw.BugleRoute}."),
-        };
+            case BugleRoute.PairEvent:
+                _ = Parse(RPCPairData.Parser, raw.MessageData.ToByteArray(), "pair event");
+                return new IncomingRpc { Raw = raw };
+            case BugleRoute.GaiaEvent:
+                _ = Parse(RPCGaiaData.Parser, raw.MessageData.ToByteArray(), "gaia event");
+                return new IncomingRpc { Raw = raw };
+            case BugleRoute.DataEvent:
+                return DecodeDataEvent(raw);
+            default:
+                throw new InvalidDataException($"Unknown bugle route {(int)raw.BugleRoute}.");
+        }
     }
 
     // =========================================================================

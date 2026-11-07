@@ -389,17 +389,7 @@ internal sealed partial class DittoPinger(
         return first == timer && timer.IsCompletedSuccessfully;
     }
 
-    private void Raise(object evt)
-    {
-        try
-        {
-            EventRaised?.Invoke(evt);
-        }
-        catch (Exception ex)
-        {
-            ProtocolLog.LogHandlerFailed(log, ex, evt.GetType().Name);
-        }
-    }
+    private void Raise(object evt) => ProtocolLog.Raise(log, EventRaised, evt);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Skipping ping {PingId} since last one was too recently")]
     private static partial void LogPingSkipped(ILogger logger, long pingId);

@@ -4,6 +4,7 @@ using GMessages.Protocol.Http;
 using GMessages.Protocol.Proto;
 using GMessages.Protocol.Rpc;
 using GMessages.Protocol.Session;
+using Google.Protobuf;
 using Microsoft.Extensions.Logging;
 
 namespace GMessages.Protocol.LongPoll;
@@ -477,7 +478,7 @@ public sealed partial class LongPollLoop(
         try
         {
             Stream body = await res.Content.ReadAsStreamAsync(connection).ConfigureAwait(false);
-            await foreach (LongPollingPayload payload in LongPollStreamReader.ReadAsync(body, ReadIdleTimeout, time, connection, log).ConfigureAwait(false))
+            await foreach (LongPollingPayload payload in LongPollStreamReader.ReadAsync(body, ReadIdleTimeout, time, log, connection).ConfigureAwait(false))
             {
                 // Go checks the data first, then the startup ack count. Heartbeats need no action.
                 if (payload.Data is not null)
@@ -502,7 +503,7 @@ public sealed partial class LongPollLoop(
         Auth = new AuthMessage
         {
             RequestID        = requestId,
-            TachyonAuthToken = Google.Protobuf.ByteString.CopyFrom(auth.TachyonAuthToken ?? []),
+            TachyonAuthToken = ByteString.CopyFrom(auth.TachyonAuthToken ?? []),
             Network          = auth.AuthNetwork,
             ConfigVersion    = GmConstants.ConfigVersion,
         },
@@ -573,17 +574,7 @@ public sealed partial class LongPollLoop(
         }
     }
 
-    private void Raise(object evt)
-    {
-        try
-        {
-            EventRaised?.Invoke(evt);
-        }
-        catch (Exception ex)
-        {
-            ProtocolLog.LogHandlerFailed(log, ex, evt.GetType().Name);
-        }
-    }
+    private void Raise(object evt) => ProtocolLog.Raise(log, EventRaised, evt);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Long polling stopped: credentials refused by {Step}: {Error}")]
     private static partial void LogFatal(ILogger logger, string step, string error);

@@ -20,8 +20,8 @@ namespace GMessages.Protocol.Tests.Http;
 /// The tests compare header names without case, and only for the headers that libgm sets. The capture does not see
 /// the headers that the Go transport adds, such as Content-Length. The Go cookie order comes from a random map
 /// iteration, so the tests compare the Cookie header as a set. The SAPISIDHASH timestamp comes from the time. Thus
-/// the tests set the fake clock to the timestamp in the Go value. The retry wait check of 1 s, then 2 s, and the
-/// long-poll timeout check are C#-only. A fake clock drives them.
+/// the tests set the fake clock to the timestamp in the Go value. The retry wait check of 1 s, then 2 s, is C#-only. A
+/// fake clock drives it.
 /// See <see href="https://github.com/mautrix/gmessages/blob/ba33f4875a491f5cb47db8a6baf42a8869f5f383/pkg/libgm/http.go"/>.
 /// </remarks>
 [TestClass]
@@ -194,12 +194,7 @@ public class GmHttpClientTests
         {
             ["messagesBase"]          = e.MessagesBase,
             ["googleAuthentication"]  = e.Authentication,
-            ["googleTimesource"]      = e.Timesource,
             ["uploadMedia"]           = e.UploadMedia,
-            ["registerPhoneRelay"]    = e.RegisterPhoneRelay,
-            ["refreshPhoneRelay"]     = e.RefreshPhoneRelay,
-            ["getWebEncryptionKey"]   = e.GetWebEncryptionKey,
-            ["revokeRelayPairing"]    = e.RevokeRelayPairing,
             ["receiveMessages"]       = e.ReceiveMessages,
             ["sendMessage"]           = e.SendMessage,
             ["ackMessages"]           = e.AckMessages,
@@ -211,7 +206,9 @@ public class GmHttpClientTests
             ["config"]                = e.Config,
         };
 
-        Assert.AreEqual(go.EnumerateObject().Count(), expected.Count);
+        // The client does not use these 5 Go paths. The QR relay pairing is not ported.
+        string[] notPorted = ["googleTimesource", "registerPhoneRelay", "refreshPhoneRelay", "getWebEncryptionKey", "revokeRelayPairing"];
+        Assert.AreEqual(go.EnumerateObject().Count(p => !notPorted.Contains(p.Name)), expected.Count);
         foreach (var (key, uri) in expected)
         {
             // The origin has no path, so the Go string has no trailing slash.
@@ -373,10 +370,6 @@ public class GmHttpClientTests
         Assert.AreEqual(go.GetProperty("attempts").GetInt32(), rig.LongPollHandler.Requests.Count);
         Assert.AreEqual(0, rig.Handler.Requests.Count);
         Assert.AreEqual(go.GetProperty("finalStatus").GetInt32(), (int)res.StatusCode);
-
-        // This check is C#-only. The long-poll client has a 30 minute timeout.
-        using HttpClient longPoll = GmHttpClient.CreateLongPollClient(new FakeHttpHandler());
-        Assert.AreEqual(TimeSpan.FromMinutes(30), longPoll.Timeout);
     }
 
     /// <summary>

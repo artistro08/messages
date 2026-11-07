@@ -70,6 +70,7 @@ public sealed class PairingSession
     /// <returns>The session.</returns>
     public static PairingSession Create(PrimaryDevice destRegDevice, TimeProvider time)
     {
+        ArgumentNullException.ThrowIfNull(destRegDevice);
         ArgumentNullException.ThrowIfNull(time);
 
         using var ecdh = ECDiffieHellman.Create(ECCurve.NamedCurves.nistP256);
@@ -87,6 +88,8 @@ public sealed class PairingSession
     /// <returns>The session.</returns>
     internal static PairingSession FromPrivateKey(Guid id, DateTimeOffset start, byte[] p256PrivateScalar, PrimaryDevice destRegDevice)
     {
+        ArgumentNullException.ThrowIfNull(destRegDevice);
+
         using var ecdh = ECDiffieHellman.Create(new ECParameters { Curve = ECCurve.NamedCurves.nistP256, D = p256PrivateScalar });
         return new PairingSession(id, start, ecdh.ExportParameters(true), destRegDevice);
     }

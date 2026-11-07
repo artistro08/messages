@@ -38,8 +38,8 @@ public static partial class LongPollStreamReader
     /// <param name="body">The response body stream.</param>
     /// <param name="idleTimeout">The longest wait for bytes.</param>
     /// <param name="time">The clock for the idle timer.</param>
-    /// <param name="ct">Cancels the read.</param>
     /// <param name="logger">The log for skipped payloads. Null logs nothing.</param>
+    /// <param name="ct">Cancels the read.</param>
     /// <returns>The decoded payloads in arrival order.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="body"/> or <paramref name="time"/> is null.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="idleTimeout"/> is zero or negative (and not <see cref="Timeout.InfiniteTimeSpan"/>).</exception>
@@ -50,8 +50,8 @@ public static partial class LongPollStreamReader
         Stream body,
         TimeSpan idleTimeout,
         TimeProvider time,
-        CancellationToken ct,
-        ILogger? logger = null)
+        ILogger? logger,
+        CancellationToken ct)
         => ReadWithCapAsync(body, idleTimeout, time, logger, MaxPayloadBytes, ct);
 
     // The same as the public method, with a payload limit that tests set. Thus tests do not allocate 32 MB.

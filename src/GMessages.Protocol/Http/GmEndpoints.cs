@@ -14,7 +14,6 @@ namespace GMessages.Protocol.Http;
 /// <param name="InstantMessagingGoogleBase">The instant messaging API origin for the Google account sign-in.</param>
 public sealed record GmEndpoints(Uri MessagesBase, Uri InstantMessagingBase, Uri InstantMessagingGoogleBase)
 {
-    private const string PairingPath      = "/$rpc/google.internal.communications.instantmessaging.v1.Pairing";
     private const string MessagingPath    = "/$rpc/google.internal.communications.instantmessaging.v1.Messaging";
     private const string RegistrationPath = "/$rpc/google.internal.communications.instantmessaging.v1.Registration";
 
@@ -29,26 +28,11 @@ public sealed record GmEndpoints(Uri MessagesBase, Uri InstantMessagingBase, Uri
     /// <summary>Gets the web app authentication page, <c>/web/authentication</c>.</summary>
     public Uri Authentication => new(MessagesBase, "/web/authentication");
 
-    /// <summary>Gets the web app time source, <c>/web/timesource</c>.</summary>
-    internal Uri Timesource => new(MessagesBase, "/web/timesource");
-
     /// <summary>Gets the web app config, <c>/web/config</c>.</summary>
     public Uri Config => new(MessagesBase, "/web/config");
 
     /// <summary>Gets the media upload endpoint.</summary>
     public Uri UploadMedia => new(InstantMessagingBase, "/upload");
-
-    /// <summary>Gets the pairing call that registers the phone relay.</summary>
-    public Uri RegisterPhoneRelay => new(InstantMessagingBase, PairingPath + "/RegisterPhoneRelay");
-
-    /// <summary>Gets the pairing call that refreshes the phone relay.</summary>
-    public Uri RefreshPhoneRelay => new(InstantMessagingBase, PairingPath + "/RefreshPhoneRelay");
-
-    /// <summary>Gets the pairing call that gets the web encryption key.</summary>
-    public Uri GetWebEncryptionKey => new(InstantMessagingBase, PairingPath + "/GetWebEncryptionKey");
-
-    /// <summary>Gets the pairing call that revokes the relay pairing.</summary>
-    public Uri RevokeRelayPairing => new(InstantMessagingBase, PairingPath + "/RevokeRelayPairing");
 
     /// <summary>Gets the messaging long poll for incoming messages on the QR pairing host.</summary>
     public Uri ReceiveMessages => new(InstantMessagingBase, MessagingPath + "/ReceiveMessages");

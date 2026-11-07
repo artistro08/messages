@@ -1,4 +1,5 @@
 using GMessages.Protocol.Crypto;
+using GMessages.Protocol.Http;
 using GMessages.Protocol.Proto;
 
 namespace GMessages.Protocol.Session;
@@ -15,8 +16,6 @@ namespace GMessages.Protocol.Session;
 /// </remarks>
 public sealed class AuthData
 {
-    private const string GoogleNetwork = "GDitto";
-
     private TachyonToken _tachyon = TachyonToken.None;
 
     /// <summary>
@@ -121,7 +120,7 @@ public sealed class AuthData
     /// <summary>
     /// Gets the network name of the account: <c>GDitto</c> for a Google account, otherwise empty.
     /// </summary>
-    public string AuthNetwork => IsGoogleAccount ? GoogleNetwork : "";
+    public string AuthNetwork => IsGoogleAccount ? GmConstants.GoogleNetwork : "";
 
     /// <summary>
     /// Gets whether the account has the cookies it needs.
@@ -141,26 +140,6 @@ public sealed class AuthData
         RequestCrypto = AesCtrHelper.CreateRandom(),
         RefreshKey    = RefreshKey.Generate(),
     };
-
-    /// <summary>
-    /// Makes auth data for a new pairing. The copy keeps the cookies and <see cref="DestPhoneId"/>. All other data is new.
-    /// </summary>
-    /// <remarks>
-    /// Ported from <c>CopyForRepair</c>. The keys are new, so the old pairing cannot work again. A jar that was never
-    /// set stays not set.
-    /// </remarks>
-    /// <returns>A new instance.</returns>
-    public AuthData CopyForRepair()
-    {
-        AuthData copy = CreateNew();
-        if (Cookies.HasCookies)
-        {
-            copy.Cookies.Set(Cookies.Snapshot());
-        }
-
-        copy.DestPhoneId = DestPhoneId;
-        return copy;
-    }
 
     /// <summary>
     /// Clears the pairing: devices, token, expiry, TTL, web key and pairing ID. It keeps the keys, the other IDs and the cookies.

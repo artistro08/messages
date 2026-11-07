@@ -286,17 +286,7 @@ public sealed partial class UpdateDispatcher(RpcSession rpc, ILogger log)
         }
     }
 
-    private void Raise(object evt)
-    {
-        try
-        {
-            EventRaised?.Invoke(evt);
-        }
-        catch (Exception ex)
-        {
-            ProtocolLog.LogHandlerFailed(log, ex, evt.GetType().Name);
-        }
-    }
+    private void Raise(object evt) => ProtocolLog.Raise(log, EventRaised, evt);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Failed to decode incoming RPC message {ResponseId}")]
     private static partial void LogDecodeFailed(ILogger logger, Exception exception, string responseId);

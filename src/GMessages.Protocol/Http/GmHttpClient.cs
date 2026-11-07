@@ -37,7 +37,7 @@ public enum GmContentType
 /// Cookie values and tokens never go in a log.
 /// </remarks>
 /// <param name="http">The client for normal requests.</param>
-/// <param name="longPollHttp">The client for long polls. See <see cref="CreateLongPollClient"/>.</param>
+/// <param name="longPollHttp">The client for long polls, with the <see cref="LongPollTimeout"/> timeout.</param>
 /// <param name="cookies">The cookie jar that the session also uses.</param>
 /// <param name="time">The clock for the SAPISIDHASH and the retry waits.</param>
 /// <param name="log">The logger.</param>
@@ -63,14 +63,6 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
 
     // This map keeps the last logged cookie line for each set of cookie names. Thus an unchanged response writes no new line.
     private readonly Dictionary<string, string> _loggedCookies = [];
-
-    /// <summary>
-    /// Creates the client for long polls.
-    /// </summary>
-    /// <remarks>The only difference from a normal client is the 30 minute timeout.</remarks>
-    /// <param name="handler">The message handler to send through.</param>
-    /// <returns>A new client. The caller owns it.</returns>
-    public static HttpClient CreateLongPollClient(HttpMessageHandler handler) => new(handler) { Timeout = LongPollTimeout };
 
     // =========================================================================
     // PUBLIC API

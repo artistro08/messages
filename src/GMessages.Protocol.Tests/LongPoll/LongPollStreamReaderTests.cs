@@ -65,7 +65,7 @@ public class LongPollStreamReaderTests
     private static async Task<List<LongPollingPayload>> ReadAllAsync(Stream body, ILogger? logger = null)
     {
         var result = new List<LongPollingPayload>();
-        await foreach (LongPollingPayload p in LongPollStreamReader.ReadAsync(body, TimeSpan.FromMinutes(1), TimeProvider.System, CancellationToken.None, logger))
+        await foreach (LongPollingPayload p in LongPollStreamReader.ReadAsync(body, TimeSpan.FromMinutes(1), TimeProvider.System, logger, CancellationToken.None))
         {
             result.Add(p);
         }
@@ -75,7 +75,7 @@ public class LongPollStreamReaderTests
 
     private static async Task DrainAsync(Stream body, TimeSpan idle, TimeProvider time, CancellationToken ct)
     {
-        await foreach (LongPollingPayload _ in LongPollStreamReader.ReadAsync(body, idle, time, ct))
+        await foreach (LongPollingPayload _ in LongPollStreamReader.ReadAsync(body, idle, time, null, ct))
         {
         }
     }
@@ -218,7 +218,7 @@ public class LongPollStreamReaderTests
 
         Task read = Task.Run(async () =>
         {
-            await foreach (LongPollingPayload p in LongPollStreamReader.ReadAsync(stream, idle, time, CancellationToken.None))
+            await foreach (LongPollingPayload p in LongPollStreamReader.ReadAsync(stream, idle, time, null, CancellationToken.None))
             {
                 result.Add(p);
             }
@@ -299,9 +299,9 @@ public class LongPollStreamReaderTests
     [TestMethod]
     public void IdleTimeout_MustBePositiveOrInfinite()
     {
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => LongPollStreamReader.ReadAsync(new MemoryStream(), TimeSpan.Zero, TimeProvider.System, CancellationToken.None));
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => LongPollStreamReader.ReadAsync(new MemoryStream(), TimeSpan.FromSeconds(-1), TimeProvider.System, CancellationToken.None));
-        Assert.IsNotNull(LongPollStreamReader.ReadAsync(new MemoryStream(), Timeout.InfiniteTimeSpan, TimeProvider.System, CancellationToken.None));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => LongPollStreamReader.ReadAsync(new MemoryStream(), TimeSpan.Zero, TimeProvider.System, null, CancellationToken.None));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => LongPollStreamReader.ReadAsync(new MemoryStream(), TimeSpan.FromSeconds(-1), TimeProvider.System, null, CancellationToken.None));
+        Assert.IsNotNull(LongPollStreamReader.ReadAsync(new MemoryStream(), Timeout.InfiniteTimeSpan, TimeProvider.System, null, CancellationToken.None));
     }
 
     /// <summary>

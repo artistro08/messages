@@ -1,3 +1,4 @@
+using System.Globalization;
 using GMessages.Protocol.Crypto;
 using GMessages.Protocol.Http;
 using GMessages.Protocol.LongPoll;
@@ -54,24 +55,6 @@ public sealed partial class GaiaPairing(GaiaSignIn signIn, RpcSession rpc, LongP
     private Task? _longPoll;
 
     /// <summary>
-    /// Gets or sets the phone to use when there are several. The value is an index into the list, newest first.
-    /// </summary>
-    /// <remarks>
-    /// Ported from <c>GaiaHackyDeviceSwitcher</c>, a manual workaround. 0 picks the newest phone. A value past the end
-    /// wraps around. This port refuses a negative value, because it picks no phone.
-    /// </remarks>
-    /// <exception cref="ArgumentOutOfRangeException">The value is negative.</exception>
-    public int HackyDeviceSwitcher
-    {
-        get;
-        set
-        {
-            ArgumentOutOfRangeException.ThrowIfNegative(value);
-            field = value;
-        }
-    }
-
-    /// <summary>
     /// Signs in, picks the phone, starts the long poll and sends the client init. Returns the emoji to show.
     /// </summary>
     /// <remarks>
@@ -106,7 +89,7 @@ public sealed partial class GaiaPairing(GaiaSignIn signIn, RpcSession rpc, LongP
         if (devices.Count > 1)
         {
             devices = [.. devices.OrderByDescending(d => d.LastSeen)];
-            LogMultipleDevices(log, devices.Count, HackyDeviceSwitcher);
+            LogMultipleDevices(log, devices.Count);
         }
 
         if (auth.DestPhoneId != 0)
@@ -118,7 +101,7 @@ public sealed partial class GaiaPairing(GaiaSignIn signIn, RpcSession rpc, LongP
             }
         }
 
-        PrimaryDevice dest = devices[HackyDeviceSwitcher % devices.Count];
+        PrimaryDevice dest = devices[0];
         if (!Guid.TryParse(dest.RegId, out Guid destRegId))
         {
             throw new InvalidDataException("failed to parse destination UUID");
@@ -402,10 +385,10 @@ public sealed partial class GaiaPairing(GaiaSignIn signIn, RpcSession rpc, LongP
     // Gives the String() of Go for the error code: the name, or the number for an unknown value.
     private static string ErrorCodeName(GaiaPairingErrorCode code) =>
         AuthenticationReflection.Descriptor.EnumTypes.First(e => e.Name == nameof(GaiaPairingErrorCode)).FindValueByNumber((int)code)?.Name
-        ?? ((int)code).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        ?? ((int)code).ToString(CultureInfo.InvariantCulture);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Found {Count} primary-looking devices for gaia pairing, hacky device switcher {Switcher}")]
-    private static partial void LogMultipleDevices(ILogger logger, int count, int switcher);
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Found {Count} primary-looking devices for gaia pairing")]
+    private static partial void LogMultipleDevices(ILogger logger, int count);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Received server init: key derivation version {KeyDerivationVersion}, verification code version {VerificationCodeVersion}")]
     private static partial void LogServerInit(ILogger logger, int keyDerivationVersion, int verificationCodeVersion);
