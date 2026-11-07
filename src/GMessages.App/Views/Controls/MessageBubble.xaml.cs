@@ -840,6 +840,12 @@ public sealed partial class MessageBubble : UserControl
 
     private void OnPhotoFullSizeChanged(object sender, SizeChangedEventArgs e) => ClipPhotoFull();
 
+    private void OnPhotoFullCanvasSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        PhotoFullImage.Width  = e.NewSize.Width;
+        PhotoFullImage.Height = e.NewSize.Height;
+    }
+
     // The picture of a playing video keeps the corners of the bubble.
     private void OnVideoPictureSizeChanged(object sender, SizeChangedEventArgs e) => ClipVideoPicture();
 
