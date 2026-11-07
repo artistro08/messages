@@ -35,8 +35,7 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
     /// </summary>
     public static readonly TimeSpan TypingTimeout = TimeSpan.FromSeconds(15);
 
-    /// <summary>The chat tells the other side about typing again only after this time.</summary>
-    public static readonly TimeSpan TypingResend = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan TypingResend = TimeSpan.FromSeconds(10);
 
     /// <summary>2 bubbles from the same sender stay in 1 group when this time or less separates them.</summary>
     public static readonly TimeSpan GroupGap = TimeSpan.FromMinutes(3);
@@ -57,6 +56,10 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
     private readonly TimeProvider _time;
     private readonly Action<Action> _post;
     private readonly LinkPreviewer? _previews;
+    private readonly long _openedAt = Stopwatch.GetTimestamp();
+
+    // The avatar that the header shows. A conversation change compares the new avatar against it.
+    private AvatarParts _avatar = new(string.Empty, AvatarParts.FallbackColor, string.Empty, string.Empty, 0, string.Empty);
 
     // Each refresh reads the setting. Null means that a link in a received message always gets a preview.
     private readonly Func<bool>? _showReceivedPreviews;
@@ -177,18 +180,13 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
     public event PropertyChangedEventHandler? PropertyChanged;
 
     /// <summary>
-    /// Gets the <see cref="Stopwatch"/> timestamp of the pick of the chat. The log lines of the open time use it.
-    /// </summary>
-    public long OpenedAt { get; } = Stopwatch.GetTimestamp();
-
-    /// <summary>
     /// Logs 1 step of the chat open with the milliseconds since the pick and the count of the bubbles. The line holds
     /// no content and no IDs.
     /// </summary>
     /// <param name="step">The step, such as "first bubbles drawn".</param>
     public void LogOpenStep(string step)
     {
-        long elapsedMs = (long)Stopwatch.GetElapsedTime(OpenedAt).TotalMilliseconds;
+        long elapsedMs = (long)Stopwatch.GetElapsedTime(_openedAt).TotalMilliseconds;
         _store.LogChatOpenStep(step, elapsedMs, Messages.Count);
     }
 
@@ -642,6 +640,7 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
         }
 
         AvatarParts avatar = AvatarParts.Of(c);
+        _avatar            = avatar;
         Conversation       = c;
         IsMuted            = c.IsMuted;
         Title              = c.Name;

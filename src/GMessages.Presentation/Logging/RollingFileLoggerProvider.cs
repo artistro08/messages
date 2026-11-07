@@ -19,7 +19,7 @@ public sealed class RollingFileLoggerProvider : ILoggerProvider
     private static readonly string BaseName = AppInfo.DisplayName;
 
     private readonly string _directory;
-    private readonly LogLevelSwitch _levelSwitch;
+    private readonly LogLevel _minimumLevel;
     private readonly long _maxFileBytes;
     private readonly int _maxFiles;
     private readonly TimeProvider _timeProvider;
@@ -29,19 +29,18 @@ public sealed class RollingFileLoggerProvider : ILoggerProvider
     /// Creates the provider and its log folder.
     /// </summary>
     /// <param name="directory">The folder for the log files.</param>
-    /// <param name="levelSwitch">The minimum level, which can change at run time.</param>
+    /// <param name="minimumLevel">The lowest level that the provider writes.</param>
     /// <param name="timeProvider">The clock for the line timestamps.</param>
     /// <param name="maxFileBytes">The size at which the current file rolls.</param>
     /// <param name="maxFiles">The total number of files to keep, with the current file.</param>
     /// <exception cref="ArgumentNullException">A required argument is null.</exception>
-    public RollingFileLoggerProvider(string directory, LogLevelSwitch levelSwitch, TimeProvider timeProvider, long maxFileBytes = 1_048_576, int maxFiles = 5)
+    public RollingFileLoggerProvider(string directory, LogLevel minimumLevel, TimeProvider timeProvider, long maxFileBytes = 1_048_576, int maxFiles = 5)
     {
         ArgumentNullException.ThrowIfNull(directory);
-        ArgumentNullException.ThrowIfNull(levelSwitch);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
         _directory    = directory;
-        _levelSwitch  = levelSwitch;
+        _minimumLevel = minimumLevel;
         _timeProvider = timeProvider;
         _maxFileBytes = maxFileBytes;
         _maxFiles     = maxFiles;
@@ -62,7 +61,7 @@ public sealed class RollingFileLoggerProvider : ILoggerProvider
         // Each write opens and closes the file, so the provider has nothing to release.
     }
 
-    internal bool IsEnabled(LogLevel level) => level != LogLevel.None && level >= _levelSwitch.MinimumLevel;
+    internal bool IsEnabled(LogLevel level) => level != LogLevel.None && level >= _minimumLevel;
 
     internal void Write(LogLevel level, string category, string message, Exception? exception)
     {

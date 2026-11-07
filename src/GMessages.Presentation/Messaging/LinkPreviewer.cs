@@ -38,14 +38,9 @@ public sealed partial class LinkPreviewer : IDisposable
     /// <summary>The largest image that the previewer reads, in bytes. A bigger one gives a card without it.</summary>
     public const int MaxImageBytes = 1_048_576;
 
-    /// <summary>The time that each request can take: the page, then its image.</summary>
-    public static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(5);
 
-    /// <summary>
-    /// The time that a pasted picture from <see cref="FetchImageAsync"/> can take. It can be much bigger than a card
-    /// image.
-    /// </summary>
-    public static readonly TimeSpan PictureTimeout = TimeSpan.FromSeconds(15);
+    private static readonly TimeSpan PictureTimeout = TimeSpan.FromSeconds(15);
 
     /// <summary>The widest card image that the previewer keeps, in pixels. The fetch shrinks a wider one.</summary>
     public const int MaxImageWidth = 480;
@@ -132,20 +127,9 @@ public sealed partial class LinkPreviewer : IDisposable
     // SAFETY RULES
     // =========================================================================
 
-    /// <summary>
-    /// Creates the handler that the app sends previews through.
-    /// </summary>
-    /// <remarks>
-    /// Cookies are off. The previewer follows the redirects itself and holds each hop to <see cref="IsAllowed"/>, 3
-    /// hops at most. The <c>ConnectCallback</c> resolves each host itself. It connects only when each resolved address
-    /// passes <see cref="IsPublic"/>, or is loopback with <paramref name="allowLoopback"/>. It connects to those vetted
-    /// addresses, so a second lookup cannot give a private address instead. The proxy is off, because through a proxy
-    /// the check vets the proxy and not the host of the link. Instead, a link that the system sends through a proxy
-    /// gets no preview. Thus the previewer never goes around the proxy of a user.
-    /// </remarks>
-    /// <param name="allowLoopback">True only in UI test runs.</param>
-    /// <returns>The handler.</returns>
-    public static SocketsHttpHandler CreateHandler(bool allowLoopback) => new()
+    // The proxy is off, because through a proxy the check vets the proxy and not the host of the link. Instead, a link
+    // that the system sends through a proxy gets no preview.
+    private static SocketsHttpHandler CreateHandler(bool allowLoopback) => new()
     {
         UseCookies             = false,
         UseProxy               = false,
@@ -238,7 +222,7 @@ public sealed partial class LinkPreviewer : IDisposable
     /// <c>localhost</c>, <c>*.local</c> and a single-label intranet name. It also refuses a user name and password in
     /// the link. With
     /// <paramref name="allowLoopback"/> in UI test runs, it also allows an <c>http</c> or <c>https</c> link to
-    /// <c>127.0.0.1</c>. The handler from <see cref="CreateHandler"/> checks where the host really points when it
+    /// <c>127.0.0.1</c>. The handler checks where the host really points when it
     /// connects.
     /// </remarks>
     /// <param name="url">The link.</param>
@@ -578,7 +562,7 @@ public sealed partial class LinkPreviewer : IDisposable
     /// </remarks>
     /// <param name="bytes">The image as fetched.</param>
     /// <returns>The image to keep, or null for none.</returns>
-    internal static async Task<byte[]?> ShrinkAsync(byte[] bytes)
+    private static async Task<byte[]?> ShrinkAsync(byte[] bytes)
     {
         try
         {

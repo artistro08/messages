@@ -16,9 +16,7 @@ namespace GMessages.Presentation.Notifications;
 /// <param name="AvatarParticipantId">The participant ID of the sender, for the avatar picture.</param>
 public sealed record NotificationContent(string Tag, string Group, string Title, string Body, string? AvatarParticipantId)
 {
-    /// <summary>The maximum length of a toast body in text elements, without the ellipsis.</summary>
-    /// <remarks>A text element is a character as a reader sees it.</remarks>
-    public const int MaxBodyLength = 100;
+    private const int MaxBodyLength = 100;
 
     /// <summary>
     /// Gets whether the app copied the one-time code of the message to the clipboard. The toast then says "Code

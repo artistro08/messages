@@ -98,12 +98,11 @@ public sealed partial class ChatViewModel
             return;
         }
 
-        bool couldMute    = CanMute;
-        string wasHolder  = DraftPlaceholder;
-        AvatarParts shown = new(Initial, AvatarColor, PhotoId, SecondInitial, SecondColor, SecondPhotoId);
+        bool couldMute   = CanMute;
+        string wasHolder = DraftPlaceholder;
 
         // A rename or a new avatar changes the header. Only then do all the properties raise.
-        if (c.Name != Title || AvatarParts.Of(c) != shown)
+        if (c.Name != Title || AvatarParts.Of(c) != _avatar)
         {
             ApplyConversation(c);
         }

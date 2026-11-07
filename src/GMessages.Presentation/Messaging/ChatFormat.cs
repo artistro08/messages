@@ -445,7 +445,10 @@ public static class ChatFormat
     /// <param name="p">The participant, or null.</param>
     /// <returns>The name, or an empty string when there is none.</returns>
     public static string SenderName(ParticipantInfo? p) =>
-        new[] { p?.FullName, p?.FirstName, p?.FormattedNumber }.FirstOrDefault(n => !string.IsNullOrEmpty(n)) ?? string.Empty;
+        p is null ? string.Empty
+        : !string.IsNullOrEmpty(p.FullName) ? p.FullName
+        : !string.IsNullOrEmpty(p.FirstName) ? p.FirstName
+        : p.FormattedNumber ?? string.Empty;
 
     /// <summary>
     /// Tells whether a message stays out of the chat. A placeholder from <see cref="ChatMessage.IsPlaceholder"/> stays

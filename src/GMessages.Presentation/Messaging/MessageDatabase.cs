@@ -27,10 +27,7 @@ namespace GMessages.Presentation.Messaging;
 /// </remarks>
 public sealed partial class MessageDatabase
 {
-    /// <summary>
-    /// The schema that this class writes, kept in <c>PRAGMA user_version</c>. A file with another version starts again.
-    /// </summary>
-    public const int SchemaVersion = 2;
+    private const int SchemaVersion = 2;
 
     /// <summary>
     /// The number of the newest messages of a conversation that the database keeps.

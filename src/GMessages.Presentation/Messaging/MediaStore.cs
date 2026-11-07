@@ -33,8 +33,7 @@ namespace GMessages.Presentation.Messaging;
 /// </remarks>
 public sealed partial class MediaStore : IDisposable
 {
-    /// <summary>The number of bytes of decrypted media that stay in memory.</summary>
-    public const long MemoryCapBytes = 64L * 1024 * 1024;
+    private const long MemoryCapBytes = 64L * 1024 * 1024;
 
     /// <summary>
     /// The default time that 1 download can take before it fails. <see cref="DownloadTimeout"/> can change it.

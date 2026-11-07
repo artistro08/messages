@@ -27,7 +27,7 @@ public sealed class RollingFileLoggerTests
     public void WritesFormattedLine()
     {
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 23, 15, 4, 5, 123, TimeSpan.Zero));
-        using var provider = new RollingFileLoggerProvider(_directory, new LogLevelSwitch(), time);
+        using var provider = new RollingFileLoggerProvider(_directory, LogLevel.Information, time);
 
         provider.CreateLogger("Tests").Log(LogLevel.Information, "hello {Name}", "world");
 
@@ -37,7 +37,7 @@ public sealed class RollingFileLoggerTests
     [TestMethod]
     public void Log_Exception_OmitsMessage()
     {
-        using var provider = new RollingFileLoggerProvider(_directory, new LogLevelSwitch(), TimeProvider.System);
+        using var provider = new RollingFileLoggerProvider(_directory, LogLevel.Information, TimeProvider.System);
 
         provider.CreateLogger("Tests").Log(LogLevel.Error, new InvalidOperationException("secret-body-text"), "failed");
 
@@ -48,24 +48,22 @@ public sealed class RollingFileLoggerTests
     }
 
     [TestMethod]
-    public void SkipsDebugUntilSwitchAllowsIt()
+    public void SkipsDebugUntilTheLevelAllowsIt()
     {
-        var levelSwitch = new LogLevelSwitch();
-        using var provider = new RollingFileLoggerProvider(_directory, levelSwitch, TimeProvider.System);
-        var logger = provider.CreateLogger("Tests");
+        using var provider = new RollingFileLoggerProvider(_directory, LogLevel.Information, TimeProvider.System);
 
-        logger.Log(LogLevel.Debug, "hidden");
+        provider.CreateLogger("Tests").Log(LogLevel.Debug, "hidden");
         Assert.IsFalse(File.Exists(provider.CurrentFilePath));
 
-        levelSwitch.MinimumLevel = LogLevel.Debug;
-        logger.Log(LogLevel.Debug, "shown");
-        StringAssert.Contains(File.ReadAllText(provider.CurrentFilePath), "shown");
+        using var debug = new RollingFileLoggerProvider(_directory, LogLevel.Debug, TimeProvider.System);
+        debug.CreateLogger("Tests").Log(LogLevel.Debug, "shown");
+        StringAssert.Contains(File.ReadAllText(debug.CurrentFilePath), "shown");
     }
 
     [TestMethod]
     public void RollsAndKeepsFiveFiles()
     {
-        using var provider = new RollingFileLoggerProvider(_directory, new LogLevelSwitch(), TimeProvider.System, maxFileBytes: 200, maxFiles: 5);
+        using var provider = new RollingFileLoggerProvider(_directory, LogLevel.Information, TimeProvider.System, maxFileBytes: 200, maxFiles: 5);
         var logger = provider.CreateLogger("Tests");
 
         for (var i = 0; i < 40; i++)
@@ -89,7 +87,7 @@ public sealed class RollingFileLoggerTests
     public void LogsOnlyWhatTheCallerPassesNeverAnUnloggedSecret()
     {
         const string Secret = "s3cr3t-pairing-token";
-        using var provider = new RollingFileLoggerProvider(_directory, new LogLevelSwitch(), TimeProvider.System);
+        using var provider = new RollingFileLoggerProvider(_directory, LogLevel.Information, TimeProvider.System);
         var logger = provider.CreateLogger("Tests");
 
         // The secret exists in scope but the test does not pass it to the logger.

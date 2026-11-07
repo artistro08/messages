@@ -280,12 +280,6 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged, IDisposa
     // =========================================================================
 
     /// <summary>
-    /// Gets the items of the microphone dropdown. "Windows default" comes first, then the name of each microphone from
-    /// <see cref="SetMicrophones"/>.
-    /// </summary>
-    public IReadOnlyList<string> MicrophoneChoices => [ChatCopy.WindowsDefault, .. _microphones.Select(mic => mic.Name)];
-
-    /// <summary>
     /// Gets or sets the selection of the microphone dropdown. Index 0 is the default microphone of Windows. Index 1 and
     /// higher are the microphones from <see cref="SetMicrophones"/>.
     /// </summary>
@@ -322,7 +316,6 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged, IDisposa
         ArgumentNullException.ThrowIfNull(microphones);
 
         _microphones = [.. microphones];
-        Raise(nameof(MicrophoneChoices));
         Raise(nameof(MicrophoneIndex));
     }
 
@@ -402,10 +395,9 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged, IDisposa
             _startWithWindows = await _startup.IsEnabledAsync();
             Raise(nameof(StartWithWindows));
         }
-#pragma warning disable CA1031 // The switch stays off, and the log keeps the failure.
         catch (Exception ex)
-#pragma warning restore CA1031
         {
+            // The switch stays off, and the log keeps the failure.
             LogStartupReadFailed(_logger, ex);
         }
     }
@@ -424,10 +416,9 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged, IDisposa
                 StartupMessage = ChatCopy.StartupRefused;
             }
         }
-#pragma warning disable CA1031 // A failed change restores the switch, and the log keeps the failure.
         catch (Exception ex)
-#pragma warning restore CA1031
         {
+            // A failed change restores the switch, and the log keeps the failure.
             LogStartupChangeFailed(_logger, ex);
             actual = !enabled;
         }
@@ -487,10 +478,9 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged, IDisposa
         {
             await _controller.UnpairAsync();
         }
-#pragma warning disable CA1031 // The local unpair is complete in all cases, and the log keeps the server error.
         catch (Exception ex)
-#pragma warning restore CA1031
         {
+            // The local unpair is complete in all cases, and the log keeps the server error.
             LogUnpairFailed(_logger, ex);
         }
         finally

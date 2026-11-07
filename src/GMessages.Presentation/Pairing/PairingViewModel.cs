@@ -168,10 +168,9 @@ public sealed class PairingViewModel : INotifyPropertyChanged
             // An unpair cancels the pairing here. The page shows a new sign-in and no failure.
             _post(() => Update(PairingStep.SigningIn, null, null));
         }
-#pragma warning disable CA1031 // Each failure becomes a message, so no caller must handle an error.
         catch (Exception ex)
-#pragma warning restore CA1031
         {
+            // Each failure becomes a message, so no caller must handle an error.
             string message = MessageFor(ex);
             _post(() => Update(PairingStep.Failed, null, message));
         }

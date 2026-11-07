@@ -66,8 +66,8 @@ public sealed class SettingsViewModelTests
     }
 
     /// <summary>
-    /// The microphone box starts on "Windows default" with only that choice. After the devices load, picking one saves
-    /// its ID. Picking "Windows default" clears the saved ID.
+    /// The microphone box starts on "Windows default". After the devices load, picking one saves its ID. Picking
+    /// "Windows default" clears the saved ID.
     /// </summary>
     [TestMethod]
     public void MicrophoneIndex_DefaultsToWindowsDefault_SavesTheChosenDevice()
@@ -76,11 +76,8 @@ public sealed class SettingsViewModelTests
         var vm    = Create(store);
 
         Assert.AreEqual(0, vm.MicrophoneIndex);
-        Assert.AreEqual(ChatCopy.WindowsDefault, string.Join("|", vm.MicrophoneChoices));
 
         vm.SetMicrophones([("mic-1", "Headset"), ("mic-2", "Webcam")]);
-        Assert.AreEqual($"{ChatCopy.WindowsDefault}|Headset|Webcam", string.Join("|", vm.MicrophoneChoices));
-
         vm.MicrophoneIndex = 2;
         vm.MicrophoneIndex = 9;
         Assert.AreEqual("mic-2", new AppSettings(store).MicrophoneId);
