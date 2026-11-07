@@ -409,47 +409,79 @@ public sealed class MainWindowTests : UiTest
     }
 
     /// <summary>
-    /// The list loads one page at a time. With 60 more conversations, the oldest is not there at first. A scroll to
-    /// the bottom loads the next pages until the oldest shows.
+    /// The list loads one page at a time. With 60 more conversations, the oldest is not there at first. Placeholder rows
+    /// end the list while pages are left. A scroll to the bottom loads the next pages until the oldest shows, and then
+    /// the placeholder rows leave.
     /// </summary>
     [TestMethod]
     public async Task ConversationList_ScrollToBottom_LoadsMorePages()
     {
-        // 60 conversations that are older than the seeded ones. A lower number means a newer conversation.
-        const int Count = 60;
-        for (int i = 0; i < Count; i++)
-        {
-            string id                         = "c-page-" + i.ToString("D2", System.Globalization.CultureInfo.InvariantCulture);
-            Conversation chat                 = FakeChats.NewConversation(id, "Page " + i, false, ConversationStatus.Active, false, false, FakeChats.Person("p-" + id, "Page " + i, "+1555200" + i.ToString("D4", System.Globalization.CultureInfo.InvariantCulture)));
-            chat.LastMessageTimestamp         = (Count - i) * 1_000_000L;
-            Server.Phone.Chats.Add(chat);
-        }
-
+        AddOlderChats();
         await OpenMainAsync();
         AutomationElement list = App.Find("Main.ConversationList");
         App.Find("Row.c-page-00");
         Assert.IsNull(App.TryFind("Row.c-page-59"), "The oldest conversation showed before scrolling, so the list didn't page.");
 
-        // Each scroll to the bottom realizes the last row, and that row asks for the next page.
-        // The test notes the size of the footer ring when it catches the ring.
-        System.Drawing.Rectangle? ring = null;
+        Assert.AreEqual(ChatCopy.LoadingMoreConversations, App.Find("Main.ListLoadingMore").Name);
+        StringAssert.DoesNotMatch(ReadLog(), new System.Text.RegularExpressions.Regex("Row faded in"), "Rows of the first page faded in.");
+
+        // A page with nothing new ends the paging, and the placeholder rows then leave.
         Wait.Until(() =>
         {
             list.Patterns.Scroll.Pattern.SetScrollPercent(-1, 100);
-            if (App.TryFind("Main.ListLoadingMore") is { } shown && shown.BoundingRectangle is { Width: > 0 } box)
-            {
-                ring = box;
-            }
+            return App.TryFind("Row.c-page-59") is not null && App.TryFind("Main.ListLoadingMore") is null;
+        }, AppDriver.DefaultTimeout, () => "Scrolling to the bottom never loaded the oldest conversation and ended the paging.");
+        StringAssert.Contains(ReadLog(), "Row faded in (c-page-", "No row of a later page faded in.");
+    }
 
-            return App.TryFind("Row.c-page-59") is not null;
-        }, AppDriver.DefaultTimeout, () => "Scrolling to the bottom never loaded the oldest conversation.");
+    /// <summary>
+    /// The next page loads only at the bottom of the list. The list realizes rows below the view, and a part scroll must
+    /// not load a page.
+    /// </summary>
+    [TestMethod]
+    public async Task ConversationList_PartScroll_LoadsNoPage()
+    {
+        AddOlderChats();
+        await OpenMainAsync();
+        AutomationElement list = App.Find("Main.ConversationList");
+        App.Find("Row.c-page-00");
 
-        // At a standard display scale, the ring is 24 px with a whole 3 px stroke. It is not the old 20 px ring with a
-        // 2.5 px stroke.
-        if (ring is { } seen)
+        list.Patterns.Scroll.Pattern.SetScrollPercent(-1, 50);
+        Thread.Sleep(1500);
+        Assert.AreEqual(0, Server.Phone.ConversationPagesAsked, "The list loaded a page before the scroll came to the bottom.");
+
+        list.Patterns.Scroll.Pattern.SetScrollPercent(-1, 100);
+        Wait.Until(() => Server.Phone.ConversationPagesAsked > 0, AppDriver.DefaultTimeout, () => "The scroll to the bottom loaded no page.");
+    }
+
+    /// <summary>
+    /// The circles of the placeholder rows line up with the avatars of the rows. UI Automation gives the drawn bounds of
+    /// the placeholder rows, so their left edge is the left edge of the circles.
+    /// </summary>
+    [TestMethod]
+    public async Task ConversationList_Placeholders_LineUpWithAvatars()
+    {
+        AddOlderChats();
+        Server.Phone.ConversationPagesDelay = TimeSpan.FromSeconds(10);
+        await OpenMainAsync();
+        AutomationElement list          = App.Find("Main.ConversationList");
+        System.Drawing.Rectangle avatar = App.Find("Row.c-page-00").FindFirstDescendant(cf => cf.ByControlType(ControlType.Custom))!.BoundingRectangle;
+
+        list.Patterns.Scroll.Pattern.SetScrollPercent(-1, 100);
+        System.Drawing.Rectangle placeholders = App.Find("Main.ListLoadingMore").BoundingRectangle;
+        Assert.AreEqual(avatar.Left, placeholders.Left, 1, $"The placeholder circles at {placeholders} don't line up with the avatar at {avatar}.");
+    }
+
+    // Adds 60 conversations that are older than the seeded ones. A lower number means a newer conversation.
+    private void AddOlderChats()
+    {
+        const int Count = 60;
+        for (int i = 0; i < Count; i++)
         {
-            double scale = seen.Width / 24.0;
-            Assert.IsTrue(Math.Abs((scale * 4) - Math.Round(scale * 4)) < 0.12, $"The loading ring is {seen.Width} px, not 24 px at a standard scale.");
+            string id                 = "c-page-" + i.ToString("D2", System.Globalization.CultureInfo.InvariantCulture);
+            Conversation chat         = FakeChats.NewConversation(id, "Page " + i, false, ConversationStatus.Active, false, false, FakeChats.Person("p-" + id, "Page " + i, "+1555200" + i.ToString("D4", System.Globalization.CultureInfo.InvariantCulture)));
+            chat.LastMessageTimestamp = (Count - i) * 1_000_000L;
+            Server.Phone.Chats.Add(chat);
         }
     }
 

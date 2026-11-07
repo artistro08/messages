@@ -1,0 +1,99 @@
+<!-- Placeholder rows show at the end of the conversation list while older pages are left. Each has the shape of a row:
+     a 40 px circle for the avatar, a bar for the name and a bar for the snippet. A light band sweeps across them. -->
+<UserControl
+    x:Class="GMessages.App.Views.Controls.ListLoadingRows"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    IsTabStop="False">
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Light">
+                    <Color x:Key="LoadingBaseColor">#14000000</Color>
+                    <Color x:Key="LoadingShineColor">#05000000</Color>
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Default">
+                    <Color x:Key="LoadingBaseColor">#17FFFFFF</Color>
+                    <Color x:Key="LoadingShineColor">#30FFFFFF</Color>
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="HighContrast">
+                    <StaticResource x:Key="LoadingBaseColor" ResourceKey="SystemColorGrayTextColor" />
+                    <StaticResource x:Key="LoadingShineColor" ResourceKey="SystemColorGrayTextColor" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+
+            <!-- All shapes share 1 brush, so 1 animation moves the band on all of them. The code moves the band. Its
+                 width is SweepBand in the code. -->
+            <LinearGradientBrush
+                x:Key="LoadingFill"
+                MappingMode="Absolute"
+                StartPoint="0,0"
+                EndPoint="120,0">
+                <LinearGradientBrush.Transform>
+                    <TranslateTransform X="-120" />
+                </LinearGradientBrush.Transform>
+                <GradientStop Offset="0" Color="{ThemeResource LoadingBaseColor}" />
+                <GradientStop Offset="0.5" Color="{ThemeResource LoadingShineColor}" />
+                <GradientStop Offset="1" Color="{ThemeResource LoadingBaseColor}" />
+            </LinearGradientBrush>
+
+            <Style TargetType="Ellipse">
+                <Setter Property="Width" Value="40" />
+                <Setter Property="Height" Value="40" />
+                <Setter Property="Fill" Value="{StaticResource LoadingFill}" />
+            </Style>
+            <Style TargetType="Rectangle">
+                <Setter Property="HorizontalAlignment" Value="Left" />
+                <Setter Property="RadiusX" Value="4" />
+                <Setter Property="RadiusY" Value="4" />
+                <Setter Property="Fill" Value="{StaticResource LoadingFill}" />
+            </Style>
+
+            <!-- A row is 60 px tall, as a list row is. The bars sit 12 px right of the circle. -->
+            <Style x:Key="LoadingRow" TargetType="StackPanel">
+                <Setter Property="Padding" Value="0,10" />
+                <Setter Property="Orientation" Value="Horizontal" />
+                <Setter Property="Spacing" Value="12" />
+            </Style>
+            <Style x:Key="LoadingText" TargetType="StackPanel">
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="Spacing" Value="8" />
+            </Style>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <!-- The footer starts at the left edge of the list, and a row puts its avatar 16 px in. Thus the 16 px left padding
+         lines the circles up with the avatars. Each row is fainter than the row above it, so the rows fade out down the
+         list. The code gives the bars their widths. -->
+    <StackPanel Padding="16,0,0,0">
+        <StackPanel Style="{StaticResource LoadingRow}">
+            <Ellipse />
+            <StackPanel Style="{StaticResource LoadingText}">
+                <Rectangle x:Name="Name0" Height="12" />
+                <Rectangle x:Name="Snippet0" Height="10" />
+            </StackPanel>
+        </StackPanel>
+        <StackPanel Opacity="0.7" Style="{StaticResource LoadingRow}">
+            <Ellipse />
+            <StackPanel Style="{StaticResource LoadingText}">
+                <Rectangle x:Name="Name1" Height="12" />
+                <Rectangle x:Name="Snippet1" Height="10" />
+            </StackPanel>
+        </StackPanel>
+        <StackPanel Opacity="0.4" Style="{StaticResource LoadingRow}">
+            <Ellipse />
+            <StackPanel Style="{StaticResource LoadingText}">
+                <Rectangle x:Name="Name2" Height="12" />
+                <Rectangle x:Name="Snippet2" Height="10" />
+            </StackPanel>
+        </StackPanel>
+        <StackPanel Opacity="0.15" Style="{StaticResource LoadingRow}">
+            <Ellipse />
+            <StackPanel Style="{StaticResource LoadingText}">
+                <Rectangle x:Name="Name3" Height="12" />
+                <Rectangle x:Name="Snippet3" Height="10" />
+            </StackPanel>
+        </StackPanel>
+    </StackPanel>
+</UserControl>
