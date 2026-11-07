@@ -233,8 +233,8 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
     /// </para>
     /// </remarks>
     /// <returns>
-    /// A task that completes when the page is shown. Its result is true when a page came, and false when the call
-    /// waited for a load, no pages were left or the page failed.
+    /// A task that completes when the page is shown. Its result is true when a page came. It is false when a load ran,
+    /// so the ask waits for that load to end, when no pages were left or when the page failed.
     /// </returns>
     public async Task<bool> LoadMoreAsync()
     {

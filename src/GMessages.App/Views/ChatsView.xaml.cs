@@ -513,9 +513,9 @@ public sealed partial class ChatsView : UserControl
         _ = ScrollFade.Attach(scroller);
     }
 
-    // At the bottom of the list, the next page loads. Start chat hides during a scroll down. It shows again on a scroll up or at
-    // the top, with a slide and a fade. The transitions of its backing animate it. A hidden Start chat takes no clicks
-    // or tab stops, and UI Automation reads "Hidden" as its status.
+    // At the bottom of the list, the next page loads. Start chat hides during a scroll down. It shows again on a scroll
+    // up or at the top, with a slide and a fade. The transitions of its backing animate it. A hidden Start chat takes no
+    // clicks or tab stops, and UI Automation reads "Hidden" as its status.
     private void OnListScrolled(object? sender, ScrollViewerViewChangedEventArgs e)
     {
         if (_listScroller is not { } scroller)
@@ -668,7 +668,7 @@ public sealed partial class ChatsView : UserControl
 
         if (args.ItemIndex == sender.Items.Count - 1 && ViewModel.CurrentList.Rows.Count == 0)
         {
-            _ = ViewModel.CurrentList.LoadMoreAsync();
+            _ = LoadMoreAtBottomAsync();
         }
     }
 
@@ -732,9 +732,9 @@ public sealed partial class ChatsView : UserControl
         && focused.As<Control>().FocusState == FocusState.Keyboard;
 
     // Names each row Row.{id} for UI Automation. When the last row is realized and the list is at its bottom, the next
-    // page loads. Thus a short list that cannot scroll fills. The list realizes rows up to 2 screens below the view, so
-    // a realized last row alone loaded pages before the user came to the end. The check waits for the layout, because
-    // the scroll height is not current yet.
+    // page loads. Thus a short list that cannot scroll fills. The list realizes rows up to 2 screens below the view.
+    // Thus a realized last row is not enough. The check waits for the layout, because the scroll height is not current
+    // yet.
     private void OnContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
     {
         if (args.InRecycleQueue || args.Item is not ConversationRowViewModel row)
