@@ -31,7 +31,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     private readonly Func<bool>? _showReceivedPreviews;
 
     // The conversations that the user archived in this session, with the latest last. Undo puts them back with the
-    // button of the bar, or with Ctrl + Z at any time. Each other action on a conversation removes it from the list.
+    // button of the bar, or with Ctrl + Shift + Z at any time. Each other action on a conversation removes it from the
+    // list.
     private readonly List<string> _archived = [];
     private ITimer? _undoTimer;
 
@@ -528,7 +529,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// <summary>Gets whether the Undo bar shows.</summary>
     public bool HasUndo => UndoNotice is not null;
 
-    /// <summary>Gets whether Ctrl + Z can put back a conversation that the user archived in this session.</summary>
+    /// <summary>Gets whether Ctrl + Shift + Z can put back a conversation that the user archived in this session.</summary>
     public bool CanUndo => _archived.Count > 0;
 
     /// <summary>
@@ -586,7 +587,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }), null, UndoTime, Timeout.InfiniteTimeSpan);
     }
 
-    // The archives stay in the list, so Ctrl + Z can still put them back.
+    // The archives stay in the list, so Ctrl + Shift + Z can still put them back.
     private void HideUndo()
     {
         _undoTimer?.Dispose();

@@ -660,11 +660,11 @@ public sealed class ConversationActionTests : UiTest
     }
 
     /// <summary>
-    /// Ctrl + Z puts the archived chat back in the inbox, also after the Undo bar has gone. This works at any time in
-    /// the session.
+    /// Ctrl + Shift + Z puts the archived chat back in the inbox, also after the Undo bar has gone. This works at any
+    /// time in the session.
     /// </summary>
     [TestMethod]
-    public async Task CtrlZ_AfterTheBarHid_UnarchivesAgain()
+    public async Task CtrlShiftZ_AfterTheBarHid_UnarchivesAgain()
     {
         await OpenChatAsync("Row.c-ann");
 
@@ -673,9 +673,9 @@ public sealed class ConversationActionTests : UiTest
         WaitForGone("Row.c-ann");
         Wait.Until(() => App.TryFind("Main.Undo") is null, MainViewModel.UndoTime + AppDriver.DefaultTimeout, () => "The Undo bar never hid.");
 
-        // The keys go to the list. In the message box, Ctrl + Z undoes typing.
+        // The keys go to the list. In the message box, the keys belong to the text box.
         App.Find("Main.ConversationList").Focus();
-        Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_Z);
+        Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.SHIFT, VirtualKeyShort.KEY_Z);
 
         WaitForUpdates(2);
         Assert.AreEqual(ConversationStatus.Active, Server.Phone.ConversationUpdates[1].UpdateData.Status);

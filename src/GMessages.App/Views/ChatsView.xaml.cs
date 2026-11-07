@@ -941,7 +941,7 @@ public sealed partial class ChatsView : UserControl
                 ViewModel.ToggleList();
                 return true;
 
-            // Ctrl + Z puts back the latest archive of this session, with or without the Undo bar.
+            // Ctrl + Shift + Z puts back the latest archive of this session, with or without the Undo bar.
             case ShortcutCommand.UndoArchive:
                 if (!ViewModel.CanUndo)
                 {
