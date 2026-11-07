@@ -84,7 +84,7 @@
                 <ListView
                     x:Name="ConversationList"
                     Grid.Row="4"
-                    Padding="{x:Bind local:ChatsView.ListPadding(ViewModel.HasUndo), Mode=OneWay}"
+                    Padding="{x:Bind local:ChatsView.ListPadding(ViewModel.HasUndo, ViewModel.CurrentList.HasMorePages), Mode=OneWay}"
                     AutomationProperties.AutomationId="Main.ConversationList"
                     ContainerContentChanging="OnContainerContentChanging"
                     ContextRequested="OnConversationListContextRequested"
@@ -267,42 +267,14 @@
                         </GridView>
                     </ListView.Header>
 
-                    <!-- The footer keeps room below the last row while the next page loads. The ring below shows there
-                         when the list is at its end. -->
+                    <!-- While older pages are left, placeholder rows end the list. The user sees them only at the
+                         bottom, and the scroll to the bottom loads the next page. -->
                     <ListView.Footer>
-                        <Border Height="40" Visibility="{x:Bind ViewModel.CurrentList.IsLoadingMore, Mode=OneWay, FallbackValue=Collapsed}" />
+                        <controls:ListLoadingRows
+                            AutomationProperties.AutomationId="Main.ListLoadingMore"
+                            Visibility="{x:Bind ViewModel.CurrentList.HasMorePages, Mode=OneWay, FallbackValue=Collapsed}" />
                     </ListView.Footer>
                 </ListView>
-
-                <!-- A small ring in a raised circle shows near the bottom of the list while the next page loads. A
-                     scroll near the bottom asks for the page, as the code shows. The ring sits in the room that the
-                     footer keeps. Its circle matches the top ring of the chat. The ring is outside the list,
-                     because the edge fade of the list redraws its content through a copy. That copy drew the ring
-                     jagged, with no smoothing. The ring is 24 px, not 20 px. Its animation draws for 32 px with a
-                     4 px stroke and then stretches. At 20 px the stroke was 2.5 px, and its edges never landed on
-                     whole pixels. At 24 px the stroke is a whole 3 px. -->
-                <Border
-                    Grid.Row="4"
-                    Width="40"
-                    Height="40"
-                    Margin="0,0,0,64"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Bottom"
-                    Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}"
-                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                    BorderThickness="1"
-                    CornerRadius="20"
-                    Translation="0,0,16"
-                    Visibility="{x:Bind ViewModel.CurrentList.IsLoadingMore, Mode=OneWay, FallbackValue=Collapsed}">
-                    <Border.Shadow>
-                        <ThemeShadow />
-                    </Border.Shadow>
-                    <muxc:ProgressRing
-                        Width="24"
-                        Height="24"
-                        AutomationProperties.AutomationId="Main.ListLoadingMore"
-                        IsActive="{x:Bind ViewModel.CurrentList.IsLoadingMore, Mode=OneWay, FallbackValue=False}" />
-                </Border>
 
                 <!-- This ring shows while an empty list loads: the inbox, Archived or Spam & blocked. It has the
                      standard 32 px for a whole 4 px stroke. The size is explicit, so a style change cannot make the
