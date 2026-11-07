@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Globalization;
 using GMessages.Presentation.Connection;
 using GMessages.Protocol.Http;
 using GMessages.Protocol.Pairing;
@@ -6,44 +7,44 @@ using GMessages.Protocol.Pairing;
 namespace GMessages.Presentation.Pairing;
 
 /// <summary>
-/// Where the pairing page is in the sign-in and pairing flow.
+/// Specifies the step of the pairing page in the sign-in and pairing flow.
 /// </summary>
 public enum PairingStep
 {
-    /// <summary>The Google sign-in page is showing.</summary>
+    /// <summary>The page shows the Google sign-in.</summary>
     SigningIn,
 
-    /// <summary>Signed in; waiting for the phone to answer before the emoji is known.</summary>
+    /// <summary>The user signed in, and the page waits for the phone to send the emoji.</summary>
     WaitingForPhone,
 
-    /// <summary>The emoji is showing; waiting for the user to tap it on the phone.</summary>
+    /// <summary>The page shows the emoji and waits for the user to tap it on the phone.</summary>
     ShowingEmoji,
 
-    /// <summary>Pairing failed; <see cref="PairingViewModel.Message"/> says why.</summary>
+    /// <summary>The pairing failed. <see cref="PairingViewModel.Message"/> gives the reason.</summary>
     Failed,
 
-    /// <summary>Paired and connected; the main window switches to the chats.</summary>
+    /// <summary>The phone is paired and connected. The main window then shows the chats.</summary>
     Done,
 }
 
 /// <summary>
-/// The pairing page's state: sign-in, the emoji to tap, and a plain-English message when pairing fails.
+/// Holds the state of the pairing page: the sign-in, the emoji to tap, and a plain-English message for a failure.
 /// </summary>
 /// <remarks>
 /// <para>
-/// The window calls <see cref="OnCookiesCapturedAsync"/> on the UI thread as soon as the sign-in cookies are captured
-/// (Google rejects cookies that are a few hours old, so pairing starts right away). Every later change (the emoji from
-/// the client's thread, Done, Failed) goes through <c>post</c>, so <see cref="PropertyChanged"/> is always raised on
-/// the UI thread.
+/// The window calls <see cref="OnCookiesCapturedAsync"/> on the UI thread when it captures the sign-in cookies. Google
+/// refuses cookies that are a few hours old, so the pairing starts at once. Every later change goes through
+/// <c>post</c>, so <see cref="PropertyChanged"/> always occurs on the UI thread. The later changes are the emoji from
+/// the thread of the client, Done and Failed.
 /// </para>
 /// <para>
-/// Each change raises <see cref="PropertyChanged"/> once with an empty property name, which tells <c>x:Bind</c> to
-/// re-read every property.
+/// Each change raises <see cref="PropertyChanged"/> once with an empty property name. That name tells <c>x:Bind</c> to
+/// read every property again.
 /// </para>
 /// </remarks>
 public sealed class PairingViewModel : INotifyPropertyChanged
 {
-    // Failure Copy (Owner Wording, Verbatim)
+    // The owner wrote these messages. They must keep the exact words.
     private const string WrongEmojiText  = "That wasn't the matching emoji. Try again.";
     private const string CanceledText    = "Pairing on phone was cancelled";
     private const string DeclinedText    = "Pairing was declined on your phone.";
@@ -57,13 +58,12 @@ public sealed class PairingViewModel : INotifyPropertyChanged
     private readonly ConnectionController _controller;
     private readonly Action<Action> _post;
 
-    // The Running Attempt's Cancel Source, Or Null
     private CancellationTokenSource? _cts;
 
     /// <summary>
-    /// Creates the view model at <see cref="PairingStep.SigningIn"/>.
+    /// Creates the view model at the <see cref="PairingStep.SigningIn"/> step.
     /// </summary>
-    /// <param name="controller">Does the pairing; also gives the signed-out reason.</param>
+    /// <param name="controller">Pairs the phone and gives the signed-out reason.</param>
     /// <param name="post">Runs an action on the UI thread.</param>
     /// <exception cref="ArgumentNullException">An argument is null.</exception>
     public PairingViewModel(ConnectionController controller, Action<Action> post)
@@ -86,30 +86,36 @@ public sealed class PairingViewModel : INotifyPropertyChanged
     public string? Emoji { get; private set; }
 
     /// <summary>
-    /// Names the bundled Noto Color Emoji image of a pairing emoji (<c>Assets/Emoji</c> in the app), so the emoji looks
-    /// the way messages.google.com and the phone draw it.
+    /// Gives the file name of the bundled Noto Color Emoji image for a pairing emoji. The image makes the emoji look as
+    /// messages.google.com and the phone draw it.
     /// </summary>
-    /// <remarks>Noto's own naming: each code point in lower-case hex (at least four digits) joined by "_", VS16 left out.</remarks>
+    /// <remarks>
+    /// The images are in <c>Assets/Emoji</c> of the app, with the Noto names. Each code point is lower-case hex with at
+    /// least 4 digits, and "_" joins the code points. The name leaves out VS16.
+    /// </remarks>
     /// <param name="emoji">The emoji.</param>
     /// <returns>The file name, such as <c>emoji_u1f62e_200d_1f4a8.png</c>.</returns>
     public static string EmojiFileName(string emoji)
     {
         ArgumentException.ThrowIfNullOrEmpty(emoji);
 
-        IEnumerable<string> points = emoji.EnumerateRunes().Where(r => r.Value != 0xFE0F).Select(r => r.Value.ToString("x4", System.Globalization.CultureInfo.InvariantCulture));
+        IEnumerable<string> points = emoji.EnumerateRunes().Where(r => r.Value != 0xFE0F).Select(r => r.Value.ToString("x4", CultureInfo.InvariantCulture));
         return "emoji_u" + string.Join('_', points) + ".png";
     }
 
     /// <summary>Gets the plain-English failure message, or null when nothing failed.</summary>
     public string? Message { get; private set; }
 
-    /// <summary>Gets why Google signed the user out, shown above the sign-in; null for a first pairing.</summary>
+    /// <summary>
+    /// Gets the reason that Google signed the user out, or null for a first pairing. The page shows the reason above
+    /// the sign-in.
+    /// </summary>
     public string? SignedOutReason { get; }
 
     /// <summary>Gets whether the sign-in page shows.</summary>
     public bool IsSigningIn => Step == PairingStep.SigningIn;
 
-    /// <summary>Gets whether the window waits for the phone before the emoji is known.</summary>
+    /// <summary>Gets whether the window waits for the phone to send the emoji.</summary>
     public bool IsWaitingForPhone => Step == PairingStep.WaitingForPhone;
 
     /// <summary>Gets whether the emoji shows.</summary>
@@ -118,21 +124,19 @@ public sealed class PairingViewModel : INotifyPropertyChanged
     /// <summary>Gets whether the failure message and Try again show.</summary>
     public bool IsFailed => Step == PairingStep.Failed;
 
-    /// <summary>Gets whether the signed-out reason shows (only above the sign-in).</summary>
+    /// <summary>Gets whether the signed-out reason shows. The reason shows only above the sign-in.</summary>
     public bool ShowSignedOutReason => IsSigningIn && SignedOutReason is not null;
 
-    // =========================================================================
-    // PAIRING
-    // =========================================================================
-
     /// <summary>
-    /// Pairs with the captured sign-in cookies: shows the emoji when the phone answers, then Done or Failed.
+    /// Pairs with the captured sign-in cookies. The page shows the emoji when the phone answers, then Done or Failed.
     /// </summary>
     /// <remarks>
-    /// Call on the UI thread. Only the first call while <see cref="PairingStep.SigningIn"/> pairs; later calls do
-    /// nothing until <see cref="TryAgain"/>. A <see cref="Cancel"/> ends the attempt without showing a failure. A cancel
-    /// from the controller (an unpair while pairing) while it reports <see cref="ConnectionState.NotPaired"/> isn't a
-    /// failure either: the window goes back to <see cref="PairingStep.SigningIn"/>. Every other error becomes <see cref="PairingStep.Failed"/> with <see cref="MessageFor"/>'s text.
+    /// Call this method on the UI thread. Only the first call at the <see cref="PairingStep.SigningIn"/> step pairs.
+    /// Later calls do nothing before <see cref="TryAgain"/>. A <see cref="Cancel"/> ends the attempt and shows no
+    /// failure. An unpair during the pairing also cancels the pairing. When the controller then reports
+    /// <see cref="ConnectionState.NotPaired"/>, the window goes back to <see cref="PairingStep.SigningIn"/> and shows
+    /// no failure. Every other error gives <see cref="PairingStep.Failed"/> with the text from
+    /// <see cref="MessageFor"/>.
     /// </remarks>
     /// <param name="cookies">The Google sign-in cookies.</param>
     /// <returns>A task that completes when the attempt has ended.</returns>
@@ -141,7 +145,6 @@ public sealed class PairingViewModel : INotifyPropertyChanged
     {
         ArgumentNullException.ThrowIfNull(cookies);
 
-        // Capture Once Per Attempt
         if (Step != PairingStep.SigningIn)
         {
             return;
@@ -158,14 +161,14 @@ public sealed class PairingViewModel : INotifyPropertyChanged
         }
         catch (OperationCanceledException) when (cts.IsCancellationRequested)
         {
-            // Canceled Here: The Window Is Closing, So Show Nothing
+            // The window cancels the attempt when the window closes, so the page shows nothing.
         }
         catch (OperationCanceledException) when (_controller.State == ConnectionState.NotPaired)
         {
-            // Canceled By The Controller (An Unpair Meanwhile): No Failure, Back To A Fresh Sign-In
+            // An unpair cancels the pairing here. The page shows a new sign-in and no failure.
             _post(() => Update(PairingStep.SigningIn, null, null));
         }
-#pragma warning disable CA1031 // Any Failure Becomes A Message; Nothing Is Left For A Caller To Handle
+#pragma warning disable CA1031 // Each failure becomes a message, so no caller must handle an error.
         catch (Exception ex)
 #pragma warning restore CA1031
         {
@@ -179,9 +182,9 @@ public sealed class PairingViewModel : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Shows the generic failure when the sign-in page itself can't load (for example, no WebView2 runtime).
+    /// Shows the generic failure when the sign-in page cannot load. A missing WebView2 runtime is an example.
     /// </summary>
-    /// <remarks>Call on the UI thread.</remarks>
+    /// <remarks>Call this method on the UI thread.</remarks>
     public void SignInFailed() => Update(PairingStep.Failed, null, GenericText);
 
     /// <summary>
@@ -190,7 +193,7 @@ public sealed class PairingViewModel : INotifyPropertyChanged
     public void TryAgain() => Update(PairingStep.SigningIn, null, null);
 
     /// <summary>
-    /// Cancels a running pairing (the window is closing or Cancel was clicked). Does nothing when none runs.
+    /// Cancels a running pairing when the window closes. With no running pairing, the method does nothing.
     /// </summary>
     public void Cancel()
     {
@@ -200,7 +203,7 @@ public sealed class PairingViewModel : INotifyPropertyChanged
         }
         catch (ObjectDisposedException)
         {
-            // The Attempt Just Ended On Its Own
+            // The attempt ends by itself at the same time.
         }
     }
 
@@ -208,8 +211,8 @@ public sealed class PairingViewModel : INotifyPropertyChanged
     /// Gives the plain-English text for a pairing error.
     /// </summary>
     /// <remarks>
-    /// <see cref="PairingException"/> maps by <see cref="PairingFailure"/>; a <see cref="GmRequestException"/> with
-    /// 401 or 403 means Google refused the sign-in cookies. Anything else is the generic message.
+    /// A <see cref="PairingException"/> maps by its <see cref="PairingFailure"/>. A <see cref="GmRequestException"/>
+    /// with 401 or 403 means that Google refused the sign-in cookies. Any other error gives the generic message.
     /// </remarks>
     /// <param name="error">The error from <see cref="ConnectionController.PairAsync"/>.</param>
     /// <returns>The text to show.</returns>
@@ -225,11 +228,7 @@ public sealed class PairingViewModel : INotifyPropertyChanged
         _                                                                                           => GenericText,
     };
 
-    // =========================================================================
-    // STATE
-    // =========================================================================
-
-    // A Late Emoji (After A Cancel Or Failure) Is Ignored
+    // The method ignores a late emoji that comes after a cancel or a failure.
     private void ShowEmoji(string emoji)
     {
         if (Step != PairingStep.WaitingForPhone)

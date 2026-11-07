@@ -1,18 +1,18 @@
 namespace GMessages.Presentation.Notifications;
 
 /// <summary>
-/// What a toast click or button sends back to the app.
+/// Holds the arguments that a toast click or a toast button sends to the app.
 /// </summary>
-/// <param name="Action">The action name (open, reply...).</param>
-/// <param name="ConversationId">The conversation it is about.</param>
-/// <param name="MessageId">The message it is about, or null.</param>
+/// <param name="Action">The action name, such as <c>open</c> or <c>reply</c>.</param>
+/// <param name="ConversationId">The conversation of the toast.</param>
+/// <param name="MessageId">The message of the toast, or null.</param>
 public sealed record NotificationArgs(string Action, string ConversationId, string? MessageId)
 {
     /// <summary>
-    /// Reads an <c>&amp;</c>-separated <c>key=value</c> list. Values are URL-escaped.
+    /// Reads a list of <c>key=value</c> pairs that <c>&amp;</c> separates. The values are URL-escaped.
     /// </summary>
-    /// <param name="arguments">The launch or button arguments.</param>
-    /// <returns>The args, or null when action or conversation is missing.</returns>
+    /// <param name="arguments">The launch arguments or the button arguments.</param>
+    /// <returns>The arguments, or null when the action or the conversation is missing.</returns>
     public static NotificationArgs? Parse(string arguments)
     {
         if (string.IsNullOrEmpty(arguments))

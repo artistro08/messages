@@ -3,28 +3,31 @@ using GMessages.Presentation.Messaging;
 namespace GMessages.Presentation.Notifications;
 
 /// <summary>
-/// Keeps the taskbar badge's number: how many inbox conversations are unread and not muted.
+/// Keeps the number on the taskbar badge: the count of unread main-view conversations that are not muted.
 /// </summary>
 /// <remarks>
-/// <see cref="Update"/> is called on every conversation change and when the list loads; a burst of them hands the sink
-/// one count, 250 ms after the first. <see cref="Clear"/> (sign-out or unpair) hands it 0 at once and drops a pending
-/// count. The sink shows the number, and clears the badge for 0. Safe to call from any thread.
+/// The app calls <see cref="Update"/> on every conversation change and when the list loads. A burst of calls gives the
+/// sink a single count, 250 ms after the first call. <see cref="Clear"/> gives the sink 0 at once and drops a pending
+/// count. The sink shows the number, and for 0 the sink clears the badge. Any thread can call the members.
 /// </remarks>
-/// <param name="conversations">Gets the cached conversations.</param>
-/// <param name="sink">Shows a count on the badge; 0 clears it.</param>
-/// <param name="time">The clock the debounce runs on.</param>
+/// <param name="conversations">Returns the cached conversations.</param>
+/// <param name="sink">Shows a count on the badge. A count of 0 clears the badge.</param>
+/// <param name="time">The clock of the debounce.</param>
 public sealed class UnreadBadge(Func<IEnumerable<ConversationInfo>> conversations, Action<int> sink, TimeProvider time) : IDisposable
 {
-    /// <summary>How long a burst of updates is gathered into one count.</summary>
+    /// <summary>The time during which a burst of updates becomes a single count.</summary>
     public static readonly TimeSpan Debounce = TimeSpan.FromMilliseconds(250);
 
     private readonly Lock _lock = new();
     private ITimer? _pending;
 
     /// <summary>
-    /// Counts the conversations the badge shows.
+    /// Counts the conversations that the badge shows.
     /// </summary>
-    /// <remarks>Unread ones in the main view (not archived, spam, blocked or deleted) that aren't muted.</remarks>
+    /// <remarks>
+    /// The count includes each unread conversation in the main view that is not muted. The main view leaves out
+    /// archived, spam, blocked, deleted and empty one-on-one conversations.
+    /// </remarks>
     /// <param name="conversations">The conversations.</param>
     /// <returns>The count.</returns>
     public static int Count(IEnumerable<ConversationInfo> conversations)
@@ -35,7 +38,7 @@ public sealed class UnreadBadge(Func<IEnumerable<ConversationInfo>> conversation
     }
 
     /// <summary>
-    /// Hands the sink the count 250 ms from now, unless a count is already on its way.
+    /// Gives the sink the count in 250 ms, unless a count is already pending.
     /// </summary>
     public void Update()
     {
@@ -46,7 +49,7 @@ public sealed class UnreadBadge(Func<IEnumerable<ConversationInfo>> conversation
     }
 
     /// <summary>
-    /// Drops a pending count and clears the badge now (sign-out or unpair).
+    /// Drops a pending count and clears the badge at once. The app calls this method on a sign-out or an unpair.
     /// </summary>
     public void Clear()
     {
@@ -55,11 +58,11 @@ public sealed class UnreadBadge(Func<IEnumerable<ConversationInfo>> conversation
     }
 
     /// <summary>
-    /// Drops a pending count, leaving the badge as it is (quit: Windows keeps it, as Mail does).
+    /// Drops a pending count and keeps the badge. On a quit, Windows keeps the badge, as it does for Mail.
     /// </summary>
     public void Dispose() => Cancel();
 
-    // The Debounce Ended: Count Now, So Every Change In The Burst Is In It
+    // The count happens at the end of the debounce, so the count includes every change in the burst.
     private void Fire()
     {
         lock (_lock)

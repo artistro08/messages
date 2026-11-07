@@ -3,7 +3,7 @@ using GMessages.Presentation.Messaging;
 namespace GMessages.Presentation.Notifications;
 
 /// <summary>
-/// Decides whether an arriving message should raise a toast.
+/// Decides whether a message raises a toast, and when the toasts of a conversation go.
 /// </summary>
 public static class NotificationPolicy
 {
@@ -11,14 +11,15 @@ public static class NotificationPolicy
     /// Says whether to show a toast for a message.
     /// </summary>
     /// <remarks>
-    /// Only live, new, incoming text or attachments in an unmuted main-list conversation notify. The chat on screen
-    /// stays quiet while the window has focus, unless <paramref name="notifyForViewedChat"/> is on.
+    /// Only a live, new, incoming text or attachment notifies. The conversation of the message must be in the main view
+    /// and not muted. The chat on screen stays quiet while the window has focus, unless
+    /// <paramref name="notifyForViewedChat"/> is on.
     /// </remarks>
-    /// <param name="e">The arrived message.</param>
+    /// <param name="e">The message that arrived.</param>
     /// <param name="notificationsEnabled">The notifications setting.</param>
     /// <param name="viewedConversationId">The conversation open in the window, or null.</param>
     /// <param name="windowFocused">True when the window has focus.</param>
-    /// <param name="notifyForViewedChat">The setting that notifies even for the chat on screen.</param>
+    /// <param name="notifyForViewedChat">The setting that notifies also for the chat on screen.</param>
     /// <returns>True to show a toast.</returns>
     public static bool ShouldNotify(MessageArrivedEventArgs e, bool notificationsEnabled, string? viewedConversationId, bool windowFocused, bool notifyForViewedChat)
     {
@@ -34,24 +35,23 @@ public static class NotificationPolicy
             return false;
         }
 
-        // The Chat On Screen Stays Quiet While Focused
         return notifyForViewedChat || !windowFocused || e.Conversation.Id != viewedConversationId;
     }
 
     /// <summary>
-    /// Says whether a conversation's toasts should go now that it changed.
+    /// Says whether the toasts of a changed conversation go because the user read it.
     /// </summary>
     /// <remarks>
-    /// A read conversation's toasts go, wherever it was read (here, a toast reply or the phone). With
-    /// <paramref name="notifyForViewedChat"/> on, the chat on screen in the focused window keeps its toasts: it is read
-    /// as messages arrive, so dismissing would undo the setting. Those go when the chat is viewed again (the window
-    /// regains focus on it, or it is opened again).
+    /// The toasts of a read conversation go, wherever the user read it: here, in a toast reply or on the phone. With
+    /// <paramref name="notifyForViewedChat"/> on, the chat on screen in the focused window keeps its toasts. The app
+    /// reads that chat as messages arrive, so a dismiss at that time undoes the setting. Those toasts go when the user
+    /// views the chat again: the window gets focus on the chat again, or the user opens the chat again.
     /// </remarks>
     /// <param name="conversation">The changed conversation.</param>
     /// <param name="viewedConversationId">The conversation open in the window, or null.</param>
     /// <param name="windowFocused">True when the window has focus.</param>
-    /// <param name="notifyForViewedChat">The setting that notifies even for the chat on screen.</param>
-    /// <returns>True to remove the conversation's toasts.</returns>
+    /// <param name="notifyForViewedChat">The setting that notifies also for the chat on screen.</param>
+    /// <returns>True to remove the toasts of the conversation.</returns>
     public static bool ShouldDismissOnRead(ConversationInfo conversation, string? viewedConversationId, bool windowFocused, bool notifyForViewedChat)
     {
         ArgumentNullException.ThrowIfNull(conversation);
@@ -65,14 +65,14 @@ public static class NotificationPolicy
     }
 
     /// <summary>
-    /// Says whether a conversation's toasts should go because it left the main list or was muted.
+    /// Says whether the toasts of a conversation go because the conversation left the main view or is muted.
     /// </summary>
     /// <remarks>
-    /// The same rule <see cref="ShouldNotify"/> uses to stay quiet: an archived, blocked, spam or deleted conversation,
-    /// or a muted one, keeps no toast, wherever the change was made (here or on the phone).
+    /// The rule is the same rule that <see cref="ShouldNotify"/> uses. An archived, blocked, spam, deleted or muted
+    /// conversation keeps no toast, wherever the user made the change: here or on the phone.
     /// </remarks>
     /// <param name="conversation">The changed conversation.</param>
-    /// <returns>True to remove the conversation's toasts.</returns>
+    /// <returns>True to remove the toasts of the conversation.</returns>
     public static bool ShouldDismissOnLeave(ConversationInfo conversation)
     {
         ArgumentNullException.ThrowIfNull(conversation);

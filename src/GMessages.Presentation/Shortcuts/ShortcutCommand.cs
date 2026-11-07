@@ -1,7 +1,7 @@
 namespace GMessages.Presentation.Shortcuts;
 
 /// <summary>
-/// An app action a keyboard shortcut can trigger.
+/// Specifies an app action that a keyboard shortcut can start.
 /// </summary>
 public enum ShortcutCommand
 {
@@ -53,12 +53,14 @@ public enum ShortcutCommand
     /// <summary>Opens the file picker to attach any files to the open conversation.</summary>
     AttachFiles,
 
-    /// <summary>Opens the file picker filtered to photos.</summary>
+    /// <summary>Opens the file picker with a filter for photos.</summary>
     AttachPhotos,
 
-    /// <summary>Puts back the conversation archived last in this session.</summary>
+    /// <summary>Restores the conversation that the user archived last in this session.</summary>
     UndoArchive,
 
-    /// <summary>Collapses the conversation list to avatars, or expands it again (the title bar's ☰).</summary>
+    /// <summary>
+    /// Collapses the conversation list to avatars, or expands it again, as the ☰ of the title bar does.
+    /// </summary>
     ToggleSidebar,
 }

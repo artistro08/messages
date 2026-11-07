@@ -3,11 +3,12 @@ using System.Text.Json;
 namespace GMessages.Presentation.Settings;
 
 /// <summary>
-/// Settings in a JSON file. Used by the unpackaged install, which has no package identity.
+/// Keeps the settings in a JSON file. The unpackaged install uses this store, because that install has no package
+/// identity.
 /// </summary>
 /// <remarks>
-/// Ported from Magic Buds. Written in full on every change, through a temporary file so a crash mid-write can't
-/// leave half a file. A missing or unreadable file starts empty.
+/// Ported from Magic Buds. The store writes the full file on every change, through a temporary file. Thus a crash
+/// during a write cannot leave half a file. A missing or unreadable file gives an empty store.
 /// </remarks>
 public sealed class JsonFileSettingsStore : ISettingsStore
 {
@@ -16,11 +17,14 @@ public sealed class JsonFileSettingsStore : ISettingsStore
     private readonly Lock _gate = new();
 
     /// <summary>
-    /// Opens the store, loading the file if it exists.
+    /// Opens the store and loads the file when the file exists.
     /// </summary>
-    /// <param name="path">Settings file, e.g. <c>%LOCALAPPDATA%\Messages\settings.json</c>.</param>
+    /// <param name="path">The settings file, such as <c>%LOCALAPPDATA%\Messages\settings.json</c>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="path"/> is null.</exception>
     public JsonFileSettingsStore(string path)
     {
+        ArgumentNullException.ThrowIfNull(path);
+
         _path   = path;
         _values = Load(path);
     }
@@ -39,13 +43,11 @@ public sealed class JsonFileSettingsStore : ISettingsStore
     {
         lock (_gate)
         {
-            // Skip Unchanged Values
             if (_values.GetValueOrDefault(key) == value)
             {
                 return;
             }
 
-            // Update Memory
             if (value is null)
             {
                 _values.Remove(key);
@@ -55,22 +57,20 @@ public sealed class JsonFileSettingsStore : ISettingsStore
                 _values[key] = value;
             }
 
-            // Save Through A Temporary File
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
-                var temporary = _path + ".tmp";
+                string temporary = _path + ".tmp";
                 File.WriteAllText(temporary, JsonSerializer.Serialize(_values, SettingsJsonContext.Default.DictionaryStringString));
                 File.Move(temporary, _path, overwrite: true);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                // File locked (antivirus) or disk full: keep the value in memory, the next change saves it
+                // An antivirus can lock the file, or the disk can be full. The value stays in memory for the next save.
             }
         }
     }
 
-    // Load: Missing Or Corrupt Files Start Empty
     private static Dictionary<string, string> Load(string path)
     {
         if (!File.Exists(path))

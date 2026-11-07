@@ -8,9 +8,11 @@ namespace GMessages.Presentation.Logging;
 /// Writes log lines to {DisplayName}.log and keeps the newest files. Ported from Magic Buds.
 /// </summary>
 /// <remarks>
-/// When the current file would pass <c>maxFileBytes</c>, it becomes {DisplayName}.1.log, the
-/// older numbered files shift up by one, and anything past <c>maxFiles</c> total is deleted.
-/// The file name comes from <see cref="AppInfo.DisplayName"/>. Line format: <c>2026-09-23T15:04:05.123Z [Information] Category: message</c>.
+/// When a line makes the current file larger than <c>maxFileBytes</c>, the current file becomes {DisplayName}.1.log.
+/// Each older numbered file moves up by 1 number. The provider deletes the files past <c>maxFiles</c> in total. The
+/// file name comes from <see cref="AppInfo.DisplayName"/>. The line format is
+/// <c>2026-09-23T15:04:05.123Z [Information] Category: message</c>. The log must never hold message text, names or
+/// numbers.
 /// </remarks>
 public sealed class RollingFileLoggerProvider : ILoggerProvider
 {
@@ -26,23 +28,28 @@ public sealed class RollingFileLoggerProvider : ILoggerProvider
     /// <summary>
     /// Creates the provider and its log folder.
     /// </summary>
-    /// <param name="directory">Folder for the log files.</param>
-    /// <param name="levelSwitch">Minimum level, changeable at runtime.</param>
-    /// <param name="timeProvider">Clock for line timestamps.</param>
-    /// <param name="maxFileBytes">Size at which the current file rolls.</param>
-    /// <param name="maxFiles">Total files kept, including the current one.</param>
+    /// <param name="directory">The folder for the log files.</param>
+    /// <param name="levelSwitch">The minimum level, which can change at run time.</param>
+    /// <param name="timeProvider">The clock for the line timestamps.</param>
+    /// <param name="maxFileBytes">The size at which the current file rolls.</param>
+    /// <param name="maxFiles">The total number of files to keep, with the current file.</param>
+    /// <exception cref="ArgumentNullException">A required argument is null.</exception>
     public RollingFileLoggerProvider(string directory, LogLevelSwitch levelSwitch, TimeProvider timeProvider, long maxFileBytes = 1_048_576, int maxFiles = 5)
     {
-        _directory = directory;
-        _levelSwitch = levelSwitch;
+        ArgumentNullException.ThrowIfNull(directory);
+        ArgumentNullException.ThrowIfNull(levelSwitch);
+        ArgumentNullException.ThrowIfNull(timeProvider);
+
+        _directory    = directory;
+        _levelSwitch  = levelSwitch;
         _timeProvider = timeProvider;
         _maxFileBytes = maxFileBytes;
-        _maxFiles = maxFiles;
+        _maxFiles     = maxFiles;
         Directory.CreateDirectory(directory);
     }
 
     /// <summary>
-    /// The file being written.
+    /// Gets the path of the current log file.
     /// </summary>
     public string CurrentFilePath => Path.Combine(_directory, BaseName + ".log");
 
@@ -52,7 +59,7 @@ public sealed class RollingFileLoggerProvider : ILoggerProvider
     /// <inheritdoc />
     public void Dispose()
     {
-        // Every write opens and closes the file, so there's nothing to release.
+        // Each write opens and closes the file, so the provider has nothing to release.
     }
 
     internal bool IsEnabled(LogLevel level) => level != LogLevel.None && level >= _levelSwitch.MinimumLevel;
@@ -69,7 +76,7 @@ public sealed class RollingFileLoggerProvider : ILoggerProvider
             line.AppendLine().Append(ExceptionText.Describe(exception));
         }
         line.AppendLine();
-        var text = line.ToString();
+        string text = line.ToString();
 
         lock (_gate)
         {
@@ -78,13 +85,9 @@ public sealed class RollingFileLoggerProvider : ILoggerProvider
                 RollIfNeeded(Encoding.UTF8.GetByteCount(text));
                 File.AppendAllText(CurrentFilePath, text, Encoding.UTF8);
             }
-            catch (IOException)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                // Logging must never take the app down.
-            }
-            catch (UnauthorizedAccessException)
-            {
-                // Logging must never take the app down.
+                // A log failure must never stop the app.
             }
         }
     }
@@ -99,14 +102,14 @@ public sealed class RollingFileLoggerProvider : ILoggerProvider
             return;
         }
 
-        var oldest = NumberedPath(_maxFiles - 1);
+        string oldest = NumberedPath(_maxFiles - 1);
         if (File.Exists(oldest))
         {
             File.Delete(oldest);
         }
-        for (var number = _maxFiles - 2; number >= 1; number--)
+        for (int number = _maxFiles - 2; number >= 1; number--)
         {
-            var source = NumberedPath(number);
+            string source = NumberedPath(number);
             if (File.Exists(source))
             {
                 File.Move(source, NumberedPath(number + 1));

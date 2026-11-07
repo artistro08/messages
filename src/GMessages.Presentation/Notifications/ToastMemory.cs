@@ -1,7 +1,7 @@
 namespace GMessages.Presentation.Notifications;
 
 /// <summary>
-/// A toast as shown: its message (tag), its conversation (group) and its payload.
+/// Holds a shown toast: the message as the tag, the conversation as the group, and the payload.
 /// </summary>
 /// <param name="Tag">The message ID.</param>
 /// <param name="Group">The conversation ID.</param>
@@ -9,35 +9,34 @@ namespace GMessages.Presentation.Notifications;
 public sealed record ShownToast(string Tag, string Group, string Xml);
 
 /// <summary>
-/// The toasts Snooze can show again: the latest few shown, and the ones snoozed and waiting. Also the message IDs
-/// already toasted, so a message gets one toast however many updates of it arrive.
+/// Keeps the toasts that Snooze can show again: the latest shown toasts and the snoozed toasts. It also keeps the
+/// toasted message IDs, so each message gets a single toast.
 /// </summary>
 /// <remarks>
-/// Payloads live in memory only, never on disk. The real phone sends several updates per incoming message (status
-/// changes, reactions); <see cref="FirstShow"/> keeps the last 256 toasted message IDs, so none of them shows the
-/// banner again. Opening the chat or clearing the toasts doesn't forget them, and a snooze wake isn't a first show.
-/// Only the latest <c>capacity</c> shown toasts can be snoozed (older ones are dropped first), but a snooze already
-/// waiting is kept apart, so newer toasts never push it out. Opening the chat (<see cref="RemoveConversation"/>) or
-/// clearing every toast (<see cref="Clear"/>) cancels its waiting snoozes.
+/// The payloads stay in memory and never go to disk. The real phone sends several updates for each incoming message,
+/// such as status changes and reactions. <see cref="FirstShow"/> keeps the last 256 toasted message IDs, so no update
+/// shows the banner again. An open of the chat or a clear of the toasts keeps these IDs. A snooze wake is not a first
+/// show. The user can snooze only the latest <c>capacity</c> shown toasts. The oldest toast goes first. A waiting
+/// snooze is kept apart, so newer toasts never push it out. <see cref="RemoveConversation"/> cancels the waiting
+/// snoozes of a conversation. <see cref="Clear"/> cancels every waiting snooze.
 /// </remarks>
-/// <param name="capacity">How many recently shown toasts can still be snoozed.</param>
+/// <param name="capacity">The number of recent shown toasts that the user can snooze.</param>
 public sealed class ToastMemory(int capacity)
 {
-    // How Many Toasted Message IDs Are Kept (As Many As ChatStore Remembers)
+    // ChatStore remembers the same number of message IDs.
     private const int ShownIdCapacity = 256;
 
     private readonly List<ShownToast> _recent = [];
     private readonly HashSet<ShownToast> _snoozed = [];
 
-    // Toasted Message IDs (Queue Keeps The Order, Set Makes The Lookup Fast)
     private readonly Queue<string> _shownOrder = new();
     private readonly HashSet<string> _shownIds = [];
 
     /// <summary>
-    /// Claims a message's one toast. Call it before showing a toast for an arrived message.
+    /// Claims the single toast of a message. Call this method before the app shows a toast for a message that arrived.
     /// </summary>
-    /// <param name="messageId">The message ID (the toast's tag).</param>
-    /// <returns>True the first time; false when the message was already toasted (a repeated update of it).</returns>
+    /// <param name="messageId">The message ID, which is the tag of the toast.</param>
+    /// <returns>True for the first call. False for a repeated update of a message that already has a toast.</returns>
     public bool FirstShow(string messageId)
     {
         ArgumentNullException.ThrowIfNull(messageId);
@@ -57,7 +56,7 @@ public sealed class ToastMemory(int capacity)
     }
 
     /// <summary>
-    /// Keeps a shown toast so it can be snoozed; the oldest is dropped past the capacity.
+    /// Keeps a shown toast for Snooze. Past the capacity, the oldest toast goes.
     /// </summary>
     /// <param name="toast">The toast.</param>
     public void Remember(ShownToast toast)
@@ -73,11 +72,11 @@ public sealed class ToastMemory(int capacity)
     }
 
     /// <summary>
-    /// Starts a snooze: moves the toast from the recent ones to the waiting ones.
+    /// Starts a snooze and moves the toast from the recent toasts to the waiting toasts.
     /// </summary>
-    /// <param name="tag">The toast's message ID.</param>
-    /// <param name="group">The toast's conversation ID.</param>
-    /// <returns>The toast, or null when it isn't one of the recent ones.</returns>
+    /// <param name="tag">The message ID of the toast.</param>
+    /// <param name="group">The conversation ID of the toast.</param>
+    /// <returns>The toast, or null when the toast is not a recent toast.</returns>
     public ShownToast? Snooze(string? tag, string group)
     {
         if (_recent.Find(t => t.Tag == tag && t.Group == group) is not { } toast)
@@ -91,11 +90,14 @@ public sealed class ToastMemory(int capacity)
     }
 
     /// <summary>
-    /// Ends a snooze once its time is up. When it is still waiting, it becomes a recent toast again, so it can be
-    /// snoozed once more after it shows.
+    /// Ends a snooze when its time is over. A toast that still waits becomes a recent toast again, so the user can
+    /// snooze it again.
     /// </summary>
     /// <param name="toast">The snoozed toast.</param>
-    /// <returns>True to show it again; false when its chat was opened or the toasts were cleared meanwhile.</returns>
+    /// <returns>
+    /// True to show the toast again. False when <see cref="RemoveConversation"/> or <see cref="Clear"/> canceled the
+    /// snooze.
+    /// </returns>
     public bool Wake(ShownToast toast)
     {
         if (!_snoozed.Remove(toast))
@@ -108,7 +110,7 @@ public sealed class ToastMemory(int capacity)
     }
 
     /// <summary>
-    /// Forgets a conversation's toasts, the waiting snoozes included (its chat was opened).
+    /// Forgets the toasts and the waiting snoozes of a conversation.
     /// </summary>
     /// <param name="group">The conversation ID.</param>
     public void RemoveConversation(string group)
