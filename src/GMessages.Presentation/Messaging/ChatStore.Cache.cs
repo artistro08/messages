@@ -137,8 +137,8 @@ public sealed partial class ChatStore
     private bool HasMyReaction(ChatMessage message)
     {
         ConversationInfo? conversation = Find(message.ConversationId);
-        return message.Reactions.Any(r => r.ParticipantIds.Any(id => id == _me?.Id
-            || (conversation is not null && (id == conversation.DefaultOutgoingId || conversation.FindParticipant(id)?.IsMe == true))));
+        return message.Reactions.Any(r => r.ParticipantIds.Any(id =>
+            (id.Length > 0 && id == _me?.Id) || conversation?.IsMine(id) == true));
     }
 
     private bool IsCached(ChatMessage message)

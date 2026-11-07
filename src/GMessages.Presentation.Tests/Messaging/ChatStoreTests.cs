@@ -1040,6 +1040,28 @@ public sealed class ChatStoreTests
         Assert.IsFalse(got.IsNew);
     }
 
+    /// <summary>
+    /// A chat has an empty default outgoing ID, and a reaction holds an empty participant ID. A new message still
+    /// makes a toast, because an empty ID is never mine.
+    /// </summary>
+    [TestMethod]
+    public async Task ReactionWithEmptyParticipantId_StillToasts()
+    {
+        using var rig = new Rig();
+        await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1", outgoing: "")));
+        MessageArrivedEventArgs? got = null;
+        rig.Store.MessageArrived += (_, e) => got = e;
+
+        Message m              = Msg("m1", "c1");
+        m.ParticipantID        = "p-ann";
+        m.MessageStatus.Status = MessageStatusType.IncomingComplete;
+        m.Reactions.Add(new ReactionEntry { Data = new ReactionData { Type = EmojiType.Like }, ParticipantIDs = { "" } });
+        await rig.Store.HandleEventAsync(new MessageReceived(m, false));
+
+        Assert.IsNotNull(got);
+        Assert.IsTrue(got.IsNew);
+    }
+
     // =========================================================================
     // SENDING
     // =========================================================================

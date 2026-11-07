@@ -127,4 +127,13 @@ public sealed record ConversationInfo(
     /// </summary>
     /// <returns>The participant, or null when the participant is not in this conversation.</returns>
     public ParticipantInfo? FindParticipant(string id) => Participants.FirstOrDefault(p => p.Id == id);
+
+    /// <summary>
+    /// Tells whether a participant ID is the owner: the default outgoing ID, or a participant marked as the owner.
+    /// An empty ID is never the owner.
+    /// </summary>
+    /// <param name="participantId">The participant ID to check.</param>
+    /// <returns>True when the ID is the owner in this conversation.</returns>
+    public bool IsMine(string participantId) =>
+        participantId.Length > 0 && (participantId == DefaultOutgoingId || FindParticipant(participantId)?.IsMe == true);
 }

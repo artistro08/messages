@@ -640,7 +640,9 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         {
             foreach (string participantId in _reactions.Where(r => r.Emoji == emoji).SelectMany(r => r.ParticipantIds))
             {
-                string name = IsMine(participantId) ? ChatCopy.You : NameOf(_conversation?.FindParticipant(participantId));
+                string name = _conversation?.IsMine(participantId) == true
+                    ? ChatCopy.You
+                    : NameOf(_conversation?.FindParticipant(participantId));
                 if (name.Length > 0)
                 {
                     rows.Add((emoji, name));
@@ -885,9 +887,6 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         return ChatFormat.WithColorEmoji((before + joint + after).Trim());
     }
 
-    private string? FindMyReaction() => _reactions.FirstOrDefault(r => r.ParticipantIds.Any(IsMine))?.Emoji;
-
-    // Mine is the default outgoing ID of the conversation, or a participant marked as me. The store uses the same rule.
-    private bool IsMine(string participantId) =>
-        participantId.Length > 0 && _conversation is { } c && (participantId == c.DefaultOutgoingId || c.FindParticipant(participantId)?.IsMe == true);
+    private string? FindMyReaction() =>
+        _reactions.FirstOrDefault(r => r.ParticipantIds.Any(id => _conversation?.IsMine(id) == true))?.Emoji;
 }
