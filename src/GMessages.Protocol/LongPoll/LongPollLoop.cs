@@ -9,38 +9,39 @@ using Microsoft.Extensions.Logging;
 namespace GMessages.Protocol.LongPoll;
 
 /// <summary>
-/// Keeps the long poll open: reconnects on errors, feeds every payload to the dispatcher, flushes acks and pings the phone.
+/// Keeps the long poll open. It reconnects after errors, gives each payload to the dispatcher, sends the acks and pings the phone.
 /// </summary>
 /// <remarks>
 /// Ported from <c>doLongPoll</c> and <c>readLongPoll</c> in
 /// <see href="https://github.com/mautrix/gmessages/blob/ba33f4875a491f5cb47db8a6baf42a8869f5f383/pkg/libgm/longpoll.go">longpoll.go</see>,
-/// <c>startLongPolling</c> in client.go, <c>startAckInterval</c> in session_handler.go and <c>SetActiveSession</c>
-/// in methods.go. Each pass refreshes the token if needed, then opens <c>ReceiveMessages</c>. A 401 or 403 (or a
-/// fatal refresh error) raises <see cref="ListenFatalError"/> and ends the loop; other failures raise
-/// <see cref="ListenTemporaryError"/> and retry after <c>(errorCount + 1) × 5</c> seconds. The first success after
-/// errors raises <see cref="ListenRecovered"/>; the error count starts at 1, so that also happens on the first
-/// connect, as in Go. Reopening after more than a minute away asks the phone to resend updates. A minute of silence
-/// on the stream drops the connection and reopens it, and so does <see cref="StreamLifetime"/> (30 minutes, as Go's
-/// client timeout), so the token refresh check runs at least that often.
+/// <c>startLongPolling</c> in client.go, <c>startAckInterval</c> in session_handler.go and <c>SetActiveSession</c> in
+/// methods.go. Each pass refreshes the token when necessary, then opens <c>ReceiveMessages</c>. A 401 or a 403 raises
+/// <see cref="ListenFatalError"/> and ends the loop. A fatal refresh error does the same. Other failures raise
+/// <see cref="ListenTemporaryError"/>, and the loop tries again after <c>(errorCount + 1) × 5</c> seconds. The first
+/// success after errors raises <see cref="ListenRecovered"/>. As in Go, the error count starts at 1, so the first
+/// connect also raises it. After more than 1 minute without a stream, the next connect asks the phone to send the
+/// updates again. After 1 minute of silence on the stream, the loop drops the connection and opens it again.
+/// <see cref="StreamLifetime"/> does the same after 30 minutes, which is the client timeout in Go. Thus the token
+/// refresh check runs at least every 30 minutes.
 /// <para>
-/// Three deliberate differences from Go keep an always-on tray app sane: the retry wait stops growing at
-/// <see cref="MaxRetryDelay"/> (5 minutes) instead of growing forever; a stream that ends within
-/// <see cref="MinStreamLifetime"/> (5 seconds) is followed by a 5 second pause, so a server that keeps closing at once
-/// can't cause a hot loop; and opening the stream gives up when no response headers arrive within
-/// <see cref="ReadIdleTimeout"/>, and can be interrupted by <see cref="RequestReconnect"/>, so a request stuck on a
-/// dead socket can't hold the loop. The wire requests are unchanged.
+/// 3 differences from Go keep an always-on tray app stable. The wire requests do not change.
+/// <see cref="MaxRetryDelay"/> limits the retry wait to 5 minutes. In Go, the wait grows without limit.
+/// <see cref="MinStreamLifetime"/> adds a 5 second pause after a stream that ends within 5 seconds. Thus a server that
+/// closes at once cannot spin the loop. The open stops when no response headers arrive within
+/// <see cref="ReadIdleTimeout"/>, and <see cref="RequestReconnect"/> can interrupt it. Thus a request on a dead socket
+/// cannot block the loop.
 /// </para>
-/// Go's background (push-woken) mode is not ported: this app has
-/// no push. The phone liveness state (<see cref="PhoneLiveness"/>) belongs to the loop, not to a run, so it survives
-/// restarts like Go's client-level state. Every wait uses the <see cref="TimeProvider"/>.
+/// Go wakes its background mode with push messages. This port does not include that mode, because this app has no
+/// push. The loop owns the <see cref="PhoneLiveness"/> state, so the state survives restarts, as the client-level
+/// state of Go does. Each wait uses the <see cref="TimeProvider"/>.
 /// </remarks>
 /// <param name="http">The HTTP client.</param>
-/// <param name="rpc">The RPC session (acks, update requests, pings).</param>
+/// <param name="rpc">The RPC session. It sends the acks, the update requests and the pings.</param>
 /// <param name="auth">The account.</param>
 /// <param name="endpoints">The server addresses.</param>
 /// <param name="refresher">Refreshes the token before each connect.</param>
-/// <param name="dispatcher">Handles every incoming message.</param>
-/// <param name="time">The clock for every wait.</param>
+/// <param name="dispatcher">Handles each incoming message.</param>
+/// <param name="time">The clock for each wait.</param>
 /// <param name="log">The logger.</param>
 public sealed partial class LongPollLoop(
     GmHttpClient http,
@@ -52,24 +53,30 @@ public sealed partial class LongPollLoop(
     TimeProvider time,
     ILogger log)
 {
-    /// <summary>How long the stream may stay silent before reconnecting (Go: the 1 minute <c>closeIn</c> timer).</summary>
+    /// <summary>The longest silence on the stream before the loop reconnects. Go uses the 1 minute <c>closeIn</c> timer.</summary>
     public static readonly TimeSpan ReadIdleTimeout = TimeSpan.FromMinutes(1);
 
-    /// <summary>Away longer than this counts as a gap that may have missed events (Go: <c>longPollGapCatchUp</c>).</summary>
+    /// <summary>A disconnect longer than this is a gap that can hide events. Ported from <c>longPollGapCatchUp</c>.</summary>
     public static readonly TimeSpan GapCatchUp = TimeSpan.FromMinutes(1);
 
-    /// <summary>How often queued acks are sent (Go: <c>startAckInterval</c>).</summary>
+    /// <summary>How often the loop sends the queued acks. Ported from <c>startAckInterval</c>.</summary>
     public static readonly TimeSpan AckInterval = TimeSpan.FromSeconds(5);
 
-    /// <summary>The longest wait between retries (C#-only; Go's <c>(errorCount + 1) × 5</c> seconds grows without limit).</summary>
+    /// <summary>
+    /// The longest wait between retries. This limit is C#-only, because in Go the wait of <c>(errorCount + 1) × 5</c>
+    /// seconds grows without limit.
+    /// </summary>
     public static readonly TimeSpan MaxRetryDelay = TimeSpan.FromMinutes(5);
 
-    /// <summary>A stream shorter than this is followed by this long a pause before reopening (C#-only; Go reopens at once).</summary>
+    /// <summary>
+    /// After a stream shorter than this, the loop pauses this long before it opens a new one. This pause is C#-only.
+    /// Go opens the new stream at once.
+    /// </summary>
     public static readonly TimeSpan MinStreamLifetime = TimeSpan.FromSeconds(5);
 
     /// <summary>
-    /// How long one stream may stay open, counted from the start of its request (Go: the long-poll client's 30 minute
-    /// timeout covers the body, so every stream ends then and the loop's token refresh check runs again).
+    /// The longest time that 1 stream stays open, from the start of its request. In Go, the 30 minute timeout of the
+    /// long-poll client covers the body. Thus each stream ends then, and the token refresh check runs again.
     /// </summary>
     public static readonly TimeSpan StreamLifetime = GmHttpClient.LongPollTimeout;
 
@@ -82,21 +89,22 @@ public sealed partial class LongPollLoop(
     private int _connected;
 
     /// <summary>
-    /// Raised for every event from the loop, the dispatcher, the token refresher and the pinger.
+    /// Occurs for each event from the loop, the dispatcher, the token refresher and the pinger.
     /// </summary>
     public event Action<object>? EventRaised;
 
     /// <summary>
-    /// Gets whether a long-poll stream is open right now.
+    /// Gets whether a long-poll stream is open now.
     /// </summary>
     /// <remarks>
-    /// Ported from Go's <c>longPollingConn</c> check in <c>IsConnected</c>: true from the moment a stream opens until
-    /// it ends or <see cref="Stop"/> is called, so it is briefly false while the loop reconnects, as in Go.
+    /// Ported from the <c>longPollingConn</c> check in <c>IsConnected</c>. The value is true from the open of a stream
+    /// until the stream ends or <see cref="Stop"/> runs. Thus it is false for a short time while the loop reconnects,
+    /// as in Go.
     /// </remarks>
     public bool IsConnected => Volatile.Read(ref _connected) != 0;
 
     /// <summary>
-    /// Gets whether a run is active, from the start of <see cref="RunAsync"/> until it ends (reconnects included).
+    /// Gets whether a run is active. A run lasts from the start of <see cref="RunAsync"/> to its end, reconnects included.
     /// </summary>
     internal bool IsRunning
     {
@@ -110,24 +118,20 @@ public sealed partial class LongPollLoop(
     }
 
     /// <summary>
-    /// Gets the pinger of the current run, or null when not running logged in.
-    /// </summary>
-    internal DittoPinger? Pinger => _pinger;
-
-    /// <summary>
-    /// Runs the loop until it is stopped, canceled, or the credentials are refused.
+    /// Runs the loop until a stop, a cancel or a refusal of the credentials.
     /// </summary>
     /// <remarks>
-    /// With <paramref name="loggedIn"/> false (pairing), no pinger or ack timer runs and no listen events are raised,
-    /// as in Go. <paramref name="onFirstConnect"/> runs in the background once the first connection opens, and again
-    /// after a recovery reconnect (Go starts a new loop with <c>postConnect</c> then). When not logged in, a fatal
-    /// error (401/403 or a fatal refresh error) is thrown instead of returning quietly: no listen event carries it,
-    /// so pairing would otherwise never learn why the long poll stopped.
+    /// When <paramref name="loggedIn"/> is false, as during pairing, no pinger and no ack timer run. As in Go, no
+    /// listen events occur then. <paramref name="onFirstConnect"/> runs in the background when the first connection
+    /// opens. It runs again after a recovery reconnect, because Go then starts a new loop with <c>postConnect</c>.
+    /// When <paramref name="loggedIn"/> is false, the method throws a fatal error: a 401, a 403 or a fatal refresh
+    /// error. No listen event carries the error then. Without the throw, pairing does not learn why the long poll
+    /// stopped.
     /// </remarks>
-    /// <param name="loggedIn">True once paired; turns on the pinger, the ack timer and listen events.</param>
+    /// <param name="loggedIn">True after pairing. It turns on the pinger, the ack timer and the listen events.</param>
     /// <param name="onFirstConnect">Runs after the first successful connect, or null.</param>
     /// <param name="ct">Stops the loop.</param>
-    /// <returns>A task that completes when the loop ends; stopping or canceling ends it normally, without an exception.</returns>
+    /// <returns>A task that completes when the loop ends. A stop or a cancel ends it normally, without an exception.</returns>
     /// <exception cref="GmRequestException">Not logged in, and the server refused the credentials (401/403).</exception>
     /// <exception cref="InvalidOperationException">Not logged in, and the token refresh failed fatally.</exception>
     public async Task RunAsync(bool loggedIn, Action? onFirstConnect, CancellationToken ct)
@@ -139,7 +143,6 @@ public sealed partial class LongPollLoop(
             _stopCts = stopCts;
         }
 
-        // Pinger And Ack Timer (Logged In Only)
         Task background = Task.CompletedTask;
         if (loggedIn)
         {
@@ -165,7 +168,7 @@ public sealed partial class LongPollLoop(
         }
         catch (Exception ex) when (stop.IsCancellationRequested)
         {
-            // Stopped Or Canceled: A Normal End, Whatever The Aborted Socket Threw
+            // A stop or a cancel is a normal end, whatever error the aborted socket threw.
             LogStopError(log, ex);
         }
         finally
@@ -184,7 +187,8 @@ public sealed partial class LongPollLoop(
             refresher.EventRaised  -= Raise;
             rpc.PhoneSlow          -= OnPhoneSlow;
             dispatcher.Pinger       = null;
-            // Only Clear Our Own CTS, So A Newer Run Started Meanwhile Stays Stoppable
+
+            // Clear only the CTS of this run, so that a newer run stays stoppable.
             lock (_lock)
             {
                 if (_stopCts == stopCts)
@@ -212,7 +216,7 @@ public sealed partial class LongPollLoop(
     }
 
     /// <summary>
-    /// Starts a new session ID and asks the phone to start sending updates for it.
+    /// Starts a new session ID and asks the phone to send updates for it.
     /// </summary>
     /// <remarks>Ported from <c>SetActiveSession</c>: a <c>GET_UPDATES</c> with the new session ID as request ID and no TTL.</remarks>
     /// <param name="ct">Cancels the request.</param>
@@ -228,7 +232,7 @@ public sealed partial class LongPollLoop(
     // LOOP
     // =========================================================================
 
-    // Returns The Fatal Error That Ended The Loop, Or Null When It Was Stopped
+    // Returns the fatal error that ended the loop, or null after a stop.
     private async Task<Exception?> ListenAsync(bool loggedIn, Action? onFirstConnect, CancellationToken stop)
     {
         Action? firstConnect            = onFirstConnect;
@@ -236,7 +240,7 @@ public sealed partial class LongPollLoop(
         int errorCount                  = 1;
         DateTimeOffset? disconnectedAt  = null;
 
-        // Recovery Reconnect: Start Over Like A New doLongPoll (Go: Reconnect Starts A Fresh Loop With postConnect)
+        // A recovery reconnect starts over like a new doLongPoll. In Go, Reconnect starts a new loop with postConnect.
         bool TakeReconnect()
         {
             lock (_lock)
@@ -261,7 +265,7 @@ public sealed partial class LongPollLoop(
         {
             TakeReconnect();
 
-            // One Connection Attempt; A Reconnect Request Cancels Its Backoff Wait Or Its Read
+            // A reconnect request cancels the backoff wait or the read of this attempt.
             using var attemptCts = CancellationTokenSource.CreateLinkedTokenSource(stop);
             lock (_lock)
             {
@@ -270,7 +274,6 @@ public sealed partial class LongPollLoop(
 
             try
             {
-                // Refresh Token
                 Exception? error = null;
                 try
                 {
@@ -289,10 +292,10 @@ public sealed partial class LongPollLoop(
                     error = wrapped;
                 }
 
-                // Stream Lifetime Starts With The Request, As Go's Client Timeout Does
+                // The stream lifetime starts with the request, as the client timeout of Go does.
                 using var lifetimeCts = new CancellationTokenSource(StreamLifetime, time);
 
-                // Open The Stream; A Reconnect Request Or 1 Minute Without Headers Interrupts It
+                // A reconnect request or 1 minute without headers interrupts the open.
                 HttpResponseMessage? res = null;
                 if (error is null)
                 {
@@ -304,7 +307,7 @@ public sealed partial class LongPollLoop(
                         int status = (int)res.StatusCode;
                         if (status >= 400)
                         {
-                            // The Body Read Disposes The Response And Never Throws, So A 401/403 Always Stays Fatal
+                            // The body read disposes the response and never throws, so a 401 or a 403 always stays fatal.
                             HttpResponseMessage failed = res;
                             res = null;
                             var failure = new GmRequestException(status, null, await ReadBodyAsync(failed, stop).ConfigureAwait(false));
@@ -320,7 +323,7 @@ public sealed partial class LongPollLoop(
                     }
                     catch (Exception) when (attemptCts.IsCancellationRequested && !stop.IsCancellationRequested)
                     {
-                        // Reconnect Requested While Opening: Start Over Right Away
+                        // A reconnect request during the open starts over at once.
                         res?.Dispose();
                         continue;
                     }
@@ -333,7 +336,6 @@ public sealed partial class LongPollLoop(
                     }
                 }
 
-                // Back Off On Errors
                 if (error is not null)
                 {
                     RaiseIf(loggedIn, new ListenTemporaryError(error));
@@ -344,7 +346,7 @@ public sealed partial class LongPollLoop(
                     continue;
                 }
 
-                // Open Without An Error Always Has A Response; This Guard Only Narrows The Type
+                // An open without an error always has a response. This guard only narrows the type.
                 if (res is not { } response)
                 {
                     continue;
@@ -352,7 +354,7 @@ public sealed partial class LongPollLoop(
 
                 using (response)
                 {
-                    // Go (longpoll.go:578-583): A Reconnect While Opening Closes This Stream And Starts Over
+                    // Ported from longpoll.go lines 578 to 583. A reconnect during the open closes this stream and starts over.
                     if (TakeReconnect())
                     {
                         LogReconnectWhileOpening(log);
@@ -381,7 +383,7 @@ public sealed partial class LongPollLoop(
                     DateTimeOffset openedAt = time.GetUtcNow();
                     try
                     {
-                        // Reaching The Lifetime Ends The Read Like Any Stream End: No Error, Reopen After The Refresh Check
+                        // The end of the lifetime ends the read like any stream end. It is no error, and the next pass checks the token.
                         using var readCts = CancellationTokenSource.CreateLinkedTokenSource(attemptCts.Token, lifetimeCts.Token);
                         await ReadAsync(response, readCts.Token, stop).ConfigureAwait(false);
                     }
@@ -392,7 +394,7 @@ public sealed partial class LongPollLoop(
                         LogClosed(log, lifetime);
                     }
 
-                    // A Stream That Ended Almost At Once Gets A Pause, So A Server Closing Right Away Can't Spin The Loop
+                    // A stream that ends almost at once gets a pause. Thus a server that closes at once cannot spin the loop.
                     disconnectedAt = time.GetUtcNow();
                     if (disconnectedAt - openedAt < MinStreamLifetime)
                     {
@@ -416,7 +418,7 @@ public sealed partial class LongPollLoop(
     }
 
     /// <summary>
-    /// Gets the wait before the next retry: <c>(errorCount + 1) × 5</c> seconds as in Go, but at most 5 minutes.
+    /// Gets the wait before the next retry. The wait is <c>(errorCount + 1) × 5</c> seconds as in Go, but 5 minutes at most.
     /// </summary>
     /// <param name="errorCount">The error count after this error.</param>
     /// <returns>The wait.</returns>
@@ -426,7 +428,7 @@ public sealed partial class LongPollLoop(
         return goDelay < MaxRetryDelay ? goDelay : MaxRetryDelay;
     }
 
-    // Waits Out A Backoff Or Pause; A Reconnect Request Ends It Early (Go Starts The New Loop Right Away)
+    // A reconnect request ends the wait early, because Go starts the new loop at once.
     private async Task PauseAsync(TimeSpan delay, CancellationToken attempt, CancellationToken stop)
     {
         try
@@ -435,11 +437,11 @@ public sealed partial class LongPollLoop(
         }
         catch (OperationCanceledException) when (!stop.IsCancellationRequested)
         {
-            // Reconnect Requested
+            // A reconnect request ended the wait.
         }
     }
 
-    // Reads A Failed Response's Body For Diagnosis, Always Disposing It; A Failed Read Gives An Empty Body
+    // Reads the body of a failed response for diagnosis and always disposes the response. A failed read gives an empty body.
     private static async Task<byte[]> ReadBodyAsync(HttpResponseMessage res, CancellationToken ct)
     {
         try
@@ -456,7 +458,7 @@ public sealed partial class LongPollLoop(
         }
     }
 
-    // Port Of `go onFirstConnect()`: Runs In The Background; A Failure Is Logged, Not Lost
+    // Port of go onFirstConnect(). The callback runs in the background, and the method logs a failure.
     private async Task RunFirstConnectAsync(Action firstConnect)
     {
         try
@@ -469,7 +471,7 @@ public sealed partial class LongPollLoop(
         }
     }
 
-    // Port Of readLongPoll: Any Read Problem Just Ends This Connection
+    // Port of readLongPoll. Any read problem ends this connection.
     private async Task ReadAsync(HttpResponseMessage res, CancellationToken connection, CancellationToken stop)
     {
         try
@@ -477,7 +479,7 @@ public sealed partial class LongPollLoop(
             Stream body = await res.Content.ReadAsStreamAsync(connection).ConfigureAwait(false);
             await foreach (LongPollingPayload payload in LongPollStreamReader.ReadAsync(body, ReadIdleTimeout, time, connection, log).ConfigureAwait(false))
             {
-                // Go Checks Data First, Then The Startup Ack Count; Heartbeats Need Nothing
+                // Go checks the data first, then the startup ack count. Heartbeats need no action.
                 if (payload.Data is not null)
                 {
                     dispatcher.Handle(payload.Data);
@@ -507,7 +509,7 @@ public sealed partial class LongPollLoop(
         Unknown = new ReceiveMessagesRequest.Types.UnknownEmptyObject2 { Unknown = new ReceiveMessagesRequest.Types.UnknownEmptyObject1() },
     };
 
-    // Port Of startAckInterval
+    // Port of startAckInterval.
     private async Task FlushAcksLoopAsync(CancellationToken stop)
     {
         using var timer = new PeriodicTimer(AckInterval, time);
@@ -520,21 +522,21 @@ public sealed partial class LongPollLoop(
         }
         catch (Exception) when (stop.IsCancellationRequested)
         {
-            // Stopped
+            // The run stopped.
         }
     }
 
     /// <summary>
-    /// Drops the current connection or backoff wait and starts over at once, as a fresh connect would.
+    /// Drops the current connection or backoff wait and starts over at once, as a new connect does.
     /// </summary>
     /// <remarks>
-    /// The same path the pinger uses (Go: <c>Reconnect</c>). The run keeps going, so there is still one long poll;
-    /// the next pass refreshes the token if needed and runs the first-connect callback again. Without an active run,
-    /// the request is consumed by the next run's first pass, which starts fresh anyway.
+    /// The pinger uses the same path, which is <c>Reconnect</c> in Go. The run continues, so there is still 1 long
+    /// poll. The next pass refreshes the token when necessary and runs the first-connect callback again. Without an
+    /// active run, the first pass of the next run takes the request. That pass starts fresh anyway.
     /// </remarks>
     internal void RequestReconnect() => _ = RequestReconnectAsync();
 
-    // Port Of Reconnect As Used By The Pinger: Drop The Connection, Then Start Over
+    // Port of Reconnect as the pinger uses it. It drops the connection, then the loop starts over.
     private Task RequestReconnectAsync()
     {
         CancellationTokenSource? connectionCts;
@@ -548,7 +550,7 @@ public sealed partial class LongPollLoop(
         return Task.CompletedTask;
     }
 
-    // Cancels Outside The Lock And Off The Caller's Thread, So Loop Code Never Runs On A UI Thread
+    // Cancels outside the lock and off the thread of the caller. Thus loop code never runs on a UI thread.
     private static void CancelInBackground(CancellationTokenSource? cts)
     {
         try
@@ -557,7 +559,7 @@ public sealed partial class LongPollLoop(
         }
         catch (ObjectDisposedException)
         {
-            // That Run Or Attempt Already Ended
+            // That run or attempt ended already.
         }
     }
 

@@ -4,45 +4,45 @@ namespace GMessages.Protocol.Events;
 
 // Ported from the event types in
 // https://github.com/mautrix/gmessages/blob/ba33f4875a491f5cb47db8a6baf42a8869f5f383/pkg/libgm/events/ready.go
-// and the protobuf values event_handler.go passes to the event handler. Every event is raised as a plain object
-// through an Action<object> event; subscribers switch on the record type.
+// and the protobuf values that event_handler.go gives to the event handler. Each event goes out as a plain object
+// through an Action<object> event. Subscribers switch on the record type.
 
 /// <summary>
-/// A message arrived from the phone, or an existing message changed.
+/// A message arrived from the phone, or a known message changed.
 /// </summary>
 /// <remarks>
-/// Ported from <c>WrappedMessage</c> in event_handler.go. <see cref="IsOld"/> is true for messages the server
-/// replays while the client catches up after connecting; the app uses it to skip notifications for them.
+/// Ported from <c>WrappedMessage</c> in event_handler.go. <see cref="IsOld"/> is true for the messages that the server
+/// replays while the client catches up after a connect. The app uses it to skip notifications for them.
 /// </remarks>
 /// <param name="Message">The message.</param>
-/// <param name="IsOld">True when the message was part of the catch-up batch.</param>
+/// <param name="IsOld">True when the message is part of the catch-up batch.</param>
 public sealed record MessageReceived(Message Message, bool IsOld);
 
 /// <summary>
-/// A conversation was created or changed.
+/// A conversation is new or changed.
 /// </summary>
-/// <remarks>Raised only for live updates; Go drops conversation updates from the catch-up batch.</remarks>
+/// <remarks>Occurs only for live updates. Go drops the conversation updates of the catch-up batch.</remarks>
 /// <param name="Conversation">The conversation.</param>
 public sealed record ConversationUpdated(Conversation Conversation);
 
 /// <summary>
-/// Someone started or stopped typing.
+/// A person started or stopped typing.
 /// </summary>
-/// <remarks>Raised only for live updates.</remarks>
+/// <remarks>Occurs only for live updates.</remarks>
 /// <param name="Data">The typing state.</param>
 public sealed record TypingChanged(TypingData Data);
 
 /// <summary>
-/// The phone's settings changed.
+/// The settings of the phone changed.
 /// </summary>
-/// <remarks>Raised for live and catch-up updates alike, as in Go.</remarks>
+/// <remarks>Occurs for live updates and catch-up updates, as in Go.</remarks>
 /// <param name="Settings">The new settings.</param>
 public sealed record SettingsChanged(Settings Settings);
 
 /// <summary>
-/// The phone sent a status alert (battery, data connection, browser active, and so on).
+/// The phone sent a status alert, such as battery, data connection or browser active.
 /// </summary>
-/// <remarks>Raised only for live updates.</remarks>
+/// <remarks>Occurs only for live updates.</remarks>
 /// <param name="Alert">The alert.</param>
 public sealed record UserAlert(UserAlertEvent Alert);
 
@@ -50,35 +50,35 @@ public sealed record UserAlert(UserAlertEvent Alert);
 /// The Google account on the phone changed.
 /// </summary>
 /// <remarks>
-/// Ported from <c>events.AccountChange</c>. <see cref="IsFake"/> is true when it came from the second encrypted field
-/// at startup; Go raises that "fake" one so the app re-checks the account.
+/// Ported from <c>events.AccountChange</c>. <see cref="IsFake"/> is true for the notice from the second encrypted
+/// field at startup. Go raises that "fake" notice, so that the app checks the account again.
 /// </remarks>
 /// <param name="Change">The account change.</param>
 /// <param name="IsFake">True for the startup notice from the second encrypted field.</param>
 public sealed record AccountChanged(AccountChangeOrSomethingEvent Change, bool IsFake);
 
 /// <summary>
-/// Listening stopped for good: the credentials were refused.
+/// Listening stopped permanently, because the server refused the credentials.
 /// </summary>
-/// <remarks>Ported from <c>events.ListenFatalError</c>. The long-poll loop has exited; the user must sign in again.</remarks>
-/// <param name="Error">What went wrong.</param>
+/// <remarks>Ported from <c>events.ListenFatalError</c>. The long-poll loop ended. The user must sign in again.</remarks>
+/// <param name="Error">The cause.</param>
 public sealed record ListenFatalError(Exception Error);
 
 /// <summary>
-/// Listening failed, and the loop will retry after a delay.
+/// Listening failed, and the loop tries again after a delay.
 /// </summary>
 /// <remarks>Ported from <c>events.ListenTemporaryError</c>.</remarks>
-/// <param name="Error">What went wrong.</param>
+/// <param name="Error">The cause.</param>
 public sealed record ListenTemporaryError(Exception Error);
 
 /// <summary>
-/// Listening works again after one or more errors (and once on the first connect, as in Go).
+/// Listening works again after 1 or more errors. As in Go, it also occurs 1 time on the first connect.
 /// </summary>
 /// <remarks>Ported from <c>events.ListenRecovered</c>.</remarks>
 public sealed record ListenRecovered;
 
 /// <summary>
-/// The phone has stopped answering pings.
+/// The phone stopped answering pings.
 /// </summary>
 /// <remarks>Ported from <c>events.PhoneNotResponding</c>.</remarks>
 public sealed record PhoneNotResponding;
@@ -90,50 +90,51 @@ public sealed record PhoneNotResponding;
 public sealed record PhoneRespondingAgain;
 
 /// <summary>
-/// A ping to the phone could not be sent.
+/// A ping to the phone did not go out.
 /// </summary>
 /// <remarks>Ported from <c>events.PingFailed</c>.</remarks>
-/// <param name="Error">What went wrong.</param>
+/// <param name="Error">The cause.</param>
 /// <param name="ErrorCount">How many sends failed in a row.</param>
 public sealed record PingFailed(Exception Error, int ErrorCount);
 
 /// <summary>
-/// No data came from the phone for a while, so an extra update request was sent.
+/// No data came from the phone for some time, so an extra update request went out.
 /// </summary>
 /// <remarks>Ported from <c>events.NoDataReceived</c>.</remarks>
 public sealed record NoDataReceived;
 
 /// <summary>
-/// The Google account was signed out on the phone.
+/// The Google account signed out on the phone.
 /// </summary>
 /// <remarks>Ported from <c>events.GaiaLoggedOut</c>.</remarks>
 public sealed record GaiaLoggedOut;
 
 /// <summary>
-/// The Tachyon auth token was refreshed; the session should be saved.
+/// The Tachyon auth token is new. The app must save the session.
 /// </summary>
 /// <remarks>Ported from <c>events.AuthTokenRefreshed</c>.</remarks>
 public sealed record AuthTokenRefreshed;
 
 /// <summary>
-/// Pairing with the phone finished.
+/// The pairing with the phone finished.
 /// </summary>
-/// <remarks>Ported from <c>events.PairSuccessful</c>, which Go's <c>DoGaiaPairing</c> raises before reconnecting.</remarks>
-/// <param name="PhoneId">The phone ID: the phone's source ID, a slash, and its timestamp (or unknown int).</param>
+/// <remarks>Ported from <c>events.PairSuccessful</c>. Go's <c>DoGaiaPairing</c> raises it before it reconnects.</remarks>
+/// <param name="PhoneId">The phone ID: the source ID of the phone, a slash, and its timestamp or its unknown int.</param>
 public sealed record PairSuccessful(string PhoneId);
 
 /// <summary>
-/// The startup skip count was still above zero when the update request went out, so it may not take effect.
+/// The startup skip count was above 0 when the update request went out. The request can fail to take effect.
 /// </summary>
-/// <remarks>Ported from <c>events.HackySetActiveMayFail</c>, raised by <c>postConnect</c>.</remarks>
+/// <remarks>Ported from <c>events.HackySetActiveMayFail</c>, which <c>postConnect</c> raises.</remarks>
 public sealed record HackySetActiveMayFail;
 
 /// <summary>
-/// The session could not be saved to disk, so the app should warn the user that a restart may need pairing again.
+/// The session save to disk failed. The app uses it to warn the user that a restart can require a new pairing.
 /// </summary>
 /// <remarks>
-/// C#-only: Go keeps the session in the bridge database. Raised for every failed save, including the one right after
-/// pairing. Only the exception's type name is carried, never its message, which could hold a path or session data.
+/// C#-only, because Go keeps the session in the bridge database. It occurs for each failed save, also for the save
+/// right after pairing. It carries only the type name of the exception, never its message. The message can hold a
+/// path or session data.
 /// </remarks>
-/// <param name="ErrorType">The exception's type name, such as <c>IOException</c>.</param>
+/// <param name="ErrorType">The type name of the exception, such as <c>IOException</c>.</param>
 public sealed record SessionSaveFailed(string ErrorType);
