@@ -19,6 +19,7 @@ public sealed class ChatFormatTests
     [DataRow(true, 0, "  sounds   good ", "sounds good")]
     [DataRow(true, 1, "https://music.youtube.com/watch?v=wK7FwO8XCS0", "1")]
     [DataRow(true, 0, " www.example.com nice", "1")]
+    [DataRow(true, 1, "(https://example.com)", "1")]
     [DataRow(true, 1, "look https://example.com", "look https://example.com")]
     [DataRow(true, 1, "see you soon", "1")]
     [DataRow(true, 1, "", "1")]
