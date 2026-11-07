@@ -9,36 +9,35 @@ using GMessages.Protocol.Proto;
 namespace GMessages.App.UITests;
 
 /// <summary>
-/// Windows notifications: which messages raise a toast, the toast's words, its reply box and a click on its body.
+/// Windows notifications: which messages raise a toast, the toast text, its reply box and a click on its body.
 /// </summary>
 /// <remarks>
-/// These show real toasts on the desktop, so Windows notifications must be turned on. The app removes its toasts when
-/// it quits in a test run, so none carry over to the next test. A test that expects no toast follows up with a live
-/// message that must toast, so it can't pass just because toasts never show.
+/// These tests show real toasts on the desktop, so Windows notifications must be on. The app removes its toasts when
+/// it quits in a test run, so no toast carries over to the next test. A test that expects no toast follows up with a
+/// live message that must toast. That test cannot pass only because toasts never show.
 /// </remarks>
 [TestClass]
 [TestCategory("UI")]
 [DoNotParallelize]
 public sealed class NotificationTests : UiTest
 {
-    // How Long A Message That Must Not Notify Is Watched For A Toast
+    // The time that a test watches for a toast from a message that must not notify.
     private static readonly TimeSpan QuietPeriod = TimeSpan.FromSeconds(5);
 
-    // How Long A Sign-Out May Take To Clear A Toast
+    // The longest time that a sign-out takes to clear a toast.
     private static readonly TimeSpan SignOutTime = TimeSpan.FromSeconds(10);
 
     private ToastDriver _toasts = null!;
 
     /// <summary>
-    /// Sets up the toast driver on the app's UI Automation client.
+    /// Sets up the toast driver on the UI Automation client of the app.
     /// </summary>
     [TestInitialize]
     public void StartToasts() => _toasts = new ToastDriver(App.Automation);
 
     /// <summary>
-    /// A live message in Ann's chat shows a toast titled with her name and the text as its body.
+    /// A live message in the chat of Ann shows a toast. The title is her name and the body is the text.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task LiveIncoming_ShowsToast_TitleAndBody()
     {
@@ -50,9 +49,8 @@ public sealed class NotificationTests : UiTest
     }
 
     /// <summary>
-    /// A group message's toast is titled with the group and its body starts with the sender's name.
+    /// The toast of a group message has the group name as title. The body starts with the name of the sender.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task GroupIncoming_BodyHasSenderPrefix()
     {
@@ -64,9 +62,8 @@ public sealed class NotificationTests : UiTest
     }
 
     /// <summary>
-    /// A message that comes in with the catch-up after a reconnect doesn't notify; the next live one does.
+    /// A message that arrives with the catch-up after a reconnect does not notify. The next live message does notify.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task CatchUp_NoToast()
     {
@@ -80,9 +77,8 @@ public sealed class NotificationTests : UiTest
     }
 
     /// <summary>
-    /// A message in a spam conversation doesn't notify; the next live one in the inbox does.
+    /// A message in a spam conversation does not notify. The next live message in the inbox does notify.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Spam_NoToast()
     {
@@ -95,9 +91,8 @@ public sealed class NotificationTests : UiTest
     }
 
     /// <summary>
-    /// Replying from the toast sends the text and marks the chat read, without opening the main window.
+    /// A reply from the toast sends the text and marks the chat as read. The main window stays closed.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task ToastReply_SendsAndMarksRead_NoWindow()
     {
@@ -115,9 +110,8 @@ public sealed class NotificationTests : UiTest
     }
 
     /// <summary>
-    /// Clicking a toast's body opens the main window on that conversation.
+    /// A click on the body of a toast opens the main window on that conversation.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task ToastBodyClick_OpensWindowOnConversation()
     {
@@ -131,9 +125,9 @@ public sealed class NotificationTests : UiTest
     }
 
     /// <summary>
-    /// Clicking a toast's body while the main window shows Settings closes Settings and shows that conversation.
+    /// A click on the body of a toast while the main window shows Settings closes Settings and shows that
+    /// conversation.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task ToastBodyClick_WhileSettingsOpen_ShowsConversation()
     {
@@ -150,13 +144,12 @@ public sealed class NotificationTests : UiTest
     }
 
     /// <summary>
-    /// The chat that's open in the focused window doesn't notify, until "Notify for the chat I'm viewing" is on.
+    /// The chat that is open in the focused window does not notify until the setting "Notify for the chat I'm
+    /// viewing" is on.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task ViewedFocusedChat_NoToast_UnlessSettingOn()
     {
-        // Ann's Chat Open In The Focused Window
         await OpenMainAsync();
         App.Find("Row.c-ann").Patterns.SelectionItem.Pattern.Select();
         App.WaitForText("Chat.Header", "Ann Lee");
@@ -165,7 +158,6 @@ public sealed class NotificationTests : UiTest
         Server.Phone.PushIncoming("c-ann", "you there?");
         _toasts.AssertNone("you there?", QuietPeriod);
 
-        // Turn The Setting On, Then Back To The Chat
         InvokeTrayMenu("TrayMenu.Settings");
         App.Find("Settings.NotifyViewedChat").Patterns.Toggle.Pattern.Toggle();
         App.Find("Settings.Back").Patterns.Invoke.Pattern.Invoke();
@@ -178,9 +170,9 @@ public sealed class NotificationTests : UiTest
     }
 
     /// <summary>
-    /// A toast reply the phone refuses shows a second toast, titled with the chat, saying the reply wasn't sent.
+    /// A toast reply that the phone refuses shows a second toast. Its title is the chat name, and it says that the
+    /// reply was not sent.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task ToastReply_PhoneFails_ShowsFailureToast()
     {
@@ -196,16 +188,15 @@ public sealed class NotificationTests : UiTest
     }
 
     /// <summary>
-    /// Updates of one incoming message (new statuses, as the real phone sends) while its toast shows don't show it
-    /// again: the app logs one toast for the message.
+    /// Status updates of one incoming message, as the real phone sends them, do not show its toast again while the
+    /// toast shows. The app logs one toast for the message.
     /// </summary>
     /// <remarks>
-    /// A repeat show reuses the toast's tag, so it would replace the toast on screen rather than add one. The app's
-    /// "Toast shown" log line is what tells them apart. The live message after the updates arrives behind them, so once
-    /// it toasts, the updates were handled. The first banner is dismissed before then: Windows shows the next banner
-    /// only once it leaves, which it never does by itself on an unattended machine.
+    /// A repeat show reuses the tag of the toast, so it replaces the toast on screen and does not add one. The
+    /// "Toast shown" log line of the app tells the two cases apart. The live message arrives behind the updates, so
+    /// when it toasts, the app has handled the updates. The test dismisses the first banner before then. Windows shows
+    /// the next banner only when the first one leaves, and on an unattended machine it never leaves by itself.
     /// </remarks>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task RepeatedUpdates_ShowOneToast()
     {
@@ -214,11 +205,11 @@ public sealed class NotificationTests : UiTest
         Message message = Server.Phone.PushIncoming("c-ann", "hey there");
         AutomationElement toast = _toasts.WaitFor(AppDriver.DefaultTimeout, "Ann Lee", "hey there");
 
-        // Updates While It Shows
         Server.Phone.PushStatusUpdate(message, MessageStatusType.IncomingDelivered);
         Server.Phone.PushStatusUpdate(message, MessageStatusType.IncomingComplete);
 
-        // Clear Its Banner: Windows Queues The Live Toast Behind One Still On Screen, And Unattended It Never Leaves
+        // Windows queues the live toast behind a toast that is still on screen. On an unattended machine,
+        // that toast never leaves, so the test dismisses its banner.
         ToastDriver.Dismiss(toast);
         Wait.Until(() => _toasts.TryFind("Ann Lee", "hey there") is null, AppDriver.DefaultTimeout, () => "The toast stayed after Dismiss.");
         AssertLiveStillToasts();
@@ -228,14 +219,13 @@ public sealed class NotificationTests : UiTest
     }
 
     /// <summary>
-    /// A reaction made here, which the phone echoes back on the reacted message, never toasts, even with the setting
-    /// that notifies for the chat on screen; a live message still does.
+    /// A reaction made in the app, which the phone echoes back on the reacted message, never toasts. This holds with
+    /// the setting that notifies for the chat on screen. A live message still toasts.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task MyReaction_NoToast_LiveStillToasts()
     {
-        // Ann's Chat Open, Notifying Even For The Chat On Screen, So Only The Fix Keeps The Echo Quiet
+        // The setting that notifies for the open chat is on, so only the fix keeps the echo quiet.
         await OpenMainAsync();
         App.Find("Row.c-ann").Patterns.SelectionItem.Pattern.Select();
         App.WaitForText("Chat.Header", "Ann Lee");
@@ -247,7 +237,6 @@ public sealed class NotificationTests : UiTest
         App.WaitForText("Chat.Header", "Ann Lee");
         FocusMainWindow();
 
-        // React To Ann's Last Message
         string id = Server.Phone.Chats.Page("c-ann", 1, null).Page[0].MessageID;
         App.Find("Bubble." + id).RightClick();
         App.Find("Bubble.React").Patterns.Invoke.Pattern.Invoke();
@@ -259,9 +248,8 @@ public sealed class NotificationTests : UiTest
     }
 
     /// <summary>
-    /// Signing out (Google ends the session) removes the toasts that were showing.
+    /// A sign-out, which is Google ending the session, removes the toasts that show.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task SignOut_RemovesToasts()
     {
@@ -275,13 +263,12 @@ public sealed class NotificationTests : UiTest
     }
 
     /// <summary>
-    /// A snoozed toast's banner is removed by a sign-out.
+    /// A sign-out removes the banner of a snoozed toast.
     /// </summary>
     /// <remarks>
-    /// That the clear also cancels the waiting snooze is covered by <c>ToastMemoryTests</c>: the shortest snooze the
-    /// settings accept is 5 minutes, too long to watch for here.
+    /// <c>ToastMemoryTests</c> covers that the clear also cancels the waiting snooze. The shortest snooze that the
+    /// settings accept is 5 minutes, which is too long to watch here.
     /// </remarks>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task SignOut_AfterSnooze_RemovesToast()
     {
@@ -289,16 +276,16 @@ public sealed class NotificationTests : UiTest
         Server.Phone.PushIncoming("c-ann", "snoozed marker");
         AutomationElement toast = _toasts.WaitFor(AppDriver.DefaultTimeout, "Ann Lee", "snoozed marker");
 
-        // Snooze It, Then Sign Out
         AppDriver.Search(toast, e => e.ControlType == ControlType.Button && AppDriver.SafeName(e) == ChatCopy.Snooze)!.Patterns.Invoke.Pattern.Invoke();
         Server.KillLongPoll(401);
 
-        // The Banner Of An Unattended Machine Stays Until The Sign-Out Clears It
+        // On an unattended machine, the banner stays until the sign-out clears it.
         Wait.Until(() => _toasts.TryFind("snoozed marker") is null, SignOutTime, () => "The toast stayed after sign-out.");
 
-        // Pressing Snooze Gave The Toast's Shell Window The Foreground, And It Keeps It Once Empty: No Window Can Take It
-        // Back From Code, So Every Later Test's Window Would Stay Behind. A Real Click On The Pairing Window's Title Bar
-        // Hands The Foreground Back, As A Person's Next Click Would
+        // The Snooze button gives the shell window of the toast the foreground, and the window keeps it when empty.
+        // Code cannot take the foreground back, so the window of every later test would stay behind.
+        // A real click on the title bar of the pairing window returns the foreground.
+        // The next click of a person does the same.
         Window pairing                  = WaitForPairing(TimeSpan.FromSeconds(30));
         System.Drawing.Rectangle bounds = pairing.BoundingRectangle;
         int appProcess                  = pairing.Properties.ProcessId.Value;
@@ -308,13 +295,12 @@ public sealed class NotificationTests : UiTest
     }
 
     /// <summary>
-    /// Archiving a chat on the phone removes its toast, as reading it does.
+    /// Archiving a chat on the phone removes its toast, as reading the chat does.
     /// </summary>
     /// <remarks>
-    /// Muting, blocking and deleting take the same path (<c>NotificationPolicyTests</c>); that it also cancels a waiting
-    /// snooze is covered by <c>ToastMemoryTests</c>.
+    /// Mute, block and delete use the same path, and <c>NotificationPolicyTests</c> covers them.
+    /// <c>ToastMemoryTests</c> covers that the path also cancels a waiting snooze.
     /// </remarks>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Archived_RemovesToast()
     {
@@ -327,18 +313,14 @@ public sealed class NotificationTests : UiTest
         Wait.Until(() => _toasts.TryFind("archive marker") is null, AppDriver.DefaultTimeout, () => "The toast stayed after the chat was archived.");
     }
 
-    // =========================================================================
-    // HELPERS
-    // =========================================================================
-
-    // A Live Message Still Toasts, So A "No Toast" Check Before It Meant Something
+    // A live message must still toast. This proves that a "no toast" check before it was meaningful.
     private void AssertLiveStillToasts()
     {
         Server.Phone.PushIncoming("c-ann", "live one");
         _toasts.WaitFor(AppDriver.DefaultTimeout, "Ann Lee", "live one");
     }
 
-    // The Main Window Takes The Foreground, So The App Sees It Focused
+    // Gives the main window the foreground, so the app sees it as focused.
     private void FocusMainWindow()
     {
         App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout).SetForeground();
@@ -346,56 +328,54 @@ public sealed class NotificationTests : UiTest
 }
 
 /// <summary>
-/// Toast checks that need a person at the machine, so they're left out of the <c>TestCategory=UI</c> run.
+/// Toast checks that need a person at the machine. The <c>TestCategory=UI</c> run leaves them out.
 /// </summary>
 /// <remarks>
-/// Windows keeps a toast's banner on screen while the user is away (no real keyboard or mouse input; UI Automation
-/// and a cursor moved from code don't count; nor does a mouse move sent through <c>SendInput</c>), so on an unattended
-/// machine the banner never leaves. Run these with <c>--filter TestCategory=Manual</c> while using the mouse or keyboard
-/// now and then. Run unattended, they end inconclusive rather than failed.
+/// Windows keeps the banner of a toast on screen while the user is away. Real keyboard or mouse input ends that.
+/// UI Automation, a cursor that code moves and a mouse move sent through <c>SendInput</c> do not count as input.
+/// On an unattended machine, the banner never leaves. Run these tests with <c>--filter TestCategory=Manual</c>
+/// and use the mouse or keyboard now and then. An unattended run ends inconclusive, not failed.
 /// </remarks>
 [TestClass]
 [TestCategory("Manual")]
 [DoNotParallelize]
 public sealed class ManualNotificationTests : UiTest
 {
-    // Windows' Default For "Dismiss Notifications After" (Settings, Accessibility, Visual Effects), In Seconds
+    // The Windows default, in seconds, for "Dismiss notifications after" in Settings, Accessibility, Visual effects.
     private const int DefaultMessageSeconds = 5;
 
-    // Room Past That Setting For The Banner's Slide Out And The Polling
+    // Extra time after that setting for the slide-out of the banner and for the polling.
     private static readonly TimeSpan BannerMargin = TimeSpan.FromSeconds(5);
 
     /// <summary>
-    /// A message's toast leaves the screen (for the Notification Center) within Windows' "Dismiss notifications after"
-    /// time plus 5 s (10 s at the default 5 s), as other apps' toasts do. Needs real user input during the run (see the
-    /// class remarks).
+    /// The toast of a message leaves the screen and goes to the Notification Center. This happens within the Windows
+    /// "Dismiss notifications after" time plus 5 s, which is 10 s at the default of 5 s. Toasts of other apps do the
+    /// same. The run needs real user input, as the remarks of the class explain.
     /// </summary>
     /// <remarks>
-    /// The setting is only read, never written. With no keyboard or mouse input since the toast showed, the banner
-    /// staying proves nothing, so the test is inconclusive then instead of failed.
+    /// The test reads the setting and never writes it. If no keyboard or mouse input comes after the toast shows,
+    /// a banner that stays proves nothing. The test is then inconclusive, not failed.
     /// </remarks>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Toast_LeavesScreenWithinDismissTime()
     {
         var toasts = new ToastDriver(App.Automation);
         await PairAsync();
 
-        // The Banner's Time On This Machine
         int seconds         = Microsoft.Win32.Registry.GetValue(@"HKEY_CURRENT_USER\Control Panel\Accessibility", "MessageDuration", null) is int set ? set : DefaultMessageSeconds;
         TimeSpan bannerTime = TimeSpan.FromSeconds(seconds) + BannerMargin;
 
         Server.Phone.PushIncoming("c-ann", "hey there");
         toasts.WaitFor(AppDriver.DefaultTimeout, "Ann Lee", "hey there");
 
-        // Off The Screen In Time, Unless Nobody Was There To Let Windows Take It Down
+        // The banner must leave in time, unless nobody was there to let Windows take it down.
         try
         {
             Wait.Until(() => toasts.TryFind("Ann Lee", "hey there") is null, bannerTime, () => $"The toast was still on screen after {bannerTime.TotalSeconds} s (Windows' setting: {seconds} s).");
         }
         catch (AssertFailedException)
         {
-            // Read Once, Outside A Filter, So A Failed Read Shows Its Own Message
+            // The read happens once, outside a filter, so a failed read shows its own message.
             TimeSpan idle = PointerInput.SinceLastInput();
             if (idle < bannerTime)
             {

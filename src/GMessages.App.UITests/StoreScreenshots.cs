@@ -9,33 +9,32 @@ using Mouse = FlaUI.Core.Input.Mouse;
 namespace GMessages.App.UITests;
 
 /// <summary>
-/// Takes the store and README screenshots of the app showing a mock phone (<see cref="FakeGoogle.FakeChats.AddScreenshotChats"/>)
-/// with the Unsplash photos in <c>Screenshots/Photos</c>, into <c>docs/screenshots</c> at 1920 x 1080.
+/// Takes the store and README screenshots into <c>docs/screenshots</c> at 1920 x 1080. The app shows a mock phone
+/// (<see cref="FakeGoogle.FakeChats.AddScreenshotChats"/>) with the Unsplash photos in <c>Screenshots/Photos</c>.
 /// </summary>
 /// <remarks>
-/// Not part of a normal run: it only goes with the <c>MESSAGES_SCREENSHOTS</c> environment variable set to 1, and is
-/// inconclusive otherwise. Run it with:
+/// A normal run skips this class. The test runs only when the <c>MESSAGES_SCREENSHOTS</c> environment variable is 1,
+/// and it is inconclusive otherwise. Run it with:
 /// <c>$env:MESSAGES_SCREENSHOTS = 1; dotnet test src/GMessages.App.UITests -p:Platform=x64 --filter StoreScreenshots</c>.
-/// Each shot is the window's visible frame (no resize border or shadow), with square corners, the pointer moved off it.
+/// Each shot is the visible frame of the window, with no resize border or shadow, square corners and no pointer.
 /// </remarks>
 [TestClass]
 public sealed partial class StoreScreenshots : UiTest
 {
-    // The Store's Recommended Desktop Size
+    // The store recommends this desktop size.
     private const int ShotWidth  = 1920;
     private const int ShotHeight = 1080;
 
-    // Where The Window Sits While Shots Are Taken (The Pointer Waits Above And Left Of It)
+    // The window position while the test takes shots.
     private const int WindowLeft = 120;
     private const int WindowTop  = 120;
 
     private static readonly string[] ThemeNames = ["Use system setting", "Light", "Dark"];
 
     /// <summary>
-    /// Takes every screenshot: the chat, a group, the photo viewer and shortcut help in dark, then the chat and settings
-    /// in light.
+    /// Takes every screenshot: the chat, a group, the photo viewer and the shortcut help in the dark theme, then the
+    /// chat and settings in the light theme.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     [TestCategory("Screenshots")]
     public async Task TakeStoreScreenshots()
@@ -50,7 +49,7 @@ public sealed partial class StoreScreenshots : UiTest
         string output = Path.Combine(root, "docs", "screenshots");
         Directory.CreateDirectory(output);
 
-        // The Mock Phone: Its Chats, And Contact Photos Cut From The Same Pictures
+        // The contact photos are cut from the same pictures as the chats.
         string photos = Path.Combine(root, "src", "GMessages.App.UITests", "Screenshots", "Photos");
         Server.Phone.Chats.AddScreenshotChats(new Dictionary<string, (byte[], int, int)>
         {
@@ -69,7 +68,6 @@ public sealed partial class StoreScreenshots : UiTest
         await OpenMainAsync();
         Window window = App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout);
 
-        // Dark: The Chat, A Group, The Photo Viewer, Shortcut Help
         SetTheme(2);
         window = PlaceWindow();
         OpenChat("Row.c-maya");
@@ -95,14 +93,13 @@ public sealed partial class StoreScreenshots : UiTest
         App.Find("Shortcuts.Close").Patterns.Invoke.Pattern.Invoke();
         Wait.Until(() => App.TryFind("Shortcuts.Close") is null, AppDriver.DefaultTimeout, () => "Shortcut help stayed open.");
 
-        // Light: The Chat, Then Settings
         SetTheme(1);
         window = PlaceWindow();
         OpenChat("Row.c-family");
         OpenChat("Row.c-maya");
         Shoot(window, output, "05-chat-light");
 
-        // Settings: A Click On The Empty Left Margin Ends Keyboard Focus, So Back Shows No Focus Outline
+        // A click on the empty left margin ends the keyboard focus, so the Back button shows no focus outline.
         InvokeTrayMenu("TrayMenu.Settings");
         window = WaitForSettings();
         (_, Rect page) = Bounds(window.Properties.NativeWindowHandle.Value);
@@ -111,11 +108,7 @@ public sealed partial class StoreScreenshots : UiTest
         Shoot(window, output, "06-settings-light");
     }
 
-    // =========================================================================
-    // STEPS
-    // =========================================================================
-
-    // Opens Settings From The Tray, Picks The Theme And Goes Back To The Chats
+    // Opens Settings from the tray, picks the theme and goes back to the chats.
     private void SetTheme(int index)
     {
         InvokeTrayMenu("TrayMenu.Settings");
@@ -129,7 +122,7 @@ public sealed partial class StoreScreenshots : UiTest
         App.Find("Main.ConversationList");
     }
 
-    // Opens A Chat From The List And Lets Its Photos And Avatars Load
+    // Opens a chat from the list and waits 2.5 s for its photos and avatars to load.
     private void OpenChat(string rowId)
     {
         App.Find(rowId).Patterns.SelectionItem.Pattern.Select();
@@ -137,7 +130,7 @@ public sealed partial class StoreScreenshots : UiTest
         Thread.Sleep(2500);
     }
 
-    // The Open Chat's First Photo Bubble
+    // Finds the first photo bubble of the open chat.
     private AutomationElement FirstPhoto()
     {
         AutomationElement? photo = null;
@@ -146,14 +139,15 @@ public sealed partial class StoreScreenshots : UiTest
         return photo!;
     }
 
-    // Puts The Window At A Set Place, Restored, With Its Visible Frame Exactly The Shot's Size And Square Corners
+    // Restores the window at a set place. The visible frame has exactly the shot size and square corners.
     private Window PlaceWindow()
     {
         Window window = App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout);
         nint hwnd     = window.Properties.NativeWindowHandle.Value;
         _             = ShowWindow(hwnd, 9);
 
-        // The Outer Rectangle Includes An Invisible Resize Border; Sized So The Visible Frame Comes Out Exact
+        // The outer rectangle includes an invisible resize border. The second SetWindowPos call adds the border size,
+        // so the visible frame has the exact shot size.
         _ = SetWindowPos(hwnd, 0, WindowLeft, WindowTop, ShotWidth, ShotHeight, 0x0014);
         Thread.Sleep(400);
         (Rect outer, Rect frame) = Bounds(hwnd);
@@ -169,8 +163,8 @@ public sealed partial class StoreScreenshots : UiTest
         return window;
     }
 
-    // Saves The Window's Visible Frame. The Pointer Rests On An Empty Stretch Of The Title Bar First, So No Bubble Shows
-    // Its Hover Buttons (A Capture Never Includes The Pointer Itself)
+    // Saves the visible frame of the window. The pointer first rests on an empty part of the title bar,
+    // so no bubble shows its hover buttons. A capture never includes the pointer itself.
     private void Shoot(Window window, string folder, string name)
     {
         window.SetForeground();
@@ -185,11 +179,7 @@ public sealed partial class StoreScreenshots : UiTest
         TestContext.WriteLine($"{file}: {shot.Bitmap.Width} x {shot.Bitmap.Height}");
     }
 
-    // =========================================================================
-    // FILES
-    // =========================================================================
-
-    // The Repository Above The Test Build: A Folder With .git, Which Is A File In A Git Worktree
+    // Finds the repository above the test build: a folder with .git. In a Git worktree, .git is a file.
     private static string RepoRoot()
     {
         for (DirectoryInfo? dir = new(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
@@ -211,8 +201,8 @@ public sealed partial class StoreScreenshots : UiTest
         return (bytes, image.Width, image.Height);
     }
 
-    // A 256 px Square Contact Photo Cut From A Picture: Centered At (x, y) As Parts Of Its Width And Height, The Square's
-    // Side A Part Of Its Shorter Side
+    // Cuts a 256 px square contact photo from a picture. The point (x, y) is the center, as fractions of the
+    // width and height. The side of the square is a fraction of the shorter side.
     private static byte[] Avatar(string folder, string file, double x, double y, double side)
     {
         using var image  = System.Drawing.Image.FromFile(Path.Combine(folder, file));
@@ -230,10 +220,6 @@ public sealed partial class StoreScreenshots : UiTest
         square.Save(stream, System.Drawing.Imaging.ImageFormat.Png);
         return stream.ToArray();
     }
-
-    // =========================================================================
-    // WIN32
-    // =========================================================================
 
     private static (Rect Outer, Rect Frame) Bounds(nint hwnd)
     {

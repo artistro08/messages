@@ -5,7 +5,7 @@ using GMessages.Presentation;
 namespace GMessages.App.UITests;
 
 /// <summary>
-/// The tray icon: its right-click menu and its left-click, clicked through the real taskbar.
+/// The tray icon right-click menu and left-click. The tests click through the real taskbar.
 /// </summary>
 [TestClass]
 [TestCategory("UI")]
@@ -13,43 +13,37 @@ namespace GMessages.App.UITests;
 public sealed class TrayTests : UiTest
 {
     /// <summary>
-    /// A right-click opens the menu with Open, Settings and Quit; each does its job, and Quit ends the process and
+    /// A right-click opens the menu with Open, Settings and Quit. Each item does its job. Quit ends the process and
     /// removes the icon.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task TrayRightClick_ShowsFlyoutMenu_OpenSettingsQuit()
     {
-        // Unpaired, So Open Brings Back The Window On Pairing Once It's Closed
+        // The app is not paired, so Open shows the pairing window again after the test closes it.
         WaitForPairing();
         App.Find("Pairing.Cancel").Patterns.Invoke.Pattern.Invoke();
         App.WaitForNoWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout);
 
-        // The Menu Shows All Three Items
         Tray.RightClick();
         App.Find("TrayMenu.Open");
         App.Find("TrayMenu.Settings");
         App.Find("TrayMenu.Quit");
 
-        // Open
         App.Find("TrayMenu.Open").Patterns.Invoke.Pattern.Invoke();
         Tray.CloseOverflow();
         WaitForPairing();
 
-        // Settings
         InvokeTrayMenu("TrayMenu.Settings");
         WaitForSettings();
 
-        // Quit
         InvokeTrayMenu("TrayMenu.Quit");
         await App.WaitForExitAsync();
         Tray.WaitForNoIcon(AppDriver.DefaultTimeout);
     }
 
     /// <summary>
-    /// Once paired, a left-click on the icon opens the main window with its conversation list.
+    /// After pairing, a left-click on the icon opens the main window with its conversation list.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task TrayLeftClick_OpensMainWindow_ShowsConnected()
     {
@@ -62,37 +56,33 @@ public sealed class TrayTests : UiTest
     }
 
     /// <summary>
-    /// Turning the tray icon off in Settings takes it away at once and after a restart, and the account menu's Quit then
-    /// ends the app.
+    /// Turning the tray icon off in Settings removes it at once and after a restart. The Quit item of the account menu
+    /// then ends the app.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task TrayIconOff_StaysOff_QuitsFromAccountMenu()
     {
         await PairAsync();
 
-        // Off In Settings: The Icon Goes At Once
         InvokeTrayMenu("TrayMenu.Settings");
         WaitForSettings();
         App.Find("Settings.ShowTrayIcon").AsToggleButton().Toggle();
         Tray.WaitForNoIcon(AppDriver.DefaultTimeout);
 
-        // Restarted (A User Launch Opens The Window): Still No Icon
+        // A launch by the user opens the window, so the restart shows the conversation list.
         await App.RestartAsync();
         App.Find("Main.ConversationList");
         Tray.WaitForNoIcon(AppDriver.DefaultTimeout);
 
-        // The Account Menu Quits
         App.Find("Main.ProfileButton").Patterns.Invoke.Pattern.Invoke();
         App.Find("Main.Profile.Quit").Patterns.Invoke.Pattern.Invoke();
         await App.WaitForExitAsync();
     }
 
     /// <summary>
-    /// With running in the background off, closing the window quits, and the tray icon stays until then (the two
-    /// settings are separate).
+    /// With run in the background off, closing the window quits the app. The tray icon stays until then, because the
+    /// two settings are separate.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task RunInBackgroundOff_ClosingTheWindowQuits()
     {

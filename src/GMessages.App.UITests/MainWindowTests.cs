@@ -17,13 +17,12 @@ namespace GMessages.App.UITests;
 [DoNotParallelize]
 public sealed class MainWindowTests : UiTest
 {
-    // The Seeded Inbox: Pinned Team First, Then Ann
+    // The seeded inbox: pinned Team first, then Ann.
     private static readonly string[] InboxRows = ["Row.c-team", "Row.c-ann"];
 
     /// <summary>
-    /// The inbox shows pinned Team above Ann, never the spam conversation, and Ann's unread row says so.
+    /// The inbox shows pinned Team above Ann and never the spam conversation. The unread row of Ann is marked unread.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Open_ShowsInboxRows_PinnedFirst_UnreadBold()
     {
@@ -38,10 +37,9 @@ public sealed class MainWindowTests : UiTest
     }
 
     /// <summary>
-    /// An unread row's snippet and time are fully bright (primary text): Ann's unread time and snippet stand out from
-    /// their background more than read Team's secondary ones.
+    /// The snippet and time of an unread row use the primary text color. The unread time and snippet of Ann contrast
+    /// with their background more than the secondary ones of the read row of Team.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task UnreadRow_SnippetAndTimeArePrimaryText()
     {
@@ -57,11 +55,11 @@ public sealed class MainWindowTests : UiTest
     }
 
     /// <summary>
-    /// The window's content stays as it is while the window is inactive (the tray menu takes activation): only the title
-    /// bar dims, as in Windows' own apps. Fading the content faded each element on its own, so overlapping ones (a photo
-    /// over its letter, Start chat over the rows) showed through each other (owner).
+    /// The content of the window stays the same while the window is inactive, for example when the tray menu takes
+    /// the activation. Only the title bar dims, as in the apps of Windows. The owner reported a bug: fading the content
+    /// faded each element on its own, so overlapping elements showed through each other. A photo over its letter and
+    /// Start chat over the rows are examples.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Inactive_ContentDoesNotDim()
     {
@@ -81,7 +79,8 @@ public sealed class MainWindowTests : UiTest
         Tray.CloseOverflow();
     }
 
-    // How Far A Text's Strongest Pixel Stands From The Background (Its Corner Pixel), 0 To 255
+    // Returns how far the strongest pixel of a text is from the background, 0 to 255.
+    // The background is the corner pixel.
     private static double Contrast(System.Drawing.Rectangle area)
     {
         using FlaUI.Core.Capturing.CaptureImage capture = FlaUI.Core.Capturing.Capture.Rectangle(area);
@@ -102,9 +101,8 @@ public sealed class MainWindowTests : UiTest
     private static double Luma(System.Drawing.Color c) => (0.2126 * c.R) + (0.7152 * c.G) + (0.0722 * c.B);
 
     /// <summary>
-    /// A live low battery alert from the phone shows the warning banner, and the restored alert hides it.
+    /// A live low battery alert from the phone shows the warning banner. The restored alert hides it.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task BatteryLow_ShowsBanner_RestoredHides()
     {
@@ -120,9 +118,8 @@ public sealed class MainWindowTests : UiTest
     }
 
     /// <summary>
-    /// Closing the battery banner hides it, and the next low alert (no restored between) shows it again.
+    /// Closing the battery banner hides it. The next low alert shows it again, with no restored alert between.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task BatteryLow_Closed_ReturnsOnNextLow()
     {
@@ -138,9 +135,9 @@ public sealed class MainWindowTests : UiTest
     }
 
     /// <summary>
-    /// Ann's row shows the photo the phone has for her; Team's members have none, so its avatar keeps the initials.
+    /// The row of Ann shows the photo that the phone has for her. The members of Team have no photo, so its avatar
+    /// keeps the initials.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Avatars_AnnShowsPhoto_TeamShowsInitials()
     {
@@ -152,21 +149,19 @@ public sealed class MainWindowTests : UiTest
     }
 
     /// <summary>
-    /// The title bar's profile button shows the phone owner's photo right after a fresh pair, and again when the
-    /// window opens from the tray with the list already cached (no row changes then, so the photo was never asked for).
+    /// The profile button in the title bar shows the photo of the phone owner right after a fresh pair. It shows the
+    /// photo again when the window opens from the tray with the list already cached. No row changes then, so the app
+    /// never asked for the photo.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Profile_ShowsOwnersPhoto_AfterPairAndOnReopen()
     {
-        // Fresh Pair
         WaitForPairing();
         await SignInAndWaitForEmojiAsync();
         Server.Phone.Tap(true);
         App.Find("Main.ConversationList");
         Wait.Until(ProfileHasPhoto, AppDriver.DefaultTimeout, () => "The profile button didn't show the owner's photo after pairing.");
 
-        // Reopen From The Tray
         CloseMainWindow();
         Tray.LeftClick();
         App.Find("Main.ConversationList");
@@ -174,9 +169,8 @@ public sealed class MainWindowTests : UiTest
     }
 
     /// <summary>
-    /// ☰ hides the conversation list, and a second click brings it back.
+    /// The ☰ button hides the conversation list. A second click shows it again.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task MenuButton_CollapsesAndExpandsList()
     {
@@ -191,10 +185,9 @@ public sealed class MainWindowTests : UiTest
     }
 
     /// <summary>
-    /// The profile picture is as tall as the caption buttons and sits right beside Minimize; ☰ is the title bar's own
-    /// button, inset from the window's edge and centered in the bar as in the WinUI Gallery.
+    /// The profile picture is as tall as the caption buttons and sits right beside Minimize. The ☰ button belongs to
+    /// the title bar. It has an inset from the window edge and is centered in the bar, as in the WinUI Gallery.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task TitleBar_ProfileBesideCaptionButtons_MenuInset()
     {
@@ -205,7 +198,8 @@ public sealed class MainWindowTests : UiTest
         System.Drawing.Rectangle minimize = App.Find("Minimize").BoundingRectangle;
         System.Drawing.Rectangle titleBar = App.Find("Main.TitleBar").BoundingRectangle;
 
-        // Measured From The Title Bar, Not The Window, Whose Bounds Take In Windows' Invisible Resize Border
+        // The test measures from the title bar and not from the window. The bounds of the window include the
+        // invisible resize border of Windows.
         Assert.IsTrue(menu.Height < minimize.Height, $"☰ ({menu.Height} px) fills the bar ({minimize.Height} px), with no inset.");
         Assert.IsTrue(Math.Abs((menu.Top + menu.Bottom) - (minimize.Top + minimize.Bottom)) <= 4, "☰ isn't centered in the title bar.");
         Assert.IsTrue(menu.Left - titleBar.Left >= 3, $"☰ starts {menu.Left - titleBar.Left} px from the title bar's edge.");
@@ -214,23 +208,20 @@ public sealed class MainWindowTests : UiTest
     }
 
     /// <summary>
-    /// The profile menu's Spam &amp; blocked swaps the list for the spam conversations under a titled header, and
-    /// the title bar's back button, in place of ☰, returns to the inbox.
+    /// The Spam &amp; blocked item of the profile menu replaces the list with the spam conversations under a titled
+    /// header. The back button in the title bar replaces ☰ and returns to the inbox.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Profile_SpamBlocked_ShowsSpamList_BackReturns()
     {
         await OpenMainAsync();
         WaitForRows(InboxRows);
 
-        // Spam And Blocked
         InvokeProfileItem("Main.Profile.SpamBlocked");
         App.WaitForText("Main.ListTitle", ChatCopy.SpamAndBlocked);
         WaitForRows(["Row.c-spam"]);
         AssertBackInTitleBar("Main.SpamBack");
 
-        // Back To The Inbox
         Invoke("Main.SpamBack");
         WaitForRows(InboxRows);
         Wait.Until(() => App.TryFind("Main.ListTitle") is null, AppDriver.DefaultTimeout, () => "The Spam & blocked title stayed after going back.");
@@ -239,10 +230,9 @@ public sealed class MainWindowTests : UiTest
     }
 
     /// <summary>
-    /// The profile menu's Settings opens the settings page over the chats in the same window; the title bar's back
-    /// button, in place of ☰, returns to them.
+    /// The Settings item of the profile menu opens the settings page over the chats in the same window. The back
+    /// button in the title bar replaces ☰ and returns to the chats.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Profile_Settings_OpensSettingsPage_BackReturns()
     {
@@ -260,10 +250,9 @@ public sealed class MainWindowTests : UiTest
     }
 
     /// <summary>
-    /// The pinned grid is off by default. Turning it on in Settings moves pinned Team out of the rows into a tile above
-    /// them, which opens its chat; turning it off puts Team back at the top of the rows.
+    /// The pinned grid is off by default. Turning it on in Settings moves pinned Team from the rows to a tile above
+    /// them, and the tile opens its chat. Turning it off puts Team back at the top of the rows.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task PinnedGrid_Switch_MovesPinnedChatIntoTiles()
     {
@@ -271,30 +260,28 @@ public sealed class MainWindowTests : UiTest
         WaitForRows(InboxRows);
         Assert.IsNull(App.TryFind("Main.PinnedGrid"), "The pinned grid showed with the setting off.");
 
-        // On: Team Leaves The Rows For A Tile
         SetPinnedGrid(ToggleState.On);
         WaitForRows(["Row.c-ann"]);
         AutomationElement tile = App.Find("Main.PinnedGrid").FindFirstDescendant(cf => cf.ByAutomationId("Row.c-team"))
             ?? throw new AssertFailedException("Team has no tile in the pinned grid.");
 
-        // Unread Badge: A Short Message Shows Itself, A Second Message Shows The Count
+        // The unread badge shows a short message as text. After a second message, it shows the count.
         Server.Phone.PushIncoming("c-team", "Dinner?");
         App.WaitForText("Pinned.Badge.c-team", "Dinner?");
         Server.Phone.PushIncoming("c-team", "See you at seven");
         App.WaitForText("Pinned.Badge.c-team", "2");
 
-        // A Tile Opens Its Chat, Which Reads It: The Badge Goes
+        // A tile opens its chat. The chat is then read, so the badge goes.
         tile.Patterns.SelectionItem.Pattern.Select();
         App.WaitForText("Chat.Header", "Team");
         WaitForGone("Pinned.Badge.c-team");
 
-        // Off: Team Back At The Top Of The Rows
         SetPinnedGrid(ToggleState.Off);
         WaitForRows(InboxRows);
         WaitForGone("Main.PinnedGrid");
     }
 
-    // Flips Settings' Pinned Grid Switch Through The Profile Menu, Then Goes Back To The Chats
+    // Sets the pinned grid switch in Settings through the profile menu and goes back to the chats.
     private void SetPinnedGrid(ToggleState wanted)
     {
         InvokeProfileItem("Main.Profile.Settings");
@@ -312,24 +299,21 @@ public sealed class MainWindowTests : UiTest
     }
 
     /// <summary>
-    /// Closing the window with an inbox chat open and opening it again from the tray shows that chat again; a chat
-    /// opened from Spam &amp; blocked doesn't come back.
+    /// Closing the window with an inbox chat open and opening it again from the tray shows that chat again. A chat
+    /// that the user opened from Spam &amp; blocked does not return.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Reopen_RestoresLastInboxChat_NotSpamChat()
     {
         await OpenMainAsync();
         WaitForRows(InboxRows);
 
-        // Inbox Chat: Back After A Reopen
         App.Find("Row.c-ann").Patterns.SelectionItem.Pattern.Select();
         App.WaitForText("Chat.Header", "Ann Lee");
         CloseMainWindow();
         Tray.LeftClick();
         App.WaitForText("Chat.Header", "Ann Lee");
 
-        // Spam Chat: Not Back
         InvokeProfileItem("Main.Profile.SpamBlocked");
         WaitForRows(["Row.c-spam"]);
         App.Find("Row.c-spam").Patterns.SelectionItem.Pattern.Select();
@@ -341,10 +325,9 @@ public sealed class MainWindowTests : UiTest
     }
 
     /// <summary>
-    /// The edge between the list and the chat resizes the list (arrow keys here, as the mouse drag shares the same path);
-    /// the width comes back in the next window. ☰ hides the edge with the list.
+    /// The edge between the list and the chat resizes the list. The test uses the arrow keys, because the mouse drag
+    /// uses the same path. The next window keeps the width. The ☰ button hides the edge with the list.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task ListSplitter_ResizesList_WidthKeptForNextWindow()
     {
@@ -352,7 +335,7 @@ public sealed class MainWindowTests : UiTest
         WaitForRows(InboxRows);
         int before = ListWidth();
 
-        // Two Steps Right: The List Grows By 32 Effective Pixels
+        // Two steps right grow the list by 32 effective pixels.
         App.Find("Main.ListSplitter").Focus();
         FlaUI.Core.Input.Keyboard.Type(FlaUI.Core.WindowsAPI.VirtualKeyShort.RIGHT);
         FlaUI.Core.Input.Keyboard.Type(FlaUI.Core.WindowsAPI.VirtualKeyShort.RIGHT);
@@ -360,13 +343,11 @@ public sealed class MainWindowTests : UiTest
         Wait.Until(() => Math.Abs(ListWidth() - before - (32 * scale)) <= 2, AppDriver.DefaultTimeout, () => $"The list is {ListWidth()} px wide, not {before} + 32 effective px.");
         int widened = ListWidth();
 
-        // Next Window: Same Width
         CloseMainWindow();
         Tray.LeftClick();
         WaitForRows(InboxRows);
         Wait.Until(() => Math.Abs(ListWidth() - widened) <= 2, AppDriver.DefaultTimeout, () => $"The reopened list is {ListWidth()} px wide, not {widened}.");
 
-        // ☰ Takes The Edge Away With The List
         Invoke("Main.MenuButton");
         Wait.Until(() => App.TryFind("Main.ListSplitter") is null, AppDriver.DefaultTimeout, () => "The resize edge stayed with the list collapsed.");
 
@@ -374,9 +355,8 @@ public sealed class MainWindowTests : UiTest
     }
 
     /// <summary>
-    /// The settings page's About names the app, its version and its maker, and links to the repository.
+    /// The About section of the settings page names the app, its version and its maker, and links to the repository.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Settings_About_NamesAppVersionMakerAndRepository()
     {
@@ -392,14 +372,13 @@ public sealed class MainWindowTests : UiTest
     }
 
     /// <summary>
-    /// Start chat floats at the bottom right over the conversation list; scrolling the list down hides it and scrolling
-    /// back up shows it again.
+    /// Start chat floats at the bottom right over the conversation list. A scroll down hides it, and a scroll up
+    /// shows it again.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task StartChat_FloatsOverList_HidesOnScrollDown_ShowsOnScrollUp()
     {
-        // Enough Conversations To Scroll
+        // The list needs enough conversations to scroll.
         for (int i = 0; i < 30; i++)
         {
             string id = "c-more-" + i;
@@ -411,17 +390,16 @@ public sealed class MainWindowTests : UiTest
         AutomationElement start = App.Find("Main.StartChat");
         Wait.Until(() => list.FindAllChildren(cf => cf.ByControlType(ControlType.ListItem)).Length > 20, AppDriver.DefaultTimeout, () => "The extra conversations never showed.");
 
-        // Over The List, At Its Bottom Right
         System.Drawing.Rectangle over   = list.BoundingRectangle;
         System.Drawing.Rectangle button = start.BoundingRectangle;
         Assert.IsTrue(over.Contains(button), $"Start chat ({button}) isn't over the list ({over}).");
         Assert.IsTrue(over.Right - button.Right < 40 && over.Bottom - button.Bottom < 40, $"Start chat ({button}) isn't at the list's bottom right ({over}).");
 
-        // The Standard Accent Button's Size (About 32 Effective Pixels Tall), Not The Old 48 Pixel Pill
+        // The button has the standard accent button size of about 32 effective pixels.
+        // It is not the old pill of 48 pixels.
         double scale = DpiSetup.ScaleOf(App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout));
         Assert.IsTrue(button.Height / scale < 40, $"Start chat is {button.Height / scale:0} effective pixels tall, not the standard button's size.");
 
-        // Down Hides It, Up Shows It
         list.Patterns.Scroll.Pattern.SetScrollPercent(-1, 50);
         Wait.Until(() => StartChatStatus() == "Hidden", AppDriver.DefaultTimeout, () => "Scrolling down didn't hide Start chat.");
         list.Patterns.Scroll.Pattern.SetScrollPercent(-1, 10);
@@ -431,14 +409,13 @@ public sealed class MainWindowTests : UiTest
     }
 
     /// <summary>
-    /// The list loads a page at a time: with 60 more conversations the oldest isn't there at first, and scrolling to
-    /// the bottom loads the next pages until it shows.
+    /// The list loads one page at a time. With 60 more conversations, the oldest is not there at first. A scroll to
+    /// the bottom loads the next pages until the oldest shows.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task ConversationList_ScrollToBottom_LoadsMorePages()
     {
-        // 60 Conversations Older Than The Seeded Ones, Newest First By Number
+        // 60 conversations that are older than the seeded ones. A lower number means a newer conversation.
         const int Count = 60;
         for (int i = 0; i < Count; i++)
         {
@@ -453,8 +430,8 @@ public sealed class MainWindowTests : UiTest
         App.Find("Row.c-page-00");
         Assert.IsNull(App.TryFind("Row.c-page-59"), "The oldest conversation showed before scrolling, so the list didn't page.");
 
-        // Each Scroll To The Bottom Realizes The Last Row, Which Asks For The Next Page. The Footer Ring, When Caught, Is
-        // Noted For Its Size
+        // Each scroll to the bottom realizes the last row, and that row asks for the next page.
+        // The test notes the size of the footer ring when it catches the ring.
         System.Drawing.Rectangle? ring = null;
         Wait.Until(() =>
         {
@@ -467,7 +444,8 @@ public sealed class MainWindowTests : UiTest
             return App.TryFind("Row.c-page-59") is not null;
         }, AppDriver.DefaultTimeout, () => "Scrolling to the bottom never loaded the oldest conversation.");
 
-        // A Standard 24 px Ring (A Whole 3 px Stroke) At A Standard Display Scale, Never The Old 20 px (A 2.5 px Stroke)
+        // At a standard display scale, the ring is 24 px with a whole 3 px stroke. It is not the old 20 px ring with a
+        // 2.5 px stroke.
         if (ring is { } seen)
         {
             double scale = seen.Width / 24.0;
@@ -476,14 +454,13 @@ public sealed class MainWindowTests : UiTest
     }
 
     /// <summary>
-    /// A live message for an older conversation updates its row's snippet and moves it above Ann, right below
+    /// A live message for an older conversation updates the snippet of its row. The row moves above Ann, right below
     /// pinned Team.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task LiveConversationUpdate_MovesRowToTop()
     {
-        // Dee: Older Than Every Seeded Conversation, So Her Row Starts Last
+        // Dee is older than every seeded conversation, so her row starts last.
         Server.Phone.Chats.Add(FakeChats.NewConversation("c-dee", "Dee", false, ConversationStatus.Active, false, false, FakeChats.Person("p-dee", "Dee", "+15550000004")));
         await OpenMainAsync();
         WaitForRows(["Row.c-team", "Row.c-ann", "Row.c-dee"]);
@@ -496,23 +473,20 @@ public sealed class MainWindowTests : UiTest
     }
 
     /// <summary>
-    /// A new message in the open conversation lifts its row (with the list's motion, animations permitting; no flash) and
-    /// the row stays selected, with its chat still open.
+    /// A new message in the open conversation lifts its row with the motion of the list, if animations are on, and
+    /// with no flash. The row stays selected and its chat stays open.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task LiveMessage_OpenRowMovesToTop_StaysSelected()
     {
-        // Dee: Older Than Every Seeded Conversation, So Her Row Starts Last
+        // Dee is older than every seeded conversation, so her row starts last.
         Server.Phone.Chats.Add(FakeChats.NewConversation("c-dee", "Dee", false, ConversationStatus.Active, false, false, FakeChats.Person("p-dee", "Dee", "+15550000004")));
         await OpenMainAsync();
         WaitForRows(["Row.c-team", "Row.c-ann", "Row.c-dee"]);
 
-        // Open Dee's Chat
         App.Find("Row.c-dee").Patterns.SelectionItem.Pattern.Select();
         App.WaitForText("Chat.Header", "Dee");
 
-        // A New Message: Her Row Lifts Below Pinned Team And Stays Selected
         Server.Phone.PushIncoming("c-dee", "yo");
         WaitForRows(["Row.c-team", "Row.c-dee", "Row.c-ann"]);
         Wait.Until(() => App.TryFind("Row.c-dee") is { } row && row.Patterns.SelectionItem.Pattern.IsSelected.ValueOrDefault,
@@ -522,10 +496,9 @@ public sealed class MainWindowTests : UiTest
     }
 
     /// <summary>
-    /// The window stops shrinking at its least size: the chat list's narrowest width (300 px) by 500 px, at the display's
-    /// scale, plus the frame.
+    /// The window stops shrinking at its minimum size. The minimum is the narrowest width of the chat list, 300 px, by
+    /// 500 px at the display scale, plus the frame.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Window_ResizeBelowMinimum_StopsAtMinimum()
     {
@@ -544,53 +517,49 @@ public sealed class MainWindowTests : UiTest
     }
 
     /// <summary>
-    /// A narrow window shows one pane: picking a conversation hides the list and shows the chat.
+    /// A narrow window shows one pane. A pick of a conversation hides the list and shows the chat.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task NarrowWindow_ShowsOnePane()
     {
         await OpenMainAsync();
         WaitForRows(InboxRows);
 
-        // Narrow
         Window window = App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout);
         window.Patterns.Transform.Pattern.Resize(600, 700);
 
-        // No ☰: There Is No List To Hide While One Pane Shows
+        // One pane shows, so there is no list to hide and no ☰ button.
         WaitForGone("Main.MenuButton");
 
-        // Pick Ann: The List Gives Way To The Chat, With Back In The Title Bar
+        // The chat replaces the list, and Back shows in the title bar.
         App.Find("Row.c-ann").Patterns.SelectionItem.Pattern.Select();
         Wait.Until(() => App.TryFind("Main.ConversationList") is null, AppDriver.DefaultTimeout, () => "The list still showed beside the chat in a narrow window.");
         App.Find("Chat.Header");
         AssertBackInTitleBar("Chat.Back");
 
-        // Back: The List Again, Still Without ☰ Or Back
+        // Back shows the list again, still without the ☰ button and without Back.
         Invoke("Chat.Back");
         App.Find("Main.ConversationList");
         Wait.Until(() => App.TryFind("Chat.Back") is null, AppDriver.DefaultTimeout, () => "Back stayed in the title bar on the list.");
         WaitForGone("Main.MenuButton");
 
-        // Start Chat Gets The Same Back
+        // Start chat gets the same Back.
         Invoke("Main.StartChat");
         App.Find("StartChat.Query");
         AssertBackInTitleBar("Chat.Back");
     }
 
     /// <summary>
-    /// The list's first row starts level with the open chat's card, the rounded island around the header and the
-    /// messages (owner: "the chat list doesn't line up with the message window"). The chat pane (<c>Chat.Pane</c>)
-    /// fills the island inside its 1 px border, so its top is the card's top.
+    /// The first row of the list starts level with the card of the open chat. The card is the rounded island around
+    /// the header and the messages. The owner reported that the chat list did not line up with the message window.
+    /// The chat pane (<c>Chat.Pane</c>) fills the island inside its 1 px border, so its top is the top of the card.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task ConversationList_FirstRow_LinesUpWithChatIsland()
     {
         await OpenMainAsync();
         WaitForRows(InboxRows);
 
-        // Open A Chat: The Card Shows Its Header And Messages
         App.Find("Row.c-ann").Patterns.SelectionItem.Pattern.Select();
         App.WaitForText("Chat.Header", "Ann Lee");
 
@@ -599,13 +568,9 @@ public sealed class MainWindowTests : UiTest
         Assert.IsTrue(Math.Abs(rowTop - cardTop) <= 2, $"The first row starts at y {rowTop}, the chat card at y {cardTop}.");
     }
 
-    // =========================================================================
-    // HELPERS
-    // =========================================================================
-
     private void Invoke(string automationId) => App.Find(automationId).Patterns.Invoke.Pattern.Invoke();
 
-    // Back Shows In The Title Bar Row, Where ☰ Was, And ☰ Is Gone
+    // Back shows in the title bar row, where the ☰ button was, and the ☰ button is gone.
     private void AssertBackInTitleBar(string automationId)
     {
         System.Drawing.Rectangle back      = App.Find(automationId).BoundingRectangle;
@@ -614,22 +579,22 @@ public sealed class MainWindowTests : UiTest
         WaitForGone("Main.MenuButton");
     }
 
-    // Opens The Profile Flyout, Then Picks One Of Its Items
+    // Opens the profile flyout and picks one of its items.
     private void InvokeProfileItem(string automationId)
     {
         Invoke("Main.ProfileButton");
         Invoke(automationId);
     }
 
-    // True When An Avatar Under The Row Says It Shows A Photo
+    // Returns true when an avatar under the row reports that it shows a photo.
     private bool HasPhoto(string rowId) =>
         App.TryFind(rowId) is { } row && AppDriver.Search(row, e => e.Properties.ItemStatus.ValueOrDefault == "Photo") is not null;
 
-    // True When The Profile Button Says It Shows The Owner's Photo
+    // Returns true when the profile button reports that it shows the photo of the owner.
     private bool ProfileHasPhoto() =>
         App.TryFind("Main.ProfileButton") is { } button && button.Properties.ItemStatus.ValueOrDefault == "Photo";
 
-    // The List's Rows, Top To Bottom, By AutomationId
+    // Returns the AutomationId of each row of the list, from top to bottom.
     private string[] RowIds()
     {
         AutomationElement? list = App.TryFind("Main.ConversationList");
@@ -646,7 +611,7 @@ public sealed class MainWindowTests : UiTest
         }
         catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or FlaUI.Core.Exceptions.ElementNotAvailableException)
         {
-            // The List Changed Mid-Walk; Read Again
+            // The list changed during the walk. The caller reads again.
             return [];
         }
     }

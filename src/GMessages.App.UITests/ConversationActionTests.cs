@@ -21,35 +21,32 @@ public sealed class ConversationActionTests : UiTest
 {
     private const string AnnPhone = "+15550000001";
 
-    // A Row's Right Padding: The Most An Unhovered Row's Time May Sit In From The Row's Right Edge
+    // The right padding of a row. This is the largest distance from the right edge of the row to the time of a row
+    // that has no hover.
     private const int RowRightPadding = 16;
 
-    // How Long A Message That Must Not Notify Is Watched For A Toast
+    // The time that a test watches for a toast from a message that must not notify.
     private static readonly TimeSpan QuietPeriod = TimeSpan.FromSeconds(5);
 
     /// <summary>
-    /// The row menu's Archive moves Ann out of the inbox; Archived (from the profile menu) lists her, and her Unarchive
-    /// brings her back to the inbox.
+    /// The Archive item of the row menu moves Ann out of the inbox. The Archived item of the profile menu lists her.
+    /// Her Unarchive item returns her to the inbox.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task RowMenu_Archive_MovesToArchived_ThenUnarchive()
     {
         await OpenListAsync();
 
-        // Archive
         PickFromRowMenu("Row.c-ann", "Conversation.Archive");
         WaitForGone("Row.c-ann");
         WaitForUpdates(1);
         Assert.AreEqual(ConversationStatus.Archived, Server.Phone.ConversationUpdates[0].UpdateData.Status);
 
-        // Archived Lists Her
         Invoke("Main.ProfileButton");
         Invoke("Main.Profile.Archived");
         App.WaitForText("Main.ListTitle", ChatCopy.Archived);
         App.Find("Main.ArchivedBack");
 
-        // Unarchive Brings Her Back
         PickFromRowMenu("Row.c-ann", "Conversation.Unarchive");
         WaitForGone("Row.c-ann");
         WaitForUpdates(2);
@@ -61,10 +58,9 @@ public sealed class ConversationActionTests : UiTest
     }
 
     /// <summary>
-    /// Archiving Ann shows "Chat archived" with Undo (the focus stays where it was); Undo unarchives her on the
-    /// phone, her row is back in the inbox, and the bar goes.
+    /// Archiving Ann shows "Chat archived" with Undo, and the focus stays where it was. Undo unarchives her on the
+    /// phone, her row returns to the inbox and the bar goes.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Archive_Undo_PutsTheRowBack()
     {
@@ -86,21 +82,21 @@ public sealed class ConversationActionTests : UiTest
     }
 
     /// <summary>
-    /// With the mouse over Ann's row, its ⋮ opens her menu.
+    /// With the mouse over the row of Ann, its ⋮ button opens her menu.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task RowHover_MoreButton_OpensMenu()
     {
         await OpenListAsync();
 
-        // The Pointer Onto The Row, Then Onto The ⋮ (Collapsed Until Then, So It Takes No Clicks)
+        // The pointer moves onto the row and then onto the ⋮ button. The button is collapsed until then,
+        // so it takes no clicks.
         System.Drawing.Rectangle row = App.Find("Row.c-ann").BoundingRectangle;
         PointerInput.Hover(row);
         AutomationElement more = ShownMore("Row.More.c-ann");
         PointerInput.Hover(more.BoundingRectangle);
 
-        // Settle Wait For The ⋮'s Fade In (167 ms), Which Turns On Its Clicks
+        // The wait lets the ⋮ button fade in (167 ms). The fade-in turns on its clicks.
         Thread.Sleep(500);
 
         Assert.AreEqual(ChatCopy.MoreOptions, AppDriver.SafeName(more));
@@ -110,10 +106,9 @@ public sealed class ConversationActionTests : UiTest
     }
 
     /// <summary>
-    /// Moving from Ann's name onto blank space beside the time keeps the ⋮ (the name's exit isn't the row's): a click on
-    /// it still opens her menu instead of opening her chat.
+    /// A move from the name of Ann onto blank space beside the time keeps the ⋮ button, because the exit from the
+    /// name is not the exit from the row. A click on the button opens her menu and not her chat.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task RowHover_NameToBlankSpace_KeepsMoreButton()
     {
@@ -124,14 +119,15 @@ public sealed class ConversationActionTests : UiTest
         Wait.Until(() => (name = AppDriver.Search(row, e => e.ControlType == ControlType.Text && AppDriver.SafeName(e) == "Ann Lee")) is not null,
             AppDriver.DefaultTimeout, () => "Ann's row shows no name.");
 
-        // Name, Then Blank Space Left Of The ⋮ On The Lower Line (Under The Time, Where No Icon Shows)
+        // The pointer moves from the name to blank space left of the ⋮ button on the lower line.
+        // That space is under the time, where no icon shows.
         PointerInput.Hover(name!.BoundingRectangle);
         AutomationElement more             = ShownMore("Row.More.c-ann");
         System.Drawing.Rectangle moreRect  = more.BoundingRectangle;
         System.Drawing.Rectangle rowRect   = row.BoundingRectangle;
         PointerInput.Hover(new System.Drawing.Rectangle(moreRect.Left - 20, rowRect.Bottom - 16, 2, 2));
 
-        // Settle Wait For Any Fade (167 ms) Before The Click
+        // The wait lets any fade (167 ms) end before the click.
         Thread.Sleep(500);
         more.Click();
 
@@ -141,10 +137,9 @@ public sealed class ConversationActionTests : UiTest
     }
 
     /// <summary>
-    /// Leaving the window straight from Ann's row hides the ⋮ (the exit reports a point inside the row, so a bounds check
-    /// would keep it): a click where it was opens her chat, not her menu.
+    /// A pointer that leaves the window straight from the row of Ann hides the ⋮ button. The exit reports a point
+    /// inside the row, so a bounds check would keep the button. A click where it was opens her chat, not her menu.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task RowHover_LeaveWindow_HidesMoreButton()
     {
@@ -157,7 +152,7 @@ public sealed class ConversationActionTests : UiTest
 
         PointerInput.LeaveLeft(win);
 
-        // A Click Where The ⋮ Was, Once It Has Collapsed
+        // The click comes where the ⋮ button was, after it has collapsed.
         WaitForGone("Row.More.c-ann");
         FlaUI.Core.Input.Mouse.Click(new System.Drawing.Point(moreRect.X + (moreRect.Width / 2), moreRect.Y + (moreRect.Height / 2)));
 
@@ -166,10 +161,9 @@ public sealed class ConversationActionTests : UiTest
     }
 
     /// <summary>
-    /// With no row hovered, Ann's time sits at the row's right edge (within the row's right padding) and her ⋮ is
-    /// collapsed (no space, and not in the UI Automation tree).
+    /// With no row hovered, the time of Ann sits at the right edge of the row, within the right padding of the row.
+    /// Her ⋮ button is collapsed: it takes no space and is not in the UI Automation tree.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Row_TimeAtRightEdge()
     {
@@ -184,9 +178,9 @@ public sealed class ConversationActionTests : UiTest
     }
 
     /// <summary>
-    /// With no row hovered, Team's and Ann's times (names of different lengths) end at the same x.
+    /// With no row hovered, the times of Team and Ann end at the same x position, although the names have different
+    /// lengths.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Row_TimesRightAlign_WhateverTheName()
     {
@@ -200,10 +194,10 @@ public sealed class ConversationActionTests : UiTest
     }
 
     /// <summary>
-    /// Hovering Ann's row gives her ⋮ its space at the right edge and slides only her time left to make room; Team's
-    /// time stays put. Once the pointer leaves the window, the ⋮ collapses and Ann's time is back at the right edge.
+    /// A hover on the row of Ann gives her ⋮ button its space at the right edge. Only her time slides left to make
+    /// room, and the time of Team stays. When the pointer leaves the window, the button collapses and the time of Ann
+    /// returns to the right edge.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task RowHover_TimeMovesLeftForMore()
     {
@@ -216,7 +210,7 @@ public sealed class ConversationActionTests : UiTest
         int annRight                  = annTime.BoundingRectangle.Right;
         int teamRight                 = teamTime.BoundingRectangle.Right;
 
-        // Hovered: Only Ann's Time Slides Left, Until It Ends Where The ⋮ Starts
+        // The time of Ann slides left until it ends where the ⋮ button starts.
         PointerInput.Hover(row);
         System.Drawing.Rectangle hoveredMore = ShownMore("Row.More.c-ann").BoundingRectangle;
         Wait.Until(() => annTime.BoundingRectangle.Right <= hoveredMore.Left, AppDriver.DefaultTimeout,
@@ -225,16 +219,14 @@ public sealed class ConversationActionTests : UiTest
         Assert.IsGreaterThanOrEqualTo(32, annRight - hoveredRight, $"Ann's time only moved from {annRight} to {hoveredRight}.");
         Assert.IsLessThanOrEqualTo(1, Math.Abs(teamTime.BoundingRectangle.Right - teamRight), "Team's time moved while Ann's row was hovered.");
 
-        // Left: The ⋮ Collapses Once The Time Is Back At The Right Edge
         PointerInput.LeaveLeft(win);
         WaitForGone("Row.More.c-ann");
         Assert.IsLessThanOrEqualTo(1, Math.Abs(annTime.BoundingRectangle.Right - annRight), "Ann's time didn't slide back.");
     }
 
     /// <summary>
-    /// Mute sends the phone a mute, the row shows the muted icon, and the menu then offers Unmute instead.
+    /// Mute sends the phone a mute and the row shows the muted icon. The menu then offers Unmute instead.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Mute_ShowsIcon_MenuSaysUnmute()
     {
@@ -252,10 +244,9 @@ public sealed class ConversationActionTests : UiTest
     }
 
     /// <summary>
-    /// The chat header's bell mutes the chat (the phone gets a mute, the row shows the muted icon), then reads Unmute and
-    /// unmutes it again.
+    /// The bell in the chat header mutes the chat: the phone gets a mute and the row shows the muted icon. The bell
+    /// then reads Unmute and unmutes the chat again.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task HeaderBell_MutesThenUnmutes()
     {
@@ -274,16 +265,15 @@ public sealed class ConversationActionTests : UiTest
     }
 
     /// <summary>
-    /// A message in a muted chat shows no toast but still makes the row unread; a message in another chat still toasts.
+    /// A message in a muted chat shows no toast but still makes the row unread. A message in another chat still toasts.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task MutedChat_NoToast_RowUnread()
     {
         var toasts = new ToastDriver(App.Automation);
         await OpenListAsync();
 
-        // Read Ann's Chat, Then Leave It, So No Chat Is On Screen
+        // The test reads the chat of Ann and then leaves it, so no chat is on screen.
         App.Find("Row.c-ann").Patterns.SelectionItem.Pattern.Select();
         App.Find("Chat.Draft");
         Wait.Until(() => !AppDriver.SafeName(App.TryFind("Row.c-ann")).Contains("Unread", StringComparison.Ordinal), AppDriver.DefaultTimeout,
@@ -291,7 +281,6 @@ public sealed class ConversationActionTests : UiTest
         Keyboard.Type(VirtualKeyShort.ESCAPE);
         WaitForGone("Chat.Draft");
 
-        // Mute, Then A Message
         PickFromRowMenu("Row.c-ann", "Conversation.Mute");
         App.Find("Row.Muted.c-ann");
         Server.Phone.PushIncoming("c-ann", "quiet please");
@@ -301,16 +290,15 @@ public sealed class ConversationActionTests : UiTest
         Wait.Until(() => (last = AppDriver.SafeName(App.TryFind("Row.c-ann"))).EndsWith(", Unread", StringComparison.Ordinal), AppDriver.DefaultTimeout,
             () => $"Ann's row read '{last}', not unread.");
 
-        // A Live Message Elsewhere Still Toasts, So The Quiet Check Meant Something
+        // A live message in another chat must still toast. This proves that the quiet check was meaningful.
         Server.Phone.PushIncoming("c-team", "still here");
         toasts.WaitFor(AppDriver.DefaultTimeout, "Team", "Bo: still here");
     }
 
     /// <summary>
-    /// Block &amp; report spam asks first, with Report spam checked; Block sends a block-and-report with Ann's number,
-    /// and she moves to Spam &amp; blocked.
+    /// Block &amp; report spam asks for confirmation first, with Report spam checked. Block sends a block-and-report
+    /// with the number of Ann, and she moves to Spam &amp; blocked.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task BlockAndReport_AsksThenMovesToSpamBlocked()
     {
@@ -334,9 +322,8 @@ public sealed class ConversationActionTests : UiTest
     }
 
     /// <summary>
-    /// Clearing Report spam before Block sends a plain block.
+    /// A cleared Report spam box before Block sends a plain block.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task BlockWithoutReport_SendsBlock()
     {
@@ -356,9 +343,8 @@ public sealed class ConversationActionTests : UiTest
     }
 
     /// <summary>
-    /// A group's menu has no Block &amp; report spam.
+    /// The menu of a group has no Block &amp; report spam item.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Team_HasNoBlockItem()
     {
@@ -373,15 +359,14 @@ public sealed class ConversationActionTests : UiTest
     }
 
     /// <summary>
-    /// Move to trash asks first: Cancel sends nothing and keeps the row; Move to trash sends a delete and the row goes.
+    /// Move to trash asks for confirmation first. Cancel sends nothing and keeps the row. Move to trash sends a delete
+    /// and the row goes.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task MoveToTrash_AsksThenRemovesRow()
     {
         await OpenListAsync();
 
-        // Cancel
         PickFromRowMenu("Row.c-ann", "Conversation.MoveToTrash");
         DialogButton(App.Find("Dialog.Trash"), ChatCopy.Cancel).Patterns.Invoke.Pattern.Invoke();
         WaitForGone("Dialog.Trash");
@@ -389,7 +374,6 @@ public sealed class ConversationActionTests : UiTest
         Assert.IsEmpty(Server.Phone.ConversationUpdates, "Cancel still sent the phone an update.");
         App.Find("Row.c-ann");
 
-        // Move To Trash
         PickFromRowMenu("Row.c-ann", "Conversation.MoveToTrash");
         DialogButton(App.Find("Dialog.Trash"), ChatCopy.MoveToTrash).Patterns.Invoke.Pattern.Invoke();
         WaitForUpdates(1);
@@ -400,7 +384,6 @@ public sealed class ConversationActionTests : UiTest
     /// <summary>
     /// Shift + F10 on the focused row opens its menu.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task ShiftF10_OnFocusedRow_OpensMenu()
     {
@@ -416,9 +399,8 @@ public sealed class ConversationActionTests : UiTest
     }
 
     /// <summary>
-    /// When the phone refuses, the failure banner shows and Ann's row stays; closing the banner hides it.
+    /// When the phone refuses, the failure banner shows and the row of Ann stays. Closing the banner hides it.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task PhoneRefuses_ShowsError_RowStays()
     {
@@ -442,16 +424,14 @@ public sealed class ConversationActionTests : UiTest
     // =========================================================================
 
     /// <summary>
-    /// The chat header's ⋮ (named More options) opens Ann's menu with Details first, then her actions; a right-click on
-    /// the header opens the same menu.
+    /// The ⋮ button in the chat header, named More options, opens the menu of Ann with Details first and then her
+    /// actions. A right-click on the header opens the same menu.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task HeaderMenu_HasDetailsAndActions()
     {
         await OpenChatAsync("Row.c-ann");
 
-        // The ⋮
         AutomationElement more = App.Find("Chat.More");
         Assert.AreEqual(ChatCopy.MoreOptions, AppDriver.SafeName(more));
         more.Patterns.Invoke.Pattern.Invoke();
@@ -463,7 +443,6 @@ public sealed class ConversationActionTests : UiTest
         Keyboard.Type(VirtualKeyShort.ESCAPE);
         WaitForGone("Conversation.Details");
 
-        // Right-Click On The Header
         App.Find("Chat.Header").RightClick();
         App.Find("Conversation.Details");
         App.Find("Conversation.MoveToTrash");
@@ -471,28 +450,26 @@ public sealed class ConversationActionTests : UiTest
     }
 
     /// <summary>
-    /// A ⋮ button's menu opens downward: the chat header's below its button, right edges lined up, and a row's below its
-    /// ⋮ too.
+    /// The menu of a ⋮ button opens downward. The menu of the chat header opens below its button with the right
+    /// edges lined up. The menu of a row opens below its ⋮ button too.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task MoreMenus_OpenBelowTheirButton()
     {
         await OpenChatAsync("Row.c-ann");
 
-        // The Header's ⋮
         AutomationElement more         = App.Find("Chat.More");
         System.Drawing.Rectangle under = more.BoundingRectangle;
         more.Patterns.Invoke.Pattern.Invoke();
 
-        // Waited For: WinUI 2.8's Menu Slides Down Into Place As It Opens
+        // The test waits because the WinUI 2.8 menu slides down into place as it opens.
         int top = 0;
         Wait.Until(() => (top = App.Find("Conversation.Details").BoundingRectangle.Top) >= under.Bottom, AppDriver.DefaultTimeout,
             () => $"The header menu's top ({top}) isn't below its button's bottom ({under.Bottom}).");
         Keyboard.Type(VirtualKeyShort.ESCAPE);
         WaitForGone("Conversation.Details");
 
-        // A Row's ⋮, Shown On Hover
+        // The ⋮ button of a row shows on hover.
         AutomationElement row = App.Find("Row.c-team");
         PointerInput.Hover(row.BoundingRectangle);
         AutomationElement rowMore       = App.Find("Row.More.c-team");
@@ -504,10 +481,9 @@ public sealed class ConversationActionTests : UiTest
     }
 
     /// <summary>
-    /// Move to trash from the header's menu, once confirmed, closes the chat: the empty state shows, the header goes and
-    /// the keyboard focus moves to the conversation list.
+    /// A confirmed Move to trash from the header menu closes the chat. The empty state shows, the header goes and the
+    /// keyboard focus moves to the conversation list.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task HeaderTrash_ClosesChat()
     {
@@ -525,9 +501,8 @@ public sealed class ConversationActionTests : UiTest
     }
 
     /// <summary>
-    /// Team's Details lists Bo and Cy with their numbers, shows Mute off, and offers no Block &amp; report spam.
+    /// The Details of Team list Bo and Cy with their numbers, show Mute off and offer no Block &amp; report spam.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Details_Team_ListsBoAndCy_NoBlock()
     {
@@ -551,9 +526,8 @@ public sealed class ConversationActionTests : UiTest
     }
 
     /// <summary>
-    /// Flipping Details' Mute on sends the phone a mute at once, and the row shows the muted icon.
+    /// Turning on Mute in Details sends the phone a mute at once, and the row shows the muted icon.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Details_MuteToggle_SendsMute()
     {
@@ -570,9 +544,8 @@ public sealed class ConversationActionTests : UiTest
     }
 
     /// <summary>
-    /// When the phone refuses the mute, Details' toggle flips back off without sending a second request.
+    /// When the phone refuses the mute, the toggle in Details flips back off. The app sends no second request.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Details_MuteFails_TogglesBack()
     {
@@ -592,9 +565,9 @@ public sealed class ConversationActionTests : UiTest
     }
 
     /// <summary>
-    /// Details' Block &amp; report spam closes Details, then asks as the menu does; Block sends a block-and-report.
+    /// Block &amp; report spam in Details closes Details and then asks for confirmation as the menu does. Block sends
+    /// a block-and-report.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Details_Block_ClosesThenAsks()
     {
@@ -616,9 +589,8 @@ public sealed class ConversationActionTests : UiTest
     // =========================================================================
 
     /// <summary>
-    /// Ctrl + Shift + o in the message box opens the open chat's Details.
+    /// Ctrl + Shift + o in the message box opens the Details of the open chat.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task CtrlShiftO_OpensDetails()
     {
@@ -631,10 +603,9 @@ public sealed class ConversationActionTests : UiTest
     }
 
     /// <summary>
-    /// Ctrl + d asks first; Move to trash sends a delete and closes the chat, and the keyboard focus moves to the
-    /// conversation list.
+    /// Ctrl + d asks for confirmation first. Move to trash sends a delete and closes the chat, and the keyboard focus
+    /// moves to the conversation list.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task CtrlD_AsksThenTrashes()
     {
@@ -651,10 +622,9 @@ public sealed class ConversationActionTests : UiTest
     }
 
     /// <summary>
-    /// A second Ctrl + d while the trash dialog is open opens no second dialog: once Cancel closes it, none is left and
-    /// nothing was sent.
+    /// A second Ctrl + d while the trash dialog is open opens no second dialog. After Cancel closes the dialog, no
+    /// dialog is left and the app sent nothing.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task CtrlD_Twice_OneDialog()
     {
@@ -674,9 +644,8 @@ public sealed class ConversationActionTests : UiTest
     }
 
     /// <summary>
-    /// Ctrl + Alt + h in the message box archives the open chat, which closes it.
+    /// Ctrl + Alt + h in the message box archives the open chat and closes it.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task CtrlAltH_Archives()
     {
@@ -691,9 +660,9 @@ public sealed class ConversationActionTests : UiTest
     }
 
     /// <summary>
-    /// Ctrl + Z, once the Undo bar has long gone, still puts the archived chat back in the inbox (any time in the session).
+    /// Ctrl + Z puts the archived chat back in the inbox, also after the Undo bar has gone. This works at any time in
+    /// the session.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task CtrlZ_AfterTheBarHid_UnarchivesAgain()
     {
@@ -704,7 +673,7 @@ public sealed class ConversationActionTests : UiTest
         WaitForGone("Row.c-ann");
         Wait.Until(() => App.TryFind("Main.Undo") is null, MainViewModel.UndoTime + AppDriver.DefaultTimeout, () => "The Undo bar never hid.");
 
-        // From The List (Not The Message Box, Where Ctrl + Z Undoes Typing)
+        // The keys go to the list. In the message box, Ctrl + Z undoes typing.
         App.Find("Main.ConversationList").Focus();
         Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_Z);
 
@@ -714,10 +683,9 @@ public sealed class ConversationActionTests : UiTest
     }
 
     /// <summary>
-    /// Ctrl + Alt + h on an open spam chat does nothing, as its header menu offers no Archive. Ctrl + Shift + o then
-    /// opens its Details, so the keys did reach the app.
+    /// Ctrl + Alt + h on an open spam chat does nothing, because its header menu offers no Archive. Ctrl + Shift + o
+    /// then opens its Details, which proves that the keys reached the app.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task CtrlAltH_SpamChat_SendsNothing()
     {
@@ -741,7 +709,7 @@ public sealed class ConversationActionTests : UiTest
     // HELPERS
     // =========================================================================
 
-    // Opens A Row's Chat From The List; Opening It Puts The Cursor In The Message Box, Where Keys Then Go
+    // Opens the chat of a row from the list. The chat puts the cursor in the message box, and the keys go there.
     private async Task OpenChatAsync(string rowId)
     {
         await OpenListAsync();
@@ -750,7 +718,7 @@ public sealed class ConversationActionTests : UiTest
             () => "The message box never took focus.");
     }
 
-    // Pairs, Opens The Window And Brings It To The Front (Mouse And Keys Go To The Foreground Window)
+    // Pairs, opens the window and brings it to the front. Mouse and key input goes to the foreground window.
     private async Task OpenListAsync()
     {
         await OpenMainAsync();
@@ -758,14 +726,15 @@ public sealed class ConversationActionTests : UiTest
         App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout).SetForeground();
     }
 
-    // Right-Clicks A Row, Then Picks One Of Its Menu Items
+    // Right-clicks a row and picks one of its menu items.
     private void PickFromRowMenu(string rowId, string itemId)
     {
         App.Find(rowId).RightClick();
         Invoke(itemId);
     }
 
-    // A Row's ⋮ Once The Hover Has Shown It (Collapsed Until Then, So Not Found) And Given It Its Space
+    // Returns the ⋮ button of a row after the hover shows it and gives it space. The button is collapsed until then,
+    // so a search does not find it.
     private AutomationElement ShownMore(string automationId)
     {
         AutomationElement? more = null;
@@ -774,8 +743,8 @@ public sealed class ConversationActionTests : UiTest
         return more!;
     }
 
-    // Widens The List With Its Resize Edge (Six Steps Of 16 Effective Pixels), So A Row That Only Sizes To Its Text Ends
-    // Short Of The List's Right Edge
+    // Widens the list with its resize edge in six steps of 16 effective pixels. A row that sizes only to its text
+    // then ends short of the right edge of the list.
     private void WidenList()
     {
         App.Find("Main.ListSplitter").Focus();
@@ -793,7 +762,7 @@ public sealed class ConversationActionTests : UiTest
         Wait.Until(() => Server.Phone.ConversationUpdates.Count == count, AppDriver.DefaultTimeout,
             () => $"The phone got {Server.Phone.ConversationUpdates.Count} conversation updates, not {count}.");
 
-    // A Dialog's Button, By Its Text
+    // Finds a button of a dialog by its text.
     private static AutomationElement DialogButton(AutomationElement dialog, string name)
     {
         AutomationElement? button = null;
