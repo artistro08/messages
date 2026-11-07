@@ -29,7 +29,7 @@ namespace GMessages.App;
 /// Composes the tray app. No window opens at launch: the tray icon and its menu open the app.
 /// </summary>
 /// <remarks>
-/// The app outlives its main window and keeps its toasts from the tray. The tray wiring, the quit and show event watch
+/// The app outlives its main window and shows its toasts from the tray. The tray wiring, the quit and show event watch
 /// and the memory trim come from the <c>App.xaml.cs</c> of Magic Buds.
 /// </remarks>
 public sealed partial class App : Application, IDisposable

@@ -163,8 +163,9 @@ public sealed partial class ConversationRow : UserControl
     }
 
     // The pointer left the row. A move between the name, the avatar and the icons raises no exit here. The UI tests
-    // check this. The method makes no bounds check. A direct exit from a row out of the window reports a last point
-    // inside the row. While the menu is open, its overlay takes the pointer. The ⋮ then waits for the menu to close.
+    // check this. The method makes no bounds check. A direct exit out of the window reports a last point inside the
+    // row, so a check would fail. While the menu is open, its overlay takes the pointer. The ⋮ then waits for the
+    // menu to close.
     private void OnPointerLeft(object sender, PointerRoutedEventArgs e)
     {
         _pointerOver = false;

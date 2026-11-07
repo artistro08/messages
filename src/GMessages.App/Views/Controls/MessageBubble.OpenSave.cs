@@ -13,8 +13,8 @@ namespace GMessages.App.Views.Controls;
 public sealed partial class MessageBubble
 {
     /// <summary>
-    /// Runs Open from the bubble menu. Open does what a click on the photo, video frame, voice message or file card
-    /// does.
+    /// Runs Open from the bubble menu. A photo or a video opens in the viewer. A voice message plays or pauses. A file
+    /// card opens its file.
     /// </summary>
     public void Open()
     {

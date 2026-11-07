@@ -23,10 +23,11 @@
         <!-- Until a hover, the ⋮ is collapsed. Thus it takes no space, and screen readers do not find it. On a hover,
              the ⋮ takes its 32 px at the right edge and fades in. The time and icons of the row slide left to give it
              space. The ⋮ shows or collapses only once for each hover. It shows at the start of the slide in. It
-             collapses at the end of the slide back. Thus the name trims once and never for each frame. The slide itself is a render transform.
-             The slide names no start value and runs from the current place of the time. Thus a hover that returns
-             during a slide changes direction smoothly. The code behind sets the start value for a slide in from rest.
-             The group must stay on the root element of the control, because GoToState looks only there. -->
+             collapses at the end of the slide back. Thus the name trims once and never for each frame. The slide
+             itself is a render transform. The slide names no start value and runs from the current place of the
+             time. Thus a hover that returns during a slide changes direction smoothly. The code behind sets the start
+             value for a slide in from rest. The group must stay on the root element of the control, because GoToState
+             looks only there. -->
         <VisualStateManager.VisualStateGroups>
             <VisualStateGroup x:Name="Hover">
                 <VisualStateGroup.Transitions>

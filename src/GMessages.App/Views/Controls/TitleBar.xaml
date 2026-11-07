@@ -194,7 +194,8 @@
             <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="Auto" />
             <!-- The content reaches the caption buttons. In Leaf Calendar, the narrow 8 px drag strip of WinUI 3 sat
-                 under the profile picture. The picture reached over the strip to Minimize, so this bar has no strip. -->
+                 under the profile picture. The picture reached over the strip to Minimize, so this bar has no
+                 strip. -->
             <ColumnDefinition Width="*" />
             <ColumnDefinition Width="Auto" />
         </Grid.ColumnDefinitions>

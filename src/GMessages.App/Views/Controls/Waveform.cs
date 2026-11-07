@@ -28,7 +28,7 @@ namespace GMessages.App.Views.Controls;
 /// </para>
 /// <para>
 /// The bars take <see cref="BarBrush"/>: the primary text brush, or the on-accent text brush on an SMS bubble. Thus
-/// they read on each bubble color and in high contrast.
+/// the bars stay visible on each bubble color and in high contrast.
 /// </para>
 /// <para>
 /// The bars are lines in paths, not elements. Each bar is a round-ended line in the bright played path or in the dim

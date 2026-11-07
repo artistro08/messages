@@ -216,7 +216,7 @@ public sealed class FakeGoogleServerTests
     }
 
     /// <summary>
-    /// Payloads that are still unread when a second long poll takes over arrive exactly once, in order.
+    /// Payloads that are still unread when a second long poll replaces the first arrive exactly once, in order.
     /// The old poll gets a prefix and the new poll gets the rest.
     /// </summary>
     /// <remarks>
@@ -232,7 +232,7 @@ public sealed class FakeGoogleServerTests
         Uri url                = new(server.BaseUrl, "/$rpc/google.internal.communications.instantmessaging.v1.Messaging/ReceiveMessages");
         string padding         = new('x', 64 * 1024);
 
-        // Open the old poll without reading it, push the payloads, then let the new poll take over.
+        // Open the old poll without reading it, push the payloads, then open the new poll.
         // The headers of the new poll arrive after the takeover.
         using HttpResponseMessage oldPoll = await OpenPollAsync(http, url);
         for (int i = 0; i < Total; i++)

@@ -172,7 +172,7 @@ internal unsafe class XamlWindow
     public event EventHandler<bool>? Activated;
 
     /// <summary>
-    /// Raised after <see cref="Close"/> or the person closes the window, while its content still exists.
+    /// Raised after a <see cref="Close"/> call or after the person closes the window, while the content still exists.
     /// </summary>
     public event EventHandler? Closed;
 
@@ -362,10 +362,10 @@ internal unsafe class XamlWindow
         if (!IsWindowVisible(Hwnd))
         {
             // The first show stays cloaked until XAML draws the first frame, as WinUI 3 windows do. Under memory
-            // pressure, the build of a new window takes 1 second, which showed as a blank window. XAML draws only after
-            // a change. Thus the window also listens to Rendering, which asks for a frame on each tick until XAML draws
-            // a frame. XAML can also hold its frames for a window that it takes as hidden. A UI test once waited 20 s.
-            // Thus the window shows after half a second in any case.
+            // pressure, the build of a new window takes about 1 second, which showed as a blank window. XAML draws
+            // only after a change. Thus the window also listens to Rendering, which asks for a frame on each tick
+            // until XAML draws a frame. XAML can also hold its frames for a window that it takes as hidden. A UI
+            // test once waited 20 s. Thus the window shows after half a second in any case.
             if (!_shownOnce)
             {
                 _shownOnce = true;

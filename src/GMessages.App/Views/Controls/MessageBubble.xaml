@@ -64,8 +64,8 @@
 
             <!-- The parts of a sent SMS bubble take the on-accent brushes. Through x:Load, the parts load only when the
                  message uses them. A setter would load its part, so each part has its own group. ShowPartStates goes to
-                 that group only while the part is loaded. The hover strip binds its column with StripColumn for the same
-                 reason. -->
+                 that group only while the part is loaded. The hover strip binds its column with StripColumn for the
+                 same reason. -->
             <VisualStateGroup x:Name="QuoteSide">
                 <VisualState x:Name="QuotePlain" />
                 <VisualState x:Name="QuoteOnAccent">
@@ -153,8 +153,8 @@
             </VisualStateGroup>
 
             <!-- The ring around the back shows while the row of the bubble has keyboard or programmatic focus. The chat
-                 pane sets the state. The names differ from Hidden and Shown of Hover, because GoToState finds a state by
-                 name across groups. -->
+                 pane sets the state. The names differ from Hidden and Shown of Hover, because GoToState finds a state
+                 by name across groups. -->
             <VisualStateGroup x:Name="FocusRingStates">
                 <VisualState x:Name="RingHidden" />
                 <VisualState x:Name="RingShown">
@@ -166,10 +166,10 @@
         </VisualStateManager.VisualStateGroups>
 
         <!-- The bubble shows the sender name, the quote, the text and the link preview on its colored back. The
-             reaction pill sits on its bottom corner. Then come the time after a click or the retry link, and the caption
-             row under my newest message. The caption row holds the time, the delivery icon and the lock. The bubble is as
-             wide as its content, up to 70% of the chat and 560 px at most. The code sets that cap. The padding keeps the
-             space of the avatar lane and the hover strip on their sides. -->
+             reaction pill sits on its bottom corner. Then come the time after a click or the retry link, and the
+             caption row under my newest message. The caption row holds the time, the delivery icon and the lock. The
+             bubble is as wide as its content, up to 70% of the chat and 560 px at most. The code sets that cap. The
+             padding keeps the space of the avatar lane and the hover strip on their sides. -->
         <StackPanel
             x:Name="Root"
             Padding="{x:Bind local:MessageBubble.LanePadding(Bubble.HasAvatarLane, Bubble.FromMe), Mode=OneWay}"
@@ -193,8 +193,8 @@
             <!-- The back sits in a row with the avatar lane and the hover strip. Both extend into the padding of the
                  row. Thus the avatar sits beside the bubble itself, and their bottoms align. It does not sit beside the
                  pill, the time or the caption row. The strip sits beside the back, centered on it. The Side states keep
-                 the row at its own width on the outer side of the bubble. Thus a wider time or caption row under a short
-                 message never stretches the back past its text. -->
+                 the row at its own width on the outer side of the bubble. Thus a wider time or caption row under a
+                 short message never stretches the back past its text. -->
             <Grid
                 x:Name="BackRow"
                 Margin="{x:Bind local:MessageBubble.LaneOverhang(Bubble.HasAvatarLane, Bubble.FromMe), Mode=OneWay}"
@@ -317,10 +317,10 @@
                         </local:LinkCardButton>
 
                         <!-- The photo fills the bubble from edge to edge, rounded to its corners. The thumbnail shows
-                             first, decoded tiny and stretched, so it looks blurred. Then the full image fades in over it.
-                             The code sets the size from the dimensions of the photo before anything loads, so nothing
-                             moves when it arrives. A click opens it in the photo viewer of the window, or tries again
-                             after a failure. Its name is its caption, else "Photo". -->
+                             first, decoded tiny and stretched, so it looks blurred. Then the full image fades in over
+                             it. The code sets the size from the dimensions of the photo before anything loads, so
+                             nothing moves when it arrives. A click opens it in the photo viewer of the window, or tries
+                             again after a failure. Its name is its caption, else "Photo". -->
                         <Button
                             x:Name="Photo"
                             Padding="0"
@@ -371,13 +371,13 @@
                         </Button>
 
                         <!-- The video fills the bubble from edge to edge as a photo does. The code sets its size from
-                             its dimensions, and it has the corners of the bubble. Its still frame is the thumbnail from the
-                             phone, else a frame that the app makes from the video. A plain fill shows until the frame
-                             loads, with a play button over it. A click on the frame opens the viewer of the window. The
-                             play button plays the video here with sound and compact controls: play or pause, seek and
-                             volume. The code makes the player in VideoHost. The expand button then opens the viewer at the
-                             same position. The frame is named by the caption, else "Video". LinkCardButton shows the hand
-                             cursor over it. -->
+                             its dimensions, and it has the corners of the bubble. Its still frame is the thumbnail from
+                             the phone, else a frame that the app makes from the video. A plain fill shows until the
+                             frame loads, with a play button over it. A click on the frame opens the viewer of the
+                             window. The play button plays the video here with sound and compact controls: play or
+                             pause, seek and volume. The code makes the player in VideoHost. The expand button then
+                             opens the viewer at the same position. The frame is named by the caption, else "Video".
+                             LinkCardButton shows the hand cursor over it. -->
                         <Grid
                             x:Name="Video"
                             x:Load="{x:Bind Bubble.HasVideo, Mode=OneWay, FallbackValue=False}"
@@ -484,9 +484,9 @@
                         </Grid>
 
                         <!-- The file card shows a video or a file with its thumbnail, else the icon of its type. It
-                             also shows the name and the size as Explorer writes it. While the file opens, "Downloading…" or the
-                             failure takes the place of the size. A click, Enter or Space downloads the file and opens it
-                             in its default app. The card is named by the file name. -->
+                             also shows the name and the size as Explorer writes it. While the file opens,
+                             "Downloading…" or the failure takes the place of the size. A click, Enter or Space
+                             downloads the file and opens it in its default app. The card is named by the file name. -->
                         <Button
                             x:Name="FileCard"
                             Padding="0"
@@ -526,8 +526,8 @@
                         </Button>
 
                         <!-- The voice message shows play or pause, the waveform and the length. The waveform fills as
-                             the message plays, and a click on it seeks. The length comes from the audio after the download.
-                             The length is named Bubble.Voice.{id}. -->
+                             the message plays, and a click on it seeks. The length comes from the audio after the
+                             download. The length is named Bubble.Voice.{id}. -->
                         <Grid
                             x:Name="Voice"
                             x:Load="{x:Bind Bubble.HasVoice, Mode=OneWay, FallbackValue=False}"
@@ -595,12 +595,12 @@
                         </Grid>
 
                         <!-- The preview shows the page image, its title in 2 lines at most, and its site in caption
-                             style. A click, Enter or Space opens the link in the default browser. The card is named by its title
-                             and the host of the link. A right-click, the Application key or Shift + F10 opens its own
-                             menu with Copy link. That menu is PreviewMenu of the chat pane, which finds the card by its
-                             name. The look of the card is on PreviewCard. IconButtonStyle gives the button no hover or
-                             press fill. Thus the card never flashes another color under the pointer, as the owner
-                             reported. Through LinkCardButton, the hand cursor shows over it, as over a link. -->
+                             style. A click, Enter or Space opens the link in the default browser. The card is named by
+                             its title and the host of the link. A right-click, the Application key or Shift + F10 opens
+                             its own menu with Copy link. That menu is PreviewMenu of the chat pane, which finds the
+                             card by its name. The look of the card is on PreviewCard. IconButtonStyle gives the button
+                             no hover or press fill. Thus the card never flashes another color under the pointer, as the
+                             owner reported. Through LinkCardButton, the hand cursor shows over it, as over a link. -->
                         <local:LinkCardButton
                             x:Name="Preview"
                             Margin="{x:Bind local:MessageBubble.PreviewMargin(Bubble.HasBodyText), Mode=OneWay}"
@@ -650,10 +650,10 @@
                 </Border>
 
                 <!-- The focus ring hugs the back 3 px out and follows its corners, also on photos, cards and grouped
-                     bubbles. It is a 2 px ring in the accent color, with a 1 px gap inside it. The owner found the white
-                     focus stroke of Windows too glaring. The accent ring still shows clearly on every bubble color. It
-                     draws only while the row has keyboard focus. See FocusRingStates. It never draws in high contrast,
-                     where the system focus visual of the row shows instead. It takes no clicks. -->
+                     bubbles. It is a 2 px ring in the accent color, with a 1 px gap inside it. The owner found the
+                     white focus stroke of Windows too glaring. The accent ring still shows clearly on every bubble
+                     color. It draws only while the row has keyboard focus. See FocusRingStates. It never draws in
+                     high contrast, where the system focus visual of the row shows instead. It takes no clicks. -->
                 <Border
                     x:Name="FocusRing"
                     Grid.Column="1"
@@ -667,9 +667,9 @@
                 <!-- The hover strip holds react, reply and the ⋮. See Hover above. It sits right of a received back and
                      left of a sent back. Its slot is always there with the width of the strip, StripWidth from
                      HoverStripWidth. Thus no bubble moves when the strip shows. The slot is as tall as the back and
-                     transparent. Thus the pointer stays on the bubble on its way to the buttons. LoadHoverStrip loads the
-                     strip on the first hover or keyboard focus of the bubble. The buttons are not tab stops, because the
-                     keyboard has the bubble menu, Shift + + and Ctrl + Enter. -->
+                     transparent. Thus the pointer stays on the bubble on its way to the buttons. LoadHoverStrip loads
+                     the strip on the first hover or keyboard focus of the bubble. The buttons are not tab stops,
+                     because the keyboard has the bubble menu, Shift + + and Ctrl + Enter. -->
                 <Grid
                     Grid.Column="{x:Bind local:MessageBubble.StripColumn(Bubble.FromMe), Mode=OneWay, FallbackValue=2}"
                     Width="{x:Bind local:MessageBubble.StripWidth}"
@@ -744,10 +744,10 @@
                 </Grid.ColumnDefinitions>
 
                 <!-- The reactions show in a pill over the bottom corner of the bubble. In every chat, a click, Enter or
-                     Space lists who reacted. The code builds that list, and the pill never opens the reaction picker. The
-                     pill has a whole-pixel height of 24, more for large text, and corners of half of it. Its fill is under
-                     the stroke. Thus the ends draw as smooth half circles at any scale. Its top 8 px overlap the back, and
-                     it keeps 6 px from the time. -->
+                     Space lists who reacted. The code builds that list, and the pill never opens the reaction picker.
+                     The pill has a whole-pixel height of 24, more for large text, and corners of half of it. Its fill
+                     is under the stroke. Thus the ends draw as smooth half circles at any scale. Its top 8 px overlap
+                     the back, and it keeps 6 px from the time. -->
                 <Grid
                     x:Name="PillHost"
                     Grid.Column="{x:Bind local:MessageBubble.PillColumn(Bubble.FromMe), Mode=OneWay}"
@@ -870,8 +870,8 @@
                     <!-- The caption row shows only under the newest bubble of the chat, until a click on it. It shows
                          the time Caption.{id}. On my bubble, the delivery icon follows. The icon is a stopwatch while
                          sending and a check in a ring when sent. It is 2 checks in rings when delivered and 2 filled
-                         circles when read. In an encrypted chat, the lock follows. The icon is drawn, not text. Its name
-                         Status.{id} is "Sent", "Delivered" or "Read" for screen readers. -->
+                         circles when read. In an encrypted chat, the lock follows. The icon is drawn, not text. Its
+                         name Status.{id} is "Sent", "Delivered" or "Read" for screen readers. -->
                     <StackPanel
                         x:Name="StatusRow"
                         x:Load="{x:Bind Bubble.ShowsStatusRow, Mode=OneWay, FallbackValue=False}"

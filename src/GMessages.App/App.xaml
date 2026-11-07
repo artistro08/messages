@@ -10,9 +10,9 @@
             <ResourceDictionary.MergedDictionaries>
                 <muxc:XamlControlsResources />
 
-                <!-- WinUI 2.8 has no SubtleButtonStyle, so this file copies the style of WinUI 3 (Windows App SDK
-                     2.3) below with its brushes. A button that is only an icon gets no background or border on hover
-                     or press, as the owner chose in Task 22. Only SubtleButtonStyle and thus IconButtonStyle read the
+                <!-- WinUI 2.8 has no SubtleButtonStyle. This file copies the style of WinUI 3, Windows App SDK 2.3,
+                     below with its brushes. A button that is only an icon gets no background or border on hover or
+                     press. The owner chose that in Task 22. Only SubtleButtonStyle and thus IconButtonStyle read the
                      hover and press brushes, so these brushes are clear in Light and Dark. The Back and ☰ buttons of
                      the title bar keep the default feedback of Windows, as the owner chose in Plan 7. They have their
                      own TitleBar style. High contrast keeps the system hover and press colors of WinUI 3. The
@@ -65,10 +65,10 @@
                 </ResourceDictionary>
             </ResourceDictionary.MergedDictionaries>
 
-            <!-- A sent RCS bubble takes a lighter shade of the accent in Light and a darker shade in Dark, with
-                 the regular text color. Sent SMS and MMS take the full accent. The border of the bubble matches the
-                 fill. In high contrast the fill is the window color, so the border takes the text color to keep the
-                 edge.
+            <!-- A sent RCS bubble takes a lighter shade of the accent in Light and a darker shade in Dark. The text
+                 keeps the regular text color. Sent SMS and MMS take the full accent. The border of the bubble matches
+                 the fill. In high contrast the fill is the window color, so the border takes the text color to keep
+                 the edge.
                  A reply quote takes a tint of its bubble, with an accent bar. On the card color and on the RCS shade,
                  the tint is a faint accent. On the full accent of SMS, the tint is a faint text-on-accent color, with
                  a bar of that color. In high contrast the quote takes the color of its bubble and a highlight bar.
@@ -113,7 +113,7 @@
                  UI Emoji, and only WinUI 3 brought a newer engine. Thus emoji come from a Fluent emoji font that
                  ships with the app: the bitmap glyphs of tetunori/fluent-emoji-webfont (see
                  scripts/Make-EmojiFont.ps1). The font comes first, so an emoji joined from several emoji
-                 (👨‍👩‍👧) stays whole in it. The script took the space, the digits and # * © ® out of the font, so text
+                 (👨‍👩‍👧) stays whole in it. The script took the space, the digits and # * © ® out of the font. Text
                  takes them from Segoe UI Variable. A script that neither font has falls to the fallback of Windows.
                  Controls read this key. The main window passes it to its plain text. Text styled elsewhere that can
                  hold a name takes it by hand. -->

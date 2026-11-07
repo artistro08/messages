@@ -479,8 +479,8 @@ public sealed class FakeGoogleServer : IAsyncDisposable
             kill = _killStatus;
             if (kill <= 0)
             {
-                // The newest long poll replaces the old one. It gets the unread payloads of the old one first, then everything
-                // queued while no long poll was open.
+                // The newest long poll replaces the old one. It gets the unread payloads of the old one first, then
+                // everything queued while no long poll was open.
                 if (_stream is { } old)
                 {
                     old.Writer.TryComplete();

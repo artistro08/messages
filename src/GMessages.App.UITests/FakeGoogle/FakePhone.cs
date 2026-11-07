@@ -12,8 +12,8 @@ namespace GMessages.App.UITests.FakeGoogle;
 /// </summary>
 /// <remarks>
 /// The phone mirrors a real phone in pair_google.go of mautrix-gmessages, seen from the other end.
-/// The phone keeps the commitment of the client init. Its answer is a server init with a fresh P-256 key of the phone,
-/// 32 random bytes, and verification and key-derivation versions 1 and 1.
+/// The phone keeps the commitment of the client init. Its answer is a server init with a fresh P-256 key of the phone
+/// and 32 random bytes. The verification and key-derivation versions are 1 and 1.
 /// The phone checks the client finished message against the commitment.
 /// The phone computes the raw ECDH X coordinate from its own key and the public key of the client.
 /// The shared secret is the SHA-256 of this coordinate.

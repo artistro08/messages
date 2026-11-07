@@ -925,9 +925,9 @@ public sealed partial class MessageBubble : UserControl
         }
     }
 
-    // Fades the row in on its composition visual, with only opacity. A rise into place was there too, but the owner did
-    // not want it. The ease matches the own controls of WinUI: ControlFastOutSlowInKeySpline, 0,0,0,1. Layout never
-    // moves, so the scroll pin does not change.
+    // Fades the row in on its composition visual, with only opacity. The owner did not want a rise into place.
+    // The ease matches the controls of WinUI: ControlFastOutSlowInKeySpline, 0,0,0,1. Layout never moves, so the
+    // scroll pin does not change.
     private void AnimateIn()
     {
         Visual visual                  = ElementCompositionPreview.GetElementVisual(Row);
