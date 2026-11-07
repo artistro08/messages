@@ -9,12 +9,14 @@ using GMessages.Presentation.Messaging;
 using GMessages.Presentation.Settings;
 using GMessages.Presentation.Shortcuts;
 using Windows.System;
+using Windows.UI.Composition;
 using Windows.UI.ViewManagement;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Automation;
 using Windows.UI.Xaml.Automation.Peers;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Controls.Primitives;
+using Windows.UI.Xaml.Hosting;
 using Windows.UI.Xaml.Input;
 using Windows.UI.Xaml.Media;
 using Windows.UI.Xaml.Media.Animation;
@@ -95,8 +97,13 @@ public sealed partial class ChatsView : UserControl
     private ScrollViewer? _listScroller;
     private double _listOffset;
 
+    // The last page failed. The list does not ask again until the next scroll down or the next list.
+    private bool _pageFailed;
+
     // Reads the animation setting of Windows live: Settings > Accessibility > Visual effects.
     private static readonly UISettings Ui = new();
+
+    private static readonly TimeSpan RowFadeTime = TimeSpan.FromMilliseconds(250);
 
     // The view watches the shown rows, so a moved open row gets its highlight back. It watches their list for live
     // changes, which get the list motion.
@@ -172,6 +179,7 @@ public sealed partial class ChatsView : UserControl
         {
             _shownList.RowsChanging             -= OnRowsChanging;
             _shownList.Pinned.CollectionChanged -= OnRowsChanged;
+            _shownList.PropertyChanged          -= OnListPropertyChanged;
         }
 
         _settings.PropertyChanged -= OnSettingsChanged;
@@ -242,11 +250,13 @@ public sealed partial class ChatsView : UserControl
 
     /// <summary>
     /// Gets the padding of the list. The bottom has room for Start chat, and for the Undo bar above it while it shows.
-    /// Thus neither covers the last row when the list is at its end.
+    /// Thus neither covers the last row when the list is at its end. While pages are left, the placeholder rows end the
+    /// list and fill that room instead.
     /// </summary>
     /// <param name="hasUndo">True while the Undo bar shows.</param>
+    /// <param name="hasMorePages">True while the placeholder rows show.</param>
     /// <returns>The padding.</returns>
-    public static Thickness ListPadding(bool hasUndo) => new(0, 0, 0, hasUndo ? 112 : 64);
+    public static Thickness ListPadding(bool hasUndo, bool hasMorePages) => new(0, 0, 0, hasMorePages ? 0 : hasUndo ? 112 : 64);
 
     /// <summary>Gets the button text of the Undo bar for bindings.</summary>
     public static string UndoText => ChatCopy.Undo;
@@ -321,6 +331,7 @@ public sealed partial class ChatsView : UserControl
         {
             _shownList.RowsChanging             -= OnRowsChanging;
             _shownList.Pinned.CollectionChanged -= OnRowsChanged;
+            _shownList.PropertyChanged          -= OnListPropertyChanged;
         }
 
         _shownRows                          = rows;
@@ -328,7 +339,19 @@ public sealed partial class ChatsView : UserControl
         _shownList                           = list;
         _shownList.RowsChanging             += OnRowsChanging;
         _shownList.Pinned.CollectionChanged += OnRowsChanged;
+        _shownList.PropertyChanged          += OnListPropertyChanged;
+        _pageFailed                          = false;
         ShowPinnedGrid();
+    }
+
+    // A user who came to the bottom during a load gets the next page when the load ends. A first page that the phone
+    // sends late is such a load.
+    private void OnListPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ConversationListViewModel.IsLoading) && !ViewModel.CurrentList.IsLoading)
+        {
+            LoadMoreIfAtBottom();
+        }
     }
 
     // The grid shows only while the shown list keeps pinned rows apart. Only the inbox does, with the setting on.
@@ -507,10 +530,9 @@ public sealed partial class ChatsView : UserControl
         _ = ScrollFade.Attach(scroller);
     }
 
-    // Within a screen of the bottom, the next page loads. It also loads when the last shown row did not ask for it. A
-    // row asks only as it draws. Start chat hides during a scroll down. It shows again on a scroll up or at
-    // the top, with a slide and a fade. The transitions of its backing animate it. A hidden Start chat takes no clicks
-    // or tab stops, and UI Automation reads "Hidden" as its status.
+    // At the bottom of the list, the next page loads. Start chat hides during a scroll down. It shows again on a scroll
+    // up or at the top, with a slide and a fade. The transitions of its backing animate it. A hidden Start chat takes no
+    // clicks or tab stops, and UI Automation reads "Hidden" as its status.
     private void OnListScrolled(object? sender, ScrollViewerViewChangedEventArgs e)
     {
         if (_listScroller is not { } scroller)
@@ -518,14 +540,15 @@ public sealed partial class ChatsView : UserControl
             return;
         }
 
-        // Only a scroll down by the user asks for a page here. Otherwise the realized last row asks. A list that cannot
-        // scroll, or whose rows just moved, also raises this event. The owner reported that it asked for a page with no
-        // scroll at all.
+        // Only a scroll down by the user asks for a page here. Otherwise the realized last row or the end of a load asks.
+        // A list that cannot scroll, or whose rows just moved, also raises this event. The owner reported that it asked
+        // for a page with no scroll at all. A scroll down also tries again after a failed page.
         bool scrolledDown = scroller.ScrollableHeight > 0 && scroller.VerticalOffset > _listOffset;
         _listOffset       = scroller.VerticalOffset;
-        if (scrolledDown && !ViewModel.CurrentList.IsLoading && scroller.VerticalOffset >= scroller.ScrollableHeight - scroller.ViewportHeight)
+        if (scrolledDown)
         {
-            _ = ViewModel.CurrentList.LoadMoreAsync();
+            _pageFailed = false;
+            LoadMoreIfAtBottom();
         }
 
         if (!_startChatHider.Scrolled(scroller.VerticalOffset))
@@ -663,7 +686,7 @@ public sealed partial class ChatsView : UserControl
 
         if (args.ItemIndex == sender.Items.Count - 1 && ViewModel.CurrentList.Rows.Count == 0)
         {
-            _ = ViewModel.CurrentList.LoadMoreAsync();
+            LoadMoreIfAtBottom();
         }
     }
 
@@ -726,7 +749,10 @@ public sealed partial class ChatsView : UserControl
             || PinnedGrid.IndexFromContainer(focused.As<DependencyObject>()) >= 0)
         && focused.As<Control>().FocusState == FocusState.Keyboard;
 
-    // Names each row Row.{id} for UI Automation, and loads the next page when the last row is realized.
+    // Names each row Row.{id} for UI Automation. When the last row is realized and the list is at its bottom, the next
+    // page loads. Thus a short list that cannot scroll fills. The list realizes rows up to 2 screens below the view.
+    // Thus a realized last row is not enough. The check waits for the layout, because the scroll height is not current
+    // yet.
     private void OnContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
     {
         if (args.InRecycleQueue || args.Item is not ConversationRowViewModel row)
@@ -737,15 +763,64 @@ public sealed partial class ChatsView : UserControl
         AutomationProperties.SetAutomationId(args.ItemContainer, "Row." + row.Id);
         WatchListScroller();
 
+        if (row.TakeFadeIn() && Ui.AnimationsEnabled && args.ItemContainer.ContentTemplateRoot is { } content)
+        {
+            FadeIn(content, row.Id);
+        }
+
         if (args.ItemIndex == sender.Items.Count - 1)
         {
-            _ = ViewModel.CurrentList.LoadMoreAsync();
+            LoadMoreIfAtBottom();
         }
     }
 
     // =========================================================================
     // HELPERS
     // =========================================================================
+
+    // Fades a row from a page in on its composition visual, with the time and ease of a new bubble. Windows can refuse
+    // the visual with E_ACCESSDENIED. A throw that escapes into XAML crashes the app, so the row then shows at once.
+    // A container that the list recycles during the fade ends the fade at full opacity, 250 ms later at most.
+    private static void FadeIn(UIElement content, string id)
+    {
+        try
+        {
+            Visual visual                = ElementCompositionPreview.GetElementVisual(content);
+            Compositor compositor        = visual.Compositor;
+            ScalarKeyFrameAnimation fade = compositor.CreateScalarKeyFrameAnimation();
+            fade.InsertKeyFrame(0, 0);
+            fade.InsertKeyFrame(1, 1, compositor.CreateCubicBezierEasingFunction(new Vector2(0, 0), new Vector2(0, 1)));
+            fade.Duration = RowFadeTime;
+            visual.StartAnimation(nameof(Visual.Opacity), fade);
+            AppLog.RowFadedIn(App.ShellLog, id);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            AppLog.MediaFailed(App.ShellLog, "row fade", id, ex.GetType().Name);
+        }
+    }
+
+    // Loads the next page when the list is at its bottom and no load runs. The end of each load checks again. Thus a
+    // page whose rows the phone already pushed, which adds nothing below, leads to the next page. A list that cannot
+    // scroll is always at its bottom, so it fills. The check waits for the layout, because the scroll height is not
+    // current yet. After a failed page, only the next scroll down tries again, so an offline list does not ask without
+    // end.
+    private void LoadMoreIfAtBottom() => XamlHost.Dispatcher.TryEnqueue(DispatcherQueuePriority.Low, () =>
+    {
+        ConversationListViewModel list = ViewModel.CurrentList;
+        if (_pageFailed || !list.HasMorePages || list.IsLoading || (_listScroller is { } scroller && !AtBottom(scroller)))
+        {
+            return;
+        }
+
+        _ = LoadMorePageAsync(list);
+    });
+
+    private async Task LoadMorePageAsync(ConversationListViewModel list) =>
+        _pageFailed = !await list.LoadMoreAsync() && list.HasMorePages && ReferenceEquals(list, ViewModel.CurrentList);
+
+    // The 1 px tolerance is for a scale that rounds the offset.
+    private static bool AtBottom(ScrollViewer scroller) => scroller.VerticalOffset >= scroller.ScrollableHeight - 1;
 
     // The item container of the list or grid that holds an element. The element itself when it is a container. Null
     // outside the items.
