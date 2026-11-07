@@ -536,8 +536,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// to its place in the inbox.
     /// </summary>
     /// <remarks>
-    /// The bar hides at once. When the undo fails, the conversation becomes the latest archive again. The next undo
-    /// then tries the same conversation.
+    /// The bar hides at once. When the undo fails, the conversation goes back to its place in the undo list. The next
+    /// undo then tries the same conversation, unless the user archived another conversation during the undo.
     /// </remarks>
     /// <returns>True when the phone made the change.</returns>
     public async Task<bool> UndoAsync()
@@ -547,14 +547,16 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             return false;
         }
 
-        string id = _archived[^1];
-        _archived.RemoveAt(_archived.Count - 1);
+        int at    = _archived.Count - 1;
+        string id = _archived[at];
+        _archived.RemoveAt(at);
         HideUndo();
 
+        // An archive made during the undo stays the latest, because the Undo bar shows that archive.
         bool undone = await RunAsync(id, ConversationAction.Unarchive, offerUndo: false);
         if (!undone && !_disposed)
         {
-            _archived.Add(id);
+            _archived.Insert(Math.Min(at, _archived.Count), id);
         }
 
         return undone;

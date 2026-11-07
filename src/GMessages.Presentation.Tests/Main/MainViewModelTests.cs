@@ -281,6 +281,31 @@ public sealed class MainViewModelTests
     }
 
     /// <summary>
+    /// An archive happens while an undo waits on the phone, and the undo then fails. The next undo puts back the newer
+    /// archive, which the Undo bar shows.
+    /// </summary>
+    [TestMethod]
+    public async Task Undo_FailsAfterANewerArchive_NextUndoPutsBackTheNewerOne()
+    {
+        using var rig = new MainRig();
+        using MainViewModel vm = await NewMainAsync(rig);
+        Assert.IsTrue(await vm.RunAsync("a", ConversationAction.Archive));
+
+        var gate              = new TaskCompletionSource();
+        rig.Client.UpdateGate = gate;
+        Task<bool> undo       = vm.UndoAsync();
+        Assert.IsTrue(await vm.RunAsync("b", ConversationAction.Archive));
+        rig.Client.RefuseUpdates = true;
+        gate.SetResult();
+        Assert.IsFalse(await undo);
+
+        rig.Client.RefuseUpdates = false;
+        Assert.IsTrue(await vm.UndoAsync());
+        Assert.AreEqual("b", rig.Client.ConversationUpdates[^1].UpdateData.ConversationID);
+        Assert.AreEqual("b,c", string.Join(",", vm.Inbox.Rows.Select(r => r.Id)));
+    }
+
+    /// <summary>
     /// Mute and unmute keep the open chat, whose mute state follows.
     /// </summary>
     [TestMethod]
