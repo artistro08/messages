@@ -472,9 +472,11 @@ public sealed partial class LinkPreviewer : IDisposable
         // The most recently used link goes last. The oldest links drop off the front past 50 links or 4 MB of images,
         // but never the newest link.
         Task<LinkPreview?> fetch;
+
+        // The fetch starts on the pool, because the proxy lookup of Windows can block for seconds.
         lock (_cacheLock)
         {
-            fetch = _cache.Remove(url, out Task<LinkPreview?>? cached) ? cached : FetchAsync(url);
+            fetch = _cache.Remove(url, out Task<LinkPreview?>? cached) ? cached : Task.Run(() => FetchAsync(url));
             _cache.Add(url, fetch);
             while (_cache.Count > 1 && (_cache.Count > CacheSize || CachedImageBytes() > CacheImageBytes))
             {
