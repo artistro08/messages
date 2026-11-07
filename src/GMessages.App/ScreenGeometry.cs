@@ -4,17 +4,17 @@ using GMessages.Presentation.Placement;
 namespace GMessages.App;
 
 /// <summary>
-/// Reads the monitor under a tray click and turns it into a menu anchor.
+/// Reads the monitor under a tray click and makes a menu anchor from it.
 /// </summary>
 /// <remarks>
-/// Ported from Magic Buds' <c>ScreenGeometry.GetMenuAnchor</c>; the flyout placement was dropped. The math
-/// lives in <see cref="MenuPlacement"/> so it can be tested; this class only does the Win32 lookups.
+/// Ported from <c>ScreenGeometry.GetMenuAnchor</c> of Magic Buds, without the flyout placement. The math is in
+/// <see cref="MenuPlacement"/>, so tests can check it. This class only does the Win32 lookups.
 /// </remarks>
 internal static class ScreenGeometry
 {
     /// <summary>
-    /// Where the tray menu opens for a click at a screen point: moved off the taskbar to the work area's
-    /// edge plus <see cref="MenuPlacement.MarginDip"/>.
+    /// Gets the place where the tray menu opens for a click at a screen point. The anchor moves off the taskbar to the
+    /// edge of the work area, plus <see cref="MenuPlacement.MarginDip"/>.
     /// </summary>
     /// <param name="x">Click X in screen pixels.</param>
     /// <param name="y">Click Y in screen pixels.</param>

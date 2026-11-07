@@ -11,28 +11,30 @@ namespace GMessages.App.UITests.Driver;
 /// folder, and finds its windows and controls from outside through UI Automation.
 /// </summary>
 /// <remarks>
-/// The app is never hosted in the test process. It starts with <c>--test-endpoints</c> and <c>--test-data-dir</c>,
-/// so it gets the <c>.Test</c> single-instance names and the test tray GUID and never touches a real install's data.
-/// Every lookup is limited to windows of the app's own process. Dispose always cleans up, also after a failed test:
-/// <c>--quit</c>, up to 10 s for the exit, then a kill, then the temp folder is deleted.
+/// The test process never hosts the app. The app starts with <c>--test-endpoints</c> and <c>--test-data-dir</c>.
+/// It then uses the <c>.Test</c> single-instance names and the test tray GUID.
+/// It never touches the data of a real install.
+/// Every lookup is limited to the windows of the process of the app.
+/// Dispose always cleans up, also after a failed test: it sends <c>--quit</c> and waits up to 10 s for the exit.
+/// It then kills the process and deletes the temp folder.
 /// </remarks>
 public sealed class AppDriver : IAsyncDisposable
 {
     /// <summary>The default time a UI wait polls before failing.</summary>
     public static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(20);
 
-    // GMESSAGES_UITEST_AOT=1 Drives The Optimized Native AOT Publish Instead: Only It Hands WinUI Objects Back As Base
-    // Types, So Only It Catches A Type Test That Fails In The Shipped App
+    // GMESSAGES_UITEST_AOT=1 drives the optimized Native AOT publish instead. Only the AOT build returns WinUI objects
+    // as base types, so only it catches a type test that fails in the shipped app.
     private static readonly bool Aot = Environment.GetEnvironmentVariable("GMESSAGES_UITEST_AOT") == "1";
 
-    // The Exe Is Named After AppDisplayName In src/Directory.Build.props; Change Both Together
+    // The exe name comes from AppDisplayName in src/Directory.Build.props. Change both together.
     private const string ExeName = "Messages.exe";
 
     private static readonly string ExeRelativePath = Aot
         ? @"GMessages.App\bin\x64\Debug\net10.0-windows10.0.26100.0\win-x64\publish\" + ExeName
         : @"GMessages.App\bin\x64\Debug\net10.0-windows10.0.26100.0\win-x64\" + ExeName;
 
-    // Visual Studio's MSBuild: The App's System XAML Compiler Doesn't Run Under The dotnet CLI
+    // Use the MSBuild of Visual Studio. The system XAML compiler of the app does not run under the dotnet CLI.
     private static readonly string BuildCommand = Aot
         ? "msbuild src/GMessages.App -restore -t:Publish -p:Configuration=Debug -p:Platform=x64 -p:Optimize=true"
         : "msbuild src/GMessages.App -restore -p:Configuration=Debug -p:Platform=x64";
@@ -54,10 +56,10 @@ public sealed class AppDriver : IAsyncDisposable
     }
 
     /// <summary>
-    /// Gets the full path of the built Debug exe the tests drive (the optimized Native AOT publish when
-    /// <c>GMESSAGES_UITEST_AOT</c> is <c>1</c>).
+    /// Gets the full path of the built Debug exe that the tests drive. When <c>GMESSAGES_UITEST_AOT</c> is <c>1</c>,
+    /// the path is the optimized Native AOT publish.
     /// </summary>
-    /// <exception cref="AssertFailedException">The exe isn't built.</exception>
+    /// <exception cref="AssertFailedException">The exe is not built.</exception>
     public static string ExePath => FoundExe ?? throw new AssertFailedException(
         $"{ExeName} is not built. Run '{BuildCommand}' first. Looked for src\\{ExeRelativePath} in every folder above {AppContext.BaseDirectory}.");
 
@@ -67,7 +69,7 @@ public sealed class AppDriver : IAsyncDisposable
     public UIA3Automation Automation { get; } = new();
 
     /// <summary>
-    /// Gets the app's temp data folder (<c>session.bin</c>, <c>settings.json</c>, <c>Logs</c>).
+    /// Gets the temp data folder of the app (<c>session.bin</c>, <c>settings.json</c>, <c>Logs</c>).
     /// </summary>
     public string DataDir { get; }
 
@@ -77,7 +79,7 @@ public sealed class AppDriver : IAsyncDisposable
     public Process Process => _process;
 
     /// <summary>
-    /// Gets the arguments every launch (and <c>--quit</c>) passes.
+    /// Gets the arguments that every launch and every <c>--quit</c> passes.
     /// </summary>
     public string[] TestArguments => ["--test-endpoints", _server.BaseUrl.AbsoluteUri, "--test-data-dir", DataDir];
 
@@ -85,8 +87,8 @@ public sealed class AppDriver : IAsyncDisposable
     /// Starts the app with a fresh temp data folder.
     /// </summary>
     /// <param name="server">The fake server the app talks to.</param>
-    /// <returns>The driver; dispose it to quit the app and delete the folder.</returns>
-    /// <exception cref="AssertFailedException">The exe isn't built, or it exited right away.</exception>
+    /// <returns>The driver. Dispose it to quit the app and delete the folder.</returns>
+    /// <exception cref="AssertFailedException">The exe is not built, or it exits at once.</exception>
     public static AppDriver Start(FakeGoogleServer server)
     {
         ArgumentNullException.ThrowIfNull(server);
@@ -94,7 +96,7 @@ public sealed class AppDriver : IAsyncDisposable
         string dataDir = Path.Combine(Path.GetTempPath(), "Messages-uitest-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dataDir);
 
-        // A Refused Start Leaves Nothing Behind: No UIA Client, No Temp Folder
+        // A refused start leaves nothing behind: no UIA client and no temp folder.
         var driver = new AppDriver(server, dataDir);
         try
         {
@@ -119,7 +121,7 @@ public sealed class AppDriver : IAsyncDisposable
     /// <param name="titleStartsWith">The start of the title, such as <c>"Messages Settings"</c>.</param>
     /// <param name="timeout">How long to poll.</param>
     /// <returns>The window.</returns>
-    /// <exception cref="AssertFailedException">No such window appeared in time.</exception>
+    /// <exception cref="AssertFailedException">No such window appears in time.</exception>
     public Window WaitForWindow(string titleStartsWith, TimeSpan timeout)
     {
         Window? window = null;
@@ -132,7 +134,7 @@ public sealed class AppDriver : IAsyncDisposable
     /// Finds an app window whose title starts with <paramref name="titleStartsWith"/>, without waiting.
     /// </summary>
     /// <param name="titleStartsWith">The start of the title.</param>
-    /// <returns>The window, or null.</returns>
+    /// <returns>The window, or null when none matches.</returns>
     public Window? FindWindow(string titleStartsWith) =>
         TopLevel().FirstOrDefault(e => SafeName(e).StartsWith(titleStartsWith, StringComparison.Ordinal))?.AsWindow();
 
@@ -141,25 +143,27 @@ public sealed class AppDriver : IAsyncDisposable
     /// </summary>
     /// <param name="titleStartsWith">The start of the title.</param>
     /// <param name="timeout">How long to poll.</param>
-    /// <exception cref="AssertFailedException">The window was still open after the timeout.</exception>
+    /// <exception cref="AssertFailedException">The window is still open after the timeout.</exception>
     public void WaitForNoWindow(string titleStartsWith, TimeSpan timeout) =>
         Wait.Until(() => FindWindow(titleStartsWith) is null, timeout, () => $"The window '{titleStartsWith}…' did not close.");
 
     /// <summary>
-    /// Waits for a control with the given AutomationId in any of the app's windows (and its popups).
+    /// Waits for a control with the given AutomationId in any window of the app, including its popups.
     /// </summary>
     /// <param name="automationId">The AutomationId, such as <c>Pairing.Emoji</c>.</param>
     /// <returns>The control.</returns>
-    /// <exception cref="AssertFailedException">It didn't appear within <see cref="DefaultTimeout"/>.</exception>
+    /// <exception cref="AssertFailedException">
+    /// The control does not appear within <see cref="DefaultTimeout"/>.
+    /// </exception>
     public AutomationElement Find(string automationId) => Find(automationId, DefaultTimeout);
 
     /// <summary>
-    /// Waits for a control with the given AutomationId in any of the app's windows (and its popups).
+    /// Waits for a control with the given AutomationId in any window of the app, including its popups.
     /// </summary>
     /// <param name="automationId">The AutomationId.</param>
     /// <param name="timeout">How long to poll.</param>
     /// <returns>The control.</returns>
-    /// <exception cref="AssertFailedException">It didn't appear in time.</exception>
+    /// <exception cref="AssertFailedException">The control does not appear in time.</exception>
     public AutomationElement Find(string automationId, TimeSpan timeout)
     {
         AutomationElement? element = null;
@@ -172,14 +176,14 @@ public sealed class AppDriver : IAsyncDisposable
     /// Finds a control with the given AutomationId in any of the app's windows, without waiting.
     /// </summary>
     /// <param name="automationId">The AutomationId.</param>
-    /// <returns>The control, or null.</returns>
+    /// <returns>The control, or null when none matches.</returns>
     public AutomationElement? TryFind(string automationId) => TryFindWhere(e => e.Properties.AutomationId.ValueOrDefault == automationId);
 
     /// <summary>
-    /// Finds the first control that matches, in any of the app's windows (and its popups), without waiting.
+    /// Finds the first control that matches, in any window of the app including its popups, without waiting.
     /// </summary>
-    /// <param name="match">The test each control is put to.</param>
-    /// <returns>The control, or null.</returns>
+    /// <param name="match">The test that each control must pass.</param>
+    /// <returns>The control, or null when none matches.</returns>
     public AutomationElement? TryFindWhere(Func<AutomationElement, bool> match)
     {
         foreach (AutomationElement window in TopLevel())
@@ -197,13 +201,13 @@ public sealed class AppDriver : IAsyncDisposable
     /// Walks the UIA tree under <paramref name="root"/> breadth-first and returns the first element that matches.
     /// </summary>
     /// <remarks>
-    /// Not UIA's own descendant search: under a WinUI WebView2 the Chromium tree leads back to the WebView2 element,
-    /// a cycle that UIA's search walks until it times out. This walk skips elements it has already seen (by runtime
-    /// ID), and stops after a few thousand.
+    /// This walk replaces the descendant search of UIA. Under a WinUI WebView2 the Chromium tree leads back to the
+    /// WebView2 element. This cycle makes the search of UIA run until it times out.
+    /// The walk skips elements that it has already seen, by runtime ID, and stops after 5000 elements.
     /// </remarks>
-    /// <param name="root">Where to start; it is checked too.</param>
+    /// <param name="root">Where to start. The method checks this element too.</param>
     /// <param name="match">The test for the wanted element.</param>
-    /// <returns>The element, or null.</returns>
+    /// <returns>The element, or null when none matches.</returns>
     public static AutomationElement? Search(AutomationElement root, Func<AutomationElement, bool> match)
     {
         ArgumentNullException.ThrowIfNull(root);
@@ -233,7 +237,7 @@ public sealed class AppDriver : IAsyncDisposable
             }
             catch (Exception ex) when (IsGone(ex))
             {
-                // Gone While Walking; Its Subtree Goes With It
+                // The element went away during the walk. The walk skips its subtree.
             }
         }
 
@@ -241,14 +245,15 @@ public sealed class AppDriver : IAsyncDisposable
     }
 
     /// <summary>
-    /// Writes the UIA tree under <paramref name="root"/>, one element per line: control type, name, AutomationId and
-    /// bounds, indented by level.
+    /// Writes the UIA tree under <paramref name="root"/>, one element per line, indented by level. A line holds the
+    /// control type, name, AutomationId and bounds.
     /// </summary>
     /// <remarks>
-    /// For probes and failure messages. Like <see cref="Search"/>, it skips elements it has already seen (the WebView2
-    /// cycle) and stops after a few thousand; an element that goes away mid-walk is noted and its subtree skipped.
+    /// The output serves probes and failure messages. Like <see cref="Search"/>, the walk skips elements that it has
+    /// already seen, which breaks the WebView2 cycle, and stops after 5000 elements.
+    /// The walk notes an element that goes away during the walk and skips its subtree.
     /// </remarks>
-    /// <param name="root">Where to start; it is written too.</param>
+    /// <param name="root">Where to start. The method writes this element too.</param>
     /// <param name="depth">How many levels below <paramref name="root"/> to write.</param>
     /// <returns>The tree.</returns>
     public static string DumpTree(AutomationElement root, int depth)
@@ -295,11 +300,11 @@ public sealed class AppDriver : IAsyncDisposable
     }
 
     /// <summary>
-    /// Waits until a control's Name (a TextBlock's text) equals <paramref name="expected"/>.
+    /// Waits until the Name of a control equals <paramref name="expected"/>. The Name of a TextBlock is its text.
     /// </summary>
-    /// <param name="automationId">The control's AutomationId.</param>
-    /// <param name="expected">The wanted text.</param>
-    /// <exception cref="AssertFailedException">The text never matched.</exception>
+    /// <param name="automationId">The AutomationId of the control.</param>
+    /// <param name="expected">The expected text.</param>
+    /// <exception cref="AssertFailedException">The text never matches.</exception>
     public void WaitForText(string automationId, string expected)
     {
         string? last = null;
@@ -312,10 +317,10 @@ public sealed class AppDriver : IAsyncDisposable
     // =========================================================================
 
     /// <summary>
-    /// Asks the app to quit with <c>Messages.exe --quit</c>, then waits for it to exit.
+    /// Asks the app to quit with <c>Messages.exe --quit</c>, then waits for the app to exit.
     /// </summary>
-    /// <returns>A task that completes once the app has exited.</returns>
-    /// <exception cref="AssertFailedException">The app was still running after 10 s.</exception>
+    /// <returns>A task that completes when the app has exited.</returns>
+    /// <exception cref="AssertFailedException">The app is still running after 10 s.</exception>
     public async Task QuitAsync()
     {
         if (_process.HasExited)
@@ -323,7 +328,8 @@ public sealed class AppDriver : IAsyncDisposable
             return;
         }
 
-        // The --quit Helper Must Never Outlive The Call; A Refused Flag Exits 2 With Its Reason In The Error File
+        // The --quit helper must not outlive the call.
+        // A refused flag exits with code 2 and writes the reason to the error file.
         using (Process quit = StartExe(["--quit", .. TestArguments]))
         {
             try
@@ -355,10 +361,10 @@ public sealed class AppDriver : IAsyncDisposable
     }
 
     /// <summary>
-    /// Waits for the app process to exit on its own (for example after the tray menu's Quit).
+    /// Waits for the app process to exit by itself, for example after Quit in the tray menu.
     /// </summary>
-    /// <returns>A task that completes once the app has exited.</returns>
-    /// <exception cref="AssertFailedException">The app was still running after 10 s.</exception>
+    /// <returns>A task that completes when the app has exited.</returns>
+    /// <exception cref="AssertFailedException">The app is still running after 10 s.</exception>
     public async Task WaitForExitAsync()
     {
         using var timeout = new CancellationTokenSource(QuitTimeout);
@@ -375,7 +381,7 @@ public sealed class AppDriver : IAsyncDisposable
     /// <summary>
     /// Quits the app and starts it again with the same data folder and fake server.
     /// </summary>
-    /// <returns>A task that completes once the new process has started.</returns>
+    /// <returns>A task that completes when the new process has started.</returns>
     public async Task RestartAsync()
     {
         await QuitAsync();
@@ -384,7 +390,7 @@ public sealed class AppDriver : IAsyncDisposable
     }
 
     /// <summary>
-    /// Starts another <c>Messages.exe</c> with the given arguments, as a person or a shortcut would.
+    /// Starts another <c>Messages.exe</c> with the given arguments.
     /// </summary>
     /// <param name="arguments">The command-line arguments.</param>
     /// <returns>The started process.</returns>
@@ -400,7 +406,8 @@ public sealed class AppDriver : IAsyncDisposable
     }
 
     /// <summary>
-    /// Gets every running process started from <see cref="ExePath"/>, so a real install of the app is never counted.
+    /// Gets every running process started from <see cref="ExePath"/>.
+    /// The result never counts a real install of the app.
     /// </summary>
     /// <returns>The process IDs.</returns>
     public static IReadOnlyList<int> RunningTestExeIds()
@@ -420,7 +427,7 @@ public sealed class AppDriver : IAsyncDisposable
                 }
                 catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
                 {
-                    // Exited Or Not Ours To Read
+                    // The process exited, or the test has no right to read it.
                 }
             }
         }
@@ -429,21 +436,20 @@ public sealed class AppDriver : IAsyncDisposable
     }
 
     /// <summary>
-    /// Quits the app (a kill if it won't), releases UI Automation and deletes the temp data folder.
+    /// Quits the app, or kills it when the quit fails. Then releases UI Automation and deletes the temp data folder.
     /// </summary>
-    /// <returns>A task that completes when everything is cleaned up.</returns>
+    /// <returns>A task that completes when the cleanup is done.</returns>
     public async ValueTask DisposeAsync()
     {
-        // Quit, Then Kill If It Hangs
         try
         {
             await QuitAsync();
         }
-#pragma warning disable CA1031 // Teardown Must Go On: The Kill Below Covers Any Failure
+#pragma warning disable CA1031 // Teardown must go on. The kill below covers any failure.
         catch (Exception)
 #pragma warning restore CA1031
         {
-            // Killed Below
+            // The kill below ends the process.
         }
 
         if (!_process.HasExited)
@@ -456,7 +462,7 @@ public sealed class AppDriver : IAsyncDisposable
         Automation.Dispose();
         await DeleteLeftoverSignInProfilesAsync();
 
-        // Temp Data Folder: The Log File May Still Be Closing, So Retry Briefly
+        // The log file can still be closing, so the delete retries briefly.
         for (int attempt = 0; attempt < 20 && Directory.Exists(DataDir); attempt++)
         {
             try
@@ -474,13 +480,12 @@ public sealed class AppDriver : IAsyncDisposable
     // HELPERS
     // =========================================================================
 
-    // Starts The App And Checks It Didn't Refuse Its Flags
     private Process Launch()
     {
         Process process = StartExe(TestArguments);
 
-        // Refused Flags Exit Before Any UI, Well Within 500 ms; Catching That Here Fails With The Reason Instead Of A
-        // 20 s "No Window" Timeout. A Healthy Start Keeps Running, So This Only Adds Half A Second Per Launch
+        // Refused flags exit before any UI, well within 500 ms. This check fails with the reason instead of a 20 s
+        // "No Window" timeout. A healthy start keeps running, so the check adds only 0.5 s per launch.
         if (process.WaitForExit(TimeSpan.FromMilliseconds(500)))
         {
             int code = process.ExitCode;
@@ -491,15 +496,18 @@ public sealed class AppDriver : IAsyncDisposable
         return process;
     }
 
-    // The Reason The App Wrote When It Refused Its Test Flags
+    // The app writes the reason to this file when it refuses its test flags.
     private static string TestHookError()
     {
         string errorFile = Path.Combine(Path.GetTempPath(), $"{AppInfo.DisplayName}-testhooks-error.txt");
         return File.Exists(errorFile) ? File.ReadAllText(errorFile) : "(no error file)";
     }
 
-    // Sign-In Profiles Made During This Test That The App Couldn't Delete (A Quit Mid-Sign-In, A Kill); Older Ones
-    // Aren't Ours. The WebView2 Browser Processes Outlive The App Briefly, So Locked Folders Are Retried For Up To 5 s
+    // Deletes the sign-in profiles that this test created and the app could not delete.
+    // This happens, for example, after a quit during sign-in or after a kill.
+    // Older profiles belong to other runs.
+    // The WebView2 browser processes outlive the app briefly.
+    // The method therefore retries locked folders for up to 5 s.
     private async Task DeleteLeftoverSignInProfilesAsync()
     {
         string pattern = $"{AppInfo.DisplayName}.Test-signin-*";
@@ -515,7 +523,7 @@ public sealed class AppDriver : IAsyncDisposable
                 }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 {
-                    // Still Locked; Retried Below
+                    // The folder is still locked. The loop retries.
                 }
             }
 
@@ -528,7 +536,7 @@ public sealed class AppDriver : IAsyncDisposable
         }
     }
 
-    // Top-Level Windows Of The App Process, Including Its Popup Windows (Menus)
+    // The top-level windows of the app process, including popup windows such as menus.
     private AutomationElement[] TopLevel()
     {
         if (_process.HasExited)
@@ -549,7 +557,7 @@ public sealed class AppDriver : IAsyncDisposable
     private IEnumerable<string> WindowTitles() => TopLevel().Select(SafeName).Where(n => n.Length > 0);
 
     /// <summary>
-    /// Reads an element's Name, or an empty string when it is null or already gone.
+    /// Reads the Name of an element, or an empty string when the element is null or gone.
     /// </summary>
     /// <param name="element">The element.</param>
     /// <returns>The Name.</returns>
@@ -565,11 +573,11 @@ public sealed class AppDriver : IAsyncDisposable
         }
     }
 
-    // UIA Throws These When An Element Disappears Mid-Call
+    // UIA throws these exceptions when an element disappears during a call.
     private static bool IsGone(Exception ex) =>
         ex is System.Runtime.InteropServices.COMException or FlaUI.Core.Exceptions.ElementNotAvailableException or FlaUI.Core.Exceptions.PropertyNotSupportedException or TimeoutException;
 
-    // The Exe Sits Under src/GMessages.App/bin; Walk Up From The Test Output To Find It
+    // The exe sits under src/GMessages.App/bin. The search walks up from the test output folder.
     private static string? FindExe()
     {
         for (DirectoryInfo? dir = new(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)

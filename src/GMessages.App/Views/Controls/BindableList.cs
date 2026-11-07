@@ -5,25 +5,26 @@ using Windows.UI.Xaml.Controls;
 namespace GMessages.App.Views.Controls;
 
 /// <summary>
-/// A view model collection as XAML's <c>ItemsSource</c> sees it: a plain <see cref="IList"/> that reports changes.
+/// Shows a view model collection to the XAML <c>ItemsSource</c> as a plain <see cref="IList"/> that reports changes.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Native AOT: XAML reaches a list through WinRT interfaces, and CsWinRT's source generator only writes those for
-/// partial classes of this project. The view models' <c>ObservableCollection&lt;T&gt;</c>s come from Presentation, so
-/// they get none and <c>ItemsSource</c> throws "Value does not fall within the expected range". This partial wrapper
-/// gets them (<c>IBindableVector</c> and <c>INotifyCollectionChanged</c>).
+/// Under Native AOT, XAML reaches a list through WinRT interfaces. The CsWinRT source generator writes those interfaces
+/// only for partial classes of this project. The <c>ObservableCollection&lt;T&gt;</c> collections of the view models
+/// come from Presentation, so they get none. <c>ItemsSource</c> then throws "Value does not fall within the expected
+/// range". This partial wrapper gets <c>IBindableVector</c> and <c>INotifyCollectionChanged</c>.
 /// </para>
 /// <para>
-/// Read-only for XAML: every read and change event goes to the wrapped collection, which the view model alone edits.
-/// Set it with <see cref="Show"/>, which keeps one wrapper per list and unhooks the one it replaces.
+/// XAML can only read the wrapper. Each read and each change event goes to the wrapped collection, and only the view
+/// model edits that collection. Set the wrapper with <see cref="Show"/>. It keeps 1 wrapper for each list and detaches
+/// the wrapper that it replaces.
 /// </para>
 /// <para>
-/// Pass the collection to <see cref="Show"/> by its concrete type (<c>chat.Messages</c>, not a generic <c>T</c>): the
-/// generator only writes the vtables for the collection's own change lists (<c>ReadOnlyList</c>,
-/// <c>SingleItemReadOnlyList</c>, which every change event carries to XAML) when it sees an
-/// <c>ObservableCollection&lt;X&gt;</c> of a known <c>X</c> turned into an <see cref="IList"/> in this project. Without
-/// them every change fails to reach XAML and the list stays empty.
+/// Pass the collection to <see cref="Show"/> by its concrete type, such as <c>chat.Messages</c>, and not as a generic
+/// <c>T</c>. Each change event carries a change list to XAML: a <c>ReadOnlyList</c> or a
+/// <c>SingleItemReadOnlyList</c>. The generator writes the vtables for these lists only from a cast in this project.
+/// The cast must turn an <c>ObservableCollection&lt;X&gt;</c> of a known <c>X</c> into an <see cref="IList"/>.
+/// Without these vtables, no change reaches XAML and the list stays empty.
 /// </para>
 /// </remarks>
 internal sealed partial class BindableList : IList, INotifyCollectionChanged
@@ -67,12 +68,12 @@ internal sealed partial class BindableList : IList, INotifyCollectionChanged
     /// Shows a view model collection in a list control, wrapped for XAML.
     /// </summary>
     /// <remarks>
-    /// Does nothing when the control already shows that collection, so its selection and scroll position stay. A
-    /// wrapper it replaces stops listening to its collection, so swapping lists back and forth leaves no handlers behind.
+    /// The method does nothing when the control already shows that collection, so the selection and scroll position
+    /// stay. A replaced wrapper stops listening to its collection. Thus repeated list swaps leave no old handlers.
     /// </remarks>
     /// <param name="view">The list control.</param>
-    /// <param name="items">The view model's <c>ObservableCollection&lt;T&gt;</c>, or null to show nothing.</param>
-    /// <exception cref="ArgumentException"><paramref name="items"/> doesn't report its changes.</exception>
+    /// <param name="items">The <c>ObservableCollection&lt;T&gt;</c> of the view model, or null to show nothing.</param>
+    /// <exception cref="ArgumentException"><paramref name="items"/> does not report its changes.</exception>
     public static void Show(ItemsControl view, IList? items)
     {
         ArgumentNullException.ThrowIfNull(view);
@@ -119,7 +120,7 @@ internal sealed partial class BindableList : IList, INotifyCollectionChanged
     /// <inheritdoc />
     public void RemoveAt(int index) => throw new NotSupportedException();
 
-    // Passes On A Change With This Wrapper As The Sender (XAML Knows Only The Wrapper)
+    // Sends each change with this wrapper as the sender, because XAML knows only the wrapper.
     private void OnSourceChanged(object? sender, NotifyCollectionChangedEventArgs e) => CollectionChanged?.Invoke(this, e);
 
     private void Detach() => _source.CollectionChanged -= OnSourceChanged;

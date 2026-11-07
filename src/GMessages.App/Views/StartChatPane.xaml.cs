@@ -8,13 +8,13 @@ using Windows.UI.Xaml.Controls;
 namespace GMessages.App.Views;
 
 /// <summary>
-/// Start chat, shown in place of the chat pane like Google's "New conversation" page: search contacts by name or
-/// number, pick one or several, then Go opens the conversation.
+/// Shows Start chat in place of the chat pane, as the "New conversation" page of Google does. The user searches
+/// contacts by name or number and picks 1 or more. Go then opens the conversation.
 /// </summary>
 /// <remarks>
-/// Contact rows are <c>Contact.{n}</c> and picked chips <c>StartChat.Chip.{n}</c>, numbered top to bottom. Clicking a
-/// row picks it, which moves it from the list to its chip; clicking the chip drops it back into the list. Both lists are wrapped with <see cref="BindableList"/> (see
-/// there for why).
+/// The contact rows are <c>Contact.{n}</c> and the picked chips are <c>StartChat.Chip.{n}</c>, numbered from top to
+/// bottom. A click on a row picks it and moves it from the list to its chip. A click on the chip puts it back into
+/// the list. <see cref="BindableList"/> wraps both lists, and that class tells why.
 /// </remarks>
 public sealed partial class StartChatPane : UserControl
 {
@@ -33,14 +33,14 @@ public sealed partial class StartChatPane : UserControl
     }
 
     /// <summary>
-    /// Raised with the conversation ID once Go has opened (or found) the conversation.
+    /// Occurs with the conversation ID after Go opened or found the conversation.
     /// </summary>
     public event EventHandler<string>? Started;
 
-    /// <summary>Gets Go's text (for bindings).</summary>
+    /// <summary>Gets the text of Go for bindings.</summary>
     public static string GoText => ChatCopy.StartChatGo;
 
-    /// <summary>Gets or sets the pane's state, or null while closed.</summary>
+    /// <summary>Gets or sets the state of the pane, or null while the pane is closed.</summary>
     public StartChatViewModel? StartChat
     {
         get => (StartChatViewModel?)GetValue(StartChatProperty);
@@ -48,16 +48,12 @@ public sealed partial class StartChatPane : UserControl
     }
 
     /// <summary>
-    /// Puts the cursor in the search box (the Ctrl + k shortcut, when Start chat was already open).
+    /// Puts the cursor in the search box for the Ctrl + k shortcut, when Start chat is already open.
     /// </summary>
     /// <returns>True when the box took focus.</returns>
     public bool FocusQuery() => QueryBox.Focus(FocusState.Keyboard);
 
-    // =========================================================================
-    // EVENT HANDLERS
-    // =========================================================================
-
-    // Opened Again: Show The New Lists And Put The Cursor In The Search Box
+    // An open of the pane shows the new lists and puts the cursor in the search box.
     private static void OnStartChatChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         var pane  = (StartChatPane)d;
@@ -80,7 +76,7 @@ public sealed partial class StartChatPane : UserControl
         }
     }
 
-    // Numbers Each Realized Row Or Chip For UI Automation, Top To Bottom
+    // Numbers each realized row or chip for UI Automation, from top to bottom.
     private void OnContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
     {
         if (args.InRecycleQueue)
@@ -92,7 +88,8 @@ public sealed partial class StartChatPane : UserControl
         AutomationProperties.SetAutomationId(args.ItemContainer, prefix + args.ItemIndex);
     }
 
-    // Opens The Conversation; When The Phone Can't, The Pane Says So (R11) And Stays Open With Everyone Still Picked
+    // Opens the conversation. When the phone cannot open it, the pane shows the failure that requirement R11 asks for.
+    // The pane then stays open with all people still picked.
     private async void OnGoClick(object sender, RoutedEventArgs e)
     {
         if (StartChat is not { CanStart: true } start)
@@ -100,7 +97,7 @@ public sealed partial class StartChatPane : UserControl
             return;
         }
 
-        // Start Chat Closed Or Reopened While The Phone Answered: Open Nothing
+        // When Start chat closed or opened again while the phone answered, the pane opens nothing.
         if (await start.StartAsync() is { } conversationId && StartChat == start)
         {
             Started?.Invoke(this, conversationId);

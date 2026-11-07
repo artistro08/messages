@@ -7,8 +7,8 @@ namespace GMessages.App.UITests.Driver;
 /// Moves the pointer as real input, for hover tests.
 /// </summary>
 /// <remarks>
-/// FlaUI moves the cursor with <c>SetCursorPos</c>, which WinUI doesn't see as pointer input (no <c>PointerEntered</c>),
-/// so every move here ends with a real one through <c>SendInput</c>.
+/// FlaUI moves the cursor with <c>SetCursorPos</c>. WinUI does not see this as pointer input and raises no
+/// <c>PointerEntered</c>. Every move here ends with a real move through <c>SendInput</c>.
 /// </remarks>
 public static partial class PointerInput
 {
@@ -16,9 +16,9 @@ public static partial class PointerInput
     private const uint MouseEventMove = 0x0001;
 
     /// <summary>
-    /// Moves the pointer over the middle of an element, as a person would.
+    /// Moves the pointer over the middle of an element.
     /// </summary>
-    /// <param name="over">The element's bounds, in screen pixels.</param>
+    /// <param name="over">The bounds of the element, in screen pixels.</param>
     public static void Hover(System.Drawing.Rectangle over)
     {
         Mouse.MoveTo(over.X + (over.Width / 2) - 1, over.Y + (over.Height / 2));
@@ -26,9 +26,9 @@ public static partial class PointerInput
     }
 
     /// <summary>
-    /// Moves the pointer sideways in one real move, such as straight out of the window.
+    /// Moves the pointer sideways in one real move.
     /// </summary>
-    /// <param name="dx">How far, in screen pixels; negative moves left.</param>
+    /// <param name="dx">The distance in screen pixels. A negative value moves left.</param>
     public static void MoveBy(int dx)
     {
         Input[] move = [new() { Type = InputMouse, Mouse = new MouseInput { Dx = dx, Flags = MouseEventMove } }];
@@ -36,10 +36,10 @@ public static partial class PointerInput
     }
 
     /// <summary>
-    /// Moves the pointer straight out through the window's left edge in one real move. The test is inconclusive when
-    /// the pointer can't leave there (the window sits at the screen's left edge).
+    /// Moves the pointer out through the left edge of the window in one real move.
+    /// The test is inconclusive when the pointer cannot leave there, for example at the left edge of the screen.
     /// </summary>
-    /// <param name="window">The window's bounds, in screen pixels.</param>
+    /// <param name="window">The bounds of the window, in screen pixels.</param>
     public static void LeaveLeft(System.Drawing.Rectangle window)
     {
         MoveBy(window.Left - Mouse.Position.X - 80);
@@ -50,9 +50,9 @@ public static partial class PointerInput
     }
 
     /// <summary>
-    /// Tells whether the pointer shows Windows' hand cursor, as over a link.
+    /// Tells whether the pointer shows the Windows hand cursor, as over a link.
     /// </summary>
-    /// <returns>True for the hand cursor.</returns>
+    /// <returns>True when the cursor is the hand cursor.</returns>
     public static bool IsHandCursor()
     {
         var info = new CursorInfo { Size = Marshal.SizeOf<CursorInfo>() };
@@ -63,8 +63,8 @@ public static partial class PointerInput
     /// Tells how long ago Windows last saw keyboard or mouse input in this session.
     /// </summary>
     /// <remarks>
-    /// UI Automation calls and <c>SetCursorPos</c> aren't input, so while a test drives the app only by those, this says
-    /// how long the person at the machine has been away.
+    /// UI Automation calls and <c>SetCursorPos</c> are not input. While a test drives the app only with these,
+    /// the result shows how long the person at the machine is away.
     /// </remarks>
     /// <returns>The time since the last input.</returns>
     public static TimeSpan SinceLastInput()
@@ -74,11 +74,7 @@ public static partial class PointerInput
         return TimeSpan.FromMilliseconds((uint)Environment.TickCount - info.Time);
     }
 
-    // =========================================================================
-    // NATIVE MOUSE INPUT
-    // =========================================================================
-
-    // The System Hand Cursor's Resource ID
+    // Resource ID of the system hand cursor (IDC_HAND).
     private const int IdcHand = 32649;
 
     [LibraryImport("user32.dll")]
@@ -95,7 +91,6 @@ public static partial class PointerInput
     [LibraryImport("user32.dll")]
     private static partial IntPtr LoadCursorW(IntPtr instance, int cursorName);
 
-    // CURSORINFO
     [StructLayout(LayoutKind.Sequential)]
     private struct CursorInfo
     {
@@ -106,7 +101,7 @@ public static partial class PointerInput
         public int Y;
     }
 
-    // LASTINPUTINFO (Time Is The Tick Count Of The Last Input)
+    // The Time field is the tick count of the last input.
     [StructLayout(LayoutKind.Sequential)]
     private struct LastInputInfo
     {
@@ -114,7 +109,7 @@ public static partial class PointerInput
         public uint Time;
     }
 
-    // INPUT With Its MOUSEINPUT (The Union's Other Members Are Smaller)
+    // The Win32 INPUT union holds only MOUSEINPUT here, because its other members are smaller.
     [StructLayout(LayoutKind.Sequential)]
     private struct Input
     {

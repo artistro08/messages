@@ -6,14 +6,15 @@ using GMessages.Presentation;
 namespace GMessages.App.UITests.Driver;
 
 /// <summary>
-/// Finds the app's notification-area icon through UI Automation and clicks it like a person would.
+/// Finds the app's notification-area icon through UI Automation and clicks it.
 /// </summary>
 /// <remarks>
 /// Windows 11 shows tray icons as buttons named after their tooltip (<see cref="AppInfo.DisplayName"/>) with the
-/// AutomationId <c>NotifyItemIcon</c>. A pinned icon sits in the taskbar (<c>Shell_TrayWnd</c>); a hidden one sits
-/// in the overflow window (<c>TopLevelWindowForOverflowXamlIsland</c>), which only exists while "Show Hidden Icons"
-/// has it open. The search looks in the taskbar first, then opens the overflow and looks there. A right-click must be
-/// a real mouse right-click, since the shell only sends <c>WM_CONTEXTMENU</c> for real input.
+/// AutomationId <c>NotifyItemIcon</c>. A pinned icon sits in the taskbar (<c>Shell_TrayWnd</c>).
+/// A hidden icon sits in the overflow window (<c>TopLevelWindowForOverflowXamlIsland</c>).
+/// This window exists only while "Show Hidden Icons" has it open.
+/// The search looks in the taskbar first, then opens the overflow and looks there.
+/// A right-click must be a real mouse right-click, because the shell sends <c>WM_CONTEXTMENU</c> only for real input.
 /// </remarks>
 public sealed class TrayDriver
 {
@@ -32,11 +33,11 @@ public sealed class TrayDriver
     public TrayDriver(UIA3Automation automation) => _automation = automation;
 
     /// <summary>
-    /// Waits for the app's tray icon, opening the overflow when it isn't pinned to the taskbar.
+    /// Waits for the app's tray icon. The method opens the overflow when the icon is not pinned to the taskbar.
     /// </summary>
     /// <param name="timeout">How long to look.</param>
-    /// <returns>The icon's button.</returns>
-    /// <exception cref="AssertFailedException">The icon wasn't found in the taskbar or the overflow.</exception>
+    /// <returns>The button of the icon.</returns>
+    /// <exception cref="AssertFailedException">The icon is in neither the taskbar nor the overflow.</exception>
     public AutomationElement FindIcon(TimeSpan timeout)
     {
         AutomationElement? icon = null;
@@ -50,7 +51,7 @@ public sealed class TrayDriver
     /// Waits until the app's tray icon is gone from both the taskbar and the overflow.
     /// </summary>
     /// <param name="timeout">How long to wait.</param>
-    /// <exception cref="AssertFailedException">The icon was still there.</exception>
+    /// <exception cref="AssertFailedException">The icon is still there.</exception>
     public void WaitForNoIcon(TimeSpan timeout)
     {
         Wait.Until(() => TryFindIcon(out _) is null, timeout, () => $"The '{AppInfo.DisplayName}' tray icon is still there.");
@@ -58,7 +59,7 @@ public sealed class TrayDriver
     }
 
     /// <summary>
-    /// Left-clicks the icon (Invoke when the shell offers it, else a real mouse click).
+    /// Left-clicks the icon. It uses Invoke when the shell offers it, and a real mouse click otherwise.
     /// </summary>
     public void LeftClick()
     {
@@ -79,9 +80,9 @@ public sealed class TrayDriver
     /// Right-clicks the icon with the real mouse, which opens the app's tray menu.
     /// </summary>
     /// <remarks>
-    /// Another app's notification can sit over the icon (with the taskbar at the top, toasts show over the overflow), and
-    /// a reminder stays until it's answered. Then the click would land on the notification, so the icon gets the
-    /// keyboard's context menu key instead, which sends the app the same menu request.
+    /// A notification of another app can sit over the icon. With the taskbar at the top, toasts show over the overflow.
+    /// A reminder stays until the user answers it. The click then lands on the notification.
+    /// In that case the icon gets the context menu key of the keyboard, which sends the app the same menu request.
     /// </remarks>
     public void RightClick()
     {
@@ -89,7 +90,6 @@ public sealed class TrayDriver
         System.Drawing.Rectangle bounds = icon.BoundingRectangle;
         var center                      = new System.Drawing.Point(bounds.X + (bounds.Width / 2), bounds.Y + (bounds.Height / 2));
 
-        // Covered: The Context Menu Key On The Focused Icon
         if (!icon.Equals(_automation.FromPoint(center)))
         {
             icon.Focus();
@@ -101,7 +101,7 @@ public sealed class TrayDriver
     }
 
     /// <summary>
-    /// Closes the overflow window if it is open, so the desktop is left as it was.
+    /// Closes the overflow window when it is open, so the desktop returns to its earlier state.
     /// </summary>
     public void CloseOverflow()
     {
@@ -110,7 +110,7 @@ public sealed class TrayDriver
             return;
         }
 
-        // The Chevron Toggles: Check Again Right Before Pressing, So A Just-Closed Overflow Isn't Reopened
+        // The chevron toggles. Check again before the press, so the press does not reopen a closed overflow.
         if (FindTopLevel(OverflowClass) is null)
         {
             return;
@@ -120,11 +120,7 @@ public sealed class TrayDriver
         Wait.Until(() => FindTopLevel(OverflowClass) is null, TimeSpan.FromSeconds(5), () => $"The overflow ({OverflowClass}) did not close.");
     }
 
-    // =========================================================================
-    // SEARCH
-    // =========================================================================
-
-    // Taskbar First, Then The Overflow (Opened If Needed); More Than One Match Is An Error, Never A Guess
+    // The search tries the taskbar first, then the overflow. More than one match is an error, never a guess.
     private AutomationElement? TryFindIcon(out string seen)
     {
         var names = new List<string>();
@@ -154,7 +150,7 @@ public sealed class TrayDriver
                 Assert.Fail($"{matches.Length} tray icons are named '{AppInfo.DisplayName}'. Quit any other copy of the app before running the UI tests.");
             }
 
-            // A Just-Opened Overflow Lays Out After Its Buttons Exist; Until Then The Icon Has An Empty Rectangle To Click
+            // A newly opened overflow lays out after its buttons exist. Until then the icon has an empty rectangle.
             if (matches.Length == 1 && matches[0].BoundingRectangle.IsEmpty)
             {
                 seen = string.Join(", ", names);
@@ -172,7 +168,6 @@ public sealed class TrayDriver
         return null;
     }
 
-    // Opens "Show Hidden Icons" Unless The Overflow Is Already Open
     private AutomationElement? OpenOverflow()
     {
         if (FindTopLevel(OverflowClass) is { } open)
@@ -192,8 +187,8 @@ public sealed class TrayDriver
         return overflow;
     }
 
-    // The Chevron's Name Carries Its State On Newer Windows Builds ("Show Hidden Icons Hide" While The Overflow Is Open),
-    // So It Matches By Prefix Among The Taskbar's Own Tray Buttons
+    // On newer Windows builds the name of the chevron carries its state, for example "Show Hidden Icons Hide" while
+    // the overflow is open. The search therefore matches by prefix among the tray buttons of the taskbar.
     private AutomationElement? Chevron()
     {
         try

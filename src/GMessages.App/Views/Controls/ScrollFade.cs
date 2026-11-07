@@ -12,21 +12,22 @@ using WinRT;
 namespace GMessages.App.Views.Controls;
 
 /// <summary>
-/// Fades a scroller's content out toward its top and bottom edges while there is more to scroll to past them
-/// (<see cref="ScrollEdges"/> decides which).
+/// Fades the content of a scroller toward its top and bottom edges while more content lies past them.
+/// <see cref="ScrollEdges"/> picks the edges.
 /// </summary>
 /// <remarks>
 /// <para>
-/// A real alpha fade, so the window's Mica or translucent layer shows through and no color is drawn over the list. XAML
-/// has no opacity mask, so the content is drawn through Composition, as the Windows Community Toolkit's
-/// <c>OpacityMaskView</c> does: a visual surface copies the scroller's content presenter, a sprite paints that copy
-/// through a mask brush whose linear gradient is clear at a fading edge, and the presenter's own visual is hidden (its
-/// XAML stays, so clicks, focus and UI Automation still reach the rows).
+/// The fade is a real alpha fade. Thus the Mica or translucent layer of the window shows through, and no color covers
+/// the list. XAML has no opacity mask, so Composition draws the content, as the <c>OpacityMaskView</c> of the Windows
+/// Community Toolkit does. A visual surface copies the content presenter of the scroller. A sprite paints that copy
+/// through a mask brush. The linear gradient of the mask is clear at a fading edge. The class hides the visual of the
+/// presenter. Its XAML stays, so clicks, focus and UI Automation still reach the rows.
 /// </para>
 /// <para>
-/// The sprite goes on the empty layer the scroller's template keeps between its content and its scroll bars, so the
-/// scroll bar stays above it and unfaded. Elements outside the scroller (floating buttons, rings) aren't touched. Each
-/// fade animates its gradient stop's alpha, so nothing moves and the layout doesn't change.
+/// The sprite goes on the empty layer of the scroller template between its content and its scroll bars. Thus the
+/// scroll bar stays above the sprite and does not fade. The fade does not touch elements outside the scroller,
+/// such as floating buttons and rings. Each fade animates the alpha of its gradient stop, so nothing moves and the
+/// layout does not change.
 /// </para>
 /// </remarks>
 internal sealed class ScrollFade
@@ -42,13 +43,14 @@ internal sealed class ScrollFade
     private readonly CompositionVisualSurface _surface;
     private readonly SpriteVisual _sprite;
 
-    // The Gradient, Top To Bottom: The Top Edge, Where Its Fade Ends, Where The Bottom Fade Starts, The Bottom Edge
+    // The gradient has 4 stops from top to bottom. _topEdge and _bottomEdge are at the edges. _topInner ends the top
+    // fade, and _bottomInner starts the bottom fade.
     private readonly CompositionColorGradientStop _topEdge;
     private readonly CompositionColorGradientStop _topInner;
     private readonly CompositionColorGradientStop _bottomInner;
     private readonly CompositionColorGradientStop _bottomEdge;
 
-    // Whether The Bottom Fades Whatever The Scroll, And The Bottom Fade's Height
+    // _bottomAlways makes the bottom fade at all scroll positions. _bottomFade is the height of the bottom fade.
     private readonly bool _bottomAlways;
     private double _bottomFade = ScrollEdges.FadeHeight;
 
@@ -62,13 +64,12 @@ internal sealed class ScrollFade
         _layer        = layer;
         _bottomAlways = bottomAlways;
 
-        // The Content's Copy
-        Visual contentVisual  =ElementCompositionPreview.GetElementVisual(content);
+        Visual contentVisual  = ElementCompositionPreview.GetElementVisual(content);
         _compositor           = contentVisual.Compositor;
         _surface              = _compositor.CreateVisualSurface();
         _surface.SourceVisual = contentVisual;
 
-        // The Mask: Opaque Everywhere Until An Edge Fades
+        // The mask is opaque at all points until an edge fades.
         CompositionLinearGradientBrush gradient = _compositor.CreateLinearGradientBrush();
         gradient.StartPoint = Vector2.Zero;
         gradient.EndPoint   = new Vector2(0, 1);
@@ -85,7 +86,7 @@ internal sealed class ScrollFade
         mask.Source = _compositor.CreateSurfaceBrush(_surface);
         mask.Mask   = gradient;
 
-        // The Copy Is Shown In Place Of The Content
+        // The sprite shows the copy in place of the content.
         _sprite       = _compositor.CreateSpriteVisual();
         _sprite.Brush = mask;
         ElementCompositionPreview.SetElementChildVisual(layer, _sprite);
@@ -93,7 +94,7 @@ internal sealed class ScrollFade
 
         Resize();
 
-        // Bind To Changes: Scrolling, Resizing And The Content Growing Or Shrinking
+        // A scroll, a resize and a change of the content size update the fade.
         _scroller.ViewChanged += (_, _) => Apply(true);
         _content.SizeChanged  += (_, _) => Resize();
         _scroller.RegisterPropertyChangedCallback(ScrollViewer.ScrollableHeightProperty, (_, _) => Apply(true));
@@ -102,11 +103,12 @@ internal sealed class ScrollFade
     }
 
     /// <summary>
-    /// Starts fading a scroller's edges.
+    /// Starts the fade on the edges of a scroller.
     /// </summary>
-    /// <remarks>Call once per scroller, after its template is applied.</remarks>
-    /// <param name="scroller">The list's scroller.</param>
-    /// <param name="bottomAlways">True to fade the bottom edge whatever the scroll (behind something floating over it).</param>
+    /// <remarks>Call this method once for each scroller, after WinUI applies the template of the scroller.</remarks>
+    /// <param name="scroller">The scroller of the list.</param>
+    /// <param name="bottomAlways">True to fade the bottom edge at all scroll positions, such as behind an element that
+    /// floats over it.</param>
     /// <returns>The fade, or null when the scroller has no content presenter yet.</returns>
     public static ScrollFade? Attach(ScrollViewer scroller, bool bottomAlways = false)
     {
@@ -116,11 +118,12 @@ internal sealed class ScrollFade
             return null;
         }
 
-        // The Template's Unnamed Grid Holding The Content. A WinRT Cast, Not A Type Test: The Native AOT Build Hands It
-        // Back As A Base Type (See UiHelpers.FindScroller)
+        // The parent is the unnamed grid of the template that holds the content. The code uses a WinRT cast, not a type
+        // test. The Native AOT build returns the grid as a base type, as UiHelpers.FindScroller tells.
         Panel parent = parentObject.As<Panel>();
 
-        // The Template's Empty Layer Right Above The Content (Below The Scroll Bars), Else The Scroller Itself
+        // The layer is the empty layer of the template directly above the content and below the scroll bars. Without
+        // that layer, the scroller itself is the layer.
         int at = parent.Children.IndexOf(content);
         UIElement layer = at + 1 < parent.Children.Count && VisualTreeHelper.GetChildrenCount(parent.Children[at + 1]) == 0
             ? parent.Children[at + 1]
@@ -130,16 +133,17 @@ internal sealed class ScrollFade
     }
 
     /// <summary>
-    /// Sets the bottom fade's height (what floats over the list's bottom, say), in effective pixels.
+    /// Sets the height of the bottom fade in effective pixels. An example is the height of an element over the list
+    /// bottom.
     /// </summary>
-    /// <param name="height">The height; the standard edge fade's by default.</param>
+    /// <param name="height">The height. The default is the height of the standard edge fade.</param>
     public void SetBottomFade(double height)
     {
         _bottomFade = Math.Max(0, height);
         Resize();
     }
 
-    // The Copy Matches The Content's Size And Place, And The Fades Keep Their Height
+    // The copy matches the size and place of the content, and the fades keep their height.
     private void Resize()
     {
         Vector2 size = _content.ActualSize;
@@ -157,7 +161,7 @@ internal sealed class ScrollFade
         Apply(false);
     }
 
-    // Each Edge Fades While There Is More To Scroll To Past It (The Bottom Always When Asked)
+    // Each edge fades while more content lies past it. The bottom edge always fades when _bottomAlways is true.
     private void Apply(bool animate)
     {
         (bool top, bool bottom) = ScrollEdges.Fades(_scroller.VerticalOffset, _scroller.ScrollableHeight);

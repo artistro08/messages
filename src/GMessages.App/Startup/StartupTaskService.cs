@@ -6,13 +6,13 @@ using StartupTaskState = Windows.ApplicationModel.StartupTaskState;
 namespace GMessages.App.Startup;
 
 /// <summary>
-/// <see cref="IStartupService"/> over the MSIX startup task. Used by the packaged install.
+/// Implements <see cref="IStartupService"/> over the MSIX startup task. The packaged install uses it.
 /// </summary>
 /// <remarks>
-/// Ported from Magic Buds' <c>StartupTaskService</c>. The task ID is <see cref="AppInfo.DisplayName"/>, which the
-/// manifest's <c>uap5:StartupTask TaskId</c> must match.
-/// https://learn.microsoft.com/uwp/api/windows.applicationmodel.startuptask
+/// Ported from the <c>StartupTaskService</c> of Magic Buds. The task ID is <see cref="AppInfo.DisplayName"/>. The
+/// <c>uap5:StartupTask TaskId</c> of the manifest must match it.
 /// </remarks>
+/// <seealso href="https://learn.microsoft.com/uwp/api/windows.applicationmodel.startuptask"/>
 internal sealed class StartupTaskService : IStartupService
 {
     /// <inheritdoc />

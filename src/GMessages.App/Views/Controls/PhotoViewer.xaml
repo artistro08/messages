@@ -1,7 +1,7 @@
-<!-- Photo Viewer: a clicked photo (zoomable) or video (playing) over the whole window (the title bar row too, so all of the
-     app is tinted) on a dark scrim, with Close, Open in Photos (Open in default app for a video), Download and Save as in
-     the title bar row's top-left corner. Dark theme always, so its icons read on the scrim. Hidden until shown (see the
-     code) -->
+<!-- The viewer shows a clicked photo with zoom, or a playing video, over the whole window on a dark scrim. It
+     also covers the title bar row, so it tints all of the app. Close, Open in Photos, Download and Save as sit in the
+     top-left corner of the title bar row. For a video, Open in Photos reads Open in default app. The theme is always
+     dark, so the icons read on the scrim. The viewer is hidden until the code shows it. -->
 <UserControl
     x:Class="GMessages.App.Views.Controls.PhotoViewer"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -10,7 +10,8 @@
     RequestedTheme="Dark"
     Visibility="Collapsed">
 
-    <!-- Scrim Color: near black, so the chat under it doesn't compete with the photo; the window color in high contrast -->
+    <!-- The scrim is near black, so the chat under it does not compete with the photo. High contrast uses the window
+         color. -->
     <UserControl.Resources>
         <ResourceDictionary>
             <ResourceDictionary.ThemeDictionaries>
@@ -24,7 +25,7 @@
         </ResourceDictionary>
     </UserControl.Resources>
 
-    <!-- Scrim: Tab and Shift + Tab cycle inside, so focus never leaves the viewer -->
+    <!-- Tab and Shift + Tab cycle inside the scrim, so focus never leaves the viewer. -->
     <Grid
         x:Name="Scrim"
         TabFocusNavigation="Cycle">
@@ -33,8 +34,8 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- Window Activation: the toolbar's icons dim while the window is inactive, as the title bar's text does (set from
-             the window's Activated, through ShowActive) -->
+        <!-- The toolbar icons dim while the window is inactive, as the title bar text does. The Activated event of the
+             window sets the state through ShowActive. -->
         <VisualStateManager.VisualStateGroups>
             <VisualStateGroup x:Name="Activation">
                 <VisualState x:Name="Active" />
@@ -50,15 +51,16 @@
             </VisualStateGroup>
         </VisualStateManager.VisualStateGroups>
 
-        <!-- Backdrop: the tint, its own layer so it fades in and out (from code) while the photo grows and shrinks. No
-             implicit transitions here or on the toolbar and stage: the code takes their visuals -->
+        <!-- The backdrop is the tint on its own layer. Thus the code fades it in and out while the photo grows and
+             shrinks. The backdrop, the toolbar and the stage must have no implicit transitions, because the code takes
+             their visuals. -->
         <Border
             x:Name="Backdrop"
             Grid.RowSpan="2"
             Background="{ThemeResource PhotoViewerScrimBrush}" />
 
-        <!-- Toolbar: in the title bar row's top-left corner (48 px, the tall caption buttons' height), Close first. The
-             window lets clicks through to these buttons only (set from the window's code) -->
+        <!-- The toolbar sits in the top-left corner of the title bar row, with Close first. The row is 48 px, the
+             height of the tall caption buttons. The code of the window lets clicks through to these buttons only. -->
         <StackPanel
             x:Name="ToolbarPanel"
             Margin="8,0,0,0"
@@ -67,7 +69,7 @@
             Orientation="Horizontal"
             Spacing="4">
 
-            <!-- Close: a plain back arrow, like the toolbar's other icons (owner) -->
+            <!-- Close is a plain back arrow, as the other icons of the toolbar are. The owner asked for this. -->
             <Button
                 x:Name="CloseButton"
                 Width="40"
@@ -83,8 +85,8 @@
                     Glyph="&#xE72B;" />
             </Button>
 
-            <!-- Open In Photos, Or Open In Default App For A Video: Named From Code On Each Open (A Bound Name Was Set Back
-                 Once The Viewer First Loaded) -->
+            <!-- This button reads Open in Photos, or Open in default app for a video. The code names it on each open.
+                 With a binding, the first load of the viewer reset the name. -->
             <Button
                 x:Name="OpenInPhotosButton"
                 Width="40"
@@ -98,7 +100,7 @@
                     Glyph="&#xE8A7;" />
             </Button>
 
-            <!-- Open With: Windows' app picker, for any photo or video -->
+            <!-- Open with opens the app picker of Windows for any photo or video. -->
             <Button
                 Width="40"
                 Height="40"
@@ -141,14 +143,14 @@
                     Glyph="&#xE792;" />
             </Button>
         </StackPanel>
-        <!-- /Toolbar -->
 
-        <!-- Stage: the photo or the video, grown from the bubble on open and shrunk back on close (from code) -->
+        <!-- The stage holds the photo or the video. The code grows it from the bubble on open and shrinks it back on
+             close. -->
         <Grid x:Name="Stage" Grid.Row="1">
 
-            <!-- Photo: centered and fitted at 1x (a smaller photo at its own size), Ctrl + mouse wheel and pinch zoom up to
-                 8x, a double-click zooms in or back out. Named for Narrator by the photo's caption (or "Photo"); a click
-                 beside the photo closes the viewer -->
+            <!-- The photo centers and fits at 1x, and a smaller photo shows at its own size. Ctrl + mouse wheel and
+                 pinch zoom up to 8x. A double-click zooms in or back out. Narrator reads the caption of the photo, or
+                 "Photo". A click beside the photo closes the viewer. -->
             <ScrollViewer
                 x:Name="Zoomer"
                 AutomationProperties.AutomationId="PhotoViewer.Photo"
@@ -172,16 +174,16 @@
                     Stretch="Uniform" />
             </ScrollViewer>
 
-            <!-- Video: a clicked video plays here, fitted inside the photo's 24 px margin, with Windows' full transport
-                 controls (made in code; PhotoViewer.Video). Shown instead of the photo -->
+            <!-- A clicked video plays here inside the 24 px margin of the photo, with the full transport controls of
+                 Windows. The code makes the player PhotoViewer.Video. It shows in place of the photo. -->
             <Grid
                 x:Name="VideoHost"
                 Margin="24"
                 Visibility="Collapsed" />
 
-            <!-- Video Still: the bubble's frame, fitted where the video will show. It grows out of the bubble (a still
-                 image grows as smoothly as a photo; a playing video doesn't), then the player takes over once it plays.
-                 On close it is back over the player for the shrink -->
+            <!-- The still is the frame of the bubble, fitted where the video will show. It grows out of the bubble,
+                 then the player replaces it when it plays. A still image grows as smoothly as a photo, and a playing
+                 video does not. On close, the still is back over the player for the shrink. -->
             <Image
                 x:Name="VideoPoster"
                 Margin="24"
@@ -192,6 +194,5 @@
                 Stretch="Uniform"
                 Visibility="Collapsed" />
         </Grid>
-        <!-- /Stage -->
     </Grid>
 </UserControl>

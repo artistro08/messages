@@ -17,21 +17,15 @@ using WinRT;
 namespace GMessages.App.Views;
 
 /// <summary>
-/// The compose area's attachments: the file pickers, the chips, and pasting from the clipboard.
+/// Handles the attachments of the compose area: the file pickers, the chips and the paste from the clipboard.
 /// </summary>
 /// <remarks>
-/// Part of <see cref="ChatPane"/>; the other members are in ChatPane.xaml.cs.
+/// This part of <see cref="ChatPane"/> holds the attachment members. ChatPane.xaml.cs holds the other members.
 /// </remarks>
 public sealed partial class ChatPane
 {
-
-    // =========================================================================
-    // ATTACHING
-    // =========================================================================
-
-    // The Picked Files (The Test's, Or The Picker's Over This Window), Each Checked For Size, Then Added As Chips In
-    // Order. Only A Photo's Header Is Read Now (For Its Shape); Send Reads The Files. A File That Can't Be Opened Is
-    // Skipped And Logged By Its Error Type Only
+    // Adds the picked files as chips in order, from the test or from the picker over this window. The log names only
+    // the error type of a failure.
     private async Task PickAttachmentsAsync(ChatViewModel chat, bool photos)
     {
         try
@@ -59,7 +53,7 @@ public sealed partial class ChatPane
         DraftBox.Focus(FocusState.Programmatic);
     }
 
-    // The Windows File Picker Over This Window: Any Files, Or Photos Only; Several May Be Picked
+    // Opens the Windows file picker over this window for any files or for photos only. The user can pick several files.
     private async Task<IReadOnlyList<StorageFile>> PickWithDialogAsync(bool photos)
     {
         nint hwnd = XamlWindow.HwndFor(XamlRoot);
@@ -83,8 +77,8 @@ public sealed partial class ChatPane
         return await picker.PickMultipleFilesAsync();
     }
 
-    // Files Picked Or Pasted, Each Checked For Size, Then Added As Chips In Order. Only A Photo's Header Is Read Now (For
-    // Its Shape), And A Video's Thumbnail When Windows Has One; Send Reads The Files
+    // Checks the size of each picked or pasted file, then adds the files as chips in order. The method reads only the
+    // header of a photo now, for its shape. A video also gets its thumbnail when Windows has one. Send reads the files.
     private static async Task AttachFilesAsync(ChatViewModel chat, IReadOnlyList<StorageFile> files)
     {
         foreach (StorageFile file in files)
@@ -104,7 +98,7 @@ public sealed partial class ChatPane
         AppLog.AttachmentsPicked(App.ShellLog, chat.ConversationId, files.Count, chat.Attachments.Count);
     }
 
-    // A Video's Frame As Windows Shows It In Explorer, For Its Chip; Null When Windows Only Has An Icon For It (Or None)
+    // Gets the frame of a video that Explorer shows, for its chip. Null when Windows has only an icon or nothing.
     private static async Task<Func<Task<Stream>>?> VideoThumbnailAsync(StorageFile file)
     {
         try
@@ -126,8 +120,8 @@ public sealed partial class ChatPane
         }
     }
 
-    // A Photo's Size As Shown (Turned By Its EXIF Orientation), So Its Bubble Keeps Its Shape, Read From The File's
-    // Header Without Decoding It; 0 x 0 When It Won't Decode
+    // Reads the shown size of a photo from the header of the file, without a full decode. The size follows the EXIF
+    // orientation, so the bubble keeps its shape. The result is 0 x 0 when the header does not decode.
     private static async Task<(int Width, int Height)> PhotoSizeAsync(StorageFile file)
     {
         try
@@ -142,11 +136,8 @@ public sealed partial class ChatPane
         }
     }
 
-    // =========================================================================
-    // PASTING
-    // =========================================================================
-
-    // The Test's Clipboard When It Set One, Else The Real One; Pasted As Owned (Under The Test Hooks Every Paste Is)
+    // Pastes the clipboard of the test when it set one, else the real clipboard. Under the test hooks, the pane takes
+    // every paste.
     private async Task PasteFromTestHookAsync()
     {
         try
@@ -163,7 +154,7 @@ public sealed partial class ChatPane
         }
     }
 
-    // The Clipboard; Null When Windows Won't Hand It Over (Another App Holds It)
+    // Gets the clipboard. Null when Windows refuses it because another app holds it.
     private static DataPackageView? ClipboardView()
     {
         try
@@ -176,23 +167,21 @@ public sealed partial class ChatPane
         }
     }
 
-    // Media On The Clipboard: Files (Explorer, The Emoji Panel's GIFs), Or A Picture With No Text Beside It (A Screenshot,
-    // A Browser's Copy Image). Text With Pictures (A Copied Web Page Or Spreadsheet) Pastes As Text
+    // True when the clipboard holds media: files from Explorer or the GIFs of the emoji panel. A picture with no text
+    // beside it also counts, such as a screenshot or the Copy image of a browser. Text with pictures pastes as text,
+    // such as a copied web page or spreadsheet. The pane takes a paste only when it carries media.
     private static bool CarriesMedia(DataPackageView view) =>
         view.Contains(StandardDataFormats.StorageItems)
         || (!view.Contains(StandardDataFormats.Text) && (view.Contains(StandardDataFormats.Bitmap) || PastedPictures.Any(p => view.Contains(p.Format))));
 
-    // The Paste Is Ours When It Carries Media (Under The Test Hooks Every Paste Is Ours Before This Is Asked)
-    private static bool OwnsPaste(DataPackageView view) => CarriesMedia(view);
-
-    // Ctrl + V And Shift + Insert
     private static bool IsPasteKey(VirtualKey key) =>
-        (key == VirtualKey.V && UiHelpers.IsDown(VirtualKey.Control)) || (key == VirtualKey.Insert && IsShiftDown());
+        (key == VirtualKey.V && UiHelpers.IsDown(VirtualKey.Control)) || (key == VirtualKey.Insert && UiHelpers.IsDown(VirtualKey.Shift));
 
-    // The Box's Own Paste (Its Menu's Paste, Or Any Paste The Keys Above Didn't Take): Media Becomes Chips, Text Is Left To It
+    // The paste of the box itself: the Paste of its menu, or a paste that OnDraftKeyDown did not take. Media becomes
+    // chips, and the box pastes text.
     private void OnDraftPaste(object sender, TextControlPasteEventArgs e)
     {
-        // Test Run: Every Paste Is Ours At Once, As In OnDraftKeyDown
+        // In a test run, the pane takes every paste at once, as in OnDraftKeyDown.
         if (TestHooks.BlockLaunches)
         {
             e.Handled = true;
@@ -205,12 +194,12 @@ public sealed partial class ChatPane
             return;
         }
 
-        e.Handled = OwnsPaste(view);
+        e.Handled = CarriesMedia(view);
         Paste(view, e.Handled);
     }
 
-    // Pastes What The Clipboard Holds, Logging Its Formats Only (Never Its Content): Media Becomes Chips; Under The Test
-    // Hooks Text Goes Into The Box As The Box Would Paste It
+    // Pastes the clipboard. The log names only its formats, never its content. Media becomes chips. Under the test
+    // hooks, text goes into the box as the box pastes it.
     private void Paste(DataPackageView view, bool owned)
     {
         if (Chat is not { } chat)
@@ -228,7 +217,7 @@ public sealed partial class ChatPane
         _ = media ? AttachPastedAsync(chat, view) : PasteTextAsync(view);
     }
 
-    // Test Run: The Hook's Text, Typed Over The Selection
+    // In a test run, types the text of the hook over the selection.
     private async Task PasteTextAsync(DataPackageView view)
     {
         if (view.Contains(StandardDataFormats.Text))
@@ -238,9 +227,9 @@ public sealed partial class ChatPane
         }
     }
 
-    // Pasted Media As Chips, Under The Same Limits As Picked Files: The Files Each As Picked; Else A Picture In Its Own
-    // Format (Kept Byte For Byte, So A GIF Still Moves On The Phone); Else The Bitmap, Saved As A PNG. A Failure Is Logged
-    // By Its Error Type Only
+    // Adds pasted media as chips, with the same limits as picked files. Files attach as picked files do. Else a picture
+    // in its own format attaches byte for byte, so a GIF still moves on the phone. Else the bitmap attaches as a PNG.
+    // The log names only the error type of a failure.
     private async Task AttachPastedAsync(ChatViewModel chat, DataPackageView view)
     {
         try
@@ -270,7 +259,7 @@ public sealed partial class ChatPane
         DraftBox.Focus(FocusState.Programmatic);
     }
 
-    // The First Picture On The Clipboard In Its Own Format (See PastedPictures), Or Null
+    // Gets the first picture on the clipboard in its own format, or null. See PastedPictures.
     private static async Task<(string Name, string Mime, byte[] Bytes)?> PastedPictureAsync(DataPackageView view)
     {
         foreach ((string format, string mime, string name) in PastedPictures)
@@ -289,10 +278,10 @@ public sealed partial class ChatPane
         return null;
     }
 
-    // The GIF A Pasted Web Picture Links To, Or Null. The Emoji Panel's GIFs Come As HTML (An <img> Of The GIF On Tenor) Beside
-    // A Bitmap Of Its First Frame, With No GIF Or File Format, So Pasting The Bitmap Sent A Still PNG. The Picture Is Fetched As
-    // A Link Preview Is (By The Previewer: Public Hosts Only, No Cookies) And Kept Only When It Is A GIF Within The
-    // Attachment Limit
+    // Gets the GIF that a pasted web picture links to, or null. A GIF of the emoji panel comes as HTML, an <img> of the
+    // GIF on Tenor. A bitmap of its first frame comes beside it, with no GIF or file format. Thus a paste of the bitmap
+    // sent a still PNG. The previewer fetches the picture as it fetches a link preview, from public hosts with no
+    // cookies. The method keeps it only when it is a GIF within the attachment limit.
     private static async Task<(string Name, string Mime, byte[] Bytes)?> PastedWebGifAsync(DataPackageView view, LinkPreviewer? previews)
     {
         if (previews is null || !view.Contains(StandardDataFormats.Html))
@@ -307,16 +296,17 @@ public sealed partial class ChatPane
             return null;
         }
 
-        // A GIF By Its Bytes Too ("GIF8"), Whatever The Server Said; The Previewer Never Throws And Logs Its Own Failures
+        // The bytes must also start with "GIF8", whatever type the server named. The previewer never throws and logs
+        // its own failures.
         byte[]? bytes = await previews.FetchImageAsync(url, "image/gif", ChatStore.MaxAttachmentBytes, CancellationToken.None);
         return bytes is [0x47, 0x49, 0x46, 0x38, ..] ? (PastedGifName, "image/gif", bytes) : null;
     }
 
-    // An <img>'s src In Pasted HTML
+    // The src of an <img> in pasted HTML.
     [System.Text.RegularExpressions.GeneratedRegex("""<img\b[^>]*?\bsrc\s*=\s*["']([^"']+)["']""", System.Text.RegularExpressions.RegexOptions.IgnoreCase)]
     private static partial System.Text.RegularExpressions.Regex ImageSource();
 
-    // A Pasted Bitmap, Encoded As A PNG, With Its Size
+    // Encodes a pasted bitmap as a PNG and returns it with its size.
     private static async Task<(byte[] Png, int Width, int Height)> BitmapToPngAsync(RandomAccessStreamReference bitmap)
     {
         using IRandomAccessStreamWithContentType source = await bitmap.OpenReadAsync();
@@ -334,7 +324,7 @@ public sealed partial class ChatPane
         return (copy.ToArray(), pixels.PixelWidth, pixels.PixelHeight);
     }
 
-    // A Pasted Picture's Size, Read From Its Header; 0 x 0 When It Won't Decode
+    // Reads the size of a pasted picture from its header. The result is 0 x 0 when the header does not decode.
     private static async Task<(int Width, int Height)> PictureSizeAsync(byte[] bytes)
     {
         try
@@ -349,7 +339,7 @@ public sealed partial class ChatPane
         }
     }
 
-    // The Box's Menu Pastes Text Itself; With Only Media On The Clipboard Its Paste Takes That Instead
+    // The menu of the box pastes text itself. With only media on the clipboard, its Paste takes the media instead.
     private Action? PasteMediaFromMenu()
     {
         if (DraftBox.CanPasteClipboardContent || ClipboardView() is not { } view || !CarriesMedia(view))
@@ -366,7 +356,7 @@ public sealed partial class ChatPane
         };
     }
 
-    // A Photo Chip's Picture, Decoded Small From The File; A File Windows Can't Read Leaves The Chip Blank
+    // Decodes the picture of a photo chip small from the file. A file that Windows cannot read leaves the chip blank.
     private static async Task LoadChipImageAsync(BitmapImage image, Func<Task<Stream>> open)
     {
         try

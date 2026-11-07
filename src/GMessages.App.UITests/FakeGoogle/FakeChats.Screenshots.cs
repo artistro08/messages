@@ -3,20 +3,22 @@ using GMessages.Protocol.Proto;
 namespace GMessages.App.UITests.FakeGoogle;
 
 /// <summary>
-/// The mock phone the store screenshots show (see <c>StoreScreenshots</c>).
+/// The mock phone that the store screenshots show (see <c>StoreScreenshots</c>).
 /// </summary>
 public sealed partial class FakeChats
 {
     /// <summary>
-    /// Replaces everything with a lifelike phone: ten conversations over the last week, with photos, a reply, reactions
-    /// and read receipts, for the store screenshots.
+    /// Replaces all data with a lifelike phone for the store screenshots. It has 10 conversations over the last week,
+    /// with photos, a reply, reactions and read receipts.
     /// </summary>
     /// <remarks>
-    /// Today's messages are minutes before now, older ones at set times on earlier days. The open chats are
-    /// <c>c-maya</c> (Maya Chen, pinned, end-to-end encrypted) and <c>c-family</c> (a group with Mom, Dad and Jordan).
-    /// Photos come in as JPEGs with their sizes, as a phone reports them.
+    /// Messages of today are minutes before now. Older messages have set times on earlier days.
+    /// The open chats are <c>c-maya</c> (Maya Chen, pinned, end-to-end encrypted) and <c>c-family</c>
+    /// (a group with Mom, Dad and Jordan). Photos come in as JPEGs with their sizes, as a phone reports them.
     /// </remarks>
-    /// <param name="photos">The photos by name (<c>farm</c>, <c>sprout</c>, <c>city</c>, <c>statue</c>): JPEG bytes and size.</param>
+    /// <param name="photos">
+    /// The photos by name (<c>farm</c>, <c>sprout</c>, <c>city</c>, <c>statue</c>) with JPEG bytes and size.
+    /// </param>
     public void AddScreenshotChats(IReadOnlyDictionary<string, (byte[] Jpeg, int Width, int Height)> photos)
     {
         ArgumentNullException.ThrowIfNull(photos);
@@ -24,7 +26,6 @@ public sealed partial class FakeChats
         Clear();
         DateTimeOffset now = DateTimeOffset.Now;
 
-        // People
         Participant maya   = Person("p-maya", "Maya Chen", "+15550100101");
         Participant mom    = Person("p-mom", "Mom", "+15550100102");
         Participant dad    = Person("p-dad", "Dad", "+15550100103");
@@ -39,7 +40,6 @@ public sealed partial class FakeChats
             AddContact(person.ID.ParticipantID, person.FullName, person.ID.Number);
         }
 
-        // Maya: Weekend Plans, A Photo From Her Garden, A Reply, Reactions, Read
         Conversation mayaChat = NewConversation("c-maya", "Maya Chen", false, ConversationStatus.Active, true, false, maya);
         Message coffee        = Text(mayaChat, "p-maya", "Perfect. I'll bring coffee 🙌", Day(1, 18, 44));
         Message sprout        = Photo(mayaChat, "p-maya", photos["sprout"], "sprout.jpg", Ago(now, 41));
@@ -62,7 +62,6 @@ public sealed partial class FakeChats
             Text(mayaChat, "p-maya", "I'll pick you up at 7:30", Ago(now, 5)),
             thermos);
 
-        // Family: A Group With Dad's Photo From The Farm
         Conversation family = NewConversation("c-family", "Family", true, ConversationStatus.Active, true, false, mom, dad, jordan);
         Message farm        = Photo(family, "p-dad", photos["farm"], "farm.jpg", Ago(now, 70));
         farm.Reactions.Add(new ReactionEntry { Data = new ReactionData { Type = EmojiType.Love }, ParticipantIDs = { "p-mom", "p-jordan" } });
@@ -76,14 +75,12 @@ public sealed partial class FakeChats
             Text(family, MyParticipantId, "Sunday dinner at the farm?", Ago(now, 30)),
             Text(family, "p-mom", "Already planning it ❤️", Ago(now, 25)));
 
-        // Jordan: Unread, A Photo From The Trip
         Conversation jordanChat = NewConversation("c-jordan", "Jordan Ellis", false, ConversationStatus.Active, false, true, jordan);
         Add(jordanChat,
             Text(jordanChat, MyParticipantId, "Have the best time in New York!", Day(2, 20, 15)),
             Photo(jordanChat, "p-jordan", photos["statue"], "statue.jpg", Ago(now, 95)),
             Text(jordanChat, "p-jordan", "Made it! She's even bigger in person", Ago(now, 94)));
 
-        // Alex: A Photo From The Walk To Work
         Conversation alexChat = NewConversation("c-alex", "Alex Rivera", false, ConversationStatus.Active, false, false, alex);
         Add(alexChat,
             Photo(alexChat, "p-alex", photos["city"], "city.jpg", Ago(now, 180)),
@@ -91,13 +88,11 @@ public sealed partial class FakeChats
             Text(alexChat, MyParticipantId, "That's a wallpaper right there", Ago(now, 150)),
             Text(alexChat, "p-alex", "Grabbing lunch near the office, want anything?", Ago(now, 140)));
 
-        // Book Club: A Group, Yesterday
         Conversation bookClub = NewConversation("c-books", "Book Club", true, ConversationStatus.Active, false, false, priya, sam, elena);
         Add(bookClub,
             Text(bookClub, "p-elena", "Did everyone finish chapter 12?", Day(1, 20, 2)),
             Text(bookClub, "p-sam", "Chapter 12 had me shook", Day(1, 20, 9)));
 
-        // The Rest: One Line Each, Over The Week
         Conversation priyaChat = NewConversation("c-priya", "Priya Patel", false, ConversationStatus.Active, false, false, priya);
         Add(priyaChat, Text(priyaChat, "p-priya", "Sending the slides over tonight", Day(1, 16, 30)));
 
@@ -116,17 +111,13 @@ public sealed partial class FakeChats
         Add(codeChat, Text(codeChat, "p-code", "Your package was delivered to the front door.", Day(6, 13, 20)));
     }
 
-    // =========================================================================
-    // SCREENSHOT HELPERS
-    // =========================================================================
-
-    // A Time Some Minutes Before Now, Or At A Set Time Some Days Ago, In Microseconds Since The Epoch
+    // Both helpers return microseconds since the epoch: a time minutes before now, or a set time on an earlier day.
     private static long Ago(DateTimeOffset now, int minutes) => now.AddMinutes(-minutes).ToUnixTimeMilliseconds() * 1000;
 
     private static long Day(int daysAgo, int hour, int minute) =>
         new DateTimeOffset(DateTime.Today.AddDays(-daysAgo).AddHours(hour).AddMinutes(minute)).ToUnixTimeMilliseconds() * 1000;
 
-    // A Text At A Given Time; From Me It Is Delivered, Otherwise Received
+    // A text from the phone owner is Delivered. Any other text is Received.
     private Message Text(Conversation conversation, string participantId, string text, long at)
     {
         Message message   = NewMessage(conversation, participantId, text);
@@ -139,7 +130,6 @@ public sealed partial class FakeChats
         return message;
     }
 
-    // A Photo At A Given Time, With Its Size
     private Message Photo(Conversation conversation, string participantId, (byte[] Jpeg, int Width, int Height) photo, string fileName, long at)
     {
         MediaContent content = StoreMedia(photo.Jpeg, fileName, "image/jpeg");

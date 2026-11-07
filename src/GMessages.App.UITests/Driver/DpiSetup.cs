@@ -6,8 +6,8 @@ namespace GMessages.App.UITests.Driver;
 /// Makes the test process per-monitor DPI aware before any UI test runs.
 /// </summary>
 /// <remarks>
-/// UI Automation reports physical pixels. A DPI-unaware test host gets scaled screen coordinates on a scaled display,
-/// so screen captures and mouse clicks would land beside the element.
+/// UI Automation reports physical pixels. A DPI-unaware test host gets scaled screen coordinates on a scaled display.
+/// Screen captures and mouse clicks then miss the element.
 /// </remarks>
 [TestClass]
 public static partial class DpiSetup
@@ -17,9 +17,9 @@ public static partial class DpiSetup
     /// <summary>
     /// Switches the test host to per-monitor DPI awareness (v2).
     /// </summary>
-    /// <param name="context">The MSTest context (unused).</param>
+    /// <param name="context">The MSTest context. The method does not use it.</param>
+    /// <exception cref="AssertFailedException">Windows refuses the change.</exception>
     [AssemblyInitialize]
-    /// <exception cref="AssertFailedException">Windows refused, so captures and clicks could miss.</exception>
     public static void MakeDpiAware(TestContext context)
     {
         if (!SetProcessDpiAwarenessContext(PerMonitorAwareV2))
@@ -31,9 +31,9 @@ public static partial class DpiSetup
     /// <summary>
     /// The display scale of a window: 1.0 at 100%, 1.25 at 125%.
     /// </summary>
-    /// <remarks>UI Automation sizes are physical pixels; divide by this to get effective pixels.</remarks>
-    /// <param name="window">The window.</param>
-    /// <returns>The window's scale.</returns>
+    /// <remarks>UI Automation sizes are physical pixels. Divide a size by this scale to get effective pixels.</remarks>
+    /// <param name="window">The window to measure.</param>
+    /// <returns>The scale of the window.</returns>
     public static double ScaleOf(FlaUI.Core.AutomationElements.AutomationElement window)
     {
         ArgumentNullException.ThrowIfNull(window);

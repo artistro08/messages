@@ -8,28 +8,28 @@ using WinRT;
 namespace GMessages.App.Views.Controls;
 
 /// <summary>
-/// A conversation's ⋮ menu: builds the flyout from <see cref="ConversationMenu.For"/>'s items and runs the item picked,
-/// asking first for Block &amp; report spam and Move to trash.
+/// Builds the ⋮ menu of a conversation from the items of <see cref="ConversationMenu.For"/> and runs the picked item.
+/// Block &amp; report spam and Move to trash ask first.
 /// </summary>
 /// <remarks>
-/// Built in code with plain <c>new</c> (Native AOT safe). The dialogs take the window's theme from the
-/// <see cref="XamlRoot"/>'s content, since a dialog's popup doesn't inherit it. One dialog shows at a time: a second
-/// ask while one is open does nothing.
+/// The code builds the menu with plain <c>new</c>, which is safe under Native AOT. A dialog popup does not inherit the
+/// window theme. Thus the dialogs take the theme from the content of the <see cref="XamlRoot"/>. Only 1 dialog shows at
+/// a time. A second ask while a dialog is open does nothing.
 /// </remarks>
 internal static class ConversationMenuFlyout
 {
-    // One Confirm Dialog At A Time (WinUI Throws On A Second ContentDialog In The Same Window)
+    // Only 1 confirm dialog shows at a time. WinUI throws on a second ContentDialog in the same window.
     private static bool _dialogOpen;
 
     /// <summary>
-    /// Builds the menu flyout for a conversation's items.
+    /// Builds the menu flyout for the items of a conversation.
     /// </summary>
     /// <remarks>
-    /// One item per entry, with its text, a Segoe Fluent glyph and the AutomationId <c>Conversation.{item}</c>. A
-    /// separator follows Details and comes before Move to trash.
+    /// Each entry gets 1 item with its text, a Segoe Fluent glyph and the AutomationId <c>Conversation.{item}</c>. A
+    /// separator follows Details, and another separator comes before Move to trash.
     /// </remarks>
-    /// <param name="items">The items, in menu order (from <see cref="ConversationMenu.For"/>).</param>
-    /// <param name="picked">Called with the item the user clicks.</param>
+    /// <param name="items">The items in menu order, from <see cref="ConversationMenu.For"/>.</param>
+    /// <param name="picked">Gets the item that the user clicks.</param>
     /// <returns>The flyout, ready to show.</returns>
     public static MenuFlyout Build(IReadOnlyList<ConversationMenuItem> items, Action<ConversationMenuItem> picked)
     {
@@ -39,7 +39,6 @@ internal static class ConversationMenuFlyout
         var menu = new MenuFlyout();
         foreach (ConversationMenuItem item in items)
         {
-            // Separator Before Move To Trash
             if (item == ConversationMenuItem.MoveToTrash && menu.Items.Count > 0)
             {
                 menu.Items.Add(new MenuFlyoutSeparator());
@@ -54,7 +53,6 @@ internal static class ConversationMenuFlyout
             entry.Click += (_, _) => picked(item);
             menu.Items.Add(entry);
 
-            // Separator After Details
             if (item == ConversationMenuItem.Details)
             {
                 menu.Items.Add(new MenuFlyoutSeparator());
@@ -68,18 +66,18 @@ internal static class ConversationMenuFlyout
     /// Runs a picked menu item on a conversation.
     /// </summary>
     /// <remarks>
-    /// Block &amp; report spam asks first (Report spam checked by default) and runs
-    /// <see cref="ConversationAction.BlockAndReport"/>, or <see cref="ConversationAction.Block"/> when unchecked. Move
-    /// to trash asks first and runs <see cref="ConversationAction.Delete"/>. Details calls
-    /// <paramref name="showDetails"/>. The rest run at once. A failure shows the view model's banner
-    /// (<see cref="MainViewModel.ActionError"/>); nothing is thrown.
+    /// Block &amp; report spam asks first, with Report spam checked by default. It runs
+    /// <see cref="ConversationAction.BlockAndReport"/>, or <see cref="ConversationAction.Block"/> when the user clears
+    /// Report spam. Move to trash asks first and runs <see cref="ConversationAction.Delete"/>. Details calls
+    /// <paramref name="showDetails"/>. The other items run at once. A failure shows the banner of the view model,
+    /// <see cref="MainViewModel.ActionError"/>. The method throws nothing.
     /// </remarks>
     /// <param name="vm">Runs the action.</param>
-    /// <param name="root">The window's XAML root, for the dialogs.</param>
+    /// <param name="root">The XAML root of the window for the dialogs.</param>
     /// <param name="c">The conversation.</param>
     /// <param name="item">The picked item.</param>
     /// <param name="showDetails">Opens the Details dialog, or null where there is none.</param>
-    /// <returns>A task that completes once the item ran (or the user canceled).</returns>
+    /// <returns>A task that completes after the item runs or after the user cancels.</returns>
     public static async Task RunAsync(MainViewModel vm, XamlRoot root, ConversationInfo c, ConversationMenuItem item, Func<Task>? showDetails)
     {
         ArgumentNullException.ThrowIfNull(vm);
@@ -118,11 +116,8 @@ internal static class ConversationMenuFlyout
         }
     }
 
-    // =========================================================================
-    // DIALOGS
-    // =========================================================================
-
-    // Block & Report Spam: True To Report As Well, False To Only Block, Null When Canceled (Or Another Dialog Is Open)
+    // Asks about Block & report spam. The result is true to block and report, false to block only, and null on a
+    // cancel. It is also null while another dialog is open.
     private static async Task<bool?> AskBlockAsync(XamlRoot root)
     {
         var report = new CheckBox
@@ -146,7 +141,7 @@ internal static class ConversationMenuFlyout
         return await ShowAsync(dialog) ? report.IsChecked == true : null;
     }
 
-    // Move To Trash: True When Confirmed
+    // Asks about Move to trash. The result is true when the user confirms.
     private static async Task<bool> AskTrashAsync(XamlRoot root)
     {
         var text = new TextBlock
@@ -158,7 +153,7 @@ internal static class ConversationMenuFlyout
         return await ShowAsync(NewDialog(root, "Dialog.Trash", ChatCopy.MoveToTrashTitle, text, ChatCopy.MoveToTrash));
     }
 
-    // A Confirm Dialog: Enter Picks Cancel (DefaultButton Close), So Nothing Happens By Accident
+    // Creates a confirm dialog. Enter picks Cancel through DefaultButton Close, so an accidental Enter changes nothing.
     internal static ContentDialog NewDialog(XamlRoot root, string automationId, string title, UIElement content, string primary)
     {
         ContentDialog dialog     = Dialogs.Create(root);
@@ -171,7 +166,8 @@ internal static class ConversationMenuFlyout
         return dialog;
     }
 
-    // Shows The Dialog Unless Another Is Open (Details Shows Through Here Too); True When Its Primary Button Was Picked
+    // Shows the dialog unless another dialog is open. Details also shows through this method. The result is true when
+    // the user picks the primary button.
     internal static async Task<bool> ShowAsync(ContentDialog dialog)
     {
         if (_dialogOpen)
@@ -189,10 +185,6 @@ internal static class ConversationMenuFlyout
             _dialogOpen = false;
         }
     }
-
-    // =========================================================================
-    // HELPERS
-    // =========================================================================
 
     private static string TextOf(ConversationMenuItem item) => item switch
     {
@@ -218,7 +210,7 @@ internal static class ConversationMenuFlyout
         _                                                                     => throw new ArgumentOutOfRangeException(nameof(item), item, null),
     };
 
-    // The Items That Run Without Asking
+    // Maps the items that run without a question.
     private static ConversationAction ActionOf(ConversationMenuItem item) => item switch
     {
         ConversationMenuItem.Archive   => ConversationAction.Archive,

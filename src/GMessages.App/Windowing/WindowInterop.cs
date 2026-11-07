@@ -3,18 +3,15 @@ using System.Runtime.InteropServices;
 namespace GMessages.App.Windowing;
 
 /// <summary>
-/// Win32, DWM and CoreMessaging calls for the XAML Island windows (<see cref="XamlWindow"/>).
+/// Holds the Win32, DWM and CoreMessaging calls for the XAML Island windows (<see cref="XamlWindow"/>).
 /// </summary>
 /// <remarks>
-/// LibraryImport with function pointers, so window procedures need no delegates kept alive. The resize sync
-/// export has no name: user32 exports it by ordinal only, so it's looked up with GetProcAddress.
+/// The calls use LibraryImport with function pointers, so the window procedures need no delegates that must stay
+/// alive. The resize sync export has no name, because user32 exports it only by ordinal. Thus the class finds it with
+/// GetProcAddress.
 /// </remarks>
 internal static unsafe partial class WindowInterop
 {
-    // =========================================================================
-    // MESSAGES
-    // =========================================================================
-
     public const uint WM_DESTROY          = 0x0002;
     public const uint WM_SIZE             = 0x0005;
     public const uint WM_ACTIVATE         = 0x0006;
@@ -39,7 +36,6 @@ internal static unsafe partial class WindowInterop
     public const uint WM_NCMOUSELEAVE     = 0x02A2;
     public const uint WM_DPICHANGED       = 0x02E0;
 
-    // Hit Test Codes
     public const int HTCAPTION     = 2;
     public const int HTMINBUTTON   = 8;
     public const int HTMAXBUTTON   = 9;
@@ -48,16 +44,11 @@ internal static unsafe partial class WindowInterop
     public const int HTTOPRIGHT    = 14;
     public const int HTCLOSE       = 20;
 
-    // System Commands
     public const int SC_MINIMIZE = 0xF020;
     public const int SC_MAXIMIZE = 0xF030;
     public const int SC_CLOSE    = 0xF060;
     public const int SC_RESTORE  = 0xF120;
     public const int SC_KEYMENU  = 0xF100;
-
-    // =========================================================================
-    // STYLES AND FLAGS
-    // =========================================================================
 
     public const uint WS_OVERLAPPEDWINDOW      = 0x00CF0000;
     public const uint WS_POPUP                 = 0x80000000;
@@ -99,7 +90,6 @@ internal static unsafe partial class WindowInterop
     public const uint TME_NONCLIENT = 0x00000010;
     public const uint TPM_RETURNCMD = 0x0100;
 
-    // DWM
     public const int DWMWA_CLOAK                    = 13;
     public const int DWMWA_USE_IMMERSIVE_DARK_MODE  = 20;
     public const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
@@ -111,12 +101,9 @@ internal static unsafe partial class WindowInterop
     public const uint DWM_BB_ENABLE                 = 0x1;
     public const uint DWM_BB_BLURREGION             = 0x2;
 
-    // Private user32 Ordinal (apkipa's gist: https://gist.github.com/apkipa/20cae438aef2a8633f99e10e0b90b11e)
+    // A private user32 ordinal, from the gist of apkipa.
+    // https://gist.github.com/apkipa/20cae438aef2a8633f99e10e0b90b11e
     private const int OrdinalEnableResizeLayoutSynchronization = 2615;
-
-    // =========================================================================
-    // STRUCTS
-    // =========================================================================
 
     [StructLayout(LayoutKind.Sequential)]
     public struct POINT
@@ -209,7 +196,7 @@ internal static unsafe partial class WindowInterop
         public nint  hIconSm;
     }
 
-    // DispatcherQueueOptions: a dispatcher queue on the calling thread, which runs a single-threaded apartment
+    // The options of a dispatcher queue on the calling thread, which runs a single-threaded apartment.
     [StructLayout(LayoutKind.Sequential)]
     public struct DispatcherQueueOptions
     {
@@ -217,10 +204,6 @@ internal static unsafe partial class WindowInterop
         public int threadType;
         public int apartmentType;
     }
-
-    // =========================================================================
-    // USER32
-    // =========================================================================
 
     [LibraryImport("user32.dll", SetLastError = true)]
     public static partial ushort RegisterClassExW(WNDCLASSEXW* windowClass);
@@ -266,7 +249,6 @@ internal static unsafe partial class WindowInterop
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool IsZoomed(nint hwnd);
-
 
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -325,16 +307,12 @@ internal static unsafe partial class WindowInterop
     [LibraryImport("user32.dll")]
     public static partial nint GetSystemMenu(nint hwnd, [MarshalAs(UnmanagedType.Bool)] bool revert);
 
-    // MONITOR_DEFAULTTONULL: 0 When The Rectangle Is On No Display
+    // With MONITOR_DEFAULTTONULL, the call returns 0 when the rectangle is on no display.
     [LibraryImport("user32.dll")]
     public static partial nint MonitorFromRect(RECT* rect, uint flags);
 
     [LibraryImport("user32.dll")]
     public static partial int TrackPopupMenu(nint menu, uint flags, int x, int y, int reserved, nint hwnd, nint rect);
-
-    // =========================================================================
-    // GDI, KERNEL32, DWM, COREMESSAGING
-    // =========================================================================
 
     [LibraryImport("gdi32.dll")]
     public static partial nint CreateRectRgn(int left, int top, int right, int bottom);
@@ -368,8 +346,8 @@ internal static unsafe partial class WindowInterop
     /// Turns DComp resize synchronization on or off for a top-level window.
     /// </summary>
     /// <remarks>
-    /// Undocumented user32 export (ordinal 2615) UWP uses so the system compositor holds each resized frame until
-    /// XAML has laid out at the new size. Returns false when this Windows build doesn't export it.
+    /// UWP uses this undocumented user32 export (ordinal 2615). The system compositor then holds each resized frame
+    /// until XAML has laid out at the new size. The method returns false when this Windows build does not export it.
     /// </remarks>
     /// <param name="hwnd">The top-level window.</param>
     /// <param name="enable">True to synchronize.</param>
@@ -388,7 +366,8 @@ internal static unsafe partial class WindowInterop
         return true;
     }
 
-    // Low And High Words Of A Message Parameter, Signed (Screen Coordinates Can Be Negative)
+    // Returns the low and the high word of a message parameter as signed values, because screen coordinates can be
+    // negative.
     public static int LowWord(nint value) => (short)(value & 0xFFFF);
 
     public static int HighWord(nint value) => (short)((value >> 16) & 0xFFFF);

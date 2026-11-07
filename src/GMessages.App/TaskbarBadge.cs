@@ -5,11 +5,12 @@ using Windows.UI.Notifications;
 namespace GMessages.App;
 
 /// <summary>
-/// Shows a number on the app's taskbar button: how many chats are unread (see <c>UnreadBadge</c>).
+/// Shows the number of unread chats on the taskbar button of the app (see <c>UnreadBadge</c>).
 /// </summary>
 /// <remarks>
-/// Windows 11 shows a packaged app's badge on its taskbar button whenever the button is visible. The unpackaged Debug
-/// app has no package identity, so it shows nothing. A failure is logged and dropped; only the count is ever logged.
+/// Windows 11 shows the badge of a packaged app on its taskbar button whenever the button is visible. The unpackaged
+/// Debug app has no package identity, so it shows no badge. The app logs a failure and drops it. The log of a badge
+/// holds only the count.
 /// </remarks>
 /// <seealso href="https://learn.microsoft.com/windows/apps/design/shell/tiles-and-notifications/badges"/>
 internal static class TaskbarBadge
@@ -42,10 +43,9 @@ internal static class TaskbarBadge
 
             AppLog.BadgeSet(logger, count);
         }
-#pragma warning disable CA1031 // A missing badge is better than a failed event handler; the failure is logged
         catch (Exception ex)
-#pragma warning restore CA1031
         {
+            // A missing badge is better than a failed event handler. The log holds the failure.
             AppLog.BadgeFailed(logger, ex.GetType().Name, ex.HResult);
         }
     }

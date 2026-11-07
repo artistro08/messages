@@ -7,20 +7,16 @@ using Windows.UI.Xaml.Controls;
 namespace GMessages.App.Views.Controls;
 
 /// <summary>
-/// The bubble's voice message: fetching its audio, its play button and waveform.
+/// Shows the voice message of the bubble with its play button and waveform, and fetches its audio.
 /// </summary>
 /// <remarks>
-/// Part of <see cref="MessageBubble"/>; the other members are in MessageBubble.xaml.cs.
+/// This file is a part of <see cref="MessageBubble"/>. The other members are in MessageBubble.xaml.cs.
 /// </remarks>
 public sealed partial class MessageBubble
 {
-
-    // =========================================================================
-    // VOICE
-    // =========================================================================
-
-    // Another Voice Message: Shown Stopped, Then (When Asked To Fetch) Downloaded And Its Waveform And Length Read. The
-    // Echo Of One Sent From Here Keeps Its Waveform And Play State, So A Playing Message Plays On
+    // A new voice message shows stopped. When the caller asks for the fetch, the audio downloads for its waveform and
+    // length. The echo of a message sent from here keeps its waveform and play state. Thus a message that plays
+    // continues.
     private void ShowVoice(bool fetch)
     {
         MediaPart? part = Bubble is { HasVoice: true } bubble ? bubble.Media : null;
@@ -43,7 +39,7 @@ public sealed partial class MessageBubble
         _voiceLoad++;
         _voiceWave   = null;
 
-        // No Voice Message: Its Part Unloads (x:Load)
+        // With no voice message, x:Load unloads its part.
         if (part is null)
         {
             return;
@@ -57,7 +53,8 @@ public sealed partial class MessageBubble
         FetchVoice(fetch);
     }
 
-    // The Shown Voice Message's Audio, Read For Its Waveform And Length Once Per Message Shown; The Audio Is Let Go After
+    // Reads the audio of the shown message for its waveform and length, once for each shown message. The method keeps
+    // no audio.
     private async void FetchVoice(bool fetch)
     {
         if (!fetch || _voicePart is not { IsPending: false } part || _voiceWave is not null || _voiceFetched == _voiceLoad
@@ -84,7 +81,7 @@ public sealed partial class MessageBubble
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            // Another Message Since: Its Part May Be Gone
+            // Another message shows now, and its part can be gone.
             if (load != _voiceLoad)
             {
                 return;
@@ -95,13 +92,12 @@ public sealed partial class MessageBubble
         }
     }
 
-    // Play Or Pause: The Chat's Player Shows The State Back (See VoiceRequest)
+    // The voice player of the chat shows the play state back through VoiceRequest.
     private void OnVoicePlayClick(object sender, RoutedEventArgs e) => RequestVoice(null);
 
-    // A Click On The Waveform Seeks There
     private void OnVoiceSeekRequested(object? sender, double share) => RequestVoice(share);
 
-    // The Audio Comes From The Media Store Again (Kept In Its Memory Cache Since The Waveform Was Read)
+    // The audio comes from the media store again. The store keeps it in its memory cache after the waveform read.
     private async void RequestVoice(double? seekTo)
     {
         if (_voicePart is not { IsPending: false } part || _voiceWave is not { } wave || (Application.Current as App)?.Media is not { } media)
@@ -109,7 +105,8 @@ public sealed partial class MessageBubble
             return;
         }
 
-        // Only While This View Still Shows The Message (A Recycled Row Moves On; Its Echo Doesn't)
+        // The request goes out only while this view shows the same message. A recycled row moves to another message,
+        // but an echo does not.
         int load = _voiceLoad;
         byte[] audio;
         try
@@ -136,7 +133,7 @@ public sealed partial class MessageBubble
         }));
     }
 
-    // The Play Button Becomes Pause While It Plays, And The Waveform Fills Up To How Much Has Played
+    // While the message plays, the play button becomes Pause. The waveform fills to the played share.
     private void ShowVoicePlaying(bool playing, double share)
     {
         if (Voice is null)

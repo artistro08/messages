@@ -5,9 +5,10 @@ using Windows.Storage;
 namespace GMessages.App;
 
 /// <summary>
-/// Settings in the package's local app data. Needs package identity (the installed MSIX). Ported from Magic Buds.
+/// Keeps the settings in the local app data of the package. It needs package identity, so only the installed MSIX
+/// uses it. Ported from Magic Buds.
 /// </summary>
-public sealed class LocalSettingsStore : ISettingsStore
+internal sealed class LocalSettingsStore : ISettingsStore
 {
     private readonly IPropertySet _values = ApplicationData.Current.LocalSettings.Values;
 
@@ -17,13 +18,11 @@ public sealed class LocalSettingsStore : ISettingsStore
     /// <inheritdoc />
     public void SetString(string key, string? value)
     {
-        // Skip Unchanged Values
         if (GetString(key) == value)
         {
             return;
         }
 
-        // Remove On Null
         if (value is null)
         {
             _values.Remove(key);

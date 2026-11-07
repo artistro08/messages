@@ -17,7 +17,7 @@
   <Identity
     Name="artistro08.Messages"
     Publisher="CN=BF59F607-536B-4252-888F-7B3ED9D56F96"
-    Version="0.1.7.7" />
+    Version="0.1.7.8" />
 
   <Properties>
     <DisplayName>$AppDisplayName$</DisplayName>

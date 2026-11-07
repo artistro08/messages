@@ -4,8 +4,8 @@ using GMessages.Presentation.Settings;
 namespace GMessages.App.Startup;
 
 /// <summary>
-/// <see cref="IStartupService"/> for UI test runs: a <c>startup-enabled</c> marker file in the test data folder stands
-/// in for the Run key, so tests never touch the registry and can assert on the file.
+/// Implements <see cref="IStartupService"/> for UI test runs. A <c>startup-enabled</c> marker file in the test data
+/// folder takes the place of the Run key. Thus tests can check the file and never touch the registry.
 /// </summary>
 internal sealed class MarkerFileStartupService : IStartupService
 {

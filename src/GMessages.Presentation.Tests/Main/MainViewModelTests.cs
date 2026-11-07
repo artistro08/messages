@@ -231,8 +231,8 @@ public sealed class MainViewModelTests
     }
 
     /// <summary>
-    /// Undo with Ctrl + Z works at any time in the session, with the bar or without it. Each undo puts back the latest
-    /// archive that remains, newest first. A conversation unarchived another way is no longer offered.
+    /// Undo with Ctrl + Shift + Z works at any time in the session, with the bar or without it. Each undo puts back
+    /// the latest archive that remains, newest first. A conversation unarchived another way is no longer offered.
     /// </summary>
     [TestMethod]
     public async Task Undo_PutsBackEachArchiveOfTheSession_AfterTheBarHid()
