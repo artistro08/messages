@@ -19,15 +19,15 @@ namespace GMessages.App.UITests;
 [DoNotParallelize]
 public sealed partial class MediaTests : UiTest
 {
-    // The Photo Bubble's Load States, As The Test Hooks Report Them In Its Item Status
+    // The load states of the photo bubble. The test hooks report them in the item status.
     private const string Blurred = "Blurred";
     private const string Full    = "Full";
     private const string Failed  = "Failed";
 
-    // A Whole 1 x 1 GIF89a, For A Pasted GIF
+    // A complete 1 x 1 GIF89a for a pasted GIF.
     private static readonly byte[] OnePixelGif = Convert.FromHexString("4749463839610100010080000000FFFFFF00000021F90400000000002C00000000010001000002024401003B");
 
-    // A 1 x 1 GIF89a That Moves: Two Frames (Black, Then White), 100 ms Each, Looping
+    // A 1 x 1 GIF89a that moves: two frames (black, then white), 100 ms each, looping.
     private static readonly byte[] TwoFrameGif = Convert.FromHexString(
         "47494638396101000100800000000000FFFFFF"
         + "21FF0B4E45545343415045322E30030100000"
@@ -36,9 +36,8 @@ public sealed partial class MediaTests : UiTest
         + "3B");
 
     /// <summary>
-    /// The seeded photo in Mia's chat shows: its bubble loads to the full image, and the image is on screen (blue).
+    /// The seeded photo in Mia's chat loads to the full image. The image on screen is blue.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task ReceivedPhoto_ShowsImage()
     {
@@ -54,9 +53,8 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// A photo with no caption names itself in its chat list row ("Image"), though the phone sends no snippet text for it.
+    /// A photo with no caption shows "Image" in its chat list row. The phone sends no snippet text for it.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task ReceivedPhoto_RowSnippetSaysImage()
     {
@@ -69,10 +67,10 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// A thumbnail-only photo shows blurred first, asks the phone for its full size, and turns sharp when the phone sends
-    /// it (the message edit swaps its media). The bubble keeps the photo's shape from its dimensions throughout.
+    /// A thumbnail-only photo shows blurred and asks the phone for its full size. It turns sharp when the phone sends
+    /// the full size and the message edit swaps its media. The bubble keeps the shape of the photo from its
+    /// dimensions.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task ReceivedPhoto_ThumbnailThenFull()
     {
@@ -89,10 +87,9 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// A photo that arrives while its download fails already takes its full size in the chat, so when it does load (after
-    /// a retry) nothing moves and the chat stays on its newest message.
+    /// A photo that arrives while its download fails already has its full size in the chat. When a retry loads the
+    /// photo, nothing moves and the chat stays on the newest message.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task ReceivedPhoto_ReservesHeight_NoJump()
     {
@@ -106,7 +103,6 @@ public sealed partial class MediaTests : UiTest
         System.Drawing.Rectangle before = photo.BoundingRectangle;
         Assert.AreEqual(4.0 / 3, (double)before.Width / before.Height, 0.03, $"The unloaded photo's box {before} isn't the photo's 4:3 shape.");
 
-        // Loads On Retry, In The Same Place
         Server.FailMediaDownloads = false;
         photo.Click();
         WaitForStatus(photo, Full);
@@ -117,9 +113,9 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// A photo whose download fails says so over its placeholder, and a click tries again and shows it.
+    /// A photo whose download fails shows a failure note over its placeholder. A click tries again and shows the
+    /// photo.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task ReceivedPhoto_DownloadFails_ShowsRetry()
     {
@@ -138,9 +134,8 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// A photo sent with a caption shows both in one bubble: the photo, named by the caption, with the caption under it.
+    /// A photo sent with a caption shows both in one bubble. The caption names the photo and sits under it.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task PhotoWithCaption_ShowsBoth()
     {
@@ -157,10 +152,9 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// A received file shows as a card with its name and size; a click downloads it, writes it to the private temp folder
-    /// and opens it (the test hook notes the path instead), and the file holds the bytes sent.
+    /// A received file shows as a card with its name and size. A click downloads the file, writes it to the private
+    /// temp folder and opens it, and the test hook notes the path instead. The file holds the bytes sent.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task ReceivedFile_Card_OpensDownloaded()
     {
@@ -184,10 +178,9 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// The photo menu's Save as writes the photo's bytes to the picked file (the test hook picks the path; the dialog is
-    /// still made and set up) and marks it as downloaded from the internet.
+    /// Save as in the photo menu writes the photo bytes to the picked file and marks the file as downloaded from the
+    /// internet. The test hook picks the path, but the app still creates and sets up the dialog.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task SaveAs_WritesPickedFile()
     {
@@ -208,10 +201,9 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// A photo the phone named without an extension (as phones often do) is offered by Save as under its type's
-    /// extension, from its mime type, not as a <c>.bin</c> file.
+    /// Phones often name a photo without an extension. Save as offers that name with the extension of the mime type,
+    /// not a <c>.bin</c> extension.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task SaveAs_NameWithoutExtension_OffersMimeExtension()
     {
@@ -231,11 +223,10 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// The menu's Download saves a photo, and a file, to the Downloads folder (the test hook's) with the bytes and the
-    /// mark of the web; a second copy gets "name (1)". "Saved to Downloads" shows, and its Show in folder opens the
-    /// folder (the test hook notes it).
+    /// Download in the menu saves a photo and a file to the Downloads folder of the test hook, with the bytes and the
+    /// mark of the web. A second copy gets the name "name (1)". The "Saved to Downloads" note shows, and its Show in
+    /// folder button opens the folder. The test hook notes the folder.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Download_FromMenu_SavesToDownloads()
     {
@@ -246,7 +237,6 @@ public sealed partial class MediaTests : UiTest
         AutomationElement photo = App.Find("Bubble.Photo." + message.MessageID);
         WaitForStatus(photo, Full);
 
-        // Twice: The Second Copy Gets Its Own Name
         foreach (string name in (string[])["keep.png", "keep (1).png"])
         {
             OpenMenu(photo);
@@ -257,7 +247,6 @@ public sealed partial class MediaTests : UiTest
             Assert.IsTrue(File.Exists(path + ":Zone.Identifier"), $"'{name}' has no mark of the web.");
         }
 
-        // The Confirmation, And Show In Folder
         AutomationElement bar = App.Find("Main.Downloaded");
         Assert.IsTrue(HasText(bar, ChatCopy.SavedToDownloads), $"The confirmation doesn't read '{ChatCopy.SavedToDownloads}'.");
         App.Find("Main.Downloaded.ShowInFolder").Patterns.Invoke.Pattern.Invoke();
@@ -265,7 +254,6 @@ public sealed partial class MediaTests : UiTest
         Wait.Until(() => File.Exists(launched), AppDriver.DefaultTimeout, () => "Show in folder opened nothing.");
         Assert.AreEqual(downloads, File.ReadAllLines(launched)[^1], true, "Show in folder opened another folder.");
 
-        // A File's Menu Has It Too
         byte[] pdf             = System.Text.Encoding.UTF8.GetBytes("%PDF-1.4 notes for the trip");
         Message file           = Server.Phone.PushIncomingMedia("c-media", "application/pdf", pdf, "notes.pdf");
         AutomationElement card = App.Find("Bubble.File." + file.MessageID);
@@ -276,10 +264,9 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// The photo menu's Open with launches the photo's temp copy with Windows' app picker (the test hook notes the path
-    /// and <c>picker</c> instead).
+    /// Open with in the photo menu launches the temp copy of the photo with the Windows app picker. The test hook
+    /// notes the path and the word <c>picker</c> instead.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task OpenWith_Photo_LaunchesPickerWithFile()
     {
@@ -300,10 +287,9 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// A received program's menu has no Open (it is never opened from here), but still offers Open with: Windows' picker
-    /// and launcher refuse to run a program themselves.
+    /// A received program has no Open in its menu, because the app never opens a program. The menu still offers
+    /// Open with, because the Windows picker and launcher refuse to run a program themselves.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task OpenWith_ReceivedProgram_StillOffered()
     {
@@ -320,9 +306,9 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// A photo whose name isn't an openable type still offers Open, and Open shows it in the app's viewer, launching nothing.
+    /// A photo whose name is not an openable type still offers Open. Open shows the photo in the viewer of the app and
+    /// launches nothing.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Open_PhotoOutsideAllowlist_OpensViewer()
     {
@@ -341,10 +327,10 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// A picked photo shows as a chip; Send uploads it, the phone gets it as a media message and then the text as its own
-    /// message (Mia's chat is RCS, which refuses captions), the bubble shows the photo in its shape, and the chip is gone.
+    /// A picked photo shows as a chip. Send uploads the photo, and the phone gets a media message and then the text as
+    /// its own message, because Mia's chat is RCS and RCS refuses captions. The bubble shows the photo in its shape
+    /// and the chip is gone.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Attach_Photo_SendsAndShows()
     {
@@ -366,7 +352,7 @@ public sealed partial class MediaTests : UiTest
         Assert.AreEqual("Look", FakeGoogle.FakePhone.SentText(Server.Phone.Sent[1]), "The text didn't follow the photo.");
         Wait.Until(() => App.TryFind("Chat.Attachment.1") is null, AppDriver.DefaultTimeout, () => "The chip stayed after Send.");
 
-        // The Photo's Echo (Before The Text's) Keeps Showing The Photo, In The Photo's Shape
+        // The echo of the photo comes before the echo of the text.
         string echoId           = Server.Phone.Chats.Page("c-media", 2, null).Page[1].MessageID;
         AutomationElement photo = App.Find("Bubble.Photo." + echoId);
         WaitForStatus(photo, Full);
@@ -375,10 +361,9 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// A sent photo's echo (which brings its media ID) keeps the photo on screen: it never clears, and nothing downloads
-    /// it again, since the bytes sent are the photo.
+    /// The echo of a sent photo brings a media ID. The photo stays on screen and never clears, and nothing downloads
+    /// it again, because the bytes sent are the photo.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task SentPhoto_Echo_NoReload()
     {
@@ -391,7 +376,6 @@ public sealed partial class MediaTests : UiTest
         App.Find("Chat.Attachment.1");
         App.Find("Chat.Send").Patterns.Invoke.Pattern.Invoke();
 
-        // The Sent Photo, Shown From Its Own Bytes
         AutomationElement? photo = null;
         Wait.Until(() => (photo = SentPhoto(seeded)) is not null, AppDriver.DefaultTimeout, () => "The sent photo didn't show.");
         WaitForStatus(photo!, Full);
@@ -399,7 +383,6 @@ public sealed partial class MediaTests : UiTest
         string mediaId  = Server.Phone.Sent[0].MessagePayload.MessageInfo.Single().MediaContent.MediaID;
         string echoId   = Server.Phone.Chats.Page("c-media", 1, null).Page[0].MessageID;
 
-        // Through The Echo And A Moment After, It Stays Full
         bool echoed    = false;
         DateTime until = DateTime.UtcNow + TimeSpan.FromSeconds(3);
         while (DateTime.UtcNow < until)
@@ -414,9 +397,9 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// A photo sending from here shows the upload bar under it while it uploads; once the phone has it, the bar goes.
+    /// A photo sent from here shows the upload bar under it during the upload. The bar goes when the phone has the
+    /// photo.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task SendPhoto_ShowsUploadBarUntilSent()
     {
@@ -431,7 +414,6 @@ public sealed partial class MediaTests : UiTest
         Wait.Until(() => Server.Phone.Sent.Count == 1, AppDriver.DefaultTimeout, () => "The phone didn't get the photo.");
         Wait.Until(() => UploadBar() is null, AppDriver.DefaultTimeout, () => "The upload bar stayed after the photo was sent.");
 
-        // Any Upload Bar In The Chat, Or Null
         AutomationElement? UploadBar() =>
             App.TryFind("Chat.Messages") is { } list
                 ? AppDriver.Search(list, e => e.Properties.AutomationId.ValueOrDefault?.StartsWith("Upload.", StringComparison.Ordinal) == true)
@@ -439,10 +421,9 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// A download that stalls gives up after the download timeout (shortened by the test hook) and shows the photo's
-    /// failure; a click tries again and shows it.
+    /// A download that stalls gives up after the download timeout, which the test hook shortens. The photo shows its
+    /// failure, and a click tries again and shows the photo.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task StalledDownload_ShowsFailed()
     {
@@ -461,10 +442,9 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// A thumbnail-only photo whose full size never comes from the phone offers to try again once the wait (shortened by
-    /// the test hook) runs out.
+    /// A thumbnail-only photo whose full size never comes from the phone offers a retry when the wait runs out.
+    /// The test hook shortens that wait.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task ReceivedPhoto_FullSizeNeverArrives_ShowsRetry()
     {
@@ -480,9 +460,8 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// The paperclip sits inside the message box's right edge, left of the mic.
+    /// The paperclip sits inside the right edge of the message box, left of the mic.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Attach_InsideDraftBox_LeftOfMic()
     {
@@ -497,9 +476,9 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// Two picked files show as two chips; each chip's remove button drops only it, and with none left Send turns off.
+    /// Two picked files show as two chips. The remove button of a chip drops only that chip. With no chip left,
+    /// Send turns off.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Attach_RemoveChip()
     {
@@ -522,9 +501,8 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// A chip's remove × keeps its round fill while hovered (the icon style's clear hover doesn't wipe it).
+    /// The remove × of a chip keeps its round fill while hovered. The clear hover of the icon style does not wipe it.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Attach_RemoveButton_KeepsItsFillOnHover()
     {
@@ -533,7 +511,7 @@ public sealed partial class MediaTests : UiTest
         App.Find("Chat.Attach").Patterns.Invoke.Pattern.Invoke();
         System.Drawing.Rectangle remove = App.Find("Chat.RemoveAttachment.1").BoundingRectangle;
 
-        // Inside The Circle, Clear Of The ×: Its Fill
+        // The sample point is inside the circle and clear of the ×, so it reads the fill.
         var at = new System.Drawing.Point(remove.Left + (remove.Width / 2), remove.Top + 4);
         Thread.Sleep(300);
         System.Drawing.Color resting = PixelAt(at);
@@ -546,10 +524,9 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// The attachment chips sit right on the message box, like the reply chip (owner: "any attachment should do that"),
-    /// and with a reply as well they stack: the reply on top, then the chips, then the box.
+    /// The attachment chips sit directly on the message box, like the reply chip. The owner asked: "any attachment
+    /// should do that". With a reply as well, they stack: the reply on top, then the chips, then the box.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Attach_ChipsJoinDraftBox_UnderReply()
     {
@@ -560,7 +537,6 @@ public sealed partial class MediaTests : UiTest
         App.Find("Chat.Attachment.1");
         AssertJoinedToDraft("Chat.AttachStrip");
 
-        // A Reply As Well: Above The Chips
         Message message = Server.Phone.PushIncoming("c-media", "joined up");
         App.Find("Bubble." + message.MessageID).RightClick();
         App.Find("Bubble.Reply").Patterns.Invoke.Pattern.Invoke();
@@ -572,10 +548,9 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// A GIF pasted into the message box (as a copied file, the way the emoji panel's GIFs and Explorer hand them over)
-    /// becomes one chip, and sends as <c>image/gif</c> with its own bytes, so it still moves on the phone.
+    /// A GIF pasted into the message box as a copied file becomes one chip. The emoji panel GIFs and Explorer hand
+    /// over GIFs this way. The chip sends as <c>image/gif</c> with its own bytes, so the GIF still moves on the phone.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Paste_Gif_OneChip_SendsAsGif()
     {
@@ -593,11 +568,10 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// A GIF from the Windows emoji panel's GIF tab: the panel hands over HTML (an <c>img</c> of the GIF on Tenor) and a
-    /// bitmap of its first frame, with no GIF or file format (the owner's log). It pastes as the linked GIF, fetched, and
-    /// sends as <c>image/gif</c> byte for byte, not as a still PNG of the bitmap.
+    /// The GIF tab of the Windows emoji panel hands over HTML and a bitmap of the first frame, with no GIF or file
+    /// format. The HTML has an <c>img</c> of the GIF on Tenor. The owner log showed this. The paste becomes the linked
+    /// GIF, fetched, and sends as <c>image/gif</c> byte for byte, not as a still PNG of the bitmap.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Paste_EmojiPanelGif_SendsTheLinkedGif()
     {
@@ -617,10 +591,9 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// A GIF in a bubble moves: its full image is an Image (an ImageBrush shows only the first frame), and the decoded
-    /// picture is animated.
+    /// A GIF in a bubble moves. Its full image is an Image, because an ImageBrush shows only the first frame, and the
+    /// decoded picture is animated.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task GifBubble_Animates()
     {
@@ -635,10 +608,9 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// A reply to a photo quotes it with its thumbnail and "Image" (not its text), and replying to a photo from here shows
-    /// the same in the reply chip over the message box.
+    /// A reply to a photo quotes it with the thumbnail and the word "Image", not its text. A reply started from here
+    /// shows the same in the reply chip over the message box.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task ReplyToPhoto_QuoteShowsThumbnailAndImage()
     {
@@ -650,7 +622,6 @@ public sealed partial class MediaTests : UiTest
         App.WaitForText("Quote." + reply.MessageID, ChatCopy.QuoteImage);
         WaitForStatus(App.Find("QuoteThumb." + reply.MessageID), "Thumb");
 
-        // The Reply Chip
         OpenMenu(App.Find("Bubble.Photo." + photo.MessageID));
         App.Find("Bubble.Reply").Patterns.Invoke.Pattern.Invoke();
         App.WaitForText("Chat.ReplyingTo", ChatCopy.QuoteImage);
@@ -658,17 +629,16 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// Scrolling a chat full of photos and GIFs fast up and down (rows recycle, photos resize) neither crashes the app
-    /// nor logs an unhandled error: 0.6.2 crashed here (0xc000027b) after Windows refused the photo clip's visual
-    /// (E_ACCESSDENIED) inside SizeChanged and x:Bind callbacks on recycled rows.
+    /// Fast scrolling up and down in a chat full of photos and GIFs neither crashes the app nor logs an unhandled
+    /// error. Rows recycle and photos resize. Version 0.6.2 crashed here with 0xc000027b. Windows refused the visual
+    /// of the photo clip with E_ACCESSDENIED inside SizeChanged and x:Bind callbacks on recycled rows.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task ManyPhotos_FastScroll_NoCrash()
     {
         await OpenMediaChatAsync();
 
-        // Thirty Photos Of Mixed Shapes, Every Fifth One A GIF
+        // Every fifth message is a GIF. The photos have mixed shapes.
         Message last = null!;
         for (int i = 0; i < 30; i++)
         {
@@ -679,7 +649,6 @@ public sealed partial class MediaTests : UiTest
 
         WaitForStatus(App.Find("Bubble.Photo." + last.MessageID), Full);
 
-        // Fast Up And Down, By Jumps And By The Wheel
         AutomationElement list = App.Find("Chat.Messages");
         var scroll             = list.Patterns.Scroll.Pattern;
         for (int round = 0; round < 8; round++)
@@ -710,11 +679,10 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// Bubbles load only the parts their message uses, and rows recycle between messages: in a chat of a photo, a voice
-    /// message and forty texts, scrolled away and back, the photo and the voice message still show their parts, and no
-    /// text bubble shows any part.
+    /// Bubbles load only the parts that their message uses, and rows recycle between messages. A chat has a photo, a
+    /// voice message and 40 texts. After a scroll away and back, the photo and the voice message still show their
+    /// parts, and no text bubble shows a part.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Bubble_Recycled_ShowsRightParts()
     {
@@ -733,7 +701,6 @@ public sealed partial class MediaTests : UiTest
 
         App.Find("Bubble." + texts[^1]);
 
-        // Away And Back, Twice: The Rows Recycle Between The Media And The Texts
         AutomationElement list = App.Find("Chat.Messages");
         var scroll             = list.Patterns.Scroll.Pattern;
         for (int round = 0; round < 2; round++)
@@ -746,7 +713,6 @@ public sealed partial class MediaTests : UiTest
             AssertParts(list, photo.MessageID, voice.MessageID, texts);
         }
 
-        // Back At The Top: The Photo Sharp And The Voice Message's Length Read, From Their Recycled Rows
         scroll.SetScrollPercent(-1, 0);
         WaitForStatus(App.Find("Bubble.Photo." + photo.MessageID), Full);
         AutomationElement length = App.Find("Bubble.Voice." + voice.MessageID);
@@ -755,8 +721,8 @@ public sealed partial class MediaTests : UiTest
         App.Find("Voice.Play." + voice.MessageID);
         Assert.IsFalse(ReadLog().Contains("Unhandled error", StringComparison.Ordinal), "Recycling the rows logged an unhandled error.");
 
-        // No Text Bubble Shows A Part, The Photo Shows Only Its Photo, And The Voice Message Only Its Voice Parts (The Chat's
-        // Seeded Messages Aside)
+        // No text bubble shows a part. The photo shows only its photo part and the voice message only its voice parts.
+        // The seeded messages of the chat are not checked.
         static void AssertParts(AutomationElement list, string photoId, string voiceId, List<string> texts)
         {
             var ids = new List<string>();
@@ -789,10 +755,9 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// A GIF on the clipboard in its own format (as a browser copies an image, beside the plain bitmap) pastes as that
-    /// GIF, not the flattened bitmap.
+    /// A GIF on the clipboard in its own format pastes as that GIF, not as the flat bitmap. A browser copies an image
+    /// this way, beside the plain bitmap.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Paste_GifFormat_BeatsBitmap()
     {
@@ -810,9 +775,8 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// Pasting text into the message box pastes the text, with no chip.
+    /// Pasted text goes into the message box and makes no chip.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Paste_Text_InsertsText()
     {
@@ -827,10 +791,9 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// A screenshot (a bitmap on the clipboard) pastes as a PNG photo chip, and a copied video file as a video chip that
-    /// sends as a video (<c>video/mp4</c>), not as a generic file.
+    /// A screenshot, which is a bitmap on the clipboard, pastes as a PNG photo chip. A copied video file pastes as a
+    /// video chip. The video sends as <c>video/mp4</c>, not as a generic file.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Paste_ScreenshotAndVideo_SendAsPhotoAndVideo()
     {
@@ -850,9 +813,9 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// Ctrl + Shift + a opens the picker for any files, and Ctrl + Shift + p the photo picker, whose pick becomes a chip.
+    /// Ctrl + Shift + a opens the picker for any file. Ctrl + Shift + p opens the photo picker, and its pick becomes
+    /// a chip.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task CtrlShiftA_OpensPicker()
     {
@@ -861,7 +824,8 @@ public sealed partial class MediaTests : UiTest
         string opened       = Path.Combine(App.DataDir, "picker.txt");
         List<string> expect = [];
 
-        // Another App's Global Hotkey Takes Ctrl + Shift + a Before Any Window Sees It: Then Only Ctrl + Shift + p Is Tried
+        // A global hotkey of another app takes Ctrl + Shift + a before any window sees it. Then the test tries only
+        // Ctrl + Shift + p.
         if (HotkeyFree(VirtualKeyShort.KEY_A))
         {
             Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.SHIFT, VirtualKeyShort.KEY_A);
@@ -883,10 +847,9 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// A received voice message shows its length, read from the audio (the proto has none), and its play button plays and
-    /// pauses it, named Play or Pause to match.
+    /// A received voice message shows its length. The app reads the length from the audio, because the proto has none.
+    /// The play button plays and pauses the message, and its name changes between Play and Pause.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task ReceivedVoice_PlayPause_ShowsLength()
     {
@@ -910,10 +873,10 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// The mic records (the test hook's microphone copies the fixture), Stop puts the recording in the preview chip with
-    /// its length, joined to the top of the message box, and Send sends it as "Voice message.m4a" (audio/mp4); the temp file is gone after.
+    /// The mic records, and the microphone of the test hook copies the fixture. Stop puts the recording in the preview
+    /// chip with its length, joined to the top of the message box. Send sends it as "Voice message.m4a" with type
+    /// audio/mp4, and the temp file is gone after.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Record_StopSend_SendsAudioMp4()
     {
@@ -925,7 +888,7 @@ public sealed partial class MediaTests : UiTest
         AutomationElement timer = App.Find("Chat.RecordTimer");
         Wait.Until(() => VoiceTempFiles().Length == 1, AppDriver.DefaultTimeout, () => "Recording wrote no temp file.");
 
-        // The Live Waveform Moves (The Fake Recorder's Level Follows A Wave) And The Timer Runs
+        // The level of the fake recorder follows a wave, so the live waveform moves. The timer runs.
         string levelFile     = Path.Combine(App.DataDir, "record-level.txt");
         HashSet<string> seen = [];
         Wait.Until(() =>
@@ -958,14 +921,15 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// The live waveform grows up and down from one fixed center line (owner: "the middle line shifts when recording
-    /// gets loud"): its bounds stay put between a quiet and a loud level, and no bar strays from the center line.
+    /// The live waveform grows up and down from one fixed center line. The owner reported: "the middle line shifts
+    /// when recording gets loud". The bounds stay the same between a quiet and a loud level, and no bar strays from
+    /// the center line.
     /// </summary>
     /// <remarks>
-    /// The fake microphone's level follows a wave, so both a quiet and a loud level come by. The bars' drift comes from
-    /// the app's test hook (<c>record-drift.txt</c>), measured on every tick from the last layout.
+    /// The level of the fake microphone follows a wave, so both a quiet and a loud level come by. The app test hook
+    /// (<c>record-drift.txt</c>) reports the drift of the bars. It measures the drift on every tick from the last
+    /// layout.
     /// </remarks>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Record_Waveform_KeepsCenterLine()
     {
@@ -975,7 +939,6 @@ public sealed partial class MediaTests : UiTest
         App.Find("Chat.Record").Patterns.Invoke.Pattern.Invoke();
         AutomationElement wave = App.Find("Chat.RecordWave");
 
-        // Watch The Levels Go By: The Wave's Bounds At A Quiet And A Loud One, And The Worst Drift Seen
         string levelFile                = Path.Combine(App.DataDir, "record-level.txt");
         string driftFile                = Path.Combine(App.DataDir, "record-drift.txt");
         System.Drawing.Rectangle? quiet = null;
@@ -1004,10 +967,9 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// The live waveform fills the free space between the timer and the recording's buttons, so a wider window gives it
-    /// more room (owner: "the waveform should expand to that").
+    /// The live waveform fills the free space between the timer and the buttons of the recording. A wider window gives
+    /// it more room. The owner asked: "the waveform should expand to that".
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Record_Waveform_GrowsWithWindow()
     {
@@ -1020,7 +982,6 @@ public sealed partial class MediaTests : UiTest
         Assert.IsGreaterThanOrEqualTo(0, cancel.BoundingRectangle.Left - wave.BoundingRectangle.Right, "The waveform runs under Cancel recording.");
         int before = wave.BoundingRectangle.Width;
 
-        // Widen The Window
         Window window                = App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout);
         System.Drawing.Rectangle box = window.BoundingRectangle;
         window.Patterns.Transform.Pattern.Resize(box.Width + 300, box.Height);
@@ -1030,25 +991,22 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// The recording bar's buttons keep the message box's spacing (owner: "the buttons do not match the spacing of the
-    /// composer bar"): Cancel recording, Pause and Done sit side by side as the mic and Send do, and Done is as far in
-    /// from the box's right edge as Send.
+    /// The buttons of the recording bar keep the spacing of the message box. The owner reported: "the buttons do not
+    /// match the spacing of the composer bar". Cancel recording, Pause and Done sit side by side like the mic and
+    /// Send. Done is as far from the right edge of the box as Send.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Record_Buttons_MatchComposerSpacing()
     {
         await FakeMicrophoneAsync();
         await OpenMediaChatAsync();
 
-        // The Message Box's Own Buttons
         System.Drawing.Rectangle box  = App.Find("Chat.Draft").BoundingRectangle;
         System.Drawing.Rectangle mic  = App.Find("Chat.Record").BoundingRectangle;
         System.Drawing.Rectangle send = App.Find("Chat.Send").BoundingRectangle;
         int composerGap               = send.Left - mic.Right;
         int composerEdge              = box.Right - send.Right;
 
-        // The Recording Bar's
         App.Find("Chat.Record").Patterns.Invoke.Pattern.Invoke();
         System.Drawing.Rectangle cancel = App.Find("Chat.CancelRecording").BoundingRectangle;
         System.Drawing.Rectangle pause  = App.Find("Chat.RecordPause").BoundingRectangle;
@@ -1061,10 +1019,10 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// Pause (reached from Done with Shift + Tab, pressed with Space) holds the timer and the live waveform still and
-    /// becomes Resume; Resume counts on from there; Done from the resumed recording still lands in the preview chip.
+    /// Pause holds the timer and the live waveform still and becomes Resume. The test reaches Pause from Done with
+    /// Shift + Tab and presses it with Space. Resume counts on from the held time. Done after a resume still lands in
+    /// the preview chip.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Record_PauseResume_TimerHoldsThenCountsOn()
     {
@@ -1078,14 +1036,13 @@ public sealed partial class MediaTests : UiTest
         Assert.AreEqual(ChatCopy.Pause, AppDriver.SafeName(pause), "The pause button has another name.");
         System.Drawing.Rectangle timerBox = timer.BoundingRectangle;
 
-        // Pause From The Keyboard: Focus Starts On Done, Pause Is Just Before It
+        // Focus starts on Done. Pause is the control just before it.
         Wait.Until(() => App.Find("Chat.StopRecording").Properties.HasKeyboardFocus.ValueOrDefault, AppDriver.DefaultTimeout, () => "Done didn't get focus.");
         Keyboard.TypeSimultaneously(VirtualKeyShort.SHIFT, VirtualKeyShort.TAB);
         Wait.Until(() => pause.Properties.HasKeyboardFocus.ValueOrDefault, AppDriver.DefaultTimeout, () => "Shift + Tab from Done didn't reach Pause.");
         Keyboard.Type(VirtualKeyShort.SPACE);
         Wait.Until(() => AppDriver.SafeName(pause) == ChatCopy.Resume, AppDriver.DefaultTimeout, () => $"Pause didn't become Resume: '{AppDriver.SafeName(pause)}'.");
 
-        // Paused: The Time And The Waveform Hold Still
         string levelFile  = Path.Combine(App.DataDir, "record-level.txt");
         string heldTime   = AppDriver.SafeName(timer);
         string heldLevel  = ReadShared(levelFile);
@@ -1093,7 +1050,6 @@ public sealed partial class MediaTests : UiTest
         Assert.AreEqual(heldTime, AppDriver.SafeName(timer), "The timer ran while paused.");
         Assert.AreEqual(heldLevel, ReadShared(levelFile), "The live waveform moved while paused.");
 
-        // Resume: The Time Counts On From Where It Held
         pause.Patterns.Invoke.Pattern.Invoke();
         Wait.Until(() => AppDriver.SafeName(pause) == ChatCopy.Pause, AppDriver.DefaultTimeout, () => "Resume didn't become Pause.");
         string next = heldTime == "0:01" ? "0:02" : "0:03";
@@ -1106,10 +1062,10 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// A recording whose file can't be finished (the test hook's "unfinished" microphone) isn't lost silently: Done says
-    /// "Couldn't save this recording. Try again." over the chips, the mic is back and the temp file is gone.
+    /// A recording whose file cannot finish is not lost silently. The "unfinished" microphone of the test hook makes
+    /// this case. Done shows "Couldn't save this recording. Try again." over the chips, the mic is back and the temp
+    /// file is gone.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Record_DoneFails_SaysSo()
     {
@@ -1129,10 +1085,10 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// Closing the window while recording drops the recording with its file, and the reopened window's chat is back at
-    /// the mic: before, the kept chat stayed recording with no recorder, so its bar came back with a Done that did nothing.
+    /// Closing the window during a recording drops the recording with its file. The reopened chat is back at the mic.
+    /// Before the fix, the kept chat stayed in the recording state with no recorder. Its bar came back with a Done
+    /// that did nothing.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Record_CloseWindow_ReopensAtMic()
     {
@@ -1151,9 +1107,8 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// Cancel recording drops the recording: its temp file is deleted, nothing is sent and the mic is back.
+    /// Cancel recording drops the recording: the temp file is deleted, nothing is sent and the mic is back.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Record_Cancel_DeletesTemp()
     {
@@ -1173,10 +1128,9 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// With microphone access off, the mic shows the app's microphone dialog (title and text), no recording starts,
-    /// and Cancel closes it without opening anything.
+    /// With microphone access off, the mic shows the microphone dialog of the app with its title and text. No
+    /// recording starts. Cancel closes the dialog and opens nothing.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task MicDenied_ShowsMicrophoneDialog()
     {
@@ -1201,10 +1155,9 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// The microphone dialog's Open settings opens Windows' microphone privacy page (the test hook notes the address
-    /// instead of launching it).
+    /// Open settings in the microphone dialog opens the microphone privacy page of Windows. The test hook notes the
+    /// address instead of launching it.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task MicDenied_OpenSettings_OpensMicrophonePage()
     {
@@ -1222,7 +1175,7 @@ public sealed partial class MediaTests : UiTest
     // HELPERS
     // =========================================================================
 
-    // The Test Hook's Microphone Records The Voice Fixture
+    // The microphone of the test hook records the voice fixture.
     private async Task FakeMicrophoneAsync()
     {
         string fixture = Path.Combine(App.DataDir, "voice-fixture.m4a");
@@ -1230,8 +1183,9 @@ public sealed partial class MediaTests : UiTest
         await File.WriteAllTextAsync(Path.Combine(App.DataDir, "microphone.txt"), fixture);
     }
 
-    // The Voice Player Really Plays: Its Own State Is Playing, Its Position Passes 0.3 s, It Knows Its Length, And It Plays
-    // As Media (A Communications Stream Goes To The Communications Device, Silent On The Owner's Speakers)
+    // The voice player must really play: its state is Playing, its position passes 0.3 s and its length is known. It
+    // must play as Media. A communications stream goes to the communications device, which is silent on the speakers
+    // of the owner.
     private void WaitForPlayback()
     {
         string state  = Path.Combine(App.DataDir, "voice-player.txt");
@@ -1250,7 +1204,6 @@ public sealed partial class MediaTests : UiTest
         }, AppDriver.DefaultTimeout, () => $"The voice player never played: '{last}'.");
     }
 
-    // A Dialog's Button, By Name
     private static AutomationElement DialogButton(AutomationElement dialog, string name)
     {
         AutomationElement? button = null;
@@ -1259,7 +1212,7 @@ public sealed partial class MediaTests : UiTest
         return button!;
     }
 
-    // A File The App May Be Writing
+    // The app can hold the file open for writing, so the read shares the file with the writer.
     private static string ReadShared(string path)
     {
         try
@@ -1273,7 +1226,6 @@ public sealed partial class MediaTests : UiTest
         }
     }
 
-    // Recordings Waiting In The App's Private Temp Folder
     private string[] VoiceTempFiles()
     {
         string folder = Path.Combine(App.DataDir, "Temp", "Media");
@@ -1281,16 +1233,15 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// Makes a 3-second voice message: a tone that swells and fades (so its waveform has a shape), 8 kHz mono, encoded
-    /// to M4A/AAC by Windows' transcoder as the app's recorder would.
+    /// Makes a voice message of 3 seconds: a tone that swells and fades, so the waveform has a shape. The audio is
+    /// 8 kHz mono. The Windows transcoder encodes it to M4A/AAC as the recorder of the app does.
     /// </summary>
-    /// <returns>The M4A file's bytes.</returns>
+    /// <returns>The bytes of the M4A file.</returns>
     internal static async Task<byte[]> VoiceFixtureAsync()
     {
         const int Rate    = 8000;
         const int Seconds = 3;
 
-        // A 16-Bit PCM WAV File
         using var wav    = new MemoryStream();
         using var writer = new BinaryWriter(wav);
         int samples      = Rate * Seconds;
@@ -1314,7 +1265,6 @@ public sealed partial class MediaTests : UiTest
 
         writer.Flush();
 
-        // To M4A
         using var source = new Windows.Storage.Streams.InMemoryRandomAccessStream();
         using var target = new Windows.Storage.Streams.InMemoryRandomAccessStream();
         await source.WriteAsync(System.Runtime.InteropServices.WindowsRuntime.WindowsRuntimeBufferExtensions.AsBuffer(wav.ToArray()));
@@ -1330,7 +1280,8 @@ public sealed partial class MediaTests : UiTest
         return m4a.ToArray();
     }
 
-    // Whether Ctrl + Shift + The Key Is Free: No Other App Holds It As A Global Hotkey (Which Windows Would Hand That App)
+    // Whether Ctrl + Shift + the key is free. When another app holds it as a global hotkey, Windows hands the key to
+    // that app.
     private static bool HotkeyFree(VirtualKeyShort key)
     {
         const uint ControlShiftNoRepeat = 0x0002 | 0x0004 | 0x4000;
@@ -1353,8 +1304,8 @@ public sealed partial class MediaTests : UiTest
     [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
     private static partial bool UnregisterHotKey(IntPtr window, int id);
 
-    // Writes Files For The App's Next Pick (The Test Hook Answers The Picker With Them)
-    // The Test Hook's Clipboard (See TestHooks.PasteContentAsync), Then Ctrl + V In The Message Box
+    // The test hook clipboard (see TestHooks.PasteContentAsync) holds the lines. Then Ctrl + V pastes in the message
+    // box.
     private void PasteIntoDraft(params string[] clipboard)
     {
         File.WriteAllLines(Path.Combine(App.DataDir, "paste.txt"), clipboard);
@@ -1363,7 +1314,7 @@ public sealed partial class MediaTests : UiTest
         Wait.Until(() => !File.Exists(Path.Combine(App.DataDir, "paste.txt")), AppDriver.DefaultTimeout, () => "The paste never read the clipboard.");
     }
 
-    // A File In Its Own Folder Under The Data Folder, For A Paste
+    // Each file goes in its own folder under the data folder.
     private string WriteFile(string name, byte[] bytes)
     {
         string folder = Path.Combine(App.DataDir, "pastes", Guid.NewGuid().ToString("N"));
@@ -1373,6 +1324,7 @@ public sealed partial class MediaTests : UiTest
         return path;
     }
 
+    // Writes the files for the next pick of the app. The test hook answers the picker with them.
     private void Pick(params (string Name, byte[] Bytes)[] files)
     {
         string folder = Path.Combine(App.DataDir, "picks", Guid.NewGuid().ToString("N"));
@@ -1388,7 +1340,7 @@ public sealed partial class MediaTests : UiTest
         File.WriteAllLines(Path.Combine(App.DataDir, "pick.txt"), paths);
     }
 
-    // A Photo's Or File Card's Bubble Menu, From The Keyboard (Shift + F10 On It, Focused)
+    // Opens the bubble menu of a photo or file card from the keyboard: Shift + F10 on the focused part.
     private void OpenMenu(AutomationElement part)
     {
         App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout).SetForeground();
@@ -1396,7 +1348,7 @@ public sealed partial class MediaTests : UiTest
         Keyboard.TypeSimultaneously(VirtualKeyShort.SHIFT, VirtualKeyShort.F10);
     }
 
-    // The Last File Launched With Windows' App Picker (The Test Hook's Note: The Path, Then " picker")
+    // The test hook notes the last file that the Windows app picker launched: the path, then " picker".
     private string LaunchedWithPicker(string what)
     {
         const string Picker = " picker";
@@ -1407,10 +1359,10 @@ public sealed partial class MediaTests : UiTest
         return line[..^Picker.Length];
     }
 
-    // Two Halves: Red Left, Blue Right
+    // Two halves: red left, blue right.
     internal static (byte R, byte G, byte B) SplitColors(int x, int y, int width) => x < width / 2 ? ((byte)220, (byte)40, (byte)40) : ((byte)40, (byte)60, (byte)220);
 
-    // Seeds Mia's Photo Chat, Pairs, Opens The Main Window And Then Her Chat
+    // Seeds the photo chat of Mia, pairs, opens the main window and then her chat.
     private async Task OpenMediaChatAsync()
     {
         Server.Phone.Chats.AddPhotoChat();
@@ -1420,7 +1372,7 @@ public sealed partial class MediaTests : UiTest
         App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout).SetForeground();
     }
 
-    // A Strip Over The Message Box Meets It: Its Bottom Is The Box's Top
+    // A strip over the message box meets it: the bottom of the strip is the top of the box.
     private void AssertJoinedToDraft(string automationId)
     {
         AutomationElement part  = App.Find(automationId);
@@ -1429,27 +1381,25 @@ public sealed partial class MediaTests : UiTest
             () => $"{automationId} ends at y {part.BoundingRectangle.Bottom}, the message box starts at y {draft.BoundingRectangle.Top}.");
     }
 
-    // The Chat's First Photo, Or Null
     private AutomationElement? FirstPhoto() =>
         App.TryFind("Chat.Messages") is { } list
             ? AppDriver.Search(list, e => e.Properties.AutomationId.ValueOrDefault?.StartsWith("Bubble.Photo.", StringComparison.Ordinal) == true)
             : null;
 
-    // The Newest Photo That Isn't The Seeded One (A Sent Photo), Or Null
+    // The newest photo that is not the seeded one, which is a sent photo.
     private AutomationElement? SentPhoto(string seeded) =>
         App.TryFind("Chat.Messages") is { } list
             ? AppDriver.Search(list, e => e.Properties.AutomationId.ValueOrDefault is { } id && id.StartsWith("Bubble.Photo.", StringComparison.Ordinal) && id != seeded)
             : null;
 
-    // Waits For The Photo's Load State (Its Item Status Under The Test Hooks)
+    // The load state of the photo is its item status under the test hooks.
     private static void WaitForStatus(AutomationElement photo, string status) =>
         Wait.Until(() => photo.Properties.ItemStatus.ValueOrDefault == status, AppDriver.DefaultTimeout,
             () => $"The photo stayed '{photo.Properties.ItemStatus.ValueOrDefault}', not '{status}'.");
 
-    // Whether Any Text Under The Element Reads This
     private static bool HasText(AutomationElement root, string text) => AppDriver.Search(root, e => AppDriver.SafeName(e) == text) is not null;
 
-    // The Screen Pixel In The Middle Of An Element, Read Once Its Fade Has Finished
+    // The screen pixel in the middle of an element. The read waits until the fade of the element has finished.
     private System.Drawing.Color CenterPixel(AutomationElement element)
     {
         App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout).SetForeground();
@@ -1459,7 +1409,7 @@ public sealed partial class MediaTests : UiTest
         return capture.Bitmap.GetPixel(0, 0);
     }
 
-    // The Message List Sits On Its Newest Message: Less Than A Pixel Short Of Its End
+    // The message list sits on its newest message when it is less than 1 px short of its end.
     private void AssertAtNewest(string what)
     {
         AutomationElement list = App.Find("Chat.Messages");
@@ -1472,15 +1422,15 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// Makes a PNG of the given size (8-bit RGB, stored with zlib), each pixel colored by a function.
+    /// Makes a PNG of the given size, 8-bit RGB stored with zlib. A function sets the color of each pixel.
     /// </summary>
     /// <param name="width">The width in pixels.</param>
     /// <param name="height">The height in pixels.</param>
-    /// <param name="color">Gives a pixel's color from its x, its y and the width.</param>
-    /// <returns>The PNG file's bytes.</returns>
+    /// <param name="color">Gives the color of a pixel from its x, its y and the width.</param>
+    /// <returns>The bytes of the PNG file.</returns>
     internal static byte[] Png(int width, int height, Func<int, int, int, (byte R, byte G, byte B)> color)
     {
-        // Rows: A Filter Byte (None), Then RGB
+        // Each row is a filter byte (None), then RGB.
         byte[] raw = new byte[height * ((width * 3) + 1)];
         for (int y = 0, at = 0; y < height; y++)
         {

@@ -9,16 +9,15 @@ using Keyboard = FlaUI.Core.Input.Keyboard;
 namespace GMessages.App.UITests;
 
 /// <summary>
-/// Videos: a video bubble plays in place (one at a time, as media) from its play button, and opens in the window's
-/// viewer from its frame or its expand button; Escape stops the viewer's video and closes it.
+/// Videos: a video bubble plays in place from its play button, one at a time and as media. It opens in the viewer of
+/// the window from its frame or its expand button. Escape stops the video of the viewer and closes it.
 /// </summary>
 public sealed partial class MediaTests
 {
     /// <summary>
-    /// The play button plays the video in its bubble, with Windows' controls, as media (not communications), and opens
-    /// nothing outside the app; the expand button then shows.
+    /// The play button plays the video in its bubble with the Windows controls, as media and not as communications.
+    /// Nothing opens outside the app, and the expand button then shows.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Video_InlinePlay_PlaysInPlace()
     {
@@ -39,10 +38,9 @@ public sealed partial class MediaTests
     }
 
     /// <summary>
-    /// Windows' play and pause button works on a video playing in its bubble: a click while the 20 s clip plays pauses it
-    /// where it is, and another click plays it on. There's no cast button.
+    /// The Windows play and pause button works on a video that plays in its bubble. A click while the 20 s clip plays
+    /// pauses it where it is, and another click plays it on. There is no cast button.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Video_InlinePlayPauseButton_PausesAndPlays()
     {
@@ -56,10 +54,9 @@ public sealed partial class MediaTests
     }
 
     /// <summary>
-    /// Windows' play and pause button works in the viewer too: it pauses the 20 s clip where it is and plays it on.
-    /// There's no cast button.
+    /// The Windows play and pause button works in the viewer too. It pauses the 20 s clip where it is and plays it on.
+    /// There is no cast button.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Video_ViewerPlayPauseButton_PausesAndPlays()
     {
@@ -73,9 +70,8 @@ public sealed partial class MediaTests
     }
 
     /// <summary>
-    /// Starting a second video stops the first: only one plays in place at a time.
+    /// A second video that starts stops the first video. Only one video plays in place at a time.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Video_SecondInlinePlay_StopsTheFirst()
     {
@@ -92,10 +88,10 @@ public sealed partial class MediaTests
     }
 
     /// <summary>
-    /// A click on the frame opens the video in the viewer, playing, with Open in default app in place of Open in
-    /// Photos; Escape stops it and closes the viewer, the chat stays open, and focus goes back to the frame.
+    /// A click on the frame opens the video in the viewer, and it plays. The viewer has Open in default app in place
+    /// of Open in Photos. Escape stops the video and closes the viewer. The chat stays open, and focus returns to the
+    /// frame.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Video_FrameOpensViewer_EscapeStops()
     {
@@ -120,7 +116,6 @@ public sealed partial class MediaTests
     /// <summary>
     /// The expand button on a playing video opens the viewer and stops the inline player.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Video_Expand_OpensViewer_StopsInline()
     {
@@ -139,10 +134,10 @@ public sealed partial class MediaTests
     }
 
     /// <summary>
-    /// A video the phone sent no thumbnail for shows a frame made from the video in its bubble (the play button's state
-    /// goes from Pending to Frame), and a reply to it shows the same frame in its quote and in the reply chip.
+    /// A video without a phone thumbnail shows a frame that the app makes from the video. The state of the play
+    /// button goes from Pending to Frame. A reply to the video shows the same frame in its quote and in the reply
+    /// chip.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Video_NoThumbnail_FrameMadeForBubbleQuoteAndChip()
     {
@@ -154,25 +149,22 @@ public sealed partial class MediaTests
         App.WaitForText("Quote." + reply.MessageID, ChatCopy.QuoteVideo);
         WaitForStatus(App.Find("QuoteThumb." + reply.MessageID), "Thumb");
 
-        // The Reply Chip
         OpenMenu(App.Find("Bubble.Video." + video.MessageID));
         App.Find("Bubble.Reply").Patterns.Invoke.Pattern.Invoke();
         App.WaitForText("Chat.ReplyingTo", ChatCopy.QuoteVideo);
         WaitForStatus(App.Find("Chat.ReplyingToThumb"), "Thumb");
     }
 
-    // Mia Sends A Test Clip (The 2 s One Unless Named)
     /// <summary>
-    /// A portrait video's narrow bubble still gets the whole compact bar in order: the seek bar shrinks to the room left
-    /// between play and volume instead of running under volume with its thumb cut off (owner report).
+    /// The narrow bubble of a portrait video still gets the whole compact bar in order. The seek bar shrinks to the
+    /// room between play and volume. It does not run under volume with its thumb cut off, as the owner reported.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Video_NarrowBubble_KeepsTheCompactBarInOrder()
     {
         await OpenMediaChatAsync();
 
-        // The Clip Is Small; Its Reported Dimensions Shape The Bubble, As A Phone's Portrait Video Would
+        // The clip is small. Its reported dimensions shape the bubble, as the portrait video of a phone does.
         Message message = Server.Phone.PushIncomingMedia("c-media", "video/mp4", File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Fixtures", "clip-long.mp4")), "portrait.mp4",
             dimensions: new Dimensions { Width = 720, Height = 1280 });
 
@@ -180,7 +172,7 @@ public sealed partial class MediaTests
         AutomationElement player = App.Find("Video.Player." + message.MessageID);
         WaitForStatus(player, "Playing");
 
-        // The Pointer Over The Video Shows The Bar
+        // The pointer over the video shows the bar.
         App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout).SetForeground();
         System.Drawing.Rectangle box = player.BoundingRectangle;
         FlaUI.Core.Input.Mouse.MoveTo(box.X + (box.Width / 2), box.Y + (box.Height / 2));
@@ -190,24 +182,23 @@ public sealed partial class MediaTests
     }
 
     /// <summary>
-    /// A video playing in its bubble shows its frames (the app draws them: the player's own picture ignored the bubble's
-    /// corners on the owner's install) with the bubble's rounded corners: the middle of the box shows the clip, and the
-    /// box's bottom right corner shows the chat behind it.
+    /// A video that plays in its bubble shows its frames with the rounded corners of the bubble. The app draws the
+    /// frames, because the own picture of the player ignored the corners on the install of the owner. The middle of
+    /// the box shows the clip, and the bottom right corner of the box shows the chat behind it.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Video_InlinePlay_ShowsFramesWithRoundedCorners()
     {
         await OpenMediaChatAsync();
 
-        // The Clip's Own Shape, So Its Picture Fills The Box To The Corners
+        // The bubble takes the shape of the clip, so the picture fills the box to the corners.
         Message message = Server.Phone.PushIncomingMedia("c-media", "video/mp4", File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Fixtures", "clip-long.mp4")), "clip-long.mp4",
             dimensions: new Dimensions { Width = 160, Height = 120 });
         App.Find("Video.Play." + message.MessageID).Patterns.Invoke.Pattern.Invoke();
         AutomationElement player = App.Find("Video.Player." + message.MessageID);
         WaitForStatus(player, "Playing");
 
-        // The Pointer Away, So The Bar Hides; A Moment For Frames To Draw
+        // The pointer moves away so the bar hides. The sleep gives the frames time to draw.
         App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout).SetForeground();
         System.Drawing.Rectangle box = player.BoundingRectangle;
         FlaUI.Core.Input.Mouse.MoveTo(box.X - 60, box.Y - 60);
@@ -223,14 +214,14 @@ public sealed partial class MediaTests
             $"The video's bottom right corner ({corner}) isn't the chat behind it ({beside}): the corner isn't rounded.");
     }
 
+    // Mia sends a test clip: the 2 s clip, unless the call names another file.
     private Message PushVideo(string file = "clip.mp4") =>
         Server.Phone.PushIncomingMedia("c-media", "video/mp4", File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Fixtures", file)), file);
 
     /// <summary>
-    /// Expanding a video playing in its bubble carries on in the viewer from where it got to, and closing the viewer
-    /// carries on in the bubble from where the viewer got to, still playing.
+    /// Expand on a video that plays in its bubble carries on in the viewer from the position that the video reached.
+    /// Close on the viewer carries on in the bubble from the position that the viewer reached. The video still plays.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Video_ExpandAndClose_KeepThePosition()
     {
@@ -257,9 +248,9 @@ public sealed partial class MediaTests
         Assert.IsTrue(back >= viewerEnd - 1, $"The bubble carried on at {back:0}%, not where the viewer got to ({viewerEnd:0}%).");
     }
 
-    // The Seek Bar's Value (Percent Of The Clip), Read The Way A Person Sees It: The Pointer Moves Over The Video First,
-    // Which Shows The Bar. The Bar Hides 1 s After The Pointer Rests While Playing, And Hidden, Windows Stops Moving
-    // Its Seek Bar
+    // The value of the seek bar, as a percent of the clip, read the way a person sees it. The pointer first moves over
+    // the video, which shows the bar. The bar hides 1 s after the pointer rests while the video plays. A hidden bar
+    // stops moving, because Windows stops the seek bar when it is hidden.
     private static double SeekValue(AutomationElement player)
     {
         System.Drawing.Rectangle box = player.BoundingRectangle;
@@ -272,11 +263,11 @@ public sealed partial class MediaTests
         return slider.Patterns.RangeValue.Pattern.Value.Value;
     }
 
-    // Each Read Moves The Pointer A Pixel The Other Way, So It Is Always A Real Move
+    // Each read moves the pointer 1 px the other way, so the move is always real.
     private static int s_nudge = 1;
 
-    // The Bar Is The Same In The Bubble And The Viewer: Play Or Pause On The Left, The Seek Bar, Volume On The Right,
-    // Nothing Else (No Cast Or Full Window)
+    // The bar is the same in the bubble and in the viewer: play or pause on the left, the seek bar, and volume on the
+    // right. It has nothing else, so it has no cast button and no full window button.
     private static void AssertCompactBar(AutomationElement player)
     {
         AutomationElement? Part(string id) => AppDriver.Search(player, e => e.Properties.AutomationId.ValueOrDefault == id);
@@ -284,7 +275,7 @@ public sealed partial class MediaTests
         AutomationElement play   = Part("PlayPauseButtonOnLeft") ?? throw new AssertFailedException("The bar has no play button on its left.");
         AutomationElement seek   = Part("ProgressSlider") ?? throw new AssertFailedException("The bar has no seek bar.");
         AutomationElement volume = Part("VolumeMuteButton") ?? throw new AssertFailedException("The bar has no volume button.");
-        // A Narrow Bubble's Bar Drops Volume (Windows' Controls Do That Below Their Width)
+        // The Windows controls drop volume in the bar of a narrow bubble, below their minimum width.
         bool volumeShown = volume.BoundingRectangle.Width > 0;
         Assert.IsTrue(play.BoundingRectangle.Right <= seek.BoundingRectangle.Left && (!volumeShown || seek.BoundingRectangle.Right <= volume.BoundingRectangle.Left),
             $"The bar isn't play, seek, volume: {play.BoundingRectangle} {seek.BoundingRectangle} {volume.BoundingRectangle}.");
@@ -292,7 +283,7 @@ public sealed partial class MediaTests
         Assert.IsNull(Part("FullWindowButton"), "The bar offers a full window button.");
     }
 
-    // Pause Holds The Position, Play Moves It On Again, And No Cast Button Shows
+    // Pause holds the position, play moves it on again, and no cast button shows.
     private void AssertPlayPauseWorks(AutomationElement player)
     {
         PressPlayPause(player, "Paused");
@@ -307,8 +298,8 @@ public sealed partial class MediaTests
         Assert.IsNull(AppDriver.Search(player, e => e.Properties.AutomationId.ValueOrDefault == "CastButton"), "The player offers a cast button.");
     }
 
-    // Windows' Play And Pause Button, Clicked With The Mouse As A Person Would (The Pointer Over The Player Shows Its
-    // Controls First), Then The Player's State It Should Bring
+    // Clicks the Windows play and pause button with the mouse, as a person does. The pointer over the player shows the
+    // controls first. Then the player must reach the expected state.
     private void PressPlayPause(AutomationElement player, string expected)
     {
         App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout).SetForeground();
@@ -322,7 +313,7 @@ public sealed partial class MediaTests
         WaitForStatus(player, expected);
     }
 
-    // The Video Player's Own State And Audio Category, As The App Noted It
+    // The own state and the audio category of the video player, as the app noted them.
     private void WaitForVideoPlayer(string expected)
     {
         string state  = Path.Combine(App.DataDir, "video-player.txt");

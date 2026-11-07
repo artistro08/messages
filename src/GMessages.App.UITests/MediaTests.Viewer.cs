@@ -10,16 +10,15 @@ using Mouse = FlaUI.Core.Input.Mouse;
 namespace GMessages.App.UITests;
 
 /// <summary>
-/// The in-app photo viewer: a clicked photo opens over the window (not in the Photos app), zooms, closes three ways
-/// without closing the chat, keeps focus inside, and its toolbar saves, downloads and opens in Photos.
+/// The photo viewer in the app: a clicked photo opens over the window, not in the Photos app. The viewer zooms, closes
+/// three ways without closing the chat, and keeps focus inside. Its toolbar saves, downloads and opens in Photos.
 /// </summary>
 public sealed partial class MediaTests
 {
     /// <summary>
-    /// Clicking a photo opens the viewer, named by the photo, and opens nothing outside the app; Escape closes it, the
-    /// chat stays open, and focus is back on the photo.
+    /// A click on a photo opens the viewer, named by the photo, and opens nothing outside the app. Escape closes the
+    /// viewer, the chat stays open, and focus returns to the photo.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Viewer_PhotoClick_OpensInApp_EscapeKeepsChat()
     {
@@ -32,7 +31,6 @@ public sealed partial class MediaTests
         Thread.Sleep(500);
         Assert.IsFalse(File.Exists(Path.Combine(App.DataDir, "launched.txt")), "The click opened the photo outside the app.");
 
-        // The Viewer Covers Both Panes
         System.Drawing.Rectangle box  = viewer.BoundingRectangle;
         System.Drawing.Rectangle list = App.Find("Row.c-media").BoundingRectangle;
         Assert.IsTrue(box.Left <= list.Left, $"The viewer ({box}) doesn't cover the list ({list}).");
@@ -45,9 +43,8 @@ public sealed partial class MediaTests
     }
 
     /// <summary>
-    /// Close and a click beside the photo both close the viewer; a click on the photo doesn't.
+    /// The Close button and a click beside the photo both close the viewer. A click on the photo does not.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Viewer_CloseButtonAndScrim_Close()
     {
@@ -70,9 +67,8 @@ public sealed partial class MediaTests
     }
 
     /// <summary>
-    /// A double-click on the photo zooms in to 2x, and another back out to 1x.
+    /// A double-click on the photo zooms in to 2x. Another double-click zooms back out to 1x.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Viewer_DoubleClick_Zooms()
     {
@@ -92,10 +88,9 @@ public sealed partial class MediaTests
     }
 
     /// <summary>
-    /// A photo wider than twice the window opens decoded narrower than its own width, and zoomed past 2x it decodes
-    /// again at its own width.
+    /// A photo wider than twice the window opens decoded narrower than its own width. When the zoom passes 2x, the
+    /// viewer decodes the photo again at its own width.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Viewer_ZoomPast2x_DecodesFullWidth()
     {
@@ -105,14 +100,13 @@ public sealed partial class MediaTests
         WaitForStatus(photo, Full);
         App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout).SetForeground();
 
-        // Opened: Decoded At Twice The Window, Not Its Own 6000 px
+        // On open, the viewer decodes the photo at twice the window width, not at its own 6000 px.
         photo.Click();
         string note = Path.Combine(App.DataDir, "viewer-decode.txt");
         Wait.Until(() => ReadNote(note).Length > 0, AppDriver.DefaultTimeout, () => "The viewer never decoded the photo.");
         int first = int.Parse(ReadNote(note), System.Globalization.CultureInfo.InvariantCulture);
         Assert.IsTrue(first is > 0 and < 6000, $"The viewer decoded the 6000 px photo {first} px wide.");
 
-        // Ctrl + Wheel Past 2x: Decoded Again At Its Own Width
         AutomationElement viewer     = App.Find("PhotoViewer.Photo");
         System.Drawing.Rectangle box = viewer.BoundingRectangle;
         Mouse.Position               = new System.Drawing.Point(box.Left + (box.Width / 2), box.Top + (box.Height / 2));
@@ -130,10 +124,9 @@ public sealed partial class MediaTests
     }
 
     /// <summary>
-    /// A tall, narrow photo (100 x 20000) decodes narrow enough that its height stays within 8192 px, opened and zoomed
-    /// past 2x alike.
+    /// A tall, narrow photo of 100 x 20000 decodes narrow enough that its height stays within 8192 px. This holds when
+    /// the viewer opens and when the zoom passes 2x.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Viewer_TallPhoto_DecodeHeightCapped()
     {
@@ -143,13 +136,12 @@ public sealed partial class MediaTests
         WaitForStatus(photo, Full);
         App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout).SetForeground();
 
-        // Invoked: Its Bubble Is Only A Few Pixels Wide, Too Narrow To Click Reliably
+        // The bubble is only a few pixels wide, too narrow to click reliably. The test invokes it.
         photo.Patterns.Invoke.Pattern.Invoke();
         string note = Path.Combine(App.DataDir, "viewer-decode.txt");
         Wait.Until(() => ReadNote(note).Length > 0, AppDriver.DefaultTimeout, () => "The viewer never decoded the photo.");
         AssertHeightCapped();
 
-        // Ctrl + Wheel Past 2x: Still Within The Cap
         AutomationElement viewer     = App.Find("PhotoViewer.Photo");
         System.Drawing.Rectangle box = viewer.BoundingRectangle;
         Mouse.Position               = new System.Drawing.Point(box.Left + (box.Width / 2), box.Top + (box.Height / 2));
@@ -176,7 +168,7 @@ public sealed partial class MediaTests
         }
     }
 
-    // A Test Note The App Wrote, Or Empty Before It Has
+    // A test note that the app wrote, or an empty string before the app writes it.
     private static string ReadNote(string path)
     {
         try
@@ -191,9 +183,8 @@ public sealed partial class MediaTests
     }
 
     /// <summary>
-    /// Tab and Shift + Tab stay inside the viewer, and every toolbar button carries its name.
+    /// Tab and Shift + Tab keep the focus inside the viewer, and every toolbar button has its name.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Viewer_FocusTrapped_ButtonsNamed()
     {
@@ -223,10 +214,9 @@ public sealed partial class MediaTests
     }
 
     /// <summary>
-    /// The toolbar: Open in Photos opens the photo's temp copy in its app (the test hook notes it), Download saves it
-    /// to the Downloads folder, and Save as writes the picked file.
+    /// Open in Photos in the toolbar opens the temp copy of the photo in its app, and the test hook notes the open.
+    /// Download saves the photo to the Downloads folder. Save as writes the picked file.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Viewer_Toolbar_OpenDownloadSaveAs()
     {
@@ -237,19 +227,16 @@ public sealed partial class MediaTests
         WaitForStatus(photo, Full);
         photo.Click();
 
-        // Open In Photos
         App.Find("PhotoViewer.OpenInPhotos").Patterns.Invoke.Pattern.Invoke();
         string launched = Path.Combine(App.DataDir, "launched.txt");
         Wait.Until(() => File.Exists(launched), AppDriver.DefaultTimeout, () => "Open in Photos opened nothing.");
         CollectionAssert.AreEqual(bytes, File.ReadAllBytes(File.ReadAllLines(launched)[^1]), "Open in Photos opened another file.");
 
-        // Download
         App.Find("PhotoViewer.Download").Patterns.Invoke.Pattern.Invoke();
         string downloaded = Path.Combine(App.DataDir, "Downloads", "wide.png");
         Wait.Until(() => File.Exists(downloaded) && new FileInfo(downloaded).Length == bytes.Length, AppDriver.DefaultTimeout, () => "Download saved nothing.");
         App.Find("Main.Downloaded");
 
-        // Save As
         string target = Path.Combine(App.DataDir, "saved-" + Guid.NewGuid().ToString("N") + ".png");
         File.WriteAllText(Path.Combine(App.DataDir, "save-pick.txt"), target);
         App.Find("PhotoViewer.SaveAs").Patterns.Invoke.Pattern.Invoke();
@@ -258,10 +245,9 @@ public sealed partial class MediaTests
     }
 
     /// <summary>
-    /// The toolbar's Open with launches the photo's temp copy with Windows' app picker (the test hook notes the path and
-    /// <c>picker</c> instead), and the viewer stays open.
+    /// Open with in the toolbar launches the temp copy of the photo with the Windows app picker, and the viewer stays
+    /// open. The test hook notes the path and the word <c>picker</c> instead.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Viewer_Toolbar_OpenWith()
     {
@@ -279,11 +265,10 @@ public sealed partial class MediaTests
     }
 
     /// <summary>
-    /// The toolbar sits in the title bar row's top-left corner, Close first, then Open in Photos, Open with, Download and Save as,
-    /// and takes real mouse clicks there; the scrim tints the title bar row too (its title and profile picture read
-    /// dark), and closing puts the row back.
+    /// The toolbar sits in the top-left corner of the title bar row, in this order: Close, Open in Photos, Open with,
+    /// Download and Save as. It takes real mouse clicks there. The scrim tints the title bar row too, so the title and
+    /// the profile picture read dark. Close puts the row back.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Viewer_ToolbarInTitleBarRow_TintCoversTitleBar()
     {
@@ -302,34 +287,33 @@ public sealed partial class MediaTests
             System.Drawing.Rectangle button = App.Find(id).BoundingRectangle;
             Assert.IsTrue(button.Top >= bar.Top && button.Bottom <= bar.Bottom, $"{id} ({button}) isn't in the title bar row ({bar}).");
             Assert.IsTrue(button.Left >= leftEdge, $"{id} ({button}) is out of order (Close, Open, Open with, Download, Save as from the left).");
-            // Five Buttons End 289 px In At The Test Machine's 125% (224 epx Plus The Window's Edge)
+            // The 5 buttons end 289 px in at 125% scaling on the test machine: 224 epx plus the edge of the window.
             Assert.IsTrue(button.Right <= window.Left + 295, $"{id} ({button}) isn't in the top-left corner (window {window}).");
             leftEdge = button.Right;
         }
 
-        // The Title Bar Row Is Under The Scrim: Its Title And The Profile Picture Read Near Black
+        // The title bar row is under the scrim, so its title and the profile picture read near black.
         Thread.Sleep(300);
         double titleAfter    = Luma(PixelAt(new System.Drawing.Point(bar.Left + 240, bar.Top + (bar.Height / 2))));
         double profileAfter  = Luma(CenterPixel(profile));
         Assert.IsTrue(titleAfter < 40 && titleAfter <= titleBefore, $"The title bar row isn't tinted (luma {titleBefore:F0} before, {titleAfter:F0} after).");
         Assert.IsTrue(profileAfter < 40, $"The profile picture isn't tinted (luma {profileAfter:F0}).");
 
-        // A Real Click On Close (Not UI Automation) Reaches It In The Title Bar Row
+        // A real mouse click, not UI Automation, on Close must reach the button in the title bar row.
         System.Drawing.Rectangle close = App.Find("PhotoViewer.Close").BoundingRectangle;
         Mouse.Click(new System.Drawing.Point(close.Left + (close.Width / 2), close.Top + (close.Height / 2)));
         WaitForGone("PhotoViewer.Photo");
 
-        // The Title Bar's Own Buttons Take Clicks Again: The Profile Menu Opens
+        // The own buttons of the title bar take clicks again: the profile menu opens.
         profile.Click();
         App.Find("Main.Profile.Settings");
         Keyboard.Type(VirtualKeyShort.ESCAPE);
     }
 
     /// <summary>
-    /// The toolbar's icons dim while the window is inactive (the tray menu takes activation) and come back when it is
-    /// active again; the viewer stays open throughout.
+    /// The icons of the toolbar dim while the window is inactive, because the tray menu takes activation. They come
+    /// back when the window is active again. The viewer stays open throughout.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Viewer_ToolbarDimsWhenInactive()
     {
@@ -349,17 +333,16 @@ public sealed partial class MediaTests
     }
 
     /// <summary>
-    /// A photo and a video grow out of their bubbles into the viewer, and Escape and Close shrink them back before the
-    /// viewer goes (animation effects on, as on the test machine).
+    /// A photo and a video grow out of their bubbles into the viewer. Escape and Close shrink them back before the
+    /// viewer goes. The test needs animation effects on, as on the test machine.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Viewer_GrowsFromBubble_ShrinksBack()
     {
         await OpenMediaChatAsync();
         string motion = Path.Combine(App.DataDir, "viewer-motion.txt");
 
-        // Photo, Closed By Escape
+        // The photo closes with Escape.
         AutomationElement photo = ViewerPhoto(null);
         photo.Click();
         WaitForMotion(motion, "Grew");
@@ -367,7 +350,7 @@ public sealed partial class MediaTests
         WaitForMotion(motion, "Shrank");
         WaitForGone("PhotoViewer.Photo");
 
-        // Video, Closed By Close: Its Still Grows, Then The Player Takes Over Once It Plays
+        // The video closes with Close. Its still grows, then the player takes over when the video plays.
         Message video = Server.Phone.PushIncomingMedia("c-media", "video/mp4", File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Fixtures", "clip-long.mp4")), "clip-long.mp4");
         WaitForStatus(App.Find("Video.Play." + video.MessageID), "Frame");
         App.Find("Bubble.Video." + video.MessageID).Patterns.Invoke.Pattern.Invoke();
@@ -379,7 +362,7 @@ public sealed partial class MediaTests
         Assert.IsNotNull(App.TryFind("Chat.Draft"), "Closing the viewer closed the chat too.");
     }
 
-    // The Viewer's Last Motion, As The App Noted It
+    // The last motion of the viewer, as the app noted it.
     private static void WaitForMotion(string path, string expected)
     {
         string last = string.Empty;
@@ -390,17 +373,16 @@ public sealed partial class MediaTests
         }, AppDriver.DefaultTimeout, () => $"The viewer's motion stayed '{last}', not '{expected}'.");
     }
 
-    // The Screen Pixel At A Point
     private static System.Drawing.Color PixelAt(System.Drawing.Point at)
     {
         using FlaUI.Core.Capturing.CaptureImage capture = FlaUI.Core.Capturing.Capture.Rectangle(new System.Drawing.Rectangle(at.X, at.Y, 1, 1));
         return capture.Bitmap.GetPixel(0, 0);
     }
 
-    // A Color's Brightness, 0 To 255
+    // The brightness of a color, from 0 to 255.
     private static double Luma(System.Drawing.Color c) => (0.2126 * c.R) + (0.7152 * c.G) + (0.0722 * c.B);
 
-    // A Loaded 400 x 300 Photo In Mia's Chat, With Or Without A Caption
+    // A loaded 400 x 300 photo in Mia's chat, with or without a caption.
     private AutomationElement ViewerPhoto(string? caption)
     {
         Message message         = Server.Phone.PushIncomingMedia("c-media", "image/png", Png(400, 300, SplitColors), "view.png", caption: caption);

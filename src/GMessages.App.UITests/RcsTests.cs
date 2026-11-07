@@ -10,7 +10,8 @@ using Keyboard = FlaUI.Core.Input.Keyboard;
 namespace GMessages.App.UITests;
 
 /// <summary>
-/// RCS in the chat pane: the status line, RCS and SMS bubbles, the lock, reactions, replies, the hover strip and typing.
+/// RCS in the chat pane: the status line, RCS and SMS bubbles, the lock, reactions, replies, the hover strip and
+/// typing.
 /// </summary>
 [TestClass]
 [TestCategory("UI")]
@@ -23,16 +24,15 @@ public sealed class RcsTests : UiTest
     private const string AnnPhone = "+15550000001";
 
     /// <summary>
-    /// A message's Delete asks first (Cancel keeps it), then deletes it from the phone and the bubble goes.
+    /// Delete in the message menu asks first, and Cancel keeps the message. Delete removes the message from the phone
+    /// and the bubble goes.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task DeleteMessage_AsksThenDeletes()
     {
         await OpenChatAsync("Row.c-ann");
         string id = Newest("c-ann").MessageID;
 
-        // Cancel: Nothing Goes
         App.Find("Bubble." + id).RightClick();
         App.Find("Bubble.Delete").Patterns.Invoke.Pattern.Invoke();
         DialogButton(App.Find("Dialog.DeleteMessage"), ChatCopy.Cancel).Patterns.Invoke.Pattern.Invoke();
@@ -41,7 +41,6 @@ public sealed class RcsTests : UiTest
         Assert.IsEmpty(Server.Phone.Deletes, "Cancel still asked the phone to delete.");
         App.Find("Bubble." + id);
 
-        // Delete
         App.Find("Bubble." + id).RightClick();
         App.Find("Bubble.Delete").Patterns.Invoke.Pattern.Invoke();
         DialogButton(App.Find("Dialog.DeleteMessage"), ChatCopy.Delete).Patterns.Invoke.Pattern.Invoke();
@@ -49,7 +48,6 @@ public sealed class RcsTests : UiTest
         WaitForGone("Bubble." + id);
     }
 
-    // A Dialog's Button, By Name
     private static AutomationElement DialogButton(AutomationElement dialog, string name)
     {
         AutomationElement? button = null;
@@ -59,9 +57,9 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// A sent message reads "Sent" once the phone echoes it, then "Delivered", then "Read" as the phone reports them.
+    /// A sent message reads "Sent" when the phone echoes it. It then reads "Delivered" and "Read" as the phone
+    /// reports them.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task SentRcs_ShowsDeliveredThenRead()
     {
@@ -82,10 +80,9 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// A bubble tells screen readers what it is: Team's SMS/MMS bubbles are "Text message", Ann's RCS ones
-    /// "Chat message".
+    /// A bubble tells screen readers what it is. The SMS and MMS bubbles of Team are "Text message". The RCS bubbles
+    /// of Ann are "Chat message".
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Sms_And_Rcs_HaveTheirItemTypes()
     {
@@ -97,10 +94,9 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// My bubble sits on the right and Ann's on the left. Every bubble showed on the left while the side's visual states
-    /// sat below the bubble's root element, where GoToState never finds them.
+    /// My bubble sits on the right and the bubble of Ann sits on the left. Every bubble showed on the left while the
+    /// visual states of the side sat below the root element of the bubble, where GoToState never finds them.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task SentAndReceived_SitOnTheirSides()
     {
@@ -116,16 +112,16 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// A link in a message's text shows as a link named by its text. Clicking it opens it (a test run only logs that,
-    /// with no browser) and doesn't also click the bubble: the newest bubble's caption row stays.
+    /// A link in the text of a message shows as a link named by its text. A click opens the link. A test run only logs
+    /// the open, because it has no browser. The click does not also click the bubble, so the caption row of the newest
+    /// bubble stays.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task LinkInText_Click_OpensWithoutTogglingTheCaption()
     {
         await OpenChatAsync("Row.c-ann");
 
-        // Plain http To A Name That Never Resolves: No Preview Is Fetched For It
+        // The link uses plain http to a name that never resolves, so the app fetches no preview.
         Message message = Server.Phone.PushIncoming("c-ann", "read http://example.invalid/page today");
         AutomationElement link = App.Find($"Link.{message.MessageID}.0");
         Assert.AreEqual("http://example.invalid/page", AppDriver.SafeName(link));
@@ -135,22 +131,21 @@ public sealed class RcsTests : UiTest
         Wait.Until(() => ReadLog().Contains("Link opened (http, launched: False)", StringComparison.Ordinal), AppDriver.DefaultTimeout,
             () => "The link click was never logged.");
 
-        // A Bubble Click Would Hide The Caption A Turn Later; Give It Time To Show It Didn't
+        // A bubble click would hide the caption one turn later. The sleep gives it time to show that it did not.
         Thread.Sleep(500);
         Assert.IsNotNull(App.TryFind("Caption." + message.MessageID), "The link click also clicked the bubble (its caption row hid).");
     }
 
     /// <summary>
-    /// A link that wraps counts only its letters: a click in the empty space at the end of its first line opens nothing,
-    /// while a click on its first letter opens it.
+    /// A link that wraps counts only its letters. A click in the empty space at the end of its first line opens
+    /// nothing. A click on its first letter opens the link.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task WrappedLink_EmptyLineEnd_IsNotTheLink()
     {
         await OpenChatAsync("Row.c-ann");
 
-        // Hyphens Let The Address Wrap Partway, Leaving Space At The First Line's End
+        // The hyphens let the address wrap partway, which leaves space at the end of the first line.
         Message message = Server.Phone.PushIncoming("c-ann", "read http://example.invalid/" + string.Join("-", Enumerable.Repeat("word", 30)) + " today");
         AutomationElement link   = App.Find($"Link.{message.MessageID}.0");
         AutomationElement body   = App.Find("Bubble." + message.MessageID);
@@ -158,7 +153,7 @@ public sealed class RcsTests : UiTest
         System.Drawing.Rectangle where = link.BoundingRectangle;
         Assert.IsTrue(where.Height > 30, $"The link ({where}) didn't wrap.");
 
-        // The Empty End Of The Link's First Line, Just Inside The Text's Right Edge
+        // The click lands on the empty end of the first line of the link, just inside the right edge of the text.
         FlaUI.Core.Input.Mouse.Click(new System.Drawing.Point(text.Right - 2, where.Top + 6));
         Thread.Sleep(600);
         Assert.IsFalse(ReadLog().Contains("Link opened", StringComparison.Ordinal), "A click past the link's letters opened it.");
@@ -169,10 +164,9 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// A link in an inbox chat gets a preview card named by the linked page's <c>og:title</c> and the link's host. Once it
-    /// shows, the card takes the link's place: the text reads without the address.
+    /// A link in an inbox chat gets a preview card named by the <c>og:title</c> of the linked page and the host of the
+    /// link. When the card shows, it takes the place of the link, and the text reads without the address.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task LinkMessage_ShowsPreviewCard_TextDropsTheLink()
     {
@@ -185,9 +179,8 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// Pointing at a link preview card shows the hand cursor, as a link does.
+    /// The pointer over a link preview card shows the hand cursor, as it does over a link.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task PreviewCard_Hover_ShowsHandCursor()
     {
@@ -201,9 +194,8 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// A message that is only a link shows its preview card alone, with no empty text line above it.
+    /// A message that is only a link shows its preview card alone, with no empty text line above the card.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task LinkOnlyMessage_ShowsCardAlone()
     {
@@ -215,10 +207,9 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// Right-clicking a preview card opens its own menu, whose Copy link puts the whole address on the clipboard (pasted
-    /// into the message box to check); the bubble menu doesn't open.
+    /// A right-click on a preview card opens the menu of the card, and the bubble menu does not open. Copy link puts
+    /// the whole address on the clipboard. The test pastes it into the message box to check.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task PreviewCard_RightClick_CopyLink_CopiesTheAddress()
     {
@@ -241,9 +232,8 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// A link whose preview fails (the page isn't there) gets no card and keeps its link in the text.
+    /// A link whose preview fails, because the page is not there, gets no card and keeps its link in the text.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task LinkPreviewFails_KeepsTheLink()
     {
@@ -259,9 +249,9 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// Ann's encrypted chat shows the lock under its newest message, not in the header; Team's SMS group shows none.
+    /// The encrypted chat of Ann shows the lock under its newest message, not in the header. The SMS group Team shows
+    /// no lock.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task EncryptedChat_ShowsLock()
     {
@@ -277,9 +267,9 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// The bubble menu's React opens the picker; 👍 sends the phone an Add of 👍, and the pill under the bubble shows it.
+    /// React in the bubble menu opens the picker. The 👍 button sends the phone an Add of 👍, and the pill under the
+    /// bubble shows it.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task React_FromMenu_PhoneGetsAdd_PillShows()
     {
@@ -303,10 +293,9 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// A right-click on a message's (selectable) text opens the bubble menu, with React and Reply, at the pointer, not
-    /// the text's own Copy and Select all menu.
+    /// A right-click on the selectable text of a message opens the bubble menu with React and Reply, at the pointer.
+    /// The own Copy and Select all menu of the text does not open.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task RightClickOnText_OpensBubbleMenu()
     {
@@ -319,7 +308,7 @@ public sealed class RcsTests : UiTest
         Assert.IsNull(App.TryFindWhere(e => string.Equals(AppDriver.SafeName(e), "Select all", StringComparison.OrdinalIgnoreCase)),
             "The text's own menu opened.");
 
-        // At The Pointer (The Text's Middle), Not Over The Back's Edge
+        // The menu opens at the pointer, in the middle of the text, not over the edge of the back.
         System.Drawing.Rectangle box  = text.BoundingRectangle;
         System.Drawing.Rectangle item = react.BoundingRectangle;
         Assert.IsTrue(Math.Abs(item.Left - (box.Left + (box.Width / 2))) < 40, $"The menu ({item}) didn't open at the pointer on the text ({box}).");
@@ -327,10 +316,9 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// On a short message with its time shown (the time wider than the bubble), received or sent, the reaction pill still
-    /// overlaps the bubble's bottom edge on its bottom-right corner, not beside the time.
+    /// A short message, received or sent, shows its time wider than the bubble. The reaction pill still overlaps the
+    /// bottom edge of the bubble on its bottom-right corner, not beside the time.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task ReactionPill_ShortMessage_OverlapsTheBubble()
     {
@@ -352,7 +340,7 @@ public sealed class RcsTests : UiTest
 
         AssertPillOnRightCorner(bubble, pill);
 
-        // Sent: Hi, Then Something After It So Its Time Isn't The Status Row
+        // A message follows the sent message, so its time is not the status row.
         App.Find("Chat.Draft").Focus();
         Keyboard.Type("Hi");
         Keyboard.Type(VirtualKeyShort.RETURN);
@@ -372,7 +360,8 @@ public sealed class RcsTests : UiTest
         AssertPillOnLeftCorner(sent, sentPill);
     }
 
-    // The Pill Crosses The Bubble's Bottom Edge At Its Bottom-Right Corner (Received). The Text Sits 12 px Inside The Back
+    // For a received message, the pill crosses the bottom edge of the bubble at its bottom-right corner. The text sits
+    // 12 px inside the back.
     private static void AssertPillOnRightCorner(AutomationElement bubble, AutomationElement pill)
     {
         System.Drawing.Rectangle text = bubble.BoundingRectangle;
@@ -382,7 +371,8 @@ public sealed class RcsTests : UiTest
         Assert.IsTrue(middle >= text.Right - 2 && on.Left < text.Right + 12, $"The pill {on} isn't on the bubble's bottom-right corner (text {text}).");
     }
 
-    // The Pill Crosses The Bubble's Bottom Edge At Its Bottom-Left Corner (Sent, The Received Pill Mirrored)
+    // For a sent message, the pill crosses the bottom edge of the bubble at its bottom-left corner. This mirrors the
+    // received pill.
     private static void AssertPillOnLeftCorner(AutomationElement bubble, AutomationElement pill)
     {
         System.Drawing.Rectangle text = bubble.BoundingRectangle;
@@ -393,10 +383,9 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// On a sent message wider than twice the pill, the pill's left edge lines up with the text's left edge (12 px in from
-    /// the back's left), mirroring a received bubble's pill (owner).
+    /// On a sent message wider than twice the pill, the left edge of the pill lines up with the left edge of the text,
+    /// 12 px in from the left of the back. This mirrors the pill of a received bubble, as the owner asked.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task ReactionPill_LongSentMessage_SitsBottomLeft()
     {
@@ -411,11 +400,10 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// On my newest message "Oh yeahhhh" (owner's screenshot), the pill covers neither the time nor the status: the time
-    /// ends at the bubble's right side and drops below the pill. Team, as the owner's chat had no lock after the status;
-    /// Team is SMS, so the status is the "SMS" word.
+    /// The owner sent a screenshot of the newest message "Oh yeahhhh". The pill covers neither the time nor the
+    /// status. The time ends at the right side of the bubble and drops below the pill. The test uses Team, because the
+    /// chat of the owner had no lock after the status. Team is SMS, so the status is the word "SMS".
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task ReactionPill_SentMessage_DoesNotCoverTime()
     {
@@ -434,10 +422,9 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// On a wide sent message the pill and the time both fit under it, so a reaction doesn't push the time down: the gap
-    /// from the text to the time is the same (within 2 px) before and after the reaction.
+    /// On a wide sent message, the pill and the time both fit under the text, so a reaction does not push the time
+    /// down. The gap from the text to the time is the same, within 2 px, before and after the reaction.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task ReactionPill_WideSentMessage_TimeStaysClose()
     {
@@ -451,7 +438,7 @@ public sealed class RcsTests : UiTest
         Assert.IsTrue(Math.Abs(after - before) <= 2, $"The time sat {before} px under the text without a reaction and {after} px with one.");
     }
 
-    // Sends A Message From The Draft And Waits Until The Phone Echoes It As Sent; Returns Its ID
+    // Sends a message from the draft, waits until the phone echoes it as sent, and returns its ID.
     private string SendAndWait(string conversationId, string text)
     {
         int sent = Server.Phone.Sent.Count;
@@ -464,7 +451,8 @@ public sealed class RcsTests : UiTest
         return id;
     }
 
-    // Has A Participant React 👍 To A Message, Waits For The Pill To Show And Settle; Returns The Pill
+    // A participant reacts with 👍 to a message. The method waits for the pill to show and settle. It returns the
+    // pill.
     private AutomationElement ReactAndWait(string conversationId, string id, string participantId)
     {
         Server.Phone.PushReactions(conversationId, id, (EmojiType.Like, participantId));
@@ -474,9 +462,9 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// A reaction added to a shown bubble pops its pill in (animation effects on, as on the test machine).
+    /// A reaction added to a shown bubble pops its pill in. The test needs animation effects on, as on the test
+    /// machine.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task ReactionPill_PopsIn()
     {
@@ -497,7 +485,7 @@ public sealed class RcsTests : UiTest
             }
             catch (IOException)
             {
-                // The App Is Writing It: Read Again
+                // The app is writing the file. Read it again.
             }
 
             return last == id;
@@ -506,11 +494,10 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// The picker's More reactions opens the app's emoji picker (focus in its search box, its emoji filling its width);
-    /// typing "eyes" shows 👀; searching "fire" leaves 🔥,
-    /// whose click closes the picker and sends the phone an Add of 🔥 as a custom reaction, and the pill shows it.
+    /// More reactions in the picker opens the emoji picker of the app. Focus is in its search box, and its emoji fill
+    /// its width. The text "eyes" shows 👀. The text "fire" leaves 🔥. A click on 🔥 closes the picker and sends the
+    /// phone an Add of 🔥 as a custom reaction, and the pill shows it.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task MoreReactions_Picker_SearchAndPick_SendsCustomEmoji()
     {
@@ -526,14 +513,14 @@ public sealed class RcsTests : UiTest
         AutomationElement search = App.Find("EmojiPicker.Search");
         Wait.Until(() => search.Properties.HasKeyboardFocus.ValueOrDefault, AppDriver.DefaultTimeout, () => "The search box didn't take focus.");
 
-        // The First Row Fills The Picker Edge To Edge, Lined Up With The Search Box (😀 First, 😂 Eighth)
+        // The first row fills the picker edge to edge, lined up with the search box: 😀 is first and 😂 is eighth.
         System.Drawing.Rectangle box    = search.BoundingRectangle;
         System.Drawing.Rectangle first  = App.Find("EmojiPicker.1F600").BoundingRectangle;
         System.Drawing.Rectangle eighth = App.Find("EmojiPicker.1F602").BoundingRectangle;
         Assert.IsTrue(Math.Abs(first.Left - box.Left) <= 2 && Math.Abs(eighth.Right - box.Right) <= 2,
             $"The emoji ({first.Left} to {eighth.Right}) don't fill the search box's width ({box.Left} to {box.Right}).");
 
-        // Typed Like The Owner Did: "eyes" Shows 👀 (And 😍, Whose Words Have It)
+        // The test types as the owner did. The text "eyes" shows 👀, and also 😍, because its words have "eyes".
         Keyboard.Type("eyes");
         Wait.Until(() => App.TryFind("EmojiPicker.1F440") is not null, AppDriver.DefaultTimeout, () => "Typing 'eyes' doesn't show 👀.");
         Assert.IsNotNull(App.TryFind("EmojiPicker.1F60D"), "Typing 'eyes' doesn't show 😍.");
@@ -556,9 +543,8 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// Escape closes the emoji picker without reacting.
+    /// Escape closes the emoji picker without a reaction.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task MoreReactions_Picker_Escape_ClosesWithoutReacting()
     {
@@ -576,10 +562,10 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// The emoji picker's first open doesn't freeze the app (it drew every emoji at once): opened twice, the log's timings
-    /// (milliseconds only) show no frame gap over 300 ms in either open, and only the rows in view are made.
+    /// The first open of the emoji picker does not freeze the app. It drew every emoji at once before. The test opens
+    /// the picker twice. The timings in the log, in milliseconds only, show no frame gap over 300 ms in either open.
+    /// The picker makes only the rows in view.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task MoreReactions_Picker_FirstOpen_IsQuick()
     {
@@ -592,7 +578,8 @@ public sealed class RcsTests : UiTest
             App.Find("Bubble.React").Patterns.Invoke.Pattern.Invoke();
             App.Find("ReactionPicker.More").Patterns.Invoke.Pattern.Invoke();
 
-            // No UI Automation Queries While It Opens: Each Find Walks The App's Tree On Its UI Thread, Which Would Be Timed Too
+            // The test runs no UI Automation query while the picker opens. Each Find walks the tree of the app on its
+            // UI thread, and the timing would then include that walk.
             string line = $"Emoji picker open {open}:";
             Wait.Until(() => ReadLog().Contains(line, StringComparison.Ordinal), AppDriver.DefaultTimeout, () => $"No '{line}' timing in the log.");
             App.Find("EmojiPicker.Search");
@@ -600,7 +587,7 @@ public sealed class RcsTests : UiTest
             Wait.Until(() => App.TryFind("EmojiPicker") is null, AppDriver.DefaultTimeout, () => "Escape left the picker open.");
         }
 
-        // "Emoji picker open N: built in B ms, longest stall S ms, R rows made"
+        // A log line reads: "Emoji picker open N: built in B ms, longest stall S ms, R rows made"
         foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(ReadLog(), @"Emoji picker open (\d+): built in \d+ ms, longest stall (\d+) ms, (\d+) rows made"))
         {
             Console.WriteLine(m.Value);
@@ -610,10 +597,9 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// In Team (a group), clicking a message's reaction pill lists who reacted, in the pill's order: 👍 from Bo and me
-    /// (shown as "You"), then 😂 from Cy.
+    /// In the group Team, a click on the reaction pill of a message lists who reacted, in the order of the pill. 👍
+    /// comes from Bo and from me, shown as "You". Then 😂 comes from Cy.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task GroupPill_Click_ListsWhoReacted()
     {
@@ -634,9 +620,9 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// The picker for a message I reacted to marks my reaction selected (Narrator reads "Selected"); the others aren't.
+    /// The picker for a message that I reacted to marks my reaction as selected, and Narrator reads "Selected". The
+    /// other reactions are not selected.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Picker_MarksMyReactionSelected()
     {
@@ -657,10 +643,9 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// In Ann's one-on-one chat the reaction pill lists who reacted too, as in a group, and never opens the reaction
-    /// picker (owner, Plan 7).
+    /// In the one-on-one chat with Ann, the reaction pill lists who reacted, as in a group. It never opens the
+    /// reaction picker. The owner asked for this in Plan 7.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task OneOnOnePill_Click_ListsWhoReacted()
     {
@@ -677,12 +662,12 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// With my reaction on a message, hovering its pill, then my reaction in the picker, changes their color steadily: every
-    /// frame of the hover sits between the color before and the settled hover color (no flash), and the hover keeps my
-    /// reaction's accent (only tints it). The fill under each sat on the button itself, so its hover swapped the accent for
-    /// the hover fill through the brush transition (the owner's flicker).
+    /// My reaction is on a message. The color changes steadily when the pointer hovers its pill, and when the pointer
+    /// hovers my reaction in the picker. Every frame of the hover sits between the color before and the settled hover
+    /// color, so there is no flash. The hover keeps the accent of my reaction and only tints it. The fill under the
+    /// accent sat on the button itself. Its hover swapped the accent for the hover fill through the brush transition.
+    /// This caused the flicker that the owner reported.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task MyReaction_Hover_StaysSteady()
     {
@@ -700,10 +685,9 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// A reaction pill doesn't push the newest bubble's time down: the gap from the bubble's text to the time under it
-    /// is the same (within 2 px) before and after Ann reacts.
+    /// A reaction pill does not push the time of the newest bubble down. The gap from the text of the bubble to the
+    /// time under it is the same, within 2 px, before and after Ann reacts.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task ReactionPill_KeepsTheTimeUnderTheBubble()
     {
@@ -720,10 +704,10 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// A short bubble fits its text, sent and received, and one ending in an emoji too: the text's left and right insets
-    /// inside the bubble are equal (within 2 px), though the time and status row under the newest bubble are wider.
+    /// A short bubble fits its text, sent or received, and also a bubble that ends in an emoji. The left and right
+    /// insets of the text inside the bubble are equal, within 2 px. The time and status row under the newest bubble
+    /// are wider.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task ShortBubbles_FitTheirText()
     {
@@ -744,10 +728,9 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// Shift + F10 on a focused bubble opens its menu, and Copy puts the bubble's text on the clipboard (pasted into the
-    /// message box to check).
+    /// Shift + F10 on a focused bubble opens its menu. Copy puts the text of the bubble on the clipboard. The test
+    /// pastes the text into the message box to check.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Copy_FromKeyboardMenu_CopiesText()
     {
@@ -767,7 +750,6 @@ public sealed class RcsTests : UiTest
     /// <summary>
     /// Shift + + on a focused bubble opens the reaction picker.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task ShiftPlus_OnFocusedBubble_OpensPicker()
     {
@@ -779,15 +761,14 @@ public sealed class RcsTests : UiTest
         App.Find("ReactionPicker");
         App.Find("ReactionPicker.7");
 
-        // Love Shows Google's Red Heart, Not Heart Eyes
+        // Love shows the red heart of Google, not heart eyes.
         Assert.AreEqual("❤️", App.Find("ReactionPicker.2").Name);
     }
 
     /// <summary>
-    /// The bubble menu's Reply shows the reply chip and moves to the message box; the send carries the quoted message's
-    /// ID, and the sent bubble shows the quote.
+    /// Reply in the bubble menu shows the reply chip and moves focus to the message box. The send carries the ID of
+    /// the quoted message, and the sent bubble shows the quote.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Reply_FromMenu_SendsReplyPayload_QuoteShows()
     {
@@ -809,9 +790,8 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// Ctrl + Enter on a focused bubble starts a reply to it and moves to the message box.
+    /// Ctrl + Enter on a focused bubble starts a reply to it and moves focus to the message box.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task CtrlEnter_OnFocusedBubble_StartsReply()
     {
@@ -825,10 +805,10 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// Focus on the newest message (as the keyboard moves it) makes its bubble draw its own ring while the row's system focus
-    /// visual stays off; focus leaving takes the ring away, and a click on the bubble doesn't bring it back (owner request).
+    /// Focus on the newest message, as the keyboard moves it, makes the bubble draw its own ring. The system focus
+    /// visual of the row stays off. When focus leaves, the ring goes. A click on the bubble does not bring the ring
+    /// back, as the owner asked.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task KeyboardFocus_RingsTheBubble_NotTheRow()
     {
@@ -847,21 +827,21 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// The bubble's focus ring is themed: the pixels it draws carry the accent color, never Windows' white or black focus
-    /// stroke.
+    /// The focus ring of the bubble is themed. The pixels that it draws have the accent color, never the white or
+    /// black focus stroke of Windows.
     /// </summary>
     /// <remarks>
-    /// Manual: UI Automation's focus on the row lands as FocusState.Pointer in most runs here (seen in the app's own
-    /// state), which by design draws no ring, so this times out even where the ring itself works. The same flake hits
-    /// KeyboardFocus_RingsTheBubble_NotTheRow when run alone.
+    /// Manual test. UI Automation focus on the row lands as FocusState.Pointer in most runs here, as the state of the
+    /// app shows. By design, that state draws no ring. The test then times out even where the ring works. The same
+    /// flake hits KeyboardFocus_RingsTheBubble_NotTheRow when it runs alone.
     /// </remarks>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     [TestCategory("Manual")]
     public async Task KeyboardFocus_RingIsAccentColored()
     {
         await OpenChatAsync("Row.c-ann");
-        // Ringed, Then Not (Focus Back In The Message Box), As KeyboardFocus_RingsTheBubble_NotTheRow Moves It
+        // The bubble is ringed, then not ringed after focus goes back to the message box, as in
+        // KeyboardFocus_RingsTheBubble_NotTheRow.
         AutomationElement text          = App.Find("Bubble." + Find("c-ann", AnnLast).MessageID);
         System.Drawing.Rectangle around = System.Drawing.Rectangle.Inflate(text.BoundingRectangle, 24, 16);
         FocusLastRow();
@@ -874,7 +854,7 @@ public sealed class RcsTests : UiTest
         Thread.Sleep(300);
         using FlaUI.Core.Capturing.CaptureImage before = FlaUI.Core.Capturing.Capture.Rectangle(around);
 
-        // The Ring's Pixels: What Changed, Each One Colored (Not Gray, White Or Black)
+        // The ring pixels are the pixels that changed. Each one must have a color: not gray, white or black.
         int changed = 0;
         int gray    = 0;
         for (int y = 0; y < after.Bitmap.Height; y++)
@@ -902,9 +882,8 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// With the mouse over Ann's last bubble, the hover strip's Reply starts a reply to it.
+    /// With the mouse over the last bubble of Ann, Reply in the hover strip starts a reply to it.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task HoverBubble_Reply_StartsReply()
     {
@@ -919,9 +898,8 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// With the mouse over Ann's last bubble, the hover strip's React opens the reaction picker.
+    /// With the mouse over the last bubble of Ann, React in the hover strip opens the reaction picker.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task HoverBubble_React_OpensPicker()
     {
@@ -937,9 +915,8 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// With the mouse over Ann's last bubble, the hover strip's ⋮ opens the bubble menu.
+    /// With the mouse over the last bubble of Ann, the ⋮ button in the hover strip opens the bubble menu.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task HoverBubble_More_OpensMenu()
     {
@@ -955,26 +932,24 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// The hover strip's space is always kept: hovering my bubble moves it not, with the strip on its left; hovering Ann's
-    /// newest bubble moves neither it nor the bubble above it in its group, with the strip on its right. The strip's React
-    /// then opens the picker, so the hover took effect.
+    /// The space of the hover strip is always kept. A hover on my bubble does not move it, and the strip is on its
+    /// left. A hover on the newest bubble of Ann moves neither that bubble nor the bubble above it in its group, and
+    /// the strip is on its right. React in the strip then opens the picker, so the hover took effect.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task HoverStrip_DoesNotMoveBubbles()
     {
         await OpenChatAsync("Row.c-ann");
 
-        // A Second Message From Ann, A Second After Her Last: The Two Make One Group
+        // A second message from Ann, one second after her last message, makes one group with it.
         Message newest     = Server.Phone.PushIncoming("c-ann", "See you then");
         string neighborId  = Find("c-ann", AnnLast).MessageID;
         string mineId      = Find("c-ann", MyReply).MessageID;
         App.Find("Bubble." + newest.MessageID);
 
-        // Settle Wait For The List To Finish Scrolling To The New Bubble
+        // The list needs time to finish the scroll to the new bubble.
         Thread.Sleep(1000);
 
-        // Mine: The Strip On The Left
         System.Drawing.Rectangle mineBefore  = App.Find("Bubble." + mineId).BoundingRectangle;
         AutomationElement mineReact          = HoverStripButton(mineId, "HoverReact.");
         System.Drawing.Rectangle mineAfter   = App.Find("Bubble." + mineId).BoundingRectangle;
@@ -982,7 +957,6 @@ public sealed class RcsTests : UiTest
         Assert.IsTrue(mineReact.BoundingRectangle.Right <= mineAfter.Left,
             $"The strip ({mineReact.BoundingRectangle}) isn't left of my bubble ({mineAfter}).");
 
-        // Ann's: The Strip On The Right, And Her Grouped Bubble Above Stays Put
         System.Drawing.Rectangle bubbleBefore    = App.Find("Bubble." + newest.MessageID).BoundingRectangle;
         System.Drawing.Rectangle neighborBefore  = App.Find("Bubble." + neighborId).BoundingRectangle;
         AutomationElement react                  = HoverStripButton(newest.MessageID, "HoverReact.");
@@ -993,7 +967,6 @@ public sealed class RcsTests : UiTest
         Assert.IsTrue(react.BoundingRectangle.Left >= bubbleAfter.Right,
             $"The strip ({react.BoundingRectangle}) isn't right of Ann's bubble ({bubbleAfter}).");
 
-        // The Hover Took Effect: The Strip Takes Clicks
         react.Click();
         App.Find("ReactionPicker");
 
@@ -1004,10 +977,9 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// My failed bubble takes no strip; retried with the pointer resting on it, the strip shows once the phone echoes it
-    /// (no pointer move needed), and its ⋮ opens the bubble menu.
+    /// My failed bubble takes no strip. The test retries it with the pointer resting on it. The strip shows when the
+    /// phone echoes the message, with no pointer move, and its ⋮ button opens the bubble menu.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task HoverBubble_SentWhileHovered_ShowsStrip()
     {
@@ -1021,7 +993,7 @@ public sealed class RcsTests : UiTest
         Wait.Until(() => (retry = App.TryFind("Chat.Messages") is { } list ? AppDriver.Search(list, e => AppDriver.SafeName(e) == ChatCopy.NotSentRetry) : null) is not null,
             AppDriver.DefaultTimeout, () => $"'{ChatCopy.NotSentRetry}' never showed.");
 
-        // The Pointer Rests On The Failed Bubble's Text, Then The Retry Goes Through Without It Moving
+        // The pointer rests on the text of the failed bubble. The retry then goes through without a pointer move.
         PointerInput.Hover(App.Find("Bubble." + Server.Phone.Sent[0].TmpID).BoundingRectangle);
         Server.Phone.FailSends = false;
         retry!.Patterns.Invoke.Pattern.Invoke();
@@ -1029,7 +1001,7 @@ public sealed class RcsTests : UiTest
         string id = Newest("c-ann").MessageID;
         App.Find("Bubble." + id);
 
-        // Settle Wait For The Strip's Fade In (167 ms)
+        // The strip fades in for 167 ms. The sleep waits for the fade to end.
         Thread.Sleep(500);
         App.Find("HoverMore." + id).Click();
 
@@ -1038,10 +1010,9 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// Leaving the window straight from Ann's bubble hides the hover strip (the exit reports a point inside the bubble, so
-    /// a bounds check would keep it): a click where the ⋮ was opens no menu.
+    /// When the pointer leaves the window straight from the bubble of Ann, the hover strip hides. The exit reports a
+    /// point inside the bubble, so a bounds check would keep the strip. A click where the ⋮ button was opens no menu.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task HoverBubble_LeaveWindow_HidesStrip()
     {
@@ -1056,15 +1027,14 @@ public sealed class RcsTests : UiTest
         Thread.Sleep(500);
         more.Click();
 
-        // A Menu Would Show By Now
+        // A menu would show by now.
         Thread.Sleep(500);
         Assert.IsNull(App.TryFind("Bubble.Copy"), "The strip stayed after the pointer left the window.");
     }
 
     /// <summary>
-    /// A reply arriving from Ann shows the message it quotes above its text.
+    /// A reply that arrives from Ann shows the message that it quotes above its text.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task IncomingReply_ShowsQuote()
     {
@@ -1076,17 +1046,16 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// Clicking a reply's quote scrolls smoothly to the quoted message, scrolled up out of view by newer ones, with no
-    /// pulse; Enter on the focused quote does the same.
+    /// A click on the quote of a reply scrolls smoothly to the quoted message, which newer messages scrolled out of
+    /// view. The original does not pulse. Enter on the focused quote does the same.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task ReplyQuote_Click_ScrollsToTheOriginal()
     {
         await OpenChatAsync("Row.c-ann");
         string original = Find("c-ann", AnnFirst).MessageID;
 
-        // Enough Newer Messages To Scroll Ann's First Out Of View
+        // The newer messages scroll the first message of Ann out of view.
         for (int i = 0; i < 30; i++)
         {
             Server.Phone.PushIncoming("c-ann", "filler " + i.ToString(System.Globalization.CultureInfo.InvariantCulture));
@@ -1107,7 +1076,8 @@ public sealed class RcsTests : UiTest
         Assert.IsTrue(shown.Top >= list.Top && shown.Bottom <= list.Bottom, $"The original ({shown}) isn't in view ({list}).");
         Assert.AreEqual("Smooth", File.Exists(scroll) ? ReadPulse(scroll) : string.Empty, "The jump to the original wasn't a smooth scroll.");
 
-        // Enter On The Focused Quote, Back At The Newest (The Reply's Row Isn't Kept Realized That Far Up)
+        // Enter on the focused quote, from the newest message. The list does not keep the row of the reply realized
+        // that far up.
         File.Delete(pulse);
         App.Find("Chat.ScrollToBottom").Patterns.Invoke.Pattern.Invoke();
         App.Find("QuoteJump." + reply.MessageID).Focus();
@@ -1129,9 +1099,8 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// Ann typing shows the typing dots; her stop hides them.
+    /// When Ann types, the typing dots show. When she stops, the dots hide.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Typing_ShowsDots_ThenHides()
     {
@@ -1145,13 +1114,12 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// Typing in Ann's RCS chat tells the phone; typing in Team's SMS group doesn't.
+    /// Typing in the RCS chat with Ann tells the phone. Typing in the SMS group Team does not.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task TypingInDraft_SendsTypingToPhone_RcsOnly()
     {
-        // Team First: Anything It Sent Would Be In Before Ann's
+        // The test uses Team first. Anything that Team sent would arrive before the typing of Ann.
         await OpenChatAsync("Row.c-team");
         App.Find("Chat.Draft").Focus();
         Keyboard.Type("Hi all");
@@ -1167,10 +1135,9 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// A plain text bubble has no preview card; a link message's card loads into its bubble once the preview arrives,
-    /// named by the page's title and the link's host, and the text drops the link.
+    /// A plain text bubble has no preview card. The card of a link message loads into its bubble when the preview
+    /// arrives. The card is named by the title of the page and the host of the link, and the text drops the link.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Bubble_TextThenLinkPreview_ShowsCard()
     {
@@ -1188,10 +1155,9 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// A bubble with no reactions has no pill; Ann's 👍 brings one in on the bubble's bottom edge. On another bubble my
-    /// own 👍 brings one in, taking it back takes the pill away, and reacting again brings it back.
+    /// A bubble with no reactions has no pill. The 👍 of Ann brings a pill in on the bottom edge of the bubble. On
+    /// another bubble, my own 👍 brings a pill in, taking it back removes the pill, and a new reaction brings it back.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Bubble_ReceivesReaction_ShowsPill()
     {
@@ -1199,18 +1165,17 @@ public sealed class RcsTests : UiTest
         string id = Find("c-ann", AnnLast).MessageID;
         Assert.IsNull(App.TryFind("Reactions." + id), "A bubble without reactions showed a pill.");
 
-        // Ann's: The Pill On The Bubble's Bottom Edge
         AutomationElement pill        = ReactAndWait("c-ann", id, "p-ann");
         System.Drawing.Rectangle text = App.Find("Bubble." + id).BoundingRectangle;
         System.Drawing.Rectangle on   = pill.BoundingRectangle;
         StringAssert.Contains(AppDriver.SafeName(pill), "\U0001F44D");
         Assert.IsTrue(on.Top < text.Bottom + 12 && on.Bottom > text.Bottom + 12, $"The pill {on} doesn't cross the bubble's bottom edge (text {text}).");
 
-        // Mine On Another Bubble: In, Taken Back (The Same Emoji Again), Then In Again
+        // On another bubble, my reaction goes in, comes back out with the same emoji, then goes in again.
         string mineId  = Find("c-ann", AnnFirst).MessageID;
         for (int round = 0; round < 3; round++)
         {
-            // Settle Wait For The Last Picker To Close And The Pill To Settle
+            // The last picker needs time to close and the pill needs time to settle.
             Thread.Sleep(500);
             App.Find("Bubble." + mineId).RightClick();
             App.Find("Bubble.React").Patterns.Invoke.Pattern.Invoke();
@@ -1230,10 +1195,10 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
-    /// A send the phone refuses in Team (SMS) shows the retry footer; retried, the footer goes, and the sent SMS bubble
-    /// (whose parts take the on-accent brushes) shows no part its message doesn't use.
+    /// A send that the phone refuses in Team, which is SMS, shows the retry footer. After a retry, the footer goes.
+    /// The parts of the sent SMS bubble take the on-accent brushes. The bubble shows no part that its message does
+    /// not use.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Bubble_SendFails_ShowsRetryFooter()
     {
@@ -1265,7 +1230,8 @@ public sealed class RcsTests : UiTest
     // HELPERS
     // =========================================================================
 
-    // Waits For A Bubble's Focus Ring State (Its Text's Item Status In A Test Run; See MessageBubble.ShowFocusRing)
+    // Waits for the focus ring state of a bubble. In a test run, the state is the item status of its text. See
+    // MessageBubble.ShowFocusRing.
     private static void WaitForRing(AutomationElement text, string state)
     {
         string last = "";
@@ -1273,8 +1239,8 @@ public sealed class RcsTests : UiTest
             () => $"The bubble's ring read '{last}', not '{state}'.");
     }
 
-    // Opens The Main Window And A Row's Chat, Waits For Its Bubbles And Brings The Window To The Front (A Real Right-Click
-    // Lands On Whatever Window Is On Top), With The Cursor In The Message Box
+    // Opens the main window and the chat of a row. The method waits for the bubbles and brings the window to the
+    // front, because a real right-click lands on the window that is on top. The cursor ends in the message box.
     private async Task OpenChatAsync(string rowId)
     {
         await OpenMainAsync();
@@ -1283,12 +1249,14 @@ public sealed class RcsTests : UiTest
         Wait.Until(() => RowCount() > 0, AppDriver.DefaultTimeout, () => $"{rowId}'s chat showed no bubbles.");
         App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout).SetForeground();
 
-        // Opening The Chat Puts The Cursor In The Message Box; Waited For, So It Can't Take Focus From A Row Later
+        // Opening the chat puts the cursor in the message box. The wait stops the cursor from taking focus from a row
+        // later.
         WaitForFocus("Chat.Draft");
     }
 
-    // Moves The Pointer Onto A Bubble (Its First Hover Loads The Strip), Then Onto One Of Its Hover Strip's Buttons (Hidden
-    // Until Then, So It Takes No Clicks), And Waits For The Strip's Fade In (167 ms), Which Turns On Its Clicks
+    // Moves the pointer onto a bubble, because its first hover loads the strip. Then the pointer moves onto a button
+    // of the hover strip, which takes no clicks while hidden. The method waits for the fade in of 167 ms, which turns
+    // the clicks on.
     private AutomationElement HoverStripButton(string messageId, string prefix)
     {
         PointerInput.Hover(App.Find("Bubble." + messageId).BoundingRectangle);
@@ -1298,8 +1266,9 @@ public sealed class RcsTests : UiTest
         return button;
     }
 
-    // A Bubble's Text Fills Its Box Edge To Edge: The Back's Padding Is The Same Either Side, So The Text's Insets In The
-    // Bubble Are Equal Only When The Text Box (Stretched Across The Back) Is As Wide As The Text Drawn In It
+    // The text of a bubble fills its box edge to edge. The padding of the back is the same on both sides. So the
+    // insets of the text are equal only when the text box, stretched across the back, is as wide as the text drawn in
+    // it.
     private void AssertTextFits(string messageId)
     {
         Thread.Sleep(300);
@@ -1314,10 +1283,11 @@ public sealed class RcsTests : UiTest
         Assert.IsTrue(Math.Abs(left - right) <= 2, $"Bubble {messageId}'s text sits {left} px from its left and {right} px from its right.");
     }
 
-    // Reads One Pixel Of A Selected Fill (Near The Left End, Clear Of The Emoji) Before The Pointer Comes, Then About Every
-    // 8 ms For 600 ms From A Real Move Onto It, On A Second Thread So The Readings Keep Their Pace. Every Reading Must Sit
-    // Between The Color Before And The Settled Hover Color (4 Levels Of Slack), And The Hover Must Keep The Accent: At Least
-    // Half The Fill's Color Strength (Its Channels' Spread)
+    // Reads one pixel of a selected fill, near the left end and clear of the emoji. The first read comes before the
+    // pointer arrives. Then a second thread reads about every 8 ms for 600 ms, from a real move onto the fill. The
+    // second thread keeps the pace of the readings. Every reading must sit between the color before and the settled
+    // hover color, with 4 levels of slack. The hover must keep the accent: at least half of the color strength of the
+    // fill, which is the spread of its channels.
     private void AssertSteadyHover(string name, System.Drawing.Rectangle box)
     {
         System.Drawing.Rectangle spot = new(box.Left + 5, box.Top + (box.Height / 2), 1, 1);
@@ -1370,7 +1340,7 @@ public sealed class RcsTests : UiTest
         Assert.IsTrue(Strength(hovered) * 2 >= Strength(before), $"Hovering the {name} lost my reaction's accent (before {before}, hovered {hovered}).");
     }
 
-    // The Newest Bubble's Row Takes Keyboard Focus
+    // The row of the newest bubble takes keyboard focus.
     private void FocusLastRow()
     {
         AutomationElement[] rows = Rows();
@@ -1392,7 +1362,7 @@ public sealed class RcsTests : UiTest
         }
     }
 
-    // A Bubble's Accessible Item Type, Once It Shows
+    // The accessible item type of a bubble, when the bubble shows.
     private string ItemType(string automationId)
     {
         string last = "";
@@ -1408,13 +1378,13 @@ public sealed class RcsTests : UiTest
             () => $"Focus was on '{last}', not '{automationId}'.");
     }
 
-    // A Link To The Fake Server's Preview Page (Loopback Links Get Previews In Test Runs Only)
+    // A link to the preview page of the fake server. The app previews loopback links in test runs only.
     private string PreviewLink() => $"http://127.0.0.1:{Server.BaseUrl.Port}/preview-page";
 
-    // The Conversation's Newest Message On The Fake Phone
+    // The newest message of the conversation on the fake phone.
     private Message Newest(string conversationId) => Server.Phone.Chats.Page(conversationId, 1, null).Page[0];
 
-    // A Conversation's Message On The Fake Phone, By Its Text
+    // A message of a conversation on the fake phone, found by its text.
     private Message Find(string conversationId, string text) =>
         Server.Phone.Chats.Page(conversationId, 50, null).Page.Single(m => m.MessageInfo.Count > 0 && m.MessageInfo[0].MessageContent?.Content == text);
 }
