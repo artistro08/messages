@@ -4,17 +4,17 @@ using GMessages.Protocol.Proto;
 namespace GMessages.Protocol;
 
 /// <summary>
-/// LibGM's table between mime types and <see cref="MediaFormats"/>.
+/// The LibGM table between mime types and <see cref="MediaFormats"/>.
 /// </summary>
 /// <remarks>
 /// Ports <c>MimeToMediaType</c> and <c>FormatToMediaType</c> from
 /// <see href="https://github.com/mautrix/gmessages/blob/ba33f4875a491f5cb47db8a6baf42a8869f5f383/pkg/libgm/media.go">media.go</see>.
-/// Go builds the reverse table by walking a map, so formats with two mime types (BMP, plain text) come out in random
-/// order; here the full mime type always wins and BMP is <c>image/bmp</c>.
+/// Go builds the reverse table from a map, so a format with 2 mime types gets a random one. BMP and plain text
+/// have 2 mime types. Here the full mime type always wins, and BMP is <c>image/bmp</c>.
 /// </remarks>
 public static class MediaFormatsMap
 {
-    // Port Of MimeToMediaType (The Bare Prefixes Are The Fallbacks)
+    // Port of MimeToMediaType. The bare prefixes are the fallbacks.
     private static readonly FrozenDictionary<string, MediaFormats> FromMimeTable = new Dictionary<string, MediaFormats>
     {
         ["image/jpeg"]     = MediaFormats.ImageJpeg,
@@ -64,15 +64,16 @@ public static class MediaFormatsMap
         ["text"]        = MediaFormats.AppTxt,
     }.ToFrozenDictionary(StringComparer.Ordinal);
 
-    // Port Of FormatToMediaType: Its Calendar Extras, Then The First Full Mime Type Of Each Format
+    // Port of FormatToMediaType: its calendar extras, then the first full mime type of each format.
     private static readonly FrozenDictionary<MediaFormats, string> ToMimeTable = BuildToMime();
 
     /// <summary>
     /// Gets the format to send for a mime type.
     /// </summary>
     /// <remarks>
-    /// As in Go's <c>UploadMedia</c>: the exact mime type, else its part before the slash (<c>image</c>, <c>video</c>,
-    /// <c>audio</c>, <c>application</c>, <c>text</c>), else <see cref="MediaFormats.UnspecifiedType"/>. Case-sensitive, like Go.
+    /// As in Go's <c>UploadMedia</c>, the method first tries the exact mime type. Then it tries the part before the
+    /// slash: <c>image</c>, <c>video</c>, <c>audio</c>, <c>application</c> or <c>text</c>. Then it returns
+    /// <see cref="MediaFormats.UnspecifiedType"/>. As in Go, the match is case-sensitive.
     /// </remarks>
     /// <param name="mime">The mime type, such as <c>image/png</c>.</param>
     /// <returns>The format.</returns>
@@ -92,7 +93,7 @@ public static class MediaFormatsMap
     /// Gets the mime type of a received format.
     /// </summary>
     /// <param name="format">The format from a message's <c>MediaContent</c>.</param>
-    /// <returns>The mime type, or null when the format has no full mime type (the unspecified ones).</returns>
+    /// <returns>The mime type, or null when the format has no full mime type, such as an unspecified format.</returns>
     public static string? ToMime(MediaFormats format) => ToMimeTable.GetValueOrDefault(format);
 
     private static FrozenDictionary<MediaFormats, string> BuildToMime()

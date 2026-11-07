@@ -3,11 +3,11 @@ using System.Text.Json.Serialization;
 namespace GMessages.Protocol.Session;
 
 /// <summary>
-/// The stored shape of <see cref="AuthData"/>. C#-only; it does not match Go's JSON.
+/// The stored shape of <see cref="AuthData"/>. It is C#-only and does not match the Go JSON.
 /// </summary>
 /// <remarks>
-/// Byte arrays (keys, token, devices as binary protobuf) are base64 strings in JSON. A null <see cref="Cookies"/>
-/// means "no cookie map", which is different from an empty one.
+/// Byte arrays are base64 strings in JSON. They hold the keys, the token and the devices as binary protobuf. A null
+/// <see cref="Cookies"/> means "no cookie map". That is different from an empty map.
 /// </remarks>
 internal sealed class SessionFile
 {
@@ -47,9 +47,9 @@ internal sealed class SessionFile
 }
 
 /// <summary>
-/// Source-generated JSON context for the session file, so saving and loading are AOT-safe.
+/// The source-generated JSON context for the session file. It makes the save and the load AOT-safe.
 /// </summary>
-/// <remarks>No reflection-based serialization is used anywhere for session data.</remarks>
+/// <remarks>Session data never uses reflection-based serialization.</remarks>
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(SessionFile))]
 internal sealed partial class SessionJsonContext : JsonSerializerContext;

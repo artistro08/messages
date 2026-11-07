@@ -8,24 +8,24 @@ using Microsoft.Extensions.Logging;
 namespace GMessages.Protocol.Session;
 
 /// <summary>
-/// Saves and loads <see cref="AuthData"/> in a DPAPI-encrypted file (current user scope).
+/// Saves and loads <see cref="AuthData"/> in a file that DPAPI encrypts for the current user.
 /// </summary>
 /// <remarks>
-/// Storage is C#-only; Go keeps this JSON in the bridge database. The data is serialized with a source-generated
-/// JSON context and encrypted with <see cref="ProtectedData"/>, so only the same Windows user can read it. Saving
-/// writes a <c>.tmp</c> file and then replaces the real one, so a crash never leaves a half-written session.
-/// Loading never throws for a bad file. Only the reason type is logged, never the contents.
-/// Related Go type: <c>AuthData</c> in
+/// The storage is C#-only. Go keeps this JSON in the bridge database. A source-generated JSON context serializes the
+/// data, and <see cref="ProtectedData"/> encrypts it. Thus only the same Windows user can read it. A save writes a
+/// <c>.tmp</c> file and then replaces the real file, so a crash never leaves a half-written session. A load never
+/// throws for a bad file. The store logs only the type of the reason, never the contents. The related Go type is
+/// <c>AuthData</c> in
 /// <see href="https://github.com/mautrix/gmessages/blob/ba33f4875a491f5cb47db8a6baf42a8869f5f383/pkg/libgm/client.go">client.go</see>.
 /// </remarks>
-/// <param name="filePath">Where the session file lives.</param>
-/// <param name="logger">Optional logger for load failures.</param>
+/// <param name="filePath">The path of the session file.</param>
+/// <param name="logger">The logger for load failures, or null.</param>
 public sealed partial class SessionStore(string filePath, ILogger? logger = null)
 {
     /// <summary>
     /// Encrypts and writes the session.
     /// </summary>
-    /// <remarks>Creates the folder if needed. Replaces any existing file.</remarks>
+    /// <remarks>The method creates the folder when necessary. It replaces an existing file.</remarks>
     /// <param name="data">The session to save.</param>
     /// <exception cref="ArgumentNullException"><paramref name="data"/> is null.</exception>
     /// <exception cref="IOException">The file could not be written.</exception>
@@ -33,7 +33,7 @@ public sealed partial class SessionStore(string filePath, ILogger? logger = null
     {
         ArgumentNullException.ThrowIfNull(data);
 
-        // Map To Stored Shape (One Token Snapshot, So A Refresh Running Now Can't Tear It)
+        // The method takes 1 token snapshot, so a refresh that runs now cannot tear it.
         TachyonToken tachyon = data.Tachyon;
         SessionFile file     = new()
         {
@@ -55,8 +55,7 @@ public sealed partial class SessionStore(string filePath, ILogger? logger = null
             Cookies          = data.Cookies.HasCookies ? new Dictionary<string, string>(data.Cookies.Snapshot()) : null,
         };
 
-        // Encrypt
-        // ponytail: best effort; the SessionFile above still holds the same secrets
+        // ponytail: the wipe is best effort. The SessionFile above still holds the same secrets.
         byte[] json = JsonSerializer.SerializeToUtf8Bytes(file, SessionJsonContext.Default.SessionFile);
         byte[] encrypted;
         try
@@ -68,15 +67,14 @@ public sealed partial class SessionStore(string filePath, ILogger? logger = null
             CryptographicOperations.ZeroMemory(json);
         }
 
-        // Write Temp, Then Replace
         string? dir = Path.GetDirectoryName(Path.GetFullPath(filePath));
         if (!string.IsNullOrEmpty(dir))
         {
             Directory.CreateDirectory(dir);
         }
 
+        // ponytail: the store expects 1 writer. GmClient lets only 1 save run at a time.
         string tmp = filePath + ".tmp";
-        // ponytail: single writer assumed; GmClient serializes saves
         using (FileStream fs = new(tmp, FileMode.Create, FileAccess.Write, FileShare.None))
         {
             fs.Write(encrypted);
@@ -90,8 +88,9 @@ public sealed partial class SessionStore(string filePath, ILogger? logger = null
     /// Reads and decrypts the session.
     /// </summary>
     /// <remarks>
-    /// Returns null instead of throwing when the file is missing, cut off, not DPAPI data (or from another user),
-    /// not valid JSON, or lacks required keys. The caller then treats it as "not logged in".
+    /// The method returns null and does not throw when the file is missing or cut off. It also returns null when the
+    /// file is not DPAPI data, is from a different user, is not valid JSON or has no required keys. The caller then
+    /// treats the result as "not logged in".
     /// </remarks>
     /// <returns>The session, or null.</returns>
     public AuthData? Load()
@@ -101,7 +100,7 @@ public sealed partial class SessionStore(string filePath, ILogger? logger = null
             return null;
         }
 
-        // Wiped In The Finally: Best Effort, The Parsed Session Still Holds The Same Secrets
+        // The finally block wipes the JSON as a best effort. The parsed session still holds the same secrets.
         byte[]? json = null;
         try
         {
@@ -142,7 +141,6 @@ public sealed partial class SessionStore(string filePath, ILogger? logger = null
         catch (Exception ex) when (ex is CryptographicException or JsonException or InvalidDataException or InvalidProtocolBufferException
                                        or IOException or UnauthorizedAccessException or ArgumentException)
         {
-            // Log The Reason Type Only, Never The Contents
             if (logger is not null)
             {
                 LogLoadFailed(logger, ex.GetType().Name);
@@ -162,7 +160,7 @@ public sealed partial class SessionStore(string filePath, ILogger? logger = null
     /// <summary>
     /// Deletes the session file and any leftover temp file.
     /// </summary>
-    /// <remarks>Used when unpairing. A missing file is not an error.</remarks>
+    /// <remarks>The unpair uses it. A missing file is not an error.</remarks>
     /// <exception cref="IOException">The file is in use.</exception>
     /// <exception cref="UnauthorizedAccessException">The file cannot be deleted.</exception>
     public void Delete()

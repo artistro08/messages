@@ -8,7 +8,7 @@ namespace GMessages.Protocol;
 internal static partial class ProtocolLog
 {
     /// <summary>
-    /// Logs that a subscriber of an event threw; the event is still delivered to the others.
+    /// Logs that a subscriber of an event threw. The other subscribers still get the event.
     /// </summary>
     /// <param name="logger">The logger.</param>
     /// <param name="exception">What the subscriber threw.</param>

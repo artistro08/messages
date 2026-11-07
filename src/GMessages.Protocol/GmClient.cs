@@ -11,25 +11,25 @@ using Microsoft.Extensions.Logging;
 namespace GMessages.Protocol;
 
 /// <summary>
-/// The single entry point for the app: pairs with the phone, connects, disconnects, unpairs, and keeps the saved
+/// The single entry point for the app. It pairs with the phone, connects, disconnects, unpairs and keeps the saved
 /// session up to date.
 /// </summary>
 /// <remarks>
 /// Ported from <c>Connect</c>, <c>Reconnect</c>, <c>Disconnect</c>, <c>IsConnected</c>, <c>IsLoggedIn</c>,
 /// <c>checkLoggedIn</c>, <c>startLongPolling</c> and <c>postConnect</c> in
 /// <see href="https://github.com/mautrix/gmessages/blob/ba33f4875a491f5cb47db8a6baf42a8869f5f383/pkg/libgm/client.go">client.go</see>,
-/// <c>Unpair</c> in pair.go and <c>DoGaiaPairing</c> in pair_google.go. Connect refreshes the token first so bad
-/// credentials show up right away, then starts the long poll; once it opens, the client waits 2 seconds (longer while
-/// the startup skip count is above zero), flushes acks, waits 1 more second and asks the phone for updates
-/// (<c>GET_UPDATES</c> with a new session ID). Go then checks whether Google Messages is the default SMS app; that
-/// check is not ported, because nothing here uses its answer.
+/// <c>Unpair</c> in pair.go and <c>DoGaiaPairing</c> in pair_google.go. Connect refreshes the token first, so bad
+/// credentials fail at once. Then it starts the long poll. When the long poll opens, the client waits 2 seconds.
+/// It waits longer while the startup skip count is above 0. Then it flushes the acks, waits 1 more second and sends
+/// <c>GET_UPDATES</c> with a new session ID. Go then checks if Google Messages is the default SMS app. This port
+/// does not do that check, because nothing uses its answer.
 /// <para>
-/// Connect, disconnect, pairing and unpairing run one at a time. The session is saved after every token refresh and
-/// every cookie change: right away when the last save started more than 5 seconds ago, otherwise once at the end of
-/// that 5 second window. Saves are paused while pairing, so a half-finished pairing never reaches the disk. A failed
-/// save raises <see cref="SessionSaveFailed"/> so the app can warn the user. After
-/// <see cref="UnpairAsync"/> or <see cref="DisposeAsync"/> the client is finished. Tokens, keys and cookie values are
-/// never logged.
+/// Connect, disconnect, pairing and unpairing run one at a time. The client saves the session after each token
+/// refresh and each cookie change. The save runs at once when the last save started 5 seconds ago or more.
+/// Otherwise it runs 1 time at the end of that 5 second window. Saves stop during pairing, so a half-finished
+/// pairing never gets to the disk. A failed save raises <see cref="SessionSaveFailed"/>, so the app can warn the
+/// user. After <see cref="UnpairAsync"/> or <see cref="DisposeAsync"/>, the client is finished. The client never
+/// logs tokens, keys or cookie values.
 /// </para>
 /// </remarks>
 public sealed partial class GmClient : IMessagingClient, IAsyncDisposable
@@ -37,7 +37,7 @@ public sealed partial class GmClient : IMessagingClient, IAsyncDisposable
     /// <summary>The shortest time between two automatic session saves.</summary>
     public static readonly TimeSpan SaveDebounce = TimeSpan.FromSeconds(5);
 
-    // Post-Connect Waits (Go: postConnect's time.Sleep Calls)
+    // These waits port the time.Sleep calls in Go's postConnect.
     private static readonly TimeSpan PostConnectDelay  = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan SkipCountDelay    = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan BeforeUpdatesWait = TimeSpan.FromSeconds(1);
@@ -57,19 +57,19 @@ public sealed partial class GmClient : IMessagingClient, IAsyncDisposable
     private readonly GmHttpClient _http;
     private readonly GmEndpoints _endpoints;
 
-    // One Connect, Disconnect, Pair Or Unpair At A Time
+    // _gate lets only 1 connect, disconnect, pairing or unpairing run at a time.
     private readonly SemaphoreSlim _gate = new(1, 1);
     private CancellationTokenSource? _pairCts;
     private int _finished;
     private int _disposed;
 
-    // Long Poll Run (Changed Under _gate; _runLock Also Guards _postConnect, Set From The Loop)
+    // The run changes only under _gate. _runLock also guards _postConnect, because the loop sets it.
     private readonly Lock _runLock = new();
     private CancellationTokenSource? _runCts;
     private Task _run         = Task.CompletedTask;
     private Task _postConnect = Task.CompletedTask;
 
-    // Session Saves: _saveLock Guards The Timer And Flags, _writeLock Keeps Writes (And The Delete) One At A Time
+    // _saveLock guards the save timer and the flags. _writeLock lets only 1 write or delete run at a time.
     private readonly Lock _saveLock  = new();
     private readonly Lock _writeLock = new();
     private ITimer? _saveTimer;
@@ -87,7 +87,6 @@ public sealed partial class GmClient : IMessagingClient, IAsyncDisposable
         _httpClient     = new HttpClient(handler, disposeHandler: false);
         _longPollClient = new HttpClient(handler, disposeHandler: false) { Timeout = GmHttpClient.LongPollTimeout };
 
-        // Wire The Pieces
         var http    = new GmHttpClient(_httpClient, _longPollClient, auth.Cookies, time, logs.CreateLogger<GmHttpClient>());
         Rpc         = new RpcSession(http, auth, endpoints, time, logs.CreateLogger<RpcSession>());
         _refresher  = new TokenRefresher(http, auth, endpoints, time, logs.CreateLogger<TokenRefresher>());
@@ -98,27 +97,26 @@ public sealed partial class GmClient : IMessagingClient, IAsyncDisposable
         _http       = http;
         _endpoints  = endpoints;
 
-        // Requests Waiting For An Answer Fail Fast While No Long Poll Runs (Pairing's Own Poll Counts)
+        // A request that waits for an answer fails at once when no long poll runs. The pairing long poll counts.
         Rpc.IsListening = () => _loop.IsRunning;
 
-        // Events And Saves
         _loop.EventRaised      += Raise;
         _refresher.EventRaised += OnRefresherEvent;
         auth.Cookies.Changed   += OnCookiesChanged;
     }
 
     /// <summary>
-    /// Raised for every event: messages, conversations, listen state, phone liveness, token refreshes and pairing.
+    /// Occurs for each event: messages, conversations, listen state, phone liveness, token refreshes and pairing.
     /// </summary>
     /// <remarks>
-    /// Go's event handler. Handlers run on background threads and must not block for long. A handler that throws is
-    /// logged and does not stop the client. Handlers must not block synchronously on GmClient methods: some events,
-    /// such as <see cref="PairSuccessful"/>, are raised while the client's lifecycle lock is held.
+    /// Go's event handler. Handlers run on background threads and must not block for a long time. The client logs a
+    /// handler that throws and continues. Handlers must not block synchronously on GmClient methods. The client
+    /// raises some events, such as <see cref="PairSuccessful"/>, while it holds its lifecycle lock.
     /// </remarks>
     public event Action<object>? EventRaised;
 
     /// <summary>
-    /// Gets the RPC session, for sending requests to the phone.
+    /// Gets the RPC session that sends requests to the phone.
     /// </summary>
     /// <remarks>Its session ID is empty until the first connect sends <c>GET_UPDATES</c>, as in Go.</remarks>
     public RpcSession Rpc { get; }
@@ -126,34 +124,34 @@ public sealed partial class GmClient : IMessagingClient, IAsyncDisposable
     /// <summary>
     /// Gets whether the account is paired and has its cookies.
     /// </summary>
-    /// <remarks>Ported from <c>IsLoggedIn</c>: a browser device is set and <see cref="AuthData.HasCookies"/> holds.</remarks>
+    /// <remarks>Ported from <c>IsLoggedIn</c>.</remarks>
     public bool IsLoggedIn => _auth.Browser is not null && _auth.HasCookies;
 
     /// <summary>
-    /// Gets whether the long poll is open right now.
+    /// Gets whether the long poll is open now.
     /// </summary>
-    /// <remarks>Ported from <c>IsConnected</c>; briefly false while the long poll reconnects, as in Go.</remarks>
+    /// <remarks>Ported from <c>IsConnected</c>. As in Go, the value is false for a short time while the long poll reconnects.</remarks>
     public bool IsConnected => _loop.IsConnected;
 
-    /// <summary>Runs inside each session write, before the file is written (test hook).</summary>
+    /// <summary>Gets or sets a test hook that runs in each session write, before the file write.</summary>
     internal Action? OnWritingForTests { get; set; }
 
     /// <summary>
     /// Creates a client for an account.
     /// </summary>
     /// <remarks>
-    /// Without a <paramref name="handler"/>, a <see cref="SocketsHttpHandler"/> is created with cookies off (the
-    /// account's <see cref="CookieJar"/> owns them) and gzip, deflate and Brotli decompression on (Go's transport asks
-    /// for compression by itself). Two clients share it: a normal one, and one with a 30 minute timeout for the long
-    /// poll. A given handler is used as is and not disposed.
+    /// Without a <paramref name="handler"/>, the client creates a <see cref="SocketsHttpHandler"/> with cookies off,
+    /// because the <see cref="CookieJar"/> of the account owns them. The handler decompresses gzip, deflate and Brotli,
+    /// because Go's transport asks for compression by itself. 2 HTTP clients share the handler. The second client has
+    /// a 30 minute timeout for the long poll. The client uses a given handler as it is and does not dispose it.
     /// </remarks>
-    /// <param name="auth">The account; a fresh <see cref="AuthData.CreateNew"/> with cookies set for pairing.</param>
-    /// <param name="store">Where the session is saved.</param>
+    /// <param name="auth">The account. For pairing, use a new <see cref="AuthData.CreateNew"/> with cookies set.</param>
+    /// <param name="store">The store that saves the session.</param>
     /// <param name="endpoints">The server addresses.</param>
-    /// <param name="time">The clock for every wait and the save window.</param>
-    /// <param name="logs">Creates the loggers.</param>
-    /// <param name="handler">The HTTP handler to send through, for tests; null for the real network.</param>
-    /// <returns>The client; dispose it when done.</returns>
+    /// <param name="time">The clock for each wait and the save window.</param>
+    /// <param name="logs">The factory that creates the loggers.</param>
+    /// <param name="handler">The HTTP handler for tests, or null for the real network.</param>
+    /// <returns>The client. Dispose it after use.</returns>
     /// <exception cref="ArgumentNullException">A required argument is null.</exception>
     public static GmClient Create(AuthData auth, SessionStore store, GmEndpoints endpoints, TimeProvider time, ILoggerFactory logs, HttpMessageHandler? handler = null)
     {
@@ -185,11 +183,12 @@ public sealed partial class GmClient : IMessagingClient, IAsyncDisposable
     /// Refreshes the token if needed and starts listening for events.
     /// </summary>
     /// <remarks>
-    /// Ported from <c>Connect</c>. The refresh happens here, not only in the long poll, so bad credentials fail the
-    /// call. A refresh error that can be retried (network, 5xx) is logged and left to the long poll. Returns once the
-    /// long poll is started; it opens and sends <c>GET_UPDATES</c> in the background. A call while the long poll is
-    /// already running makes it reconnect right away (dropping any backoff wait), the way Go's <c>Connect</c> retries
-    /// at once; there is still only one long poll. Call it when the network comes back or the PC wakes up.
+    /// Ported from <c>Connect</c>. The refresh runs here and in the long poll, so bad credentials fail this call. The
+    /// client logs a refresh error that it can retry, such as a network error or a 5xx status. The long poll then
+    /// retries it. The call returns when the long poll starts. The long poll opens and sends <c>GET_UPDATES</c> in the
+    /// background. A call while the long poll runs makes it reconnect at once and skip its backoff wait. Go's
+    /// <c>Connect</c> also retries at once. Only 1 long poll runs. Call this method when the network comes back or the
+    /// PC wakes up.
     /// </remarks>
     /// <param name="ct">Cancels the wait for another operation and the token refresh. The long poll runs until <see cref="DisconnectAsync"/>.</param>
     /// <returns>A task that completes when the long poll is started.</returns>
@@ -205,14 +204,15 @@ public sealed partial class GmClient : IMessagingClient, IAsyncDisposable
         {
             ThrowIfFinished();
             ThrowIfNotLoggedIn();
-            // Already Running: Reconnect Now Instead Of Waiting Out A Backoff (The Loop Refreshes The Token Itself)
+
+            // The running loop refreshes the token itself.
             if (IsRunning)
             {
                 _loop.RequestReconnect();
                 return;
             }
 
-            // Refresh The Token (Its Event Goes Out Here; No Long Poll Is Relaying Refresher Events Now)
+            // No long poll relays the refresher events now, so this method raises them.
             _refresher.EventRaised += Raise;
             try
             {
@@ -243,11 +243,10 @@ public sealed partial class GmClient : IMessagingClient, IAsyncDisposable
     /// Stops listening and fails every request still waiting for the phone.
     /// </summary>
     /// <remarks>
-    /// Ported from <c>Disconnect</c>: closes the long poll and fails the waiters, since their answers could only
-    /// arrive over the long poll. Go also closes idle HTTP connections; .NET has no such call short of disposing the
-    /// handler, and idle connections close by themselves after a while. Safe to call when not connected. A running
-    /// pairing is canceled first, so its <see cref="PairAsync"/> fails at once, as in Go (the bridge cancels a login
-    /// this way).
+    /// Ported from <c>Disconnect</c>. The waiters fail, because their answers can only come over the long poll. Go
+    /// also closes idle HTTP connections. .NET has no such call except to dispose the handler. Idle connections close
+    /// by themselves after some time. A call when not connected is safe. The method first cancels a running pairing,
+    /// so its <see cref="PairAsync"/> fails at once, as in Go. The bridge cancels a login in this way.
     /// </remarks>
     /// <returns>A task that completes when the long poll has ended.</returns>
     public async Task DisconnectAsync()
@@ -269,12 +268,12 @@ public sealed partial class GmClient : IMessagingClient, IAsyncDisposable
     // =========================================================================
 
     /// <summary>
-    /// Cancels a running pairing, disconnects, writes a pending session save, and releases the HTTP clients.
+    /// Cancels a running pairing, disconnects, writes a pending session save and releases the HTTP clients.
     /// </summary>
     /// <remarks>
-    /// Safe to call more than once. Afterwards the client is finished. Errors from the stopping long poll (such as
-    /// an aborted socket) are logged, not thrown, and the pending save and the release run even if disconnecting
-    /// fails, so a rotated cookie or refreshed token is never lost on exit.
+    /// More than 1 call is safe. After the call, the client is finished. The method logs the errors of the stopping
+    /// long poll, such as an aborted socket, and does not throw them. The pending save and the release run also when
+    /// the disconnect fails. Thus the app never loses a rotated cookie or a refreshed token on exit.
     /// </remarks>
     /// <returns>A task that completes when everything is released.</returns>
     public async ValueTask DisposeAsync()
@@ -299,7 +298,6 @@ public sealed partial class GmClient : IMessagingClient, IAsyncDisposable
         }
     }
 
-    // Writes A Pending Save, Waits Out Any Write In Progress, Then Unsubscribes And Releases The HTTP Clients
     private void ReleaseAfterDisconnect()
     {
         try
@@ -318,7 +316,7 @@ public sealed partial class GmClient : IMessagingClient, IAsyncDisposable
             StopSaves();
             lock (_writeLock)
             {
-                // Nothing; Entering Waits For An In-Flight Timer Save
+                // The lock waits for a timer save that is in progress.
             }
         }
         finally
@@ -334,7 +332,7 @@ public sealed partial class GmClient : IMessagingClient, IAsyncDisposable
 
     private void ThrowIfFinished() => ObjectDisposedException.ThrowIf(Volatile.Read(ref _finished) != 0, this);
 
-    // Port Of checkLoggedIn
+    // Port of checkLoggedIn.
     private void ThrowIfNotLoggedIn()
     {
         if (_auth.TachyonAuthToken is null)
@@ -411,13 +409,13 @@ public sealed partial class GmClient : IMessagingClient, IAsyncDisposable
 }
 
 /// <summary>
-/// Thrown when the server refused the token refresh for good, so the user must pair again.
+/// The exception that is thrown when the server refuses the token refresh permanently. The user must pair again.
 /// </summary>
 /// <remarks>
-/// Stands in for the error Go's <c>Connect</c> returns when <c>isFatalRefreshError</c> holds (HTTP 401, 403 or 404,
-/// or Google's "invalid credentials" and "entity not found" errors), in
+/// Replaces the error that Go's <c>Connect</c> returns when <c>isFatalRefreshError</c> is true in
 /// <see href="https://github.com/mautrix/gmessages/blob/ba33f4875a491f5cb47db8a6baf42a8869f5f383/pkg/libgm/client.go">client.go</see>.
-/// The server's error is the inner exception.
+/// That is HTTP 401, 403 or 404, or the Google errors "invalid credentials" and "entity not found". The inner
+/// exception is the error of the server.
 /// </remarks>
 public sealed class SessionExpiredException : Exception
 {
