@@ -64,7 +64,8 @@ public static class ChatFormat
     /// </summary>
     /// <remarks>
     /// The owner chose this rule. An unread conversation with no live count counts as 1. Its messages came while the
-    /// app was not running. A message with no text, such as media with no caption, shows its count.
+    /// app was not running. A message with no text, such as media with no caption, shows its count. So does a message
+    /// that starts with a link, because the badge showed only the start of the address.
     /// </remarks>
     /// <param name="unread">Whether the conversation is unread.</param>
     /// <param name="count">The live unread count from <see cref="ChatStore.LiveUnreadTexts"/>.</param>
@@ -81,7 +82,8 @@ public static class ChatFormat
 
         count          = Math.Max(1, count);
         string[] words = text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
-        return count == 1 && words.Length is 1 or 2
+        bool linkFirst = words.Length > 0 && LinkPreviewer.FindLinks(words[0]) is [{ Start: 0 }, ..];
+        return count == 1 && words.Length is 1 or 2 && !linkFirst
             ? WithColorEmoji(string.Join(' ', words))
             : count.ToString(CultureInfo.CurrentCulture);
     }
