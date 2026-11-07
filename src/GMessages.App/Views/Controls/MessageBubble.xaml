@@ -338,16 +338,21 @@
                                 <Border x:Name="PhotoBlur" CornerRadius="{x:Bind local:MessageBubble.PhotoCorners(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup, Bubble.HasBodyText), Mode=OneWay}" />
                                 <!-- A still photo is the ImageBrush of this layer, and the corners of the layer clip
                                      it. A GIF is the Image. A brush shows only the first frame of a GIF, and an Image
-                                     plays it. The code clips the Image to the corners of the photo. -->
+                                     plays it. The code clips the Image to the corners of the photo. The Image is on a
+                                     Canvas, and the code gives it the size of the Canvas. An Image with UniformToFill
+                                     asks for all the width of the row. A GIF with no caption then made its bubble full
+                                     width and cut the GIF. -->
                                 <Border
                                     x:Name="PhotoFull"
                                     CornerRadius="{x:Bind local:MessageBubble.PhotoCorners(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup, Bubble.HasBodyText), Mode=OneWay}"
                                     Opacity="0">
-                                    <Image
-                                        x:Name="PhotoFullImage"
-                                        Loaded="OnPhotoFullLoaded"
-                                        SizeChanged="OnPhotoFullSizeChanged"
-                                        Stretch="UniformToFill" />
+                                    <Canvas SizeChanged="OnPhotoFullCanvasSizeChanged">
+                                        <Image
+                                            x:Name="PhotoFullImage"
+                                            Loaded="OnPhotoFullLoaded"
+                                            SizeChanged="OnPhotoFullSizeChanged"
+                                            Stretch="UniformToFill" />
+                                    </Canvas>
                                 </Border>
 
                                 <!-- The note shows the wait for the phone or the failure on a small plate over the
