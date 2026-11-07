@@ -1,31 +1,31 @@
 namespace GMessages.Presentation.Messaging;
 
 /// <summary>
-/// What the owner can do to a whole conversation (see <see cref="ChatStore.UpdateConversationAsync"/>).
+/// Names what the owner can do to a whole conversation through <see cref="ChatStore.UpdateConversationAsync"/>.
 /// </summary>
 public enum ConversationAction
 {
-    /// <summary>Move it to the archive.</summary>
+    /// <summary>Moves the conversation to the archive.</summary>
     Archive,
 
-    /// <summary>Move it back to the inbox.</summary>
+    /// <summary>Moves the conversation back to the inbox.</summary>
     Unarchive,
 
-    /// <summary>Stop its notifications.</summary>
+    /// <summary>Stops the notifications of the conversation.</summary>
     Mute,
 
-    /// <summary>Turn its notifications back on.</summary>
+    /// <summary>Turns the notifications of the conversation on again.</summary>
     Unmute,
 
-    /// <summary>Block it; it moves to spam and blocked.</summary>
+    /// <summary>Blocks the conversation, which moves it to spam and blocked.</summary>
     Block,
 
-    /// <summary>Block it and report it as spam.</summary>
+    /// <summary>Blocks the conversation and reports it as spam.</summary>
     BlockAndReport,
 
-    /// <summary>Unblock it; it moves back to the inbox.</summary>
+    /// <summary>Unblocks the conversation, which moves it back to the inbox.</summary>
     Unblock,
 
-    /// <summary>Move it to the trash, on the phone too.</summary>
+    /// <summary>Moves the conversation to the trash, also on the phone.</summary>
     Delete,
 }

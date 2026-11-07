@@ -5,19 +5,20 @@ using GMessages.Protocol.Proto;
 namespace GMessages.Presentation.Messaging;
 
 /// <summary>
-/// Fetches participants' photos from the phone, in batches, and keeps the newest 200 in memory.
+/// Fetches the photos of participants from the phone in batches, and keeps the newest 200 in memory.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Every ID asked for within 50 ms goes to the phone in one <c>GetParticipantThumbnail</c> request; asking for an ID
-/// already on its way shares that answer. A participant without a photo is remembered as null, so the phone isn't
-/// asked again. A failed request (not connected, phone silent) answers null without remembering it.
+/// The cache sends all IDs that callers ask for within 50 ms to the phone in 1 <c>GetParticipantThumbnail</c>
+/// request. A request for an ID that is already on its way shares that answer. The cache remembers a participant
+/// without a photo as null, so it does not ask the phone again. A failed request answers null and is not remembered.
+/// The request fails when the phone is not connected or does not answer.
 /// </para>
 /// <para>
-/// <see cref="GetFileUriAsync"/> writes a photo to <c>{avatar folder}\{id hash}.png</c> for notifications; the file
-/// name is a hash, so no number or name lands on disk. The folder holds contacts' photos, so
-/// <see cref="Connection.ConnectionController"/> deletes it with the session. Photos are never logged. Safe to call
-/// from any thread; awaits resume on the caller's context.
+/// <see cref="GetFileUriAsync"/> writes a photo to <c>{avatar folder}\{id hash}.png</c> for notifications. The file
+/// name is a hash, so no number or name goes to disk. The folder holds the photos of contacts, so
+/// <see cref="Connection.ConnectionController"/> deletes it with the session. The log never holds photos. Any thread
+/// can call the cache, and awaits continue on the context of the caller.
 /// </para>
 /// </remarks>
 public sealed class AvatarCache
@@ -30,11 +31,12 @@ public sealed class AvatarCache
     private readonly string _folder;
     private readonly Lock _lock = new();
 
-    // LRU: Newest First; The Map Finds An ID's Node
+    // The least recently used list, newest first. The map finds the node of an ID.
     private readonly LinkedList<(string Id, byte[]? Photo)> _recent = [];
     private readonly Dictionary<string, LinkedListNode<(string Id, byte[]? Photo)>> _byId = [];
 
-    // Answers Not In Yet (Waiting For The Batch Or On Their Way), And The IDs Of The Batch Still Collecting
+    // The answers that are not in yet, because they wait for the batch or are on their way. _batch holds the IDs of
+    // the batch that still collects.
     private readonly Dictionary<string, TaskCompletionSource<byte[]?>> _pending = [];
     private List<string>? _batch;
 
@@ -42,7 +44,9 @@ public sealed class AvatarCache
     /// Creates the cache.
     /// </summary>
     /// <param name="store">Gives the phone client.</param>
-    /// <param name="avatarFolder">Where <see cref="GetFileUriAsync"/> writes photos (<c>{DataFolder}\Avatars</c>).</param>
+    /// <param name="avatarFolder">
+    /// The folder where <see cref="GetFileUriAsync"/> writes photos: <c>{DataFolder}\Avatars</c>.
+    /// </param>
     public AvatarCache(ChatStore store, string avatarFolder)
     {
         ArgumentNullException.ThrowIfNull(store);
@@ -53,32 +57,30 @@ public sealed class AvatarCache
     }
 
     /// <summary>
-    /// Gets a participant's photo.
+    /// Gets the photo of a participant.
     /// </summary>
     /// <param name="participantId">The participant ID.</param>
-    /// <param name="ct">Cancels the wait (not the shared request).</param>
-    /// <returns>The image bytes, or null when the participant has no photo or the phone couldn't be asked.</returns>
+    /// <param name="ct">Cancels the wait. It does not cancel the shared request.</param>
+    /// <returns>The image bytes, or null when the participant has no photo or the request failed.</returns>
     public Task<byte[]?> GetAsync(string participantId, CancellationToken ct)
     {
         ArgumentException.ThrowIfNullOrEmpty(participantId);
 
         lock (_lock)
         {
-            // Cached: Mark As Newest
-            if (_byId.TryGetValue(participantId, out var node))
+            if (_byId.TryGetValue(participantId, out LinkedListNode<(string Id, byte[]? Photo)>? node))
             {
                 _recent.Remove(node);
                 _recent.AddFirst(node);
                 return Task.FromResult(node.Value.Photo);
             }
 
-            // Already Asked For: Share The Answer
-            if (_pending.TryGetValue(participantId, out var waiting))
+            if (_pending.TryGetValue(participantId, out TaskCompletionSource<byte[]?>? waiting))
             {
                 return waiting.Task.WaitAsync(ct);
             }
 
-            // Join The Collecting Batch, Starting One When None Is Open
+            // The ID joins the batch that collects, and starts a batch when none is open.
             var answer = new TaskCompletionSource<byte[]?>(TaskCreationOptions.RunContinuationsAsynchronously);
             _pending[participantId] = answer;
             if (_batch is null)
@@ -93,13 +95,13 @@ public sealed class AvatarCache
     }
 
     /// <summary>
-    /// Gets a file URI of a participant's photo for a notification, writing the file the first time.
+    /// Gets a file URI of the photo of a participant for a notification, and writes the file the first time.
     /// </summary>
     /// <param name="participantId">The participant ID.</param>
     /// <param name="ct">Cancels the wait.</param>
     /// <returns>A <c>file:///</c> URI, or null when the participant has no photo.</returns>
-    /// <exception cref="IOException">The avatar folder can't be written.</exception>
-    /// <exception cref="UnauthorizedAccessException">The avatar folder can't be written.</exception>
+    /// <exception cref="IOException">The avatar folder cannot be written.</exception>
+    /// <exception cref="UnauthorizedAccessException">The avatar folder cannot be written.</exception>
     public async Task<string?> GetFileUriAsync(string participantId, CancellationToken ct)
     {
         ArgumentException.ThrowIfNullOrEmpty(participantId);
@@ -116,7 +118,7 @@ public sealed class AvatarCache
             return null;
         }
 
-        // Written Aside, Then Moved In, So A Toast Never Reads Half A File
+        // The method writes to a temp file and then moves it in, so a toast never reads half a file.
         Directory.CreateDirectory(_folder);
         string temp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
         await File.WriteAllBytesAsync(temp, photo, ct).ConfigureAwait(false);
@@ -126,7 +128,7 @@ public sealed class AvatarCache
         }
         catch (IOException)
         {
-            // Another Call Moved It In First And A Toast Has It Open: That Copy Is The Same Photo
+            // Another call moved its file in first, and a toast holds it open. That file is the same photo.
             File.Delete(temp);
         }
 
@@ -134,7 +136,7 @@ public sealed class AvatarCache
     }
 
     /// <summary>
-    /// Forgets every photo kept in memory (files stay).
+    /// Forgets every photo in memory. The files stay.
     /// </summary>
     public void Clear()
     {
@@ -145,11 +147,7 @@ public sealed class AvatarCache
         }
     }
 
-    // =========================================================================
-    // BATCHING
-    // =========================================================================
-
-    // Waits Out The Batch Window, Then Asks The Phone For Every ID Collected
+    // Waits for the batch window, then asks the phone for each collected ID.
     private async Task SendBatchAsync()
     {
         await Task.Delay(BatchWindow).ConfigureAwait(false);
@@ -161,7 +159,7 @@ public sealed class AvatarCache
             _batch = null;
         }
 
-        // Ask; Any Failure Answers Null Without Remembering It
+        // Any failure answers null, and the cache does not remember it.
         Dictionary<string, byte[]> photos = [];
         bool asked                        = false;
         try
@@ -179,10 +177,9 @@ public sealed class AvatarCache
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            // Nothing Logged: The Caller Shows The Initial Instead
+            // The log gets nothing, because the caller shows the initial instead.
         }
 
-        // Remember And Answer
         List<(TaskCompletionSource<byte[]?> Answer, byte[]? Photo)> answers = [];
         lock (_lock)
         {
@@ -194,7 +191,7 @@ public sealed class AvatarCache
                     Remember(id, photo);
                 }
 
-                if (_pending.Remove(id, out var answer))
+                if (_pending.Remove(id, out TaskCompletionSource<byte[]?>? answer))
                 {
                     answers.Add((answer, photo));
                 }
@@ -207,10 +204,10 @@ public sealed class AvatarCache
         }
     }
 
-    // Caller Holds The Lock. Adds As Newest, Dropping The Oldest Past Capacity
+    // Adds the photo as the newest and drops the oldest past the capacity. The caller holds the lock.
     private void Remember(string id, byte[]? photo)
     {
-        if (_byId.Remove(id, out var old))
+        if (_byId.Remove(id, out LinkedListNode<(string Id, byte[]? Photo)>? old))
         {
             _recent.Remove(old);
         }
@@ -224,7 +221,7 @@ public sealed class AvatarCache
         }
     }
 
-    // SHA-256 Of The ID, First 16 Bytes As Hex: No Number Or Name On Disk
+    // The first 16 bytes of the SHA-256 of the ID, as hex. Thus no number or name goes to disk.
     private static string FileName(string participantId) =>
         Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(participantId)), 0, 16) + ".png";
 }

@@ -5,38 +5,41 @@ using System.Runtime.InteropServices;
 namespace GMessages.Presentation.Messaging;
 
 /// <summary>
-/// A voice message's waveform and length, from its decoded audio.
+/// Holds the waveform and length of a voice message, from its decoded audio.
 /// </summary>
 /// <remarks>
-/// The proto has no duration or waveform field (research doc), so both come from the decoded samples: the app decodes
-/// the voice message to 16-bit PCM WAV once, after its first download, and keeps the result in memory only (spec: not
-/// cached between launches).
+/// The proto has no duration or waveform field, as the research doc found, so both come from the decoded samples. The
+/// app decodes the voice message to 16-bit PCM WAV once, after its first download. It keeps the result only in memory,
+/// because the spec says that it must not stay between launches.
 /// </remarks>
-/// <param name="Peaks">The bars, each the loudest sample of its slice, scaled so the loudest bar is 1 (all 0 for silence).</param>
-/// <param name="Length">How long the audio plays.</param>
+/// <param name="Peaks">
+/// The bars, each the loudest sample of its slice. The loudest bar is 1, and silence gives all 0.
+/// </param>
+/// <param name="Length">The time that the audio plays.</param>
 public sealed record VoiceWave(float[] Peaks, TimeSpan Length)
 {
-    /// <summary>How many bars a waveform has.</summary>
+    /// <summary>The number of bars in a waveform.</summary>
     public const int BarCount = 48;
 
-    // WAV Format Tags: Integer PCM, And WAVE_FORMAT_EXTENSIBLE (Its Sub-Format Says PCM)
+    // The WAV format tags: integer PCM, and WAVE_FORMAT_EXTENSIBLE, whose sub-format says PCM.
     private const ushort PcmFormat        = 1;
     private const ushort ExtensibleFormat = 0xFFFE;
 
-    // The Quietest Input The Live Waveform Draws, In Decibels; Anything Under It Is Silence
+    // The quietest input that the live waveform draws, in decibels. Any input under it is silence.
     private const double QuietestLevelDb = -50;
 
     /// <summary>
-    /// Reads a 16-bit PCM WAV file: its waveform and its length.
+    /// Reads the waveform and the length of a 16-bit PCM WAV file.
     /// </summary>
     /// <remarks>
-    /// Walks the RIFF chunks for <c>fmt </c> and <c>data</c>. A data chunk whose size is unset or runs past the end
-    /// (a stream the writer never finished) takes the rest of the file. Channels are mixed by taking the loudest.
+    /// The method walks the RIFF chunks for <c>fmt </c> and <c>data</c>. An unfinished stream can have a data chunk
+    /// whose size is not set or runs past the end. That chunk takes the rest of the file. The method
+    /// mixes the channels by taking the loudest.
     /// </remarks>
-    /// <param name="wav">The WAV file's bytes.</param>
-    /// <param name="bars">How many bars to make.</param>
+    /// <param name="wav">The bytes of the WAV file.</param>
+    /// <param name="bars">The number of bars to make.</param>
     /// <returns>The waveform and length.</returns>
-    /// <exception cref="InvalidDataException">Not a 16-bit PCM WAV file.</exception>
+    /// <exception cref="InvalidDataException">The file is not a 16-bit PCM WAV file.</exception>
     public static VoiceWave FromWav(ReadOnlySpan<byte> wav, int bars = BarCount)
     {
         if (wav.Length < 12 || !wav[..4].SequenceEqual("RIFF"u8) || !wav.Slice(8, 4).SequenceEqual("WAVE"u8))
@@ -53,7 +56,7 @@ public sealed record VoiceWave(float[] Peaks, TimeSpan Length)
             uint size             = BinaryPrimitives.ReadUInt32LittleEndian(wav.Slice(at + 4, 4));
             int body              = at + 8;
 
-            // Format: PCM (Or Extensible PCM), 16 Bits
+            // The format must be PCM or extensible PCM, with 16 bits.
             if (id.SequenceEqual("fmt "u8) && body + 16 <= wav.Length)
             {
                 ushort format = BinaryPrimitives.ReadUInt16LittleEndian(wav.Slice(body, 2));
@@ -66,7 +69,7 @@ public sealed record VoiceWave(float[] Peaks, TimeSpan Length)
                 }
             }
 
-            // Samples: The Chunk, Or The Rest Of An Unfinished File
+            // The samples are the chunk, or the rest of a file that the writer did not finish.
             if (id.SequenceEqual("data"u8))
             {
                 if (channels == 0)
@@ -80,7 +83,7 @@ public sealed record VoiceWave(float[] Peaks, TimeSpan Length)
                 return new VoiceWave(PeaksOf(pcm, channels, bars), TimeSpan.FromSeconds((double)frames / sampleRate));
             }
 
-            // Chunks Are Padded To An Even Size
+            // Chunks have padding to an even size.
             at = body + (int)Math.Min(size + (size & 1), (uint)(wav.Length - body));
         }
 
@@ -88,13 +91,13 @@ public sealed record VoiceWave(float[] Peaks, TimeSpan Length)
     }
 
     /// <summary>
-    /// Splits 16-bit little-endian samples into bars: each the loudest sample of its slice, scaled so the loudest bar
+    /// Splits 16-bit little-endian samples into bars. Each bar is the loudest sample of its slice, and the loudest bar
     /// is 1.
     /// </summary>
-    /// <remarks>Fewer frames than bars leaves the bars past them at 0; silence gives all 0.</remarks>
+    /// <remarks>With fewer frames than bars, the bars past the frames stay at 0. Silence gives all 0.</remarks>
     /// <param name="pcm">Interleaved 16-bit little-endian samples.</param>
-    /// <param name="channels">How many channels are interleaved.</param>
-    /// <param name="bars">How many bars to make.</param>
+    /// <param name="channels">The number of interleaved channels.</param>
+    /// <param name="bars">The number of bars to make.</param>
     /// <returns>The bars, from 0 to 1.</returns>
     public static float[] PeaksOf(ReadOnlySpan<byte> pcm, int channels, int bars)
     {
@@ -108,7 +111,6 @@ public sealed record VoiceWave(float[] Peaks, TimeSpan Length)
             return peaks;
         }
 
-        // Each Bar's Slice Of Frames: The Loudest Sample In It
         for (long frame = 0; frame < frames; frame++)
         {
             int bar = (int)(frame * bars / frames);
@@ -120,7 +122,7 @@ public sealed record VoiceWave(float[] Peaks, TimeSpan Length)
             }
         }
 
-        // Scaled To The Loudest, So A Quiet Recording Still Shows Its Shape
+        // The bars scale to the loudest, so a quiet recording still shows its shape.
         float loudest = peaks.Max();
         if (loudest > 0)
         {
@@ -134,13 +136,13 @@ public sealed record VoiceWave(float[] Peaks, TimeSpan Length)
     }
 
     /// <summary>
-    /// Gives the live input level of a block of 32-bit float samples (an audio graph's frame): the loudest sample, in
-    /// decibels from -50 dB (0) to full scale (1), as level meters show it.
+    /// Gives the live input level of a block of 32-bit float samples, which is 1 frame of an audio graph. The level is
+    /// the loudest sample in decibels, from -50 dB as 0 to full scale as 1. Level meters show it the same way.
     /// </summary>
     /// <remarks>
-    /// Speech mostly peaks at 5 to 30 percent of full scale, so the plain peak drew short bars that barely moved; on
-    /// the decibel scale it fills the bar and follows the voice. Any trailing partial sample is ignored; silence or no
-    /// samples gives 0, and clipping caps at 1.
+    /// Speech mostly peaks at 5 to 30 percent of full scale. Thus the plain peak drew short bars that almost did not
+    /// move. On the decibel scale, the level fills the bar and follows the voice. The method ignores a partial sample
+    /// at the end. Silence or no samples gives 0, and clipping stops at 1.
     /// </remarks>
     /// <param name="floats">Interleaved 32-bit float samples, as bytes.</param>
     /// <returns>The level, from 0 to 1.</returns>
@@ -162,11 +164,11 @@ public sealed record VoiceWave(float[] Peaks, TimeSpan Length)
     }
 
     /// <summary>
-    /// Writes a length the way the bubble shows it: minutes and two-digit seconds, such as <c>0:07</c> or <c>12:30</c>.
+    /// Writes a length as the bubble shows it: minutes and seconds of 2 digits, such as <c>0:07</c> or <c>12:30</c>.
     /// </summary>
     /// <remarks>
-    /// Rounded to the nearest whole second (decoded audio runs a few milliseconds long), but a message under half a
-    /// second reads 0:01, never 0:00.
+    /// The method rounds to the nearest whole second, because decoded audio runs a few milliseconds long. A message
+    /// under half a second reads 0:01, never 0:00.
     /// </remarks>
     /// <param name="length">The length.</param>
     /// <returns>The text.</returns>

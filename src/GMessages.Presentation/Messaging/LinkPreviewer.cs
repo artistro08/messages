@@ -10,64 +10,66 @@ using Windows.Storage.Streams;
 namespace GMessages.Presentation.Messaging;
 
 /// <summary>
-/// Fetches a link's preview card (title, site and image) the way the phone app does, since the phone sends none.
+/// Fetches the preview card of a link, with its title, site and image, as the phone app does. The phone sends no card.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Fetching a page the other side chose is a privacy and safety risk, so the rules are strict. Only HTTPS links (port 443) to a
-/// named public host are fetched (<see cref="IsAllowed"/>): no IP literals, <c>localhost</c> or <c>*.local</c>. The
-/// handler from <see cref="CreateHandler"/> resolves the host itself and connects only to the address it vetted
-/// (<see cref="IsPublic"/>), on every redirect hop too, so DNS rebinding can't reach the local network. Each redirect
-/// hop is held to <see cref="IsAllowed"/> as well. No cookies or credentials are sent, and a link the system would send
-/// through a proxy gets no preview, so the user's proxy is never bypassed. At most 4 previews fetch at once.
+/// The other side chooses the link, so a fetch is a privacy and safety risk, and the rules are strict. The previewer
+/// fetches only HTTPS links on port 443 to a named public host, as <see cref="IsAllowed"/> checks. It refuses IP
+/// literals, <c>localhost</c> and <c>*.local</c>. The handler from <see cref="CreateHandler"/> resolves the host
+/// itself. It connects only to the address that <see cref="IsPublic"/> vetted, on each redirect hop too. Thus DNS
+/// rebinding cannot reach the local network. <see cref="IsAllowed"/> also checks each redirect hop. The previewer sends
+/// no cookies or credentials. A link that the system sends through a proxy gets no preview. Thus the previewer never
+/// goes around the proxy of the user. At most 4 previews fetch at the same time.
 /// </para>
 /// <para>
-/// A page must be <c>text/html</c> within <see cref="MaxPageBytes"/> and an image <c>image/*</c> within
-/// <see cref="MaxImageBytes"/>, each answered within <see cref="RequestTimeout"/>. An image wider than
-/// <see cref="MaxImageWidth"/> is kept scaled down (<see cref="ShrinkAsync"/>). Results, failures included, stay in an
-/// in-memory list of the last 50 links (fewer once their images pass 4 MB) and are never written to disk. A failure is logged by its error type only,
-/// never the link, title or description.
+/// A page must be <c>text/html</c> within <see cref="MaxPageBytes"/>. An image must be <c>image/*</c> within
+/// <see cref="MaxImageBytes"/>. Each must answer within <see cref="RequestTimeout"/>. <see cref="ShrinkAsync"/>
+/// scales down an image wider than <see cref="MaxImageWidth"/>. The results, failures included, stay in memory for the
+/// last 50 links. The list holds fewer links when their images pass 4 MB. The previewer never writes them to disk. The
+/// log holds only the error type of a failure, never the link, title or description.
 /// </para>
 /// </remarks>
 public sealed partial class LinkPreviewer : IDisposable
 {
-    /// <summary>The largest page read, in bytes; a bigger one gives no preview.</summary>
+    /// <summary>The largest page that the previewer reads, in bytes. A bigger page gives no preview.</summary>
     public const int MaxPageBytes = 262_144;
 
-    /// <summary>The largest image read, in bytes; a bigger one gives a preview without an image.</summary>
+    /// <summary>The largest image that the previewer reads, in bytes. A bigger one gives a card without it.</summary>
     public const int MaxImageBytes = 1_048_576;
 
-    /// <summary>How long each request (the page, then its image) may take.</summary>
+    /// <summary>The time that each request can take: the page, then its image.</summary>
     public static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(5);
 
-    /// <summary>How long a pasted picture (<see cref="FetchImageAsync"/>) may take, since it can be far bigger than a card image.</summary>
+    /// <summary>
+    /// The time that a pasted picture from <see cref="FetchImageAsync"/> can take. It can be much bigger than a card
+    /// image.
+    /// </summary>
     public static readonly TimeSpan PictureTimeout = TimeSpan.FromSeconds(15);
 
-    /// <summary>The widest a card image is kept, in pixels; a wider one is scaled down when fetched.</summary>
+    /// <summary>The widest card image that the previewer keeps, in pixels. The fetch shrinks a wider one.</summary>
     public const int MaxImageWidth = 480;
 
-    // The Largest Card Image Decoded: Either Side, And Pixels In All. Shrinking Only Scales Down, So The Kept Height Stays
-    // Within The Side Limit Too
+    // The largest card image that the previewer decodes: on each side, and in pixels in all. The shrink only scales
+    // down, so the kept height also stays within the side limit.
     private const int MaxImageSide = 8192;
     private const long MaxImagePixels = 16_000_000;
 
-    // How Many Links' Results Are Kept In Memory, And Their Images' Byte Budget
+    // The number of links whose results stay in memory, and the byte budget of their images.
     private const int CacheSize = 50;
     private const int CacheImageBytes = 4 * 1024 * 1024;
 
-    // How Many Redirects A Request May Follow
     private const int MaxRedirects = 3;
 
-    // How Many Previews Fetch At Once
     private const int MaxFetches = 4;
 
-    // The Longest Title Or Site Kept, In Characters; The Card Shows Two Lines At Most
+    // The longest title or site that the previewer keeps, in characters. The card shows 2 lines at most.
     private const int MaxTextLength = 300;
 
-    // How Long A Regular Expression May Spend On A Page, So A Hostile Page Can't Stall Parsing
+    // The longest time that a regular expression can spend on a page, so a hostile page cannot stall the parse.
     private const int HtmlTimeoutMs = 500;
 
-    // Punctuation A Link Ends Before, Like A Browser's Or Windows' Link Detection
+    // A link ends before this punctuation, as in the link detection of a browser or of Windows.
     private const string TrailingPunctuation = ".,;:!?)]}'\"";
 
     private readonly HttpClient _http;
@@ -75,25 +77,29 @@ public sealed partial class LinkPreviewer : IDisposable
     private readonly ILogger _log;
     private readonly IWebProxy _proxy;
 
-    // Bounds How Many Previews Fetch At Once, However Many Links A Chat Shows
+    // Limits the number of previews that fetch at the same time, for any number of links in a chat.
     private readonly SemaphoreSlim _fetchSlots = new(MaxFetches);
 
-    // Canceled On Dispose, So Fetches Still Running Stop
+    // Dispose cancels this source, so running fetches stop.
     private readonly CancellationTokenSource _closing = new();
 
-    // Least Recently Used First; Each Link's Fetch, Running Or Done (Null Results Included)
+    // The fetch of each link, running or done, null results included. The order is least recently used first.
     private readonly Lock _cacheLock = new();
     private readonly OrderedDictionary<Uri, Task<LinkPreview?>> _cache = [];
 
     /// <summary>
     /// Creates the previewer.
     /// </summary>
-    /// <param name="handler">Sends the requests; <see cref="CreateHandler"/> in the app, a fake in tests. Disposed with the previewer.</param>
-    /// <param name="allowLoopback">True in UI test runs only, so <c>http://127.0.0.1</c> (the fake server) can be previewed.</param>
-    /// <param name="log">Takes failures, by error type only.</param>
+    /// <param name="handler">
+    /// Sends the requests: <see cref="CreateHandler"/> in the app, a fake in tests. The previewer disposes it.
+    /// </param>
+    /// <param name="allowLoopback">
+    /// True only in UI test runs, so the fake server at <c>http://127.0.0.1</c> gets previews.
+    /// </param>
+    /// <param name="log">Takes the failures, by error type only.</param>
     /// <param name="proxy">
-    /// The proxy Windows would send the link through; null for the system's (<see cref="HttpClient.DefaultProxy"/>).
-    /// A link it would proxy gets no preview, since previews connect directly.
+    /// The proxy that Windows sends the link through, or null for the proxy of the system. The previews connect
+    /// directly, so a link that this proxy carries gets no preview.
     /// </param>
     /// <exception cref="ArgumentNullException">An argument other than <paramref name="proxy"/> is null.</exception>
     public LinkPreviewer(HttpMessageHandler handler, bool allowLoopback, ILogger log, IWebProxy? proxy = null)
@@ -108,11 +114,14 @@ public sealed partial class LinkPreviewer : IDisposable
     }
 
     /// <summary>
-    /// Creates the previewer with the app's own vetted handler (<see cref="CreateHandler"/>), so the loopback flag is passed once.
+    /// Creates the previewer with the vetted handler of the app from <see cref="CreateHandler"/>. The caller gives the
+    /// loopback flag only once.
     /// </summary>
-    /// <param name="allowLoopback">True in UI test runs only, so <c>http://127.0.0.1</c> (the fake server) can be previewed.</param>
-    /// <param name="log">Takes failures, by error type only.</param>
-    /// <param name="proxy">The proxy Windows would send the link through; null for the system's.</param>
+    /// <param name="allowLoopback">
+    /// True only in UI test runs, so the fake server at <c>http://127.0.0.1</c> gets previews.
+    /// </param>
+    /// <param name="log">Takes the failures, by error type only.</param>
+    /// <param name="proxy">The proxy that Windows sends the link through, or null for the proxy of the system.</param>
     /// <exception cref="ArgumentNullException"><paramref name="log"/> is null.</exception>
     public LinkPreviewer(bool allowLoopback, ILogger log, IWebProxy? proxy = null)
         : this(CreateHandler(allowLoopback), allowLoopback, log, proxy)
@@ -124,17 +133,17 @@ public sealed partial class LinkPreviewer : IDisposable
     // =========================================================================
 
     /// <summary>
-    /// Creates the handler the app sends previews through.
+    /// Creates the handler that the app sends previews through.
     /// </summary>
     /// <remarks>
-    /// Cookies are off, and redirects are left to the previewer, which holds each hop (3 at most) to
-    /// <see cref="IsAllowed"/>. The <c>ConnectCallback</c> resolves each host itself and connects only when every address
-    /// it resolves to passes <see cref="IsPublic"/> (or is loopback when <paramref name="allowLoopback"/>). It connects to
-    /// those vetted addresses, so a second lookup can't swap in a private one. The proxy is off because through a proxy
-    /// the check would vet the proxy, not the link's host; instead a link the system would proxy gets no preview at all,
-    /// so a user's proxy is never quietly bypassed.
+    /// Cookies are off. The previewer follows the redirects itself and holds each hop to <see cref="IsAllowed"/>, 3
+    /// hops at most. The <c>ConnectCallback</c> resolves each host itself. It connects only when each resolved address
+    /// passes <see cref="IsPublic"/>, or is loopback with <paramref name="allowLoopback"/>. It connects to those vetted
+    /// addresses, so a second lookup cannot give a private address instead. The proxy is off, because through a proxy
+    /// the check vets the proxy and not the host of the link. Instead, a link that the system sends through a proxy
+    /// gets no preview. Thus the previewer never goes around the proxy of a user.
     /// </remarks>
-    /// <param name="allowLoopback">True in UI test runs only.</param>
+    /// <param name="allowLoopback">True only in UI test runs.</param>
     /// <returns>The handler.</returns>
     public static SocketsHttpHandler CreateHandler(bool allowLoopback) => new()
     {
@@ -148,20 +157,24 @@ public sealed partial class LinkPreviewer : IDisposable
     };
 
     /// <summary>
-    /// Finds the first web link in a message, without the punctuation that ends a sentence around it.
+    /// Finds the first web link in a message, without the punctuation of a sentence around it.
     /// </summary>
     /// <remarks>
-    /// The first <c>http://</c> or <c>https://</c> run of non-spaces, with trailing <c>.,;:!?)]}'"</c> trimmed. A closing
-    /// bracket the link opened itself stays, so <c>https://en.wikipedia.org/wiki/Foo_(bar)</c> keeps its <c>)</c>.
+    /// The link is the first run of non-spaces that starts with <c>http://</c> or <c>https://</c>. The method removes
+    /// <c>.,;:!?)]}'"</c> from its end. A closing bracket stays when the link opened it. Thus
+    /// <c>https://en.wikipedia.org/wiki/Foo_(bar)</c> keeps its <c>)</c>.
     /// </remarks>
     /// <param name="text">The message text.</param>
     /// <returns>The link, or null when there is none.</returns>
     public static Uri? FirstLink(string text) => FirstTextLink(text)?.Url;
 
     /// <summary>
-    /// Finds the first web link in a message as <see cref="FirstLink"/> does, with where it sits in the text.
+    /// Finds the first web link in a message as <see cref="FirstLink"/> does, with its place in the text.
     /// </summary>
-    /// <remarks>The link's text (<see cref="TextLink.Start"/>, <see cref="TextLink.Length"/>) is exactly the address as sent.</remarks>
+    /// <remarks>
+    /// The text of the link, at <see cref="TextLink.Start"/> for <see cref="TextLink.Length"/>, is the address exactly
+    /// as sent.
+    /// </remarks>
     /// <param name="text">The message text.</param>
     /// <returns>The link and its place, or null when there is none.</returns>
     public static TextLink? FirstTextLink(string text)
@@ -181,22 +194,23 @@ public sealed partial class LinkPreviewer : IDisposable
     }
 
     /// <summary>
-    /// Finds every web link in a message's text, for showing them as links.
+    /// Finds every web link in the text of a message, so the bubble can show them as links.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// A link starts with <c>http://</c>, <c>https://</c> or <c>www.</c> (at a word start) and runs to the next space or
-    /// emoji (VS16 and zero-width joiners included), with the same trailing punctuation trimmed as <see cref="FirstLink"/>.
-    /// A bare <c>www.</c> host opens over <c>https</c>.
+    /// A link starts with <c>http://</c>, <c>https://</c> or <c>www.</c> at the start of a word. It runs to the next
+    /// space or emoji, VS16 and zero-width joiners included. The method removes the same punctuation from its end as
+    /// <see cref="FirstLink"/>. A bare <c>www.</c> host opens over <c>https</c>.
     /// </para>
     /// <para>
-    /// Only <c>http</c> and <c>https</c> addresses with no user name come back, so a <c>file:</c>, <c>javascript:</c> or
-    /// <c>ms-</c> link, or one that hides its real host behind a user name (<c>www.bank.com@evil.example</c>), stays
-    /// plain text. Works on the shown text (<see cref="ChatFormat.WithColorEmoji"/>) as well as the original.
+    /// The method gives only <c>http</c> and <c>https</c> addresses with no user name. Thus a <c>file:</c>,
+    /// <c>javascript:</c> or <c>ms-</c> link stays plain text. So does a link that hides its real host behind a user
+    /// name, such as <c>www.bank.com@evil.example</c>. The method works on the shown text from
+    /// <see cref="ChatFormat.WithColorEmoji"/> and on the original text.
     /// </para>
     /// </remarks>
     /// <param name="text">The message text.</param>
-    /// <returns>The links in order; empty when there are none.</returns>
+    /// <returns>The links in order, or empty when there are none.</returns>
     public static IReadOnlyList<TextLink> FindLinks(string text)
     {
         ArgumentNullException.ThrowIfNull(text);
@@ -217,17 +231,19 @@ public sealed partial class LinkPreviewer : IDisposable
     }
 
     /// <summary>
-    /// Says whether a link may be fetched for a preview.
+    /// Tells whether the previewer can fetch a link for a preview.
     /// </summary>
     /// <remarks>
-    /// HTTPS on port 443 only, to a named host with a dot in it: no IP literal, <c>localhost</c>, <c>*.local</c>, single-label
-    /// intranet name, or user name and password in the link. With <paramref name="allowLoopback"/> (UI test runs), an
-    /// <c>http</c> or <c>https</c> link to <c>127.0.0.1</c> is allowed too. Where the host really points is checked when
-    /// connecting (<see cref="CreateHandler"/>).
+    /// The link must be HTTPS on port 443, to a named host with a dot in it. The method refuses an IP literal,
+    /// <c>localhost</c>, <c>*.local</c> and a single-label intranet name. It also refuses a user name and password in
+    /// the link. With
+    /// <paramref name="allowLoopback"/> in UI test runs, it also allows an <c>http</c> or <c>https</c> link to
+    /// <c>127.0.0.1</c>. The handler from <see cref="CreateHandler"/> checks where the host really points when it
+    /// connects.
     /// </remarks>
     /// <param name="url">The link.</param>
-    /// <param name="allowLoopback">True in UI test runs only.</param>
-    /// <returns>True when the link may be fetched.</returns>
+    /// <param name="allowLoopback">True only in UI test runs.</param>
+    /// <returns>True when the previewer can fetch the link.</returns>
     public static bool IsAllowed(Uri url, bool allowLoopback)
     {
         ArgumentNullException.ThrowIfNull(url);
@@ -237,7 +253,7 @@ public sealed partial class LinkPreviewer : IDisposable
             return false;
         }
 
-        // UI Test Runs: The Fake Server On 127.0.0.1
+        // UI test runs use the fake server on 127.0.0.1.
         if (allowLoopback && url.HostNameType == UriHostNameType.IPv4 && url.IsLoopback && (url.Scheme == Uri.UriSchemeHttp || url.Scheme == Uri.UriSchemeHttps))
         {
             return true;
@@ -256,18 +272,25 @@ public sealed partial class LinkPreviewer : IDisposable
     }
 
     /// <summary>
-    /// Says whether an address is on the public internet.
+    /// Tells whether an address is on the public internet.
     /// </summary>
     /// <remarks>
-    /// False for loopback, private (10/8, 172.16/12, 192.168/16, fc00::/7), link-local (169.254/16, fe80::/10), CGNAT
-    /// (100.64/10), IETF protocol and documentation ranges (192.0.0/24, 192.0.2/24, 198.51.100/24, 203.0.113/24),
-    /// benchmarking (198.18/15), unspecified (0/8, ::), multicast and reserved (224/4, 240/4, ff00::/8) and the old IPv6 site-local
-    /// range. IPv6 that carries an IPv4 address is judged by that address: IPv4-mapped (<c>::ffff:10.0.0.1</c>), NAT64
-    /// (64:ff9b::/96) and 6to4 (2002::/16). Local-use NAT64 (64:ff9b:1::/48, whose layout the network picks),
-    /// Teredo (2001::/32), SIIT (::ffff:0:0/96) and IPv4-compatible (::/96) addresses are refused outright.
+    /// <para>
+    /// The method refuses these IPv4 ranges: loopback, private 10/8, 172.16/12 and 192.168/16, link-local 169.254/16,
+    /// and CGNAT 100.64/10. It also refuses the IETF protocol and documentation ranges 192.0.0/24, 192.0.2/24,
+    /// 198.51.100/24 and 203.0.113/24, and the benchmark range 198.18/15. It refuses the unspecified range 0/8, and
+    /// multicast and reserved 224/4 and 240/4.
+    /// </para>
+    /// <para>
+    /// The method refuses these IPv6 ranges: loopback, unspecified ::, private fc00::/7, link-local fe80::/10,
+    /// multicast ff00::/8, and the old site-local range. It judges an IPv6 address that carries an IPv4 address by that
+    /// IPv4 address. Such addresses are IPv4-mapped, as <c>::ffff:10.0.0.1</c>, NAT64 64:ff9b::/96, and 6to4 2002::/16.
+    /// The method always refuses local-use NAT64 64:ff9b:1::/48, because the network picks its layout. It always
+    /// refuses Teredo 2001::/32, SIIT ::ffff:0:0/96 and IPv4-compatible ::/96 too.
+    /// </para>
     /// </remarks>
     /// <param name="address">The address.</param>
-    /// <returns>True when public.</returns>
+    /// <returns>True when the address is public.</returns>
     public static bool IsPublic(IPAddress address)
     {
         ArgumentNullException.ThrowIfNull(address);
@@ -302,7 +325,7 @@ public sealed partial class LinkPreviewer : IDisposable
         {
             byte[] b = address.GetAddressBytes();
 
-            // IPv6 Carrying An IPv4 Address: Judged By That Address (6to4, NAT64 Well-Known)
+            // 6to4 and well-known NAT64 carry an IPv4 address. The method judges them by that address.
             if (b is [0x20, 0x02, ..])
             {
                 return IsPublic(new IPAddress(b.AsSpan(2, 4)));
@@ -313,7 +336,8 @@ public sealed partial class LinkPreviewer : IDisposable
                 return IsPublic(new IPAddress(b.AsSpan(12, 4)));
             }
 
-            // Refused Outright: NAT64 Local-Use /48 (Its Layout Is The Network's Choice, RFC 8215), Teredo, SIIT And IPv4-Compatible (::/96, Which Holds :: And ::1 Too)
+            // The method always refuses local-use NAT64 /48, because the network chooses its layout, as RFC 8215 says.
+            // It also refuses Teredo, SIIT and IPv4-compatible ::/96, which also holds :: and ::1.
             if (b is [0x00, 0x64, 0xFF, 0x9B, 0x00, 0x01, ..]
                 || b is [0x20, 0x01, 0x00, 0x00, ..]
                 || b is [0, 0, 0, 0, 0, 0, 0, 0, 0xFF, 0xFF, 0, 0, ..]
@@ -337,29 +361,29 @@ public sealed partial class LinkPreviewer : IDisposable
     // =========================================================================
 
     /// <summary>
-    /// Reads the preview's parts from a page's head, with regular expressions only.
+    /// Reads the parts of the preview from the head of a page, with regular expressions only.
     /// </summary>
     /// <remarks>
-    /// The title is <c>og:title</c>, else <c>&lt;title&gt;</c>; the site is always the page's real host without
-    /// <c>www.</c> (never the page's own claim, so a card can't pose as another site). Attributes may come in any order
-    /// and any quotes. The title has tags removed, entities decoded, direction-control characters removed and spaces
-    /// collapsed, and is cut to 300 characters. The image is <c>og:image</c> resolved against <paramref name="page"/>, kept only when
-    /// <see cref="IsAllowed"/>.
+    /// The title is <c>og:title</c>, else <c>&lt;title&gt;</c>. The site is always the real host of the page without
+    /// <c>www.</c>, never the claim of the page. Thus a card cannot pose as another site. The attributes can come in
+    /// any order and with any quotes. The method removes tags, decodes entities, removes direction-control characters and
+    /// collapses spaces in the title. It then cuts the title to 300 characters. The image is <c>og:image</c> resolved
+    /// against <paramref name="page"/>, and the method keeps it only when <see cref="IsAllowed"/> allows it.
     /// </remarks>
     /// <param name="html">The page.</param>
-    /// <param name="page">The page's address after redirects, for relative image links and the host.</param>
-    /// <param name="allowLoopback">True in UI test runs only.</param>
+    /// <param name="page">The address of the page after redirects, for relative image links and the host.</param>
+    /// <param name="allowLoopback">True only in UI test runs.</param>
     /// <returns>The parts, or null when the page has no title.</returns>
     internal static (string Title, string Site, Uri? Image)? ParseHead(string html, Uri page, bool allowLoopback = false)
     {
         ArgumentNullException.ThrowIfNull(html);
         ArgumentNullException.ThrowIfNull(page);
 
-        // Only The Head Holds What A Card Needs
+        // Only the head holds what a card needs.
         int end     = html.IndexOf("</head>", StringComparison.OrdinalIgnoreCase);
         string head = end >= 0 ? html[..end] : html;
 
-        // Open Graph Tags: The First Of Each Wins
+        // The first Open Graph tag of each kind wins.
         string? ogTitle = null;
         string? ogImage = null;
         foreach (Match tag in MetaTag().Matches(head))
@@ -395,7 +419,6 @@ public sealed partial class LinkPreviewer : IDisposable
             }
         }
 
-        // Title: og:title, Else <title>
         string title = PlainText(ogTitle);
         if (title.Length == 0 && TitleTag().Match(head) is { Success: true } titleTag)
         {
@@ -407,11 +430,12 @@ public sealed partial class LinkPreviewer : IDisposable
             return null;
         }
 
-        // Site: The Real Host Without www., Punycode For Non-ASCII So A Look-Alike Can't Pass As The Real One
+        // The site is the real host without www. A non-ASCII host shows as punycode, so a look-alike cannot pass as the
+        // real host.
         string host = page.IdnHost;
         string site = Cap(host.StartsWith("www.", StringComparison.OrdinalIgnoreCase) ? host[4..] : host);
 
-        // Image: Resolved Against The Page, Then Held To The Same Rules As A Link
+        // The image link resolves against the page, and the same rules as a link apply to it.
         Uri? image = ogImage is not null
             && Uri.TryCreate(page, WebUtility.HtmlDecode(ogImage).Trim(), out Uri? resolved)
             && IsAllowed(resolved, allowLoopback)
@@ -426,15 +450,15 @@ public sealed partial class LinkPreviewer : IDisposable
     // =========================================================================
 
     /// <summary>
-    /// Gives a link's preview, fetching it the first time.
+    /// Gives the preview of a link, and fetches it the first time.
     /// </summary>
     /// <remarks>
-    /// A link <see cref="IsAllowed"/> refuses is never requested. The last 50 links' results (null included) are kept in
-    /// memory, and a second call for a link whose fetch is still running shares it. Never throws: any failure, or
-    /// <paramref name="ct"/> being canceled, gives null.
+    /// The previewer never requests a link that <see cref="IsAllowed"/> refuses. The results of the last 50 links, null
+    /// included, stay in memory. A second call for a link whose fetch still runs shares that fetch. The method never
+    /// throws: any failure, or a canceled <paramref name="ct"/>, gives null.
     /// </remarks>
     /// <param name="url">The link.</param>
-    /// <param name="ct">Stops waiting; the fetch itself carries on for the cache.</param>
+    /// <param name="ct">Stops the wait. The fetch itself continues for the cache.</param>
     /// <returns>The preview, or null when there is none.</returns>
     public async Task<LinkPreview?> GetAsync(Uri url, CancellationToken ct)
     {
@@ -445,7 +469,8 @@ public sealed partial class LinkPreviewer : IDisposable
             return null;
         }
 
-        // Most Recently Used Goes Last; The Oldest Drop Off The Front Past 50 Links Or 4 MB Of Images (Never The Newest)
+        // The most recently used link goes last. The oldest links drop off the front past 50 links or 4 MB of images,
+        // but never the newest link.
         Task<LinkPreview?> fetch;
         lock (_cacheLock)
         {
@@ -468,19 +493,20 @@ public sealed partial class LinkPreviewer : IDisposable
     }
 
     /// <summary>
-    /// Fetches a picture a message pastes, such as a GIF from the emoji panel, through the same vetted handler as the cards.
+    /// Fetches a picture that a message pastes, such as a GIF from the emoji panel. The fetch uses the same vetted
+    /// handler as the cards.
     /// </summary>
     /// <remarks>
-    /// The same rules as a card's page: <see cref="IsAllowed"/> on every hop, redirects held to it (3 at most), no
-    /// cookies, nothing through a proxy. Unlike a card image it is not shrunk or cached: it is sent as an attachment at
-    /// full size. Never throws: any failure, a different type, a body over <paramref name="maxBytes"/>, or
-    /// <paramref name="ct"/> being canceled gives null.
+    /// The rules of a card page apply. <see cref="IsAllowed"/> checks each hop, with 3 redirects at most, no cookies
+    /// and no proxy. The previewer does not shrink or cache the picture, because the app sends it as an attachment at
+    /// full size. The method never throws. Any failure, a different type, a body over <paramref name="maxBytes"/>, or a
+    /// canceled <paramref name="ct"/> gives null.
     /// </remarks>
-    /// <param name="uri">The picture's address.</param>
-    /// <param name="mime">The type the response must declare, such as <c>image/gif</c>.</param>
-    /// <param name="maxBytes">The most bytes read.</param>
+    /// <param name="uri">The address of the picture.</param>
+    /// <param name="mime">The type that the response must declare, such as <c>image/gif</c>.</param>
+    /// <param name="maxBytes">The most bytes that the method reads.</param>
     /// <param name="ct">Stops the fetch.</param>
-    /// <returns>The picture's bytes, or null when there are none.</returns>
+    /// <returns>The bytes of the picture, or null when there are none.</returns>
     public async Task<byte[]?> FetchImageAsync(Uri uri, string mime, long maxBytes, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(uri);
@@ -502,7 +528,7 @@ public sealed partial class LinkPreviewer : IDisposable
         _http.Dispose();
     }
 
-    // The Page, Then Its Image; A Page Without A Title Gives Nothing, A Missing Image Only Drops The Image
+    // Fetches the page, then its image. A page without a title gives nothing. A missing image only drops the image.
     private async Task<LinkPreview?> FetchAsync(Uri url)
     {
         bool slot = false;
@@ -540,13 +566,13 @@ public sealed partial class LinkPreviewer : IDisposable
     }
 
     /// <summary>
-    /// Makes a card image small: one wider than <see cref="MaxImageWidth"/> is scaled down to it (EXIF orientation
-    /// applied) and saved as JPEG, or as PNG when it has any transparent pixel.
+    /// Makes a card image small. The method scales an image wider than <see cref="MaxImageWidth"/> down to that width,
+    /// with its EXIF orientation applied. It saves the result as JPEG, or as PNG when any pixel is transparent.
     /// </summary>
     /// <remarks>
-    /// One that is narrow enough keeps its own bytes, so a small GIF still moves. Bytes Windows can't read give no image,
-    /// as the card couldn't show them anyway, and so does an image over 8192 pixels on a side or 16 million in all
-    /// (a few bytes can claim a huge size, and a remote sender picks the link).
+    /// An image that is narrow enough keeps its own bytes, so a small GIF still moves. Bytes that Windows cannot read
+    /// give no image, because the card cannot show them. An image over 8192 pixels on a side or 16 million pixels in
+    /// all also gives no image. A few bytes can claim a huge size, and a remote sender picks the link.
     /// </remarks>
     /// <param name="bytes">The image as fetched.</param>
     /// <returns>The image to keep, or null for none.</returns>
@@ -557,7 +583,8 @@ public sealed partial class LinkPreviewer : IDisposable
             using IRandomAccessStream input = new MemoryStream(bytes, writable: false).AsRandomAccessStream();
             BitmapDecoder decoder           = await BitmapDecoder.CreateAsync(input);
 
-            // Too Many Pixels To Decode Safely (The Bytes Don't Bound Them): No Image, Here Or In The Bubble Later
+            // The bytes do not limit the pixels, so too many pixels are not safe to decode. The bubble does not get
+            // the image later either.
             if (decoder.PixelWidth > MaxImageSide || decoder.PixelHeight > MaxImageSide
                 || (long)decoder.PixelWidth * decoder.PixelHeight > MaxImagePixels)
             {
@@ -569,8 +596,8 @@ public sealed partial class LinkPreviewer : IDisposable
                 return bytes;
             }
 
-            // Scaled Before Orientation (Windows Scales, Then Flips And Rotates), So The Transform Takes The Stored Size And
-            // The Pixels Come Out Upright, Turned A Quarter When The Orientation Swaps The Sides
+            // Windows scales first, and then flips and rotates. Thus the transform takes the stored size. The pixels
+            // come out upright, and turn a quarter when the orientation swaps the sides.
             double scale  = (double)MaxImageWidth / decoder.OrientedPixelWidth;
             var transform = new BitmapTransform
             {
@@ -584,7 +611,7 @@ public sealed partial class LinkPreviewer : IDisposable
                 ? (transform.ScaledWidth, transform.ScaledHeight)
                 : (transform.ScaledHeight, transform.ScaledWidth);
 
-            // Any Pixel Not Fully Opaque Keeps PNG; Else JPEG
+            // Any pixel that is not fully opaque keeps PNG. Else the image becomes JPEG.
             bool transparent = false;
             for (int i = 3; i < pixels.Length && !transparent; i += 4)
             {
@@ -603,7 +630,8 @@ public sealed partial class LinkPreviewer : IDisposable
         }
     }
 
-    // The Bytes Of The Cached Previews' Images (Fetches Still Running Count As None). Called Under The Cache Lock
+    // The bytes of the images of the cached previews. A fetch that still runs counts as none. The caller holds the
+    // cache lock.
     private long CachedImageBytes()
     {
         long total = 0;
@@ -618,8 +646,8 @@ public sealed partial class LinkPreviewer : IDisposable
         return total;
     }
 
-    // One GET Within The Time And Size Limits, Of The Wanted Type. Every Hop, Redirects Included, Must Be Allowed And
-    // Not Go Through The System's Proxy. Null, Logged By Reason Or Error Type, Otherwise
+    // Sends 1 GET within the time and size limits, for the wanted type. Each hop, redirects included, must be allowed
+    // and must not go through the proxy of the system. Else the method logs the reason or error type and gives null.
     private async Task<(byte[] Body, string? CharSet, Uri Final)?> GetBodyAsync(Uri url, string accept, long maxBytes, TimeSpan limit, CancellationToken ct = default)
     {
         try
@@ -655,7 +683,7 @@ public sealed partial class LinkPreviewer : IDisposable
         }
     }
 
-    // One Hop: A Redirect's Target, Or The Body. Null When Refused, Logged By Reason
+    // Sends 1 hop and gives the target of a redirect, or the body. A refused hop logs its reason and gives null.
     private async Task<(byte[] Body, string? CharSet, Uri? RedirectTo)?> GetHopAsync(Uri url, string accept, long maxBytes, CancellationToken ct)
     {
         string? before = !IsAllowed(url, _allowLoopback) ? "link not allowed"
@@ -673,7 +701,7 @@ public sealed partial class LinkPreviewer : IDisposable
 
         using HttpResponseMessage response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
 
-        // A Redirect: The Next Hop Is Checked Like The First
+        // The next hop of a redirect gets the same checks as the first hop.
         if ((int)response.StatusCode is >= 300 and < 400 && response.Headers.Location is { } location)
         {
             return ([], null, new Uri(url, location));
@@ -694,7 +722,7 @@ public sealed partial class LinkPreviewer : IDisposable
             return null;
         }
 
-        // Read At Most maxBytes, Whatever The Length Header Said
+        // The loop reads at most maxBytes, whatever the length header said.
         using Stream stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
         using var body      = new MemoryStream();
         byte[] chunk        = new byte[16_384];
@@ -713,7 +741,7 @@ public sealed partial class LinkPreviewer : IDisposable
         return (body.ToArray(), response.Content.Headers.ContentType?.CharSet, null);
     }
 
-    // Whether The System Would Send The Link Through A Proxy; The Fake Server In UI Test Runs Never Is
+    // Tells whether the system sends the link through a proxy. The fake server of UI test runs never goes through one.
     private bool IsProxied(Uri url)
     {
         if (_allowLoopback && url.IsLoopback)
@@ -725,7 +753,7 @@ public sealed partial class LinkPreviewer : IDisposable
         return via is not null && via != url && !_proxy.IsBypassed(url);
     }
 
-    // Connects Only When Every Address The Host Resolves To Is Allowed, And Only To Those Addresses
+    // Connects only when each address of the host is allowed, and only to those addresses.
     private static async ValueTask<Stream> ConnectAsync(DnsEndPoint endpoint, bool allowLoopback, CancellationToken ct)
     {
         IPAddress[] addresses = await Dns.GetHostAddressesAsync(endpoint.Host, ct).ConfigureAwait(false);
@@ -747,7 +775,7 @@ public sealed partial class LinkPreviewer : IDisposable
         }
     }
 
-    // The Page's Charset, Else UTF-8
+    // Decodes the page with its charset, else with UTF-8.
     private static string Decode(byte[] body, string? charset)
     {
         Encoding encoding = Encoding.UTF8;
@@ -760,21 +788,21 @@ public sealed partial class LinkPreviewer : IDisposable
         }
         catch (ArgumentException)
         {
-            // An Unknown Charset Reads As UTF-8
+            // The method reads an unknown charset as UTF-8.
         }
 
         return encoding.GetString(body);
     }
 
-    // The Error Type Only: An Exception's Message Can Hold The Link
+    // The log holds the error type only, because the message of an exception can hold the link.
     private void LogError(Exception ex) => LogFailed(ex.GetType().Name);
 
-    // Tags Removed, Entities Decoded, Direction Controls Removed (They Could Make Text Read Backwards), Spaces Collapsed,
-    // Then Cut To Length
+    // Removes tags, decodes entities and removes direction controls, which can make text read backward. It then
+    // collapses spaces and cuts the text to length.
     private static string PlainText(string? html) =>
         html is null ? string.Empty : Cap(Spaces().Replace(BidiControls().Replace(WebUtility.HtmlDecode(AnyTag().Replace(html, " ")), string.Empty), " ").Trim());
 
-    // At Most MaxTextLength Characters, Never Splitting An Emoji's Surrogate Pair
+    // Cuts the text to MaxTextLength characters, and never splits the surrogate pair of an emoji.
     private static string Cap(string text)
     {
         if (text.Length <= MaxTextLength)
@@ -786,10 +814,11 @@ public sealed partial class LinkPreviewer : IDisposable
         return text[..cut].TrimEnd() + "\u2026";
     }
 
-    // Sentence Punctuation Comes Off The End; A Closing Bracket Stays When The Link Opened One Itself
+    // Removes the punctuation of a sentence from the end. A closing bracket stays when the link opened 1 itself.
     private static string TrimLink(string link)
     {
-        // Count The Brackets Once, Then Keep The Counts In Step As Characters Come Off (A Long Run Of ")" Stays Linear)
+        // The method counts the brackets once, then updates the counts as characters come off. Thus a long run of ")"
+        // stays linear.
         int roundOpen   = link.AsSpan().Count('(');
         int roundClose  = link.AsSpan().Count(')');
         int squareOpen  = link.AsSpan().Count('[');
@@ -829,8 +858,8 @@ public sealed partial class LinkPreviewer : IDisposable
     [GeneratedRegex(@"\bhttps?://\S+", RegexOptions.IgnoreCase)]
     private static partial Regex LinkPattern();
 
-    // A Link In Text Ends At A Space Or An Emoji: Symbols, Surrogate Pairs, VS16 And Zero-Width Joiners
-    [GeneratedRegex(@"\b(?:https?://|www\.)[^\s\p{So}\p{Cs}️‍]+", RegexOptions.IgnoreCase)]
+    // A link in text ends at a space or an emoji: symbols, surrogate pairs, VS16 and zero-width joiners.
+    [GeneratedRegex(@"\b(?:https?://|www\.)[^\s\p{So}\p{Cs}\uFE0F\u200D]+", RegexOptions.IgnoreCase)]
     private static partial Regex TextLinkPattern();
 
     [GeneratedRegex(@"<meta\b[^>]*>", RegexOptions.IgnoreCase, HtmlTimeoutMs)]

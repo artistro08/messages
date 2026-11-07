@@ -3,13 +3,14 @@ using System.Text.RegularExpressions;
 namespace GMessages.Presentation.Messaging;
 
 /// <summary>
-/// Finds the one-time passcode in a received message ("Your verification code is 482913"), so it can be copied for you.
+/// Finds the one-time passcode in a received message, so the app can copy it. An example is "Your verification code
+/// is 482913".
 /// </summary>
 /// <remarks>
-/// A message counts only when it says what it is (code, passcode, OTP, verification, verify, one-time or 2FA), so a
-/// phone number, an amount or an order number in an ordinary text is never taken. The code is the group of 4 to 8 ASCII
-/// digits standing on its own that sits closest to one of those words, so an account number or an amount earlier in the
-/// message doesn't win; "123-456" and "123 456" are read as 123456.
+/// A message counts only when it says what it is: code, passcode, OTP, verification, verify, one-time or 2FA. Thus the
+/// method never takes a phone number, an amount or an order number in an ordinary text. The code is the group of 4 to
+/// 8 ASCII digits, on its own, nearest to one of those words. Thus an account number or an amount earlier in the
+/// message does not win. The method reads "123-456" and "123 456" as 123456.
 /// </remarks>
 public static partial class OneTimeCode
 {
@@ -28,7 +29,6 @@ public static partial class OneTimeCode
             return null;
         }
 
-        // The Number Nearest A Keyword
         Match? code = Code().Matches(text).MinBy(m => keywords.Min(k => Math.Abs(m.Index - k)));
         return code is null ? null : string.Concat(code.Value.Where(char.IsAsciiDigit));
     }
@@ -36,8 +36,9 @@ public static partial class OneTimeCode
     [GeneratedRegex(@"\b(?:code|passcode|otp|verification|verify|one[- ]time|2fa)\b", RegexOptions.IgnoreCase)]
     private static partial Regex Keyword();
 
-    // ASCII Digits Not Touching Other Digits, Letters, A Decimal Point, A Currency Sign, A Date's Slash, Or A Number Before
-    // A Dash Or Space (A Phone Number's Last Part): 3+3 Grouped, Else 4 To 8 In A Row
+    // The pattern takes ASCII digits that touch no other digit, letter, decimal point or currency sign. They also
+    // touch no slash of a date. A number and a dash or space must not come before them. That case is the last part of
+    // a phone number. The digits are 2 groups of 3, else 4 to 8 in a row.
     [GeneratedRegex(@"(?<![\w.,/$€£]|\d[- ])(?:[0-9]{3}[- ][0-9]{3}|[0-9]{4,8})(?![\w/]|[.,][0-9])")]
     private static partial Regex Code();
 }
