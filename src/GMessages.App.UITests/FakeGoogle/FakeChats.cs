@@ -9,20 +9,24 @@ namespace GMessages.App.UITests.FakeGoogle;
 /// The conversations, messages and contacts of the <see cref="FakePhone"/>.
 /// </summary>
 /// <remarks>
-/// Starts with three conversations: <c>c-ann</c> (Ann Lee, one on one over RCS, an encrypted-chat tombstone then three
-/// messages, unread), <c>c-team</c> (Team, an SMS/MMS group with Bo and Cy, pinned) and <c>c-spam</c> (Prize Bot, in
-/// the spam folder), plus the contacts Ann, Bo and Cy. Texts in RCS conversations have message type 4, in SMS ones 2
-/// (a downloaded MMS), as <c>Message.type</c> in conversations.proto documents.
-/// Use <see cref="Clear"/>, <see cref="Add"/> and <see cref="AddContact"/> to seed something else. Every conversation
-/// has the phone's own participant (<see cref="MyParticipantId"/>, <c>IsMe</c>) and that ID as its default outgoing
-/// ID. Timestamps are microseconds since the epoch. Safe to use from any thread; everything handed out is a copy.
+/// The store starts with 3 conversations. <c>c-ann</c> is Ann Lee, one on one over RCS, with an encrypted-chat
+/// tombstone and 3 unread messages. <c>c-team</c> is Team, a pinned SMS/MMS group with Bo and Cy.
+/// <c>c-spam</c> is Prize Bot, in the spam folder. The contacts are Ann, Bo and Cy.
+/// A text in an RCS conversation has message type 4. A text in an SMS conversation has type 2, a downloaded MMS,
+/// as <c>Message.type</c> in conversations.proto documents.
+/// Use <see cref="Clear"/>, <see cref="Add"/> and <see cref="AddContact"/> to seed other data.
+/// Every conversation has the participant of the phone (<see cref="MyParticipantId"/>, <c>IsMe</c>).
+/// That ID is also the default outgoing ID. Timestamps are microseconds since the epoch.
+/// Any thread can use the store. Every object that the store hands out is a copy.
 /// </remarks>
 public sealed partial class FakeChats
 {
-    /// <summary>The phone's own participant ID, also the ID of its one SIM.</summary>
+    /// <summary>The participant ID of the phone itself, also the ID of its one SIM.</summary>
     public const string MyParticipantId = "me-1";
 
-    /// <summary>A 1x1 blue PNG: Ann's contact photo and the photo <see cref="AddPhotoChat"/> seeds.</summary>
+    /// <summary>
+    /// A 1x1 blue PNG. It is the contact photo of Ann and the photo that <see cref="AddPhotoChat"/> seeds.
+    /// </summary>
     public const string BluePng = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGOQKn4BAAIgAXZmNuK1AAAAAElFTkSuQmCC";
 
     private readonly Lock _lock = new();
@@ -43,16 +47,13 @@ public sealed partial class FakeChats
         AddContact("p-bo", "Bo", "+15550000002");
         AddContact("p-cy", "Cy", "+15550000003");
 
-        // Ann: An RCS Chat That Starts Encrypted, Three Messages, The Last One Unread
         Conversation ann = NewConversation("c-ann", "Ann Lee", false, ConversationStatus.Active, false, true, Person("p-ann", "Ann Lee", "+15550000001"));
         Add(ann, NewTombstone(ann, MessageStatusType.TombstoneEncryptedOneOnOneRcsCreated), NewMessage(ann, "p-ann", "Hi, it's Ann"), NewMessage(ann, MyParticipantId, "Hey Ann"), NewMessage(ann, "p-ann", "Are you free later?"));
 
-        // Team: A Pinned SMS/MMS Group
         Conversation team = NewConversation("c-team", "Team", true, ConversationStatus.Active, true, false, Person("p-bo", "Bo", "+15550000002"), Person("p-cy", "Cy", "+15550000003"));
         team.Type         = ConversationType.Sms;
         Add(team, NewMessage(team, "p-bo", "Lunch at noon?"), NewMessage(team, "p-cy", "Works for me"));
 
-        // Spam: One Message From A Bot
         Conversation spam = NewConversation("c-spam", "Prize Bot", false, ConversationStatus.SpamFolder, false, false, Person("p-bot", "Prize Bot", "+15550000009"));
         Add(spam, NewMessage(spam, "p-bot", "You won a prize!"));
     }
@@ -79,9 +80,9 @@ public sealed partial class FakeChats
     /// <summary>
     /// Adds a conversation with its messages, oldest first.
     /// </summary>
-    /// <remarks>The conversation's snippet, latest message ID and last message time are taken from the last message.</remarks>
+    /// <remarks>The snippet, the latest message ID and the last message time come from the last message.</remarks>
     /// <param name="conversation">The conversation.</param>
-    /// <param name="messages">Its messages, oldest first.</param>
+    /// <param name="messages">The messages of the conversation, oldest first.</param>
     public void Add(Conversation conversation, params Message[] messages)
     {
         ArgumentNullException.ThrowIfNull(conversation);
@@ -101,9 +102,9 @@ public sealed partial class FakeChats
     /// <summary>
     /// Adds a contact.
     /// </summary>
-    /// <param name="participantId">The contact's participant ID.</param>
-    /// <param name="name">The contact's name.</param>
-    /// <param name="number">The contact's phone number.</param>
+    /// <param name="participantId">The participant ID of the contact.</param>
+    /// <param name="name">The name of the contact.</param>
+    /// <param name="number">The phone number of the contact.</param>
     public void AddContact(string participantId, string name, string number)
     {
         lock (_lock)
@@ -113,8 +114,8 @@ public sealed partial class FakeChats
     }
 
     /// <summary>
-    /// Adds a one-on-one chat with Mia Media holding one received photo (<see cref="BluePng"/>), for media
-    /// tests. The default chats stay as they are, so tests that count Ann's bubbles or rows aren't affected.
+    /// Adds a one-on-one chat with Mia Media that holds one received photo (<see cref="BluePng"/>), for media tests.
+    /// The default chats stay as they are. Tests that count the bubbles or rows of Ann are not affected.
     /// </summary>
     /// <param name="id">The conversation ID.</param>
     public void AddPhotoChat(string id = "c-media")
@@ -124,18 +125,20 @@ public sealed partial class FakeChats
     }
 
     /// <summary>
-    /// Adds a long chat with Mia where every third message is a received photo (tall and flat ones by turns, sized as
-    /// the phone would report them), the rest texts, for tests that page up through pictures.
+    /// Adds a long chat with Mia for tests that page up through pictures. By default every third message is a received
+    /// photo, tall and flat by turns, sized as the phone reports them. The other messages are texts.
     /// </summary>
     /// <remarks>
-    /// The texts read <c>mixed {i}</c>; message IDs are <c>{id}-{i:000}</c>, oldest first, so a test can find
-    /// <c>Bubble.{id}-096</c>.
+    /// The texts read <c>mixed {i}</c>. The message IDs are <c>{id}-{i:000}</c>, oldest first,
+    /// so a test can find <c>Bubble.{id}-096</c>.
     /// </remarks>
     /// <param name="id">The conversation ID.</param>
-    /// <param name="count">How many messages.</param>
-    /// <param name="tall">A tall PNG's bytes.</param>
-    /// <param name="flat">A flat PNG's bytes.</param>
-    /// <param name="isPhoto">Which message numbers (1 to count) are photos; null for every third.</param>
+    /// <param name="count">The number of messages.</param>
+    /// <param name="tall">The bytes of a tall PNG.</param>
+    /// <param name="flat">The bytes of a flat PNG.</param>
+    /// <param name="isPhoto">
+    /// Tells which message numbers (1 to count) are photos. Null selects every third message.
+    /// </param>
     public void AddPhotoPagesChat(string id, int count, byte[] tall, byte[] flat, Func<int, bool>? isPhoto = null)
     {
         Conversation chat = NewConversation(id, "Mia Media", false, ConversationStatus.Active, false, false, Person("p-mia", "Mia Media", "+15550000004"));
@@ -158,13 +161,13 @@ public sealed partial class FakeChats
     /// Adds a long one-on-one chat with Bo, for tests that scroll through older pages.
     /// </summary>
     /// <remarks>
-    /// The messages read <c>long 001</c> to <c>long {count}</c>, oldest first, one minute apart, the newest a minute
-    /// ago. Like a real chat, Bo and the phone take turns in runs of one to three, and every fourth message carries a
-    /// longer line after its number that wraps. Message IDs are <c>{id}-001</c> to <c>{id}-{count}</c>, so a test
-    /// can find <c>Bubble.{id}-096</c>.
+    /// The messages read <c>long 001</c> to <c>long {count}</c>, oldest first, one minute apart. The newest message is
+    /// one minute old. Like a real chat, Bo and the phone take turns in runs of 1 to 3 messages.
+    /// Every fourth message has a longer line after its number that wraps.
+    /// The message IDs are <c>{id}-001</c> to <c>{id}-{count}</c>, so a test can find <c>Bubble.{id}-096</c>.
     /// </remarks>
     /// <param name="id">The conversation ID.</param>
-    /// <param name="count">How many messages.</param>
+    /// <param name="count">The number of messages.</param>
     public void AddLongChat(string id = "c-history", int count = 120)
     {
         Conversation chat = NewConversation(id, "Long Chat", false, ConversationStatus.Active, false, false, Person("p-bo", "Bo", "+15550000002"));
@@ -174,7 +177,6 @@ public sealed partial class FakeChats
 
         Message Line(int i)
         {
-            // Runs Of One To Three From Each Side; Every Fourth Message Wraps
             bool fromMe  = (i / 3 + i / 5) % 2 == 0;
             string text  = i % 4 == 0 ? $"long {i:000} " + string.Concat(Enumerable.Repeat("and a longer line that wraps ", 4)).TrimEnd() : $"long {i:000}";
             var message  = new Message
@@ -195,9 +197,10 @@ public sealed partial class FakeChats
     // ANSWERS
     // =========================================================================
 
-    // One Page Of A Folder's Conversations, Newest First, After The Cursor's Conversation (All Of Them With No Count);
-    // Inbox = Active, Archive = Archived Or Keep Archived, Spam And Blocked = Spam Or Blocked Folder. Like Its Message
-    // Pages It Sends No Cursor Back: The App Pages On From The Last Conversation It Got, And An Empty Page Is The End
+    // Returns one page of the conversations of a folder, newest first, after the conversation of the cursor.
+    // A count of 0 returns all of them. Inbox is Active, Archive is Archived or KeepArchived, and
+    // SpamBlocked is the spam or blocked folder. Like the message pages, the page sends no cursor back.
+    // The app pages on from the last conversation that it got, and an empty page is the end.
     internal List<Conversation> List(ListConversationsRequest.Types.Folder folder, long count = 0, Cursor? cursor = null)
     {
         lock (_lock)
@@ -230,8 +233,8 @@ public sealed partial class FakeChats
         }
     }
 
-    // One Page Of Messages, Newest First, After The Cursor. Like Google, It Sends No Cursor Back: The App Must Page On
-    // From The Oldest Message It Got, And An Empty Page Is The End
+    // Returns one page of messages, newest first, after the cursor. Like Google, the page sends no cursor back.
+    // The app must page on from the oldest message that it got, and an empty page is the end.
     internal (List<Message> Page, Cursor? Next) Page(string conversationId, long count, Cursor? cursor)
     {
         lock (_lock)
@@ -260,8 +263,8 @@ public sealed partial class FakeChats
     // CHANGES
     // =========================================================================
 
-    // The Phone's Own Message, Sent From The App; A Reply Carries The Quoted Message's ID, As The Phone's Echo Does.
-    // A Send With Media Keeps The Request's Parts (Media, Then Any Caption) As They Came
+    // A message of the phone itself, sent from the app. A reply carries the ID of the quoted message, as the echo of
+    // the phone does. A send with media keeps the parts of the request, media first and then any caption, in order.
     internal Message AddOutgoing(string conversationId, string text, string tmpId, string? replyToId = null, IReadOnlyList<MessageInfo>? parts = null)
     {
         lock (_lock)
@@ -285,8 +288,8 @@ public sealed partial class FakeChats
         }
     }
 
-    // An Attachment From The Other Side, Which Leaves The Conversation Unread. With A Thumbnail, Only The Thumbnail Is
-    // Sent; The Full Media ID Is Held Until The App Asks For It (ReleaseFullSize)
+    // An attachment from the other side. It leaves the conversation unread. With a thumbnail, the message carries only
+    // the thumbnail. The store holds the full media ID until the app asks for it (ReleaseFullSize).
     internal (Conversation Conversation, Message Message) AddIncomingMedia(string conversationId, string mime, byte[] bytes, string fileName, bool withThumbnail, string? caption = null, Dimensions? dimensions = null)
     {
         lock (_lock)
@@ -302,7 +305,7 @@ public sealed partial class FakeChats
             Message message           = NewMediaMessage(conversation, sender, content);
             if (withThumbnail)
             {
-                // ponytail: the thumbnail is the same bytes as the full file; a real phone sends a smaller one
+                // ponytail: the thumbnail has the same bytes as the full file. A real phone sends a smaller one.
                 MediaContent thumbnail         = StoreMedia(bytes, fileName, mime);
                 _heldFull[message.MessageID]   = (content.MediaID, content.DecryptionKey);
                 content.ThumbnailMediaID       = thumbnail.MediaID;
@@ -323,7 +326,8 @@ public sealed partial class FakeChats
         }
     }
 
-    // The Full Media ID And Key Of A Thumbnail-Only Message, Put In The Stored Message; Null When None Is Held
+    // Puts the held full media ID and key of a thumbnail-only message into the stored message. Returns null when the
+    // store holds none.
     internal Message? ReleaseFullSize(string messageId)
     {
         lock (_lock)
@@ -341,7 +345,7 @@ public sealed partial class FakeChats
         }
     }
 
-    // An Uploaded (Already Encrypted) File, Stored Under A New Media ID
+    // Stores an uploaded file, already encrypted, under a new media ID.
     internal string StoreUpload(byte[] encrypted)
     {
         lock (_lock)
@@ -352,7 +356,6 @@ public sealed partial class FakeChats
         }
     }
 
-    // The Encrypted Bytes Of A Media ID, Or Null
     internal byte[]? MediaBytes(string mediaId)
     {
         lock (_lock)
@@ -361,7 +364,7 @@ public sealed partial class FakeChats
         }
     }
 
-    // A Message From The Other Side, Which Leaves The Conversation Unread; A Reply Carries The Quoted Message's ID
+    // A message from the other side. It leaves the conversation unread. A reply carries the ID of the quoted message.
     internal (Conversation Conversation, Message Message) AddIncoming(string conversationId, string text, string? replyToId, long type)
     {
         lock (_lock)
@@ -382,7 +385,8 @@ public sealed partial class FakeChats
         }
     }
 
-    // My Reaction On A Message: Add And Switch Leave Me Only On The New Emoji, Remove Takes Me Off; Null For An Unknown Message
+    // The reaction of the phone owner on a message. Add and Switch leave the owner only on the new emoji.
+    // Remove takes the owner off. Returns null for an unknown message.
     internal Message? React(SendReactionRequest request)
     {
         lock (_lock)
@@ -393,7 +397,7 @@ public sealed partial class FakeChats
                 return null;
             }
 
-            // Off Every Emoji First, Dropping Emptied Ones
+            // Remove the owner from every emoji first and drop the emptied entries.
             foreach (ReactionEntry entry in message.Reactions)
             {
                 entry.ParticipantIDs.Remove(MyParticipantId);
@@ -406,7 +410,8 @@ public sealed partial class FakeChats
 
             if (request.Action is SendReactionRequest.Types.Action.Add or SendReactionRequest.Types.Action.Switch)
             {
-                // The Same Reaction Is The Same Type (❤ And ❤️ Are Both RedHeart); Only Custom Ones Compare Their Emoji
+                // A reaction type matches by type alone. U+2764 with or without U+FE0F is RedHeart.
+                // Only Custom compares the emoji.
                 EmojiType type      = request.ReactionData?.Type ?? EmojiType.ReactionTypeUnspecified;
                 ReactionEntry? same = message.Reactions.FirstOrDefault(e =>
                     e.Data?.Type == type && (type != EmojiType.Custom || e.Data.Unicode == request.ReactionData?.Unicode));
@@ -423,7 +428,8 @@ public sealed partial class FakeChats
         }
     }
 
-    // Others' (Or My) Reactions On A Stored Message, Each Added To Its Emoji's Entry; Null For An Unknown Message
+    // Adds reactions of others, or of the owner, to a stored message. Each goes to the entry of its emoji.
+    // Returns null for an unknown message.
     internal Message? AddReactions(string conversationId, string messageId, IEnumerable<(EmojiType Type, string ParticipantId)> reactions)
     {
         lock (_lock)
@@ -450,7 +456,6 @@ public sealed partial class FakeChats
         }
     }
 
-    // A New Status On A Stored Message; Null For An Unknown Message
     internal Message? SetStatus(string conversationId, string messageId, MessageStatusType status)
     {
         lock (_lock)
@@ -466,7 +471,8 @@ public sealed partial class FakeChats
         }
     }
 
-    // A New Status Or Mute State On A Conversation (Null Keeps It); The Conversation After, Or Null For An Unknown One
+    // Sets a new status or mute state on a conversation. A null value keeps the current one.
+    // Returns the conversation after the change, or null for an unknown conversation.
     internal Conversation? SetConversationStatus(string conversationId, ConversationStatus? status, ConversationMuteStatus? muted = null)
     {
         lock (_lock)
@@ -499,7 +505,7 @@ public sealed partial class FakeChats
         }
     }
 
-    // The One Conversation With Exactly These Numbers, Or A New Active One
+    // Returns the conversation with exactly these numbers, or creates a new Active one.
     internal Conversation FindOrCreate(IReadOnlyList<ContactNumber> numbers)
     {
         lock (_lock)
@@ -555,7 +561,8 @@ public sealed partial class FakeChats
         return conversation;
     }
 
-    // A Message A Little Later Than The Last One; From Me It Is Outgoing, Otherwise Incoming
+    // The message is one second later than the last one.
+    // A message from the phone owner is Outgoing, any other is Incoming.
     private Message NewMessage(Conversation conversation, string participantId, string text, string tmpId = "")
     {
         bool fromMe  = participantId == MyParticipantId;
@@ -573,7 +580,6 @@ public sealed partial class FakeChats
         return message;
     }
 
-    // A Message Whose Only Part Is An Attachment
     private Message NewMediaMessage(Conversation conversation, string participantId, MediaContent content)
     {
         Message message = NewMessage(conversation, participantId, "");
@@ -582,7 +588,7 @@ public sealed partial class FakeChats
         return message;
     }
 
-    // Encrypts A File With A Fresh Key (As The Phone Would), Stores It And Describes It As A Message Would
+    // Encrypts a file with a fresh key, as the phone does, stores it and describes it as a message does.
     private MediaContent StoreMedia(byte[] bytes, string fileName, string mime)
     {
         byte[] key = MediaCrypto.GenerateKey();
@@ -598,13 +604,14 @@ public sealed partial class FakeChats
         };
     }
 
-    // A PNG's Width And Height From Its Header, As A Phone Reports A Photo's Dimensions; Null For Anything Else
+    // Reads the width and height from the PNG header, as a phone reports the dimensions of a photo. Returns null for
+    // any other format.
     private static Dimensions? PngSize(byte[] bytes) =>
         bytes.Length >= 24 && bytes[1] == 'P' && bytes[2] == 'N' && bytes[3] == 'G'
             ? new Dimensions { Width = System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(16)), Height = System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(20)) }
             : null;
 
-    // A Tombstone (A System Line Such As The Chat Becoming Encrypted): A Status And No Content
+    // A tombstone is a system line, such as the chat becoming encrypted. It has a status and no content.
     private Message NewTombstone(Conversation conversation, MessageStatusType status) => new()
     {
         MessageID      = "m-" + ++_nextId,
@@ -613,10 +620,10 @@ public sealed partial class FakeChats
         MessageStatus  = new MessageStatus { Status = status },
     };
 
-    // Message Type Of A Text: 4 (RCS) Or 2 (A Downloaded MMS, As In An SMS Group)
+    // The message type of a text is 4 for RCS, or 2 for a downloaded MMS, as in an SMS group.
     private static long TextType(Conversation conversation) => conversation.Type == ConversationType.Sms ? 2 : 4;
 
-    // Snippet, Latest Message And Time Follow The Newest Message
+    // The snippet, the latest message and the time follow the newest message.
     private static void Refresh(Conversation conversation, Message latest)
     {
         string text = latest.MessageInfo.FirstOrDefault()?.MessageContent?.Content ?? "";

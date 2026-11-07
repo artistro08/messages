@@ -11,35 +11,49 @@ namespace GMessages.App.UITests.FakeGoogle;
 /// A fake phone behind <see cref="FakeGoogleServer"/>: the server side of the UKEY2 pairing, then encrypted answers.
 /// </summary>
 /// <remarks>
-/// Mirrors what a real phone does in mautrix-gmessages' pair_google.go, seen from the other end. The client init's
-/// commitment is kept; the answer is a server init with the phone's own fresh P-256 key, 32 random bytes and
-/// verification and key-derivation versions 1/1. The client finished message is checked against the commitment, and
-/// the shared secret is SHA-256 of the raw ECDH X coordinate of the phone's key with the client's public key. HKDF over
-/// it (with the client and server init messages as info) gives the auth key, whose first four bytes pick
-/// <see cref="ShownEmoji"/>, and the next key, which gives the request keys. The finish answer waits for
-/// <see cref="Tap"/>. Answers go onto the open long poll as data events whose session ID is the request ID, which is
-/// how the client matches them. Once paired, <c>NOTIFY_DITTO_ACTIVITY</c> pings are answered (encrypted), as a real
-/// phone does, so the app never reports the phone as not responding. Unknown actions are only acked by the HTTP
-/// reply; the phone sends nothing back.
+/// The phone mirrors a real phone in pair_google.go of mautrix-gmessages, seen from the other end.
+/// The phone keeps the commitment of the client init. Its answer is a server init with a fresh P-256 key of the phone,
+/// 32 random bytes, and verification and key-derivation versions 1 and 1.
+/// The phone checks the client finished message against the commitment.
+/// The shared secret is the SHA-256 of the raw ECDH X coordinate of the phone key with the public key of the client.
+/// HKDF over the secret, with the client init and server init messages as info, gives the auth key.
+/// The first 4 bytes of the auth key pick <see cref="ShownEmoji"/>. The next key gives the request keys.
+/// The finish answer waits for <see cref="Tap"/>.
 /// <para>
-/// Once paired it also keeps <see cref="Chats"/> and answers the requests the app sends for them: conversations
-/// by folder, messages, sends (answered, then echoed as a live message with the request's temporary ID, unless
-/// <see cref="FailSends"/>), reactions (answered with success, then the message is sent again with its reactions
-/// updated), typing updates (kept in <see cref="Typing"/>, never answered), read marks, single conversations,
-/// contacts, top contacts, get-or-create and thumbnails (always none). A <c>SettingsEvent</c> with one SIM goes out
-/// after every <c>GET_UPDATES</c>. <see cref="PushIncoming"/> sends a live message, or, with <c>old</c>, one in the
-/// startup catch-up batch; <see cref="PushStatusUpdate"/> and <see cref="PushStatus"/> send a message again with a new
-/// status, as a real phone does several times per message; <see cref="PushTyping"/> sends a typing event.
-/// <see cref="PushIncomingMedia"/> sends an attachment, and a full-size image request sends a thumbnail-only photo again
-/// with its full media ID.
-/// Conversation updates (archive, mute, block, delete) are kept in <see cref="ConversationUpdates"/>, answered, applied
-/// and the conversation sent again, unless <see cref="FailConversationUpdates"/>. <see cref="PushConversationStatus"/>
-/// moves a conversation on the phone's side and <see cref="PushAlert"/> sends a user alert.
+/// Answers go onto the open long poll as data events. The session ID of an event is the request ID,
+/// and the client matches answers with this ID.
+/// After pairing, the phone answers <c>NOTIFY_DITTO_ACTIVITY</c> pings with an encrypted answer, as a real phone does,
+/// so the app never reports the phone as not responding.
+/// The HTTP reply only acks an unknown action, and the phone sends nothing back.
+/// </para>
+/// <para>
+/// After pairing, the phone also keeps <see cref="Chats"/> and answers the requests of the app for them.
+/// These are conversations by folder, messages, single conversations, contacts, top contacts, get-or-create,
+/// read marks, and thumbnails, which are always none.
+/// A send gets an answer, then an echo as a live message with the temporary ID of the request, unless
+/// <see cref="FailSends"/> is set.
+/// A reaction gets a success answer, then the phone sends the message again with the updated reactions.
+/// Typing updates go to <see cref="Typing"/> and never get an answer.
+/// A <c>SettingsEvent</c> with one SIM goes out after every <c>GET_UPDATES</c>.
+/// </para>
+/// <para>
+/// <see cref="PushIncoming"/> sends a live message.
+/// With <c>old</c>, it sends the message in the startup catch-up batch.
+/// <see cref="PushStatusUpdate"/> and <see cref="PushStatus"/> send a message again with a new status.
+/// A real phone does this several times per message.
+/// <see cref="PushTyping"/> sends a typing event. <see cref="PushIncomingMedia"/> sends an attachment.
+/// A full-size image request sends a thumbnail-only photo again with its full media ID.
+/// </para>
+/// <para>
+/// The phone keeps conversation updates (archive, mute, block, delete) in <see cref="ConversationUpdates"/>,
+/// answers them, applies them and sends the conversation again, unless <see cref="FailConversationUpdates"/> is set.
+/// <see cref="PushConversationStatus"/> moves a conversation on the side of the phone.
+/// <see cref="PushAlert"/> sends a user alert.
 /// </para>
 /// </remarks>
 public sealed class FakePhone
 {
-    // Copied Verbatim From encryptionKeyInfo In pair_google.go
+    // Copied verbatim from encryptionKeyInfo in pair_google.go.
     private static readonly byte[] EncryptionKeyInfo = [130, 170, 85, 160, 211, 151, 248, 131, 70, 202, 28, 238, 141, 57, 9, 185, 95, 19, 250, 125, 235, 29, 74, 179, 131, 118, 184, 37, 109, 168, 85, 16];
 
     private readonly Lock _lock = new();
@@ -64,7 +78,9 @@ public sealed class FakePhone
     /// Creates a phone that sends its answers through <paramref name="push"/>.
     /// </summary>
     /// <param name="push">Puts a message on the open long poll.</param>
-    /// <param name="pushCatchUp">Puts a message in the batch the next long poll starts with, which its startup ack counts.</param>
+    /// <param name="pushCatchUp">
+    /// Puts a message in the batch that the next long poll starts with. The startup ack counts it.
+    /// </param>
     internal FakePhone(Action<IncomingRPCMessage> push, Action<IncomingRPCMessage> pushCatchUp)
     {
         _push        = push;
@@ -72,13 +88,14 @@ public sealed class FakePhone
     }
 
     /// <summary>
-    /// Gets the conversations, messages and contacts the phone answers with.
+    /// Gets the conversations, messages and contacts that the phone answers with.
     /// </summary>
     public FakeChats Chats { get; } = new();
 
     /// <summary>
-    /// Gets the contact photos the phone answers with, by participant ID: Ann and the phone's owner have a 1x1 PNG
-    /// (<see cref="FakeChats.BluePng"/>) unless changed. Change it before the app asks (before pairing).
+    /// Gets the contact photos that the phone answers with, by participant ID. Ann and the owner of the phone have a
+    /// 1x1 PNG (<see cref="FakeChats.BluePng"/>) unless a test changes it. Change it before the app asks, which is
+    /// before pairing.
     /// </summary>
     public Dictionary<string, byte[]> ParticipantPhotos { get; } = new()
     {
@@ -87,29 +104,30 @@ public sealed class FakePhone
     };
 
     /// <summary>
-    /// Gets or sets whether sends are answered with <c>FAILURE_2</c> and no echo, to test failures without the 60 second timeout.
+    /// Gets or sets whether sends get a <c>FAILURE_2</c> answer and no echo.
+    /// This tests failures without the 60 second timeout.
     /// </summary>
     public bool FailSends { get; set; }
 
     /// <summary>
-    /// Gets or sets whether conversation updates are answered with <c>Success = false</c> and change nothing.
+    /// Gets or sets whether conversation updates get a <c>Success = false</c> answer and change nothing.
     /// </summary>
     public bool FailConversationUpdates { get; set; }
 
     /// <summary>
-    /// Gets or sets how long every <c>ListMessages</c> answer waits before it goes out (zero by default).
+    /// Gets or sets how long every <c>ListMessages</c> answer waits before it goes out. The default is zero.
     /// </summary>
     public TimeSpan MessagesDelay { get; set; }
 
     /// <summary>
-    /// Gets or sets how much longer a <c>ListMessages</c> answer for an older page (the request carries a cursor)
-    /// waits, on top of <see cref="MessagesDelay"/> (zero by default).
+    /// Gets or sets how much longer a <c>ListMessages</c> answer for an older page waits, in addition to
+    /// <see cref="MessagesDelay"/>. A request for an older page carries a cursor. The default is zero.
     /// </summary>
     public TimeSpan OlderPagesDelay { get; set; }
 
     /// <summary>
     /// Gets or sets how long the phone waits after a full-size image request before it sends the photo again with its
-    /// full media ID (zero by default).
+    /// full media ID. The default is zero.
     /// </summary>
     public TimeSpan FullSizeDelay { get; set; }
 
@@ -142,7 +160,7 @@ public sealed class FakePhone
     }
 
     /// <summary>
-    /// Gets every message ID a <c>DeleteMessage</c> request asked for, in arrival order.
+    /// Gets every message ID that a <c>DeleteMessage</c> request named, in arrival order.
     /// </summary>
     public IReadOnlyList<string> Deletes
     {
@@ -198,15 +216,18 @@ public sealed class FakePhone
     }
 
     /// <summary>
-    /// Gets the emoji the phone asks the user to tap, or null before the current attempt's client finished message.
+    /// Gets the emoji that the phone asks the user to tap. The value is null before the client finished message of
+    /// the current attempt.
     /// </summary>
     public string? ShownEmoji { get; private set; }
 
     /// <summary>
-    /// Gets a task that completes once the current attempt's client finished message arrived and
+    /// Gets a task that completes when the client finished message of the current attempt arrives and
     /// <see cref="ShownEmoji"/> is set.
     /// </summary>
-    /// <remarks>Each client init starts a new attempt with a new task, so a retried pairing can be awaited too.</remarks>
+    /// <remarks>
+    /// Each client init starts a new attempt with a new task, so a test can also await a retried pairing.
+    /// </remarks>
     public Task FinishReceived
     {
         get
@@ -219,19 +240,21 @@ public sealed class FakePhone
     }
 
     /// <summary>
-    /// Gets the request keys after a correct <see cref="Tap"/>, or null before.
+    /// Gets the request keys after a correct <see cref="Tap"/>. The value is null before the tap.
     /// </summary>
-    /// <remarks>The same AES and HMAC keys the client derives, so later answers can be encrypted for it.</remarks>
+    /// <remarks>
+    /// These are the same AES and HMAC keys that the client derives. The phone encrypts later answers with them.
+    /// </remarks>
     public AesCtrHelper? RequestCrypto { get; private set; }
 
     /// <summary>
     /// Answers the held client finished message as if the user tapped an emoji on the phone.
     /// </summary>
     /// <remarks>
-    /// A correct tap derives the request keys and answers with success. A wrong one answers with
+    /// A correct tap derives the request keys and answers with success. A wrong tap answers with
     /// <c>WRONG_VERIFICATION_CODE_SELECTED</c>.
     /// </remarks>
-    /// <param name="correct">True when the user tapped the emoji the computer shows.</param>
+    /// <param name="correct">True when the user taps the emoji that the computer shows.</param>
     /// <exception cref="InvalidOperationException">No client finished message is waiting.</exception>
     public void Tap(bool correct)
     {
@@ -246,7 +269,7 @@ public sealed class FakePhone
             }
         }
 
-        // Pairing Answers Are Never Encrypted
+        // Pairing answers are never encrypted.
         GaiaPairingResponseContainer answer = correct
             ? new GaiaPairingResponseContainer()
             : new GaiaPairingResponseContainer { FinishErrorType = 1, FinishErrorCode = GaiaPairingErrorCode.WrongVerificationCodeSelected };
@@ -254,7 +277,7 @@ public sealed class FakePhone
     }
 
     /// <summary>
-    /// Handles one request the client sent through <c>SendMessage</c>.
+    /// Handles one request that the client sent through <c>SendMessage</c>.
     /// </summary>
     /// <param name="request">The request.</param>
     /// <exception cref="InvalidDataException">A pairing message is invalid.</exception>
@@ -271,12 +294,12 @@ public sealed class FakePhone
                 OnClientFinished(data);
                 break;
 
-            // Ping Answers Keep The Client From Reporting The Phone As Not Responding
+            // The ping answer keeps the client from reporting that the phone does not respond.
             case ActionType.NotifyDittoActivity when RequestCrypto is not null:
                 Reply(data.RequestID, data.Action, new NotifyDittoActivityResponse(), encrypt: true);
                 break;
 
-            // Every Update Request (Each Connect) Gets The Settings Event Right After, As From A Real Phone
+            // Every update request, one per connect, gets the settings event right after it, as from a real phone.
             case ActionType.GetUpdates when RequestCrypto is not null:
                 PushUpdate(new UpdateEvents { SettingsEvent = new Settings { SIMCards = { new SIMCard { SIMParticipant = new SIMParticipant { ID = FakeChats.MyParticipantId } } } } }, _push);
                 break;
@@ -297,7 +320,7 @@ public sealed class FakePhone
                     break;
                 }
 
-                // Held Off The Request's Thread, So Other Requests Are Answered Meanwhile
+                // The delay runs off the request thread, so the phone answers other requests in the meantime.
                 string requestId = data.RequestID;
                 _ = Task.Delay(delay).ContinueWith(_ => Reply(requestId, ActionType.ListMessages, answer, encrypt: true), TaskScheduler.Default);
                 break;
@@ -314,7 +337,7 @@ public sealed class FakePhone
                 OnUpdateConversation(data);
                 break;
 
-            // Typing Is Sent Without Waiting, So The Phone Never Answers It
+            // The client sends typing without waiting for an answer, so the phone never answers it.
             case ActionType.TypingUpdates when RequestCrypto is not null:
                 var typing = Open(data, TypingUpdateRequest.Parser);
                 lock (_lock)
@@ -363,7 +386,8 @@ public sealed class FakePhone
                 Reply(data.RequestID, data.Action, new GetOrCreateConversationResponse { Conversation = Chats.FindOrCreate(create.Numbers), Status = GetOrCreateConversationResponse.Types.Status.Success }, encrypt: true);
                 break;
 
-            // Photos: Those In ParticipantPhotos (Ann And The Phone's Owner Unless Changed), Everyone Else None
+            // Photos come from ParticipantPhotos, which holds Ann and the owner of the phone unless a test changes it.
+            // Every other participant has none.
             case ActionType.GetParticipantsThumbnail when RequestCrypto is not null:
                 var thumbnails = Open(data, GetThumbnailRequest.Parser);
                 var photos     = new GetThumbnailResponse();
@@ -378,7 +402,7 @@ public sealed class FakePhone
                 Reply(data.RequestID, data.Action, photos, encrypt: true);
                 break;
 
-            // A Thumbnail-Only Photo: Answered, Then Sent Again With Its Full Media ID
+            // The phone answers, then sends the thumbnail-only photo again with its full media ID.
             case ActionType.GetFullSizeImage when RequestCrypto is not null:
                 var fullSize  = Open(data, GetFullSizeImageRequest.Parser);
                 Message? full = Chats.ReleaseFullSize(fullSize.MessageID);
@@ -391,7 +415,7 @@ public sealed class FakePhone
 
                 break;
 
-            // No Contact Photos: An Empty Thumbnail List
+            // The phone has no contact photos, so the thumbnail list is empty.
             case ActionType.GetContactsThumbnail when RequestCrypto is not null:
                 Reply(data.RequestID, data.Action, new GetThumbnailResponse(), encrypt: true);
                 break;
@@ -405,19 +429,22 @@ public sealed class FakePhone
     /// Pushes a message from the other side of a conversation, as a live update.
     /// </summary>
     /// <remarks>
-    /// The conversation's snippet is updated and it becomes unread. A <c>ConversationEvent</c> with the updated
-    /// conversation goes first, then the <c>MessageEvent</c>. With <paramref name="old"/>, both are put in the startup
-    /// catch-up batch instead: the next long poll of a paired client counts them in its startup ack, so the client
-    /// marks them old. The batch is only delivered at the start of a long poll, so a client that is already
-    /// connected holds it until it reconnects: call <see cref="FakeGoogleServer.KillLongPoll"/> with 0 to end the
-    /// current long poll and the client reopens one and receives the batch. Before the first connect, push after the
-    /// client finished message arrived and before <see cref="Tap"/>.
+    /// The snippet of the conversation is updated and the conversation becomes unread.
+    /// A <c>ConversationEvent</c> with the updated conversation goes first, then the <c>MessageEvent</c>.
+    /// <para>
+    /// With <paramref name="old"/>, both events go into the startup catch-up batch instead.
+    /// The startup ack of the next long poll of a paired client counts them, so the client marks them old.
+    /// The phone delivers the batch only at the start of a long poll. A client that is already connected holds it
+    /// until it reconnects. Call <see cref="FakeGoogleServer.KillLongPoll"/> with 0 to end the current long poll.
+    /// The client then opens a new one and receives the batch.
+    /// Before the first connect, push after the client finished message arrives and before <see cref="Tap"/>.
+    /// </para>
     /// </remarks>
     /// <param name="conversationId">The conversation ID.</param>
     /// <param name="text">The message text.</param>
-    /// <param name="old">True to send it in the catch-up batch.</param>
-    /// <param name="replyToId">The ID of the message it replies to, or null for none.</param>
-    /// <param name="type">The message type: 4 for RCS (the default), 2 for a downloaded MMS, 1 for SMS.</param>
+    /// <param name="old">True to send the message in the catch-up batch.</param>
+    /// <param name="replyToId">The ID of the message that this one replies to, or null for none.</param>
+    /// <param name="type">The message type: 4 for RCS (the default), 2 for a downloaded MMS, or 1 for SMS.</param>
     /// <returns>The message as pushed, for <see cref="PushStatusUpdate"/>.</returns>
     /// <exception cref="InvalidOperationException">Pairing has not reached the client finished message.</exception>
     public Message PushIncoming(string conversationId, string text, bool old = false, string? replyToId = null, long type = 4)
@@ -433,18 +460,24 @@ public sealed class FakePhone
     /// Pushes an attachment from the other side of a conversation, as a live update.
     /// </summary>
     /// <remarks>
-    /// The file is encrypted with <see cref="MediaCrypto"/> and a fresh key and stored, so the client can download it
-    /// from <c>/upload</c>. With <paramref name="withThumbnail"/>, the message carries only a thumbnail (the same
-    /// bytes, under its own ID and key); <c>GET_FULL_SIZE_IMAGE</c> then sends it again with the full media ID, as a
-    /// real phone does. A <c>ConversationEvent</c> goes first, then the <c>MessageEvent</c>.
+    /// The phone encrypts the file with <see cref="MediaCrypto"/> and a fresh key and stores it, so the client can
+    /// download it from <c>/upload</c>. With <paramref name="withThumbnail"/>, the message carries only a thumbnail.
+    /// The thumbnail has the same bytes, under its own ID and key.
+    /// <c>GET_FULL_SIZE_IMAGE</c> then sends the message again with the full media ID, as a real phone does.
+    /// A <c>ConversationEvent</c> goes first, then the <c>MessageEvent</c>.
     /// </remarks>
     /// <param name="conversationId">The conversation ID.</param>
-    /// <param name="mime">The kind of file, as a mime type such as <c>image/png</c>.</param>
-    /// <param name="bytes">The file's bytes.</param>
+    /// <param name="mime">The mime type of the file, such as <c>image/png</c>.</param>
+    /// <param name="bytes">The bytes of the file.</param>
     /// <param name="fileName">The file name.</param>
-    /// <param name="withThumbnail">True to send a thumbnail only and hold the full media ID until it is asked for.</param>
-    /// <param name="caption">A caption sent with it, or null for none.</param>
-    /// <param name="dimensions">The media's width and height as the phone reports them, or null for a PNG's own (none for the rest).</param>
+    /// <param name="withThumbnail">
+    /// True to send a thumbnail only and hold the full media ID until the client asks for it.
+    /// </param>
+    /// <param name="caption">A caption to send with the file, or null for none.</param>
+    /// <param name="dimensions">
+    /// The width and height of the media as the phone reports them.
+    /// Null selects the own size of a PNG, and none for other formats.
+    /// </param>
     /// <returns>The message as pushed.</returns>
     /// <exception cref="InvalidOperationException">Pairing has not reached the client finished message.</exception>
     public Message PushIncomingMedia(string conversationId, string mime, byte[] bytes, string fileName, bool withThumbnail = false, string? caption = null, Dimensions? dimensions = null)
@@ -456,10 +489,10 @@ public sealed class FakePhone
     }
 
     /// <summary>
-    /// Pushes an already pushed message again with a new status, as a live update: the same message ID, as the real
-    /// phone sends for status changes and reactions.
+    /// Pushes an already pushed message again with a new status, as a live update.
+    /// The message ID stays the same, as the real phone sends it for status changes and reactions.
     /// </summary>
-    /// <param name="message">The message, as <see cref="PushIncoming"/> returned it.</param>
+    /// <param name="message">The message that <see cref="PushIncoming"/> returned.</param>
     /// <param name="status">The new status.</param>
     /// <exception cref="KeyNotFoundException">The fake phone does not store the message.</exception>
     /// <exception cref="InvalidOperationException">Pairing has not reached the client finished message.</exception>
@@ -467,7 +500,7 @@ public sealed class FakePhone
     {
         ArgumentNullException.ThrowIfNull(message);
 
-        // Through The Store, So The New Status Sticks For Later Fetches
+        // The call goes through the store, so the new status stays for later fetches.
         PushStatus(message.ConversationID, message.MessageID, status);
     }
 
@@ -486,11 +519,11 @@ public sealed class FakePhone
     }
 
     /// <summary>
-    /// Adds reactions to a stored message and pushes it again, as a live update (the way the phone reports reactions).
+    /// Adds reactions to a stored message and pushes it again, as a live update. The phone reports reactions this way.
     /// </summary>
     /// <param name="conversationId">The conversation ID.</param>
     /// <param name="messageId">The message ID.</param>
-    /// <param name="reactions">Each reaction's type and who reacted, in order.</param>
+    /// <param name="reactions">The type of each reaction and the person who reacted, in order.</param>
     /// <exception cref="KeyNotFoundException">The conversation has no such message.</exception>
     /// <exception cref="InvalidOperationException">Pairing has not reached the client finished message.</exception>
     public void PushReactions(string conversationId, string messageId, params (EmojiType Type, string ParticipantId)[] reactions)
@@ -502,10 +535,12 @@ public sealed class FakePhone
     /// <summary>
     /// Pushes a typing event from someone in a conversation, as a live update.
     /// </summary>
-    /// <remarks>The sender is named by phone number, as the real phone does; the app maps it to a participant.</remarks>
+    /// <remarks>
+    /// The event names the sender by phone number, as the real phone does. The app maps the number to a participant.
+    /// </remarks>
     /// <param name="conversationId">The conversation ID.</param>
-    /// <param name="number">The typing person's phone number.</param>
-    /// <param name="started">True when they started typing, false when they stopped.</param>
+    /// <param name="number">The phone number of the typing person.</param>
+    /// <param name="started">True when the person starts typing, false when the person stops.</param>
     /// <exception cref="InvalidOperationException">Pairing has not reached the client finished message.</exception>
     public void PushTyping(string conversationId, string number, bool started)
     {
@@ -519,7 +554,7 @@ public sealed class FakePhone
     }
 
     /// <summary>
-    /// Pushes a user alert, such as the phone's battery running low, as a live update.
+    /// Pushes a user alert, such as a low battery of the phone, as a live update.
     /// </summary>
     /// <param name="type">The alert type.</param>
     /// <exception cref="InvalidOperationException">Pairing has not reached the client finished message.</exception>
@@ -527,7 +562,8 @@ public sealed class FakePhone
         PushUpdate(new UpdateEvents { UserAlertEvent = new UserAlertEvent { AlertType = type } }, _push);
 
     /// <summary>
-    /// Moves a conversation to a new status on the phone's side, such as archiving it there, and pushes it as a live update.
+    /// Moves a conversation to a new status on the side of the phone, such as archiving it there.
+    /// Pushes the conversation as a live update.
     /// </summary>
     /// <param name="conversationId">The conversation ID.</param>
     /// <param name="status">The new status.</param>
@@ -539,8 +575,8 @@ public sealed class FakePhone
         PushUpdate(new UpdateEvents { ConversationEvent = new ConversationEvent { Data = { conversation } } }, _push);
     }
 
-    // Answers A Conversation Update, Applies It (Status Or Mute) And Sends The Conversation Again. Failed Or Unknown
-    // Conversations Are Answered Without Success And Change Nothing
+    // Answers a conversation update, applies the status or mute change and sends the conversation again.
+    // A failed update or an unknown conversation gets an answer without success and changes nothing.
     private void OnUpdateConversation(OutgoingRPCData data)
     {
         var request = Open(data, UpdateConversationRequest.Parser);
@@ -555,7 +591,7 @@ public sealed class FakePhone
             return;
         }
 
-        // Block, Unblock And Delete Ride On The Action; Archive And Unarchive On The Update Data's Status
+        // Block, unblock and delete use the action. Archive and unarchive use the status in the update data.
         ConversationStatus? updated = request.UpdateData?.DataCase == UpdateConversationData.DataOneofCase.Status ? request.UpdateData.Status : null;
         ConversationStatus? status  = request.Action switch
         {
@@ -565,7 +601,8 @@ public sealed class FakePhone
             _                                                                         => updated,
         };
 
-        // Archive, Unarchive And Mute Carry The ID Only In The Update Data (LibGM's conversation_builder.go)
+        // Archive, unarchive and mute carry the conversation ID only in the update data.
+        // See conversation_builder.go of LibGM.
         string id                     = request.ConversationID.Length > 0 ? request.ConversationID : request.UpdateData?.ConversationID ?? "";
         ConversationMuteStatus? muted = request.UpdateData?.DataCase == UpdateConversationData.DataOneofCase.Mute ? request.UpdateData.Mute : null;
         Conversation? conversation    = Chats.SetConversationStatus(id, status, muted);
@@ -576,7 +613,6 @@ public sealed class FakePhone
         }
     }
 
-    // Answers A Reaction, Then Sends The Message Again With Its Reactions Updated
     private void OnSendReaction(OutgoingRPCData data)
     {
         var request = Open(data, SendReactionRequest.Parser);
@@ -593,7 +629,7 @@ public sealed class FakePhone
         }
     }
 
-    // Answers A Send, Then Echoes It As A Live Message With The Request's Temporary ID
+    // Answers a send, then echoes it as a live message with the temporary ID of the request.
     private void OnSendMessage(OutgoingRPCData data)
     {
         var request = Open(data, SendMessageRequest.Parser);
@@ -615,19 +651,18 @@ public sealed class FakePhone
     }
 
     /// <summary>
-    /// Reads the text of a sent message: the first <c>MessageInfo</c>'s content, where the app (like the bridge's
-    /// <c>ConvertMatrixMessage</c>) puts it.
+    /// Reads the text of a sent message from the content of the first <c>MessageInfo</c>. The app puts the text there,
+    /// as <c>ConvertMatrixMessage</c> of the bridge does.
     /// </summary>
     /// <param name="request">The send request.</param>
-    /// <returns>The text, or empty.</returns>
+    /// <returns>The text, or an empty string.</returns>
     public static string SentText(SendMessageRequest request) =>
         request?.MessagePayload?.MessageInfo.FirstOrDefault()?.MessageContent?.Content ?? "";
 
-    // A Live Update: A GET_UPDATES Data Event That Answers No Request
+    // A live update is a GET_UPDATES data event that answers no request.
     private void PushUpdate(UpdateEvents update, Action<IncomingRPCMessage> push) =>
         Reply(Guid.NewGuid().ToString(), ActionType.GetUpdates, update, encrypt: true, push);
 
-    // The Request's Payload, Decrypted
     private T Open<T>(OutgoingRPCData data, MessageParser<T> parser) where T : IMessage<T> =>
         parser.ParseFrom(RequestCrypto!.Decrypt(data.EncryptedProtoData.Span));
 
@@ -635,7 +670,7 @@ public sealed class FakePhone
     // UKEY2 SERVER SIDE
     // =========================================================================
 
-    // Keeps The Client Init And Its Commitment, Answers With A Server Init Using A Fresh Key
+    // Keeps the client init and its commitment. Answers with a server init that uses a fresh key.
     private GaiaPairingResponseContainer OnClientInit(OutgoingRPCData data)
     {
         byte[] clientInit      = GaiaPairingRequestContainer.Parser.ParseFrom(data.UnencryptedProtoData).Data.ToByteArray();
@@ -643,7 +678,7 @@ public sealed class FakePhone
         byte[] commitment      = parsed.CipherCommitments.FirstOrDefault(c => c.HandshakeCipher == Ukey2HandshakeCipher.P256Sha512)?.Commitment.ToByteArray()
             ?? throw new InvalidDataException("No P-256/SHA-512 commitment in the client init.");
 
-        // Server Init: Own Key, X/Y With A Leading Zero Byte Like Go
+        // The server init holds the own key of the phone. X and Y have a leading zero byte, like the Go code.
         using var ecdh = ECDiffieHellman.Create(ECCurve.NamedCurves.nistP256);
         ECParameters key = ecdh.ExportParameters(true);
         var serverInit   = new Ukey2ServerInit
@@ -659,7 +694,7 @@ public sealed class FakePhone
         };
         byte[] message = new Ukey2Message { MessageType = Ukey2Message.Types.Type.ServerInit, MessageData = serverInit.ToByteString() }.ToByteArray();
 
-        // A New Attempt Forgets The Last One's Emoji, Held Answer And Signal
+        // A new attempt forgets the emoji, the held answer and the signal of the last attempt.
         lock (_lock)
         {
             _key        = key;
@@ -682,7 +717,7 @@ public sealed class FakePhone
         };
     }
 
-    // Checks The Commitment, Derives The Auth And Next Keys, Picks The Emoji, Holds The Answer For Tap
+    // Checks the commitment, derives the auth key and the next key, picks the emoji and holds the answer for Tap.
     private void OnClientFinished(OutgoingRPCData data)
     {
         byte[] finish = GaiaPairingRequestContainer.Parser.ParseFrom(data.UnencryptedProtoData).Data.ToByteArray();
@@ -693,11 +728,10 @@ public sealed class FakePhone
                 throw new InvalidDataException("The client finished message does not match the client init's commitment.");
             }
 
-            // Client Public Key
             EcP256PublicKey client = Ukey2ClientFinished.Parser.ParseFrom(Ukey2Message.Parser.ParseFrom(finish).MessageData).PublicKey.EcP256PublicKey;
             var clientPoint        = new ECPoint { X = StripPrefix(client.X), Y = StripPrefix(client.Y) };
 
-            // Shared Secret: SHA-256 Of The Raw ECDH X Coordinate, From The Phone's Own Key
+            // The shared secret is the SHA-256 of the raw ECDH X coordinate, computed from the own key of the phone.
             byte[] sharedSecret;
             using (var server = ECDiffieHellman.Create(_key))
             using (var peer = ECDiffieHellman.Create(new ECParameters { Curve = ECCurve.NamedCurves.nistP256, Q = clientPoint }))
@@ -706,22 +740,22 @@ public sealed class FakePhone
                 sharedSecret = SHA256.HashData(server.DeriveRawSecretAgreement(peerPublic));
             }
 
-            // Auth Key Picks The Emoji, Next Key Waits For The Tap
+            // The auth key picks the emoji. The next key waits for the tap.
             byte[] info     = [.. _clientInit, .. _serverInit];
             byte[] authKey  = Hkdf(sharedSecret, "UKEY2 v1 auth"u8.ToArray(), info);
             _nextKey        = Hkdf(sharedSecret, "UKEY2 v1 next"u8.ToArray(), info);
             ShownEmoji      = PairingEmojis.Pick(BinaryPrimitives.ReadUInt32BigEndian(authKey), 1);
             _heldFinish     = data.RequestID;
 
-            // Derived Now, So A Catch-Up Message Can Be Encrypted Before The Tap
+            // The phone derives the keys now, so it can encrypt a catch-up message before the tap.
             _derivedCrypto  = DeriveRequestKeys(_nextKey);
 
-            // Continuations Run Asynchronously, So Signaling Inside The Lock Is Safe
+            // Continuations run asynchronously, so the signal inside the lock is safe.
             _finishReceived.TrySetResult();
         }
     }
 
-    // Key Derivation Version 1: Order Client And Server Keys By Java Hash, Then The "Ditto" HKDFs
+    // Key derivation version 1 orders the client key and the server key by Java hash. The "Ditto" HKDFs follow.
     private static AesCtrHelper DeriveRequestKeys(byte[] nextKey)
     {
         byte[] clientKey    = Hkdf(nextKey, EncryptionKeyInfo, "client"u8.ToArray());
@@ -736,7 +770,7 @@ public sealed class FakePhone
     // HELPERS
     // =========================================================================
 
-    // An Answer Routed To The Request: Data Event, Session ID = Request ID
+    // An answer routed to the request is a data event whose session ID is the request ID.
     private void Reply(string requestId, ActionType action, IMessage answer, bool encrypt, Action<IncomingRPCMessage>? push = null)
     {
         byte[] bytes = answer.ToByteArray();
@@ -759,9 +793,9 @@ public sealed class FakePhone
         });
     }
 
-    // HKDF-SHA256, 32 Bytes Out (Go: doHKDF)
+    // HKDF-SHA256 with 32 bytes of output (doHKDF in Go).
     private static byte[] Hkdf(byte[] key, byte[] salt, byte[] info) => HKDF.DeriveKey(HashAlgorithmName.SHA256, key, 32, salt, info);
 
-    // Go Sends Each Coordinate With A Leading Zero Byte
+    // Go sends each coordinate with a leading zero byte.
     private static byte[] StripPrefix(ByteString coordinate) => coordinate.Length == 33 ? coordinate.ToByteArray()[1..] : coordinate.ToByteArray();
 }

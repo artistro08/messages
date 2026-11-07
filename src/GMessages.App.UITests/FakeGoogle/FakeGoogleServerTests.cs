@@ -12,12 +12,13 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace GMessages.App.UITests.FakeGoogle;
 
 /// <summary>
-/// Protocol-level checks of <see cref="FakeGoogleServer"/> and <see cref="FakePhone"/>: a real <see cref="GmClient"/>
+/// Protocol-level checks of <see cref="FakeGoogleServer"/> and <see cref="FakePhone"/>. A real <see cref="GmClient"/>
 /// pairs and connects against them over real HTTP on 127.0.0.1.
 /// </summary>
 /// <remarks>
-/// No UI: these run in the normal <c>dotnet test</c> of this project. Every wait is a signal with a 30 s hang guard,
-/// never a sleep. The client saves its session to a temp file, never the owner's data folder.
+/// These tests have no UI. They run in the normal <c>dotnet test</c> of this project.
+/// Every wait is a signal with a 30 s hang guard, never a sleep.
+/// The client saves its session to a temp file, never to the data folder of the owner.
 /// </remarks>
 [TestClass]
 public sealed class FakeGoogleServerTests
@@ -91,7 +92,7 @@ public sealed class FakeGoogleServerTests
         }
     }
 
-    // Starts Pairing; The Returned Task Gives The Emoji The Client Showed
+    // The returned task gives the emoji that the client showed.
     private static (Task Pair, Task<string> Shown) StartPairing(Rig rig)
     {
         var shown = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -101,7 +102,6 @@ public sealed class FakeGoogleServerTests
 
     private static int Count(FakeGoogleServer server, string suffix) => server.RequestedPaths.Count(p => p.EndsWith(suffix, StringComparison.Ordinal));
 
-    // Waits For A Condition Without Sleeping A Fixed Time
     private static void WaitUntil(Func<bool> condition, string what) => Assert.IsTrue(SpinWait.SpinUntil(condition, HangGuard), what);
 
     // =========================================================================
@@ -109,8 +109,8 @@ public sealed class FakeGoogleServerTests
     // =========================================================================
 
     /// <summary>
-    /// The right tap pairs: the client's emoji is the phone's, both sides hold the same request keys, and the client
-    /// ends connected.
+    /// The right tap pairs. The emoji of the client is the emoji of the phone, both sides hold the same request keys,
+    /// and the client ends connected.
     /// </summary>
     [TestMethod]
     public async Task Pair_TapCorrect_Pairs_AndEmojiMatches()
@@ -152,7 +152,7 @@ public sealed class FakeGoogleServerTests
     }
 
     /// <summary>
-    /// After a wrong tap, a second attempt on the same server gets a fresh signal and emoji and pairs.
+    /// After a wrong tap, a second attempt on the same server gets a fresh signal and a fresh emoji, and pairs.
     /// </summary>
     [TestMethod]
     public async Task Pair_RetryAfterWrongTap_Pairs()
@@ -175,7 +175,7 @@ public sealed class FakeGoogleServerTests
     }
 
     /// <summary>
-    /// <see cref="FakeGoogleServer.RejectCookies"/> makes the sign-in a 401.
+    /// <see cref="FakeGoogleServer.RejectCookies"/> makes the sign-in fail with a 401.
     /// </summary>
     [TestMethod]
     public async Task Pair_RejectCookies_Is401()
@@ -193,7 +193,7 @@ public sealed class FakeGoogleServerTests
     // =========================================================================
 
     /// <summary>
-    /// After pairing, connect reopens the long poll; killing it with 401 raises <see cref="ListenFatalError"/>.
+    /// After pairing, connect reopens the long poll. A kill with 401 raises <see cref="ListenFatalError"/>.
     /// </summary>
     [TestMethod]
     public async Task Connect_AfterPairing_ThenKill401_IsListenFatalError()
@@ -216,12 +216,12 @@ public sealed class FakeGoogleServerTests
     }
 
     /// <summary>
-    /// Payloads still unread when a second long poll takes over arrive exactly once, in order: a prefix on the old
-    /// poll, the rest on the new one.
+    /// Payloads that are still unread when a second long poll takes over arrive exactly once, in order.
+    /// The old poll gets a prefix and the new poll gets the rest.
     /// </summary>
     /// <remarks>
-    /// The old poll is not read until after the takeover, and each payload is 64 KB, so the server's write to it
-    /// stalls and most payloads are still queued for it when the new poll opens.
+    /// The test reads the old poll only after the takeover, and each payload is 64 KB. The write of the server to the
+    /// old poll therefore stalls, and most payloads are still queued for it when the new poll opens.
     /// </remarks>
     [TestMethod]
     public async Task LongPoll_Takeover_DeliversEveryPayloadOnceInOrder()
@@ -232,7 +232,8 @@ public sealed class FakeGoogleServerTests
         Uri url                = new(server.BaseUrl, "/$rpc/google.internal.communications.instantmessaging.v1.Messaging/ReceiveMessages");
         string padding         = new('x', 64 * 1024);
 
-        // Old Poll Open But Not Read, Payloads Pushed, New Poll Takes Over (Its Headers Come After The Takeover)
+        // Open the old poll without reading it, push the payloads, then let the new poll take over.
+        // The headers of the new poll arrive after the takeover.
         using HttpResponseMessage oldPoll = await OpenPollAsync(http, url);
         for (int i = 0; i < Total; i++)
         {
@@ -242,7 +243,6 @@ public sealed class FakeGoogleServerTests
         using HttpResponseMessage newPoll = await OpenPollAsync(http, url);
         server.Push(new LongPollingPayload { Data = new IncomingRPCMessage { ResponseID = "end" } });
 
-        // Read Both
         List<string> first  = await ReadIdsAsync(oldPoll).WaitAsync(HangGuard);
         List<string> second = await ReadIdsAsync(newPoll).WaitAsync(HangGuard);
 
@@ -255,7 +255,7 @@ public sealed class FakeGoogleServerTests
     private static Task<HttpResponseMessage> OpenPollAsync(HttpClient http, Uri url) =>
         http.SendAsync(new HttpRequestMessage(HttpMethod.Post, url) { Content = new ByteArrayContent([]) }, HttpCompletionOption.ResponseHeadersRead).WaitAsync(HangGuard);
 
-    // Reads One Long Poll's Data Payload IDs Until The Stream Ends Or The "end" Payload
+    // Reads the data payload IDs of one long poll until the stream ends or the "end" payload arrives.
     private static async Task<List<string>> ReadIdsAsync(HttpResponseMessage poll)
     {
         Stream body = await poll.Content.ReadAsStreamAsync();
@@ -282,7 +282,7 @@ public sealed class FakeGoogleServerTests
     // =========================================================================
 
     /// <summary>
-    /// The sign-in page sets no cookies and has the "signin" button; the login POST sets all eight cookies.
+    /// The sign-in page sets no cookies and has the "signin" button. The login POST sets all 8 cookies.
     /// </summary>
     [TestMethod]
     public async Task SignInPage_SetsCookiesOnlyAfterLogin()
@@ -291,14 +291,12 @@ public sealed class FakeGoogleServerTests
         using var handler      = new HttpClientHandler { UseCookies = false, AllowAutoRedirect = false };
         using var http         = new HttpClient(handler);
 
-        // Page: No Cookies
         using HttpResponseMessage page = await http.GetAsync(new Uri(server.BaseUrl, "/web/authentication")).WaitAsync(HangGuard);
         string html = await page.Content.ReadAsStringAsync();
         Assert.AreEqual(HttpStatusCode.OK, page.StatusCode);
         Assert.IsFalse(page.Headers.Contains("Set-Cookie"), "no cookies before login");
         StringAssert.Contains(html, "id=\"signin\"");
 
-        // Login: All Eight
         using HttpResponseMessage login = await http.PostAsync(new Uri(server.BaseUrl, "/web/authentication/login"), null).WaitAsync(HangGuard);
         string[] names = [.. login.Headers.GetValues("Set-Cookie").Select(c => c[..c.IndexOf('=', StringComparison.Ordinal)])];
         Assert.AreEqual(HttpStatusCode.OK, login.StatusCode);
@@ -310,7 +308,7 @@ public sealed class FakeGoogleServerTests
     // CONVERSATIONS AND MESSAGES
     // =========================================================================
 
-    // Pairs And Waits Until The Client Is Connected; Events Are Collected From The Start
+    // Pairs and waits until the client is connected. The rig collects events from the start.
     private static async Task<Rig> PairedAsync()
     {
         var rig = new Rig();
@@ -323,7 +321,6 @@ public sealed class FakeGoogleServerTests
         return rig;
     }
 
-    // Waits For The First Event Of A Type That Matches
     private static T WaitForEvent<T>(List<object> events, Func<T, bool> match, string what)
     {
         T? found = default;
@@ -340,7 +337,7 @@ public sealed class FakeGoogleServerTests
     }
 
     /// <summary>
-    /// The inbox lists the active conversations and leaves the spam one out; the spam folder lists only that.
+    /// The inbox lists the active conversations and leaves out the spam one. The spam folder lists only the spam one.
     /// </summary>
     [TestMethod]
     public async Task ListConversations_Inbox_ExcludesSpam()
@@ -356,8 +353,8 @@ public sealed class FakeGoogleServerTests
     }
 
     /// <summary>
-    /// A send is answered with success, then echoed as a live message with the request's temporary ID, a new message
-    /// ID and the outgoing-complete status.
+    /// A send gets a success answer. The phone then echoes it as a live message with the temporary ID of the request,
+    /// a new message ID and the outgoing-complete status.
     /// </summary>
     [TestMethod]
     public async Task SendMessage_EchoesWithTmpId()
@@ -390,8 +387,8 @@ public sealed class FakeGoogleServerTests
     }
 
     /// <summary>
-    /// A reaction is answered with success and the message comes back with my reaction; a switch moves it to the new
-    /// emoji and a remove takes it off.
+    /// A reaction gets a success answer, and the message comes back with the reaction of the owner.
+    /// A switch moves the reaction to the new emoji. A remove takes it off.
     /// </summary>
     [TestMethod]
     public async Task SendReaction_EchoesMessageWithReaction()
@@ -400,7 +397,6 @@ public sealed class FakeGoogleServerTests
         ListMessagesResponse page = await rig.Client.FetchMessagesAsync("c-ann", 10, null, CancellationToken.None).WaitAsync(HangGuard);
         string messageId          = page.Messages[0].MessageID;
 
-        // Add A Thumbs Up
         SendReactionResponse added = await rig.Client.SendReactionAsync(Reaction(messageId, "\U0001F44D", SendReactionRequest.Types.Action.Add), CancellationToken.None).WaitAsync(HangGuard);
         Assert.IsTrue(added.Success);
         MessageReceived like = WaitForEvent<MessageReceived>(rig.Events, e => e.Message.MessageID == messageId && e.Message.Reactions.Count > 0, "message with the like");
@@ -408,12 +404,10 @@ public sealed class FakeGoogleServerTests
         Assert.AreEqual(EmojiType.Like, like.Message.Reactions[0].Data.Type);
         Assert.AreEqual("me-1", like.Message.Reactions[0].ParticipantIDs.Single());
 
-        // Switch To A Heart
         await rig.Client.SendReactionAsync(Reaction(messageId, "❤️", SendReactionRequest.Types.Action.Switch), CancellationToken.None).WaitAsync(HangGuard);
         MessageReceived heart = WaitForEvent<MessageReceived>(rig.Events, e => e.Message.MessageID == messageId && e.Message.Reactions.Any(r => r.Data.Type == EmojiType.RedHeart), "message with the heart");
         Assert.HasCount(1, heart.Message.Reactions);
 
-        // Remove It
         lock (rig.Events)
         {
             rig.Events.Clear();
@@ -429,7 +423,7 @@ public sealed class FakeGoogleServerTests
     }
 
     /// <summary>
-    /// An archive is answered with success, the conversation comes back archived, and it moves from the inbox to the
+    /// An archive gets a success answer. The conversation comes back archived and moves from the inbox to the
     /// archive folder.
     /// </summary>
     [TestMethod]
@@ -452,7 +446,7 @@ public sealed class FakeGoogleServerTests
         Assert.IsFalse(inbox.Conversations.Any(c => c.ConversationID == "c-ann"), "out of the inbox");
         Assert.AreEqual("c-ann", archive.Conversations.Single().ConversationID);
 
-        // A Phone-Side Keep-Archived Move Still Lists In The Archive
+        // A KeepArchived move on the phone side also lists in the archive folder.
         rig.Server.Phone.PushConversationStatus("c-team", ConversationStatus.KeepArchived);
         WaitForEvent<ConversationUpdated>(rig.Events, e => e.Conversation.ConversationID == "c-team" && e.Conversation.Status == ConversationStatus.KeepArchived, "phone-side move");
         archive = await rig.Client.ListConversationsAsync(ListConversationsRequest.Types.Folder.Archive, 25, null, CancellationToken.None).WaitAsync(HangGuard);
@@ -460,8 +454,8 @@ public sealed class FakeGoogleServerTests
     }
 
     /// <summary>
-    /// An archive with the ID only in the update data (the top-level ID unset, as the app and LibGM send it) is applied
-    /// to that conversation.
+    /// An archive with the ID only in the update data is applied to that conversation. The top-level ID is unset,
+    /// as the app and LibGM send it.
     /// </summary>
     [TestMethod]
     public async Task UpdateConversation_IdOnlyInUpdateData_IsApplied()
@@ -480,8 +474,8 @@ public sealed class FakeGoogleServerTests
     }
 
     /// <summary>
-    /// With <see cref="FakePhone.FailConversationUpdates"/>, a block is answered with no success, is recorded, and the
-    /// conversation stays in the inbox.
+    /// With <see cref="FakePhone.FailConversationUpdates"/>, a block gets an answer without success and the phone
+    /// records it. The conversation stays in the inbox.
     /// </summary>
     [TestMethod]
     public async Task UpdateConversation_Fail_ChangesNothing()
@@ -502,7 +496,7 @@ public sealed class FakeGoogleServerTests
         ListConversationsResponse inbox = await rig.Client.ListConversationsAsync(ListConversationsRequest.Types.Folder.Inbox, 25, null, CancellationToken.None).WaitAsync(HangGuard);
         CollectionAssert.AreEquivalent(InboxIds, inbox.Conversations.Select(c => c.ConversationID).ToArray());
 
-        // A Late Push Would Show Up Within This Bounded Wait
+        // A late push would show up within this bounded wait.
         bool pushed = SpinWait.SpinUntil(() =>
         {
             lock (rig.Events)
@@ -514,13 +508,13 @@ public sealed class FakeGoogleServerTests
     }
 
     /// <summary>
-    /// Each successful update leaves the phone's conversation in the status its action or update data names, and the
-    /// conversation comes back with that status. A mute leaves the status as it was and comes back muted.
+    /// Each successful update leaves the conversation of the phone in the status that its action or update data names.
+    /// The conversation comes back with that status. A mute leaves the status as it was and comes back muted.
     /// </summary>
     /// <param name="conversationId">The conversation to update.</param>
-    /// <param name="action">The request's action.</param>
-    /// <param name="data">The request's data: <c>delete</c>, <c>archive</c> or <c>mute</c>.</param>
-    /// <param name="expected">The status the phone ends with.</param>
+    /// <param name="action">The action of the request.</param>
+    /// <param name="data">The data of the request: <c>delete</c>, <c>archive</c> or <c>mute</c>.</param>
+    /// <param name="expected">The status that the phone ends with.</param>
     [TestMethod]
     [DataRow("c-ann", ConversationActionStatus.Delete, "delete", ConversationStatus.Deleted)]
     [DataRow("c-ann", ConversationActionStatus.Block, "delete", ConversationStatus.BlockedFolder)]
@@ -549,7 +543,7 @@ public sealed class FakeGoogleServerTests
 
         UpdateConversationResponse answer = await rig.Client.UpdateConversationAsync(request, CancellationToken.None).WaitAsync(HangGuard);
 
-        // Only The Mute Row Comes Back Muted
+        // Only the mute row comes back muted.
         ConversationMuteStatus muted = data == "mute" ? ConversationMuteStatus.Mute : ConversationMuteStatus.Unmute;
 
         Assert.IsTrue(answer.Success);
@@ -560,7 +554,7 @@ public sealed class FakeGoogleServerTests
     }
 
     /// <summary>
-    /// A pushed alert raises UserAlert with its type.
+    /// A pushed alert raises UserAlert with the type of the alert.
     /// </summary>
     [TestMethod]
     public async Task PushAlert_RaisesUserAlert()
@@ -573,8 +567,8 @@ public sealed class FakeGoogleServerTests
     }
 
     /// <summary>
-    /// Pushed typing raises TypingChanged with the conversation, number and start or stop; the app's own typing
-    /// update reaches the phone.
+    /// Pushed typing raises TypingChanged with the conversation, the number and the start or stop.
+    /// The own typing update of the app reaches the phone.
     /// </summary>
     [TestMethod]
     public async Task PushTyping_RaisesTypingChanged()
@@ -590,7 +584,6 @@ public sealed class FakeGoogleServerTests
         Assert.AreEqual("+15550000001", started.Data.User.Number);
         Assert.AreEqual("c-ann", stopped.Data.ConversationID);
 
-        // The App's Own Typing
         await rig.Client.SetTypingAsync("c-ann", new SIMPayload { SIMNumber = 1 }, CancellationToken.None).WaitAsync(HangGuard);
         WaitUntil(() => rig.Server.Phone.Typing.Count == 1, "typing update received");
         Assert.AreEqual("c-ann", rig.Server.Phone.Typing[0].Data.ConversationID);
@@ -598,8 +591,8 @@ public sealed class FakeGoogleServerTests
     }
 
     /// <summary>
-    /// The seeded chats carry their types and Ann's tombstone; a pushed reply quotes its message, and a pushed status
-    /// arrives on the same message.
+    /// The seeded chats carry their types and the tombstone of Ann. A pushed reply quotes its message,
+    /// and a pushed status arrives on the same message.
     /// </summary>
     [TestMethod]
     public async Task Chats_TypesTombstoneReplyAndStatus()
@@ -609,7 +602,6 @@ public sealed class FakeGoogleServerTests
         ListMessagesResponse ann        = await rig.Client.FetchMessagesAsync("c-ann", 10, null, CancellationToken.None).WaitAsync(HangGuard);
         ListMessagesResponse team       = await rig.Client.FetchMessagesAsync("c-team", 10, null, CancellationToken.None).WaitAsync(HangGuard);
 
-        // Types And The Tombstone
         Assert.AreEqual(ConversationType.Rcs, inbox.Conversations.Single(c => c.ConversationID == "c-ann").Type);
         Assert.AreEqual(ConversationType.Sms, inbox.Conversations.Single(c => c.ConversationID == "c-team").Type);
         Assert.IsTrue(inbox.Conversations.SelectMany(c => c.Participants).All(p => p.ID.Number.Length > 0), "every participant has a number");
@@ -617,7 +609,6 @@ public sealed class FakeGoogleServerTests
         Assert.IsTrue(ann.Messages.SkipLast(1).All(m => m.Type == 4));
         Assert.IsTrue(team.Messages.All(m => m.Type == 2));
 
-        // A Reply, Then A New Status On It
         string quoted = ann.Messages[0].MessageID;
         Message reply = rig.Server.Phone.PushIncoming("c-ann", "Reply", replyToId: quoted);
         Assert.AreEqual(quoted, WaitForEvent<MessageReceived>(rig.Events, e => e.Message.MessageID == reply.MessageID, "reply").Message.ReplyMessage.MessageID);
@@ -626,7 +617,7 @@ public sealed class FakeGoogleServerTests
     }
 
     /// <summary>
-    /// A pushed incoming message arrives live (not old), preceded by the conversation with the new snippet.
+    /// A pushed incoming message arrives live, not old. The conversation with the new snippet arrives first.
     /// </summary>
     [TestMethod]
     public async Task PushIncoming_RaisesLiveMessage()
@@ -642,8 +633,8 @@ public sealed class FakeGoogleServerTests
     }
 
     /// <summary>
-    /// An old message pushed while connected arrives with IsOld after the long poll is ended and reopened, and a second
-    /// connect (a second GET_UPDATES) gets the settings event again.
+    /// An old message pushed while connected arrives with IsOld after the long poll ends and reopens.
+    /// A second connect, which sends a second GET_UPDATES, gets the settings event again.
     /// </summary>
     [TestMethod]
     public async Task Reconnect_DeliversQueuedCatchUpAsOld_AndResendsSettings()
@@ -661,7 +652,7 @@ public sealed class FakeGoogleServerTests
         MessageReceived message = WaitForEvent<MessageReceived>(rig.Events, e => e.Message.MessageInfo[0].MessageContent.Content == "Queued while connected", "catch-up message");
         Assert.IsTrue(message.IsOld);
 
-        // A Second Connect (A Restarted App) Asks For Updates Again And Gets The Settings Again
+        // A restarted app connects a second time, asks for updates again and gets the settings again.
         lock (rig.Events)
         {
             rig.Events.Clear();
@@ -672,8 +663,8 @@ public sealed class FakeGoogleServerTests
     }
 
     /// <summary>
-    /// A message pushed with <c>old</c> before the client connects comes in the startup catch-up batch, so the client
-    /// counts it as old through the startup ack.
+    /// A message pushed with <c>old</c> before the client connects comes in the startup catch-up batch.
+    /// The client counts it as old through the startup ack.
     /// </summary>
     [TestMethod]
     public async Task PushIncomingOld_RaisesIsOld()
@@ -690,7 +681,7 @@ public sealed class FakeGoogleServerTests
         MessageReceived message = WaitForEvent<MessageReceived>(rig.Events, e => e.Message.MessageInfo[0].MessageContent.Content == "While you were away", "catch-up message");
         Assert.IsTrue(message.IsOld);
 
-        // Live Ones After The Catch-Up Are Not Old
+        // Live messages after the catch-up are not old.
         rig.Server.Phone.PushIncoming("c-ann", "Now");
         Assert.IsFalse(WaitForEvent<MessageReceived>(rig.Events, e => e.Message.MessageInfo[0].MessageContent.Content == "Now", "live message").IsOld);
     }
@@ -700,8 +691,8 @@ public sealed class FakeGoogleServerTests
     // =========================================================================
 
     /// <summary>
-    /// A file uploaded through the fake server downloads back as the same bytes, and the seeded photo chat's photo
-    /// downloads as the blue PNG.
+    /// A file uploaded through the fake server downloads back as the same bytes.
+    /// The photo of the seeded photo chat downloads as the blue PNG.
     /// </summary>
     [TestMethod]
     public async Task Media_UploadThenDownload_RoundTrips()
@@ -710,12 +701,10 @@ public sealed class FakeGoogleServerTests
         byte[] plain = new byte[70000];
         Random.Shared.NextBytes(plain);
 
-        // Upload, Then Download
         MediaContent uploaded = await rig.Client.UploadMediaAsync(plain, "file.bin", "application/octet-stream", null, CancellationToken.None).WaitAsync(HangGuard);
         byte[] downloaded     = await rig.Client.DownloadMediaAsync(uploaded.MediaID, uploaded.DecryptionKey.Memory, CancellationToken.None).WaitAsync(HangGuard);
         CollectionAssert.AreEqual(plain, downloaded);
 
-        // The Seeded Photo
         rig.Server.Phone.Chats.AddPhotoChat();
         ListMessagesResponse page = await rig.Client.FetchMessagesAsync("c-media", 10, null, CancellationToken.None).WaitAsync(HangGuard);
         MediaContent photo        = page.Messages.SelectMany(m => m.MessageInfo).Single(p => p.MediaContent is not null).MediaContent;
@@ -723,13 +712,12 @@ public sealed class FakeGoogleServerTests
         CollectionAssert.AreEqual(Convert.FromBase64String(FakeChats.BluePng), png);
         Assert.AreEqual("image/png", photo.MimeType);
 
-        // An Unknown ID Is Refused
         await Assert.ThrowsExactlyAsync<GmRequestException>(() => rig.Client.DownloadMediaAsync("media-none", uploaded.DecryptionKey.Memory, CancellationToken.None).WaitAsync(HangGuard));
     }
 
     /// <summary>
-    /// The fake refuses with 400 a finalize to a session it never started, a finalize at another offset, and any upload
-    /// request that carries a cookie or the api key.
+    /// The fake server refuses with 400 a finalize to a session that never started, a finalize at another offset,
+    /// and any upload request that carries a cookie or the API key.
     /// </summary>
     [TestMethod]
     public async Task Media_UploadChecks_RefuseBadRequests()
@@ -739,15 +727,13 @@ public sealed class FakeGoogleServerTests
         using var http         = new HttpClient(handler);
         Uri upload             = new(server.BaseUrl, "/upload");
 
-        // Unknown Session
         Assert.AreEqual(HttpStatusCode.BadRequest, await SendAsync(new Uri(server.BaseUrl, "/upload/session/never"), "upload, finalize", ("x-goog-upload-offset", "0")));
 
-        // Known Session, Wrong Offset (The Session Is Spent Either Way)
+        // The finalize spends the session, also with the wrong offset.
         using HttpResponseMessage started = await SendRawAsync(upload, "start");
         Uri session = new(started.Headers.GetValues("x-goog-upload-url").Single());
         Assert.AreEqual(HttpStatusCode.BadRequest, await SendAsync(session, "upload, finalize", ("x-goog-upload-offset", "5")));
 
-        // Credentials On Any Upload Request
         Assert.AreEqual(HttpStatusCode.BadRequest, await SendAsync(upload, "start", ("cookie", "SID=x")));
         Assert.AreEqual(HttpStatusCode.BadRequest, await SendAsync(upload, "start", ("x-goog-api-key", "k")));
 
@@ -771,7 +757,7 @@ public sealed class FakeGoogleServerTests
     }
 
     /// <summary>
-    /// A thumbnail-only photo comes back with its full media ID after a full-size request, and the full file downloads.
+    /// A thumbnail-only photo comes back with its full media ID after a full-size request. The full file downloads.
     /// </summary>
     [TestMethod]
     public async Task GetFullSizeImage_RepushesWithFullId()
@@ -779,7 +765,6 @@ public sealed class FakeGoogleServerTests
         await using Rig rig = await PairedAsync();
         byte[] bytes = Convert.FromBase64String(FakeChats.BluePng);
 
-        // Thumbnail Only
         Message pushed = rig.Server.Phone.PushIncomingMedia("c-ann", "image/png", bytes, "pic.png", withThumbnail: true);
         MessageReceived first = WaitForEvent<MessageReceived>(rig.Events, e => e.Message.MessageID == pushed.MessageID, "thumbnail-only photo");
         MediaContent thumb    = first.Message.MessageInfo[0].MediaContent;
@@ -787,7 +772,6 @@ public sealed class FakeGoogleServerTests
         Assert.IsNotEmpty(thumb.ThumbnailMediaID);
         CollectionAssert.AreEqual(bytes, await rig.Client.DownloadMediaAsync(thumb.ThumbnailMediaID, thumb.ThumbnailDecryptionKey.Memory, CancellationToken.None).WaitAsync(HangGuard));
 
-        // Ask For The Full Size
         await rig.Client.GetFullSizeImageAsync(pushed.MessageID, pushed.MessageID, CancellationToken.None).WaitAsync(HangGuard);
         MessageReceived full = WaitForEvent<MessageReceived>(rig.Events, e => e.Message.MessageID == pushed.MessageID && e.Message.MessageInfo[0].MediaContent.MediaID.Length > 0, "photo with its full ID");
         MediaContent content = full.Message.MessageInfo[0].MediaContent;

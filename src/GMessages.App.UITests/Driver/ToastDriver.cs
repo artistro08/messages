@@ -9,10 +9,10 @@ namespace GMessages.App.UITests.Driver;
 /// </summary>
 /// <remarks>
 /// Windows shows each toast as a top-level window named <c>New notification</c>, owned by the shell, on the desktop
-/// root. Toasts of other apps may be on screen too, so a toast only counts when its texts include the expected title.
-/// A failed wait lists every toast's texts (<see cref="DescribeAll"/>), so a missing toast can be told from a wrong one.
-/// A new toast's content slides in, and Windows drops a reply or click made during the slide, so <see cref="Reply"/>
-/// and <see cref="ClickBody"/> first wait for the part they use to stand still.
+/// root. Toasts of other apps can be on screen too, so a toast counts only when its texts include the expected title.
+/// A failed wait lists the texts of every toast (<see cref="DescribeAll"/>). This shows a missing toast or a wrong one.
+/// The content of a new toast slides in, and Windows drops a reply or click made during the slide.
+/// <see cref="Reply"/> and <see cref="ClickBody"/> first wait for the part they use to stop moving.
 /// </remarks>
 public sealed class ToastDriver
 {
@@ -31,9 +31,9 @@ public sealed class ToastDriver
     /// Waits for a toast whose texts include every one of <paramref name="texts"/>.
     /// </summary>
     /// <param name="timeout">How long to look.</param>
-    /// <param name="texts">The texts it must show, such as its title and body.</param>
+    /// <param name="texts">The texts the toast must show, such as its title and body.</param>
     /// <returns>The toast window.</returns>
-    /// <exception cref="AssertFailedException">No such toast showed.</exception>
+    /// <exception cref="AssertFailedException">No such toast shows.</exception>
     public AutomationElement WaitFor(TimeSpan timeout, params string[] texts)
     {
         AutomationElement? toast = null;
@@ -44,14 +44,14 @@ public sealed class ToastDriver
     /// <summary>
     /// Finds a toast whose texts include every one of <paramref name="texts"/>, without waiting.
     /// </summary>
-    /// <param name="texts">The texts it must show.</param>
-    /// <returns>The toast window, or null.</returns>
+    /// <param name="texts">The texts the toast must show.</param>
+    /// <returns>The toast window, or null when no toast matches.</returns>
     public AutomationElement? TryFind(params string[] texts) => Toasts().FirstOrDefault(t => texts.All(Texts(t).Contains));
 
     /// <summary>
-    /// Lists every toast on screen, one per line, as its texts in order.
+    /// Lists every toast on screen, one per line, as the texts of the toast in order.
     /// </summary>
-    /// <returns>The lines, or <c>(none)</c>.</returns>
+    /// <returns>The lines, or <c>(none)</c> when no toast shows.</returns>
     public string DescribeAll()
     {
         string[] lines = [.. Toasts().Select(t => "[" + string.Join(" | ", Texts(t)) + "]")];
@@ -59,11 +59,11 @@ public sealed class ToastDriver
     }
 
     /// <summary>
-    /// Says that no toast showing <paramref name="text"/> appears for the whole of <paramref name="period"/>.
+    /// Checks that no toast with <paramref name="text"/> appears during the whole of <paramref name="period"/>.
     /// </summary>
     /// <param name="text">A text the toast would show, such as its title.</param>
     /// <param name="period">How long to watch.</param>
-    /// <exception cref="AssertFailedException">One showed.</exception>
+    /// <exception cref="AssertFailedException">A matching toast shows.</exception>
     public void AssertNone(string text, TimeSpan period)
     {
         DateTime until = DateTime.UtcNow + period;
@@ -79,7 +79,7 @@ public sealed class ToastDriver
     }
 
     /// <summary>
-    /// Reads a toast's texts, in order.
+    /// Reads the texts of a toast, in order.
     /// </summary>
     /// <param name="toast">The toast window.</param>
     /// <returns>The texts.</returns>
@@ -101,7 +101,7 @@ public sealed class ToastDriver
     }
 
     /// <summary>
-    /// Types into a toast's reply box and presses its send button.
+    /// Types into the reply box of a toast and presses the send button.
     /// </summary>
     /// <param name="toast">The toast window.</param>
     /// <param name="text">The reply.</param>
@@ -114,21 +114,21 @@ public sealed class ToastDriver
         WaitUntilStill(box);
         box.Patterns.Value.Pattern.SetValue(text);
 
-        // Windows' Quick Reply Button Beside The Box Has No Name In UI Automation, Only Its Own ID
+        // The quick reply button next to the box has no name in UI Automation. Only its AutomationId identifies it.
         AutomationElement send = AppDriver.Search(toast, e => e.ControlType == ControlType.Button && e.IsEnabled && e.AutomationId == SendButtonId)
             ?? throw new AssertFailedException($"The toast has no send button ('{SendButtonId}'). {Describe(toast)}");
         send.Patterns.Invoke.Pattern.Invoke();
     }
 
     /// <summary>
-    /// Clicks a toast's body (not one of its buttons).
+    /// Clicks the body of a toast, not one of its buttons.
     /// </summary>
     /// <param name="toast">The toast window.</param>
     public static void ClickBody(AutomationElement toast)
     {
         ArgumentNullException.ThrowIfNull(toast);
 
-        // The Title, As A Person Would: The Toast's Own Center Can Land On The Reply Box
+        // Click the title. The center of the toast can land on the reply box.
         AutomationElement title = AppDriver.Search(toast, e => e.ControlType == ControlType.Text && e.AutomationId == "Title")
             ?? throw new AssertFailedException($"The toast has no title. {Describe(toast)}");
         WaitUntilStill(title);
@@ -136,11 +136,11 @@ public sealed class ToastDriver
     }
 
     /// <summary>
-    /// Presses a toast's Dismiss button, as a person would to clear its banner.
+    /// Presses the Dismiss button of a toast to clear its banner.
     /// </summary>
     /// <remarks>
-    /// Windows shows one banner at a time and queues the next behind it. On an unattended machine a banner never leaves
-    /// by itself (see <c>ManualNotificationTests</c>), so a test that waits for a second toast dismisses the first.
+    /// Windows shows one banner at a time and queues the next banner behind it. On an unattended machine a banner never
+    /// leaves by itself (see <c>ManualNotificationTests</c>). A test that waits for a second toast dismisses the first.
     /// </remarks>
     /// <param name="toast">The toast window.</param>
     public static void Dismiss(AutomationElement toast)
@@ -154,7 +154,7 @@ public sealed class ToastDriver
     }
 
     /// <summary>
-    /// Lists a toast's elements (type, AutomationId, name) for a failure message.
+    /// Lists the elements of a toast (type, AutomationId, name) for a failure message.
     /// </summary>
     /// <param name="toast">The toast window.</param>
     /// <returns>The description.</returns>
@@ -171,13 +171,13 @@ public sealed class ToastDriver
         return "Toast elements: " + string.Join(", ", parts);
     }
 
-    // The Send Button Is The Reply Box's Button; Its Name Comes From Windows
+    // AutomationId of the send button that Windows puts next to the reply box.
     private const string SendButtonId = "BuddyButton";
 
-    // How Long A Toast's Part Must Keep Its Bounds Before It Counts As Done Sliding In (The Slide Takes About 100 ms)
+    // A part must keep its bounds this long to count as done sliding in. The slide takes about 100 ms.
     private static readonly TimeSpan StillTime = TimeSpan.FromMilliseconds(500);
 
-    // Waits Until The Toast's Entrance Slide Is Over: Its Part Kept The Same Bounds For StillTime
+    // The entrance slide is over when the part keeps the same bounds for StillTime.
     private static void WaitUntilStill(AutomationElement part)
     {
         System.Drawing.Rectangle bounds = part.BoundingRectangle;
@@ -195,7 +195,6 @@ public sealed class ToastDriver
         }, AppDriver.DefaultTimeout, () => $"The toast never stopped moving; last at {bounds}.");
     }
 
-    // Every Toast Window On The Desktop Root
     private AutomationElement[] Toasts()
     {
         try

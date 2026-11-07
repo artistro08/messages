@@ -1,7 +1,7 @@
 namespace GMessages.App.UITests.Driver;
 
 /// <summary>
-/// Polls a condition until it holds or a timeout passes. The UI tests' only way to wait: no fixed sleeps.
+/// Polls a condition until it holds or a timeout passes. The UI tests wait only this way, with no fixed sleeps.
 /// </summary>
 public static class Wait
 {
@@ -10,9 +10,9 @@ public static class Wait
     /// <summary>
     /// Polls <paramref name="condition"/> every 200 ms until it returns true.
     /// </summary>
-    /// <param name="condition">The condition; it is checked once more at the deadline.</param>
+    /// <param name="condition">The condition. The method checks it once more at the deadline.</param>
     /// <param name="timeout">How long to poll.</param>
-    /// <param name="failure">Builds the failure message, so it can name what was last seen.</param>
+    /// <param name="failure">Builds the failure message, so the message can name the last state seen.</param>
     /// <exception cref="AssertFailedException">The condition never held.</exception>
     public static void Until(Func<bool> condition, TimeSpan timeout, Func<string> failure)
     {
