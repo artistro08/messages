@@ -89,7 +89,7 @@ public sealed class LinkPreviewerTests
     public void FindLinks_None(string text) => Assert.AreEqual(string.Empty, Links(text));
 
     /// <summary>
-    /// The previewer fetches only HTTPS to a named public host. Review Focus 5 requires this rule.
+    /// The previewer fetches only HTTPS to a named public host. It must never fetch a local or private host.
     /// </summary>
     [TestMethod]
     [DataRow("http://example.com/")]
@@ -118,7 +118,8 @@ public sealed class LinkPreviewerTests
     }
 
     /// <summary>
-    /// The previewer refuses each of these addresses, one for each refused range. Review Focus 5 requires this rule.
+    /// The previewer refuses each of these addresses, one for each refused range.
+    /// It must never fetch a local or private host.
     /// </summary>
     [TestMethod]
     [DataRow("127.0.0.1")]
@@ -268,7 +269,7 @@ public sealed class LinkPreviewerTests
             : HtmlResponse(Html.Replace("</head>", "<meta property=\"og:image\" content=\"https://cdn.example.com/c.png\"></head>", StringComparison.Ordinal)),
     };
 
-    // The alpha value makes the PNG opaque (255) or half see-through (128).
+    // An alpha value of 255 makes the PNG opaque. An alpha value of 128 makes it half see-through.
     private static async Task<byte[]> MakePngAsync(uint width, uint height, byte alpha)
     {
         byte[] pixels = new byte[width * height * 4];

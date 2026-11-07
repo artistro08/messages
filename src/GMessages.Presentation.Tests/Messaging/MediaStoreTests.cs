@@ -123,7 +123,7 @@ public sealed class MediaStoreTests
 
     /// <summary>
     /// A download writes the file to the folder under its own name. When the name is taken, the names are
-    /// "name (1)" and "name (2)". Each file has the bytes and the mark of the web.
+    /// "name (1)" and then "name (2)". Each file has the bytes and the mark of the web.
     /// </summary>
     [TestMethod]
     public async Task SaveToFolder_UniqueNamesAndMark()

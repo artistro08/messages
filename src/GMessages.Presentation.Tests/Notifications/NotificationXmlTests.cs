@@ -117,8 +117,8 @@ public sealed class NotificationXmlTests
     [TestMethod]
     public void Build_All_MatchesThePlan3Shape()
     {
-        // The Plan 3 toast, character for character: the quick reply, the snooze of the app (R25) and the dismiss
-        // of Windows.
+        // The original toast design, character for character. It needs the quick reply with a text input and a send
+        // button, then the snooze button of the app, then the dismiss button of Windows.
         const string Expected = "<toast launch=\"action=open&amp;conversation=c1\"><visual><binding template=\"ToastGeneric\"><text>Ann</text><text>hi</text></binding></visual>"
             + "<actions><input id=\"reply\" type=\"text\" placeHolderContent=\"Reply\" />"
             + "<action content=\"\" hint-inputId=\"reply\" activationType=\"foreground\" arguments=\"action=reply&amp;conversation=c1&amp;message=m1\" imageUri=\"file:///send.png\" hint-toolTip=\"Send\" />"

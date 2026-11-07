@@ -38,8 +38,8 @@ public sealed class ConversationInfoTests
     }
 
     /// <summary>
-    /// A conversation with field 7 set to 1 (varint) is muted. A conversation without field 7 is not muted.
-    /// The Plan 5 probe showed this phone behavior.
+    /// A muted conversation sends field 7 as varint 1, as the Plan 5 probe saw. A conversation without field 7 is not
+    /// muted.
     /// </summary>
     [TestMethod]
     public void From_MuteField_SetsIsMuted()

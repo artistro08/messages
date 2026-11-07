@@ -40,7 +40,9 @@ internal sealed class FakeMessagingClient : IMessagingClient
     /// <summary>The cursor of each list call, in call order. A null cursor asks for the newest page.</summary>
     public List<Cursor?> ListCursors { get; } = [];
 
-    /// <summary>When set, the next list call picks its page at once and returns the page after this completes.</summary>
+    /// <summary>
+    /// When set, the next list call picks its page at once and returns the page after this completes.
+    /// </summary>
     public TaskCompletionSource? ListGate { get; set; }
 
     /// <summary>When set, a list call fails with this exception.</summary>
@@ -139,12 +141,16 @@ internal sealed class FakeMessagingClient : IMessagingClient
     /// </summary>
     public Queue<ListMessagesResponse> MessagePages { get; } = new();
 
-    /// <summary>When set, the next message fetch picks its page at once and returns the page after this completes.</summary>
+    /// <summary>
+    /// When set, the next message fetch picks its page at once and returns the page after this completes.
+    /// </summary>
     public TaskCompletionSource? FetchGate { get; set; }
 
     public int FetchCount { get; private set; }
 
-    /// <summary>When set, a message fetch with a cursor, which asks for older pages, fails with this exception.</summary>
+    /// <summary>
+    /// When set, a message fetch with a cursor, which asks for older pages, fails with this exception.
+    /// </summary>
     public Exception? OlderFetchThrows { get; set; }
 
     /// <summary>

@@ -39,8 +39,8 @@ public sealed class VoiceWaveTests
 
     /// <summary>
     /// The level of a frame of 32-bit float samples is its loudest sample in decibels.
-    /// The scale goes from -50 dB (0) to full scale (1).
-    /// A 440 Hz sine at 0.5 (-6 dB) gives 0.88. A speech-like 0.1 (-20 dB) gives 0.6.
+    /// The scale goes from -50 dB, which is 0, to full scale, which is 1.
+    /// A 440 Hz sine at 0.5, which is -6 dB, gives 0.88. A speech-like 0.1, which is -20 dB, gives 0.6.
     /// A level of -50 dB or less gives 0, and clipping gives 1.
     /// Silence, no samples and a partial sample give 0.
     /// </summary>
@@ -65,7 +65,7 @@ public sealed class VoiceWaveTests
 
     /// <summary>
     /// A WAV file gives its bars, and its length from the sample rate.
-    /// An unfinished file (data size 0) is read to the end.
+    /// An unfinished file has a data size of 0, and the reader reads it to the end.
     /// </summary>
     [TestMethod]
     public void FromWav_BarsAndLength()

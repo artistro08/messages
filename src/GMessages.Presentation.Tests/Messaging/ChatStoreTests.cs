@@ -241,7 +241,7 @@ public sealed class ChatStoreTests
     }
 
     /// <summary>
-    /// Someone texts me in such a chat, and the message arrives before the update of the phone. The chat shows at once
+    /// Someone texts me in this one-on-one chat that has only a created line, and the message arrives before the update of the phone. The chat shows at once
     /// as unread. Its snippet is that message, not the created line.
     /// </summary>
     [TestMethod]
@@ -653,8 +653,8 @@ public sealed class ChatStoreTests
     }
 
     /// <summary>
-    /// Reset, on sign-out or unpair, clears the decrypted media in memory and in the temp folder. Review Focus 3
-    /// requires this.
+    /// Reset, on sign-out or unpair, clears the decrypted media in memory and in the temp folder.
+    /// The next account must never see the decrypted media of the old account.
     /// </summary>
     [TestMethod]
     public async Task Reset_Clears()
@@ -1253,9 +1253,9 @@ public sealed class ChatStoreTests
     }
 
     /// <summary>
-    /// Each action builds the LibGM request. Archive and mute fill only <c>UpdateData</c> (conversation_builder.go).
-    /// Delete, block and unblock fill <c>DeleteData</c> with the number of the other person (methods.go,
-    /// handlematrix.go). Only a block has <c>Action5</c>.
+    /// Each action builds the LibGM request. Archive and mute fill only <c>UpdateData</c>, as conversation_builder.go
+    /// does. Delete, block and unblock fill <c>DeleteData</c> with the number of the other person, as methods.go and
+    /// handlematrix.go do. Only a block has <c>Action5</c>.
     /// </summary>
     [TestMethod]
     [DataRow(ConversationAction.Archive, UpdateConversationRequest.DataOneofCase.UpdateData, ConversationActionStatus.UnknownActionStatus, false, "Status=Archived")]
@@ -1514,7 +1514,7 @@ public sealed class ChatStoreTests
 
     /// <summary>
     /// A message in a chat muted here does not notify. After the user unmutes the chat here, the next message
-    /// notifies. Review Focus 3 requires this.
+    /// notifies. A muted chat must stay silent.
     /// </summary>
     [TestMethod]
     public async Task Unmuted_NotifiesAgain()
@@ -1858,8 +1858,8 @@ public sealed class ChatStoreTests
     }
 
     /// <summary>
-    /// The encryption flag of the conversation (field 39) decides the lock. Without the flag, the newest encryption
-    /// line decides.
+    /// The encryption flag of the conversation, which is field 39, decides the lock. Without the flag, the newest
+    /// encryption line decides.
     /// </summary>
     [TestMethod]
     public async Task Store_IsEncrypted_TheConversationsOwnFlagWins()
@@ -1966,7 +1966,7 @@ public sealed class ChatStoreTests
 
     private static UserAlert Alert(AlertType type) => new(new UserAlertEvent { AlertType = type });
 
-    /// <summary>Low sets the flag and raises once (a repeat is silent); restored clears it and raises.</summary>
+    /// <summary>Low sets the flag and raises once, and a repeat is silent. Restored clears the flag and raises.</summary>
     [TestMethod]
     public async Task BatteryLow_SetsAndRaisesOnce_RestoredClears()
     {
