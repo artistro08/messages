@@ -1,4 +1,5 @@
 using GMessages.Presentation.Messaging;
+using Windows.Foundation;
 using Windows.UI.ViewManagement;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Automation;
@@ -12,10 +13,11 @@ using WinRT;
 namespace GMessages.App.Views.Controls;
 
 /// <summary>
-/// Shows placeholder rows at the end of the conversation list while the next page loads.
+/// Shows placeholder rows at the end of the conversation list while older pages are left.
 /// </summary>
 /// <remarks>
-/// The band sweeps only while the rows show and Windows animation effects are on. Otherwise the rows stay still.
+/// The band sweeps only while the rows are on screen, Windows animation effects are on and high contrast is off. The
+/// sweep runs on the UI thread, so it stops off screen. Otherwise the rows stay still.
 /// </remarks>
 public sealed partial class ListLoadingRows : UserControl
 {
@@ -28,9 +30,13 @@ public sealed partial class ListLoadingRows : UserControl
     // The band starts left of the shapes and ends right of the widest bar.
     private static readonly double SweepEnd = BarWidths[^1] + SweepBand;
 
-    private static readonly UISettings Ui = new();
+    private static readonly UISettings Ui                  = new();
+    private static readonly AccessibilitySettings Contrast = new();
 
+    // The band moves for 1200 ms of each 1500 ms, so it rests 300 ms between sweeps.
     private readonly Storyboard _sweep = new() { Duration = TimeSpan.FromMilliseconds(1500), RepeatBehavior = RepeatBehavior.Forever };
+
+    private bool _inView;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ListLoadingRows"/> class.
@@ -52,27 +58,46 @@ public sealed partial class ListLoadingRows : UserControl
         Storyboard.SetTargetProperty(move, nameof(TranslateTransform.X));
         _sweep.Children.Add(move);
 
-        _ = RegisterPropertyChangedCallback(VisibilityProperty, (_, _) => Sweep());
-        Loaded   += (_, _) => Sweep();
-        Unloaded += (_, _) => _sweep.Stop();
+        _ = RegisterPropertyChangedCallback(VisibilityProperty, (_, _) => Show());
+        Loaded                   += (_, _) => Show();
+        Unloaded                 += (_, _) => _sweep.Stop();
+        EffectiveViewportChanged += OnViewportChanged;
     }
 
     /// <inheritdoc />
     protected override AutomationPeer OnCreateAutomationPeer() => new FrameworkElementAutomationPeer(this);
 
-    // Each show picks new bar widths, then sweeps the band.
-    private void Sweep()
+    // Each show picks new bar widths.
+    private void Show()
     {
-        if (Visibility != Visibility.Visible || !IsLoaded)
+        if (Visibility == Visibility.Visible)
         {
-            _sweep.Stop();
-            return;
+            PickWidths();
         }
 
-        PickWidths();
-        if (Ui.AnimationsEnabled)
+        Sweep();
+    }
+
+    private void OnViewportChanged(FrameworkElement sender, EffectiveViewportChangedEventArgs args)
+    {
+        Rect seen   = args.EffectiveViewport;
+        bool inView = seen.Height > 0 && seen.Bottom > 0 && seen.Top < ActualHeight;
+        if (inView != _inView)
+        {
+            _inView = inView;
+            Sweep();
+        }
+    }
+
+    private void Sweep()
+    {
+        if (IsLoaded && Visibility == Visibility.Visible && _inView && Ui.AnimationsEnabled && !Contrast.HighContrast)
         {
             _sweep.Begin();
+        }
+        else
+        {
+            _sweep.Stop();
         }
     }
 

@@ -1,4 +1,4 @@
-<!-- Placeholder rows show at the end of the conversation list while the next page loads. Each has the shape of a row:
+<!-- Placeholder rows show at the end of the conversation list while older pages are left. Each has the shape of a row:
      a 40 px circle for the avatar, a bar for the name and a bar for the snippet. A light band sweeps across them. -->
 <UserControl
     x:Class="GMessages.App.Views.Controls.ListLoadingRows"

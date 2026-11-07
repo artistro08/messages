@@ -320,14 +320,18 @@ public sealed class FakePhone
             case ActionType.ListConversations when RequestCrypto is not null:
                 var list = Open(data, ListConversationsRequest.Parser);
                 var chats = new ListConversationsResponse { Conversations = { Chats.List(list.Folder, list.Count, list.Cursor) } };
-                if (list.Cursor is null)
+                if (list.Cursor is not null)
+                {
+                    Interlocked.Increment(ref _conversationPagesAsked);
+                }
+
+                if (list.Cursor is null || ConversationPagesDelay <= TimeSpan.Zero)
                 {
                     Reply(data.RequestID, data.Action, chats, encrypt: true);
                     break;
                 }
 
                 // A later page waits off the request thread, so the phone answers other requests in the meantime.
-                Interlocked.Increment(ref _conversationPagesAsked);
                 string listId = data.RequestID;
                 _ = Task.Delay(ConversationPagesDelay).ContinueWith(_ => Reply(listId, ActionType.ListConversations, chats, encrypt: true), TaskScheduler.Default);
                 break;
