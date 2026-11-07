@@ -6,11 +6,11 @@ using Microsoft.Extensions.Logging;
 namespace GMessages.Presentation.Settings;
 
 /// <summary>
-/// Typed access to every stored app setting. Ported from Magic Buds.
+/// Gives typed access to every stored app setting. Ported from Magic Buds.
 /// </summary>
 /// <remarks>
-/// "Start with Windows" is not stored here: the OS startup service owns it. Raises <see cref="PropertyChanged"/>
-/// when a value actually changes.
+/// The class does not store "Start with Windows", because the startup service of Windows owns that switch. The class
+/// raises <see cref="PropertyChanged"/> only when a value changes.
 /// </remarks>
 public sealed class AppSettings : INotifyPropertyChanged
 {
@@ -29,7 +29,6 @@ public sealed class AppSettings : INotifyPropertyChanged
     private const string RunInBackgroundKey          = "RunInBackground";
     private const string CopyCodesKey                = "CopyCodes";
 
-    // Snooze Lengths, In Minutes (The Choices Settings Offers), And The Default
     private const int DefaultSnoozeMinutes = 15;
 
     private readonly ISettingsStore _store;
@@ -37,9 +36,12 @@ public sealed class AppSettings : INotifyPropertyChanged
     /// <summary>
     /// Wraps a store.
     /// </summary>
-    /// <param name="store">Where values are kept.</param>
+    /// <param name="store">The store of the values.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="store"/> is null.</exception>
     public AppSettings(ISettingsStore store)
     {
+        ArgumentNullException.ThrowIfNull(store);
+
         _store = store;
     }
 
@@ -47,7 +49,8 @@ public sealed class AppSettings : INotifyPropertyChanged
     public event PropertyChangedEventHandler? PropertyChanged;
 
     /// <summary>
-    /// App theme. Defaults to <see cref="AppTheme.System"/>; an unknown saved value also gives System.
+    /// Gets or sets the app theme. The default is <see cref="AppTheme.System"/>, and an unknown saved value also gives
+    /// System.
     /// </summary>
     public AppTheme Theme
     {
@@ -56,7 +59,7 @@ public sealed class AppSettings : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Whether new messages raise Windows notifications. Defaults to true.
+    /// Gets or sets whether new messages raise Windows notifications. The default is true.
     /// </summary>
     public bool NotificationsEnabled
     {
@@ -65,7 +68,7 @@ public sealed class AppSettings : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Whether a notification still shows for the chat that is open on screen. Defaults to false.
+    /// Gets or sets whether a notification also shows for the chat on screen. The default is false.
     /// </summary>
     public bool NotifyForViewedChat
     {
@@ -74,8 +77,8 @@ public sealed class AppSettings : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Whether a link in a received message gets a preview card, which means this PC fetches the page the sender chose.
-    /// Defaults to true; links in the user's own messages always get one.
+    /// Gets or sets whether a link in a received message gets a preview card. For the card, this PC fetches the page
+    /// that the sender chose. The default is true. A link in a message from the user always gets a card.
     /// </summary>
     public bool ShowReceivedLinkPreviews
     {
@@ -84,8 +87,8 @@ public sealed class AppSettings : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Whether the inbox shows pinned conversations as a grid of large pictures above the list, like iMessage, instead
-    /// of as rows at its top. Defaults to false.
+    /// Gets or sets whether the inbox shows pinned conversations as a grid of large pictures above the list, as
+    /// iMessage does. Otherwise the pinned conversations are rows at the top of the list. The default is false.
     /// </summary>
     public bool ShowPinnedGrid
     {
@@ -94,8 +97,9 @@ public sealed class AppSettings : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Whether the app shows its icon in the system tray. Defaults to true; off, it opens from Start and quits from the
-    /// account menu. Separate from <see cref="RunInBackground"/>.
+    /// Gets or sets whether the app shows its icon in the system tray. The default is true. With the icon off, the user
+    /// opens the app from Start and quits the app from the account menu. This setting is separate from
+    /// <see cref="RunInBackground"/>.
     /// </summary>
     public bool ShowTrayIcon
     {
@@ -104,8 +108,9 @@ public sealed class AppSettings : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Whether the app keeps running after its window closes, so new messages still notify. Defaults to true; off,
-    /// closing the window quits, and starting with Windows opens the window. Separate from <see cref="ShowTrayIcon"/>.
+    /// Gets or sets whether the app continues to run after its window closes, so new messages still notify. The
+    /// default is true. With the setting off, a close of the window quits the app. A start with Windows then opens the
+    /// window. This setting is separate from <see cref="ShowTrayIcon"/>.
     /// </summary>
     public bool RunInBackground
     {
@@ -114,8 +119,9 @@ public sealed class AppSettings : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Whether a one-time passcode in a new received message is copied to the clipboard (see
-    /// <see cref="Messaging.OneTimeCode"/>). Defaults to false, since it replaces what's on the clipboard.
+    /// Gets or sets whether the app copies a one-time passcode from a new received message to the clipboard.
+    /// <see cref="Messaging.OneTimeCode"/> finds the code. The default is false, because the copy replaces the contents
+    /// of the clipboard.
     /// </summary>
     public bool CopyCodes
     {
@@ -124,7 +130,8 @@ public sealed class AppSettings : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Minimum level the file log writes. Defaults to Information; an unknown saved value also gives Information.
+    /// Gets or sets the minimum level that the file log writes. The default is Information, and an unknown saved value
+    /// also gives Information.
     /// </summary>
     public LogLevel LogLevel
     {
@@ -133,8 +140,8 @@ public sealed class AppSettings : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// How long a toast's Snooze waits before showing it again, in minutes: one of <see cref="SnoozeChoices"/>.
-    /// Defaults to 15; an unknown saved value also gives 15.
+    /// Gets or sets the time in minutes that Snooze waits before it shows a toast again. The value is one of
+    /// <see cref="SnoozeChoices"/>. The default is 15, and an unknown saved value also gives 15.
     /// </summary>
     public int SnoozeMinutes
     {
@@ -143,8 +150,8 @@ public sealed class AppSettings : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// The conversation list's width in the main window, in effective pixels, as the user last dragged it; null until
-    /// they do. The window keeps it within its own limits.
+    /// Gets or sets the width of the conversation list in the main window, in effective pixels. The value is the last
+    /// width that the user dragged, or null before the first drag. The window keeps the width in its own limits.
     /// </summary>
     public double? ListWidth
     {
@@ -153,8 +160,9 @@ public sealed class AppSettings : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// The main window's last place and size on screen, in physical pixels (left, top, width, height), as the user last
-    /// moved or sized it; null until they do. The window checks it still lands on a display.
+    /// Gets or sets the last position and size of the main window on screen, in physical pixels. The value comes from
+    /// the last move or resize by the user. Before that, the value is null. The window makes sure that the bounds are
+    /// still on a display.
     /// </summary>
     public (int Left, int Top, int Width, int Height)? WindowBounds
     {
@@ -174,8 +182,8 @@ public sealed class AppSettings : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Whether the main window was maximized when last closed (its <see cref="WindowBounds"/> are then where it goes back
-    /// to when restored). Defaults to false.
+    /// Gets or sets whether the main window was maximized at the last close. The <see cref="WindowBounds"/> then give
+    /// the position for a restore. The default is false.
     /// </summary>
     public bool WindowMaximized
     {
@@ -184,9 +192,9 @@ public sealed class AppSettings : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// The Windows device ID of the microphone that records voice messages, or null for Windows' default microphone.
-    /// Kept while that device is unplugged (recording falls back to the default), so it's used again once it's back.
-    /// Never logged.
+    /// Gets or sets the Windows device ID of the microphone for voice messages, or null for the default microphone of
+    /// Windows. The setting stays while that device is unplugged, and the recording then uses the default microphone.
+    /// The app uses the device again when the device is connected again. The app never logs the ID.
     /// </summary>
     public string? MicrophoneId
     {
@@ -195,15 +203,13 @@ public sealed class AppSettings : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Gets the snooze lengths Settings offers, in minutes, shortest first.
+    /// Gets the snooze lengths in minutes that Settings offers, shortest first.
     /// </summary>
     public static IReadOnlyList<int> SnoozeChoices { get; } = [5, 15, 60, 240];
 
-    // Read A Bool With A Fallback
     private bool GetBool(string key, bool fallback) =>
-        bool.TryParse(_store.GetString(key), out var value) ? value : fallback;
+        bool.TryParse(_store.GetString(key), out bool value) ? value : fallback;
 
-    // Write A Value, Raising PropertyChanged Only On A Real Change
     private void Set(string key, string value, [CallerMemberName] string? property = null)
     {
         if (_store.GetString(key) == value)

@@ -5,17 +5,17 @@ using GMessages.Presentation.Messaging;
 namespace GMessages.Presentation.Main;
 
 /// <summary>
-/// One row of the conversation list: name, snippet, time, unread dot, pin and avatar details.
+/// Shows 1 row of the conversation list: the name, the snippet, the time, the unread state, the pin and the avatar.
 /// </summary>
 /// <remarks>
-/// Every <see cref="Update"/> raises <see cref="PropertyChanged"/> once with an empty property name, which tells
-/// <c>x:Bind</c> to re-read every property. Call it on the UI thread.
+/// Each <see cref="Update"/> raises <see cref="PropertyChanged"/> 1 time with an empty property name. That name tells
+/// <c>x:Bind</c> to read every property again. Call it on the UI thread.
 /// </remarks>
 public sealed class ConversationRowViewModel : INotifyPropertyChanged
 {
     private static readonly PropertyChangedEventArgs AllChanged = new(string.Empty);
 
-    // The Most Unread Messages The Tooltip Lists (The Newest)
+    // The tooltip lists this number of the newest unread messages at most.
     private const int MaxHoverLines = 10;
 
     /// <summary>
@@ -23,8 +23,12 @@ public sealed class ConversationRowViewModel : INotifyPropertyChanged
     /// </summary>
     /// <param name="c">The conversation.</param>
     /// <param name="now">The current time, for the list time.</param>
-    /// <param name="unreadTexts">The live unread messages' text (<see cref="ChatStore.LiveUnreadTexts"/>), or null for none.</param>
-    /// <param name="draft">The unsent draft's line (<see cref="ChatFormat.DraftLine"/>), or empty for none.</param>
+    /// <param name="unreadTexts">
+    /// The texts of the live unread messages from <see cref="ChatStore.LiveUnreadTexts"/>, or null for none.
+    /// </param>
+    /// <param name="draft">
+    /// The line of the unsent draft from <see cref="ChatFormat.DraftLine"/>, or empty for none.
+    /// </param>
     public ConversationRowViewModel(ConversationInfo c, DateTimeOffset now, IReadOnlyList<string>? unreadTexts = null, string draft = "")
     {
         ArgumentNullException.ThrowIfNull(c);
@@ -43,30 +47,35 @@ public sealed class ConversationRowViewModel : INotifyPropertyChanged
     public string Name { get; private set; } = string.Empty;
 
     /// <summary>
-    /// Gets the newest message's text, with "You: " for the owner's own messages; or "Draft: " and the unsent draft while
-    /// there is one (see <see cref="IsDraft"/>).
+    /// Gets the text of the newest message, with "You: " for a message from the owner. While a draft exists, the
+    /// snippet is "Draft: " and the unsent draft.
     /// </summary>
     public string Snippet { get; private set; } = string.Empty;
 
-    /// <summary>Gets whether the snippet shows an unsent draft (drawn in italics).</summary>
+    /// <summary>Gets whether the snippet shows an unsent draft. The view draws it in italics.</summary>
     public bool IsDraft { get; private set; }
 
     /// <summary>Gets the formatted time of the newest message.</summary>
     public string Time { get; private set; } = string.Empty;
 
-    /// <summary>Gets whether there are unread messages.</summary>
+    /// <summary>Gets whether the conversation has unread messages.</summary>
     public bool IsUnread { get; private set; }
 
-    /// <summary>Gets whether more than one message came in live while unread, so the tooltip lists them.</summary>
+    /// <summary>
+    /// Gets whether more than 1 message arrived live while the conversation is unread. The tooltip then lists them.
+    /// </summary>
     public bool HasUnreadList { get; private set; }
 
     /// <summary>
-    /// Gets the row's tooltip: the name, then each live unread message on its own line (the newest 10) when there is more
-    /// than one, else the whole snippet.
+    /// Gets the tooltip of the row: the name, and then the body. With more than 1 live unread message, the body lists
+    /// the newest 10 on separate lines. Otherwise the body is the whole snippet.
     /// </summary>
     public string HoverText { get; private set; } = string.Empty;
 
-    /// <summary>Gets the pinned tile's unread badge (see <see cref="ChatFormat.UnreadBadge"/>); empty while read.</summary>
+    /// <summary>
+    /// Gets the unread badge of the pinned tile from <see cref="ChatFormat.UnreadBadge"/>, or empty while the
+    /// conversation is read.
+    /// </summary>
     public string UnreadBadge { get; private set; } = string.Empty;
 
     /// <summary>Gets whether the conversation is pinned.</summary>
@@ -75,31 +84,27 @@ public sealed class ConversationRowViewModel : INotifyPropertyChanged
     /// <summary>Gets whether the conversation is muted.</summary>
     public bool IsMuted { get; private set; }
 
-    /// <summary>Gets whether the conversation is a group chat.</summary>
-    public bool IsGroup { get; private set; }
-
-    /// <summary>Gets the avatar letter: the conversation's, or a group's first other person's.</summary>
+    /// <summary>
+    /// Gets the avatar letter: the letter of the conversation, or of the first other person in a group.
+    /// </summary>
     public string Initial { get; private set; } = string.Empty;
 
     /// <summary>Gets the avatar color as opaque ARGB.</summary>
     public uint AvatarColor { get; private set; }
 
-    /// <summary>Gets the IDs whose photos make the avatar: one other person, or up to two for a group.</summary>
-    public IReadOnlyList<string> ParticipantIds { get; private set; } = [];
-
     /// <summary>Gets the participant whose photo covers the front circle, or empty.</summary>
     public string PhotoId { get; private set; } = string.Empty;
 
-    /// <summary>Gets the back circle's letter: the second other person of a group, else empty.</summary>
+    /// <summary>Gets the letter of the back circle: the second other person of a group, or empty.</summary>
     public string SecondInitial { get; private set; } = string.Empty;
 
-    /// <summary>Gets the back circle's color as opaque ARGB; 0 (no back circle) unless a group.</summary>
+    /// <summary>Gets the color of the back circle as opaque ARGB, or 0 when there is no back circle.</summary>
     public uint SecondColor { get; private set; }
 
     /// <summary>Gets the participant whose photo covers the back circle, or empty.</summary>
     public string SecondPhotoId { get; private set; } = string.Empty;
 
-    /// <summary>Gets when the newest message arrived (the sort key).</summary>
+    /// <summary>Gets the time of the newest message. The list sorts by it.</summary>
     public DateTimeOffset LastMessageTime { get; private set; }
 
     /// <summary>
@@ -107,8 +112,12 @@ public sealed class ConversationRowViewModel : INotifyPropertyChanged
     /// </summary>
     /// <param name="c">The conversation.</param>
     /// <param name="now">The current time, for the list time.</param>
-    /// <param name="unreadTexts">The live unread messages' text (<see cref="ChatStore.LiveUnreadTexts"/>), or null for none.</param>
-    /// <param name="draft">The unsent draft's line (<see cref="ChatFormat.DraftLine"/>), or empty for none.</param>
+    /// <param name="unreadTexts">
+    /// The texts of the live unread messages from <see cref="ChatStore.LiveUnreadTexts"/>, or null for none.
+    /// </param>
+    /// <param name="draft">
+    /// The line of the unsent draft from <see cref="ChatFormat.DraftLine"/>, or empty for none.
+    /// </param>
     public void Update(ConversationInfo c, DateTimeOffset now, IReadOnlyList<string>? unreadTexts = null, string draft = "")
     {
         ArgumentNullException.ThrowIfNull(c);
@@ -118,9 +127,12 @@ public sealed class ConversationRowViewModel : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Gives the row's accessible name: the conversation name, plus "Unread" while it has unread messages.
+    /// Gives the accessible name of the row: the conversation name, and "Unread" while the conversation has unread
+    /// messages.
     /// </summary>
-    /// <remarks>A list item with no name of its own reads this through UI Automation (Narrator and the UI tests).</remarks>
+    /// <remarks>
+    /// A list item with no name of its own reads this name through UI Automation. Narrator and the UI tests read it.
+    /// </remarks>
     /// <returns>The name.</returns>
     public override string ToString() => IsUnread ? $"{Name}, Unread" : Name;
 
@@ -137,11 +149,9 @@ public sealed class ConversationRowViewModel : INotifyPropertyChanged
         HoverText       = body.Length > 0 ? Name + "\n" + body : Name;
         IsPinned        = c.Pinned;
         IsMuted         = c.IsMuted;
-        IsGroup         = c.IsGroup;
         LastMessageTime = c.LastMessageTime;
-        ParticipantIds  = [.. c.Participants.Where(p => !p.IsMe).Take(c.IsGroup ? 2 : 1).Select(p => p.Id)];
 
-        // Avatar: Stacked People For A Group (R12), The Same As The Chat Header
+        // By ruling R12, a group stacks 2 people in the avatar, as the chat header does.
         AvatarParts avatar = AvatarParts.Of(c);
         Initial            = avatar.Initial;
         AvatarColor        = avatar.Color;

@@ -10,19 +10,19 @@ using Google.Protobuf.Reflection;
 namespace GMessages.Protocol.PbLite;
 
 /// <summary>
-/// Reads and writes PBLite, the "protobuf as a JSON array" format Google Messages endpoints use.
+/// Reads and writes PBLite, the "protobuf as a JSON array" format of the Google Messages endpoints.
 /// </summary>
 /// <remarks>
-/// A message becomes an array with one slot per field number (slot 0 is field 1), <c>null</c> for unset fields, nested
-/// messages as nested arrays, bytes as base64, and enums and integers as plain numbers. Fields marked
-/// <c>pblite_binary</c> are instead the binary protobuf (or the UTF-8 string bytes) in base64. The writer matches Go's
-/// <c>encoding/json</c> output byte for byte, including its string escaping and number formatting, so requests look
-/// identical to the original library's. The reader is as lenient as Go's: integers may be JSON strings, bools may be
-/// numbers, a trailing JSON object overrides slots by field number, and short arrays or extra slots are fine.
-/// One deliberate difference: Go decodes JSON numbers through float64, so integers above 2^53 lose precision there;
-/// this reader parses whole numbers from their exact text, so big int64 and uint64 values decode exactly.
-/// Fields are reached through <see cref="FieldDescriptor.Accessor"/> and never through reflection on type names, which
-/// keeps it Native AOT safe. Ported from
+/// A message becomes an array with 1 slot for each field number. Slot 0 is field 1, and <c>null</c> is an unset field.
+/// A nested message is a nested array, bytes are base64, and enums and integers are plain numbers. A field with
+/// <c>pblite_binary</c> holds the binary protobuf or the UTF-8 string bytes in base64. The writer gives byte-for-byte
+/// the output of the Go <c>encoding/json</c>, with its string escapes and number format. Thus the requests are the same
+/// as from the original library. The reader is as lenient as the Go reader. An integer can be a JSON string, and a bool
+/// can be a number. A trailing JSON object replaces slots by field number. Short arrays and extra slots are valid.
+/// There is 1 intentional difference. Go decodes JSON numbers through float64, so it loses precision above 2^53. This
+/// reader parses whole numbers from their exact text, so big int64 and uint64 values decode exactly. The code gets to
+/// fields through <see cref="FieldDescriptor.Accessor"/> and never through reflection on type names. Thus it is safe
+/// for Native AOT. Ported from
 /// <see href="https://github.com/mautrix/go-util/tree/main/pblite">go-util pblite</see> (<c>serialize.go</c> and
 /// <c>deserialize.go</c>).
 /// </remarks>
@@ -37,9 +37,9 @@ public static class PbLiteSerializer
     /// Writes a message as PBLite JSON.
     /// </summary>
     /// <remarks>
-    /// The array length is the highest field number the message type declares, even when later slots are empty,
-    /// because Go does the same and the server has been seen to care. A field counts as set when it has presence and a
-    /// value, or has no presence and differs from its default; repeated fields are set when non-empty.
+    /// The array length is the highest field number that the message type declares, also when the last slots are
+    /// empty. Go does the same, and in practice the server cares about it. A field is set when it has presence and a
+    /// value. A field without presence is set when it is not the default. A repeated field is set when it is not empty.
     /// </remarks>
     /// <param name="message">The message to write. Must not contain map, group, fixed-width or zigzag fields.</param>
     /// <returns>UTF-8 JSON bytes.</returns>
@@ -58,8 +58,8 @@ public static class PbLiteSerializer
     /// Reads PBLite JSON into a new message.
     /// </summary>
     /// <remarks>
-    /// Mirrors Go's leniency: null slots are skipped, slots past the last known field are ignored, and a trailing
-    /// object such as <c>{"4":11}</c> wins over the array slot with that field number.
+    /// The method is as lenient as Go. It skips null slots and ignores slots after the last known field. A trailing
+    /// object such as <c>{"4":11}</c> has priority over the array slot with that field number.
     /// </remarks>
     /// <typeparam name="T">The message type to create.</typeparam>
     /// <param name="json">UTF-8 PBLite JSON whose root is an array.</param>
@@ -94,15 +94,9 @@ public static class PbLiteSerializer
     // WRITING
     // =========================================================================
 
-    /// <summary>
-    /// Writes one message as a JSON array, one slot per field number.
-    /// </summary>
-    /// <param name="builder">The output.</param>
-    /// <param name="message">The message to write.</param>
-    /// <exception cref="PbLiteException">A set field cannot be written.</exception>
     private static void WriteMessage(StringBuilder builder, IMessage message)
     {
-        // Slots Run To The Highest Declared Field Number
+        // The slots go up to the highest declared field number.
         IList<FieldDescriptor> fields = message.Descriptor.Fields.InFieldNumberOrder();
         int maxFieldNumber            = fields.Count == 0 ? 0 : fields[^1].FieldNumber;
         int nextField                 = 0;
@@ -115,7 +109,6 @@ public static class PbLiteSerializer
                 builder.Append(',');
             }
 
-            // Unset Slot
             if (fields[nextField].FieldNumber != slot)
             {
                 builder.Append("null");
@@ -135,13 +128,7 @@ public static class PbLiteSerializer
         builder.Append(']');
     }
 
-    /// <summary>
-    /// Says whether a field would be written, using Go's definition of "set".
-    /// </summary>
-    /// <param name="field">The field.</param>
-    /// <param name="message">The message holding it.</param>
-    /// <returns>True when the slot gets a value instead of null.</returns>
-    /// <exception cref="PbLiteException">The field is a map.</exception>
+    // The method tells whether a field gets a value or null, with the Go meaning of "set". It throws on a map field.
     private static bool IsSet(FieldDescriptor field, IMessage message)
     {
         if (field.IsMap)
@@ -159,7 +146,7 @@ public static class PbLiteSerializer
             return field.Accessor.HasValue(message);
         }
 
-        // No Presence: Set Means Different From The Default (Negative Zero Counts As Set, As In Go)
+        // Without presence, a field is set when it is not the default. As in Go, negative zero is set.
         return field.Accessor.GetValue(message) switch
         {
             string text    => text.Length > 0,
@@ -176,13 +163,6 @@ public static class PbLiteSerializer
         };
     }
 
-    /// <summary>
-    /// Writes a field value, as an array when the field is repeated.
-    /// </summary>
-    /// <param name="builder">The output.</param>
-    /// <param name="field">The field.</param>
-    /// <param name="value">The boxed value from the field accessor.</param>
-    /// <exception cref="PbLiteException">The value cannot be written.</exception>
     private static void WriteField(StringBuilder builder, FieldDescriptor field, object value)
     {
         if (!field.IsRepeated)
@@ -207,13 +187,6 @@ public static class PbLiteSerializer
         builder.Append(']');
     }
 
-    /// <summary>
-    /// Writes one scalar, string, bytes or message value.
-    /// </summary>
-    /// <param name="builder">The output.</param>
-    /// <param name="field">The field the value belongs to.</param>
-    /// <param name="value">The boxed value.</param>
-    /// <exception cref="PbLiteException">The field type is unsupported or a float is not finite.</exception>
     private static void WriteOne(StringBuilder builder, FieldDescriptor field, object value)
     {
         switch (field.FieldType)
@@ -269,24 +242,13 @@ public static class PbLiteSerializer
         }
     }
 
-    /// <summary>
-    /// Writes a string that needs no escaping (base64) between quotes.
-    /// </summary>
-    /// <param name="builder">The output.</param>
-    /// <param name="text">The text, which must be plain ASCII.</param>
+    // The text must be plain ASCII, such as base64, because the method does not escape it.
     private static void WriteQuoted(StringBuilder builder, string text) => builder.Append('"').Append(text).Append('"');
 
-    /// <summary>
-    /// Writes a JSON string exactly as Go's <c>encoding/json</c> does.
-    /// </summary>
-    /// <remarks>
-    /// Go escapes <c>&lt; &gt; &amp;</c> and U+2028/U+2029 as lowercase <c>\uXXXX</c>, writes short escapes for
-    /// quote, backslash, newline, carriage return, tab, backspace and form feed, escapes other control characters, and
-    /// replaces invalid UTF-16 (lone surrogates) with U+FFFD. The default <see cref="Utf8JsonWriter"/> differs on every
-    /// one of those, which is why this is written by hand.
-    /// </remarks>
-    /// <param name="builder">The output.</param>
-    /// <param name="text">The string to write.</param>
+    // The method writes a JSON string exactly as the Go encoding/json does. Go escapes < > & and U+2028/U+2029 as
+    // lowercase \uXXXX. It writes short escapes for the quote, backslash, newline, carriage return, tab, backspace and
+    // form feed. It escapes the other control characters. It replaces invalid UTF-16, a lone surrogate, with U+FFFD.
+    // The default Utf8JsonWriter is different on each of these points. Thus this code writes the string by hand.
     private static void WriteString(StringBuilder builder, string text)
     {
         builder.Append('"');
@@ -335,18 +297,11 @@ public static class PbLiteSerializer
         builder.Append('"');
     }
 
-    /// <summary>
-    /// Formats a double the way Go's <c>json.Marshal</c> does.
-    /// </summary>
-    /// <remarks>
-    /// Go uses the shortest digits that round-trip, plain notation between 1e-6 and 1e21, and exponent notation
-    /// outside that range with no zero padding on negative exponents (<c>1e-7</c>, <c>1e+21</c>). .NET's round-trip
-    /// text supplies the shortest digits; this re-lays them out. Floats widen to double first, as Go's reflection does.
-    /// </remarks>
-    /// <param name="value">The number.</param>
-    /// <param name="field">The field, for the error message.</param>
-    /// <returns>The JSON number text.</returns>
-    /// <exception cref="PbLiteException"><paramref name="value"/> is NaN or infinite.</exception>
+    // The method formats a double as the Go json.Marshal does. Go uses the shortest digits that round-trip. It uses
+    // plain notation from 1e-6 up to 1e21, and exponent notation out of that range. A negative exponent has no zero
+    // padding: 1e-7. A positive exponent has at least 2 digits: 1e+21. The .NET round-trip text gives the shortest
+    // digits, and this method changes their layout.
+    // As with the Go reflection, a float becomes a double first. NaN or infinity throws a PbLiteException.
     private static string FormatDouble(double value, FieldDescriptor field)
     {
         if (!double.IsFinite(value))
@@ -359,21 +314,20 @@ public static class PbLiteSerializer
             return double.IsNegative(value) ? "-0" : "0";
         }
 
-        // Pull Digits And Decimal Exponent Out Of The Round-Trip Text (magnitude = 0.DIGITS x 10^decimalExponent)
-        double magnitude = Math.Abs(value);
-        string text      = magnitude.ToString("R", CultureInfo.InvariantCulture);
-        int exponentAt   = text.IndexOf('E', StringComparison.Ordinal);
-        int exponent     = exponentAt < 0
+        // The digits and the decimal exponent come from the round-trip text: magnitude = 0.DIGITS x 10^decimalExponent.
+        double magnitude    = Math.Abs(value);
+        string text         = magnitude.ToString("R", CultureInfo.InvariantCulture);
+        int exponentAt      = text.IndexOf('E', StringComparison.Ordinal);
+        int exponent        = exponentAt < 0
             ? 0
             : int.Parse(text.AsSpan(exponentAt + 1), NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture);
-        string mantissa  = exponentAt < 0 ? text : text[..exponentAt];
-        int pointAt      = mantissa.IndexOf('.', StringComparison.Ordinal);
-        string allDigits  = mantissa.Replace(".", string.Empty, StringComparison.Ordinal);
-        int leadingZeros  = allDigits.Length - allDigits.TrimStart('0').Length;
-        string digits     = allDigits.Trim('0');
-        int decimalExponent  = (pointAt < 0 ? mantissa.Length : pointAt) + exponent - leadingZeros;
+        string mantissa     = exponentAt < 0 ? text : text[..exponentAt];
+        int pointAt         = mantissa.IndexOf('.', StringComparison.Ordinal);
+        string allDigits    = mantissa.Replace(".", string.Empty, StringComparison.Ordinal);
+        int leadingZeros    = allDigits.Length - allDigits.TrimStart('0').Length;
+        string digits       = allDigits.Trim('0');
+        int decimalExponent = (pointAt < 0 ? mantissa.Length : pointAt) + exponent - leadingZeros;
 
-        // Lay Out
         var result = new StringBuilder();
         if (value < 0)
         {
@@ -412,12 +366,6 @@ public static class PbLiteSerializer
     // READING
     // =========================================================================
 
-    /// <summary>
-    /// Fills a message from a PBLite array.
-    /// </summary>
-    /// <param name="array">The JSON array.</param>
-    /// <param name="message">The empty message to fill.</param>
-    /// <exception cref="PbLiteException">A slot has the wrong shape.</exception>
     private static void ReadMessage(JsonElement array, IMessage message)
     {
         var slots = new List<JsonElement>(array.GetArrayLength());
@@ -426,7 +374,7 @@ public static class PbLiteSerializer
             slots.Add(slot);
         }
 
-        // A Trailing Object Holds Overrides Keyed By Field Number
+        // A trailing object holds replacement values by field number.
         JsonElement overrides = default;
         bool hasOverrides     = slots.Count > 0 && slots[^1].ValueKind == JsonValueKind.Object;
         if (hasOverrides)
@@ -439,7 +387,7 @@ public static class PbLiteSerializer
         {
             int index = field.FieldNumber - 1;
 
-            // Override First, Then The Array Slot; Null Means Unset
+            // The override comes first, then the array slot. Null means unset.
             JsonElement value = default;
             bool found        = hasOverrides
                 && overrides.TryGetProperty((index + 1).ToString(CultureInfo.InvariantCulture), out value)
@@ -459,14 +407,7 @@ public static class PbLiteSerializer
         }
     }
 
-    /// <summary>
-    /// Reads one slot into its field.
-    /// </summary>
-    /// <param name="message">The message being filled.</param>
-    /// <param name="field">The field.</param>
-    /// <param name="value">The slot value, never null.</param>
-    /// <param name="index">The zero-based slot index, for errors.</param>
-    /// <exception cref="PbLiteException">The slot has the wrong shape.</exception>
+    // The value is never null. The index is the zero-based slot index for the error messages.
     private static void ReadField(IMessage message, FieldDescriptor field, JsonElement value, int index)
     {
         if (field.IsMap)
@@ -493,14 +434,7 @@ public static class PbLiteSerializer
         }
     }
 
-    /// <summary>
-    /// Converts one JSON value to the boxed .NET value of a field.
-    /// </summary>
-    /// <param name="value">The JSON value.</param>
-    /// <param name="index">The slot or list index, for errors.</param>
-    /// <param name="field">The field.</param>
-    /// <returns>A boxed value of the exact type the field accessor expects.</returns>
-    /// <exception cref="PbLiteException">The value has the wrong shape.</exception>
+    // The method returns a boxed value of the exact type that the field accessor expects.
     private static object ReadOne(JsonElement value, int index, FieldDescriptor field)
     {
         switch (field.FieldType)
@@ -556,14 +490,7 @@ public static class PbLiteSerializer
         }
     }
 
-    /// <summary>
-    /// Reads a nested message, from a nested array or (for <c>pblite_binary</c>) base64 binary protobuf.
-    /// </summary>
-    /// <param name="value">The JSON value.</param>
-    /// <param name="index">The slot or list index, for errors.</param>
-    /// <param name="field">The message-typed field.</param>
-    /// <returns>The new message.</returns>
-    /// <exception cref="PbLiteException">The value has the wrong shape or the binary protobuf is malformed.</exception>
+    // A nested message is a nested array. A pblite_binary message is base64 binary protobuf.
     private static IMessage ReadMessageValue(JsonElement value, int index, FieldDescriptor field)
     {
         MessageParser parser = field.MessageType.Parser;
@@ -591,14 +518,6 @@ public static class PbLiteSerializer
         return nested;
     }
 
-    /// <summary>
-    /// Reads a base64 JSON string.
-    /// </summary>
-    /// <param name="value">The JSON value.</param>
-    /// <param name="index">The slot or list index, for errors.</param>
-    /// <param name="field">The field, for errors.</param>
-    /// <returns>The decoded bytes.</returns>
-    /// <exception cref="PbLiteException">The value is not a string or not valid base64.</exception>
     private static byte[] ReadBase64(JsonElement value, int index, FieldDescriptor field)
     {
         if (value.ValueKind != JsonValueKind.String)
@@ -616,21 +535,10 @@ public static class PbLiteSerializer
         }
     }
 
-    /// <summary>
-    /// Reads an integer from a JSON number or, when allowed, a decimal string.
-    /// </summary>
-    /// <remarks>
-    /// Whole numbers are parsed from their exact text so int64 and uint64 values above 2^53 survive; anything else
-    /// (such as <c>1e3</c>) goes through double and truncates, as Go's float64 path does.
-    /// </remarks>
-    /// <typeparam name="T">The integer type of the field.</typeparam>
-    /// <param name="value">The JSON value.</param>
-    /// <param name="index">The slot or list index, for errors.</param>
-    /// <param name="field">The field, for errors.</param>
-    /// <param name="styles">Which signs the number text may carry.</param>
-    /// <param name="allowString">Whether a JSON string is accepted (not for enums, as in Go).</param>
-    /// <returns>The number, boxed as <typeparamref name="T"/>.</returns>
-    /// <exception cref="PbLiteException">The value is neither a number nor a parsable string.</exception>
+    // The method reads an integer from a JSON number or, when allowString is true, from a decimal string. As in Go,
+    // an enum does not accept a string. The method parses a whole number from its exact text, so int64 and uint64
+    // values above 2^53 stay exact. Other text, such as 1e3, goes through double and truncates. The Go float64 path
+    // does the same.
     private static object ReadNumber<T>(JsonElement value, int index, FieldDescriptor field, NumberStyles styles, bool allowString)
         where T : IBinaryInteger<T>
     {
@@ -657,14 +565,6 @@ public static class PbLiteSerializer
         }
     }
 
-    /// <summary>
-    /// Reads a floating-point number.
-    /// </summary>
-    /// <param name="value">The JSON value.</param>
-    /// <param name="index">The slot or list index, for errors.</param>
-    /// <param name="field">The field, for errors.</param>
-    /// <returns>The number.</returns>
-    /// <exception cref="PbLiteException">The value is not a JSON number.</exception>
     private static double ReadDouble(JsonElement value, int index, FieldDescriptor field)
     {
         if (value.ValueKind != JsonValueKind.Number)
@@ -672,7 +572,7 @@ public static class PbLiteSerializer
             throw Fail(field, index, "float64", value);
         }
 
-        // Out Of Range (1e400) Is An Error In Go's json.Unmarshal Too
+        // A number out of range, such as 1e400, is also an error in the Go json.Unmarshal.
         if (!value.TryGetDouble(out double number) || !double.IsFinite(number))
         {
             throw new PbLiteException($"number out of range at index {index} for field {field.FullName}");
@@ -681,18 +581,8 @@ public static class PbLiteSerializer
         return number;
     }
 
-    /// <summary>
-    /// Reads a JSON string value.
-    /// </summary>
-    /// <remarks>
-    /// <see cref="JsonElement.GetString"/> throws <see cref="InvalidOperationException"/> on escapes that are not valid
-    /// UTF-16 (a lone surrogate such as <c>"\ud800"</c>); that is reported as a field error instead.
-    /// </remarks>
-    /// <param name="value">The JSON value.</param>
-    /// <param name="index">The slot or list index, for errors.</param>
-    /// <param name="field">The field, for errors.</param>
-    /// <returns>The string.</returns>
-    /// <exception cref="PbLiteException">The value is not a string or is not valid UTF-16.</exception>
+    // JsonElement.GetString throws InvalidOperationException on an escape that is not valid UTF-16, such as the lone
+    // surrogate "\ud800". The method reports that as a field error.
     private static string ReadText(JsonElement value, int index, FieldDescriptor field)
     {
         if (value.ValueKind != JsonValueKind.String)
@@ -714,25 +604,13 @@ public static class PbLiteSerializer
     // HELPERS
     // =========================================================================
 
-    /// <summary>
-    /// Reads the <c>pblite_binary</c> field option.
-    /// </summary>
-    /// <param name="field">The field.</param>
-    /// <returns>True when the field is carried as base64 binary.</returns>
     private static bool IsPbliteBinary(FieldDescriptor field)
     {
         FieldOptions? options = field.GetOptions();
         return options is not null && options.GetExtension(PbliteExtensions.PbliteBinary);
     }
 
-    /// <summary>
-    /// Builds the "expected X at index N for field F, got K" error, worded like Go's.
-    /// </summary>
-    /// <param name="field">The field.</param>
-    /// <param name="index">The slot or list index.</param>
-    /// <param name="expected">What was expected.</param>
-    /// <param name="actual">The value that was found.</param>
-    /// <returns>The exception to throw.</returns>
+    // The error text "expected X at index N for field F, got K" uses the same words as Go.
     private static PbLiteException Fail(FieldDescriptor field, int index, string expected, JsonElement actual)
         => new($"expected {expected} at index {index} for field {field.FullName}, got {actual.ValueKind}");
 }

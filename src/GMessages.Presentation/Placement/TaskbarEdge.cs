@@ -1,36 +1,36 @@
 namespace GMessages.Presentation.Placement;
 
 /// <summary>
-/// Screen edge the taskbar sits on. Ported from Magic Buds' <c>MagicBuds.Presentation.Placement</c>.
+/// Specifies the screen edge of the taskbar. Ported from <c>MagicBuds.Presentation.Placement</c> of Magic Buds.
 /// </summary>
 public enum TaskbarEdge
 {
     /// <summary>
-    /// Along the bottom, the Windows default. Also used for an auto-hidden taskbar.
+    /// The bottom edge, which is the Windows default. An auto-hidden taskbar also uses this value.
     /// </summary>
     Bottom,
 
     /// <summary>
-    /// Along the top.
+    /// The top edge.
     /// </summary>
     Top,
 
     /// <summary>
-    /// Down the left side.
+    /// The left edge.
     /// </summary>
     Left,
 
     /// <summary>
-    /// Down the right side.
+    /// The right edge.
     /// </summary>
     Right,
 }
 
 /// <summary>
-/// Screen rectangle in physical pixels. Right and bottom are exclusive. Ported from Magic Buds.
+/// Holds a screen rectangle in physical pixels. The right and bottom edges are exclusive. Ported from Magic Buds.
 /// </summary>
-/// <param name="Left">Left edge.</param>
-/// <param name="Top">Top edge.</param>
-/// <param name="Right">Right edge, exclusive.</param>
-/// <param name="Bottom">Bottom edge, exclusive.</param>
+/// <param name="Left">The left edge.</param>
+/// <param name="Top">The top edge.</param>
+/// <param name="Right">The right edge, exclusive.</param>
+/// <param name="Bottom">The bottom edge, exclusive.</param>
 public readonly record struct PixelRect(int Left, int Top, int Right, int Bottom);

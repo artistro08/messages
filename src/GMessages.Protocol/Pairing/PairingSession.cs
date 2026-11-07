@@ -9,20 +9,21 @@ using Google.Protobuf.Reflection;
 namespace GMessages.Protocol.Pairing;
 
 /// <summary>
-/// One UKEY2 handshake with a phone: the client's P-256 key, the payloads sent, and the keys that come out of it.
+/// 1 UKEY2 handshake with a phone: the P-256 key of the client, the sent payloads and the keys that result.
 /// </summary>
 /// <remarks>
 /// Ported from <c>PairingSession</c>, <c>NewPairingSession</c>, <c>PreparePayloads</c>, <c>doHKDF</c>,
-/// <c>ProcessServerInit</c>, <c>encryptionKeyInfo</c> and the key derivation block of <c>FinishGaiaPairing</c> in
+/// <c>ProcessServerInit</c> and <c>encryptionKeyInfo</c> in
 /// <see href="https://github.com/mautrix/gmessages/blob/ba33f4875a491f5cb47db8a6baf42a8869f5f383/pkg/libgm/pair_google.go">pair_google.go</see>.
-/// The client sends a commitment to its public key (client init), the phone answers with its own public key (server
-/// init), and both derive the same auth key from the P-256 shared secret. The auth key picks the emoji the user must
-/// tap on the phone; the next key becomes the request keys once the phone confirms. Keys, the shared secret and the
-/// derivation inputs are secret and never logged.
+/// The key derivation block of <c>FinishGaiaPairing</c> is also a port.
+/// The client init carries a commitment to the public key of the client. The phone answers with its own public key
+/// in the server init. Both sides derive the same auth key from the P-256 shared secret. The auth key picks the emoji
+/// that the user must tap on the phone. After the phone confirms, the next key gives the request keys. The keys, the
+/// shared secret and the derivation inputs are secret. The log never gets them.
 /// </remarks>
 public sealed class PairingSession
 {
-    // Copied Verbatim From encryptionKeyInfo
+    // A verbatim copy of encryptionKeyInfo.
     private static readonly byte[] EncryptionKeyInfo = [130, 170, 85, 160, 211, 151, 248, 131, 70, 202, 28, 238, 141, 57, 9, 185, 95, 19, 250, 125, 235, 29, 74, 179, 131, 118, 184, 37, 109, 168, 85, 16];
 
     private readonly ECParameters _key;
@@ -35,20 +36,20 @@ public sealed class PairingSession
         DestRegDevice = destRegDevice;
     }
 
-    /// <summary>Gets the pairing attempt ID (Go: <c>UUID</c>).</summary>
+    /// <summary>Gets the pairing attempt ID. Go calls it <c>UUID</c>.</summary>
     public Guid Id { get; }
 
     /// <summary>Gets when the attempt started.</summary>
     public DateTimeOffset Start { get; }
 
-    /// <summary>Gets the phone being paired.</summary>
+    /// <summary>Gets the phone that the session pairs with.</summary>
     public PrimaryDevice DestRegDevice { get; }
 
-    /// <summary>Gets the server init the phone sent, or null before <see cref="ProcessServerInit"/>.</summary>
+    /// <summary>Gets the server init from the phone, or null before <see cref="ProcessServerInit"/>.</summary>
     public GaiaPairingResponseContainer? ServerInit { get; private set; }
 
     /// <summary>Gets the client init message, or empty before <see cref="PreparePayloads"/>.</summary>
-    /// <remarks>The setter is for golden tests, which put Go's payload (with Go's random bytes) in.</remarks>
+    /// <remarks>The setter is for golden tests. They put in the payload of Go, with the random bytes of Go.</remarks>
     public byte[] InitPayload { get; internal set; } = [];
 
     /// <summary>Gets the client finished message, or empty before <see cref="PreparePayloads"/>.</summary>
@@ -57,18 +58,19 @@ public sealed class PairingSession
     /// <summary>Gets the UKEY2 next key, or empty before <see cref="ProcessServerInit"/>.</summary>
     public byte[] NextKey { get; private set; } = [];
 
-    /// <summary>Gets the key derivation version the phone confirmed; 0 before <see cref="ProcessServerInit"/>.</summary>
+    /// <summary>Gets the key derivation version that the phone confirmed, or 0 before <see cref="ProcessServerInit"/>.</summary>
     public int KeyDerivationVersion => ServerInit?.ConfirmedKeyDerivationVersion ?? 0;
 
     /// <summary>
     /// Starts a new attempt with a fresh random P-256 key.
     /// </summary>
     /// <remarks>Ported from <c>NewPairingSession</c>.</remarks>
-    /// <param name="destRegDevice">The phone being paired.</param>
+    /// <param name="destRegDevice">The phone to pair with.</param>
     /// <param name="time">The clock for the start time.</param>
     /// <returns>The session.</returns>
     public static PairingSession Create(PrimaryDevice destRegDevice, TimeProvider time)
     {
+        ArgumentNullException.ThrowIfNull(destRegDevice);
         ArgumentNullException.ThrowIfNull(time);
 
         using var ecdh = ECDiffieHellman.Create(ECCurve.NamedCurves.nistP256);
@@ -78,14 +80,16 @@ public sealed class PairingSession
     /// <summary>
     /// Builds a session with a fixed key, for golden tests.
     /// </summary>
-    /// <remarks>Matches Go's <c>ecdh.P256().NewPrivateKey(scalar)</c>; the public key is computed from the scalar.</remarks>
+    /// <remarks>Matches <c>ecdh.P256().NewPrivateKey(scalar)</c> in Go. The public key comes from the scalar.</remarks>
     /// <param name="id">The pairing attempt ID.</param>
     /// <param name="start">The start time.</param>
     /// <param name="p256PrivateScalar">The 32-byte private scalar.</param>
-    /// <param name="destRegDevice">The phone being paired.</param>
+    /// <param name="destRegDevice">The phone to pair with.</param>
     /// <returns>The session.</returns>
     internal static PairingSession FromPrivateKey(Guid id, DateTimeOffset start, byte[] p256PrivateScalar, PrimaryDevice destRegDevice)
     {
+        ArgumentNullException.ThrowIfNull(destRegDevice);
+
         using var ecdh = ECDiffieHellman.Create(new ECParameters { Curve = ECCurve.NamedCurves.nistP256, D = p256PrivateScalar });
         return new PairingSession(id, start, ecdh.ExportParameters(true), destRegDevice);
     }
@@ -94,14 +98,13 @@ public sealed class PairingSession
     /// Builds the client init and client finished messages and keeps them on the session.
     /// </summary>
     /// <remarks>
-    /// Ported from <c>PreparePayloads</c>. The finished message carries the public key, with X and Y each given a
-    /// leading zero byte as Go does. The init message commits to it with SHA-512 and carries 32 random bytes, so it
-    /// differs every time; the finished message does not.
+    /// Ported from <c>PreparePayloads</c>. The finished message carries the public key. As in Go, X and Y each get a
+    /// leading zero byte. The init message commits to the finished message with SHA-512 and carries 32 random bytes.
+    /// Thus the init message is different each time, but the finished message is not.
     /// </remarks>
     /// <returns>The client init and client finished messages.</returns>
     public (byte[] Init, byte[] Finish) PreparePayloads()
     {
-        // Client Finished: The Public Key
         var finished = new Ukey2ClientFinished
         {
             PublicKey = new GenericPublicKey
@@ -116,7 +119,6 @@ public sealed class PairingSession
         };
         byte[] finish = new Ukey2Message { MessageType = Ukey2Message.Types.Type.ClientFinish, MessageData = finished.ToByteString() }.ToByteArray();
 
-        // Client Init: Commitment To The Finished Message
         var clientInit = new Ukey2ClientInit
         {
             Version      = 1,
@@ -136,15 +138,15 @@ public sealed class PairingSession
     }
 
     /// <summary>
-    /// Checks the phone's server init, derives the shared keys and returns the emoji the user must tap.
+    /// Checks the server init of the phone, derives the shared keys and returns the emoji that the user must tap.
     /// </summary>
     /// <remarks>
-    /// Ported from <c>ProcessServerInit</c>. The server init must be version 1, P-256/SHA-512, with 32 random bytes and
-    /// a valid P-256 point (a 33-byte coordinate must start with a zero byte). The shared secret is SHA-256 of the raw
-    /// ECDH X coordinate; HKDF-SHA256 over it, with the init and server init messages as info, gives the auth key
-    /// ("UKEY2 v1 auth") and the next key ("UKEY2 v1 next"). The first four auth key bytes pick the emoji from the
-    /// confirmed verification code version's list. As in Go, the server init is kept before any check, and the next
-    /// key is set before the version check.
+    /// Ported from <c>ProcessServerInit</c>. The server init must be version 1 and P-256/SHA-512, with 32 random bytes
+    /// and a valid P-256 point. A 33-byte coordinate must start with a zero byte. The shared secret is the SHA-256 of
+    /// the raw ECDH X coordinate. HKDF-SHA256 of the secret, with the init and server init messages as info, gives 2
+    /// keys. The salt "UKEY2 v1 auth" gives the auth key, and the salt "UKEY2 v1 next" gives the next key. The first 4
+    /// bytes of the auth key pick the emoji from the list of the confirmed verification code version. As in Go, the
+    /// method keeps the server init before any check. It sets the next key before the version check.
     /// </remarks>
     /// <param name="msg">The phone's server init container.</param>
     /// <returns>The emoji.</returns>
@@ -155,7 +157,6 @@ public sealed class PairingSession
 
         ServerInit = msg;
 
-        // Unwrap And Check The Server Init
         Ukey2Message message = Parse(Ukey2Message.Parser, msg.Data, "failed to unmarshal server init message");
         if (message.MessageType != Ukey2Message.Types.Type.ServerInit)
         {
@@ -178,7 +179,6 @@ public sealed class PairingSession
             throw new InvalidDataException($"unexpected random length {serverInit.Random.Length}");
         }
 
-        // Server Public Key
         byte[] x = StripPrefix(serverInit.PublicKey?.EcP256PublicKey?.X, "x");
         byte[] y = StripPrefix(serverInit.PublicKey?.EcP256PublicKey?.Y, "y");
         if (x.Length != 32 || y.Length != 32)
@@ -186,7 +186,6 @@ public sealed class PairingSession
             throw new InvalidDataException($"invalid server key coordinate lengths: {x.Length}, {y.Length}");
         }
 
-        // Shared Secret: SHA-256 Of The Raw ECDH X Coordinate
         byte[] sharedSecret;
         try
         {
@@ -200,7 +199,6 @@ public sealed class PairingSession
             throw new InvalidDataException($"invalid server key: {ex.Message}", ex);
         }
 
-        // Auth And Next Keys
         byte[] authInfo  = [.. InitPayload, .. msg.Data.Span];
         byte[] authKey   = Hkdf(sharedSecret, "UKEY2 v1 auth"u8.ToArray(), authInfo);
         NextKey          = Hkdf(sharedSecret, "UKEY2 v1 next"u8.ToArray(), authInfo);
@@ -212,10 +210,11 @@ public sealed class PairingSession
     /// Derives the request encryption keys from the next key.
     /// </summary>
     /// <remarks>
-    /// Ported from the key derivation block of <c>FinishGaiaPairing</c>. The client and server keys are HKDF of the
-    /// next key with <c>encryptionKeyInfo</c> as salt and "client" / "server" as info. Version 0 uses them directly
-    /// (AES = client, HMAC = server). Version 1 hashes <c>encryptionKeyInfo</c> plus both keys, the one with the
-    /// smaller Java hash first, and derives AES and HMAC from that hash with the "Ditto" salts.
+    /// Ported from the key derivation block of <c>FinishGaiaPairing</c>. The client key and the server key are HKDF of
+    /// the next key, with <c>encryptionKeyInfo</c> as salt. The info is "client" or "server". Version 0 uses the client
+    /// key as the AES key and the server key as the HMAC key. Version 1 hashes <c>encryptionKeyInfo</c> and both keys,
+    /// with the key of the smaller Java hash first. It then derives the AES key and the HMAC key from that hash with the
+    /// "Ditto" salts.
     /// </remarks>
     /// <returns>The AES and HMAC keys.</returns>
     /// <exception cref="InvalidOperationException"><see cref="ProcessServerInit"/> has not run.</exception>
@@ -245,10 +244,10 @@ public sealed class PairingSession
         }
     }
 
-    // Port Of doHKDF: HKDF-SHA256, 32 Bytes Out
+    // Port of doHKDF: HKDF-SHA256 with 32 output bytes.
     private static byte[] Hkdf(byte[] key, byte[] salt, byte[] info) => HKDF.DeriveKey(HashAlgorithmName.SHA256, key, 32, salt, info);
 
-    // A 33-Byte Coordinate Must Start With 0x00, Which Is Dropped
+    // A 33-byte coordinate must start with 0x00. The method removes that byte.
     private static byte[] StripPrefix(ByteString? coordinate, string name)
     {
         byte[] bytes = coordinate?.ToByteArray() ?? [];
@@ -265,7 +264,7 @@ public sealed class PairingSession
         return bytes[1..];
     }
 
-    // Go's %v Of A Proto Enum: The Name, Or The Number When Unknown
+    // Gives the %v format of Go for a proto enum: the name, or the number for an unknown value.
     private static string EnumName(EnumDescriptor descriptor, int value) =>
         descriptor.FindValueByNumber(value)?.Name ?? value.ToString(CultureInfo.InvariantCulture);
 

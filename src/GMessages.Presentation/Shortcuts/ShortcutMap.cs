@@ -6,19 +6,19 @@ namespace GMessages.Presentation.Shortcuts;
 /// Maps key presses to <see cref="ShortcutCommand"/>s and lists the wired shortcuts for the help dialog.
 /// </summary>
 /// <remarks>
-/// Key text and action names are the Google Messages shortcut list, kept verbatim from the spec. Only the shortcuts
-/// that are wired appear in <see cref="HelpRows"/>.
+/// The key text and the action names come from the Google Messages shortcut list, with the exact words of the spec.
+/// Only the wired shortcuts appear in <see cref="HelpRows"/>.
 /// </remarks>
 public static class ShortcutMap
 {
-    // Punctuation keys the Windows.System.VirtualKey enum has no names for (OEM period, comma, slash, plus).
+    // The VirtualKey enum has no names for these OEM keys.
     private const VirtualKey Plus   = (VirtualKey)187;
     private const VirtualKey Period = (VirtualKey)190;
     private const VirtualKey Comma  = (VirtualKey)188;
     private const VirtualKey Slash  = (VirtualKey)191;
 
     /// <summary>
-    /// The wired shortcuts, in the spec's order, as (keys, action) text.
+    /// Gets the wired shortcuts in the order of the spec, as text pairs of keys and action.
     /// </summary>
     public static IReadOnlyList<(string Keys, string Action)> HelpRows { get; } =
     [
@@ -40,19 +40,20 @@ public static class ShortcutMap
         ("Ctrl + Shift + o", "Show Details"),
         ("Ctrl + Enter", "Reply to message"),
         ("Ctrl + ?", "Open keyboard shortcut help"),
-        ("Ctrl + z", "Undo archive"),
+        ("Ctrl + Shift + z", "Undo archive"),
     ];
 
     /// <summary>
     /// Finds the command for a key press, or null when the press is not a shortcut.
     /// </summary>
     /// <remarks>
-    /// Chords must match their modifiers exactly, so Ctrl + Alt + k is not a shortcut. The bare "r", Shift + + and
-    /// Ctrl + Enter depend on <paramref name="focusInTextBox"/>; they are ignored while typing. The conversation
-    /// shortcuts (Ctrl + d, Ctrl + Alt + h, Ctrl + Shift + o) work while typing too. Ctrl + z (the app's own: undo an
-    /// archive) is left to the text box while typing, where it undoes typing. Ctrl + / opens the help like
-    /// Ctrl + ? (Ctrl + Shift + /) and has no help row of its own. Ctrl + Alt + h is not a shortcut
-    /// while Right Alt is down: Windows reports AltGr as Left Ctrl + Right Alt, and AltGr + h types on some layouts.
+    /// A chord must match its modifiers exactly, so Ctrl + Alt + k is not a shortcut. The bare "r", Shift + + and
+    /// Ctrl + Enter depend on <paramref name="focusInTextBox"/>. The method ignores them while the user types. The
+    /// conversation shortcuts Ctrl + d, Ctrl + Alt + h and Ctrl + Shift + o also work while the user types. In the
+    /// app, Ctrl + Shift + z undoes an archive, as the owner chose. While the user types, the method leaves the keys to
+    /// the text box. Ctrl + ? is Ctrl + Shift + /. Ctrl + / also opens the help and has no help row of its own.
+    /// Ctrl + Alt + h is not a shortcut while Right Alt is down. Windows reports AltGr as Left Ctrl + Right Alt, and
+    /// AltGr + h types a character on some layouts.
     /// </remarks>
     /// <param name="key">The pressed key.</param>
     /// <param name="ctrl">Whether Ctrl is held.</param>
@@ -63,60 +64,55 @@ public static class ShortcutMap
     /// <returns>The matching command, or null.</returns>
     public static ShortcutCommand? Resolve(VirtualKey key, bool ctrl, bool shift, bool alt, bool focusInTextBox, bool rightAlt)
     {
-        // Ctrl + Alt Chords: Only Ctrl + Alt + h, And Never With AltGr
         if (alt)
         {
             return ctrl && !shift && !rightAlt && key == VirtualKey.H ? ShortcutCommand.ArchiveConversation : null;
         }
 
-        // Bare Keys
         if (!ctrl && !shift)
         {
             return key switch
             {
-                VirtualKey.Escape => ShortcutCommand.ExitConversation,
+                VirtualKey.Escape                 => ShortcutCommand.ExitConversation,
                 VirtualKey.R when !focusInTextBox => ShortcutCommand.FocusMessageBox,
-                _ => null,
+                _                                 => null,
             };
         }
 
-        // Shift Chords
         if (!ctrl && shift)
         {
             return key == Plus && !focusInTextBox ? ShortcutCommand.OpenReactions : null;
         }
 
-        // Ctrl Chords
         if (ctrl && !shift)
         {
             return key switch
             {
                 VirtualKey.Enter when !focusInTextBox => ShortcutCommand.ReplyToMessage,
-                VirtualKey.Z when !focusInTextBox => ShortcutCommand.UndoArchive,
-                VirtualKey.K => ShortcutCommand.StartChat,
-                VirtualKey.J => ShortcutCommand.FocusMessages,
-                VirtualKey.S => ShortcutCommand.ToggleSidebar,
-                VirtualKey.D => ShortcutCommand.DeleteConversation,
-                Period       => ShortcutCommand.NextConversation,
-                Comma        => ShortcutCommand.OpenSettings,
-                Slash        => ShortcutCommand.ShowHelp,
-                _ => null,
+                VirtualKey.K                          => ShortcutCommand.StartChat,
+                VirtualKey.J                          => ShortcutCommand.FocusMessages,
+                VirtualKey.S                          => ShortcutCommand.ToggleSidebar,
+                VirtualKey.D                          => ShortcutCommand.DeleteConversation,
+                Period                                => ShortcutCommand.NextConversation,
+                Comma                                 => ShortcutCommand.OpenSettings,
+                Slash                                 => ShortcutCommand.ShowHelp,
+                _                                     => null,
             };
         }
 
-        // Ctrl + Shift Chords
         if (ctrl && shift)
         {
             return key switch
             {
-                VirtualKey.K => ShortcutCommand.FocusConversationList,
-                VirtualKey.E => ShortcutCommand.ToggleEmoji,
-                VirtualKey.O => ShortcutCommand.ShowDetails,
-                VirtualKey.A => ShortcutCommand.AttachFiles,
-                VirtualKey.P => ShortcutCommand.AttachPhotos,
-                Comma        => ShortcutCommand.PreviousConversation,
-                Slash        => ShortcutCommand.ShowHelp,
-                _ => null,
+                VirtualKey.Z when !focusInTextBox => ShortcutCommand.UndoArchive,
+                VirtualKey.K                      => ShortcutCommand.FocusConversationList,
+                VirtualKey.E                      => ShortcutCommand.ToggleEmoji,
+                VirtualKey.O                      => ShortcutCommand.ShowDetails,
+                VirtualKey.A                      => ShortcutCommand.AttachFiles,
+                VirtualKey.P                      => ShortcutCommand.AttachPhotos,
+                Comma                             => ShortcutCommand.PreviousConversation,
+                Slash                             => ShortcutCommand.ShowHelp,
+                _                                 => null,
             };
         }
 

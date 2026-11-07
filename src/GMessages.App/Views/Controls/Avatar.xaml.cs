@@ -12,15 +12,16 @@ using Windows.UI.Xaml.Media.Imaging;
 namespace GMessages.App.Views.Controls;
 
 /// <summary>
-/// A round avatar: a photo, or a colored circle with an initial, or two stacked circles for a group.
+/// Shows a round avatar: a photo, an initial on a colored circle, or 2 stacked circles for a group.
 /// </summary>
 /// <remarks>
-/// A nonzero <see cref="SecondColor"/> draws the group look: a smaller back circle at the top right and the front
-/// circle shrunk to the bottom left. <see cref="Image"/>, when set, covers the front circle's initial.
+/// A nonzero <see cref="SecondColor"/> draws the group look. A smaller back circle sits at the top right, and the front
+/// circle shrinks to the bottom left. When <see cref="Image"/> is set, it covers the initial of the front circle.
 /// <para>
-/// <see cref="PhotoId"/> and <see cref="SecondPhotoId"/> load the participants' photos from <see cref="Cache"/> into
-/// the front and back circles; an answer that arrives after the ID changed (a recycled list row) is dropped. While the
-/// front circle shows a photo, the avatar's UI Automation item status is "Photo" (for the UI tests).
+/// <see cref="PhotoId"/> and <see cref="SecondPhotoId"/> load the photos of the participants from <see cref="Cache"/>
+/// into the front and back circles. The avatar drops an answer that arrives after the ID changes, as in a recycled list
+/// row. While the front circle shows a photo, the UI Automation item status of the avatar is "Photo". The UI tests read
+/// this status.
 /// </para>
 /// </remarks>
 public sealed partial class Avatar : UserControl
@@ -57,15 +58,16 @@ public sealed partial class Avatar : UserControl
     public static readonly DependencyProperty PhotoSizeProperty =
         DependencyProperty.Register(nameof(PhotoSize), typeof(int), typeof(Avatar), new PropertyMetadata(PhotoDecodeWidth));
 
-    // Photos Are Decoded At The 40 px Circle, In Logical Pixels (The Display Scale Is Already In Them)
+    // The avatar decodes photos at the 40 px size of the circle in logical pixels. Logical pixels include the display
+    // scale.
     private const int PhotoDecodeWidth = 40;
 
-    // Photos Already Decoded, By Their Size, Then Their Bytes: The Photo Cache Hands Back The Same Array For An ID, So A
-    // Photo Shown Before Shows Again At Once (Switching Chats Showed The Letter For A Few Frames While It Decoded Again).
-    // An Entry Lives As Long As The Photo Cache Keeps Its Bytes. Touched On The UI Thread Only
+    // Holds the decoded photos by size, then by bytes. The photo cache returns the same array for an ID. Thus a photo
+    // that showed before shows again at once. Without this table, a chat switch shows the letter for a few frames while
+    // the photo decodes again. An entry lives as long as the photo cache keeps its bytes. Only the UI thread uses it.
     private static readonly Dictionary<int, ConditionalWeakTable<byte[], ImageSource>> Decoded = [];
 
-    // Circle Sizes: One Avatar Fills The 40 px Square; A Group's Two Circles Overlap Inside It
+    // A single avatar fills the 40 px square. The 2 circles of a group overlap inside it.
     private const double FullSize  = 40;
     private const double GroupSize = 28;
 
@@ -74,14 +76,14 @@ public sealed partial class Avatar : UserControl
     /// </summary>
     public Avatar() => InitializeComponent();
 
-    /// <summary>Gets or sets the front circle's letter.</summary>
+    /// <summary>Gets or sets the letter of the front circle.</summary>
     public string Initial
     {
         get => (string)GetValue(InitialProperty);
         set => SetValue(InitialProperty, value);
     }
 
-    /// <summary>Gets or sets the front circle's color as opaque ARGB.</summary>
+    /// <summary>Gets or sets the color of the front circle as opaque ARGB.</summary>
     public uint Color
     {
         get => (uint)GetValue(ColorProperty);
@@ -95,28 +97,28 @@ public sealed partial class Avatar : UserControl
         set => SetValue(ImageProperty, value);
     }
 
-    /// <summary>Gets or sets the back circle's letter (groups only).</summary>
+    /// <summary>Gets or sets the letter of the back circle. Only a group has a back circle.</summary>
     public string SecondInitial
     {
         get => (string)GetValue(SecondInitialProperty);
         set => SetValue(SecondInitialProperty, value);
     }
 
-    /// <summary>Gets or sets the back circle's color as opaque ARGB; 0 means no back circle.</summary>
+    /// <summary>Gets or sets the color of the back circle as opaque ARGB. The value 0 means no back circle.</summary>
     public uint SecondColor
     {
         get => (uint)GetValue(SecondColorProperty);
         set => SetValue(SecondColorProperty, value);
     }
 
-    /// <summary>Gets or sets the participant whose photo covers the front circle; empty for none.</summary>
+    /// <summary>Gets or sets the participant whose photo covers the front circle, or empty for none.</summary>
     public string PhotoId
     {
         get => (string)GetValue(PhotoIdProperty);
         set => SetValue(PhotoIdProperty, value);
     }
 
-    /// <summary>Gets or sets the participant whose photo covers the back circle; empty for none.</summary>
+    /// <summary>Gets or sets the participant whose photo covers the back circle, or empty for none.</summary>
     public string SecondPhotoId
     {
         get => (string)GetValue(SecondPhotoIdProperty);
@@ -124,10 +126,13 @@ public sealed partial class Avatar : UserControl
     }
 
     /// <summary>
-    /// Gets or sets the width photos are decoded to, in effective pixels: 40 (the avatar's own size) unless a
-    /// <c>Viewbox</c> draws the avatar larger, so a photo stays sharp there. Set it before the photo IDs.
+    /// Gets or sets the decode width of photos in effective pixels. The default is 40, the size of the avatar.
     /// </summary>
-    /// <remarks>Decoded photos are kept per size, so every avatar of one size shares them.</remarks>
+    /// <remarks>
+    /// A <c>Viewbox</c> that draws the avatar larger needs a larger value, so that its photo stays sharp. Set this
+    /// property before the photo IDs. The avatar keeps the decoded photos for each size. Thus all avatars of the same
+    /// size share them.
+    /// </remarks>
     public int PhotoSize
     {
         get => (int)GetValue(PhotoSizeProperty);
@@ -135,16 +140,18 @@ public sealed partial class Avatar : UserControl
     }
 
     /// <summary>
-    /// Gets or sets where photos come from: the open main window's cache, or null while it is closed.
+    /// Gets or sets the photo source: the cache of the open main window, or null while that window is closed.
     /// </summary>
-    /// <remarks>One main window at most is open, so one shared reference does; the window clears it on close.</remarks>
+    /// <remarks>
+    /// At most 1 main window is open, so a single shared reference is enough. The window clears it when it closes.
+    /// </remarks>
     public static AvatarCache? Cache { get; set; }
 
     /// <summary>
-    /// Turns photo bytes into an image, decoded small.
+    /// Decodes photo bytes into a small image.
     /// </summary>
     /// <param name="photo">The image bytes.</param>
-    /// <param name="decodeWidth">The width to decode to, in effective pixels; 0 for an avatar's.</param>
+    /// <param name="decodeWidth">The decode width in effective pixels, or 0 for the avatar size.</param>
     /// <returns>The image, or null when the bytes are not an image.</returns>
     public static async Task<ImageSource?> ToImageAsync(byte[] photo, int decodeWidth = 0)
     {
@@ -159,25 +166,25 @@ public sealed partial class Avatar : UserControl
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            // Not An Image: Keep The Initial
+            // The bytes are not an image, so the circle keeps its initial.
             return null;
         }
     }
 
     /// <summary>
-    /// Turns image bytes into an image decoded only as wide as it shows, from its own size read first.
+    /// Decodes image bytes only as wide as the image shows. The method reads the size of the picture first.
     /// </summary>
     /// <remarks>
-    /// One stream over the bytes (no copy): its header gives the picture's size as shown (after its orientation), then
-    /// the same stream decodes at the width <paramref name="decodeWidth"/> picks from that size. A header that won't
-    /// read gives 0 x 0, and the decode still tries.
+    /// A single stream reads the bytes and makes no copy. Its header gives the size of the picture after its
+    /// orientation. Then the same stream decodes at the width that <paramref name="decodeWidth"/> picks from that size.
+    /// When the header does not read, the size is 0 x 0, and the decode still tries.
     /// </remarks>
     /// <param name="photo">The image bytes.</param>
-    /// <param name="decodeWidth">Given the picture's width and height in pixels (0 x 0 when unknown), the width to
-    /// decode to; 0 for its own width.</param>
-    /// <param name="type">Whether the decode width is in logical (effective) or physical pixels.</param>
-    /// <returns>The image (null when the bytes are not an image), the picture's width and height, and the width it was
-    /// decoded to.</returns>
+    /// <param name="decodeWidth">Picks the decode width from the width and height of the picture in pixels. The size is
+    /// 0 x 0 when it is unknown. A result of 0 decodes at the full width.</param>
+    /// <param name="type">Tells whether the decode width is in logical pixels or in physical pixels.</param>
+    /// <returns>The image, the width and height of the picture, and the decode width. The image is null when the bytes
+    /// are not an image.</returns>
     public static async Task<(ImageSource? Image, int Width, int Height, int DecodeWidth)> ToFittedImageAsync(
         byte[] photo, Func<int, int, int> decodeWidth, DecodePixelType type = DecodePixelType.Logical)
     {
@@ -195,7 +202,7 @@ public sealed partial class Avatar : UserControl
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
-                // The Size Stays Unknown; The Decode Below Still Tries
+                // The size stays unknown. The decode below still tries.
             }
 
             stream.Seek(0);
@@ -213,44 +220,44 @@ public sealed partial class Avatar : UserControl
     /// <summary>
     /// Shows the back circle only when it has a color.
     /// </summary>
-    /// <param name="color">The back circle's color.</param>
+    /// <param name="color">The color of the back circle.</param>
     /// <returns>Visible for a nonzero color.</returns>
     public static Visibility ShownIfColor(uint color) => color != 0 ? Visibility.Visible : Visibility.Collapsed;
 
     /// <summary>
-    /// Gives the front circle's size: full for one avatar, smaller when a back circle shares the square.
+    /// Gives the size of the front circle. The circle has the full size alone and a smaller size beside a back circle.
     /// </summary>
-    /// <param name="secondColor">The back circle's color.</param>
+    /// <param name="secondColor">The color of the back circle.</param>
     /// <returns>The size in effective pixels.</returns>
     public static double FrontSize(uint secondColor) => secondColor != 0 ? GroupSize : FullSize;
 
     /// <summary>
-    /// Gives the front initial's font size to match the circle.
+    /// Gives the font size of the front initial to match the circle.
     /// </summary>
-    /// <param name="secondColor">The back circle's color.</param>
+    /// <param name="secondColor">The color of the back circle.</param>
     /// <returns>The font size.</returns>
     public static double InitialSize(uint secondColor) => secondColor != 0 ? 12 : 16;
 
     /// <summary>
-    /// Shows the filled person icon in place of a letter for someone with no name (an empty initial: the phone only has
-    /// their number or a short code).
+    /// Shows the filled person icon in place of a letter for a person with no name. The initial is empty when the phone
+    /// has only a number or a short code.
     /// </summary>
-    /// <param name="initial">The circle's letter.</param>
+    /// <param name="initial">The letter of the circle.</param>
     /// <returns>Visible when there is no letter.</returns>
     public static Visibility PersonIfNoInitial(string initial) => string.IsNullOrEmpty(initial) ? Visibility.Visible : Visibility.Collapsed;
 
     /// <summary>
-    /// Gives the front circle's person icon size to match the circle.
+    /// Gives the size of the person icon in the front circle to match the circle.
     /// </summary>
-    /// <param name="secondColor">The back circle's color.</param>
+    /// <param name="secondColor">The color of the back circle.</param>
     /// <returns>The icon size.</returns>
     public static double PersonSize(uint secondColor) => secondColor != 0 ? 14 : 20;
 
     /// <summary>
-    /// Loads again every photo under <paramref name="root"/> that is still missing, such as one that failed while the
-    /// phone was away. Photos already showing are left alone.
+    /// Loads again each missing photo under <paramref name="root"/>, such as a photo that failed while the phone was
+    /// away. The method does not change a photo that shows.
     /// </summary>
-    /// <param name="root">Where to look for avatars (a window's root grid).</param>
+    /// <param name="root">The element that holds the avatars, such as the root grid of a window.</param>
     public static void ReloadMissing(DependencyObject root)
     {
         ArgumentNullException.ThrowIfNull(root);
@@ -279,19 +286,15 @@ public sealed partial class Avatar : UserControl
     /// <inheritdoc />
     protected override AutomationPeer OnCreateAutomationPeer() => new FrameworkElementAutomationPeer(this);
 
-    // =========================================================================
-    // PHOTOS
-    // =========================================================================
-
-    // Says "Photo" To UI Automation While The Front Circle Shows One
+    // The item status tells UI Automation that the front circle shows a photo.
     private static void OnImageChanged(DependencyObject d, DependencyPropertyChangedEventArgs e) =>
         AutomationProperties.SetItemStatus(d, e.NewValue is null ? string.Empty : "Photo");
 
     private static void OnPhotoIdChanged(DependencyObject d, DependencyPropertyChangedEventArgs e) =>
         _ = ((Avatar)d).LoadPhotoAsync(front: e.Property == PhotoIdProperty);
 
-    // Shows A Photo Already Decoded At Once; Otherwise Clears The Circle's Photo, Then Shows The New One Unless The ID
-    // Changed Meanwhile
+    // Shows a decoded photo at once. Otherwise the method clears the photo of the circle and decodes the new photo. It
+    // shows the new photo only when the ID did not change during the load.
     private async Task LoadPhotoAsync(bool front)
     {
         string id = front ? PhotoId : SecondPhotoId;

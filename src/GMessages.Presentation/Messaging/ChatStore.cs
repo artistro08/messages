@@ -9,40 +9,40 @@ using Microsoft.Extensions.Logging;
 namespace GMessages.Presentation.Messaging;
 
 /// <summary>
-/// Loads conversations and messages, sends texts, and turns the phone's live events into chat events.
+/// Loads conversations and messages, sends messages, and turns the live events of the phone into chat events.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Lives for the whole app so a message that arrives with the main window closed can still notify. It keeps slim
-/// <see cref="ConversationInfo"/> records, a ring of the last 256 message IDs, and the newest page of messages of the
-/// last 20 opened conversations, so reopening one shows it at once (see <see cref="CachedMessages"/>).
+/// The store lives for the whole app, so a message can notify while the main window is closed. It keeps slim
+/// <see cref="ConversationInfo"/> records and a ring of the last 256 notified message IDs. It also keeps the newest
+/// page of the last 20 opened conversations. Thus a chat shows at once when it opens again.
 /// </para>
 /// <para>
-/// <b>Privacy.</b> Under the memory caches sits the <see cref="MessageDatabase"/>: conversations and each one's newest
-/// messages, encrypted with DPAPI for the current Windows user, so chats open at once after a restart.
-/// <see cref="Reset"/> clears memory and deletes the database file, and a fetch that started before it writes nothing.
+/// <b>Privacy.</b> Below the memory caches is the <see cref="MessageDatabase"/>. It keeps the conversations and the
+/// newest messages of each one, encrypted with DPAPI for the current Windows user. <see cref="Reset"/> clears memory
+/// and deletes the database file. A fetch that started before a reset writes nothing.
 /// </para>
 /// <para>
-/// <b>Threads.</b> Live events come from <see cref="ConnectionController.ClientEvent"/> on the UI thread. The cache is
-/// safe to read from anywhere. The database is never touched on the caller's thread: reads, writes and the delete go,
-/// in order, through one background queue (a locked file can block a call for 30 s). Message text, names and numbers
-/// are never logged.
+/// <b>Threads.</b> Live events come from <see cref="ConnectionController.ClientEvent"/> on the UI thread. Any thread
+/// can read the cache. The store never uses the database on the thread of the caller. Reads, writes and the delete go
+/// in order through a single background queue. A locked file can block a call for 30 s. The store never logs message
+/// text, names or numbers.
 /// </para>
 /// </remarks>
 public sealed partial class ChatStore : IDisposable
 {
-    /// <summary>How many conversations or messages one page asks for.</summary>
+    /// <summary>The number of conversations or messages that 1 page asks for.</summary>
     public const int PageSize = 25;
 
-    /// <summary>How many conversations keep their newest page of messages in memory.</summary>
+    /// <summary>The number of conversations that keep their newest page of messages in memory.</summary>
     public const int CachedChatCount = 20;
 
-    /// <summary>The biggest attachment that may be sent, in bytes: 100 MiB (LibGM's <c>MaxFileSize</c>).</summary>
+    /// <summary>The largest attachment that the store sends, in bytes: 100 MiB, as LibGM <c>MaxFileSize</c>.</summary>
     public const long MaxAttachmentBytes = 100L * 1024 * 1024;
 
     private const int NotifiedRingSize = 256;
 
-    // A Message Older Than This Never Counts As New (A Reaction Or Status Update To An Old Message)
+    // A message older than this is never new. A reaction or a status update to an old message must not notify.
     private static readonly TimeSpan NewMessageAge = TimeSpan.FromDays(1);
 
     private readonly ConnectionController _connection;
@@ -52,65 +52,69 @@ public sealed partial class ChatStore : IDisposable
     private readonly TimeProvider _time;
     private readonly MediaStore? _media;
 
-    // Bumped By Reset: Work Started Under An Older Generation Belongs To The Old Account And Is Dropped
+    // Reset increments the generation. Work that started under an older generation belongs to the old account, and
+    // the store drops it.
     private int _generation;
 
-    // Held By Reset While It Bumps The Generation And Clears The Conversations, And By LoadSavedAsync And NoteEncryption While They Fill Them
+    // Reset holds this lock while it increments the generation and clears the conversations. LoadSavedAsync and
+    // NoteEncryption hold it while they fill them.
     private readonly Lock _resetLock = new();
 
-    // Database Calls, Run One After Another Off The Caller's Thread
     private readonly Lock _queueLock = new();
     private Task _queue = Task.CompletedTask;
 
-    // Cache Of Slim Conversation Records, By ID
     private readonly ConcurrentDictionary<string, ConversationInfo> _cache = new();
 
-    // Last 256 Raised Message IDs (Queue Keeps The Order, Set Makes The Lookup Fast)
     private readonly Lock _ringLock = new();
     private readonly Queue<string> _ring = new();
     private readonly HashSet<string> _ringSet = [];
 
-    // Newest Page Of The Last 20 Opened Conversations, Oldest First; The Dictionary Order Is Least Recently Used First
+    // The newest page of each of the last 20 opened conversations, oldest message first. The dictionary order is
+    // least recently used first.
     private readonly Lock _pagesLock = new();
-
-    // Each Conversation's Newest Live Media Message And Its Label, So A Conversation Update After It (With No Snippet
-    // Text For Media) Still Names It In The List, Its Page In Memory Or Not
-    private readonly ConcurrentDictionary<string, (string MessageId, string Label)> _liveMedia = new();
     private readonly OrderedDictionary<string, List<ChatMessage>> _pages = [];
 
-    // IDs Of The Messages In Pages DropPagesAsync Dropped, So IsCached Still Blocks A Second Toast For Them (Under _pagesLock)
+    // The IDs of the messages in the pages that DropPagesAsync dropped, so IsCached still blocks a second toast for
+    // them. _pagesLock guards this set.
     private readonly HashSet<string> _droppedIds = [];
 
-    // New Received Messages' Text Kept Live Per Conversation Since It Was Last Read (The Phone Sends No Count); Dropped
-    // When The Conversation Turns Read
+    // The newest live media message of each conversation and its label. A conversation update has no snippet text
+    // for media. This label names the media in the list, with or without a cached page.
+    private readonly ConcurrentDictionary<string, (string MessageId, string Label)> _liveMedia = new();
+
+    // The text of each new received message since the conversation was last read. The phone sends no unread count.
+    // The store drops the list when the conversation turns read.
     private readonly ConcurrentDictionary<string, ImmutableList<string>> _unreadTexts = new();
 
-    // When Each Conversation Last Changed Live (A Stopwatch Timestamp), So A List Page Asked For Before That Keeps It
+    // When each conversation last changed live, as a Stopwatch timestamp. A list page that the store asked for before
+    // that time keeps the live copy.
     private readonly ConcurrentDictionary<string, long> _liveAt = new();
 
-    // Each Conversation's Unsent Draft, Loaded From And Saved To The Database So It Outlives The Window And The App, And
-    // The Files Picked To Send With It (Memory Only)
+    // The unsent draft of each conversation. The database keeps the text, so the draft outlives the window and the
+    // app. The files stay in memory only.
     private readonly ConcurrentDictionary<string, string> _drafts                               = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, IReadOnlyList<PendingAttachment>> _draftFiles = new(StringComparer.Ordinal);
 
-    // Newest Encryption Tombstone Seen Per Conversation, With Its Time In Microseconds
+    // The newest encryption system line of each conversation, with its time in microseconds.
     private readonly ConcurrentDictionary<string, (bool Encrypted, long At)> _encryption = new();
 
     private volatile ParticipantInfo? _me;
     private volatile IReadOnlyList<SIMCard> _sims = [];
 
-    // Set By A Live MOBILE_BATTERY_LOW, Cleared By MOBILE_BATTERY_RESTORED Or Reset
+    // A live MOBILE_BATTERY_LOW sets this flag. MOBILE_BATTERY_RESTORED or Reset clears it.
     private bool _batteryLow;
 
     /// <summary>
-    /// Creates the store and starts listening to live events.
+    /// Creates the store and subscribes to the live events of the connection.
     /// </summary>
-    /// <param name="connection">The connection whose <see cref="ConnectionController.ClientEvent"/> feeds the store.</param>
-    /// <param name="client">Gets the current phone client, or null when not connected.</param>
+    /// <param name="connection">
+    /// The connection whose <see cref="ConnectionController.ClientEvent"/> supplies the live events.
+    /// </param>
+    /// <param name="client">Gets the current phone client, or null when the app is not connected.</param>
     /// <param name="log">The logger.</param>
-    /// <param name="database">The one database for this data folder, or null to keep everything in memory only.</param>
-    /// <param name="time">The clock that decides when a message is too old to be new; the system clock when null.</param>
-    /// <param name="media">The decrypted media cache, cleared by <see cref="Reset"/>; null for none.</param>
+    /// <param name="database">The database for this data folder, or null to keep all data in memory only.</param>
+    /// <param name="time">The clock for the 1 day age limit of a new message, or null for the system clock.</param>
+    /// <param name="media">The decrypted media cache that <see cref="Reset"/> clears, or null for none.</param>
     public ChatStore(ConnectionController connection, Func<IMessagingClient?> client, ILogger log, MessageDatabase? database = null, TimeProvider? time = null, MediaStore? media = null)
     {
         ArgumentNullException.ThrowIfNull(connection);
@@ -127,111 +131,111 @@ public sealed partial class ChatStore : IDisposable
         _connection.ClientEvent += OnClientEvent;
     }
 
-    /// <summary>Raised when a conversation's details changed (live update, or a fetch that changed the cache).</summary>
+    /// <summary>Occurs when the details of a conversation change, from a live update or from a fetch.</summary>
     public event EventHandler<ConversationInfo>? ConversationChanged;
 
-    /// <summary>Raised when a message arrives or changes status.</summary>
+    /// <summary>Occurs when a message arrives or changes status.</summary>
     public event EventHandler<MessageArrivedEventArgs>? MessageArrived;
 
-    /// <summary>Raised when the live connection recovered, so open views reload.</summary>
+    /// <summary>Occurs when the live connection recovers, so open views can load again.</summary>
     public event EventHandler? Resynced;
 
-    /// <summary>Raised when someone in a cached conversation starts or stops typing.</summary>
+    /// <summary>Occurs when a person in a cached conversation starts or stops typing.</summary>
     public event EventHandler<TypingEventArgs>? TypingChanged;
 
-    /// <summary>Raised when <see cref="IsPhoneBatteryLow"/> changed.</summary>
+    /// <summary>Occurs when <see cref="IsPhoneBatteryLow"/> changes.</summary>
     public event EventHandler? PhoneBatteryChanged;
 
-    /// <summary>Raised on every live low battery alert, even a repeat, so a closed banner can return.</summary>
+    /// <summary>Occurs on each live low battery alert, also on a repeat, so a closed banner can show again.</summary>
     public event EventHandler? PhoneBatteryLowAlerted;
 
     /// <summary>
-    /// Gets whether the phone reported a low battery and has not said it recovered. The level isn't known at start, so
-    /// this is false until a live alert arrives (the protocol drops catch-up alerts). It lives here so it survives the
-    /// window closing; <see cref="Reset"/> clears it.
+    /// Gets whether the phone reported a low battery and did not report a recovery yet.
     /// </summary>
+    /// <remarks>
+    /// The level is not known at start, so this is false until a live alert arrives. The protocol drops catch-up
+    /// alerts. The store keeps the state, so it survives when the window closes. <see cref="Reset"/> clears it.
+    /// </remarks>
     public bool IsPhoneBatteryLow => Volatile.Read(ref _batteryLow);
 
-    /// <summary>Gets the decrypted media cache, or null when the store was made without one.</summary>
+    /// <summary>Gets the decrypted media cache, or null when the store has none.</summary>
     public MediaStore? Media => _media;
 
-    /// <summary>Gets the first participant marked as the phone's owner in any cached conversation.</summary>
+    /// <summary>
+    /// Gets the first participant marked as the owner in any cached conversation. A phone with 2 SIMs has 2 such IDs.
+    /// The App reads this one only for the profile photo.
+    /// </summary>
     public ParticipantInfo? Me => _me;
 
     /// <summary>
     /// Gets the phone client.
     /// </summary>
-    /// <returns>The client.</returns>
-    /// <exception cref="MessagingUnavailableException">Not connected.</exception>
+    /// <exception cref="MessagingUnavailableException">The app is not connected to the phone.</exception>
     public IMessagingClient RequireClient() => _client() ?? throw new MessagingUnavailableException();
 
     /// <summary>
     /// Finds a cached conversation.
     /// </summary>
-    /// <param name="conversationId">The conversation ID.</param>
-    /// <returns>The conversation, or null when not cached.</returns>
+    /// <returns>The conversation, or null when it is not cached.</returns>
     public ConversationInfo? Find(string conversationId) => _cache.GetValueOrDefault(conversationId);
 
     /// <summary>
-    /// Gets every cached conversation, in no order: what the app already knows, so a list can show at once while it
-    /// asks the phone for the newest page.
+    /// Gets all cached conversations in no order. A list can show them at once while it asks the phone for the newest
+    /// page.
     /// </summary>
     /// <returns>A copy of the cached conversations.</returns>
     public IReadOnlyList<ConversationInfo> CachedConversations() => [.. _cache.Values];
 
     /// <summary>
-    /// Gets the text of each new message a conversation received live since it was last read, oldest first.
+    /// Gets the text of each new message that a conversation received live since it was last read, oldest first.
     /// </summary>
     /// <remarks>
-    /// The phone only says whether a conversation is unread, so received messages are kept as they arrive (each as its
-    /// <see cref="ChatFormat.UnreadLine"/>: the sender's first name in a group, the media's label), and the list starts over once the phone says the conversation is read or it
-    /// is read here. Its count is the unread count. Messages that came while the app wasn't running aren't kept (a
-    /// caller shows an unread conversation with none as one).
+    /// The phone only says if a conversation is unread, so the store keeps each received message as it arrives. Each
+    /// entry is its <see cref="ChatFormat.UnreadLine"/>: the first name of the sender in a group, or the media label.
+    /// The list starts again when the phone or this app marks the conversation read. The count of the list is the
+    /// unread count. The store does not keep messages that came while the app was not running. A caller shows an
+    /// unread conversation with no texts as 1 unread message.
     /// </remarks>
-    /// <param name="conversationId">The conversation ID.</param>
-    /// <returns>The texts; empty when none were kept.</returns>
+    /// <returns>The texts, or empty when the store kept none.</returns>
     public IReadOnlyList<string> LiveUnreadTexts(string conversationId) =>
         _unreadTexts.GetValueOrDefault(conversationId) ?? [];
 
     /// <summary>
-    /// Gets a conversation's unsent draft.
+    /// Gets the unsent draft of a conversation.
     /// </summary>
-    /// <param name="conversationId">The conversation ID.</param>
-    /// <returns>The draft; empty when there is none.</returns>
+    /// <returns>The draft, or empty when there is none.</returns>
     public string Draft(string conversationId) => _drafts.GetValueOrDefault(conversationId) ?? string.Empty;
 
     /// <summary>
-    /// Gets the files picked or pasted to send with a conversation's unsent draft.
+    /// Gets the files that the user picked or pasted to send with the unsent draft of a conversation.
     /// </summary>
-    /// <param name="conversationId">The conversation ID.</param>
-    /// <returns>The files; empty when there are none.</returns>
+    /// <returns>The files, or empty when there are none.</returns>
     public IReadOnlyList<PendingAttachment> DraftFiles(string conversationId) => _draftFiles.GetValueOrDefault(conversationId) ?? [];
 
     /// <summary>
-    /// Raised on the caller's thread with the conversation ID when its draft (text or files) changed, so its list row
-    /// can show it.
+    /// Occurs on the thread of the caller when the draft text or files of a conversation change. The list row can then
+    /// show the draft. The event argument is the conversation ID.
     /// </summary>
     public event EventHandler<string>? DraftChanged;
 
     /// <summary>
-    /// Keeps a conversation's unsent draft, and saves its text so it's still there after the window or the app closes.
+    /// Keeps the unsent draft of a conversation and saves its text. The draft is then still there after the window or
+    /// the app closes.
     /// </summary>
     /// <remarks>
-    /// An empty draft forgets it. The files are kept in memory only, for as long as the app runs: a pasted picture has
-    /// no file to open again after a restart. The text is saved on the background queue, in order, encrypted like every
-    /// other body, and dropped after a sign-out (the database is deleted with the account).
-    /// ponytail: a quit right after a catch-up (hundreds of saves queued) can cut the draft's save off with the rest; give
-    /// drafts their own locked write path if that ever bites.
+    /// An empty text forgets the draft. The files stay in memory only while the app runs. A pasted picture has no file
+    /// to open after a restart. The save queue writes the text in order, encrypted like every other body.
+    /// A sign-out deletes the text with the database.
+    /// ponytail: a quit right after a catch-up can cut off the draft save with hundreds of other queued saves. Give
+    /// drafts their own locked write path if that becomes a problem.
     /// </remarks>
-    /// <param name="conversationId">The conversation ID.</param>
     /// <param name="text">The draft text.</param>
-    /// <param name="files">The files to send with it, or null for none.</param>
+    /// <param name="files">The files to send with the draft, or null for none.</param>
     public void SaveDraft(string conversationId, string text, IReadOnlyList<PendingAttachment>? files = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(conversationId);
         ArgumentNullException.ThrowIfNull(text);
 
-        // Files In Memory
         files ??= [];
         bool filesChanged = !DraftFiles(conversationId).SequenceEqual(files);
         if (files.Count > 0)
@@ -243,8 +247,8 @@ public sealed partial class ChatStore : IDisposable
             _draftFiles.TryRemove(conversationId, out _);
         }
 
-        // Text Unchanged: Nothing To Write. A Cleared Draft Stays As An Empty Entry, So A Saved One That Loads Late Can't
-        // Bring It Back (See LoadSavedAsync)
+        // A cleared draft stays as an empty entry, so a saved draft that LoadSavedAsync loads late cannot bring it
+        // back.
         bool textChanged = !_drafts.TryGetValue(conversationId, out string? old) || old != text;
         _drafts[conversationId] = text;
         if (textChanged || filesChanged)
@@ -257,7 +261,8 @@ public sealed partial class ChatStore : IDisposable
             return;
         }
 
-        // On The Save Queue: In Order, Behind A Sign-Out's Delete, So An Old Account's Draft Never Lands In The Next One's File
+        // The save queue runs this write after the delete of a sign-out. Thus a draft never gets into the file of the
+        // next account.
         SaveIfCurrent(conversationId, Generation, database => database.SaveDraft(conversationId, text));
     }
 
@@ -265,24 +270,24 @@ public sealed partial class ChatStore : IDisposable
     /// Gets whether a conversation is end-to-end encrypted.
     /// </summary>
     /// <remarks>
-    /// Follows the newest encryption system line seen in any page or live message (see
-    /// <see cref="ChatFormat.EncryptionOf"/>), kept in the database so the lock shows after a restart.
+    /// The store follows the newest encryption system line in any page or live message, see
+    /// <see cref="ChatFormat.EncryptionOf"/>. The database keeps that state, so the lock shows after a restart.
     /// </remarks>
-    /// <param name="conversationId">The conversation ID.</param>
     /// <returns>
-    /// What the conversation itself says (<see cref="ConversationInfo.IsEncrypted"/>, current and on every chat), else
-    /// true when the newest such line says encrypted; false when it says not, or none was seen.
+    /// The <see cref="ConversationInfo.IsEncrypted"/> flag of the conversation when the phone sent it. That flag is
+    /// current, and the phone sends it on every chat. Otherwise, true when the newest system line says encrypted.
+    /// False when that line says not encrypted, or when the store saw no line.
     /// </returns>
     public bool IsEncrypted(string conversationId) =>
         Find(conversationId)?.IsEncrypted ?? (_encryption.TryGetValue(conversationId, out (bool Encrypted, long At) state) && state.Encrypted);
 
     /// <summary>
-    /// Gets a conversation from the cache, fetching it from the phone when it is not cached.
+    /// Gets a conversation from the cache, or fetches it from the phone when it is not cached.
     /// </summary>
-    /// <param name="conversationId">The conversation ID.</param>
-    /// <param name="ct">Cancels the wait.</param>
     /// <returns>The conversation, or null when the phone does not know it.</returns>
-    /// <exception cref="MessagingUnavailableException">Not cached and not connected.</exception>
+    /// <exception cref="MessagingUnavailableException">
+    /// The conversation is not cached and the app is not connected to the phone.
+    /// </exception>
     public async Task<ConversationInfo?> GetAsync(string conversationId, CancellationToken ct)
     {
         if (Find(conversationId) is { } cached)
@@ -290,7 +295,7 @@ public sealed partial class ChatStore : IDisposable
             return cached;
         }
 
-        // No ConfigureAwait(false): ConversationChanged Must Be Raised On The Caller Thread
+        // No ConfigureAwait(false): the store must raise ConversationChanged on the thread of the caller.
         int generation        = Generation;
         Conversation? fetched = await RequireClient().GetConversationAsync(conversationId, ct);
 
@@ -301,13 +306,15 @@ public sealed partial class ChatStore : IDisposable
     /// Fills the conversation cache from the database, so the list shows at once after a restart.
     /// </summary>
     /// <remarks>
-    /// Call once start-up ends paired. Reads on the thread pool and raises no events; a conversation the phone
-    /// already sent is kept over the saved copy. Also loads each conversation's saved encryption (see <see cref="IsEncrypted"/>).
+    /// Call it once when start-up ends paired. It reads on the thread pool and raises no events. A conversation that
+    /// the phone already sent stays over the saved copy. It also loads the saved encryption state and draft of each
+    /// conversation, see <see cref="IsEncrypted"/>.
     /// </remarks>
     /// <returns>A task that completes when the saved conversations are cached.</returns>
     public Task LoadSavedAsync()
     {
-        // Taken Now, Not When The Queue Gets To It: A Reset Meanwhile Means These Rows Are The Old Account's
+        // The generation comes from this call, not from the queued work. After a reset, the saved rows belong to the
+        // old account.
         int generation = Generation;
 
         return EnqueueAsync(database =>
@@ -321,7 +328,22 @@ public sealed partial class ChatStore : IDisposable
             IReadOnlyDictionary<string, (bool Encrypted, long At)> encryption = database.LoadEncryption();
             IReadOnlyDictionary<string, string> drafts                        = database.LoadDrafts();
 
-            // Under The Reset Lock, So Reset Can't Land Between The Check And The Rows
+            // A conversation with no snippet text names the media of its saved newest message. The reads run before
+            // the reset lock, so a Reset on the UI thread never waits for them.
+            List<ConversationInfo> infos = [];
+            foreach (Conversation c in saved)
+            {
+                ConversationInfo info = ConversationInfo.From(c);
+                if (info.Snippet.Length == 0 && info.LatestMessageId.Length > 0 && database.LoadMessage(info.Id, info.LatestMessageId) is { } latest
+                    && ChatMessage.From(latest).Media is { } media)
+                {
+                    info = info with { SnippetMedia = ChatFormat.MediaLabel(media) };
+                }
+
+                infos.Add(info);
+            }
+
+            // The reset lock keeps a Reset out between the check and the rows.
             lock (_resetLock)
             {
                 if (generation != Generation)
@@ -329,29 +351,21 @@ public sealed partial class ChatStore : IDisposable
                     return;
                 }
 
-                foreach (Conversation c in saved)
+                foreach (ConversationInfo info in infos)
                 {
-                    // No Snippet Text: Name The Saved Newest Message's Media, If It Is Saved
-                    ConversationInfo info = ConversationInfo.From(c);
-                    if (info.Snippet.Length == 0 && info.LatestMessageId.Length > 0 && database.LoadMessage(info.Id, info.LatestMessageId) is { } latest
-                        && ChatMessage.From(latest).Media is { } media)
-                    {
-                        info = info with { SnippetMedia = ChatFormat.MediaLabel(media) };
-                    }
-
                     if (_cache.TryAdd(info.Id, info))
                     {
                         _me ??= info.Participants.FirstOrDefault(p => p.IsMe);
                     }
                 }
 
-                // The Lock Of Each Chat, Unless A Newer Line Was Seen Meanwhile
+                // A newer encryption line that the store saw during the load wins.
                 foreach ((string id, (bool Encrypted, long At) state) in encryption)
                 {
                     _encryption.AddOrUpdate(id, state, (_, old) => state.At > old.At ? state : old);
                 }
 
-                // Each Saved Draft, Unless One Was Typed Meanwhile
+                // A draft that the user typed during the load wins.
                 foreach ((string id, string draft) in drafts)
                 {
                     _drafts.TryAdd(id, draft);
@@ -361,13 +375,11 @@ public sealed partial class ChatStore : IDisposable
     }
 
     /// <summary>
-    /// Loads one page of a folder and caches it.
+    /// Loads 1 page of a folder and caches it.
     /// </summary>
-    /// <param name="folder">The folder.</param>
-    /// <param name="cursor">Where the previous page ended, or null for the newest page.</param>
-    /// <param name="ct">Cancels the wait.</param>
-    /// <returns>Up to 25 conversations, newest first, and the cursor for the next page (null when there is none).</returns>
-    /// <exception cref="MessagingUnavailableException">Not connected.</exception>
+    /// <param name="cursor">The end of the previous page, or null for the newest page.</param>
+    /// <returns>Up to 25 conversations, newest first, and the cursor for the next page or null.</returns>
+    /// <exception cref="MessagingUnavailableException">The app is not connected to the phone.</exception>
     public async Task<(IReadOnlyList<ConversationInfo> Conversations, Cursor? Next)> LoadFolderAsync(ConversationFolder folder, Cursor? cursor, CancellationToken ct)
     {
         IMessagingClient client = RequireClient();
@@ -380,22 +392,21 @@ public sealed partial class ChatStore : IDisposable
             _                              => throw new ArgumentOutOfRangeException(nameof(folder)),
         };
 
+        // No ConfigureAwait(false): the store must raise ConversationChanged on the thread of the caller.
         int generation                     = Generation;
         long asked                         = Stopwatch.GetTimestamp();
         ListConversationsResponse response = await client.ListConversationsAsync(protocolFolder, PageSize, cursor, ct);
 
-        // Unpaired Or Signed Out Meanwhile: The Old Account's Page Is Dropped
         if (generation != Generation)
         {
             return ([], null);
         }
 
-        // Counts Only, So The Log Shows Where Paging Stalls
+        // The log gets counts only, so it shows where paging stops.
         LogConversationPage(folder, PageSize, cursor is not null, response.Conversations.Count, response.Cursor is not null);
 
-        // No ConfigureAwait(false) Here: ConversationChanged Must Be Raised On The Caller Thread
-        // A Conversation That Changed Live While The Page Was On Its Way (Read, A New Message) Keeps That: The Page Was
-        // Made Before It, And Put It Back Unread With Its Last Message Gone Until The Next Update
+        // A conversation that changed live during the wait keeps the live copy. The phone made the page before the
+        // change. Until the next update, the page copy can show a read chat as unread, without its newest message.
         List<ConversationInfo> result = [];
         foreach (Conversation c in response.Conversations)
         {
@@ -403,21 +414,19 @@ public sealed partial class ChatStore : IDisposable
             result.Add(newerHere && Find(c.ConversationID) is { } kept ? kept : CacheConversation(c, generation));
         }
 
-        // No Cursor Back: The Next Page Starts At This Page's Last (Oldest) Conversation, Its Time In Milliseconds, As
-        // Message Pages Do. An Empty Page Means There Are No More
+        // When the phone sends no cursor, the next page starts at the oldest conversation of this page. The cursor time
+        // is in milliseconds, as for message pages. An empty page means that there are no more pages.
         Conversation? last = response.Conversations.LastOrDefault();
         Cursor? next       = response.Cursor ?? (last is not null ? new Cursor { LastItemID = last.ConversationID, LastItemTimestamp = last.LastMessageTimestamp / 1000 } : null);
         return (result, next);
     }
 
     /// <summary>
-    /// Loads one page of messages.
+    /// Loads 1 page of messages.
     /// </summary>
-    /// <param name="conversationId">The conversation ID.</param>
-    /// <param name="cursor">Where the previous page ended, or null for the newest page.</param>
-    /// <param name="ct">Cancels the wait.</param>
-    /// <returns>Up to 25 messages, oldest first, and the cursor for the older page (null when there is none).</returns>
-    /// <exception cref="MessagingUnavailableException">Not connected.</exception>
+    /// <param name="cursor">The end of the previous page, or null for the newest page.</param>
+    /// <returns>Up to 25 messages, oldest first, and the cursor for the older page or null.</returns>
+    /// <exception cref="MessagingUnavailableException">The app is not connected to the phone.</exception>
     public async Task<(IReadOnlyList<ChatMessage> Messages, Cursor? Older)> LoadMessagesAsync(string conversationId, Cursor? cursor, CancellationToken ct)
     {
         IMessagingClient client = RequireClient();
@@ -428,22 +437,23 @@ public sealed partial class ChatStore : IDisposable
         long pageMs                   = (long)Stopwatch.GetElapsedTime(asked).TotalMilliseconds;
         LogPhonePage(pageMs, response.Messages.Count);
 
-        // Unpaired Or Signed Out Meanwhile: The Old Account's Page Is Dropped
         if (generation != Generation)
         {
             return ([], null);
         }
 
-        // The Phone Answers Newest First. An Older Page Can Hold The Cursor's Own Message Or Newer Ones, Already Shown Below,
-        // So Those Are Dropped (As mautrix-gmessages Does: pkg/connector/backfill.go)
+        // The phone answers newest first. An older page can hold the cursor message or newer ones, which the view
+        // already shows. The store drops them, as pkg/connector/backfill.go in mautrix-gmessages does.
         List<Message> page = [.. response.Messages.Where(m => cursor is null || (m.MessageID != cursor.LastItemID && (cursor.LastItemTimestamp <= 0 || m.Timestamp / 1000 < cursor.LastItemTimestamp)))];
         List<ChatMessage> messages = [.. page.Select(ChatMessage.From).Reverse()];
 
-        // Google Usually Sends No Cursor: The Next Older Page Then Starts At This Page's Oldest Message (Its Time In
-        // Milliseconds), As mautrix-gmessages Does. An Empty Page Means There Are No Older Messages
+        // Google usually sends no cursor. The next older page then starts at the oldest message of this page, as
+        // mautrix-gmessages does. The cursor time is in milliseconds. An empty page means that there are no older
+        // messages.
         Cursor? older = response.Cursor ?? (page.Count > 0 ? new Cursor { LastItemID = page[^1].MessageID, LastItemTimestamp = page[^1].Timestamp / 1000 } : null);
 
-        // The Newest Page Is What Reopening The Chat Shows; Every Page Goes To The Database
+        // The memory cache keeps only the newest page, which shows when the chat opens again. The database gets every
+        // page.
         if (cursor is null)
         {
             CachePage(conversationId, messages, onlyIfAbsent: false, generation);
@@ -456,13 +466,13 @@ public sealed partial class ChatStore : IDisposable
     }
 
     /// <summary>
-    /// Gets the newest page of a conversation from memory, else from the database (then kept in memory).
+    /// Gets the newest page of a conversation from memory, or else from the database. A page from the database stays
+    /// in memory.
     /// </summary>
     /// <remarks>
-    /// A memory hit completes at once, without leaving the caller's thread; the database is read on the background queue.
-    /// Counts as a use, so the conversation is the last one the memory cache drops.
+    /// A memory hit completes at once, on the thread of the caller. A miss reads the database at once on the thread
+    /// pool, ahead of the queued saves. The call counts as a use, so the memory cache drops this conversation last.
     /// </remarks>
-    /// <param name="conversationId">The conversation ID.</param>
     /// <returns>A copy of the page, oldest first, or null when neither memory nor the database has it.</returns>
     public async Task<IReadOnlyList<ChatMessage>?> CachedMessagesAsync(string conversationId)
     {
@@ -476,7 +486,6 @@ public sealed partial class ChatStore : IDisposable
             return null;
         }
 
-        // Ahead Of Queued Saves (See ReadNowAsync), Timed: How Long It Waited, Then Read
         int generation               = Generation;
         IReadOnlyList<Message> saved = [];
         long asked                   = Stopwatch.GetTimestamp();
@@ -498,7 +507,7 @@ public sealed partial class ChatStore : IDisposable
             return null;
         }
 
-        // A Page The Phone Sent Meanwhile Wins Over The Saved One
+        // A page that the phone sent during the read wins over the saved page.
         List<ChatMessage> savedPage = [.. saved.Select(ChatMessage.From)];
         CachePage(conversationId, savedPage, onlyIfAbsent: true, generation);
         NoteEncryption(conversationId, savedPage, generation);
@@ -506,11 +515,10 @@ public sealed partial class ChatStore : IDisposable
     }
 
     /// <summary>
-    /// Gets the newest page of a conversation from memory only, kept from its last load and the messages since.
+    /// Gets the newest page of a conversation from memory only. The page holds its last load and the messages since.
     /// </summary>
-    /// <remarks>Counts as a use, so the conversation is the last one the cache drops.</remarks>
-    /// <param name="conversationId">The conversation ID.</param>
-    /// <returns>A copy of the page, oldest first, or null when the conversation isn't cached.</returns>
+    /// <remarks>The call counts as a use, so the cache drops this conversation last.</remarks>
+    /// <returns>A copy of the page, oldest first, or null when the conversation is not cached.</returns>
     public IReadOnlyList<ChatMessage>? CachedMessages(string conversationId)
     {
         lock (_pagesLock)
@@ -526,18 +534,16 @@ public sealed partial class ChatStore : IDisposable
     }
 
     /// <summary>
-    /// Finds one message: in the conversation's page in memory, else in the database.
+    /// Finds 1 message in the cached page of the conversation, or else in the database.
     /// </summary>
     /// <remarks>
-    /// For a reply's quote. A memory hit completes at once, without leaving the caller's thread and without counting
-    /// as a use; the database is read at once on the thread pool, ahead of saves still queued.
+    /// The view uses it for the quote of a reply. A memory hit completes at once on the thread of the caller and does
+    /// not count as a use. A miss reads the database at once on the thread pool, ahead of the queued saves.
     /// </remarks>
-    /// <param name="conversationId">The conversation ID.</param>
-    /// <param name="messageId">The message ID.</param>
     /// <returns>The message, or null when neither memory nor the database has it.</returns>
     public async Task<ChatMessage?> FindMessageAsync(string conversationId, string messageId)
     {
-        // An Empty ID Would Match A Message Still Being Sent
+        // An empty ID matches a pending message, which has no ID yet.
         if (messageId.Length == 0)
         {
             return null;
@@ -556,7 +562,6 @@ public sealed partial class ChatStore : IDisposable
             return null;
         }
 
-        // Ahead Of Queued Saves (See ReadNowAsync)
         int generation = Generation;
         Message? saved = null;
         await ReadNowAsync(database =>
@@ -574,18 +579,17 @@ public sealed partial class ChatStore : IDisposable
     /// Sends a text message the way the bridge does.
     /// </summary>
     /// <remarks>
-    /// Ported from <c>ConvertMatrixMessage</c> in the Go connector: the same temporary ID goes in the request and the
-    /// payload, the message is sent as the conversation's default outgoing participant, and the SIM is the card
-    /// belonging to that participant (from the last settings event). Phone-not-responding and connection-closed
-    /// exceptions pass through for the caller to handle.
+    /// Ported from <c>ConvertMatrixMessage</c> in the Go connector. The request and the payload carry the same
+    /// temporary ID. The message goes as the default outgoing participant of the conversation. The SIM is the card of
+    /// that participant, from the last settings event. The exceptions for a phone that does not respond and for a
+    /// closed connection go to the caller.
     /// </remarks>
-    /// <param name="conversationId">The conversation ID.</param>
-    /// <param name="text">The text.</param>
-    /// <param name="tmpId">The temporary ID (<c>GmClient.NewTmpId()</c>), so the echo can be matched to the pending bubble.</param>
-    /// <param name="replyToId">The ID of the message this one replies to (RCS only), or null for a plain message.</param>
-    /// <param name="ct">Cancels the wait.</param>
+    /// <param name="tmpId">
+    /// The temporary ID from <c>GmClient.NewTmpId()</c>. It matches the echo to the pending bubble.
+    /// </param>
+    /// <param name="replyToId">The ID of the quoted message for an RCS reply, or null for a plain message.</param>
     /// <returns>The pending message as sent.</returns>
-    /// <exception cref="MessagingUnavailableException">Not connected.</exception>
+    /// <exception cref="MessagingUnavailableException">The app is not connected to the phone.</exception>
     /// <exception cref="MessageSendException">The phone answered with a status other than success.</exception>
     public async Task<ChatMessage> SendTextAsync(string conversationId, string text, string tmpId, string? replyToId, CancellationToken ct)
     {
@@ -598,7 +602,7 @@ public sealed partial class ChatStore : IDisposable
         SendMessageRequest request = NewSendRequest(conversationId, conversation, tmpId);
         request.MessagePayload.MessageInfo.Add(new MessageInfo { MessageContent = new MessageContent { Content = text } });
 
-        // A Reply Carries The Quoted Message's ID (handlematrix.go)
+        // A reply carries the ID of the quoted message, as in handlematrix.go.
         if (replyToId is not null)
         {
             request.Reply = new ReplyPayload { MessageID = replyToId };
@@ -619,49 +623,23 @@ public sealed partial class ChatStore : IDisposable
     }
 
     /// <summary>
-    /// Uploads an attachment and sends it, with an optional caption, the way the bridge does.
+    /// Uploads an attachment, encrypted, and does not send it yet.
     /// </summary>
     /// <remarks>
-    /// <see cref="UploadAttachmentAsync"/>, then <see cref="SendUploadedMediaAsync"/>. A file over
-    /// <see cref="MaxAttachmentBytes"/> is refused before anything uploads. The file name and type are never logged.
+    /// The result is the <see cref="MediaContent"/> to send, with its media ID and decryption key. A retry sends it
+    /// again without a new upload. A file over <see cref="MaxAttachmentBytes"/> fails before the upload starts. The
+    /// store never logs the file name or type.
     /// </remarks>
-    /// <param name="conversationId">The conversation ID.</param>
-    /// <param name="bytes">The file's bytes.</param>
-    /// <param name="fileName">The file name the other side sees.</param>
+    /// <param name="bytes">The bytes of the file.</param>
+    /// <param name="fileName">The file name that the other side sees.</param>
     /// <param name="mime">The mime type, such as <c>image/jpeg</c>.</param>
-    /// <param name="caption">The caption, or null or empty for none.</param>
-    /// <param name="tmpId">The temporary ID (<c>GmClient.NewTmpId()</c>), so the echo can be matched to the pending bubble.</param>
-    /// <param name="progress">Gets the share of the upload done, from 0 to 1; may be null.</param>
-    /// <param name="ct">Cancels the upload and the wait.</param>
-    /// <returns>The pending media message as sent (without the caption when it went apart).</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="fileName"/> or <paramref name="mime"/> is null.</exception>
-    /// <exception cref="AttachmentTooBigException">The file is over <see cref="MaxAttachmentBytes"/>.</exception>
-    /// <exception cref="MessagingUnavailableException">Not connected.</exception>
-    /// <exception cref="MessageSendException">The phone answered with a status other than success.</exception>
-    public async Task<ChatMessage> SendMediaAsync(string conversationId, ReadOnlyMemory<byte> bytes, string fileName, string mime, string? caption, string tmpId, IProgress<double>? progress, CancellationToken ct)
-    {
-        // Upload, Then Send
-        MediaContent media = await UploadAttachmentAsync(bytes, fileName, mime, progress, ct).ConfigureAwait(false);
-        return await SendUploadedMediaAsync(conversationId, media, caption, tmpId, null, ct).ConfigureAwait(false);
-    }
-
-    /// <summary>
-    /// Uploads an attachment, encrypted, without sending it yet.
-    /// </summary>
-    /// <remarks>
-    /// The answer is the <see cref="MediaContent"/> to send (its media ID and decryption key), which a retry sends again
-    /// as is, without a new upload. A file over <see cref="MaxAttachmentBytes"/> is refused before anything uploads. The
-    /// file name and type are never logged.
-    /// </remarks>
-    /// <param name="bytes">The file's bytes.</param>
-    /// <param name="fileName">The file name the other side sees.</param>
-    /// <param name="mime">The mime type, such as <c>image/jpeg</c>.</param>
-    /// <param name="progress">Gets the share of the upload done, from 0 to 1; may be null.</param>
-    /// <param name="ct">Cancels the upload.</param>
+    /// <param name="progress">Receives the done part of the upload, from 0 to 1, or null.</param>
     /// <returns>The uploaded media part.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="fileName"/> or <paramref name="mime"/> is null.</exception>
+    /// <exception cref="ArgumentNullException">
+    /// <paramref name="fileName"/> or <paramref name="mime"/> is null.
+    /// </exception>
     /// <exception cref="AttachmentTooBigException">The file is over <see cref="MaxAttachmentBytes"/>.</exception>
-    /// <exception cref="MessagingUnavailableException">Not connected.</exception>
+    /// <exception cref="MessagingUnavailableException">The app is not connected to the phone.</exception>
     public Task<MediaContent> UploadAttachmentAsync(ReadOnlyMemory<byte> bytes, string fileName, string mime, IProgress<double>? progress, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(fileName);
@@ -679,23 +657,23 @@ public sealed partial class ChatStore : IDisposable
     /// Sends an uploaded attachment, with an optional caption, the way the bridge does.
     /// </summary>
     /// <remarks>
-    /// Ported from <c>ConvertMatrixMessage</c> in the Go connector (handlematrix.go): the uploaded
-    /// <see cref="MediaContent"/> is the message's first <see cref="MessageInfo"/>, and the caption a second one holding
-    /// its text. RCS refuses captions on media (capabilities.go), so in an RCS chat the caption goes as its own text
-    /// message right after; if only that caption fails, the media still counts as sent (the failure is logged by type),
-    /// so a retry never sends the media twice. Sent as the conversation's default outgoing participant with its SIM, as
-    /// <see cref="SendTextAsync"/> is. A reply carries the quoted message's ID, as a text reply does. A retry sends the
-    /// same media part again. The file name and type are never logged.
+    /// Ported from <c>ConvertMatrixMessage</c> in handlematrix.go of the Go connector. The uploaded
+    /// <see cref="MediaContent"/> is the first <see cref="MessageInfo"/> of the message, and the caption is a second
+    /// one. RCS refuses captions on media, see capabilities.go. Thus in an RCS chat, the caption goes as a separate
+    /// text message right after the media. If only that caption fails, the media still counts as sent and the store
+    /// logs the failure by type. Thus a retry never sends the media twice. The message goes as the default outgoing
+    /// participant with its SIM, as in <see cref="SendTextAsync"/>. A reply carries the ID of the quoted message, as a
+    /// text reply does. The store never logs the file name or type.
     /// </remarks>
-    /// <param name="conversationId">The conversation ID.</param>
-    /// <param name="media">The uploaded media part (see <see cref="UploadAttachmentAsync"/>).</param>
+    /// <param name="media">The uploaded media part from <see cref="UploadAttachmentAsync"/>.</param>
     /// <param name="caption">The caption, or null or empty for none.</param>
-    /// <param name="tmpId">The temporary ID (<c>GmClient.NewTmpId()</c>), so the echo can be matched to the pending bubble.</param>
-    /// <param name="replyToId">The ID of the message replied to, or null.</param>
-    /// <param name="ct">Cancels the wait.</param>
-    /// <returns>The pending media message as sent (without the caption when it went apart).</returns>
+    /// <param name="tmpId">
+    /// The temporary ID from <c>GmClient.NewTmpId()</c>. It matches the echo to the pending bubble.
+    /// </param>
+    /// <param name="replyToId">The ID of the quoted message, or null.</param>
+    /// <returns>The pending media message as sent. A caption that goes separately is not in it.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="media"/> is null.</exception>
-    /// <exception cref="MessagingUnavailableException">Not connected.</exception>
+    /// <exception cref="MessagingUnavailableException">The app is not connected to the phone.</exception>
     /// <exception cref="MessageSendException">The phone answered with a status other than success.</exception>
     public async Task<ChatMessage> SendUploadedMediaAsync(string conversationId, MediaContent media, string? caption, string tmpId, string? replyToId, CancellationToken ct)
     {
@@ -708,7 +686,6 @@ public sealed partial class ChatStore : IDisposable
         string text                   = caption ?? string.Empty;
         bool captionApart             = conversation.IsRcs && text.Length > 0;
 
-        // Send The Media With Its Caption (RCS: Without)
         SendMessageRequest request = NewSendRequest(conversationId, conversation, tmpId);
         request.MessagePayload.MessageInfo.Add(new MessageInfo { MediaContent = media });
         if (text.Length > 0 && !captionApart)
@@ -716,7 +693,6 @@ public sealed partial class ChatStore : IDisposable
             request.MessagePayload.MessageInfo.Add(new MessageInfo { MessageContent = new MessageContent { Content = text } });
         }
 
-        // A Reply Carries The Quoted Message's ID (handlematrix.go)
         if (replyToId is not null)
         {
             request.Reply = new ReplyPayload { MessageID = replyToId };
@@ -727,7 +703,7 @@ public sealed partial class ChatStore : IDisposable
 
         var pending = ChatMessage.Pending(tmpId, conversationId, conversation.DefaultOutgoingId, _time.GetUtcNow(), MediaPart.KindOf(media.Format), captionApart ? string.Empty : text) with
         {
-            Media = MediaPart.From(media),
+            Media     = MediaPart.From(media),
             IsRcs     = conversation.IsRcs,
             ReplyToId = replyToId ?? string.Empty,
         };
@@ -736,7 +712,6 @@ public sealed partial class ChatStore : IDisposable
             CacheMessage(pending);
         }
 
-        // RCS: The Caption Follows As Its Own Message; Its Failure Leaves The Media Sent
         if (captionApart)
         {
             try
@@ -756,18 +731,17 @@ public sealed partial class ChatStore : IDisposable
     /// Adds, switches or removes my reaction on a message, the way the bridge does.
     /// </summary>
     /// <remarks>
-    /// Ported from <c>HandleMatrixReaction</c> and <c>HandleMatrixReactionRemove</c> in the Go connector: the emoji
-    /// maps to its LibGM type, and the SIM is the conversation's (as <see cref="SendTextAsync"/> picks it), except a
-    /// removal, which sends none. The bubble changes when the phone's echo arrives.
+    /// Ported from <c>HandleMatrixReaction</c> and <c>HandleMatrixReactionRemove</c> in the Go connector. The emoji
+    /// maps to its LibGM type. The request carries the SIM of the conversation, as in <see cref="SendTextAsync"/>, but
+    /// a removal carries no SIM. The bubble changes when the echo from the phone arrives.
     /// </remarks>
-    /// <param name="conversationId">The conversation ID.</param>
-    /// <param name="messageId">The message reacted to.</param>
-    /// <param name="emoji">The emoji.</param>
-    /// <param name="action">Add, switch (from another emoji of mine) or remove.</param>
-    /// <param name="ct">Cancels the wait.</param>
+    /// <param name="messageId">The message that gets the reaction.</param>
+    /// <param name="action">Add, switch from another emoji of mine, or remove.</param>
     /// <returns>A task that completes when the phone answered.</returns>
-    /// <exception cref="MessagingUnavailableException">Not connected.</exception>
-    /// <exception cref="MessageSendException">The phone refused the reaction, or the conversation is unknown.</exception>
+    /// <exception cref="MessagingUnavailableException">The app is not connected to the phone.</exception>
+    /// <exception cref="MessageSendException">
+    /// The phone refused the reaction, or the conversation is unknown.
+    /// </exception>
     public async Task SendReactionAsync(string conversationId, string messageId, string emoji, SendReactionRequest.Types.Action action, CancellationToken ct)
     {
         IMessagingClient client = RequireClient();
@@ -791,13 +765,13 @@ public sealed partial class ChatStore : IDisposable
     }
 
     /// <summary>
-    /// Tells the other side of a conversation that I'm typing.
+    /// Tells the other side of a conversation that I am typing.
     /// </summary>
-    /// <remarks>Sent with the conversation's SIM, as <see cref="SendTextAsync"/> picks it. The phone sends no answer.</remarks>
-    /// <param name="conversationId">The conversation ID.</param>
-    /// <param name="ct">Cancels the wait.</param>
-    /// <returns>A task that completes when the request was sent.</returns>
-    /// <exception cref="MessagingUnavailableException">Not connected.</exception>
+    /// <remarks>
+    /// The request carries the SIM of the conversation, as in <see cref="SendTextAsync"/>. The phone sends no answer.
+    /// </remarks>
+    /// <returns>A task that completes when the request is sent.</returns>
+    /// <exception cref="MessagingUnavailableException">The app is not connected to the phone.</exception>
     /// <exception cref="MessageSendException">The conversation is unknown.</exception>
     public async Task SendTypingAsync(string conversationId, CancellationToken ct)
     {
@@ -808,15 +782,17 @@ public sealed partial class ChatStore : IDisposable
     }
 
     /// <summary>
-    /// Deletes a message from the phone, then from the kept page and the database.
+    /// Deletes a message on the phone, then from the cached page and the database.
     /// </summary>
-    /// <remarks>Only this side's copy goes; the other side keeps theirs. The phone updates the conversation's snippet itself.</remarks>
-    /// <param name="conversationId">The conversation ID.</param>
-    /// <param name="messageId">The message ID.</param>
-    /// <param name="ct">Cancels the wait.</param>
-    /// <returns>True when the phone deleted it; false when it said no.</returns>
-    /// <exception cref="ArgumentException"><paramref name="conversationId"/> or <paramref name="messageId"/> is empty.</exception>
-    /// <exception cref="MessagingUnavailableException">Not connected.</exception>
+    /// <remarks>
+    /// Only the copy on this side goes. The other side keeps its copy. The phone updates the snippet of the
+    /// conversation itself.
+    /// </remarks>
+    /// <returns>True when the phone deleted the message, or false when the phone refused.</returns>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="conversationId"/> or <paramref name="messageId"/> is empty.
+    /// </exception>
+    /// <exception cref="MessagingUnavailableException">The app is not connected to the phone.</exception>
     public async Task<bool> DeleteMessageAsync(string conversationId, string messageId, CancellationToken ct)
     {
         ArgumentException.ThrowIfNullOrEmpty(conversationId);
@@ -835,7 +811,6 @@ public sealed partial class ChatStore : IDisposable
         return true;
     }
 
-    // Drops A Message From The Kept Page And The Database
     private void ForgetMessage(string conversationId, string messageId, int generation)
     {
         lock (_pagesLock)
@@ -858,8 +833,7 @@ public sealed partial class ChatStore : IDisposable
         }
     }
 
-    // Looks Up The Conversation, Fetching It When Not Cached. No ConfigureAwait(false): ConversationChanged Must Be
-    // Raised On The Caller Thread
+    // No ConfigureAwait(false): the store must raise ConversationChanged on the thread of the caller.
     private async Task<ConversationInfo> RequireConversationAsync(IMessagingClient client, string conversationId, int generation, CancellationToken ct)
     {
         if (Find(conversationId) is { } cached)
@@ -876,12 +850,10 @@ public sealed partial class ChatStore : IDisposable
         return CacheConversation(fetched, generation);
     }
 
-    // The SIM Card Of The Participant The Conversation Sends As (From The Last Settings Event), Or Null
+    // The SIM card of the default outgoing participant, from the last settings event.
     private SIMPayload? SimOf(ConversationInfo conversation) =>
         _sims.FirstOrDefault(s => s.SIMParticipant?.ID == conversation.DefaultOutgoingId)?.SIMData?.SIMPayload;
 
-    // A Send Request Without Its Parts, As The Bridge Builds It: The Same Temporary ID In The Request And The Payload,
-    // Sent As The Conversation's Default Outgoing Participant With Its SIM
     private SendMessageRequest NewSendRequest(string conversationId, ConversationInfo conversation, string tmpId) => new()
     {
         ConversationID = conversationId,
@@ -897,7 +869,6 @@ public sealed partial class ChatStore : IDisposable
         ForceRCS   = false,
     };
 
-    // Sends, Throwing When The Phone Answers Anything But Success
     private async Task SendCheckedAsync(IMessagingClient client, SendMessageRequest request, CancellationToken ct)
     {
         SendMessageResponse response = await client.SendMessageAsync(request, ct).ConfigureAwait(false);
@@ -909,25 +880,23 @@ public sealed partial class ChatStore : IDisposable
     }
 
     /// <summary>
-    /// Tells the phone a conversation was read up to a message, then marks the cached conversation read.
+    /// Tells the phone that a conversation is read up to a message, then marks the cached conversation read.
     /// </summary>
     /// <remarks>
-    /// The cached copy changes as soon as the phone answers, raising <see cref="ConversationChanged"/>, so the list
-    /// stops showing it unread without waiting for the phone to send the conversation back. The saved row is marked
-    /// read too, so the chat doesn't show unread for a moment on the next launch.
+    /// The cached copy changes when the phone answers and raises <see cref="ConversationChanged"/>. Thus the list stops
+    /// showing it unread before the phone sends the conversation back. The saved row turns read too, so the chat does
+    /// not show unread for a moment on the next start.
     /// </remarks>
-    /// <param name="conversationId">The conversation ID.</param>
-    /// <param name="messageId">The newest message that was read.</param>
-    /// <param name="ct">Cancels the wait.</param>
+    /// <param name="messageId">The newest message that the user read.</param>
     /// <returns>A task that completes when the phone answered.</returns>
-    /// <exception cref="MessagingUnavailableException">Not connected.</exception>
+    /// <exception cref="MessagingUnavailableException">The app is not connected to the phone.</exception>
     public async Task MarkReadAsync(string conversationId, string messageId, CancellationToken ct)
     {
-        // No ConfigureAwait(false): ConversationChanged Must Be Raised On The Caller Thread
+        // No ConfigureAwait(false): the store must raise ConversationChanged on the thread of the caller.
         int generation = Generation;
         await RequireClient().MarkReadAsync(conversationId, messageId, ct);
 
-        // Read Here: The Live Unread Count Starts Over, Even When The Cached Conversation Never Turned Unread
+        // The live unread texts start again, also when the cached conversation never turned unread.
         _unreadTexts.TryRemove(conversationId, out _);
 
         if (generation != Generation || Find(conversationId) is not { Unread: true } cached)
@@ -938,8 +907,8 @@ public sealed partial class ChatStore : IDisposable
         ConversationInfo read = cached with { Unread = false };
         Upsert(read);
 
-        // Saved Read Only While The Saved Row's Newest Message Is The Read One, Or My Own (A Reply From A Toast), Checked When
-        // The Write Runs: One That Came In Meanwhile Stays Unread On Disk
+        // The saved row turns read only when its newest message is the read one or mine. Mine can be a reply from a
+        // toast. The check runs with the write, so a message that came in meanwhile keeps the row unread on disk.
         SaveIfCurrent(conversationId, generation, database => database.UpdateConversation(conversationId, c =>
         {
             if (!c.Unread || (c.LatestMessageID != messageId && c.LatestMessage?.FromMe != 1))
@@ -958,24 +927,21 @@ public sealed partial class ChatStore : IDisposable
     /// Archives, unarchives, mutes, unmutes, blocks, unblocks or deletes a conversation on the phone.
     /// </summary>
     /// <remarks>
-    /// Sends the request <see cref="BuildRequest"/> builds. Only once the phone says it succeeded does the cached
-    /// conversation take its new status (<see cref="StatusAfter"/>) or mute state, raising
-    /// <see cref="ConversationChanged"/> so the lists move it at once. The saved row changes too, so the next launch
-    /// doesn't show it in its old place for a moment. A
-    /// <see cref="Reset"/> while the phone is answering applies nothing. A refusal is logged here;
-    /// callers log every other failure, as they do for the other writers.
+    /// The store sends the request from <see cref="BuildRequest"/>. When the phone accepts it, the cached conversation
+    /// gets its new status from <see cref="StatusAfter"/> or its new mute state. That change raises
+    /// <see cref="ConversationChanged"/>, so the lists move the conversation at once. The saved row changes too, so
+    /// the next start does not show it in its old place for a moment. A <see cref="Reset"/> during the request
+    /// applies nothing. The store logs a refusal. Callers log all other failures, as they do for the other writers.
     /// </remarks>
-    /// <param name="conversationId">The conversation ID.</param>
-    /// <param name="action">What to do.</param>
-    /// <param name="ct">Cancels the wait.</param>
+    /// <param name="action">The action to do.</param>
     /// <returns>A task that completes when the phone answered.</returns>
-    /// <exception cref="MessagingUnavailableException">Not connected.</exception>
+    /// <exception cref="MessagingUnavailableException">The app is not connected to the phone.</exception>
     /// <exception cref="MessageSendException">The phone refused the update, or the conversation is unknown.</exception>
     public async Task UpdateConversationAsync(string conversationId, ConversationAction action, CancellationToken ct)
     {
         IMessagingClient client = RequireClient();
 
-        // No ConfigureAwait(false): ConversationChanged Must Be Raised On The Caller Thread
+        // No ConfigureAwait(false): the store must raise ConversationChanged on the thread of the caller.
         int generation                = Generation;
         ConversationInfo conversation = await RequireConversationAsync(client, conversationId, generation, ct);
 
@@ -986,21 +952,20 @@ public sealed partial class ChatStore : IDisposable
             throw new MessageSendException("ConversationUpdateRefused");
         }
 
-        // Unpaired Or Signed Out Meanwhile
         if (generation != Generation || Find(conversationId) is not { } cached)
         {
             return;
         }
 
-        // Mute And Unmute Leave The Status Alone
         ConversationStatus? newStatus = StatusAfter(action);
         ConversationInfo updated      = newStatus is { } status
             ? cached with { Status = status }
             : cached with { IsMuted = action == ConversationAction.Mute };
         bool changed                  = Upsert(updated);
 
-        // The Saved Row Changes Too, Even When The Cached Copy Already Had It, So The Next Launch Doesn't Show It In Its Old
-        // Place Until The Phone's Page Comes. A Deleted Chat Leaves The Database, Messages And All
+        // The saved row changes also when the cached copy already had the change. Thus the next start does not show
+        // the chat in its old place before the page from the phone comes. A deleted chat leaves the database with all
+        // its messages.
         if (action == ConversationAction.Delete)
         {
             _drafts.TryRemove(conversationId, out _);
@@ -1012,7 +977,6 @@ public sealed partial class ChatStore : IDisposable
             ConversationMuteStatus mute = updated.IsMuted ? ConversationMuteStatus.Mute : ConversationMuteStatus.Unmute;
             SaveIfCurrent(conversationId, generation, database => database.UpdateConversation(conversationId, c =>
             {
-                // Already So: Nothing To Rewrite
                 bool same = newStatus is { } target ? c.Status == target : c.Muted == mute;
                 if (same)
                 {
@@ -1042,20 +1006,18 @@ public sealed partial class ChatStore : IDisposable
     /// Builds the phone request for a conversation action, the way LibGM and the Go connector do.
     /// </summary>
     /// <remarks>
-    /// Archive, unarchive, mute and unmute fill only <c>UpdateData</c> (LibGM's <c>conversation_builder.go</c>).
-    /// Delete, block and unblock set the action and the ID and fill <c>DeleteData</c> with the other person's number
-    /// (<c>DeleteConversation</c> in <c>methods.go</c>, <c>HandleMatrixBlockUser</c>); a block also sends
-    /// <c>Action5</c>. The number is the first visible participant that isn't me and has one, in a one-on-one chat
-    /// only (<c>findPhoneForConversation</c>); otherwise it is left unset.
+    /// Archive, unarchive, mute and unmute fill only <c>UpdateData</c>, as <c>conversation_builder.go</c> in LibGM
+    /// does. Delete, block and unblock set the action and the ID. They also fill <c>DeleteData</c> with the number of
+    /// the other person, as <c>DeleteConversation</c> in <c>methods.go</c> and <c>HandleMatrixBlockUser</c> do. A
+    /// block also sends <c>Action5</c>. The number comes from the first visible participant who is not me and has a
+    /// number. Only a one-on-one chat sends it, as <c>findPhoneForConversation</c> does. Otherwise the number stays
+    /// unset.
     /// </remarks>
-    /// <param name="conversation">The conversation.</param>
-    /// <param name="action">What to do.</param>
     /// <returns>The request.</returns>
     internal static UpdateConversationRequest BuildRequest(ConversationInfo conversation, ConversationAction action)
     {
         string id = conversation.Id;
 
-        // Archive And Mute
         switch (action)
         {
             case ConversationAction.Archive or ConversationAction.Unarchive:
@@ -1067,7 +1029,6 @@ public sealed partial class ChatStore : IDisposable
                 return new UpdateConversationRequest { UpdateData = new UpdateConversationData { ConversationID = id, Mute = mute } };
         }
 
-        // Delete, Block And Unblock
         var deleteData  = new DeleteConversationData { ConversationID = id };
         string? phone   = conversation.IsGroup ? null : conversation.Participants.FirstOrDefault(p => p.IsVisible && !p.IsMe && p.Number.Length > 0)?.Number;
         if (phone is not null)
@@ -1098,10 +1059,9 @@ public sealed partial class ChatStore : IDisposable
     }
 
     /// <summary>
-    /// Gets the status a conversation has once the phone accepted an action.
+    /// Gets the status of a conversation after the phone accepts an action.
     /// </summary>
-    /// <param name="action">The action.</param>
-    /// <returns>The new status, or null when the action leaves the status alone (mute and unmute).</returns>
+    /// <returns>The new status, or null when the action keeps the status, as mute and unmute do.</returns>
     internal static ConversationStatus? StatusAfter(ConversationAction action) => action switch
     {
         ConversationAction.Archive                                      => ConversationStatus.Archived,
@@ -1113,14 +1073,15 @@ public sealed partial class ChatStore : IDisposable
     };
 
     /// <summary>
-    /// Forgets everything learned from the paired phone: cached conversations, the owner, the SIMs, the notified IDs,
-    /// the decrypted media (memory and temp folder) and the database.
+    /// Forgets all data from the paired phone: cached conversations, the owner, the SIMs and the notified IDs. It also
+    /// deletes the decrypted media in memory and in the temp folder, and the database.
     /// </summary>
     /// <remarks>
-    /// Call on unpair or sign-out. Conversation IDs are small per-phone numbers, so a different phone paired later
-    /// would otherwise get the old phone's names, owner and SIMs; it also drops the old account's names and numbers
-    /// from memory and disk. A fetch that started before the reset drops its result: no cache write, no database
-    /// write, no event. The file is deleted on the background queue, after any write already queued.
+    /// Call it on unpair or sign-out. Conversation IDs are small numbers on each phone. Without a reset, a different
+    /// phone paired later gets the names, owner and SIMs of the old phone. The reset also removes the names and
+    /// numbers of the old account from memory and disk. A fetch that started before the reset drops its result: no
+    /// cache write, no database write, no event. The background queue deletes the file after the writes that are
+    /// already in the queue.
     /// </remarks>
     public void Reset()
     {
@@ -1156,7 +1117,8 @@ public sealed partial class ChatStore : IDisposable
     }
 
     /// <summary>
-    /// Logs that a view's request failed, with the error type only (never the message, which can hold content).
+    /// Logs that a request of a view failed, with the error type only. The error message can hold content, so the
+    /// log never gets it.
     /// </summary>
     /// <param name="action">What failed, such as "send".</param>
     /// <param name="ex">The error.</param>
@@ -1195,11 +1157,12 @@ public sealed partial class ChatStore : IDisposable
     private partial void LogPhonePage(long elapsedMs, int count);
 
     /// <summary>
-    /// Logs one step of opening a chat, in milliseconds since it was picked (counts only, never content or IDs).
+    /// Logs 1 step of a chat open, in milliseconds since the user picked the chat. The log gets counts only, never
+    /// content or IDs.
     /// </summary>
     /// <param name="step">The step, such as "cache shown" or "first bubbles drawn".</param>
-    /// <param name="elapsedMs">Milliseconds since the chat was picked.</param>
-    /// <param name="count">How many bubbles or messages the step had.</param>
+    /// <param name="elapsedMs">The milliseconds since the user picked the chat.</param>
+    /// <param name="count">The number of bubbles or messages in the step.</param>
     [LoggerMessage(Level = LogLevel.Information, Message = "Chat open: {Step} at {ElapsedMs} ms, {Count} bubbles")]
     public partial void LogChatOpenStep(string step, long elapsedMs, int count);
 }

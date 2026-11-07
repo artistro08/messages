@@ -19,22 +19,25 @@ using WinRT;
 namespace GMessages.App.Media;
 
 /// <summary>
-/// One video playing from memory: a <see cref="MediaPlayer"/> over the decrypted bytes, shown in a
-/// <see cref="MediaPlayerElement"/> with Windows' transport controls.
+/// Plays 1 video from memory: a <see cref="MediaPlayer"/> over the decrypted bytes, shown in a
+/// <see cref="MediaPlayerElement"/> with the transport controls of Windows.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Made the way <see cref="VoicePlayer"/> makes its player: the bytes play from memory (never from disk), as media (a
-/// communications stream goes to the default communications device, often not the speakers), and muted in a test run.
-/// Its command manager stays on: with it off, the play button of Windows' controls never played a paused video. The
-/// bubble and the viewer show the same compact bar: play or pause, seek, volume. Zoom, cast and full window are hidden
-/// (the bubble's expand and the viewer stand in for full window).
+/// The class makes its player in the way that <see cref="VoicePlayer"/> does. The bytes play from memory, never from
+/// disk. They play as media, because a communications stream goes to the default communications device. That device is
+/// often not the speakers. A test run plays muted.
 /// </para>
 /// <para>
-/// The owner puts <see cref="Element"/> in a panel, and on <see cref="Dispose"/> takes it out first, then disposes:
-/// that stops the sound and lets go of the player and the bytes' stream. A test run puts the player's state in the
-/// element's item status (<c>Playing</c>, <c>Paused</c>, ...) and notes it, with the audio category, in
-/// <c>video-player.txt</c>; a failure goes in <c>video-failed.txt</c>.
+/// The command manager stays on. With it off, the play button of the Windows controls never played a paused video.
+/// The bubble and the viewer show the same compact bar: play or pause, seek and volume. Zoom, cast and full window are
+/// hidden. The expand button of the bubble and the viewer take the place of full window.
+/// </para>
+/// <para>
+/// The owner puts <see cref="Element"/> in a panel. Before <see cref="Dispose"/>, the owner must take it out of the
+/// panel. The dispose stops the sound and releases the player and the stream of the bytes. A test run puts the player
+/// state in the item status of the element, such as <c>Playing</c> or <c>Paused</c>. The test run also notes the state
+/// and the audio category in <c>video-player.txt</c>, and a failure in <c>video-failed.txt</c>.
 /// </para>
 /// </remarks>
 internal sealed class VideoPlayback : IDisposable
@@ -43,32 +46,34 @@ internal sealed class VideoPlayback : IDisposable
     private readonly IRandomAccessStream _stream;
     private readonly MediaSource _source;
 
-    // Hides Cast And Full Window Once The Controls Make Them; Held, So Dispose Can Take It Off If They Never Did
+    // Hides cast and full window when the controls make them. The field holds the handler, so that Dispose can remove
+    // it when the controls never made them.
     private readonly EventHandler<object> _hideExtras;
 
-    // Seeks To The Start Position Once Opened; Held, So Dispose Can Take It Off
+    // Seeks to the start position when the video opens. The field holds the handler, so that Dispose can remove it.
     private readonly TypedEventHandler<MediaPlayer, object>? _seekToStart;
 
-    // Hides The Controls While Playing, 1 s After Play Starts Or The Pointer Rests Or Leaves (Owner), Fading Over The
-    // Time WinUI's Own Controls Take
+    // While the video plays, the controls hide 1 s after play starts or the pointer rests or leaves. The owner asked
+    // for this. The fade takes the control animation time of WinUI.
     private static readonly TimeSpan HideAfter = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan FadeTime  = TimeSpan.FromMilliseconds(250);
     private readonly DispatcherQueueTimer _hideTimer;
 
-    // The Bar's Panel Once Its Template Has Made It, And Whether The Bar Is Meant To Show
+    // The panel of the bar, after its template makes it, and whether the bar must show.
     private FrameworkElement? _panel;
     private bool _panelShown = true;
 
-    // Keyboard (Or Gamepad) Focus Is In The Controls, Which Then Stay Shown; Set As Focus Arrives, Read Once It Has
+    // Keyboard or gamepad focus in the controls keeps them shown. GettingFocus sets the first flag, and GotFocus reads
+    // it.
     private bool _focusByKeys;
     private bool _keysInside;
 
-    // Where The Pointer Last Was Over The Video, In Window Coordinates
+    // The last pointer position over the video, in window coordinates.
     private Point _pointerAt = new(double.NaN, double.NaN);
     private bool _disposed;
 
-    // Frames Drawn By The Owner: The Box They Fit, The Surface Each Is Copied To (Made At The Frame's Size), The Bitmap On
-    // Show, And Whether One Is On Its Way (A Frame Arriving Meanwhile Is Skipped)
+    // The fields hold the box that the drawn frames fit and the surface of each copy. The surface has the frame size.
+    // Then come the bitmap on show and a flag that is 1 while a frame draws.
     private SizeInt32 _frameBox;
     private VideoFrame? _frame;
     private SoftwareBitmap? _shown;
@@ -77,15 +82,15 @@ internal sealed class VideoPlayback : IDisposable
     /// <summary>
     /// Makes the player and its element, paused at the start position.
     /// </summary>
-    /// <param name="queue">The UI thread's queue, where state changes are shown.</param>
-    /// <param name="bytes">The video file's bytes.</param>
-    /// <param name="mime">The video's mime type.</param>
+    /// <param name="queue">The queue of the UI thread, where state changes show.</param>
+    /// <param name="bytes">The bytes of the video file.</param>
+    /// <param name="mime">The MIME type of the video.</param>
     /// <param name="start">Where to start.</param>
-    /// <param name="automationId">The element's AutomationId.</param>
-    /// <param name="name">What Narrator calls the element.</param>
+    /// <param name="automationId">The AutomationId of the element.</param>
+    /// <param name="name">The name that Narrator reads for the element.</param>
     /// <param name="drawFrames">
-    /// True to hand the frames to the owner through <see cref="Frames"/> (the bubble, whose rounded corners the
-    /// player's own picture ignores) instead of the element drawing them; see <see cref="SizeFrames"/>.
+    /// True to give the frames to the owner through <see cref="Frames"/>, and the element then does not draw them. The
+    /// bubble uses this, because the own picture of the player ignores rounded corners. See <see cref="SizeFrames"/>.
     /// </param>
     public VideoPlayback(DispatcherQueue queue, byte[] bytes, string mime, TimeSpan start, string automationId, string name, bool drawFrames = false)
     {
@@ -103,7 +108,8 @@ internal sealed class VideoPlayback : IDisposable
         };
         Player.MediaFailed                          += OnMediaFailed;
 
-        // The Start Position Once Opened (The Item's Own Start Time Alone Left The Player At The Beginning)
+        // The player seeks to the start when the video opens. The start time of the item alone left the player at the
+        // beginning.
         if (start > TimeSpan.Zero)
         {
             _seekToStart        = (sender, _) => sender.PlaybackSession.Position = start;
@@ -112,9 +118,8 @@ internal sealed class VideoPlayback : IDisposable
 
         Player.PlaybackSession.PlaybackStateChanged += OnPlaybackStateChanged;
 
-        // Element: Windows' Controls, Without Its Own Full Window, Zoom And Cast. The Element's Own Controls Are Set Up
-        // In Place: A New MediaTransportControls Put In Their Stead Never Heard The Player's State, So Its Play Button
-        // Stayed On "Play" While The Video Played And Only Ever Paused It
+        // The code configures the own controls of the element in place. A new MediaTransportControls in their place
+        // never got the player state. Its play button stayed on "Play" while the video played and only paused it.
         Element = new MediaPlayerElement
         {
             AreTransportControlsEnabled = true,
@@ -124,9 +129,9 @@ internal sealed class VideoPlayback : IDisposable
         AutomationProperties.SetName(Element, name);
         Element.SetMediaPlayer(Player);
 
-        // Frames Drawn By The Owner: The Player Serves Each Frame Instead Of Showing It (Frame Server Mode), And The Owner
-        // Shows It As A Picture Of Its Own, Which Rounds, Clips And Layers Like Any Other. After The Element Takes The
-        // Player, Which Would Set It Up To Draw Again
+        // In frame server mode, the player serves each frame and does not show it. The owner shows the frame as its own
+        // picture, which rounds, clips and layers as any other picture does. This must come after the element takes the
+        // player, because the element sets the player up to draw again.
         if (drawFrames)
         {
             Frames                           = new SoftwareBitmapSource();
@@ -135,24 +140,27 @@ internal sealed class VideoPlayback : IDisposable
             Player.IsVideoFrameServerEnabled = true;
         }
 
-        // One Bar For The Bubble And The Viewer (Owner, Plan 10): Play Or Pause On The Left, The Seek Bar, Volume On The Right
+        // The bubble and the viewer share 1 bar, as the owner asked in Plan 10. Play or pause is on the left, then the
+        // seek bar, and volume is on the right.
         MediaTransportControls controls     = Element.TransportControls;
         controls.IsCompact                  = true;
         controls.IsZoomButtonVisible        = false;
 
-        // Across The Whole Video, Inside The Bar's Own 12 px Inset: The Style's 296 px Minimum Ran Past A Narrow Bubble's
-        // Right Edge, And Its 720 px Maximum Left A Wide Video's Bar Short (Owner, Plan 11)
+        // The bar spans the whole video inside its own 12 px inset, as the owner asked in Plan 11. The 296 px minimum
+        // of the style ran past the right edge of a narrow bubble. Its 720 px maximum left a short bar on a wide video.
         controls.MinWidth = 0;
         controls.MaxWidth = double.PositiveInfinity;
 
-        // Cast And Full Window: WinUI 3's Controls Have No Property For Either, And Set The Template's Buttons Visible
-        // Themselves (Collapsing Them Fought That And Hung The Window), So Once Made They Get No Width, No Input, No Tab
-        // Stop And No Place In Narrator's Tree. The Compact Bar Then Ends At Volume, With No Empty Slot (Owner, Plan 10)
+        // The WinUI 3 controls had no property for cast or full window, and they set the template buttons visible
+        // themselves. A collapse of the buttons fought that and hung the window. Thus each button gets no width, no
+        // input, no tab stop and no place in the tree of Narrator. The compact bar then ends at volume, with no empty
+        // slot, as the owner asked in Plan 10.
         _hideExtras             = HideExtras;
         controls.LayoutUpdated += _hideExtras;
 
-        // Controls Hide 1 s After Play Starts Or The Pointer Rests Or Leaves; Moving The Pointer Over The Video Or Keyboard
-        // Focus Brings Them Back, And They Stay While Paused. Driven Here Alone: Windows' Own Show And Hide Is Off
+        // The controls hide 1 s after play starts or the pointer rests or leaves. A pointer move over the video or
+        // keyboard focus shows them again, and they stay while the video is paused. Only this class shows and hides
+        // them, because the automatic show and hide of Windows is off.
         controls.ShowAndHideAutomatically = false;
         _hideTimer             = queue.CreateTimer();
         _hideTimer.Interval    = HideAfter;
@@ -167,38 +175,40 @@ internal sealed class VideoPlayback : IDisposable
     }
 
     /// <summary>
-    /// Raised on the UI thread when the video can't play.
+    /// Occurs on the UI thread when the video cannot play.
     /// </summary>
     public event EventHandler? Failed;
 
     /// <summary>Gets the player.</summary>
     public MediaPlayer Player { get; }
 
-    /// <summary>Gets the element that shows the video and its controls (the controls alone when the owner draws the frames).</summary>
+    /// <summary>
+    /// Gets the element that shows the video and its controls. When the owner draws the frames, the element shows only
+    /// the controls.
+    /// </summary>
     public MediaPlayerElement Element { get; }
 
     /// <summary>
-    /// Gets the picture the frames are drawn to when the owner draws them (see the constructor), else null. Show it with
-    /// an image brush, stretched uniformly: each frame is the video's own shape, fitted to <see cref="SizeFrames"/>.
+    /// Gets the picture that the frames draw to when the owner draws them, else null. Show it with an image brush that
+    /// stretches uniformly. Each frame has the shape of the video, fitted to <see cref="SizeFrames"/>.
     /// </summary>
     public SoftwareBitmapSource? Frames { get; }
 
     /// <summary>
-    /// Sets the box the frames are drawn to fit, in pixels (the shown size times the display scale), when the owner draws
-    /// them. Until set, no frame is drawn.
+    /// Sets the box in pixels that the frames fit when the owner draws them. Until then, no frame draws.
     /// </summary>
-    /// <param name="width">The box's width in pixels.</param>
-    /// <param name="height">The box's height in pixels.</param>
+    /// <param name="width">The width of the box in pixels, which is the shown width times the display scale.</param>
+    /// <param name="height">The height of the box in pixels, which is the shown height times the display scale.</param>
     public void SizeFrames(int width, int height) => _frameBox = new SizeInt32(width, height);
 
     /// <summary>Gets how far the video has played.</summary>
     public TimeSpan Position => _disposed ? TimeSpan.Zero : Player.PlaybackSession.Position;
 
-    /// <summary>Gets a value indicating whether the video is playing (or opening or buffering to play).</summary>
+    /// <summary>Gets a value indicating whether the video plays, or opens or buffers to play.</summary>
     public bool IsPlaying => !_disposed && Player.PlaybackSession.PlaybackState is MediaPlaybackState.Playing or MediaPlaybackState.Opening or MediaPlaybackState.Buffering;
 
     /// <summary>
-    /// Stops the video and lets go of the player and the bytes. Take <see cref="Element"/> out of its panel first.
+    /// Stops the video and releases the player and the bytes. Take <see cref="Element"/> out of its panel first.
     /// </summary>
     public void Dispose()
     {
@@ -231,8 +241,8 @@ internal sealed class VideoPlayback : IDisposable
 
         Player.Pause();
 
-        // The Element Lets Go Of The Player, Then The Player, Its Item (Not Closable: Dropped As Its Source), Source And
-        // Stream Go
+        // The element releases the player first. Then the player, its source and the stream go. The item cannot close,
+        // so the player drops it as its source.
         Element.SetMediaPlayer(null);
         Player.Source = null;
         Player.Dispose();
@@ -240,7 +250,8 @@ internal sealed class VideoPlayback : IDisposable
         _stream.Dispose();
     }
 
-    // Cast And Full Window, Once The Controls Make Them: No Width, No Input, No Tab Stop, No Place In Narrator's Tree
+    // The controls make cast and full window late. Each then gets no width, no input, no tab stop and no place in the
+    // tree of Narrator.
     private void HideExtras(object? sender, object e)
     {
         MediaTransportControls controls = Element.TransportControls;
@@ -249,18 +260,19 @@ internal sealed class VideoPlayback : IDisposable
             return;
         }
 
-        // Full Window Isn't Always Made In The Compact Bar
+        // The compact bar does not always make full window.
         controls.LayoutUpdated -= _hideExtras;
         FrameworkElement? full  = UiHelpers.FindPart<FrameworkElement>(controls, "FullWindowButton");
 
-        // Frames Drawn By The Owner: The Element's Own Picture Goes (Serving Frames, It Still Painted An Opaque Backdrop
-        // Over The Owner's Picture), Leaving The Controls
+        // When the owner draws the frames, the own picture of the element goes, so only the controls stay. While it
+        // served frames, that picture still painted an opaque backdrop over the picture of the owner.
         if (Frames is not null && UiHelpers.FindPart<FrameworkElement>(Element, "MediaPlayerPresenter") is { } presenter)
         {
             presenter.Visibility = Visibility.Collapsed;
         }
 
-        // The Bar Fades In And Out In Place (Owner): Its Own States Slide It Too. Faded Out It Takes No Clicks
+        // The bar fades in and out in place, as the owner asked. Its own states slide it too. A faded bar takes no
+        // clicks.
         if (UiHelpers.FindPart<FrameworkElement>(controls, "ControlPanel_ControlPanelVisibilityStates_Border") is { } panel)
         {
             _panel                   = panel;
@@ -269,8 +281,8 @@ internal sealed class VideoPlayback : IDisposable
             ShowControls(_panelShown);
         }
 
-        // The Seek Bar Shrinks To What A Narrow Bubble Leaves It: Its Style's 80 px Minimum Overran Its Slot, And Windows
-        // Cut Its Thumb Off At The Slot's Edge (Owner Report)
+        // The seek bar shrinks to the room that a narrow bubble leaves it. The 80 px minimum of its style overran its
+        // slot. Windows then cut its thumb at the edge of the slot, as the owner reported.
         if (UiHelpers.FindPart<FrameworkElement>(controls, "ProgressSlider") is { } seek)
         {
             seek.MinWidth = 0;
@@ -291,7 +303,7 @@ internal sealed class VideoPlayback : IDisposable
         }
     }
 
-    // Raised Off The UI Thread: The State For The Tests
+    // Windows raises this event off the UI thread. The state goes to the tests.
     private void OnPlaybackStateChanged(MediaPlaybackSession sender, object args)
     {
         MediaPlaybackState state = sender.PlaybackState;
@@ -305,7 +317,7 @@ internal sealed class VideoPlayback : IDisposable
             TestHooks.ShowState(Element, state.ToString());
             TestHooks.NoteState("video-player", FormattableString.Invariant($"{state} {Player.AudioCategory}"));
 
-            // Playing: The Controls Hide In 1 s. Paused Or Ended: Shown, Nothing Pending
+            // While the video plays, the controls hide in 1 s. A pause or the end shows them with no hide pending.
             if (state == MediaPlaybackState.Playing)
             {
                 RestartHide();
@@ -321,9 +333,9 @@ internal sealed class VideoPlayback : IDisposable
     // CONTROLS HIDING
     // =========================================================================
 
-    // The Pointer Over The Video, Arriving Or Moving: The Controls Show, And Hide Again 1 s After It Rests. Only A Real
-    // Move Counts: The Bar Fading Out Changes What Is Under A Still Pointer, And Windows Reports That As A Move, Which
-    // Brought The Bar Straight Back
+    // A pointer that arrives or moves over the video shows the controls. They hide again 1 s after the pointer rests.
+    // Only a real move counts. The fade of the bar changes what is under a still pointer. Windows reports that as a
+    // move, which showed the bar again at once.
     private void OnPointerActivity(object sender, PointerRoutedEventArgs e)
     {
         Point at = e.GetCurrentPoint(null).Position;
@@ -339,11 +351,11 @@ internal sealed class VideoPlayback : IDisposable
 
     private void OnPointerExited(object sender, PointerRoutedEventArgs e) => RestartHide();
 
-    // Focus Arriving In The Controls: Remembered Whether It Came From The Keyboard Or A Gamepad (A Click's Doesn't Count)
+    // Notes whether focus comes from the keyboard or a gamepad. Focus from a click does not count.
     private void OnControlsGettingFocus(UIElement sender, GettingFocusEventArgs args) =>
         _focusByKeys = args.InputDevice is FocusInputDeviceKind.Keyboard or FocusInputDeviceKind.GameController;
 
-    // Keyboard Focus In The Controls Keeps Them Shown Until It Leaves
+    // Keyboard focus in the controls keeps them shown until the focus leaves.
     private void OnControlsGotFocus(object sender, RoutedEventArgs e)
     {
         if (!_focusByKeys)
@@ -356,7 +368,8 @@ internal sealed class VideoPlayback : IDisposable
         ShowControls(true);
     }
 
-    // Raised Before The Next Control's GotFocus, So Moving Between The Buttons Keeps Them Shown
+    // Windows raises LostFocus before the GotFocus of the next control. Thus a move between the buttons keeps them
+    // shown.
     private void OnControlsLostFocus(object sender, RoutedEventArgs e)
     {
         _keysInside = false;
@@ -369,7 +382,7 @@ internal sealed class VideoPlayback : IDisposable
         _hideTimer.Start();
     }
 
-    // Hides Only While Playing, With No Keyboard Focus In The Controls
+    // The controls hide only while the video plays and no keyboard focus is in them.
     private void OnHideTick(DispatcherQueueTimer sender, object args)
     {
         if (_disposed || _keysInside || Player.PlaybackSession.PlaybackState != MediaPlaybackState.Playing)
@@ -380,9 +393,9 @@ internal sealed class VideoPlayback : IDisposable
         ShowControls(false);
     }
 
-    // Fades The Bar In Or Out In Place (Its Opacity Transition Animates It); Faded Out It Takes No Clicks. Until The Bar's
-    // Panel Is Made (See HideExtras), Only The Wish Is Kept. Setting What Is Already Set Does Nothing, So Each Pointer
-    // Move Doesn't Restart The Fade In
+    // The opacity transition of the bar fades it in or out in place, and a faded bar takes no clicks. Until HideExtras
+    // finds the panel of the bar, the method keeps only the wish. A set to the same value does nothing. Thus a pointer
+    // move does not start the fade-in again.
     private void ShowControls(bool show)
     {
         _panelShown = show;
@@ -397,8 +410,8 @@ internal sealed class VideoPlayback : IDisposable
     // FRAMES DRAWN BY THE OWNER
     // =========================================================================
 
-    // Raised Off The UI Thread For Each Frame: Drawn On The UI Thread, One At A Time (A Frame Arriving While One Is Still
-    // Being Drawn Is Skipped; The Next Catches Up)
+    // Windows raises this event off the UI thread for each frame. The UI thread draws 1 frame at a time. The code skips
+    // a frame that arrives while another frame draws, and the next frame shows the current picture.
     private void OnFrameAvailable(MediaPlayer sender, object args)
     {
         if (_disposed || Interlocked.CompareExchange(ref _drawing, 1, 0) != 0)
@@ -412,8 +425,8 @@ internal sealed class VideoPlayback : IDisposable
         }
     }
 
-    // Copies The Current Frame To A Surface The Video's Own Shape, Fitted To The Box, Then Into The Picture On Show. A
-    // Copy That Fails Is Noted And Skipped (The Next Frame Draws)
+    // Copies the current frame to a surface with the shape of the video, fitted to the box. Then the frame goes into
+    // the picture on show. A copy that fails goes to the log, and the next frame draws.
     private async Task DrawFrameAsync()
     {
         try
@@ -430,7 +443,8 @@ internal sealed class VideoPlayback : IDisposable
             }
 
             Player.CopyFrameToVideoSurface(_frame.Direct3DSurface);
-            // No Alpha: A Video Frame Copied To The Surface Leaves It At Zero, Which Premultiplied Shows As Nothing
+            // The copy ignores alpha. A video frame copied to the surface leaves alpha at 0, and premultiplied alpha
+            // then shows nothing.
             SoftwareBitmap bitmap = await SoftwareBitmap.CreateCopyFromSurfaceAsync(_frame.Direct3DSurface, BitmapAlphaMode.Ignore);
             if (_disposed)
             {
@@ -439,6 +453,12 @@ internal sealed class VideoPlayback : IDisposable
             }
 
             await Frames.SetBitmapAsync(bitmap);
+            if (_disposed)
+            {
+                bitmap.Dispose();
+                return;
+            }
+
             _shown?.Dispose();
             _shown = bitmap;
         }
@@ -452,7 +472,8 @@ internal sealed class VideoPlayback : IDisposable
         }
     }
 
-    // The Frame's Size In Pixels: The Video's Own Shape (Once Opened; The Box's Until Then) Fitted Inside The Box
+    // The frame size in pixels: the shape of the video fitted inside the box. Before the video opens, the size of the
+    // box.
     private SizeInt32 FrameSize()
     {
         uint naturalWidth  = Player.PlaybackSession.NaturalVideoWidth;
@@ -466,7 +487,7 @@ internal sealed class VideoPlayback : IDisposable
         return new SizeInt32(Math.Max(1, (int)Math.Round(naturalWidth * scale)), Math.Max(1, (int)Math.Round(naturalHeight * scale)));
     }
 
-    // Raised Off The UI Thread: The Video Couldn't Play (The Error Kind Only Is Noted)
+    // Windows raises this event off the UI thread when the video cannot play. The note gets only the kind of error.
     private void OnMediaFailed(MediaPlayer sender, MediaPlayerFailedEventArgs args)
     {
         TestHooks.NoteState("video-failed", FormattableString.Invariant($"{args.Error} 0x{args.ExtendedErrorCode?.HResult ?? 0:X8}"));

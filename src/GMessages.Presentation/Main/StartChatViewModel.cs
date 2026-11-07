@@ -7,10 +7,12 @@ using GMessages.Protocol.Proto;
 namespace GMessages.Presentation.Main;
 
 /// <summary>
-/// The Start chat pane: pick people or type a number, then open the conversation with them.
+/// Holds the state of the Start chat pane. The user picks people or types a number, and then opens the conversation
+/// with them.
 /// </summary>
 /// <remarks>
-/// Call everything on the UI thread. <see cref="Results"/> shows the phone's top contacts first, then the rest.
+/// Call every member on the UI thread. <see cref="Results"/> shows the top contacts of the phone first, and then the
+/// rest.
 /// </remarks>
 public sealed class StartChatViewModel : INotifyPropertyChanged
 {
@@ -20,7 +22,7 @@ public sealed class StartChatViewModel : INotifyPropertyChanged
     private List<ContactRowViewModel> _all = [];
     private bool _loaded;
 
-    // Lookups Running: The Contact Load And Go Can Overlap
+    // The number of lookups that run now. The contact load and Go can overlap.
     private int _busy;
     private string _query = string.Empty;
     private string? _error;
@@ -29,12 +31,10 @@ public sealed class StartChatViewModel : INotifyPropertyChanged
     /// Creates the pane with no contacts yet.
     /// </summary>
     /// <param name="store">Gives the phone client.</param>
-    /// <param name="post">Runs an action on the UI thread (the pane raises everything on the caller's thread, so it is not needed yet).</param>
     /// <exception cref="ArgumentNullException">An argument is null.</exception>
-    public StartChatViewModel(ChatStore store, Action<Action> post)
+    public StartChatViewModel(ChatStore store)
     {
         ArgumentNullException.ThrowIfNull(store);
-        ArgumentNullException.ThrowIfNull(post);
 
         _store = store;
     }
@@ -42,7 +42,7 @@ public sealed class StartChatViewModel : INotifyPropertyChanged
     /// <inheritdoc />
     public event PropertyChangedEventHandler? PropertyChanged;
 
-    /// <summary>Gets or sets what the user typed; changing it filters <see cref="Results"/>.</summary>
+    /// <summary>Gets or sets what the user typed. A change filters <see cref="Results"/>.</summary>
     public string Query
     {
         get => _query;
@@ -54,16 +54,20 @@ public sealed class StartChatViewModel : INotifyPropertyChanged
         }
     }
 
-    /// <summary>Gets the rows that match <see cref="Query"/>; a "Send to" row comes first for a number or email.</summary>
+    /// <summary>
+    /// Gets the rows that match <see cref="Query"/>. A "Send to" row comes first for a number or an email address.
+    /// </summary>
     public ObservableCollection<ContactRowViewModel> Results { get; } = [];
 
-    /// <summary>Gets the picked people (the chips).</summary>
+    /// <summary>Gets the picked people, which show as chips.</summary>
     public ObservableCollection<ContactRowViewModel> Selected { get; } = [];
 
     /// <summary>Gets whether anyone is picked.</summary>
     public bool CanStart => Selected.Count > 0;
 
-    /// <summary>Gets why the last Go failed (<see cref="ChatCopy.StartFailed"/>), or null; the next Go clears it.</summary>
+    /// <summary>
+    /// Gets the text <see cref="ChatCopy.StartFailed"/> after the last Go failed, or null. The next Go clears it.
+    /// </summary>
     public string? Error
     {
         get => _error;
@@ -75,16 +79,25 @@ public sealed class StartChatViewModel : INotifyPropertyChanged
         }
     }
 
-    /// <summary>Gets whether a lookup is running (the contacts loading, or Go finding the conversation): the loading ring.</summary>
+    /// <summary>
+    /// Gets whether a lookup runs, which shows the loading ring. A lookup is the contact load or the search of Go for
+    /// the conversation.
+    /// </summary>
     public bool IsLoading => _busy > 0;
 
-    /// <summary>Gets whether <see cref="Error"/> shows (for bindings, which skip their function when an argument is null).</summary>
+    /// <summary>
+    /// Gets whether <see cref="Error"/> shows. A binding uses it because a binding skips its function when an argument
+    /// is null.
+    /// </summary>
     public bool HasError => _error is not null;
 
     /// <summary>
-    /// Loads the top contacts, then the full contact list (once).
+    /// Loads the top contacts and then the full contact list.
     /// </summary>
-    /// <remarks>When the load fails (phone not connected or not answering, a network error), what loaded so far stays and a later call tries again.</remarks>
+    /// <remarks>
+    /// After a full load, a call does nothing. When the load fails, the contacts that loaded stay, and a later call
+    /// tries again. A load can fail with no connection, no answer or a network error.
+    /// </remarks>
     /// <returns>A task that completes when the contacts are shown.</returns>
     public async Task LoadAsync()
     {
@@ -109,7 +122,7 @@ public sealed class StartChatViewModel : INotifyPropertyChanged
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            // Not Connected, Not Answering Or A Network Error: Opening Start chat Again Tries Again
+            // The next open of Start chat tries again.
             _store.LogFailure("load contacts", ex);
         }
         finally
@@ -119,9 +132,9 @@ public sealed class StartChatViewModel : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Picks a person, or removes them from the chips when already picked.
+    /// Picks a person, or removes the person from the chips when the person is already picked.
     /// </summary>
-    /// <remarks>Picking the "Send to" row clears the query.</remarks>
+    /// <remarks>A pick of the "Send to" row clears the query.</remarks>
     /// <param name="c">The row.</param>
     public void Toggle(ContactRowViewModel c)
     {
@@ -139,7 +152,7 @@ public sealed class StartChatViewModel : INotifyPropertyChanged
 
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CanStart)));
 
-        // A Picked Person Leaves The List (Their Chip Shows Them); Removed, They Come Back
+        // A picked person leaves the list, because the chip shows the person. A removed person comes back.
         if (c.IsSendTo)
         {
             Query = string.Empty;
@@ -151,14 +164,19 @@ public sealed class StartChatViewModel : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Opens (or creates) the conversation with everyone picked.
+    /// Opens or creates the conversation with all picked people.
     /// </summary>
     /// <remarks>
-    /// Ported from the bridge's create flow: each number is sent as <c>ContactNumber { MysteriousInt = 2, Number = n,
-    /// Number2 = n }</c>. When the phone answers <c>CreateRcs</c> the request is sent again as an RCS group with an
-    /// empty name. When it fails for any reason (not connected, not answering, connection closed, a network, timeout,
-    /// server or decode error, or no success with a conversation, also after the RCS retry), <see cref="Error"/> says
-    /// so and everyone stays picked; nothing is thrown.
+    /// <para>
+    /// The method ports the create flow of the bridge. The request sends each number in this form:
+    /// <c>ContactNumber { MysteriousInt = 2, Number = n, Number2 = n }</c>. When the phone answers <c>CreateRcs</c>,
+    /// the method sends the request again as an RCS group with an empty name.
+    /// </para>
+    /// <para>
+    /// On a failure, <see cref="Error"/> tells the user and all picked people stay. The method throws nothing. A
+    /// failure is no connection, no answer, a closed connection, or a network, timeout, server or decode error. An
+    /// answer without success and a conversation is also a failure, after the RCS retry too.
+    /// </para>
     /// </remarks>
     /// <returns>The conversation ID, or null when it failed.</returns>
     /// <exception cref="InvalidOperationException">Nobody is picked.</exception>
@@ -177,7 +195,7 @@ public sealed class StartChatViewModel : INotifyPropertyChanged
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            // Any Failure (Phone, Network, Timeout, Server, Decode) Is Shown, Never Thrown At The Click Handler
+            // The click handler must get no exception.
             _store.LogFailure("start chat", ex);
             Error = ChatCopy.StartFailed;
             return null;
@@ -188,14 +206,12 @@ public sealed class StartChatViewModel : INotifyPropertyChanged
         }
     }
 
-    // Counts A Lookup In (1) Or Out (-1)
     private void Busy(int change)
     {
         _busy += change;
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsLoading)));
     }
 
-    // The Create Request, Retried As An RCS Group When The Phone Asks; Throws When The Phone Can't
     private async Task<string> GetOrCreateAsync()
     {
         IMessagingClient client = _store.RequireClient();
@@ -215,7 +231,6 @@ public sealed class StartChatViewModel : INotifyPropertyChanged
             response               = await client.GetOrCreateConversationAsync(request, CancellationToken.None);
         }
 
-        // The Phone Must Have Answered Success With A Real Conversation
         if (response.Status != GetOrCreateConversationResponse.Types.Status.Success
             || string.IsNullOrEmpty(response.Conversation?.ConversationID))
         {
@@ -225,19 +240,15 @@ public sealed class StartChatViewModel : INotifyPropertyChanged
         return response.Conversation.ConversationID;
     }
 
-    // =========================================================================
-    // FILTERING
-    // =========================================================================
-
-    // Rebuilds Results: Send-To Row, Then Top Contacts, Then The Rest, Filtered By The Query, Without Anyone Picked (Their
-    // Chips Show Them). The Same Rows Leave The List Alone, So A Row Being Clicked (The Full List Arriving After The Top
-    // Contacts) Isn't Swapped Out Under The Click
+    // The "Send to" row comes first, then the top contacts, then the rest. A picked person shows only as a chip. When
+    // the rows stay the same, the list stays as it is. The full list arrives after the top contacts, and a row under a
+    // click must stay the same object.
     private void Refresh()
     {
-        string query  = _query.Trim();
-        string digits = ContactRowViewModel.DigitsOf(query);
-        var topIds    = _top.Select(c => c.Number).ToHashSet();
-        var pickedIds = Selected.Select(c => c.Number).ToHashSet();
+        string query              = _query.Trim();
+        string digits             = ContactRowViewModel.DigitsOf(query);
+        HashSet<string> topIds    = [.. _top.Select(c => c.Number)];
+        HashSet<string> pickedIds = [.. Selected.Select(c => c.Number)];
 
         IEnumerable<ContactRowViewModel> matches = _top
             .Concat(_all.Where(c => !topIds.Contains(c.Number)))
@@ -258,8 +269,9 @@ public sealed class StartChatViewModel : INotifyPropertyChanged
             return;
         }
 
-        // Changed In Place, Not Cleared And Refilled: The List Then Animates Only What Changed (A Picked Row Fades Out And
-        // The Rows Below Slide Up) And Keeps Its Scroll, Where A Refill Made It Jump (Owner, Plan 9)
+        // The list changes in place, with no clear and refill. The view then animates only the changes and keeps its
+        // scroll position. A picked row fades out, and the rows below it move up. In plan 9 the owner saw a refill make
+        // the scroll jump.
         var kept = new HashSet<ContactRowViewModel>(rows, ReferenceEqualityComparer.Instance);
         for (int i = Results.Count - 1; i >= 0; i--)
         {

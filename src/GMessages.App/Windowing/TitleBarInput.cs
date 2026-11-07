@@ -5,34 +5,37 @@ using static GMessages.App.Windowing.WindowInterop;
 namespace GMessages.App.Windowing;
 
 /// <summary>
-/// Where the main window's title bar drags, where its caption buttons are, and where clicks go to the content instead.
-/// All in client pixels of the window.
+/// Holds the areas of the title bar of the main window in client pixels. They are the drag area, the caption buttons
+/// and the holes for clicks to the content.
 /// </summary>
 /// <param name="Bar">The whole title bar row.</param>
 /// <param name="Minimize">The Minimize button.</param>
 /// <param name="Maximize">The Maximize (or Restore) button.</param>
 /// <param name="Close">The Close button.</param>
-/// <param name="Passthrough">The interactive elements in the row (Back, ☰, the profile picture), which take their own clicks.</param>
+/// <param name="Passthrough">
+/// The interactive elements in the row, which take their own clicks: Back, ☰ and the profile picture.
+/// </param>
 internal readonly record struct TitleBarLayout(RECT Bar, RECT Minimize, RECT Maximize, RECT Close, IReadOnlyList<RECT> Passthrough);
 
 /// <summary>
-/// An invisible child window over the title bar row that answers Windows' hit tests the way a system caption does.
+/// Covers the title bar row with an invisible child window, which answers hit tests as a system caption does.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Windows Terminal's drag bar way. XAML can't tell Windows that part of an island is a caption, so this layered window,
-/// which draws nothing, sits over the row with holes cut where the row's own buttons are (a window region). Over the
-/// rest it answers HTCAPTION (drag, double-click maximizes), HTTOP along the top edge (resize, not when maximized) and
-/// HTMINBUTTON, HTMAXBUTTON or HTCLOSE over the caption buttons, which also gives Maximize its Snap Layouts flyout.
+/// The drag bar of Windows Terminal works the same way. XAML cannot tell Windows that a part of an island is a
+/// caption. Thus this layered window, which draws nothing, sits over the row. A window region cuts holes where the
+/// buttons of the row are. Over the rest, the window answers HTCAPTION, so a drag moves and a double-click maximizes.
+/// Along the top edge it answers HTTOP, which resizes when the window is not maximized. Over the caption buttons it
+/// answers HTMINBUTTON, HTMAXBUTTON or HTCLOSE, which also gives Maximize its Snap Layouts flyout.
 /// </para>
 /// <para>
-/// The caption buttons are drawn in XAML under this window, so they never see the pointer; the hover and press are
-/// reported back (see <see cref="XamlWindow.CaptionButtonsChanged"/>) and the click runs here, as the system command.
-/// Everything else (a drag, a double-click, the top edge) goes on to the top-level window, whose own default handling
-/// does it.
+/// XAML draws the caption buttons under this window, so they never see the pointer. This window reports the hover
+/// and the press back (see <see cref="XamlWindow.CaptionButtonsChanged"/>), and runs the click as the system command.
+/// The default handling of the top-level window does all other input. That input is a drag, a double-click or the
+/// top edge.
 /// </para>
 /// </remarks>
-/// @link https://github.com/microsoft/terminal/blob/main/src/cascadia/WindowsTerminal/NonClientIslandWindow.cpp
+/// <seealso href="https://github.com/microsoft/terminal/blob/main/src/cascadia/WindowsTerminal/NonClientIslandWindow.cpp"/>
 internal sealed unsafe class TitleBarInput : IDisposable
 {
     private const string ClassName = "GMessages.TitleBarInput";
@@ -50,10 +53,11 @@ internal sealed unsafe class TitleBarInput : IDisposable
     private bool _tracking;
 
     /// <summary>
-    /// Creates the input window over the parent's title bar row (empty until <see cref="Update"/>).
+    /// Creates the input window over the title bar row of the parent. The window is empty until <see cref="Update"/>.
     /// </summary>
     /// <param name="parent">The top-level window.</param>
-    /// <param name="captionButtonsChanged">Told the caption button hovered and pressed (hit test codes, or 0).</param>
+    /// <param name="captionButtonsChanged">Gets the hovered and the pressed caption button as hit test codes, or 0.
+    /// </param>
     public TitleBarInput(nint parent, Action<int, int> captionButtonsChanged)
     {
         _parent                = parent;
@@ -66,7 +70,8 @@ internal sealed unsafe class TitleBarInput : IDisposable
             throw new InvalidOperationException($"CreateWindowExW failed ({Marshal.GetLastPInvokeError()}).");
         }
 
-        // Fully Opaque But Drawing Nothing (No Redirection Bitmap), So It Takes Hit Tests And Shows The Island Under It
+        // The window is fully opaque but draws nothing, because it has no redirection bitmap. Thus it takes hit tests
+        // and shows the island under it.
         _ = SetLayeredWindowAttributes(_hwnd, 0, 255, LWA_ALPHA);
         ByHandle[_hwnd] = this;
     }
@@ -74,14 +79,14 @@ internal sealed unsafe class TitleBarInput : IDisposable
     /// <summary>
     /// Moves the window over the title bar row and cuts the holes for the row's own buttons.
     /// </summary>
-    /// <param name="layout">The title bar's areas, client pixels of the parent.</param>
+    /// <param name="layout">The areas of the title bar, in client pixels of the parent.</param>
     public void Update(TitleBarLayout layout)
     {
         _layout = layout;
         RECT bar = layout.Bar;
         _ = SetWindowPos(_hwnd, 0, bar.Left, bar.Top, bar.Right - bar.Left, bar.Bottom - bar.Top, SWP_NOACTIVATE | SWP_SHOWWINDOW);
 
-        // The Region Is In This Window's Own Pixels; The Window Owns It Once Set
+        // The region uses the pixels of this window. After SetWindowRgn, the window owns the region.
         nint region = CreateRectRgn(0, 0, bar.Right - bar.Left, bar.Bottom - bar.Top);
         foreach (RECT hole in layout.Passthrough)
         {
@@ -101,10 +106,6 @@ internal sealed unsafe class TitleBarInput : IDisposable
         ByHandle.Remove(_hwnd);
         _ = DestroyWindow(_hwnd);
     }
-
-    // =========================================================================
-    // WINDOW PROCEDURE
-    // =========================================================================
 
     private static void RegisterClass()
     {
@@ -147,7 +148,7 @@ internal sealed unsafe class TitleBarInput : IDisposable
             case WM_NCHITTEST:
                 return HitTest(LowWord(lParam), HighWord(lParam));
 
-            // Hover: Tracked Until The Pointer Leaves, So The Button's Hover Fill Goes Too
+            // The window tracks the hover until the pointer leaves, so the hover fill of the button also goes.
             case WM_NCMOUSEMOVE:
                 if (!_tracking)
                 {
@@ -159,14 +160,15 @@ internal sealed unsafe class TitleBarInput : IDisposable
                 SetCaptionState(hit, hit != 0 && hit == _pressed ? hit : 0);
                 return hit != 0 ? 0 : SendMessageW(_parent, msg, wParam, lParam);
 
-            // Left (Also Mid-Press, Released Elsewhere): No Hover, No Press
+            // The pointer left, also during a press that ends somewhere else. No button stays hovered or pressed.
             case WM_NCMOUSELEAVE:
                 _tracking = false;
                 _pressed  = 0;
                 SetCaptionState(0, 0);
                 return 0;
 
-            // A Caption Button Press Is Ours; Anything Else (A Drag, The Top Edge) Is The Window's Own
+            // This window handles a press on a caption button. The top-level window handles all other presses, such as
+            // a drag or the top edge.
             case WM_NCLBUTTONDOWN:
                 if (IsCaptionButton((int)wParam))
                 {
@@ -177,7 +179,7 @@ internal sealed unsafe class TitleBarInput : IDisposable
 
                 return SendMessageW(_parent, msg, wParam, lParam);
 
-            // Released Over The Button It Pressed: Its Command
+            // A release over the pressed button runs its command.
             case WM_NCLBUTTONUP:
                 if (_pressed != 0)
                 {
@@ -194,7 +196,7 @@ internal sealed unsafe class TitleBarInput : IDisposable
 
                 return SendMessageW(_parent, msg, wParam, lParam);
 
-            // Right-Click On The Caption: The System Menu, As The Real Caption Shows It
+            // A right-click on the caption shows the system menu, as the real caption does.
             case WM_NCRBUTTONUP when (int)wParam == HTCAPTION:
                 ShowSystemMenu(LowWord(lParam), HighWord(lParam));
                 return 0;
@@ -209,11 +211,7 @@ internal sealed unsafe class TitleBarInput : IDisposable
         return DefWindowProcW(_hwnd, msg, wParam, lParam);
     }
 
-    // =========================================================================
-    // HIT TESTING
-    // =========================================================================
-
-    // Screen Point To The Caption Button, The Top Resize Edge Or The Caption
+    // Maps a screen point to a caption button, the top resize edge or the caption.
     private nint HitTest(int screenX, int screenY)
     {
         var point = new POINT { X = screenX, Y = screenY };
@@ -234,7 +232,7 @@ internal sealed unsafe class TitleBarInput : IDisposable
             return HTMINBUTTON;
         }
 
-        // The Top Edge Resizes, Except Maximized
+        // The top edge resizes, except when the window is maximized.
         if (!IsZoomed(_parent))
         {
             uint dpi    = GetDpiForWindow(_parent);
@@ -255,11 +253,7 @@ internal sealed unsafe class TitleBarInput : IDisposable
 
     private static bool IsCaptionButton(int hit) => hit is HTMINBUTTON or HTMAXBUTTON or HTCLOSE;
 
-    // =========================================================================
-    // CAPTION BUTTONS
-    // =========================================================================
-
-    // Tells The Title Bar Only When The Hovered Or Pressed Button Changed
+    // Tells the title bar only when the hovered or the pressed button changes.
     private void SetCaptionState(int hovered, int pressed)
     {
         if (hovered == _hovered && pressed == _reportedPressed)
@@ -272,7 +266,7 @@ internal sealed unsafe class TitleBarInput : IDisposable
         _captionButtonsChanged(hovered, pressed);
     }
 
-    // The System Command, So Windows Animates It As For A Real Caption Button
+    // Posts the system command, so Windows animates it as for a real caption button.
     private void RunCaptionButton(int hit)
     {
         int command = hit switch

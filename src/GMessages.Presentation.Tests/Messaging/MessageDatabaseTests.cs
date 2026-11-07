@@ -32,10 +32,6 @@ public sealed class MessageDatabaseTests
         }
     }
 
-    // =========================================================================
-    // HELPERS
-    // =========================================================================
-
     private MessageDatabase Db() => new(_path, NullLogger.Instance);
 
     private static Message Msg(string id, long ts, string text = "hi", MessageStatusType status = MessageStatusType.OutgoingComplete)
@@ -49,7 +45,7 @@ public sealed class MessageDatabaseTests
         [.. Enumerable.Range(0, count).Select(i => Msg("m-" + i, BaseTime + i, "text " + i))];
 
     /// <summary>
-    /// Drafts are saved and loaded back (encrypted on disk), and an empty draft deletes the saved one.
+    /// The database saves drafts, encrypted on disk, and loads them again. An empty draft deletes the saved draft.
     /// </summary>
     [TestMethod]
     public void Drafts_RoundTrip_EmptyDeletes()
@@ -64,7 +60,6 @@ public sealed class MessageDatabaseTests
         Assert.IsFalse(Contains(File.ReadAllBytes(_path), Encoding.UTF8.GetBytes("see you")));
     }
 
-    // Runs SQL Straight On The File, Bypassing The Class
     private void RawSql(string sql)
     {
         using var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = _path, Pooling = false }.ToString());
@@ -76,10 +71,6 @@ public sealed class MessageDatabaseTests
 
     private static bool Contains(byte[] haystack, byte[] needle) =>
         haystack.AsSpan().IndexOf(needle) >= 0;
-
-    // =========================================================================
-    // TESTS
-    // =========================================================================
 
     [TestMethod]
     public void Messages_RoundTrip_NewestCountOldestFirst()
@@ -184,7 +175,7 @@ public sealed class MessageDatabaseTests
     }
 
     /// <summary>
-    /// A version 1 file (before drafts) keeps its saved chats and gets the drafts table, instead of starting over.
+    /// A version 1 file has no drafts table. The database keeps its saved chats and adds the table.
     /// </summary>
     [TestMethod]
     public void Version1File_KeepsItsRows_AndGetsDrafts()
@@ -256,7 +247,7 @@ public sealed class MessageDatabaseTests
         var db  = new MessageDatabase(_path, log, busyTimeoutSeconds: 1);
         db.SaveMessages("c-1", Range(3));
 
-        // Another Process Holds An Exclusive Lock
+        // This connection stands in for another process that holds an exclusive lock.
         using (var holder = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = _path, Pooling = false }.ToString()))
         {
             holder.Open();

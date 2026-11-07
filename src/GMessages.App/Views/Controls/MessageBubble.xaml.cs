@@ -24,209 +24,237 @@ using WinRT;
 namespace GMessages.App.Views.Controls;
 
 /// <summary>
-/// One message bubble: sent ones on the right (RCS in a lighter shade of the accent, SMS in the accent color), received
-/// ones on the left in the card color.
+/// Shows 1 message bubble. Sent bubbles sit on the right, and received bubbles sit on the left in the card color.
 /// </summary>
 /// <remarks>
 /// <para>
-/// The text carries the AutomationId <c>Bubble.{id}</c>, or <c>Bubble.{tmpId}</c> until the phone has echoed a sent
-/// message. A failed bubble shows the "Not sent" link (<c>Bubble.{id}.Retry</c>) in place of the time; clicking it
-/// raises <see cref="RetryRequested"/> for the chat to send it again.
+/// A sent RCS bubble has a lighter shade of the accent color. A sent SMS bubble has the accent color.
 /// </para>
 /// <para>
-/// The time (<c>Bubble.{id}.Time</c>) is hidden until the bubble is clicked, and a second click hides it; on the chat's
-/// newest bubble the click hides its caption row instead, and a second one shows it again. The click is caught even
-/// when it lands on the text, whose selection marks the pointer handled. The chat pane does the same for Enter and
+/// The text carries the AutomationId <c>Bubble.{id}</c>. Until the phone echoes a sent message, it carries
+/// <c>Bubble.{tmpId}</c>. A failed bubble shows the "Not sent" link <c>Bubble.{id}.Retry</c> in place of the time. A
+/// click on the link raises <see cref="RetryRequested"/>, and the chat sends the message again.
+/// </para>
+/// <para>
+/// The time <c>Bubble.{id}.Time</c> is hidden until a click on the bubble, and a second click hides it. On the newest
+/// bubble of the chat, the click hides the caption row instead, and a second click shows it. The bubble catches the
+/// click also on the text. The text selection marks the pointer as handled. The chat pane does the same for Enter and
 /// Space on a focused bubble.
 /// </para>
 /// <para>
-/// The side is a visual state so its brushes stay theme resources and follow the window's light or dark theme. So is
-/// the reaction pill's accent border for my reaction. Both follow the bubble's changes (an echo turns a sending bubble
-/// into the sent one). Their groups sit on the control's root element (<c>Row</c>), the only place GoToState looks.
+/// The side is a visual state, so its brushes stay theme resources. They follow the light or dark theme of the window.
+/// The accent fill of the reaction pill for my reaction is a visual state too. Both follow the changes of the bubble,
+/// as when an echo makes a sending bubble a sent bubble. Their groups sit on the root element <c>Row</c> of the
+/// control, because GoToState looks only there.
 /// </para>
 /// <para>
-/// The reply quote shows above the text (<c>Quote.{id}</c>), the reaction pill (<c>Reactions.{id}</c>) over the bottom
-/// corner and, under the chat's newest message, the caption row: the time (<c>Caption.{id}</c>), on my message the
-/// owner's delivery icon (named <c>Status.{id}</c>: "Sent", "Delivered" or "Read"), and the lock in an encrypted chat. A link's preview card (<c>Preview.{id}</c>), named by its
-/// title and the link's host, shows under the text once fetched, and the text then leaves out that link's address (a
-/// message that was only the link shows the card alone). Clicking the card opens the link in the default browser; its
-/// own menu (right-click, the Application key or Shift + F10) has Copy link (<c>Preview.CopyLink</c>), which copies the
-/// address as sent. In every chat the pill opens who reacted (<c>Reactors</c>, rows <c>Reactors.{n}</c>, mine as
-/// "You"). The menu's React and the hover strip's React raise
-/// <see cref="ReactRequested"/>, and the menu's Reply raises <see cref="ReplyRequested"/>, for the chat to act on.
+/// The reply quote <c>Quote.{id}</c> shows above the text. The reaction pill <c>Reactions.{id}</c> sits over the bottom
+/// corner. Under the newest message of the chat, the caption row shows the time <c>Caption.{id}</c>. On my message, it
+/// also shows the delivery icon of the owner. The icon is named <c>Status.{id}</c>: "Sent", "Delivered" or "Read". In
+/// an encrypted chat, the caption row also shows the lock.
 /// </para>
 /// <para>
-/// Web links in the text (see <see cref="LinkPreviewer.FindLinks"/>) show as underlined links in the text's own color,
-/// so they read on every bubble color and in high contrast. Each is named <c>Link.{id}.{n}</c> (n from 0) and reached
-/// with Tab; a click or Enter opens it in the default browser (http and https only), and that click doesn't also
-/// show or hide the time. Selection and Copy work on the whole text as before.
+/// The preview card <c>Preview.{id}</c> of a link shows under the text after the fetch. Its name is its title and the
+/// host of the link. The text then omits the address of that link. A message that was only the link shows the
+/// card alone. A click on the card opens the link in the default browser. The own menu of the card has Copy link
+/// <c>Preview.CopyLink</c>, which copies the address as sent. A right-click, the Application key or Shift + F10 opens
+/// that menu.
 /// </para>
 /// <para>
-/// Bubbles of one group (see <see cref="ChatViewModel.GroupGap"/>) sit close together with small corners where they meet,
-/// as in Google Messages. A bubble is as wide as its content, up to 70% of the chat and 560 px at most.
+/// In every chat, the pill opens the list of who reacted, <c>Reactors</c>. Its rows are <c>Reactors.{n}</c>, and my
+/// row reads "You". React in the menu and in the hover strip raises <see cref="ReactRequested"/>. Reply in the menu
+/// raises <see cref="ReplyRequested"/>. The chat acts on both.
 /// </para>
 /// <para>
-/// Pointing at a bubble that can take them (<see cref="MessageBubbleViewModel.CanAct"/>) fades in react
-/// (<c>HoverReact.{id}</c>), reply (<c>HoverReply.{id}</c>) and the ⋮ (<c>HoverMore.{id}</c>) beside its back, as in
-/// Google Messages for web, through the <c>Hover</c> visual states. Their space is always kept, so nothing moves.
+/// Web links in the text show as underlined links in the own color of the text. See
+/// <see cref="LinkPreviewer.FindLinks"/>. Thus they read on every bubble color and in high contrast. Each link is named
+/// <c>Link.{id}.{n}</c>, with n from 0, and Tab reaches it. A click or Enter opens it in the default browser, for http
+/// and https only. That click does not also show or hide the time. Selection and Copy work on the whole text.
 /// </para>
 /// <para>
-/// A photo (<c>Bubble.Photo.{id}</c>, named by its caption or "Photo") fills the bubble edge to edge, with its caption
-/// under it. Its size comes from the photo's dimensions before anything loads, so the chat never jumps. Its thumbnail
-/// shows first, decoded tiny and stretched so it looks blurred (a Composition blur needs Win2D, which this app doesn't
-/// carry), then the full image fades in over it. A thumbnail-only photo asks the phone for the full size, which arrives
-/// as an edit of the message. While the phone hasn't sent the photo it reads "Waiting for the photo from your phone…";
-/// a failure (or a full size that never comes) reads "Couldn't load this photo." and a click tries again. Otherwise a
-/// click shows it in the window's photo viewer (see <see cref="PhotoViewer"/>), as does the menu's Open
-/// (<c>Bubble.Open</c>); Open with (<c>Bubble.OpenWith</c>, on every attachment's menu) opens it with Windows' app
-/// picker; Save as (<c>Bubble.SaveAs</c>) saves a copy where the person picks, and Download
-/// (<c>Bubble.Download</c>, also on a file's menu) saves it to the Downloads folder.
+/// Bubbles of 1 group sit close together with small corners where they meet, as in Google Messages. See
+/// <see cref="ChatViewModel.GroupGap"/>. A bubble is as wide as its content, up to 70% of the chat and 560 px at most.
 /// </para>
 /// <para>
-/// A file shows as a card (<c>Bubble.File.{id}</c>, named by the file name): its thumbnail when one came, else its
-/// type's icon, the name, and the size as Explorer writes it. A click shows "Downloading…" while it downloads, then
-/// opens it in its default app; a failure reads "Couldn't open this file." until the next click.
+/// A bubble that can take them shows react <c>HoverReact.{id}</c>, reply <c>HoverReply.{id}</c> and the ⋮
+/// <c>HoverMore.{id}</c>. See <see cref="MessageBubbleViewModel.CanAct"/>. They fade in beside its back while the
+/// pointer is over the bubble, as in Google Messages for web. The <c>Hover</c> visual states run the fade. The space of
+/// the buttons is always kept, so nothing moves.
 /// </para>
 /// <para>
-/// A video fills the bubble like a photo: its first frame (<c>Bubble.Video.{id}</c>, named by its caption or "Video",
-/// with the hand cursor) under a play button (<c>Video.Play.{id}</c>, "Play video"). Play plays it in place
-/// (<c>Video.Player.{id}</c>, a <see cref="VideoPlayback"/> with compact controls), with sound, as media; only one
-/// plays at a time. The player is let go when the row is recycled, unloads or scrolls out of sight, on a chat switch,
-/// and when the viewer opens. The frame, the menu's Open, or the expand button over a playing video
-/// (<c>Video.Expand.{id}</c>, "Open video") opens it in the window's viewer, from where it got to.
+/// A photo <c>Bubble.Photo.{id}</c> fills the bubble from edge to edge, with its caption under it. Its name is its
+/// caption or "Photo". Its size comes from the dimensions of the photo before anything loads, so the chat never jumps.
+/// Its thumbnail shows first, decoded tiny and stretched, so it looks blurred. A Composition blur needs Win2D, which
+/// this app does not carry. Then the full image fades in over it.
 /// </para>
 /// <para>
-/// A bubble the chat added live (sent, or arrived while the chat is open; see
-/// <see cref="MessageBubbleViewModel.TakeNew"/>) fades in and rises 12 px into place once, on its composition visual, so
-/// layout and the list's scroll pin never see it move. The first page, older pages, cached bubbles and recycled rows
-/// show without it, and so does everything when Windows' animation effects are off.
+/// A thumbnail-only photo asks the phone for the full size, which arrives as an edit of the message. While the phone
+/// has not sent the photo, it reads "Waiting for the photo from your phone…". A failure or a full size that never comes
+/// reads "Couldn't load this photo.", and a click tries again. Else a click shows the photo in the photo viewer of the
+/// window. See <see cref="PhotoViewer"/>.
 /// </para>
 /// <para>
-/// A bubble whose row has keyboard focus draws a ring around its back (see <see cref="ShowFocusRing"/>), in place of the
-/// row's system focus visual; in high contrast the system visual shows instead.
+/// Open <c>Bubble.Open</c> in the menu also shows the photo in the viewer. Open with <c>Bubble.OpenWith</c> is on the
+/// menu of every attachment. It opens the attachment with the app picker of Windows. Save as <c>Bubble.SaveAs</c> saves
+/// a copy where the person picks. Download <c>Bubble.Download</c>, also on the menu of a file, saves it to the
+/// Downloads folder.
+/// </para>
+/// <para>
+/// A file shows as a card <c>Bubble.File.{id}</c>, named by the file name. The card shows the thumbnail of the file
+/// when one came, else the icon of its type. It also shows the name and the size as Explorer writes it. A click shows
+/// "Downloading…" during the download, then opens the file in its default app. A failure reads "Couldn't open this
+/// file." until the next click.
+/// </para>
+/// <para>
+/// A video fills the bubble as a photo does. Its first frame <c>Bubble.Video.{id}</c> shows the hand cursor, and its
+/// name is its caption or "Video". A play button <c>Video.Play.{id}</c>, "Play video", sits over the frame. Play plays
+/// the video in place with sound, as media, in <c>Video.Player.{id}</c>. That player is a
+/// <see cref="VideoPlayback"/> with compact controls. Only 1 video plays at a time.
+/// </para>
+/// <para>
+/// The bubble releases the player when the row recycles, unloads or scrolls out of sight. It also releases the player
+/// on a chat switch and when the viewer opens. The frame and Open in the menu open the video in the viewer of the
+/// window. Over a playing video, the expand button <c>Video.Expand.{id}</c>, "Open video", does the same. The viewer
+/// starts where the player of the bubble stopped.
+/// </para>
+/// <para>
+/// A bubble that the chat added live fades in once, on its composition visual. That is a sent message, or a message
+/// that arrives while the chat is open. See <see cref="MessageBubbleViewModel.TakeNew"/>. Thus layout and the scroll
+/// pin of the list never see it move. The first page, older pages, cached bubbles and recycled rows show with no fade.
+/// With the animation effects of Windows off, no bubble fades.
+/// </para>
+/// <para>
+/// When its row has keyboard focus, a bubble draws a ring around its back. The ring takes the place of the system
+/// focus visual of the row. See <see cref="ShowFocusRing"/>. In high contrast, the system visual shows instead.
 /// </para>
 /// </remarks>
-[System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1001", Justification = "ReleaseVideo disposes the inline player on recycle, scroll away, unload and chat switch; a control has no Dispose of its own.")]
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1001", Justification = "ReleaseVideo disposes the inline player at recycle, unload, scroll and chat switch. A control has no Dispose.")]
 public sealed partial class MessageBubble : UserControl
 {
     /// <summary>Identifies the <see cref="Bubble"/> property.</summary>
     public static readonly DependencyProperty BubbleProperty =
         DependencyProperty.Register(nameof(Bubble), typeof(MessageBubbleViewModel), typeof(MessageBubble), new PropertyMetadata(null, OnBubbleChanged));
 
-    // How Far The Reaction Pill's Top Overlaps The Back (PillHost's -8 Top Margin)
+    // The top of the reaction pill overlaps the back by this much. PillHost has a top margin of -8.
     private const double PillOverlap = 8;
 
-    // The Gap Between The Reaction Pill And The Time Beside It (PillHost's 6 px Margin On The Time's Side)
+    // The gap between the reaction pill and the time beside it. PillHost has a 6 px margin on the side of the time.
     private const double PillGap = 6;
 
-    // A Short Bubble's Pill Is Centered This Far Outward Of The Point 12 px In From The Back's Edge (4 px In From The Edge)
+    // On a short bubble, the pill centers this far outward of the point 12 px in from the back edge. That puts its
+    // middle 4 px in from the edge.
     private const double PillCornerReach = 8;
 
-    // The Preview Card's Image Width, And Its Gap Below The Text, In Effective Pixels
+    // The image width of the preview card and its gap below the text, in effective pixels.
     private const int PreviewImageWidth = 240;
     private const double PreviewGap     = 8;
 
-    // Who Reacted: The List Scrolls Past This Height, And Each Row's Emoji Sits This Far From The Name
+    // The list of who reacted scrolls past this height. The emoji of each row sits this far from the name.
     private const double ReactorsMaxHeight = 320;
     private const double ReactorsSpacing   = 8;
     private const double ReactorsRowHeight = 32;
 
-    // Width: A Bubble Grows With Its Content Up To This Share Of The Chat, And Never Past The Cap (Effective Pixels)
+    // A bubble grows with its content up to this share of the chat. It never grows past the cap in effective pixels.
     private const double MaxWidthShare  = 0.7;
     private const double MaxBubbleWidth = 560;
 
-    // Corners: Large Round Ones, And Small Ones Where Bubbles Of A Group Meet On The Sender's Side
+    // Large round corners, and small corners on the side of the sender where bubbles of a group meet.
     private const double LargeCorner = 18;
     private const double SmallCorner = 4;
 
-    // Spacing: Half The Gap Inside A Group, And Half The Gap Between Groups
+    // Half the gap inside a group, and half the gap between groups.
     private const double InGroupGap = 1;
     private const double GroupGap   = 4;
 
-    // The Avatar Lane Beside Received Bubbles In A Group Chat
+    // The avatar lane beside received bubbles in a group chat.
     private const double AvatarLane = 36;
 
-    // The Hover Strip: Three 32 px Buttons With 4 px Either Side (Its Slot In MessageBubble.xaml Binds StripWidth)
+    // The hover strip has 3 buttons of 32 px with 4 px on each side. Its slot in MessageBubble.xaml binds StripWidth.
     private const double HoverStripWidth = 104;
 
-    // A Photo's Blurred Look: Its Thumbnail Decoded This Wide, Then Stretched To The Photo's Size
+    // For the blurred look, the thumbnail of a photo decodes this wide, then stretches to the size of the photo.
     private const int BlurDecodeWidth = 24;
 
-    // The File Card's Thumbnail Width: Its 40 px Square, In Logical Pixels (The Display Scale Is Already In Them)
+    // The thumbnail of the file card is a 40 px square in logical pixels. Logical pixels already include the display
+    // scale.
     private const int FileThumbWidth = 40;
 
-    // A Photo's Caption Sits This Far Inside The Bubble; The Back's Usual Padding Otherwise
+    // The caption of a photo sits this far inside the bubble. Other text has the usual padding of the back.
     private static readonly Thickness CaptionInset = new(12, 6, 12, 8);
     private static readonly Thickness TextPadding  = new(12, 8, 12, 8);
 
-
-    // How Long A Thumbnail-Only Photo Waits For The Phone's Full Size Before It Offers To Try Again
+    // A thumbnail-only photo waits this long for the full size from the phone. Then it offers to try again.
     private static readonly TimeSpan FullSizeWait = TimeSpan.FromSeconds(30);
 
-    // A New Bubble's Entrance: A Fade, Over WinUI's Normal Control Animation Time
+    // The entrance of a new bubble is a fade over the normal control animation time of WinUI.
     private static readonly TimeSpan EntranceTime = TimeSpan.FromMilliseconds(250);
 
-    // A Reaction Pill's Pop: From Half Size, A Touch Over Full Size, Then Settling
+    // The pop of a reaction pill starts at half size, goes a little over full size, then settles.
     private const float PillPopFrom = 0.5f;
     private const float PillPopOver = 1.08f;
     private static readonly TimeSpan PillPopTime = TimeSpan.FromMilliseconds(180);
 
-    // Reads The Windows Animation Setting Live (Settings > Accessibility > Visual Effects)
+    // Reads the animation setting of Windows live: Settings > Accessibility > Visual effects.
     private static readonly UISettings Ui = new();
 
-    // The Pointer Is Over The Bubble; The Picker Or Menu Opened From The Strip Is Open, So The Strip Stays While The
-    // Pointer Is In It
+    // The first flag is true while the pointer is over the bubble. The second flag is true while the picker or the
+    // menu from the strip is open. The strip then stays while the pointer is in that popup.
     private bool _pointerOver;
     private bool _keepShown;
 
-    // Whether The Bubble Took The Strip When Last Seen, So A Change (Sending To Sent) Shows Or Hides It Under The Pointer
+    // The CanAct value that the bubble last had. Thus a change from sending to sent shows or hides the strip under the
+    // pointer.
     private bool _canAct;
 
-    // The Preview The Card Shows (Or Is Decoding), So A Change Decodes Once; Only Its Decoded Image Is Held Here
+    // The preview that the card shows or decodes, so that a change decodes once. The card holds only the decoded image.
     private LinkPreview? _previewShown;
 
-    // A Click On A Link In The Text Also Reaches The Bubble's Back, Which Must Not Toggle The Time For It. Its Click And
-    // The Back's Tap Come In Either Order, So The Tap Waits A Turn
+    // A click on a link in the text also reaches the back of the bubble. The back must not toggle the time for that
+    // click. The link click and the tap of the back come in any order, so the tap waits a turn.
     private bool _linkClicked;
 
-    // The Text And Part Key The Text's Runs Were Built For: Rebuilt Only When They Change (A Rebuild Drops A Selection)
+    // The text and the part key that the runs of the text were built for. The runs rebuild only when these change,
+    // because a rebuild drops a selection.
     private string? _shownText;
     private string? _shownKey;
 
-    // The Text's Links, Kept In The Text's Color
+    // The links of the text, kept in the color of the text.
     private readonly List<Hyperlink> _links = [];
 
-    // The Full Photo's Fade In Over The Blurred One
+    // The fade of the full photo over the blurred photo.
     private readonly ScalarTransition _photoFade = new();
 
-    // The Photo Shown (Or Loading) And Its Bubble; Each Load Gets A Number, So One Overtaken By A Newer Load Stops. The
-    // Bubble Is The View Model Itself: It Stays One Object Through Its Echo (Its ID Arrives) And A Retry (A New Temporary
-    // ID), While A Recycled Container Gets Another One
+    // The photo that shows or loads, and its bubble. Each load gets a number, so a load that a newer load overtakes
+    // stops. The bubble is the view model itself. It stays 1 object through its echo, when its ID arrives, and through
+    // a retry with a new temporary ID. A recycled container gets another view model.
     private MediaPart? _photoPart;
     private MessageBubbleViewModel? _photoBubble;
     private int _photoLoad;
     private bool _photoFailed;
 
-    // Whether The Full Image Is A Moving GIF (An Image, Clipped On Its Composition Visual), Else A Still One (A Brush);
-    // And The GIF Image's Visual, Taken Once While It Is In The Live Tree
+    // The first field tells whether the full image is a moving GIF: an Image clipped on its composition visual. Else
+    // the image is a still photo in a brush. The second field is the visual of the GIF image. The bubble takes it once
+    // while the image is in the live tree.
     private bool _photoAnimated;
     private Visual? _photoFullVisual;
 
-    // Cancels A Thumbnail-Only Photo's Wait For Its Full Size When A Newer Load Starts (Null When None Is Waiting)
+    // Cancels the wait of a thumbnail-only photo for its full size when a newer load starts. It is null when no load
+    // waits.
     private Action? _cancelPhotoWait;
 
-    // The Widest A Photo May Be: The Bubble's Width Cap (Set At Measure; The Photo Covers The Bubble's Edge)
+    // The widest that a photo can be: the width cap of the bubble. Measure sets it, because the photo covers the edge
+    // of the bubble.
     private double _photoMaxWidth = MaxBubbleWidth;
 
-    // The File The Card Shows, Its Message, And Whether It Is Opening Or Its Last Open Failed
     private MediaPart? _filePart;
     private MessageBubbleViewModel? _fileBubble;
     private bool _fileOpening;
     private bool _fileFailed;
 
-    // The Voice Message Shown, Its Bubble, Its Player Key (Kept Through The Echo), Its Load Number (Bumped When Another
-    // Message Shows, So A Late Load Or Player Update Stops), The Load Number Whose Audio Fetch Started, And Its Waveform
-    // Once Read. The Audio Itself Isn't Kept: Play Gets It From The Media Store Again
+    // The voice message on show, its bubble and its player key, which the echo keeps. The load number goes up when
+    // another message shows, so a late load or player update stops. Then come the load number whose audio fetch
+    // started, and the waveform after the read. The bubble keeps no audio, because Play gets it from the media store
+    // again.
     private MediaPart? _voicePart;
     private MessageBubbleViewModel? _voiceBubble;
     private string _voiceKey = string.Empty;
@@ -234,33 +262,34 @@ public sealed partial class MessageBubble : UserControl
     private int _voiceFetched = -1;
     private VoiceWave? _voiceWave;
 
-    // The Bubble Whose Video Plays In Place: One At A Time Across The Chat
+    // The bubble whose video plays in place. Only 1 video in the chat plays at a time.
     private static MessageBubble? s_playingVideo;
 
-    // The Video Shown, Its Bubble, Its Load Number (Bumped When It Stops Or Another Message Shows, So A Late Download
-    // Stops), And The Inline Player While It Plays
+    // The video on show and its bubble. The load number goes up when the video stops or another message shows, so a
+    // late download stops. The last field is the inline player while it plays.
     private MediaPart? _videoPart;
     private MessageBubbleViewModel? _videoBubble;
     private int _videoLoad;
     private VideoPlayback? _video;
 
-    // The Video's Still Frame Once It Shows, Which The Viewer Grows Out Of The Bubble Before Its Player Takes Over
+    // The still frame of the video after it shows. The viewer grows it out of the bubble before its player replaces it.
     private ImageSource? _videoFrameImage;
 
-    // The Reactions The Pill Shows, So A Change On The Same Bubble Pops It In; Set When A Pill Just Shown Waits For Its
-    // Size To Pop; And The Pill Host's Visual (No Implicit Transitions On It, So Windows Hands It Out), Taken Once Per
-    // Pill (The Pill Unloads With The Last Reaction, And A New One Loads With The Next)
+    // The reactions that the pill shows, so that a change on the same bubble pops the pill in. The flag is true while a
+    // new pill waits for its size to pop. The visual of the pill host has no implicit transitions, so Windows gives it
+    // out. The bubble takes it once for each pill. The pill unloads with the last reaction and loads with the next.
     private string _reactionsShown = string.Empty;
     private bool _popPill;
     private Visual? _pillVisual;
 
-    // The Row Let Go Of Its Media And Waits To Be Used Again: Its Message's Updates Load None Into It Meanwhile
+    // ReleaseMedia sets this flag while the row waits for reuse. Updates of its message then load no media into it.
     private bool _released;
 
-    // Whether The Entrance Ran On This Row, So A Recycle Puts Its Visual Back (A Row That Never Animated Makes None)
+    // AnimateIn sets this flag, so that a recycle restores the visual of the row. A row that never animated makes no
+    // visual.
     private bool _animatedIn;
 
-    // The Moving GIF Shown, And Whether It Was Paused For Being Off Screen (So Only That Pause Plays It Again)
+    // The moving GIF on show, and whether this bubble paused it off screen. Only that pause plays it again.
     private BitmapImage? _gif;
     private bool _gifPaused;
 
@@ -271,15 +300,17 @@ public sealed partial class MessageBubble : UserControl
     {
         InitializeComponent();
 
-        // Behavior. The Parts A Message Doesn't Use (Quote, Photo, Video, File Card, Voice, Upload Bar, Preview Card, Pill,
-        // Retry Footer, Caption Row) Aren't Made (x:Load), So Their Own Wiring Sits On Them In The XAML, Made With Them
+        // x:Load does not make the parts that a message does not use. Such parts are the quote, photo, video, file
+        // card, voice, upload bar, preview card, pill, retry footer and caption row. Thus their own wiring sits on them
+        // in the XAML and comes with them.
         Back.AddHandler(TappedEvent, new TappedEventHandler(OnBackTapped), handledEventsToo: true);
         Row.Tapped += OnRowTapped;
 
-        // A Playing Video Stops When The Bubble Leaves The Tree
+        // A video that plays stops when the bubble leaves the tree.
         Unloaded += (_, _) => ReleaseVideo();
 
-        // The Row Under The Bubble Is At Least As Wide As The Back (Inside Its Margins), So The Pill Sits On The Back's Corner
+        // The row under the bubble is at least as wide as the back, inside its margins. Thus the pill sits on the
+        // corner of the back.
         Back.SizeChanged += (_, _) =>
         {
             Under.MinWidth = Math.Max(0, Back.ActualWidth - Under.Margin.Left - Under.Margin.Right);
@@ -288,11 +319,11 @@ public sealed partial class MessageBubble : UserControl
         Under.SizeChanged    += (_, _) => LayPill();
         Captions.SizeChanged += (_, _) => LayPill();
 
-        // The Text's Own Menu Would Win A Right-Click On It, So It Has None: The Request Goes On Up To The Chat Pane, Whose
-        // Bubble Menu Has Copy
+        // The own menu of the text would win a right-click on it, so the text has no menu. The request goes to the chat
+        // pane, whose bubble menu has Copy.
         Body.ContextFlyout = null;
 
-        // Links Follow The Text's Color: Its Side's State And The Theme Set It
+        // The links follow the color of the text, which the side state and the theme set.
         Body.RegisterPropertyChangedCallback(TextBlock.ForegroundProperty, (_, _) => ColorLinks());
     }
 
@@ -302,83 +333,85 @@ public sealed partial class MessageBubble : UserControl
     public event EventHandler? RetryRequested;
 
     /// <summary>
-    /// Asks the chat to open the reaction picker on this bubble (the menu's React or the hover strip's React),
-    /// over the element given: the back, or the strip's React button.
+    /// Asks the chat to open the reaction picker on this bubble, over the given element. React in the menu gives the
+    /// back, and React in the hover strip gives its button.
     /// </summary>
     public event EventHandler<FrameworkElement>? ReactRequested;
 
     /// <summary>
-    /// Asks the chat to start a reply to this bubble (the menu's Reply or the hover strip's Reply).
+    /// Asks the chat to start a reply to this bubble. Reply in the menu and in the hover strip raise it.
     /// </summary>
     public event EventHandler? ReplyRequested;
 
     /// <summary>
-    /// Asks the chat to open its bubble menu on this bubble, at the element given: the back, or the hover strip's ⋮.
+    /// Asks the chat to open its bubble menu on this bubble at the given element: the back or the ⋮ of the hover strip.
     /// </summary>
     public event EventHandler<FrameworkElement>? MenuRequested;
 
     /// <summary>
-    /// Asks the chat's voice player to play, pause or seek this bubble's voice message.
+    /// Asks the voice player of the chat to play, pause or seek the voice message of this bubble.
     /// </summary>
     public event EventHandler<VoiceRequest>? VoiceRequested;
 
     /// <summary>
-    /// Asks the chat to jump to the message this bubble's quote shows (a click, Enter or Space on the quote).
+    /// Asks the chat to jump to the message that the quote shows. A click, Enter or Space on the quote raises it.
     /// </summary>
     public event EventHandler? QuoteRequested;
 
-    /// <summary>Gets the quote's accessible name: it jumps to the quoted message.</summary>
+    /// <summary>Gets the accessible name of the quote, which jumps to the quoted message.</summary>
     public static string QuoteJumpText => ChatCopy.GoToOriginalMessage;
 
-    /// <summary>Gets the menu's Copy text.</summary>
+    /// <summary>Gets the Copy text of the menu.</summary>
     public static string CopyText => ChatCopy.Copy;
 
-    /// <summary>Gets the menu's React text.</summary>
+    /// <summary>Gets the React text of the menu.</summary>
     public static string ReactText => ChatCopy.React;
 
-    /// <summary>Gets the menu's Reply text.</summary>
+    /// <summary>Gets the Reply text of the menu.</summary>
     public static string ReplyText => ChatCopy.Reply;
 
-    /// <summary>Gets the hover strip ⋮'s name and tooltip.</summary>
+    /// <summary>Gets the name and tooltip of the ⋮ in the hover strip.</summary>
     public static string MoreOptionsText => ChatCopy.MoreOptions;
 
-    /// <summary>Gets the preview card menu's Copy link text.</summary>
+    /// <summary>Gets the Copy link text of the preview card menu.</summary>
     public static string CopyLinkText => ChatCopy.CopyLink;
 
-    /// <summary>Gets the menu's Open text.</summary>
+    /// <summary>Gets the Open text of the menu.</summary>
     public static string OpenText => ChatCopy.Open;
 
-    /// <summary>Gets the menu's Open with text.</summary>
+    /// <summary>Gets the Open with text of the menu.</summary>
     public static string OpenWithText => ChatCopy.OpenWith;
 
-    /// <summary>Gets the menu's Save as text.</summary>
+    /// <summary>Gets the Save as text of the menu.</summary>
     public static string SaveAsText => ChatCopy.SaveAs;
 
-    /// <summary>Gets the menu's Download text.</summary>
+    /// <summary>Gets the Download text of the menu.</summary>
     public static string DownloadText => ChatCopy.Download;
 
-    /// <summary>Gets the video's play button name and tooltip.</summary>
+    /// <summary>Gets the name and tooltip of the play button of a video.</summary>
     public static string PlayVideoText => ChatCopy.PlayVideo;
 
-    /// <summary>Gets the playing video's expand button name and tooltip.</summary>
+    /// <summary>Gets the name and tooltip of the expand button over a playing video.</summary>
     public static string OpenVideoText => ChatCopy.OpenVideo;
 
-    /// <summary>Gets the hover strip slot's width (see <see cref="LanePadding"/>), kept the same in the XAML.</summary>
+    /// <summary>
+    /// Gets the width of the hover strip slot, which the XAML binds. See <see cref="LanePadding"/>.
+    /// </summary>
     public static double StripWidth => HoverStripWidth;
 
-    /// <summary>Gets the caption row lock's tooltip and name.</summary>
+    /// <summary>Gets the tooltip and name of the lock in the caption row.</summary>
     public static string EncryptedText => ChatCopy.EndToEndEncrypted;
 
-    /// <summary>Gets the caption row's word for a message sent as SMS.</summary>
+    /// <summary>Gets the word in the caption row for a message sent as SMS.</summary>
     public static string SmsText => ChatCopy.Sms;
 
-    /// <summary>Gets the bubble menu's Delete.</summary>
+    /// <summary>Gets the Delete text of the bubble menu.</summary>
     public static string DeleteText => ChatCopy.Delete;
 
     /// <summary>Gets the colored back, which the reaction picker opens over.</summary>
     internal FrameworkElement Anchor => Back;
 
-    /// <summary>Gets or sets the message the bubble shows.</summary>
+    /// <summary>Gets or sets the message that the bubble shows.</summary>
     public MessageBubbleViewModel? Bubble
     {
         get => (MessageBubbleViewModel?)GetValue(BubbleProperty);
@@ -386,30 +419,32 @@ public sealed partial class MessageBubble : UserControl
     }
 
     /// <summary>
-    /// Opens the chat's bubble menu over the back.
+    /// Opens the bubble menu of the chat over the back.
     /// </summary>
     public void ShowMenu() => ShowMenu(Back);
 
     /// <summary>
-    /// Opens the chat's bubble menu at an element, such as the hover strip's ⋮ (see <see cref="MenuRequested"/>).
+    /// Opens the bubble menu of the chat at an element, such as the ⋮ of the hover strip. See
+    /// <see cref="MenuRequested"/>.
     /// </summary>
     /// <remarks>The chat keeps the hover strip shown until the menu closes.</remarks>
-    /// <param name="anchor">The element the menu opens at.</param>
+    /// <param name="anchor">The element that the menu opens at.</param>
     public void ShowMenu(FrameworkElement anchor) => MenuRequested?.Invoke(this, anchor);
 
     /// <summary>
-    /// Shows or hides the ring around the bubble's back, for its row's keyboard focus.
+    /// Shows or hides the ring around the back of the bubble for the keyboard focus of its row.
     /// </summary>
     /// <remarks>
-    /// The chat pane decides (see <see cref="MessageBubbleViewModel.ShowsFocusRing"/>). A test run also puts the result in
-    /// the text's item status: <c>FocusRing</c> or <c>NoRing</c>, then <c>+SystemFocus</c> while the row's system focus
-    /// visual draws too.
+    /// The chat pane decides. See <see cref="MessageBubbleViewModel.ShowsFocusRing"/>. A test run also puts the result
+    /// in the item status of the text: <c>FocusRing</c> or <c>NoRing</c>. Then comes <c>+SystemFocus</c> while the
+    /// system focus visual of the row draws too.
     /// </remarks>
     /// <param name="shown">True to show the ring.</param>
-    /// <param name="systemVisual">True when the row's system focus visual draws (high contrast).</param>
+    /// <param name="systemVisual">True when the system focus visual of the row draws, as in high contrast.</param>
     internal void ShowFocusRing(bool shown, bool systemVisual)
     {
-        // Keyboard Focus Loads The Hover Strip, As The Pointer Does; In High Contrast The System Visual Stands In For The Ring
+        // Keyboard focus loads the hover strip, as the pointer does. In high contrast, the system visual takes the
+        // place of the ring.
         if (shown || systemVisual)
         {
             LoadHoverStrip();
@@ -420,11 +455,11 @@ public sealed partial class MessageBubble : UserControl
     }
 
     /// <summary>
-    /// Keeps the hover strip shown while the reaction picker or the menu opened from it is open (the pointer leaves the
-    /// bubble for it).
+    /// Keeps the hover strip shown while the reaction picker or the menu from the strip is open. The pointer leaves the
+    /// bubble for that popup.
     /// </summary>
-    /// <remarks>Turned off, the strip hides unless the pointer is back over the bubble.</remarks>
-    /// <param name="keep">True while the picker or menu is open.</param>
+    /// <remarks>With the keep off, the strip hides unless the pointer is over the bubble again.</remarks>
+    /// <param name="keep">True while the picker or the menu is open.</param>
     internal void KeepShown(bool keep)
     {
         _keepShown = keep;
@@ -434,7 +469,7 @@ public sealed partial class MessageBubble : UserControl
         }
     }
 
-    // Loads The Hover Strip Once (It Then Stays): Most Bubbles Are Never Hovered
+    // Loads the hover strip once, and it then stays. Most bubbles never get the pointer.
     private void LoadHoverStrip()
     {
         if (HoverStrip is null)
@@ -443,7 +478,8 @@ public sealed partial class MessageBubble : UserControl
         }
     }
 
-    // Shows Or Hides The Hover Strip. Shown Loads It First: Shown's Storyboard And Setters Target It
+    // Shows or hides the hover strip. Before the Shown state, the method loads the strip, because the storyboard and
+    // the setters of that state target it.
     private void ShowHover(bool shown, bool animate)
     {
         if (shown)
@@ -459,58 +495,61 @@ public sealed partial class MessageBubble : UserControl
     // =========================================================================
 
     /// <summary>
-    /// Gives a part's AutomationId: the prefix, then the bubble's <see cref="MessageBubbleViewModel.PartKey"/> (the message
-    /// ID or, until the phone has reported the message, the temporary ID).
+    /// Gives the AutomationId of a part: the prefix, then the <see cref="MessageBubbleViewModel.PartKey"/> of the
+    /// bubble. The key is the message ID, or the temporary ID until the phone reports the message.
     /// </summary>
     /// <param name="prefix">The prefix, such as "Status.".</param>
-    /// <param name="key">The bubble's part key.</param>
+    /// <param name="key">The part key of the bubble.</param>
     /// <returns>The AutomationId.</returns>
     public static string PartIdOf(string prefix, string key) => prefix + key;
 
     /// <summary>
-    /// Gives the text's AutomationId: <c>Bubble.</c> and the bubble's part key (the message ID, or the temporary ID until
-    /// the phone has reported the message).
+    /// Gives the AutomationId of the text: <c>Bubble.</c> and the part key of the bubble. The key is the message ID, or
+    /// the temporary ID until the phone reports the message.
     /// </summary>
-    /// <param name="key">The bubble's part key.</param>
+    /// <param name="key">The part key of the bubble.</param>
     /// <returns>The AutomationId.</returns>
     public static string AutomationIdOf(string key) => PartIdOf("Bubble.", key);
 
     /// <summary>
-    /// Gives the "Not sent" link's AutomationId.
+    /// Gives the AutomationId of the "Not sent" link.
     /// </summary>
-    /// <param name="key">The bubble's part key.</param>
+    /// <param name="key">The part key of the bubble.</param>
     /// <returns>The AutomationId.</returns>
     public static string RetryIdOf(string key) => AutomationIdOf(key) + ".Retry";
 
     /// <summary>
-    /// Gives the time's AutomationId.
+    /// Gives the AutomationId of the time.
     /// </summary>
-    /// <param name="key">The bubble's part key.</param>
+    /// <param name="key">The part key of the bubble.</param>
     /// <returns>The AutomationId.</returns>
     public static string TimeIdOf(string key) => AutomationIdOf(key) + ".Time";
 
     /// <summary>
-    /// Shows the time once the bubble was clicked, unless the retry link takes its place or the caption row already shows it.
+    /// Shows the time after a click on the bubble. The time stays hidden when the retry link takes its place or the
+    /// caption row shows it.
     /// </summary>
-    /// <param name="isTimeShown">True once clicked.</param>
+    /// <param name="isTimeShown">True after a click.</param>
     /// <param name="isFailed">True when the send failed.</param>
-    /// <param name="showsStatusRow">True when the caption row (with the time) shows.</param>
-    /// <returns>The time's visibility.</returns>
+    /// <param name="showsStatusRow">True when the caption row with the time shows.</param>
+    /// <returns>The visibility of the time.</returns>
     public static Visibility TimeVisibility(bool isTimeShown, bool isFailed, bool showsStatusRow) =>
         isTimeShown && !isFailed && !showsStatusRow ? Visibility.Visible : Visibility.Collapsed;
 
     /// <summary>
     /// Shows a part of the delivery icon for some of the icons.
     /// </summary>
-    /// <param name="icon">The bubble's icon.</param>
-    /// <param name="icons">The icons the part belongs to, as their numbers ("123" for sending, sent and delivered).</param>
-    /// <returns>Visible when the bubble's icon is one of them.</returns>
+    /// <param name="icon">The icon of the bubble.</param>
+    /// <param name="icons">
+    /// The icons that the part belongs to, as their numbers. "123" is sending, sent and delivered.
+    /// </param>
+    /// <returns>Visible when the icon of the bubble is one of them.</returns>
     public static Visibility ShownFor(MessageStatusIcon icon, string icons) =>
         icon != MessageStatusIcon.None && icons.Contains((char)('0' + (int)icon), StringComparison.Ordinal) ? Visibility.Visible : Visibility.Collapsed;
 
     /// <summary>
-    /// Rounds a bubble the way Google Messages does: large corners, with small ones on the sender's side where it meets the
-    /// bubble above or below in its group (sent on the right, received on the left).
+    /// Rounds a bubble as Google Messages does, with large corners. Where it meets the bubble above or below in its
+    /// group, the side of the sender gets small corners: the right for sent, the left for received.
     /// </summary>
     /// <param name="fromMe">True for a sent bubble.</param>
     /// <param name="isFirst">True for the first bubble of its group.</param>
@@ -527,13 +566,13 @@ public sealed partial class MessageBubble : UserControl
     }
 
     /// <summary>
-    /// Rounds the focus ring a distance outside the back: each of the back's corners (see <see cref="CornersOf"/>) grown
-    /// by that distance, so the ring follows them evenly.
+    /// Rounds the focus ring at a distance outside the back. Each corner of the back grows by that distance, so the
+    /// ring follows the corners evenly. See <see cref="CornersOf"/>.
     /// </summary>
     /// <param name="fromMe">True for a sent bubble.</param>
     /// <param name="isFirst">True for the first bubble of its group.</param>
     /// <param name="isLast">True for the last bubble of its group.</param>
-    /// <param name="outset">How far outside the back the ring's edge sits, in effective pixels.</param>
+    /// <param name="outset">How far outside the back the edge of the ring sits, in effective pixels.</param>
     /// <returns>The corners.</returns>
     public static CornerRadius RingCorners(bool fromMe, bool isFirst, bool isLast, double outset)
     {
@@ -546,50 +585,59 @@ public sealed partial class MessageBubble : UserControl
     /// </summary>
     /// <param name="isFirst">True for the first bubble of its group.</param>
     /// <param name="isLast">True for the last bubble of its group.</param>
-    /// <returns>The row's margin.</returns>
+    /// <returns>The margin of the row.</returns>
     public static Thickness GroupMargin(bool isFirst, bool isLast) =>
         new(0, isFirst ? GroupGap : InGroupGap, 0, isLast ? GroupGap : InGroupGap);
 
     /// <summary>
-    /// Puts the reaction pill in the column under the row toward the chat's middle: the right one (2) under a received
-    /// bubble, the left one (0) under a sent one, so a sent bubble's time keeps the row's right end.
+    /// Puts the reaction pill in the column under the row toward the middle of the chat. That is column 2 under a
+    /// received bubble and column 0 under a sent bubble. Thus the time of a sent bubble keeps the right end of the row.
     /// </summary>
-    /// <remarks>Bound with <c>x:Bind</c>, not a Side state setter, so the setter never forces a deferred pill to load.</remarks>
+    /// <remarks>
+    /// The XAML binds it with <c>x:Bind</c>, not with a setter of the Side state. A setter would force a deferred pill
+    /// to load.
+    /// </remarks>
     /// <param name="fromMe">True for a sent bubble.</param>
-    /// <returns>The pill's column.</returns>
+    /// <returns>The column of the pill.</returns>
     public static int PillColumn(bool fromMe) => fromMe ? 0 : 2;
 
     /// <summary>
-    /// Gives the reaction pill's margin: its top 8 px over the back, and a 6 px gap on the time's side (left of a received
-    /// bubble's pill, right of a sent one's).
+    /// Gives the margin of the reaction pill: its top 8 px over the back, and a 6 px gap on the side of the time. The
+    /// gap is on the left of a received pill and on the right of a sent pill.
     /// </summary>
-    /// <remarks>Bound with <c>x:Bind</c>, not a Side state setter, so the setter never forces a deferred pill to load.</remarks>
+    /// <remarks>
+    /// The XAML binds it with <c>x:Bind</c>, not with a setter of the Side state. A setter would force a deferred pill
+    /// to load.
+    /// </remarks>
     /// <param name="fromMe">True for a sent bubble.</param>
-    /// <returns>The pill's margin.</returns>
+    /// <returns>The margin of the pill.</returns>
     public static Thickness PillMargin(bool fromMe) =>
         fromMe ? new(0, -PillOverlap, PillGap, 0) : new(PillGap, -PillOverlap, 0, 0);
 
     /// <summary>
-    /// Puts the hover strip's slot beside the back on the bubble's inner side: the right column (2) beside a received
-    /// back, the left one (0) beside a sent one.
+    /// Puts the slot of the hover strip beside the back on the inner side of the bubble. That is column 2 beside a
+    /// received back and column 0 beside a sent back.
     /// </summary>
-    /// <remarks>Bound with <c>x:Bind</c>, not a Side state setter, so the setter never forces the deferred strip to load.</remarks>
+    /// <remarks>
+    /// The XAML binds it with <c>x:Bind</c>, not with a setter of the Side state. A setter would force the deferred
+    /// strip to load.
+    /// </remarks>
     /// <param name="fromMe">True for a sent bubble.</param>
-    /// <returns>The slot's column.</returns>
+    /// <returns>The column of the slot.</returns>
     public static int StripColumn(bool fromMe) => fromMe ? 0 : 2;
 
     /// <summary>
-    /// Gives the avatar lane's width: received bubbles in a group chat keep it, so their avatar lines up.
+    /// Gives the width of the avatar lane. Received bubbles in a group chat keep the lane, so their avatars align.
     /// </summary>
     /// <param name="hasLane">True for a received bubble in a group chat.</param>
-    /// <returns>The lane's width.</returns>
+    /// <returns>The width of the lane.</returns>
     public static double LaneWidth(bool hasLane) => hasLane ? AvatarLane : 0;
 
     /// <summary>
-    /// Gives the bubble's padding: the avatar lane's width on the left when it has one, and the hover strip's width on the
-    /// strip's side (right of a received bubble, left of a sent one), so the name, pill and time line up with the
-    /// bubble's back.
+    /// Gives the padding of the bubble. The avatar lane width is on the left when the bubble has a lane. The hover
+    /// strip width is on the strip side. Thus the name, the pill and the time align with the back of the bubble.
     /// </summary>
+    /// <remarks>The strip is on the right of a received bubble and on the left of a sent bubble.</remarks>
     /// <param name="hasLane">True for a received bubble in a group chat.</param>
     /// <param name="fromMe">True for a sent bubble.</param>
     /// <returns>The padding.</returns>
@@ -597,8 +645,8 @@ public sealed partial class MessageBubble : UserControl
         fromMe ? new(HoverStripWidth, 0, 0, 0) : new(LaneWidth(hasLane), 0, HoverStripWidth, 0);
 
     /// <summary>
-    /// Gives the back's row negative margins of the padding (see <see cref="LanePadding"/>), so the lane (with the avatar)
-    /// and the hover strip sit in the padding, beside the back.
+    /// Gives the row of the back the negative margins of the padding. Thus the lane with the avatar and the hover strip
+    /// sit in the padding, beside the back. See <see cref="LanePadding"/>.
     /// </summary>
     /// <param name="hasLane">True for a received bubble in a group chat.</param>
     /// <param name="fromMe">True for a sent bubble.</param>
@@ -610,16 +658,16 @@ public sealed partial class MessageBubble : UserControl
     }
 
     /// <summary>
-    /// Spaces the preview card from the text above it; with no text (a message that was only the link) the card starts
-    /// at the top of the bubble.
+    /// Spaces the preview card from the text above it. A message that was only the link has no text. The card then
+    /// starts at the top of the bubble.
     /// </summary>
     /// <param name="hasText">True when the bubble shows text.</param>
-    /// <returns>The card's margin.</returns>
+    /// <returns>The margin of the card.</returns>
     public static Thickness PreviewMargin(bool hasText) => new(0, hasText ? PreviewGap : 0, 0, 0);
 
     /// <summary>
-    /// Gives the back's padding: none around a photo, which fills the bubble edge to edge, or around emoji alone, which
-    /// have no bubble, so they line up with the other bubbles' edges; the text's padding otherwise.
+    /// Gives the padding of the back. A photo fills the bubble from edge to edge and gets none. Emoji alone have no
+    /// bubble and get none, so they align with the edges of the other bubbles. Other content gets the text padding.
     /// </summary>
     /// <param name="hasPhoto">True when the bubble shows a photo.</param>
     /// <param name="emojiOnly">True when the message is only emoji.</param>
@@ -627,26 +675,30 @@ public sealed partial class MessageBubble : UserControl
     public static Thickness BackPadding(bool hasPhoto, bool emojiOnly) => hasPhoto || emojiOnly ? default : TextPadding;
 
     /// <summary>
-    /// Gives the text's margin: under a photo the caption keeps the bubble's usual inset; otherwise the back's padding does.
+    /// Gives the margin of the text. Under a photo, the caption keeps the usual inset of the bubble. Else the padding
+    /// of the back gives the inset.
     /// </summary>
     /// <param name="hasPhoto">True when the bubble shows a photo.</param>
     /// <returns>The margin.</returns>
     public static Thickness CaptionMargin(bool hasPhoto) => hasPhoto ? CaptionInset : default;
 
     /// <summary>
-    /// Shows the bubble's fill and edge, except behind a photo with nothing else in its bubble (no caption, no quote):
-    /// then the photo's own edge is the bubble's, with no fill or stroke around it.
+    /// Shows the fill and the edge of the bubble, except behind a photo with no caption and no quote. The edge of that
+    /// photo is then the edge of the bubble, with no fill or stroke around it.
     /// </summary>
     /// <param name="hasPhoto">True when the bubble shows a photo.</param>
     /// <param name="hasCaption">True when a caption shows under the photo.</param>
-    /// <param name="hasQuote">True when the bubble quotes the message it replies to.</param>
-    /// <param name="emojiOnly">True when the message is only emoji, shown big with no bubble around them (issue #11).</param>
-    /// <returns>Collapsed for a photo alone, or emoji alone.</returns>
+    /// <param name="hasQuote">True when the bubble quotes the message that it replies to.</param>
+    /// <param name="emojiOnly">
+    /// True when the message is only emoji. They show big with no bubble around them, as issue #11 asked.
+    /// </param>
+    /// <returns>Collapsed for a photo alone or for emoji alone.</returns>
     public static Visibility FillShown(bool hasPhoto, bool hasCaption, bool hasQuote, bool emojiOnly) =>
         emojiOnly || (hasPhoto && !hasCaption && !hasQuote) ? Visibility.Collapsed : Visibility.Visible;
+
     /// <summary>
-    /// Rounds a photo to its bubble's corners exactly (the photo covers the bubble's edge), square at the bottom when its
-    /// caption follows.
+    /// Rounds a photo to the exact corners of its bubble, because the photo covers the edge of the bubble. The bottom
+    /// is square when a caption follows.
     /// </summary>
     /// <param name="fromMe">True for a sent bubble.</param>
     /// <param name="isFirst">True for the first bubble of its group.</param>
@@ -664,31 +716,32 @@ public sealed partial class MessageBubble : UserControl
     }
 
     /// <summary>
-    /// Gives the quote's sender line its weight: semibold beside quoted media's thumbnail, the caption's own otherwise.
+    /// Gives the weight of the sender line in the quote. It is semibold beside the thumbnail of quoted media, else the
+    /// weight of the caption style.
     /// </summary>
-    /// <param name="hasMedia">True when the quote shows the quoted media's thumbnail or icon.</param>
+    /// <param name="hasMedia">True when the quote shows the thumbnail or the icon of the quoted media.</param>
     /// <returns>The weight.</returns>
     public static Windows.UI.Text.FontWeight QuoteSenderWeight(bool hasMedia) => hasMedia ? FontWeights.SemiBold : FontWeights.Normal;
 
     /// <summary>
-    /// Sets a media label ("Image", "Video", "GIF") in italic; a file name or text stays upright.
+    /// Sets a media label such as "Image", "Video" or "GIF" in italic. A file name or text stays upright.
     /// </summary>
     /// <param name="isLabel">True for a label.</param>
     /// <returns>The style.</returns>
     public static Windows.UI.Text.FontStyle LabelStyle(bool isLabel) => isLabel ? Windows.UI.Text.FontStyle.Italic : Windows.UI.Text.FontStyle.Normal;
 
     /// <summary>
-    /// Gives the file card's icon: a video's, or a document's for any other file.
+    /// Gives the icon of the file card: the video icon for a video, or the document icon for any other file.
     /// </summary>
-    /// <param name="kind">The message's kind.</param>
+    /// <param name="kind">The kind of the message.</param>
     /// <returns>The Segoe Fluent Icons glyph.</returns>
     public static string FileGlyph(MessageKind kind) => kind == MessageKind.Video ? "\uE714" : "\uE8A5";
 
     /// <summary>
-    /// Writes a file size the way Explorer does ("1.20 MB", "940 bytes"), through Windows' own formatter.
+    /// Writes a file size as Explorer does, such as "1.20 MB" or "940 bytes", with the formatter of Windows.
     /// </summary>
     /// <param name="bytes">The size in bytes.</param>
-    /// <returns>The size, or empty when it is unknown (0).</returns>
+    /// <returns>The size, or an empty string for a size of 0, which means unknown.</returns>
     public static string SizeText(long bytes)
     {
         if (bytes <= 0)
@@ -702,12 +755,14 @@ public sealed partial class MessageBubble : UserControl
     }
 
     /// <summary>
-    /// Caps the bubble at 70% of the chat's width (560 px at most) before it is measured, so it is the right width from its
-    /// first layout and short messages stay narrow. The hover strip's kept space comes on top, so it takes nothing from
-    /// the bubble.
+    /// Caps the bubble at 70% of the chat width and 560 px at most before the measure. Thus the bubble has the right
+    /// width from its first layout, and short messages stay narrow.
     /// </summary>
-    /// <param name="availableSize">The row's width and height.</param>
-    /// <returns>The size the bubble wants.</returns>
+    /// <remarks>
+    /// The kept space of the hover strip comes on top of the cap. Thus the strip takes nothing from the bubble.
+    /// </remarks>
+    /// <param name="availableSize">The width and the height of the row.</param>
+    /// <returns>The size that the bubble wants.</returns>
     protected override Windows.Foundation.Size MeasureOverride(Windows.Foundation.Size availableSize)
     {
         if (double.IsFinite(availableSize.Width))
@@ -719,7 +774,7 @@ public sealed partial class MessageBubble : UserControl
                 Root.MaxWidth = maxWidth;
             }
 
-            // The Photo Fills The Bubble Edge To Edge, Beside The Avatar Lane
+            // The photo fills the bubble from edge to edge, beside the avatar lane.
             _photoMaxWidth = cap - LaneWidth(Bubble?.HasAvatarLane == true);
             SizePhoto();
         }
@@ -731,12 +786,14 @@ public sealed partial class MessageBubble : UserControl
     // DEFERRED PARTS
     // =========================================================================
 
-    // A Part Loaded (Or Back In The Tree): Its States Again, Since One Made Afresh Has None Of Its Group's Setters
+    // A part that loads or returns to the tree gets its states again. A new part has none of the setters of its
+    // group.
     private void OnPartLoaded(object sender, RoutedEventArgs e) => ShowPartStates(refresh: true);
 
-    // The Parts' Own States: The On-Accent Brushes On A Sent SMS Bubble's Parts, And My Reaction's Fill On The Pill. Only
-    // On A Loaded Part: A State's Setter Would Load Its Part. With Refresh, A State Is Gone To Again Through The Plain One,
-    // For A Part Made Afresh While Its Group Already Sat In The State (Going To The Same State Again Does Nothing)
+    // Sets the own states of the parts: the on-accent brushes on the parts of a sent SMS bubble, and the fill of my
+    // reaction on the pill. The method sets states only on a loaded part, because the setter of a state would load its
+    // part. With refresh, the method goes to a state again through the plain state. That is for a new part whose group
+    // already sat in the state. A second go to the same state does nothing.
     private void ShowPartStates(bool refresh)
     {
         bool sms = Bubble is { FromMe: true, IsRcs: false };
@@ -762,7 +819,8 @@ public sealed partial class MessageBubble : UserControl
         VisualStateManager.GoToState(this, state, false);
     }
 
-    // True When The Element Sits In The Quote, Photo, Video, File Card, Voice Or Preview Card, Whose Taps Are Their Own
+    // Returns true when the element sits in the quote, photo, video, file card, voice message or preview card. Those
+    // parts handle their own taps.
     private bool InPart(DependencyObject? element)
     {
         for (DependencyObject? at = element; at is not null && !ReferenceEquals(at, Back); at = VisualTreeHelper.GetParent(at))
@@ -777,15 +835,15 @@ public sealed partial class MessageBubble : UserControl
         return false;
     }
 
-    // The Photo's Full Image: Clipped Once Laid Out, Reshaped With Its Size
+    // The full image of the photo gets its clip after layout, and the clip follows its size.
     private void OnPhotoFullLoaded(object sender, RoutedEventArgs e) => ClipPhotoFull(mayTake: true);
 
     private void OnPhotoFullSizeChanged(object sender, SizeChangedEventArgs e) => ClipPhotoFull();
 
-    // The Playing Video's Picture Keeps The Bubble's Corners
+    // The picture of a playing video keeps the corners of the bubble.
     private void OnVideoPictureSizeChanged(object sender, SizeChangedEventArgs e) => ClipVideoPicture();
 
-    // A Pill That Just Appeared Pops In Once It Is In The Tree With Its Size (Its Middle Is Where It Grows From)
+    // A new pill pops when it is in the tree with its size. It grows from its middle.
     private void OnPillHostLoaded(object sender, RoutedEventArgs e)
     {
         ShowPartStates(refresh: true);
@@ -802,15 +860,16 @@ public sealed partial class MessageBubble : UserControl
     // EVENT HANDLERS
     // =========================================================================
 
-    // A Recycled Container Gets Another Message: Follow Its Changes Instead, And Put It On Its Side, With No Hover Strip
-    // Left Over From The Last One
+    // A recycled container gets another message. The view then follows the changes of that message and takes its
+    // side. No hover strip stays from the last message.
     private static void OnBubbleChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         var view = (MessageBubble)d;
 
-        // No Entrance Left Running From The Container's Last Bubble; Only When One Ran, So A Row That Never Animated Makes
-        // No Visual. Guarded: This Runs In x:Bind's ProcessBindings, Where Windows Can Refuse The Visual (E_ACCESSDENIED, As
-        // It Did The Photo's Clip), And A Throw Escaping Into XAML Crashes The App
+        // The recycled row restores its visual, so no entrance of its last bubble still runs. Only a row whose
+        // entrance ran does this, so a row that never animated makes no visual. The try is a guard, because this code
+        // runs in the ProcessBindings of x:Bind. There Windows can refuse the visual with E_ACCESSDENIED, as it did for
+        // the photo clip. A throw that escapes into XAML crashes the app.
         if (view._animatedIn)
         {
             view._animatedIn = false;
@@ -842,13 +901,14 @@ public sealed partial class MessageBubble : UserControl
             newBubble.PropertyChanged += view.OnBubblePropertyChanged;
         }
 
-        // The Voice Message's Audio Waits For Phase 1 (The Chat's LoadMedia), So A Row Passed Over While Scrolling Fetches None
+        // The audio of a voice message waits for phase 1, the LoadMedia call of the chat. Thus a row that a scroll
+        // passes over fetches no audio.
         view.ShowText();
         view.ShowStates();
         view.LoadMedia(fetchVoice: false);
 
-        // Another Message's Reactions Show As They Are, With No Pop (A Recycled Row's Half-Run Pop Is Put Back). With None,
-        // The Pill Unloads, Its Visual With It
+        // The reactions of another message show as they are, with no pop. A recycled row stops a pop that is half
+        // done. With no reactions, the pill unloads with its visual.
         view._reactionsShown = view.Bubble?.ReactionsText ?? string.Empty;
         view._popPill        = false;
         view.RestPill();
@@ -857,15 +917,17 @@ public sealed partial class MessageBubble : UserControl
             view._pillVisual = null;
         }
 
-        // A Bubble Added Live Animates In, Once (The Flag Clears, So A Recycled Row Never Replays It)
+        // A bubble that the chat added live animates in once. TakeNew clears the flag, so a recycled row never plays
+        // the entrance again.
         if (view.Bubble?.TakeNew() == true && Ui.AnimationsEnabled)
         {
             view.AnimateIn();
         }
     }
 
-    // Fades In On The Row's Composition Visual (Opacity Only: It Rose Into Place Too, Which The Owner Didn't Want), Easing
-    // Like WinUI's Own Controls (ControlFastOutSlowInKeySpline: 0,0,0,1). Layout Never Moves, So The Scroll Pin Is Unaffected
+    // Fades the row in on its composition visual, with only opacity. The owner did not want a rise into place.
+    // The ease matches the controls of WinUI: ControlFastOutSlowInKeySpline, 0,0,0,1. Layout never moves, so the
+    // scroll pin does not change.
     private void AnimateIn()
     {
         Visual visual                  = ElementCompositionPreview.GetElementVisual(Row);
@@ -883,19 +945,21 @@ public sealed partial class MessageBubble : UserControl
         AppLog.BubbleAnimatedIn(App.ShellLog, Bubble?.PartKey ?? string.Empty);
     }
 
-    // The Bubble Raises Each Property It Changed By Name (Bindings Follow On Their Own); Only The Work The Name Touches
-    // Runs Here. An Echo Can Make A Sending Bubble RCS, My Reaction Comes And Goes, And A Preview Card Arrives
+    // The bubble raises each changed property by name, and the bindings follow by themselves. This method runs only the
+    // work that the name touches. An echo can make a sending bubble RCS, my reaction comes and goes, and a preview card
+    // arrives.
     private void OnBubblePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         switch (e.PropertyName)
         {
-            // The Text, Or The ID Its Links Are Named By
+            // The text, or the ID that names its links.
             case nameof(MessageBubbleViewModel.BodyText) or nameof(MessageBubbleViewModel.PartKey):
                 ShowText();
                 break;
 
-            // The Side, My Reaction's Fill, And Where The Pill Sits; The Photo's And The Playing Video's Corners Follow The
-            // Side And The Bubble's Place In Its Group (Which A Newer Message From The Same Sender Changes)
+            // The side, the fill of my reaction and the place of the pill. The corners of the photo and the playing
+            // video follow the side and the group place of the bubble. A newer message from the same sender can change
+            // that place.
             case nameof(MessageBubbleViewModel.FromMe) or nameof(MessageBubbleViewModel.IsRcs)
                 or nameof(MessageBubbleViewModel.IsEmojiOnly) or nameof(MessageBubbleViewModel.HasMyReaction) or nameof(MessageBubbleViewModel.HasReactions)
                 or nameof(MessageBubbleViewModel.IsFirstInGroup) or nameof(MessageBubbleViewModel.IsLastInGroup):
@@ -904,7 +968,7 @@ public sealed partial class MessageBubble : UserControl
                 ClipVideoPicture();
                 break;
 
-            // The Media Or The Preview Card Changed: Loaded, Unless The Row Let Go Of Its Media While Waiting To Be Used Again
+            // A change of the media or the preview card loads it. A row that released its media for reuse loads none.
             case nameof(MessageBubbleViewModel.Media) or nameof(MessageBubbleViewModel.Preview) or nameof(MessageBubbleViewModel.HasPhoto)
                 or nameof(MessageBubbleViewModel.HasVideo) or nameof(MessageBubbleViewModel.HasFileCard) or nameof(MessageBubbleViewModel.HasVoice):
                 if (!_released)
@@ -922,8 +986,9 @@ public sealed partial class MessageBubble : UserControl
                 ShowReactionChange();
                 break;
 
-            // The Photo's Corners Follow The Group (A Bubble Added Below) And The Caption, And A GIF's Clip With Them
-            case nameof(MessageBubbleViewModel.IsFirstInGroup) or nameof(MessageBubbleViewModel.IsLastInGroup) or nameof(MessageBubbleViewModel.HasBodyText):
+            // The corners of the photo follow the caption, and the clip of a GIF follows them. The case above handles a
+            // change of the group.
+            case nameof(MessageBubbleViewModel.HasBodyText):
                 ClipPhotoFull();
                 break;
         }
@@ -933,9 +998,10 @@ public sealed partial class MessageBubble : UserControl
     // REACTION PILL
     // =========================================================================
 
-    // The Same Bubble's Reactions Changed: The Pill Pops In, At Once When It Already Shows, Else Once It Is In The Tree
-    // With Its Size (Hidden Until Then, So It Never Shows A Frame At Full Size First). Only With Windows' Animation
-    // Effects On. The Last Reaction Gone, The Pill Unloads With Its Visual
+    // When the reactions of the same bubble change, the pill pops. It pops at once when it already shows, else when
+    // it is in the tree with its size. It stays hidden until then, so it never shows a frame at full size first. The
+    // pop runs only with the animation effects of Windows on. When the last reaction goes, the pill unloads with its
+    // visual.
     private void ShowReactionChange()
     {
         string text = Bubble?.ReactionsText ?? string.Empty;
@@ -962,7 +1028,8 @@ public sealed partial class MessageBubble : UserControl
         TryPopPill();
     }
 
-    // Pops A Waiting Pill Once Windows Hands Out Its Visual (In The Live Tree) And It Has Its Size; Until Then It Is Hidden
+    // Pops a waiting pill when it has its size and Windows gives its visual in the live tree. Until then the pill is
+    // hidden.
     private void TryPopPill()
     {
         if (!_popPill || TakePillVisual() is not { } visual)
@@ -980,8 +1047,8 @@ public sealed partial class MessageBubble : UserControl
         visual.Opacity = 0;
     }
 
-    // Pops The Pill In From Its Middle: From Half Size And Clear To A Touch Over Full Size, Then Settling, In 180 ms On
-    // WinUI's Fast-Out-Slow-In Curve. Layout Never Moves
+    // Pops the pill in from its middle: from half size and clear to a little over full size, then it settles. The pop
+    // takes 180 ms on the fast-out-slow-in curve of WinUI. Layout never moves.
     private void PopPill()
     {
         if (PillHost is null || TakePillVisual() is not { } visual)
@@ -1009,7 +1076,7 @@ public sealed partial class MessageBubble : UserControl
         TestHooks.NoteState("reaction-pop", Bubble?.PartKey ?? string.Empty);
     }
 
-    // Puts The Pill Back At Rest (Full Size, Shown), Stopping A Pop
+    // Stops a pop and shows the pill at full size.
     private void RestPill()
     {
         if (_pillVisual is not { } visual)
@@ -1023,14 +1090,17 @@ public sealed partial class MessageBubble : UserControl
         visual.Opacity = 1;
     }
 
-    // The Pill On The Back's Bottom Corner Toward The Chat's Middle, Its Top 8 px Over The Back: Bottom-Right On A Received
-    // Bubble, Ending 12 px In From The Back's Right; Bottom-Left On A Sent One, Starting 12 px In From The Back's Left (Owner,
-    // The Received Pill Mirrored). On A Short Bubble (Under Twice The Pill's Width) That Would Put It Past The Far Corner, So
-    // It Is Centered 4 px In From The Back's Edge Instead, Over The Corner (Owner, Plan 10). The Pill Sits At Its Column's
-    // End (The Row's Right On Received, Its Left On Sent), So It Is Moved There From Wherever The Row's Width Put It. The
-    // Time (On The Received Row's Left, The Sent Row's Right) Drops Below The Pill When The Two Would Meet; Only Its Top
-    // Margin Changes, Never Its Width, So The Layout Can't Loop. No Pill (Not Loaded, Or Its Last Reaction Just Went):
-    // The Time Sits Back In Its Place
+    // Puts the pill on the bottom corner of the back toward the middle of the chat. Its top is 8 px over the back.
+    // On a received bubble, the pill sits bottom right and ends 12 px in from the right of the back. On a sent bubble,
+    // it sits bottom left and starts 12 px in from the left of the back. The owner asked for this mirror of the pill.
+    // A short bubble is under twice the width of the pill, and that place would be past the far corner. Thus the pill
+    // centers 4 px in from the edge of the back, over the corner. The owner asked for this in Plan 10.
+    // The pill sits at the end of its column: the right of the row on received, its left on sent. A shift moves it
+    // from there to its place, wherever the width of the row put it.
+    // The time sits on the left of a received row and the right of a sent row. It drops below the pill when the two
+    // would meet. Only its top margin changes, never its width, so the layout cannot loop.
+    // With no pill, the time returns to its place. That is when the pill is not loaded or its last reaction just
+    // went.
     private void LayPill()
     {
         if (PillHost is null || PillShift is null || Bubble?.HasReactions != true)
@@ -1048,8 +1118,9 @@ public sealed partial class MessageBubble : UserControl
         bool sent         = Bubble.FromMe;
         bool shortBack    = Under.MinWidth < pillWidth * 2;
 
-        // Received: The Row Starts 12 px In From The Back's Left; Its MinWidth Point Is 12 px In From The Back's Right
-        // Sent: The Row Ends 12 px In From The Back's Right; 12 px In From The Back's Left Is Under.ActualWidth - Under.MinWidth
+        // On received, the row starts 12 px in from the left of the back. Its MinWidth point is 12 px in from the
+        // right. On sent, the row ends 12 px in from the right of the back. There, the point 12 px in from the left is
+        // Under.ActualWidth - Under.MinWidth.
         double left = sent
             ? (shortBack ? (Under.ActualWidth - Under.MinWidth) - PillCornerReach - (pillWidth / 2) : Under.ActualWidth - Under.MinWidth)
             : (shortBack ? Under.MinWidth + PillCornerReach - (pillWidth / 2) : Under.MinWidth - pillWidth);
@@ -1073,8 +1144,8 @@ public sealed partial class MessageBubble : UserControl
         }
     }
 
-    // The Pill Host's Visual, Taken Once While The Bubble Is In The Live Tree; Null When Windows Refuses It (No Pop Beats
-    // A Crash)
+    // Takes the visual of the pill host once while the bubble is in the live tree. Returns null when Windows refuses
+    // it, because no pop is better than a crash.
     private Visual? TakePillVisual()
     {
         if (_pillVisual is not null || PillHost is not { IsLoaded: true })
@@ -1094,8 +1165,8 @@ public sealed partial class MessageBubble : UserControl
         return _pillVisual;
     }
 
-    // A Bubble Under The Pointer That Starts Or Stops Taking The Strip (An Echo Turns Sending Into Sent) Shows Or Hides
-    // It Without The Pointer Moving
+    // A bubble under the pointer can start or stop taking the strip, for example after an echo. The bubble then shows
+    // or hides the strip with no pointer move.
     private void ShowHoverStrip()
     {
         bool canAct = Bubble?.CanAct == true;
@@ -1108,8 +1179,8 @@ public sealed partial class MessageBubble : UserControl
         ShowHover(canAct && (_pointerOver || _keepShown), Ui.AnimationsEnabled);
     }
 
-    // Decodes The Card's Image From Its Bytes; Bytes Windows Can't Read Leave The Card Without One. No Card: It Unloads,
-    // Its Image With It
+    // Decodes the image of the card from its bytes. Bytes that Windows cannot read leave the card with no image. With
+    // no preview, the card unloads with its image.
     private async void ShowPreviewImage()
     {
         LinkPreview? preview = Bubble?.Preview;
@@ -1132,7 +1203,7 @@ public sealed partial class MessageBubble : UserControl
             return;
         }
 
-        // A Recycled Container May Have Moved On While Decoding
+        // A recycled container can show another message after the decode.
         ImageSource? image = await Avatar.ToImageAsync(bytes, PreviewImageWidth);
         if (image is null || !ReferenceEquals(preview, _previewShown))
         {
@@ -1148,17 +1219,17 @@ public sealed partial class MessageBubble : UserControl
     // =========================================================================
 
     /// <summary>
-    /// Shows the message's media: the preview card's image, the photo, the file card's thumbnail, the voice message and
-    /// the video's frame, loading only what changed.
+    /// Shows the media of the message and loads only what changed. That is the preview card image, the photo, the file
+    /// card thumbnail, the voice message and the video frame.
     /// </summary>
     /// <remarks>
-    /// The bubble calls it when its message or the message's media changes; the chat calls it again once a list row has
-    /// its message (phase 1), so a row given back the message it showed before its media was let go
-    /// (<see cref="ReleaseMedia"/>) loads it again. A voice message's audio is fetched (for its waveform and length) only
-    /// when <paramref name="fetchVoice"/> is true: the bubble's own call on a new message passes false, so the audio
-    /// waits for the chat's phase 1 call.
+    /// The bubble calls it when its message or the media of the message changes. The chat calls it again when a list
+    /// row has its message, in phase 1. Thus a row that gets back its last message after <see cref="ReleaseMedia"/>
+    /// loads the media again. The audio of a voice message downloads for its waveform and length only when
+    /// <paramref name="fetchVoice"/> is true. The own call of the bubble on a new message passes false. Thus the audio
+    /// waits for the phase 1 call of the chat.
     /// </remarks>
-    /// <param name="fetchVoice">True to fetch a voice message's audio for its waveform.</param>
+    /// <param name="fetchVoice">True to fetch the audio of a voice message for its waveform.</param>
     internal void LoadMedia(bool fetchVoice = true)
     {
         _released = false;
@@ -1170,19 +1241,19 @@ public sealed partial class MessageBubble : UserControl
     }
 
     /// <summary>
-    /// Lets go of the media a list row holds while it waits to be used again: the inline video's player, the voice
-    /// message's waveform, and every decoded image (preview card, photo, file thumbnail, video frame).
+    /// Releases the media of a list row while the row waits for reuse. That is the player of the inline video, the
+    /// waveform of the voice message, and every decoded image.
     /// </summary>
     /// <remarks>
-    /// Loads still running stop, and the media shown is forgotten, so <see cref="LoadMedia"/> loads it again. The bubble
-    /// keeps its message: clearing it would unload and reload every deferred (<c>x:Load</c>) part on each recycle. Parts
-    /// the message doesn't use aren't loaded, so each is checked first.
+    /// The decoded images are the preview card image, the photo, the file thumbnail and the video frame. Loads that
+    /// still run stop, and the bubble forgets the shown media, so <see cref="LoadMedia"/> loads it again. The bubble
+    /// keeps its message, because a clear would unload and reload every deferred <c>x:Load</c> part on each recycle.
+    /// Parts that the message does not use are not loaded, so the method checks each part first.
     /// </remarks>
     internal void ReleaseMedia()
     {
         _released = true;
 
-        // Video: The Inline Player And Its Frame
         ReleaseVideo();
         _videoPart       = null;
         _videoBubble     = null;
@@ -1192,13 +1263,13 @@ public sealed partial class MessageBubble : UserControl
             VideoThumb.Background = null;
         }
 
-        // Voice: Its Waveform; A Late Load Or Player Update Stops
+        // A new load number stops a late load or player update of the voice message.
         _voicePart   = null;
         _voiceBubble = null;
         _voiceWave   = null;
         _voiceLoad++;
 
-        // Photo: Its Blurred And Full Images, And Any GIF; A Load Still Running Stops
+        // The photo releases its blurred and full images and any GIF. A load that still runs stops.
         _photoPart   = null;
         _photoBubble = null;
         _photoFailed = false;
@@ -1211,7 +1282,6 @@ public sealed partial class MessageBubble : UserControl
             PhotoFullImage.Source = null;
         }
 
-        // File Card: Its Thumbnail
         _filePart   = null;
         _fileBubble = null;
         if (FileThumb is not null)
@@ -1219,7 +1289,6 @@ public sealed partial class MessageBubble : UserControl
             FileThumb.Background = null;
         }
 
-        // Preview Card: Its Image
         _previewShown = null;
         if (PreviewImage is not null)
         {
@@ -1230,7 +1299,8 @@ public sealed partial class MessageBubble : UserControl
 
     private void ShowStates()
     {
-        // Emoji Alone Have No Accent Fill Behind Them, So A Sent SMS Takes The Plain Text Color (Sent), Not The On-Accent One
+        // Emoji alone have no accent fill behind them. Thus a sent SMS of emoji takes the plain text color of the Sent
+        // state, not the on-accent color.
         string side = Bubble switch
         {
             { FromMe: false } or null                => "Received",
@@ -1242,11 +1312,12 @@ public sealed partial class MessageBubble : UserControl
         VisualStateManager.GoToState(this, Bubble?.IsEmojiOnly == true ? "BigEmoji" : "BodyText", false);
         ShowPartStates(refresh: false);
 
-        // Re-Lay The Pill, So A Recycled Bubble That Switched Sides Doesn't Keep The Old Side's Shift
+        // The pill gets its place again, so a recycled bubble on the other side does not keep the old shift.
         LayPill();
     }
 
-    // The Text, With Its Web Links As Links (Plain Text When It Has None); Without The Card's Link While The Card Shows
+    // Shows the text with its web links as links, or as plain text when it has none. While the card shows, the text
+    // has no link of the card.
     private void ShowText()
     {
         string text = Bubble?.BodyText ?? string.Empty;
@@ -1268,7 +1339,7 @@ public sealed partial class MessageBubble : UserControl
             return;
         }
 
-        // The Line Ends Are Known Once The New Text Is Laid Out
+        // The line ends are known after the layout of the new text.
         void OnLaidOut(object? sender, object e)
         {
             Body.LayoutUpdated -= OnLaidOut;
@@ -1277,7 +1348,7 @@ public sealed partial class MessageBubble : UserControl
 
         Body.LayoutUpdated += OnLaidOut;
 
-        // Plain Runs Between The Links
+        // Plain runs fill the text between the links.
         Body.Inlines.Clear();
         int at = 0;
         foreach (TextLink link in links)
@@ -1297,7 +1368,7 @@ public sealed partial class MessageBubble : UserControl
         }
     }
 
-    // A Link Named By Its Text, Opened On Click Or Enter (Never By Itself)
+    // Makes a link named by its text. Only a click or Enter opens it, never the app itself.
     private Hyperlink NewLink(string shown, Uri url, int number)
     {
         var link = new Hyperlink { Foreground = Body.Foreground, UnderlineStyle = UnderlineStyle.Single };
@@ -1314,15 +1385,16 @@ public sealed partial class MessageBubble : UserControl
         return link;
     }
 
-    // The Quote's Click, Enter Or Space: The Chat Jumps To The Quoted Message
+    // A click, Enter or Space on the quote makes the chat jump to the quoted message.
     private void OnQuoteClick(object sender, RoutedEventArgs e) => QuoteRequested?.Invoke(this, EventArgs.Empty);
 
-    // A New Width Moves The Line Ends
+    // A new width moves the line ends.
     private void OnBodySizeChanged(object sender, SizeChangedEventArgs e) => BlockLinkEnds();
 
-    // The Text Maps The Empty Space At The End Of A Line To The Line's Last Letter, So Past A Link That Ends A Line (Or
-    // Wraps) The Pointer Still Hovers The Link And Shows The Hand. A Clear Strip Covers That Space From The Line's Last
-    // Letter To The Text's Right Edge, Over Every Line Where A Link's Letters End; Only The Letters Themselves Count
+    // The text maps the empty space at the end of a line to the last letter of the line. Thus past a link that ends or
+    // wraps a line, the pointer still hovers the link and shows the hand. A clear strip covers that space from the
+    // last letter of the line to the right edge of the text. It covers each line where the letters of a link end. Only
+    // the letters count.
     private void BlockLinkEnds()
     {
         LinkBlockers.Children.Clear();
@@ -1334,9 +1406,9 @@ public sealed partial class MessageBubble : UserControl
 
         foreach (Hyperlink link in _links)
         {
-            // Each Line The Link's Letters Sit On: Its Top, Height And Rightmost Edge. GetCharacterRect Gives The Caret (No
-            // Width), So Each Letter's Right Edge Is The Caret Just After It, Taken Backward (At A Wrap That Caret Stays At
-            // The End Of The Line It Leaves)
+            // The loop finds each line that the letters of the link sit on, with its top, height and rightmost edge.
+            // GetCharacterRect gives the caret, which has no width. Thus the right edge of each letter is the caret
+            // just after it, taken backward. At a wrap, that caret stays at the end of the line that it leaves.
             List<Rect> lines = [];
             TextPointer? at  = link.ContentStart.GetPositionAtOffset(1, LogicalDirection.Forward);
             while (at is not null && at.Offset <= link.ContentEnd.Offset)
@@ -1355,7 +1427,8 @@ public sealed partial class MessageBubble : UserControl
                 at = at.GetPositionAtOffset(1, LogicalDirection.Forward);
             }
 
-            // Every Line But The Last Ends With The Link; The Last Does Too Unless Text Follows On The Same Line
+            // Every line but the last ends with the link. The last line also ends with it, unless text follows on that
+            // line.
             for (int i = 0; i < lines.Count; i++)
             {
                 Rect line = lines[i];
@@ -1369,11 +1442,12 @@ public sealed partial class MessageBubble : UserControl
         }
     }
 
-    // True When A Letter After The Link (Past The Next Run's Start) Sits On The Link's Last Line
+    // Returns true when a letter after the link sits on the last line of the link. The letter is past the next run
+    // start.
     private static bool FollowedOnLine(Hyperlink link, Rect line)
     {
-        // The Caret Just After The Next Letter: The First Past The Link's End That Moved (Element Edges Don't Move It);
-        // None When The Text Ends With The Link
+        // The loop looks for the caret just after the next letter: the first caret past the end of the link that moved.
+        // Element edges do not move the caret. When the text ends with the link, the loop finds none.
         Rect end           = link.ContentEnd.GetCharacterRect(LogicalDirection.Backward);
         TextPointer? after = link.ElementEnd;
         for (int step = 0; step < 4 && after is not null; step++)
@@ -1389,7 +1463,8 @@ public sealed partial class MessageBubble : UserControl
         return false;
     }
 
-    // A Clear Strip That Takes The Pointer (A Transparent Fill); Its Right-Click Goes On Up To The Chat's Bubble Menu, Like The Text's
+    // Adds a clear strip that takes the pointer through its transparent fill. A right-click on it goes to the bubble
+    // menu of the chat, as a right-click on the text does.
     private void AddBlocker(double left, double top, double width, double height)
     {
         if (width < 1 || height < 1)
@@ -1411,8 +1486,8 @@ public sealed partial class MessageBubble : UserControl
         }
     }
 
-    // Only Web Addresses Open (FindLinks Gives No Other, Checked Again Before Anything Launches); A Test Run Only Logs
-    // The Click. Never The Address: Only Its Scheme Is Logged
+    // Only web addresses open. FindLinks gives no other kind, and the method checks again before any launch. A test run
+    // only logs the click. The log gets only the scheme, never the address.
     private static void OpenLink(Uri url)
     {
         if (url.Scheme != Uri.UriSchemeHttp && url.Scheme != Uri.UriSchemeHttps)
@@ -1428,10 +1503,10 @@ public sealed partial class MessageBubble : UserControl
         }
     }
 
-    // The Time Toggles A Turn Later, Once A Link's Click (Which Can Come After The Tap) Has Had Its Say
+    // The time toggles a turn later, after the click of a link. That click can come after the tap.
     private void OnBackTapped(object sender, TappedRoutedEventArgs e)
     {
-        // A Tap On The Quote, A Photo, Video, File Card, Voice Message Or Preview Card Is That Part's Own
+        // The quote, photo, video, file card, voice message and preview card handle their own taps.
         if (InPart(e.OriginalSource as DependencyObject))
         {
             return;
@@ -1449,8 +1524,8 @@ public sealed partial class MessageBubble : UserControl
         });
     }
 
-    // The Row Beside The Bubble (Its Empty Width, The Avatar, The Time) Toggles The Time Too; The Bubble Has Its Own
-    // Handler Above, And A Button (The Hover Strip, The Pill) Handles Its Own Tap
+    // A tap on the row beside the bubble also toggles the time: on its empty width, the avatar or the time. The bubble
+    // has its own handler above. A button such as the hover strip or the pill handles its own tap.
     private void OnRowTapped(object sender, TappedRoutedEventArgs e)
     {
         for (DependencyObject? at = e.OriginalSource as DependencyObject; at is not null && !ReferenceEquals(at, Row); at = VisualTreeHelper.GetParent(at))
@@ -1464,7 +1539,6 @@ public sealed partial class MessageBubble : UserControl
         Bubble?.ToggleTime();
     }
 
-    // Opens The Link In The Default Browser
     private void OnPreviewClick(object sender, RoutedEventArgs e)
     {
         if (Bubble?.Preview is { } preview)
@@ -1476,9 +1550,10 @@ public sealed partial class MessageBubble : UserControl
     private void OnRetryClick(object sender, RoutedEventArgs e) => RetryRequested?.Invoke(this, EventArgs.Empty);
 
     /// <summary>
-    /// The bubble menu's Copy: the selected text, or the whole text when nothing is selected, as the text's own Copy did.
+    /// Runs Copy from the bubble menu. It copies the selected text, or the whole text when nothing is selected. The own
+    /// Copy of the text did the same.
     /// </summary>
-    /// <remarks>Always as sent, without the VS16 added for showing color emoji.</remarks>
+    /// <remarks>The copy is always the text as sent, without the VS16 that the bubble adds for color emoji.</remarks>
     public void Copy()
     {
         string original = Bubble?.Text ?? string.Empty;
@@ -1492,7 +1567,7 @@ public sealed partial class MessageBubble : UserControl
     }
 
     /// <summary>
-    /// The preview card menu's Copy link: the whole address as sent, though the text no longer shows it.
+    /// Runs Copy link from the preview card menu. It copies the whole address as sent, which the text no longer shows.
     /// </summary>
     public void CopyLink()
     {
@@ -1503,11 +1578,12 @@ public sealed partial class MessageBubble : UserControl
     }
 
     /// <summary>
-    /// The bubble menu's React: asks the chat to open the reaction picker over the back.
+    /// Runs React from the bubble menu, which asks the chat to open the reaction picker over the back.
     /// </summary>
     public void React() => ReactRequested?.Invoke(this, Back);
 
-    // The Pill: Who Reacted, In Every Chat (Never The Picker; The Menu, The Strip And Shift + + Open That)
+    // The pill shows who reacted, in every chat. It never opens the picker. The menu, the strip and Shift + + open the
+    // picker.
     private void OnPillClick(object sender, RoutedEventArgs e)
     {
         if (Bubble is not { } bubble)
@@ -1518,9 +1594,10 @@ public sealed partial class MessageBubble : UserControl
         ShowReactors(bubble.Reactors());
     }
 
-    // Who Reacted: A List In A Flyout At The Pill, One Row Per Person ("👍 Bo"), Named For Narrator (Reactors.{n}). The
-    // Rows Only Read, So They Show No Hover Or Press Fill. Compact Like A Menu: 32 px Rows, 8 px From Emoji To Name, And A
-    // Menu's Thin Edge Around The List. Names Never Reach The Log
+    // Shows who reacted in a flyout list at the pill, with 1 row for each person, such as "👍 Bo". Narrator reads
+    // the rows Reactors.{n}. The rows are only for reading, so they show no hover or press fill. The list is compact as
+    // a menu: 32 px rows, 8 px from emoji to name, and the thin edge of a menu around the list. Names never reach the
+    // log.
     private void ShowReactors(IReadOnlyList<(string Emoji, string Name)> reactors)
     {
         if (reactors.Count == 0)
@@ -1550,8 +1627,8 @@ public sealed partial class MessageBubble : UserControl
         new Flyout { Content = list, FlyoutPresenterStyle = Application.Current.Resources["ReactorsFlyoutPresenterStyle"].As<Style>() }.ShowAt(Pill);
     }
 
-    // The Strip's Buttons Act Only While The Bubble Takes Them (A Click Can Race A Change). Its React Opens The Picker
-    // Over The Button
+    // The buttons of the strip act only while the bubble takes them, because a click can race a change. React of the
+    // strip opens the picker over the button.
     private void OnHoverReactClick(object sender, RoutedEventArgs e)
     {
         if (Bubble?.CanAct == true)
@@ -1576,7 +1653,7 @@ public sealed partial class MessageBubble : UserControl
         }
     }
 
-    // Only A Bubble That Can Take Them Shows The Strip
+    // Only a bubble that can take them shows the strip.
     private void OnPointerEntered(object sender, PointerRoutedEventArgs e)
     {
         _pointerOver = true;
@@ -1586,9 +1663,9 @@ public sealed partial class MessageBubble : UserControl
         }
     }
 
-    // The Pointer Left The Bubble. As On The Conversation Row, No Bounds Check Is Made: Leaving The Window Straight From A
-    // Bubble Reports Its Last Point Inside It. While The Picker Or Menu Is Open (Its Overlay Takes The Pointer) The Strip
-    // Waits For It To Close
+    // The pointer left the bubble. As on the conversation row, the method makes no bounds check. A pointer that leaves
+    // the window straight from a bubble reports its last point inside the bubble. While the picker or the menu is
+    // open, its overlay takes the pointer. The strip then waits for the popup to close.
     private void OnPointerLeft(object sender, PointerRoutedEventArgs e)
     {
         _pointerOver = false;
@@ -1599,7 +1676,7 @@ public sealed partial class MessageBubble : UserControl
     }
 
     /// <summary>
-    /// The bubble menu's Reply: asks the chat to start a reply to this bubble.
+    /// Runs Reply from the bubble menu, which asks the chat to start a reply to this bubble.
     /// </summary>
     public void Reply() => ReplyRequested?.Invoke(this, EventArgs.Empty);
 }

@@ -5,12 +5,13 @@ using GMessages.Protocol.Proto;
 namespace GMessages.Presentation.Messaging;
 
 /// <summary>
-/// Turns conversation data into the short text the chat list shows.
+/// Turns conversation data into the short text that the chat list, the bubbles and the toasts show.
 /// </summary>
 public static class ChatFormat
 {
-    // Emoji That Default To Text Style (Emoji=Yes Without Emoji_Presentation, Unicode 16.0 emoji-data.txt), As Inclusive
-    // Ranges. Left Out On Purpose: The Keycap Bases (Digits, # And *), (c), (r) And TM, Which Are Usually Meant As Text
+    // The emoji that show in text style by default, as inclusive ranges. They have Emoji=Yes without
+    // Emoji_Presentation in emoji-data.txt of Unicode 16.0. The table leaves out the keycap bases on purpose: the
+    // digits, # and *. It also leaves out (c), (r) and TM. People usually mean these characters as text.
     private static readonly (int First, int Last)[] TextDefaultEmoji =
     [
         (0x203C, 0x203C), (0x2049, 0x2049), (0x2139, 0x2139), (0x2194, 0x2199), (0x21A9, 0x21AA), (0x2328, 0x2328),
@@ -36,8 +37,8 @@ public static class ChatFormat
         (0x1F6F3, 0x1F6F3),
     ];
 
-    // Emoji That Default To Color (Emoji_Presentation, Unicode 16.0 emoji-data.txt), As Inclusive Ranges. With
-    // TextDefaultEmoji, Every Emoji
+    // The emoji that show in color by default, as inclusive ranges. They have Emoji_Presentation in emoji-data.txt of
+    // Unicode 16.0. This table and TextDefaultEmoji together hold every emoji.
     private static readonly (int First, int Last)[] ColorDefaultEmoji =
     [
         (0x231A, 0x231B), (0x23E9, 0x23EC), (0x23F0, 0x23F0), (0x23F3, 0x23F3), (0x25FD, 0x25FE), (0x2614, 0x2615),
@@ -58,17 +59,17 @@ public static class ChatFormat
     ];
 
     /// <summary>
-    /// The unread badge on a pinned tile: the newest message itself when it is the only unread one and one or two words
-    /// long, else how many messages are unread (owner).
+    /// Gives the unread badge of a pinned tile. It is the newest message when that message is the only unread one and
+    /// has 1 or 2 words. Else it is the number of unread messages.
     /// </summary>
     /// <remarks>
-    /// An unread conversation with no live count (its messages came while the app wasn't running) counts as one. A
-    /// message with no text (media with no caption) shows its count.
+    /// The owner chose this rule. An unread conversation with no live count counts as 1. Its messages came while the
+    /// app was not running. A message with no text, such as media with no caption, shows its count.
     /// </remarks>
     /// <param name="unread">Whether the conversation is unread.</param>
-    /// <param name="count">The live unread count (<see cref="ChatStore.LiveUnreadTexts"/>).</param>
-    /// <param name="text">The newest message's text, or empty.</param>
-    /// <returns>The badge text; empty for a read conversation.</returns>
+    /// <param name="count">The live unread count from <see cref="ChatStore.LiveUnreadTexts"/>.</param>
+    /// <param name="text">The text of the newest message, or empty.</param>
+    /// <returns>The badge text, or empty for a read conversation.</returns>
     public static string UnreadBadge(bool unread, int count, string text)
     {
         ArgumentNullException.ThrowIfNull(text);
@@ -86,12 +87,13 @@ public static class ChatFormat
     }
 
     /// <summary>
-    /// The snippet line of a conversation: "You: " in front of the owner's own messages, and in a group the sender's
-    /// first name in front of anyone else's ("Rachel: "), as Google Messages shows it.
+    /// Gives the snippet line of a conversation, as Google Messages shows it. The messages of the owner get "You: " in
+    /// front. In a group, the messages of others get the first name of the sender in front, such as "Rachel: ".
     /// </summary>
     /// <remarks>
-    /// Text-style emoji are shown in color (see <see cref="WithColorEmoji"/>). The phone sends no text for a photo, video,
-    /// voice message or file with no caption, so the media's label (<see cref="ConversationInfo.SnippetMedia"/>) stands in.
+    /// Text-style emoji show in color, as <see cref="WithColorEmoji"/> makes them. The phone sends no text for a photo,
+    /// video, voice message or file with no caption. The media label from <see cref="ConversationInfo.SnippetMedia"/>
+    /// then takes the place of the text.
     /// </remarks>
     /// <param name="c">The conversation.</param>
     /// <returns>The text to show.</returns>
@@ -106,12 +108,12 @@ public static class ChatFormat
     }
 
     /// <summary>
-    /// One unread message as the chat list's tooltip lists it: like <see cref="Snippet"/>, with the sender's first name in
-    /// front in a group ("Rachel: ") and the media's label for media with no caption.
+    /// Gives 1 unread message as the tooltip of the chat list shows it. As in <see cref="Snippet"/>, a group line gets
+    /// the first name of the sender in front, such as "Rachel: ". Media with no caption shows its media label.
     /// </summary>
-    /// <param name="c">The message's conversation.</param>
+    /// <param name="c">The conversation of the message.</param>
     /// <param name="m">The received message.</param>
-    /// <returns>The line, emoji not yet colored.</returns>
+    /// <returns>The line, with the emoji not yet in color.</returns>
     public static string UnreadLine(ConversationInfo c, ChatMessage m)
     {
         ArgumentNullException.ThrowIfNull(c);
@@ -123,18 +125,18 @@ public static class ChatFormat
     }
 
     /// <summary>
-    /// What a chat's list row says about its unsent draft: the text, else what the files are ("Photo", or a file's
-    /// name), each after the other; empty for no draft. The row puts "Draft: " in front.
+    /// Gives what the list row of a chat says about its unsent draft. It is the text, else the kind of each file in
+    /// order. A kind is "Photo", or the name of a file. The row puts "Draft: " in front.
     /// </summary>
     /// <param name="text">The draft text.</param>
     /// <param name="files">The files picked to send with it.</param>
-    /// <returns>The line, or empty.</returns>
+    /// <returns>The line, or empty when there is no draft.</returns>
     public static string DraftLine(string text, IReadOnlyList<PendingAttachment> files)
     {
         ArgumentNullException.ThrowIfNull(text);
         ArgumentNullException.ThrowIfNull(files);
 
-        // Blank Text Counts As None; Line Breaks Become Spaces, So The One-Line Row Shows The Words
+        // Blank text counts as none. Line breaks become spaces, so the row of 1 line shows the words.
         string line = string.Join(' ', text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
         return line.Length > 0
             ? line
@@ -142,7 +144,7 @@ public static class ChatFormat
     }
 
     /// <summary>
-    /// The first word of a name, or the whole of a number, short code or email address (which have no first name).
+    /// Gives the first word of a name. A number, short code or email address has no first name, so it comes back whole.
     /// </summary>
     /// <param name="name">The name as the phone gives it.</param>
     /// <returns>The first name, or empty for no name.</returns>
@@ -154,16 +156,17 @@ public static class ChatFormat
     }
 
     /// <summary>
-    /// Shows emoji that default to text style (such as U+263A, U+2764, U+2600, U+270C) in color, by adding VS16
-    /// (U+FE0F) after them.
+    /// Shows in color the emoji that show in text style by default, such as U+263A, U+2764, U+2600 and U+270C. The
+    /// method adds VS16, which is U+FE0F, after them.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Without VS16 those symbols draw as plain black glyphs from the text font; the phone (Noto Color Emoji) draws them in
-    /// color either way. A symbol that already has VS16, asks for text style with VS15 (U+FE0E), or takes a skin tone is
-    /// left alone, and so are the digits, # and *, (c), (r) and TM.
+    /// Without VS16, those symbols draw as plain black glyphs from the text font. The phone draws them in color with
+    /// Noto Color Emoji in all cases. The method does not change a symbol that already has VS16 or takes a skin tone.
+    /// It also does not change a symbol that asks for text style with VS15, which is U+FE0E. The digits, # and *, (c),
+    /// (r) and TM also stay as they are.
     /// </para>
-    /// <para>For showing only: the text sent or copied stays as typed.</para>
+    /// <para>The result is only for display. The text that the app sends or copies stays as typed.</para>
     /// </remarks>
     /// <param name="text">The text.</param>
     /// <returns>The text with VS16 added where needed.</returns>
@@ -174,7 +177,7 @@ public static class ChatFormat
             return text ?? string.Empty;
         }
 
-        // Copied Only Once The First VS16 Is Needed; Most Text Comes Back As It Was
+        // The method copies the text only at the first VS16 that it adds. Most text comes back unchanged.
         StringBuilder? built = null;
         int i = 0;
         while (i < text.Length)
@@ -195,16 +198,18 @@ public static class ChatFormat
     }
 
     /// <summary>
-    /// Tells whether a message is only emoji (spaces between them allowed), which the chat shows big with no bubble around it.
+    /// Tells whether a message is only emoji, with spaces between them allowed. The chat shows such a message big, with
+    /// no bubble around it.
     /// </summary>
     /// <remarks>
-    /// Each character as shown (a text element: a flag, a skin-toned or joined emoji counts as one) must draw as a color
-    /// emoji: it starts with one of Unicode's emoji (those shown in color with VS16 included, see
-    /// <see cref="WithColorEmoji"/>) and isn't asked for in text style (VS15), or it's a keycap (a digit, # or * with
-    /// U+20E3). Plain symbols (★, ✓, box drawing), half a flag and boxed letters keep the bubble.
+    /// Each shown character must draw as a color emoji. A shown character is a text element, so a flag or a skin-toned
+    /// or joined emoji counts as 1. The element must start with a Unicode emoji and not ask for text style with VS15.
+    /// The Unicode emoji include those that <see cref="WithColorEmoji"/> shows in color with VS16. A keycap also
+    /// counts: a digit, # or * with U+20E3. Plain symbols such as ★, ✓ and box drawing keep the bubble. Half a flag
+    /// and boxed letters also keep it.
     /// </remarks>
-    /// <param name="text">The message's text.</param>
-    /// <returns>True when it has at least one emoji and nothing else but spaces.</returns>
+    /// <param name="text">The text of the message.</param>
+    /// <returns>True when the text has at least 1 emoji and nothing else but spaces.</returns>
     public static bool IsEmojiOnly(string text)
     {
         if (string.IsNullOrWhiteSpace(text))
@@ -225,22 +230,22 @@ public static class ChatFormat
         return true;
     }
 
-    // One Text Element That Draws As An Emoji
+    // Tells whether 1 text element draws as an emoji.
     private static bool IsEmoji(string element)
     {
-        // Text Style Asked For: A One-Color Glyph
-        if (element.Contains('︎', StringComparison.Ordinal))
+        // VS15 asks for text style, which draws a glyph of 1 color.
+        if (element.Contains('\uFE0E', StringComparison.Ordinal))
         {
             return false;
         }
 
-        // Keycap: A Digit, # Or * With U+20E3 (The Bases Themselves Are Left Out Of TextDefaultEmoji)
-        if (element.Contains('⃣', StringComparison.Ordinal))
+        // A keycap is a digit, # or * with U+20E3. TextDefaultEmoji leaves out the bases themselves.
+        if (element.Contains('\u20E3', StringComparison.Ordinal))
         {
             return element[0] is (>= '0' and <= '9') or '#' or '*';
         }
 
-        // A Broken Surrogate Decodes As U+FFFD, Which Is No Emoji. A Regional Indicator Draws A Flag Only In A Pair
+        // A broken surrogate decodes as U+FFFD, which is no emoji. A regional indicator draws a flag only in a pair.
         Rune.DecodeFromUtf16(element, out Rune rune, out int used);
         int code = rune.Value;
         return code is >= 0x1F1E6 and <= 0x1F1FF
@@ -249,12 +254,13 @@ public static class ChatFormat
     }
 
     /// <summary>
-    /// Gives the part of the original text that a selection in the shown text (see <see cref="WithColorEmoji"/>) covers, so
-    /// a copy carries none of the VS16 added for showing.
+    /// Gives the part of the original text that a selection in the shown text covers. Thus a copy holds none of the
+    /// VS16 that <see cref="WithColorEmoji"/> added for display.
     /// </summary>
     /// <remarks>
-    /// The selection is found in the shown text (its first match), then both ends are walked back to the original, where
-    /// every character is the same except the added VS16. A selection not found in the shown text is given back as it is.
+    /// The method finds the first match of the selection in the shown text. It then maps both ends back to the
+    /// original, where each character is the same except the added VS16. A selection that is not in the shown text
+    /// comes back as it is.
     /// </remarks>
     /// <param name="original">The text as sent.</param>
     /// <param name="selected">The selected part of <c>WithColorEmoji(original)</c>.</param>
@@ -271,7 +277,8 @@ public static class ChatFormat
             return selected;
         }
 
-        // Walk Both Texts Together; A VS16 In The Shown Text With None At The Same Place In The Original Was Added
+        // The loop walks both texts together. A VS16 in the shown text with none at the same place in the original is
+        // an added VS16.
         int end  = start + selected.Length;
         int from = -1;
         int to   = original.Length;
@@ -300,7 +307,8 @@ public static class ChatFormat
     }
 
     /// <summary>
-    /// The list time, in the current culture. See <see cref="ListTime(DateTimeOffset, DateTimeOffset, CultureInfo)"/>.
+    /// Gives the list time in the current culture, as
+    /// <see cref="ListTime(DateTimeOffset, DateTimeOffset, CultureInfo)"/> does.
     /// </summary>
     /// <param name="time">When the message arrived.</param>
     /// <param name="now">The current time.</param>
@@ -308,9 +316,12 @@ public static class ChatFormat
     public static string ListTime(DateTimeOffset time, DateTimeOffset now) => ListTime(time, now, CultureInfo.CurrentCulture);
 
     /// <summary>
-    /// The list time: the time today, the weekday within the last 7 days, month and day this year, else a short date.
+    /// Gives the list time. It is the time for today, or the weekday within the last 7 days. Else it is the month and
+    /// day for this year, or a short date.
     /// </summary>
-    /// <remarks><paramref name="time"/> is converted to <paramref name="now"/>'s offset before the day is compared.</remarks>
+    /// <remarks>
+    /// The method converts <paramref name="time"/> to the offset of <paramref name="now"/> before it compares the days.
+    /// </remarks>
     /// <param name="time">When the message arrived.</param>
     /// <param name="now">The current time.</param>
     /// <param name="culture">The culture to format with.</param>
@@ -337,18 +348,18 @@ public static class ChatFormat
             return local.ToString("MMM d", culture);
         }
 
-        // Two-Digit Year Short Date
+        // The short date gets a year of 2 digits.
         string pattern = culture.DateTimeFormat.ShortDatePattern.Replace("yyyy", "yy", StringComparison.Ordinal);
         return local.ToString(pattern, culture);
     }
 
     /// <summary>
-    /// The first visible character of a name, for avatars.
+    /// Gives the first visible character of a name, for avatars.
     /// </summary>
     /// <remarks>
-    /// A phone number, a short code (such as "59538") or an email address is no name at all: it's what the phone shows
-    /// for someone nobody saved. Those get an empty initial, and the avatar shows the generic person icon instead.
-    /// Anything else, an emoji-only name or one starting with a digit ("2Pac") included, keeps its first character.
+    /// A phone number, a short code such as "59538" or an email address is no name. The phone shows it for a person
+    /// that nobody saved. It gets an empty initial, and the avatar shows the generic person icon. Any other name keeps
+    /// its first character. This includes a name of only emoji, and a name that starts with a digit, such as "2Pac".
     /// </remarks>
     /// <param name="name">The name.</param>
     /// <returns>The first text element in upper case, or empty for no name.</returns>
@@ -378,7 +389,7 @@ public static class ChatFormat
     }
 
     /// <summary>
-    /// The label that stands in for a message that has no text.
+    /// Gives the label that takes the place of the text of a message that has no text.
     /// </summary>
     /// <param name="kind">What the message shows.</param>
     /// <returns>"Photo", "Video", "Voice message", "File" or "Unsupported message".</returns>
@@ -392,10 +403,10 @@ public static class ChatFormat
     };
 
     /// <summary>
-    /// Names a message's media: "GIF" for a GIF, "Image" for any other picture, "Video", the file's name for a file, else
-    /// its kind ("Voice message", "File").
+    /// Names the media of a message: "GIF" for a GIF, "Image" for any other picture, and "Video". A file gets its name.
+    /// Else the label is the kind, such as "Voice message" or "File".
     /// </summary>
-    /// <remarks>Shared by the reply quotes and the chat list's snippet, so both name media the same way.</remarks>
+    /// <remarks>The reply quotes and the list snippet both use this method, so they name media the same way.</remarks>
     /// <param name="media">The media.</param>
     /// <returns>The label.</returns>
     public static string MediaLabel(MediaPart media)
@@ -413,11 +424,11 @@ public static class ChatFormat
     }
 
     /// <summary>
-    /// The text that stands for a message wherever text is shown (bubble, notification, reply quote).
+    /// Gives the text that stands for a message in the bubble, the notification and the reply quote.
     /// </summary>
     /// <remarks>
-    /// A text message's text, a media message's caption or a system line's words when it has them, else
-    /// <see cref="KindLabel"/>.
+    /// It is the text of a text message. It is the caption of a media message or the words of a system line when they
+    /// have them. Else it is <see cref="KindLabel"/>.
     /// </remarks>
     /// <param name="m">The message.</param>
     /// <returns>The text to show.</returns>
@@ -429,18 +440,24 @@ public static class ChatFormat
     }
 
     /// <summary>
-    /// How a participant is named: full name, else first name, else phone number.
+    /// Gives the name of a participant: the full name, else the first name, else the phone number.
     /// </summary>
     /// <param name="p">The participant, or null.</param>
     /// <returns>The name, or an empty string when there is none.</returns>
     public static string SenderName(ParticipantInfo? p) =>
-        new[] { p?.FullName, p?.FirstName, p?.FormattedNumber }.FirstOrDefault(n => !string.IsNullOrEmpty(n)) ?? string.Empty;
+        p is null ? string.Empty
+        : !string.IsNullOrEmpty(p.FullName) ? p.FullName
+        : !string.IsNullOrEmpty(p.FirstName) ? p.FirstName
+        : p.FormattedNumber ?? string.Empty;
 
     /// <summary>
-    /// Whether a message stays out of the chat: a placeholder (<see cref="ChatMessage.IsPlaceholder"/>), or a system line,
-    /// except a group's name change (changed or cleared, in Google's own words), which shows as a centered gray line. The
-    /// others only steer the lock (<see cref="EncryptionOf"/>).
+    /// Tells whether a message stays out of the chat. A placeholder from <see cref="ChatMessage.IsPlaceholder"/> stays
+    /// out. A system line also stays out, except a change to the name of a group.
     /// </summary>
+    /// <remarks>
+    /// A name change, changed or cleared, shows as a centered gray line in the words of Google. The other system lines
+    /// only control the lock through <see cref="EncryptionOf"/>.
+    /// </remarks>
     /// <param name="m">The message.</param>
     /// <returns>True for a hidden placeholder or system line.</returns>
     public static bool IsHiddenLine(ChatMessage m)
@@ -452,15 +469,17 @@ public static class ChatFormat
     }
 
     /// <summary>
-    /// What a system line says about end-to-end encryption.
+    /// Gives what a system line says about end-to-end encryption.
     /// </summary>
     /// <remarks>
-    /// The protocol tombstones that switch a chat into or out of encryption. The newest one seen decides whether the
-    /// chat shows the lock, when the conversation itself doesn't say (<see cref="ConversationInfo.IsEncrypted"/>, field
-    /// 39, comes first).
+    /// The method knows the protocol tombstones that switch a chat into or out of encryption. The newest one decides
+    /// whether the chat shows the lock, when the conversation itself does not say. The flag of the conversation in
+    /// <see cref="ConversationInfo.IsEncrypted"/>, field 39, comes first.
     /// </remarks>
     /// <param name="status">The message status.</param>
-    /// <returns>True when the chat is now encrypted, false when it no longer is, null when the status says nothing.</returns>
+    /// <returns>
+    /// True when the chat is now encrypted, false when it no longer is, or null when the status says nothing.
+    /// </returns>
     public static bool? EncryptionOf(MessageStatusType status) => status switch
     {
         MessageStatusType.TombstoneEncryptedOneOnOneRcsCreated
@@ -485,7 +504,7 @@ public static class ChatFormat
     };
 
     /// <summary>
-    /// The status line under the owner's newest message.
+    /// Gives the status line under the newest message of the owner.
     /// </summary>
     /// <param name="status">The message status.</param>
     /// <returns>"Sent", "Delivered", "Read", or empty for any other status.</returns>
@@ -498,28 +517,31 @@ public static class ChatFormat
     };
 
     /// <summary>
-    /// The reaction chip under a bubble, the way Google Messages shows it.
+    /// Gives the reaction chip under a bubble, as Google Messages shows it.
     /// </summary>
-    /// <remarks>Up to 3 emoji, most used first (ties keep first-seen order), then the total count when above 1.</remarks>
-    /// <param name="reactions">The message's reactions.</param>
-    /// <returns>Text such as "👍" or "👍😂 3"; empty when nobody reacted.</returns>
+    /// <remarks>
+    /// The chip shows up to 3 emoji, the most used first, and ties keep the order in which they came. The total count
+    /// follows when it is above 1.
+    /// </remarks>
+    /// <param name="reactions">The reactions of the message.</param>
+    /// <returns>Text such as "👍" or "👍😂 3", or empty when nobody reacted.</returns>
     public static string ReactionSummary(IReadOnlyList<ReactionInfo> reactions)
     {
         ArgumentNullException.ThrowIfNull(reactions);
 
-        // Keep The Top 3
-        var counts = RankedCounts(reactions);
-        int total  = counts.Sum(e => e.Count);
-        string top = string.Concat(counts.Take(3).Select(e => e.Emoji));
+        List<(string Emoji, int Count)> counts = RankedCounts(reactions);
+        int total                              = counts.Sum(e => e.Count);
+        string top                             = string.Concat(counts.Take(3).Select(e => e.Emoji));
 
         return total > 1 ? $"{top} {total.ToString(CultureInfo.CurrentCulture)}" : top;
     }
 
     /// <summary>
-    /// Ranks a message's emoji the way <see cref="ReactionSummary"/> shows them: most used first, ties in first-seen order.
+    /// Ranks the emoji of a message as <see cref="ReactionSummary"/> shows them. The most used come first, and ties
+    /// keep the order in which they came.
     /// </summary>
-    /// <param name="reactions">The message's reactions.</param>
-    /// <returns>Every emoji anyone reacted with, ranked; empty when nobody reacted.</returns>
+    /// <param name="reactions">The reactions of the message.</param>
+    /// <returns>Each emoji that anyone reacted with, ranked, or empty when nobody reacted.</returns>
     public static IReadOnlyList<string> RankedEmoji(IReadOnlyList<ReactionInfo> reactions)
     {
         ArgumentNullException.ThrowIfNull(reactions);
@@ -527,7 +549,7 @@ public static class ChatFormat
         return [.. RankedCounts(reactions).Select(e => e.Emoji)];
     }
 
-    // Counts Each Emoji, Most Used First (OrderByDescending Is Stable, So Ties Keep First-Seen Order)
+    // Counts each emoji, the most used first. OrderByDescending is stable, so ties keep the order in which they came.
     private static List<(string Emoji, int Count)> RankedCounts(IReadOnlyList<ReactionInfo> reactions) =>
         [.. reactions
             .GroupBy(r => r.Emoji)
@@ -537,7 +559,7 @@ public static class ChatFormat
 
     private static bool IsTextDefaultEmoji(int code) => InRanges(TextDefaultEmoji, code);
 
-    // Binary Search Over The Sorted Ranges, With No Allocation (Runs For Every Character Shown)
+    // A binary search over the sorted ranges, with no allocation. It runs for each shown character.
     private static bool InRanges((int First, int Last)[] ranges, int code)
     {
         int low  = 0;
@@ -563,12 +585,13 @@ public static class ChatFormat
         return false;
     }
 
-    // VS16 Or VS15 Already, Or A Skin Tone Modifier (U+1F3FB To U+1F3FF) Follows
+    // Tells whether VS16, VS15 or a skin tone modifier from U+1F3FB to U+1F3FF follows.
     private static bool TakesNoVs16(string text, int at) =>
         at < text.Length
         && (text[at] is '\uFE0F' or '\uFE0E' || (char.IsSurrogatePair(text, at) && char.ConvertToUtf32(text, at) is >= 0x1F3FB and <= 0x1F3FF));
 
-    // Empty, A Number Or Short Code (Digits And Dialing Marks Only), Or An Email Address (One Word With An @)
+    // Tells whether a name is empty, a number or a short code, or an email address. A number or a short code has only
+    // digits and dial marks. An email address is 1 word with an @.
     private static bool IsNoName(string name) =>
         name.Length == 0
         || name.All(c => char.IsAsciiDigit(c) || c is '+' or '-' or '(' or ')' or '.' or ' ' or '#' or '*')

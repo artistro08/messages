@@ -76,15 +76,11 @@ public sealed class NotificationPolicyTests
     [TestMethod]
     public void Compose_Photo_UsesLabel() => Assert.AreEqual("Photo", NotificationContent.Compose(Msg(kind: MessageKind.Photo, text: ""), Conv()).Body);
 
-    // =========================================================================
-    // LONG BODIES
-    // =========================================================================
-
     [TestMethod]
     public void Body_Short_Unchanged() => Assert.AreEqual("hey, you!", NotificationContent.Compose(Msg(text: "hey, you!"), Conv()).Body);
 
     /// <summary>
-    /// A long body is cut at the last space at or before 100, its trailing comma dropped, and "…" added.
+    /// A long body is cut at the last space at or before position 100. The cut drops a trailing comma and adds "…".
     /// </summary>
     [TestMethod]
     public void Body_Long_CutAtWordWithEllipsis()
@@ -106,7 +102,7 @@ public sealed class NotificationPolicyTests
     public void Body_LongWord_HardCut() => Assert.AreEqual(new string('x', 100) + "…", NotificationContent.Shorten(new string('x', 150)));
 
     /// <summary>
-    /// A ZWJ family emoji straddling the cut stays whole: it counts as one text element.
+    /// A ZWJ family emoji at the cut stays whole, because it counts as 1 text element.
     /// </summary>
     [TestMethod]
     public void Body_EmojiAtCut_NotSplit()

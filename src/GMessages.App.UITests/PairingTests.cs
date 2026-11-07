@@ -13,20 +13,18 @@ namespace GMessages.App.UITests;
 [DoNotParallelize]
 public sealed class PairingTests : UiTest
 {
-    // Failure Copy (Owner Wording, Verbatim)
+    // The owner wrote these failure messages. They must stay verbatim.
     private const string WrongEmojiText  = "That wasn't the matching emoji. Try again.";
     private const string NotAcceptedText = "Google didn't accept the sign-in. Try again.";
 
     /// <summary>
-    /// A first run opens the main window on pairing, with no ☰ or profile button; the fake sign-in page loads in the
-    /// WebView2, about as wide as the window; the app shows the phone's emoji; a correct tap switches the same window to
-    /// the chats, saves the session and leaves the tray icon.
+    /// A first run opens the main window on pairing, with no menu or profile button. The fake sign-in page loads in
+    /// the WebView2 at nearly the window width, and the app shows the phone emoji. A correct tap switches the same
+    /// window to the chats, saves the session and keeps the tray icon.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task FirstRun_ShowsPairing_SignIn_Emoji_TapPairs_SwitchesToChats()
     {
-        // Main Window On Pairing With The Fake Sign-In Page, Nearly As Wide As The Window
         Window window = WaitForPairing();
         AssertTitleBar("Main.TitleBar", AppInfo.WindowTitle);
         Assert.IsNull(App.TryFind("Main.MenuButton"), "☰ shows while pairing.");
@@ -36,11 +34,9 @@ public sealed class PairingTests : UiTest
         Rectangle signIn = App.Find("Pairing.SignIn").BoundingRectangle;
         Assert.IsTrue(signIn.Width >= window.BoundingRectangle.Width - 40, $"The sign-in is {signIn.Width} px wide in a {window.BoundingRectangle.Width} px window.");
 
-        // Emoji Matches The Phone
         string emoji = await SignInAndWaitForEmojiAsync();
         Assert.AreEqual(Server.Phone.ShownEmoji, emoji);
 
-        // Correct Tap: The Same Window Shows The Chats (☰ And Profile Back), Session Saved, Tray Stays
         Server.Phone.Tap(true);
         App.Find("Main.ConversationList");
         WaitForGone("Pairing.Cancel");
@@ -51,27 +47,25 @@ public sealed class PairingTests : UiTest
         Tray.FindIcon(AppDriver.DefaultTimeout);
         Tray.CloseOverflow();
 
-        // Which Cookies WebView2 Kept Over http://127.0.0.1 (Is __Secure-1PSIDTS Among Them?)
+        // The test log records which cookies WebView2 keeps over http://127.0.0.1, for example __Secure-1PSIDTS.
         string captured = ReadLog().Split('\n').FirstOrDefault(l => l.Contains("Sign-in cookies captured", StringComparison.Ordinal)) ?? "(not logged)";
         TestContext.WriteLine(captured.Trim());
     }
 
     /// <summary>
-    /// A wrong tap shows the wrong-emoji message; Try again brings back a fresh sign-in page.
+    /// A wrong tap shows the wrong-emoji message. Try again loads a fresh sign-in page.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task WrongEmoji_ShowsMessage_TryAgain_RestartsSignIn()
     {
         WaitForPairing();
         await SignInAndWaitForEmojiAsync();
 
-        // Wrong Tap
         Server.Phone.Tap(false);
         App.WaitForText("Pairing.Message", WrongEmojiText);
 
-        // Try Again: A New Browser Loads The Sign-In Page Again. UI Automation Waits For The Load: A WebView2 Asked
-        // While Its Browser Is Still Starting Stays An Empty Pane For Good
+        // Try again starts a new browser. The test waits for the page load through UI Automation.
+        // A WebView2 that gets a request while its browser still starts stays an empty pane for good.
         int pageLoads = Server.RequestedPaths.Count(p => p == "/web/authentication");
         App.Find("Pairing.TryAgain").Patterns.Invoke.Pattern.Invoke();
         Wait.Until(() => Server.RequestedPaths.Count(p => p == "/web/authentication") > pageLoads, AppDriver.DefaultTimeout,
@@ -81,7 +75,7 @@ public sealed class PairingTests : UiTest
     }
 
     /// <summary>
-    /// Google refusing the cookies (401 on sign-in) shows the not-accepted message and saves nothing.
+    /// A 401 from Google on sign-in shows the not-accepted message and saves no session.
     /// </summary>
     [TestMethod]
     public void RejectedCookies_ShowsGoogleDidntAccept()

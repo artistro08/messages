@@ -4,17 +4,16 @@ using GMessages.Protocol.Proto;
 namespace GMessages.Presentation.Messaging;
 
 /// <summary>
-/// One message as the chat view shows it.
+/// Holds 1 message as the chat view shows it.
 /// </summary>
-/// <param name="Id">The message ID.</param>
-/// <param name="TmpId">The temporary ID the sender made, or empty.</param>
-/// <param name="ConversationId">The conversation it belongs to.</param>
-/// <param name="ParticipantId">Who sent it.</param>
-/// <param name="Time">When it was sent.</param>
-/// <param name="FromMe">True when the owner sent it (from here or from the phone).</param>
-/// <param name="Kind">What it shows.</param>
-/// <param name="Text">The text (a media message's caption), or empty when there is none.</param>
-/// <param name="Status">The phone's delivery status.</param>
+/// <param name="TmpId">The temporary ID that the sender made, or empty.</param>
+/// <param name="ConversationId">The conversation that the message belongs to.</param>
+/// <param name="ParticipantId">The participant who sent the message.</param>
+/// <param name="Time">When the message was sent.</param>
+/// <param name="FromMe">True when the owner sent the message, from here or from the phone.</param>
+/// <param name="Kind">What the message shows.</param>
+/// <param name="Text">The text, which is the caption on a media message, or empty when there is none.</param>
+/// <param name="Status">The delivery status from the phone.</param>
 public sealed record ChatMessage(
     string Id,
     string TmpId,
@@ -26,7 +25,7 @@ public sealed record ChatMessage(
     string Text,
     MessageStatusType Status)
 {
-    /// <summary>True when the message failed to send or was canceled.</summary>
+    /// <summary>Gets whether the message failed to send or was canceled.</summary>
     public bool IsFailed => Status is MessageStatusType.OutgoingFailedGeneric
         or MessageStatusType.OutgoingFailedEmergencyNumber
         or MessageStatusType.OutgoingCanceled
@@ -41,55 +40,57 @@ public sealed record ChatMessage(
         or MessageStatusType.OutgoingFailedToEncrypt;
 
     /// <summary>
-    /// True for a stand-in the phone shows nowhere: an MMS it is still downloading (no text or media yet), or a
-    /// deletion notice.
+    /// Gets whether the message is a stand-in that the phone shows nowhere. A stand-in is an MMS that the phone still
+    /// downloads, with no text or media yet, or a deletion notice.
     /// </summary>
     /// <remarks>
-    /// A group MMS first lands, undownloaded, in the sender's one-on-one chat; once downloaded, the phone moves it (same
-    /// ID) into the group, or turns it into a reaction (an iPhone tapback), and drops the stand-in without saying so.
+    /// A group MMS first lands, not downloaded, in the one-on-one chat of the sender. After the download, the phone
+    /// moves it with the same ID into the group. Or the phone turns it into a reaction, such as an iPhone tapback.
+    /// The phone then drops the stand-in and does not say so.
     /// </remarks>
     public bool IsPlaceholder => Status == MessageStatusType.MessageDeleted
         || (Kind == MessageKind.Other && Status is MessageStatusType.IncomingAutoDownloading
             or MessageStatusType.IncomingRetryingAutoDownload
             or MessageStatusType.IncomingAwaitingAutoDownload);
 
-    /// <summary>Gets the reactions on the message, one per emoji.</summary>
+    /// <summary>Gets the reactions on the message, 1 for each emoji.</summary>
     public IReadOnlyList<ReactionInfo> Reactions { get; init; } = [];
 
-    /// <summary>Gets the ID of the message this one replies to, or empty.</summary>
+    /// <summary>Gets the ID of the message that this message replies to, or empty.</summary>
     public string ReplyToId { get; init; } = string.Empty;
 
-    /// <summary>Gets whether the message went over RCS (chat) rather than SMS or MMS (text).</summary>
+    /// <summary>Gets whether the message went over RCS chat and not over SMS or MMS text.</summary>
     public bool IsRcs { get; init; }
 
-    /// <summary>Gets the encryption this system line switches the chat to, or null when it says nothing about encryption.</summary>
+    /// <summary>Gets the encryption state that this system line sets for the chat, or null when it sets none.</summary>
     public bool? EncryptionChange { get; init; }
 
-    /// <summary>Gets the photo, video, voice message or file the message carries, or null for none.</summary>
+    /// <summary>Gets the photo, video, voice message or file that the message carries, or null for none.</summary>
     public MediaPart? Media { get; init; }
 
     /// <summary>
-    /// Makes the message of mine that is on its way to the phone: no ID yet, sending.
+    /// Makes a message of mine that is on its way to the phone. It has no ID yet, and its status is sending.
     /// </summary>
-    /// <param name="tmpId">The temporary ID the send carries.</param>
-    /// <param name="conversationId">The conversation it goes to.</param>
-    /// <param name="outgoingId">Who sends it (the conversation's outgoing participant), or empty when not known.</param>
-    /// <param name="now">The time it was sent.</param>
-    /// <param name="kind">What it shows.</param>
-    /// <param name="text">The text, or the media's caption.</param>
-    /// <returns>The pending message; the caller sets the reply, RCS flag and media with <c>with</c>.</returns>
+    /// <param name="tmpId">The temporary ID that the send carries.</param>
+    /// <param name="conversationId">The conversation that the message goes to.</param>
+    /// <param name="outgoingId">The outgoing participant of the conversation, or empty when not known.</param>
+    /// <param name="now">The time of the send.</param>
+    /// <param name="kind">What the message shows.</param>
+    /// <param name="text">The text, or the caption of the media.</param>
+    /// <returns>The pending message. The caller sets the reply, the RCS flag and the media with <c>with</c>.</returns>
     public static ChatMessage Pending(string tmpId, string conversationId, string outgoingId, DateTimeOffset now, MessageKind kind, string text) =>
         new(string.Empty, tmpId, conversationId, outgoingId, now, true, kind, text, MessageStatusType.OutgoingSending);
 
     /// <summary>
-    /// Copies the fields the app needs out of a protocol message.
+    /// Copies the fields that the app needs from a protocol message.
     /// </summary>
     /// <remarks>
-    /// The first media part becomes <see cref="Media"/> and decides the kind (by its format); the first text part is the
-    /// text, which on a media message is its caption. Text alone is Text; neither is Other. A status of 200 to 299 is a
-    /// system line (Tombstone). Outgoing statuses are 1 to 99, which includes messages sent from the phone.
-    /// Message types 1, 2 and 3 are SMS and MMS, anything else RCS (<c>IsSMSOrMMS</c> in the Go connector's
-    /// <c>dbmeta.go</c>). Reactions are read as the connector's <c>GetReactions</c> does.
+    /// The first media part becomes <see cref="Media"/> and its format decides the kind. The first text part is the
+    /// text, which is the caption on a media message. Text alone is Text, and no part is Other. A status from 200 to
+    /// 299 is a system line, which is Tombstone. Outgoing statuses are 1 to 99, which includes messages sent from the
+    /// phone. Message types 1, 2 and 3 are SMS and MMS, and all other types are RCS. <c>IsSMSOrMMS</c> in the
+    /// <c>dbmeta.go</c> file of the Go connector decides the same. The reactions follow <c>GetReactions</c> in the
+    /// connector.
     /// </remarks>
     /// <param name="m">The protocol message.</param>
     /// <returns>The chat record.</returns>
@@ -101,7 +102,6 @@ public sealed record ChatMessage(
         MessageKind kind         = MessageKind.Other;
         string text              = string.Empty;
 
-        // Media Decides The Kind; Text Is The Message, Or The Media's Caption
         MessageInfo? textPart  = m.MessageInfo.FirstOrDefault(i => i.DataCase == MessageInfo.DataOneofCase.MessageContent);
         MessageInfo? mediaPart = m.MessageInfo.FirstOrDefault(i => i.DataCase == MessageInfo.DataOneofCase.MediaContent);
         MediaPart? media       = mediaPart is null ? null : MediaPart.From(mediaPart.MediaContent) with { ActionMessageId = mediaPart.ActionMessageID };
@@ -117,7 +117,7 @@ public sealed record ChatMessage(
             kind = media.Kind;
         }
 
-        // System Lines Win
+        // A system line wins over the text and the media.
         if ((int)status is >= 200 and <= 299)
         {
             kind = MessageKind.Tombstone;
@@ -142,7 +142,8 @@ public sealed record ChatMessage(
         };
     }
 
-    // Like GetReactions In The Go Connector: Custom Uses Its Text, Emotify Is Skipped, Any Other Type Uses Its Fixed Emoji
+    // As GetReactions in the Go connector does: Custom uses its text, Emotify is skipped, and all other types use their
+    // fixed emoji.
     private static List<ReactionInfo> ReactionsOf(Message m)
     {
         List<ReactionInfo> reactions = [];

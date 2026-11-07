@@ -6,21 +6,21 @@ using GMessages.Protocol.Proto;
 namespace GMessages.Presentation.Main;
 
 /// <summary>
-/// One folder's conversation list: pinned first, then newest first, kept current by live updates.
+/// Shows the conversations of 1 folder, pinned first and then newest first. Live updates keep the list current.
 /// </summary>
 /// <remarks>
 /// <para>
-/// <see cref="ChatStore"/> raises its events on the UI thread, so rows change there. The list subscribes to the
-/// store (which outlives the window), so call <see cref="Dispose"/> when the window closes.
+/// <see cref="ChatStore"/> raises its events on the UI thread, so the rows change on the UI thread. The store lives
+/// longer than the window, and the list listens to its events. Call <see cref="Dispose"/> when the window closes.
 /// </para>
 /// <para>
-/// With <see cref="PinnedApart"/> on, pinned conversations go to <see cref="Pinned"/> (the inbox's grid) instead of
-/// <see cref="Rows"/>; a row moves between the two as it is pinned or unpinned on the phone.
+/// With <see cref="PinnedApart"/> on, <see cref="Pinned"/> holds the pinned conversations for the grid of the inbox,
+/// and <see cref="Rows"/> holds the others. A row moves between the 2 when the phone pins or unpins it.
 /// </para>
 /// <para>
-/// Folder membership follows the status: the inbox shows active conversations, spam and blocked shows the spam and
-/// blocked folders, and archived shows archived and kept-archived ones. A live update that moves a conversation out
-/// of the folder removes its row.
+/// The folder of a conversation follows its status. The inbox shows the active conversations, except an empty
+/// one-on-one chat. Spam and blocked shows the spam and blocked folders. Archived shows the archived and kept-archived
+/// conversations. A live update that moves a conversation out of the folder removes its row.
 /// </para>
 /// </remarks>
 public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposable
@@ -30,30 +30,33 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
     private readonly TimeProvider _time;
     private readonly Action<Action> _post;
 
-    // Every Conversation The Pages Listed Since The Newest Page: A Page With None New Is The End. Not The Rows, Which
-    // Live Updates Also Fill (The Phone Pushes The Next Page's Conversations Too)
+    // The conversations that the pages listed since the newest page. A page with no new conversation ends the paging.
+    // The rows cannot serve here. Live updates also add rows, because the phone pushes the next page too.
     private readonly HashSet<string> _paged = [];
 
-    // Where The Last Page Ended; Null Means No More Pages
+    // The conversations that changed live while a load ran. A fresh page keeps their rows, because the phone made the
+    // page before the change.
+    private readonly HashSet<string> _changedMidLoad = [];
+
+    // Null means that no more pages are left.
     private Cursor? _next;
     private bool _isLoading;
     private bool _isLoadingMore;
 
-    // The First Load Ended (Shown Or Failed); Live Changes Animate Only After It
+    // Live changes animate only after the first load ends, with a page or with a failure.
     private bool _hasLoaded;
 
-    // A Reload, Or The Next Page, Asked For While A Load Was Running; Runs When That Load Ends
+    // A reload or a next page that a caller asks for during a load runs when that load ends.
     private bool _reloadPending;
     private bool _morePending;
 
-    // Pinned Conversations Go To Pinned Instead Of Rows
     private bool _pinnedApart;
 
     /// <summary>
-    /// Creates an empty list and starts listening to the store.
+    /// Creates an empty list and starts to listen to the store.
     /// </summary>
     /// <param name="store">Loads conversations and raises live updates.</param>
-    /// <param name="folder">Which folder this list shows.</param>
+    /// <param name="folder">The folder that the list shows.</param>
     /// <param name="time">Gives the current time for the list times.</param>
     /// <param name="post">Runs an action on the UI thread.</param>
     /// <exception cref="ArgumentNullException">An argument is null.</exception>
@@ -72,7 +75,7 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
         _store.Resynced            += OnResynced;
         _store.DraftChanged        += OnDraftChanged;
 
-        // A Row Landing Mid-Load (A Live Update) Ends The Empty List, So The Ring Goes At Once
+        // A live row during a load ends the empty list, so the ring hides at once.
         Rows.CollectionChanged   += (_, _) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsLoadingFirstPage)));
         Pinned.CollectionChanged += (_, _) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsLoadingFirstPage)));
     }
@@ -81,25 +84,30 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
     public event PropertyChangedEventHandler? PropertyChanged;
 
     /// <summary>
-    /// Raised just before the rows change: true for a live change (a new message lifts a row, a conversation arrives or
-    /// leaves), false for a load or a page.
+    /// Occurs just before the rows change. The argument is true for a live change and false for a load or a page.
     /// </summary>
     /// <remarks>
-    /// Raised ahead of the change so the view can turn the list's move and add animations on or off before the list
-    /// sees it: only live changes animate, never the first load, a reload or a page.
+    /// A live change is a new message that lifts a row, or a conversation that arrives or leaves. The event comes
+    /// before the change, so the view can enable or disable the move and add animations first. Only live changes
+    /// animate, never the first load, a reload or a page.
     /// </remarks>
     public event EventHandler<bool>? RowsChanging;
 
-    /// <summary>Gets the rows, pinned first (unless <see cref="PinnedApart"/>), then newest first.</summary>
+    /// <summary>
+    /// Gets the rows, pinned first and then newest first. With <see cref="PinnedApart"/> on, the pinned rows are in
+    /// <see cref="Pinned"/> instead.
+    /// </summary>
     public ObservableCollection<ConversationRowViewModel> Rows { get; } = [];
 
-    /// <summary>Gets the pinned rows, newest first, while <see cref="PinnedApart"/> is on; empty otherwise.</summary>
+    /// <summary>
+    /// Gets the pinned rows, newest first, while <see cref="PinnedApart"/> is on. The collection is empty otherwise.
+    /// </summary>
     public ObservableCollection<ConversationRowViewModel> Pinned { get; } = [];
 
     /// <summary>
     /// Gets or sets whether pinned conversations show in <see cref="Pinned"/> instead of <see cref="Rows"/>.
     /// </summary>
-    /// <remarks>Turning it on or off moves the rows at once, without motion. Call on the UI thread.</remarks>
+    /// <remarks>A change moves the rows at once, with no animation. Call it on the UI thread.</remarks>
     public bool PinnedApart
     {
         get => _pinnedApart;
@@ -110,7 +118,7 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
                 return;
             }
 
-            // A Copy: Placing Moves Rows Between The Two
+            // Place moves rows between the 2 collections, so the loop runs on a copy.
             _pinnedApart                        = value;
             List<ConversationRowViewModel> rows = [.. Pinned, .. Rows];
             foreach (ConversationRowViewModel row in rows)
@@ -138,12 +146,15 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
     }
 
     /// <summary>
-    /// Gets whether a page is loading into an empty list (the first load, or a reload after one that failed): the
-    /// loading ring. A list with rows keeps them on screen while it reloads or loads more.
+    /// Gets whether a page is loading into an empty list, which shows the loading ring. This occurs on the first load,
+    /// or on a reload after a failed load.
     /// </summary>
+    /// <remarks>A list with rows keeps them on the screen while it reloads or loads more.</remarks>
     public bool IsLoadingFirstPage => _isLoading && Rows.Count == 0 && Pinned.Count == 0;
 
-    /// <summary>Gets whether the next page is loading below the rows: the small ring at the list's bottom.</summary>
+    /// <summary>
+    /// Gets whether the next page is loading below the rows. The small ring at the bottom of the list then shows.
+    /// </summary>
     public bool IsLoadingMore
     {
         get => _isLoadingMore;
@@ -160,13 +171,14 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
     }
 
     /// <summary>
-    /// Loads the newest page, replacing the rows.
+    /// Loads the newest page in place of the rows.
     /// </summary>
     /// <remarks>
-    /// Call on the UI thread. An empty list first shows the conversations the store already has (the window reopened),
-    /// so it never waits on the phone. The page then updates those rows in place and drops the ones it doesn't list.
-    /// While a page is loading the call is remembered and runs once that load ends. When the load fails (phone not
-    /// connected or not answering, a network error) the rows stay as they were.
+    /// Call it on the UI thread. An empty list first shows the conversations that the store already has, so the list
+    /// never waits on the phone. The store has them when the window opens again. The page then updates those rows in
+    /// place and drops the rows that it does not list. A row that got a new message or first showed during the load
+    /// stays. A call during a load runs when that load ends. When the load fails, the rows stay as they were. A load
+    /// can fail with no connection, no answer or a network error.
     /// </remarks>
     /// <returns>A task that completes when the page is shown.</returns>
     public async Task LoadAsync()
@@ -177,7 +189,6 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
             return;
         }
 
-        // What The Store Already Has, Before The Phone Answers
         if (Rows.Count == 0 && Pinned.Count == 0)
         {
             foreach (ConversationInfo c in _store.CachedConversations())
@@ -186,15 +197,17 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
             }
         }
 
+        _changedMidLoad.Clear();
         IsLoading = true;
         try
         {
             (IReadOnlyList<ConversationInfo> page, Cursor? next) = await _store.LoadFolderAsync(_folder, null, CancellationToken.None);
 
-            // Rows Stay The Same Objects, So The Selection And Scroll Survive The Refresh
+            // The rows stay the same objects, so the selection and the scroll position survive the refresh.
             HashSet<string> listed = [.. page.Select(c => c.Id)];
-            DropUnlisted(Pinned, listed);
-            DropUnlisted(Rows, listed);
+            HashSet<string> kept   = [.. listed, .. _changedMidLoad];
+            DropUnlisted(Pinned, kept);
+            DropUnlisted(Rows, kept);
 
             _next = next;
             _paged.Clear();
@@ -206,7 +219,7 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            // Not Connected, Not Answering Or A Network Error: Reconnecting Or The Phone Answering Again Reloads
+            // A reconnect or the next answer of the phone reloads the list.
             _store.LogFailure("load conversations", ex);
         }
         finally
@@ -222,11 +235,16 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
     /// Loads the next page below the rows.
     /// </summary>
     /// <remarks>
-    /// Call on the UI thread. Does nothing when there are no more pages. Asked while a page is loading, it runs once that
-    /// load ends: the list asks when its last row shows, and a row that showed mid-load won't show again until it is
-    /// scrolled away and back (the paging that stalled now and then). A page with no conversation the earlier pages
-    /// didn't list (empty, or the phone ignored the cursor) is the end, so scrolling never asks for the same page forever.
-    /// A page whose rows live updates had already shown loads the next one at once, as the last row didn't change.
+    /// <para>
+    /// Call it on the UI thread. The call does nothing when no more pages are left. A call during a load runs when that
+    /// load ends. The view asks when the last row shows. A row that showed during a load does not show again until it
+    /// scrolls out of view and back in. Without the wait, the paging sometimes stopped.
+    /// </para>
+    /// <para>
+    /// A page with no conversation that the earlier pages did not list ends the paging. Such a page is empty, or the
+    /// phone ignored the cursor. Thus the scroll never asks for the same page forever. Live updates can show all rows
+    /// of a page before the page arrives. The last row then does not change, so the next page loads at once.
+    /// </para>
     /// </remarks>
     /// <returns>A task that completes when the page is shown.</returns>
     public async Task LoadMoreAsync()
@@ -242,7 +260,8 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
             return;
         }
 
-        // The Rows Before The Page: Loading It Raises Live Updates That Add Its Rows Before It Returns
+        // The set must hold the rows from before the page. The load raises live updates that add the rows of the page
+        // before the load returns.
         HashSet<string> shown = [.. Pinned.Select(r => r.Id), .. Rows.Select(r => r.Id)];
 
         IsLoading     = true;
@@ -263,8 +282,8 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
                 Apply(c, live: false);
             }
 
-            // Every Row Of The Page Was On Screen Already (Live Updates Brought Them First): The Last Row Didn't Change,
-            // So It Won't Show Again To Ask For The Next Page. Ask Now
+            // Live updates showed each row of the page before the page came. The last row did not change, so it does
+            // not show again to ask for the next page. The list asks now.
             if (_next is not null && page.All(c => shown.Contains(c.Id)))
             {
                 _morePending = true;
@@ -272,7 +291,7 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            // Not Connected, Not Answering Or A Network Error: Scrolling Again Tries Again
+            // The next scroll to the end tries again.
             _store.LogFailure("load more conversations", ex);
         }
         finally
@@ -284,7 +303,8 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
         await RunPendingReloadAsync();
     }
 
-    // A Resync Or Reload Arrived Mid-Load: The Page May Be Stale, So Load Again. Then The Next Page, If It Was Asked For
+    // A resync or a reload during a load can make the page stale, so the list loads again. A next page that a caller
+    // asked for runs after that.
     private async Task RunPendingReloadAsync()
     {
         if (_reloadPending)
@@ -313,14 +333,22 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
     // LIVE UPDATES
     // =========================================================================
 
-    // A Live Update Before The First Load Ends, Or While A Load Or Page Runs, Is Part Of That Load (Loading A Page
-    // Raises Them): It Doesn't Animate
-    private void OnConversationChanged(object? sender, ConversationInfo c) => Apply(c, live: _hasLoaded && !IsLoading);
+    // The load of a page raises live updates too. Thus an update does not animate before the first load ends or during
+    // a load.
+    private void OnConversationChanged(object? sender, ConversationInfo c)
+    {
+        // Only a new message keeps a row that the page does not list. A mark-read keeps no row of a deleted chat.
+        if (IsLoading && (Find(c.Id) is not { } row || c.LastMessageTime > row.LastMessageTime))
+        {
+            _changedMidLoad.Add(c.Id);
+        }
+
+        Apply(c, live: _hasLoaded && !IsLoading);
+    }
 
     private void OnResynced(object? sender, EventArgs e) => _post(() => _ = LoadAsync());
 
-    // Inserts, Moves Or Updates The Row; Removes It When The Conversation Left This Folder. A Live Change Says So First
-    // (RowsChanging), So The List Animates It
+    // A live change raises RowsChanging first, so the view animates it.
     private void Apply(ConversationInfo c, bool live)
     {
         ConversationRowViewModel? existing = Find(c.Id);
@@ -353,7 +381,7 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
         Place(existing, live);
     }
 
-    // A Draft Kept Or Cleared: The Row Shows It (Or Its Newest Message Again), In Place
+    // The row shows the draft, or the newest message again, and does not move.
     private void OnDraftChanged(object? sender, string conversationId)
     {
         if (_store.Find(conversationId) is not { } c || Find(conversationId) is null)
@@ -364,7 +392,7 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
         Apply(c, live: false);
     }
 
-    // Moves A Row To Its Place: Within Its Collection, Or Across When It Was Pinned Or Unpinned (Or PinnedApart Changed)
+    // A row moves to the other collection when the phone pins or unpins it, or when PinnedApart changes.
     private void Place(ConversationRowViewModel row, bool live)
     {
         ObservableCollection<ConversationRowViewModel> from = ListOf(row);
@@ -388,12 +416,11 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
         to.Insert(TargetIndex(to, row, null), row);
     }
 
-    // Removes The Rows A Fresh Page Didn't List
-    private void DropUnlisted(ObservableCollection<ConversationRowViewModel> list, HashSet<string> listed)
+    private void DropUnlisted(ObservableCollection<ConversationRowViewModel> list, HashSet<string> kept)
     {
         for (int i = list.Count - 1; i >= 0; i--)
         {
-            if (!listed.Contains(list[i].Id))
+            if (!kept.Contains(list[i].Id))
             {
                 RowsChanging?.Invoke(this, false);
                 list.RemoveAt(i);
@@ -401,7 +428,6 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
         }
     }
 
-    // The Collection A Row Belongs In, And The One It Is In Now
     private ObservableCollection<ConversationRowViewModel> ListFor(ConversationRowViewModel row) => _pinnedApart && row.IsPinned ? Pinned : Rows;
 
     private ObservableCollection<ConversationRowViewModel> ListOf(ConversationRowViewModel row) => Pinned.Contains(row) ? Pinned : Rows;
@@ -417,7 +443,7 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
     private ConversationRowViewModel? Find(string id) =>
         Pinned.FirstOrDefault(r => r.Id == id) ?? Rows.FirstOrDefault(r => r.Id == id);
 
-    // Where A Row Goes Among The Others: After Every Row That Sorts Before It
+    // A row goes after each row that sorts before it. A row with the same time stays above the new row.
     private static int TargetIndex(ObservableCollection<ConversationRowViewModel> list, ConversationRowViewModel row, ConversationRowViewModel? skip)
     {
         int count = 0;

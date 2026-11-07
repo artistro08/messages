@@ -9,30 +9,26 @@ namespace GMessages.Protocol.Rpc;
 /// <remarks>
 /// Ported from <c>IncomingRPCMessage</c> in
 /// <see href="https://github.com/mautrix/gmessages/blob/ba33f4875a491f5cb47db8a6baf42a8869f5f383/pkg/libgm/event_handler.go">event_handler.go</see>.
-/// Which of <see cref="Pair"/>, <see cref="Gaia"/> and <see cref="Message"/> is set depends on the route of
-/// <see cref="Raw"/>; the other two stay null. <see cref="DecryptedMessage"/> is only set for data events whose
-/// action has a known response type.
+/// Only a data event sets <see cref="Message"/>. The client decodes a pairing event only to check it.
+/// <see cref="DecryptedMessage"/> is set only for data events with an action that has a known response type.
 /// </remarks>
 public sealed class IncomingRpc
 {
     /// <summary>Gets the message as it came off the wire.</summary>
     public required IncomingRPCMessage Raw { get; init; }
 
-    /// <summary>Gets or sets whether the message was delivered before the client finished catching up.</summary>
+    /// <summary>Gets or sets whether the message came before the client finished the catch-up.</summary>
     public bool IsOld { get; set; }
 
     /// <summary>Gets the decoded data event, or null for other routes.</summary>
     public RPCMessageData? Message { get; init; }
 
-    /// <summary>Gets the decoded Google account pairing event, or null for other routes.</summary>
-    public RPCGaiaData? Gaia { get; init; }
-
-    /// <summary>Gets the decoded QR pairing event, or null for other routes.</summary>
-    public RPCPairData? Pair { get; init; }
-
     /// <summary>Gets the decrypted payload bytes, or null when the data event had none.</summary>
     public byte[]? DecryptedData { get; init; }
 
-    /// <summary>Gets the payload decoded as the response type of its action, or null when unknown or not encrypted.</summary>
+    /// <summary>
+    /// Gets the payload decoded as the response type of its action, or null when the type is unknown. An event with
+    /// no encrypted data gets an empty message of that type, as in Go.
+    /// </summary>
     public IMessage? DecryptedMessage { get; init; }
 }

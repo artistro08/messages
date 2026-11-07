@@ -11,44 +11,44 @@ using Windows.System;
 namespace GMessages.App;
 
 /// <summary>
-/// Shows a Windows notification for each new incoming message, and handles the reply box and clicks on them.
+/// Shows a toast for each new incoming message, and handles the reply box and the clicks on the toasts.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Built on the Windows App SDK's <see cref="AppNotificationManager"/>. Dismiss is Windows' own system button; the
-/// reply, Snooze and the body click come back here. A reply is sent through the running app without opening the
-/// window, then the conversation is marked read; a reply the phone doesn't take shows a second toast saying so. A body
-/// click raises <see cref="OpenConversationRequested"/>.
+/// The service uses the <see cref="AppNotificationManager"/> of the Windows App SDK. Dismiss is the system button of
+/// Windows. The reply, Snooze and the body click come back to this service. The running app sends a reply and does
+/// not open the window, then marks the conversation as read. When the phone does not take a reply, a second toast
+/// tells the person. A body click raises <see cref="OpenConversationRequested"/>.
 /// </para>
 /// <para>
-/// Snooze is the app's own button, because its length is a setting (<see cref="AppSettings.SnoozeMinutes"/>) and
-/// Windows' system snooze only takes a length from a picker on the toast. Windows takes the toast away on the click;
-/// the app shows the same toast again once the length has passed, unless its chat was opened meanwhile. To show it
-/// again it keeps the latest toasts' payloads, and the snoozed ones apart from them, in memory only (never on disk;
-/// see <see cref="ToastMemory"/>).
+/// Snooze is a button of the app, because its length is a setting (<see cref="AppSettings.SnoozeMinutes"/>). The
+/// system snooze of Windows takes its length only from a picker on the toast. Windows removes the toast on the click.
+/// The app shows the same toast again after the length, unless the person opened its chat during the wait. For that,
+/// the app keeps the payloads of the latest and the snoozed toasts in memory only, never on disk. See
+/// <see cref="ToastMemory"/>.
 /// </para>
 /// <para>
-/// Each toast's tag is the message ID and its group the conversation ID, so opening a chat clears its toasts with
-/// <see cref="RemoveConversation"/>. A toast that can't be built or shown is logged (the error type only) and
-/// dropped, so one bad message never takes the tray down. Message text and names are never logged.
+/// The tag of each toast is the message ID, and its group is the conversation ID. Thus a chat that opens clears its
+/// toasts through <see cref="RemoveConversation"/>. The app logs the error type of a toast that it cannot build or
+/// show, then drops the toast. Thus a bad message never stops the tray. The log never holds message text or names.
 /// </para>
 /// </remarks>
-/// <param name="store">Sends replies and marks them read; names a conversation for the failure toast.</param>
+/// <param name="store">Sends replies and marks them as read. It also names the conversation of a failure toast.</param>
 /// <param name="settings">The notification settings.</param>
-/// <param name="avatars">Writes the sender's photo to disk for the toast; cleared after each use.</param>
-/// <param name="mainView">The open main window's state, or null when it is closed.</param>
-/// <param name="dispatcher">The UI thread, where clicks are handled.</param>
+/// <param name="avatars">Writes the photo of the sender to disk for the toast. The service clears it after use.</param>
+/// <param name="mainView">Returns the state of the open main window, or null when the window is closed.</param>
+/// <param name="dispatcher">The dispatcher of the UI thread, where the service handles the clicks.</param>
 /// <param name="logger">The app log.</param>
 /// <seealso href="https://learn.microsoft.com/windows/apps/develop/notifications/app-notifications/app-notifications-quickstart"/>
 internal sealed class NotificationService(ChatStore store, AppSettings settings, AvatarCache avatars, Func<MainViewModel?> mainView, DispatcherQueue dispatcher, ILogger logger) : IDisposable
 {
-    // The Quick Reply Button's Icon: Packaged, Windows Picks The Send.scale-*.png That Fits The Display Scale; Unpackaged
-    // (Debug), Only A File Path Works, So It Is The 100% One
+    // The icon of the quick reply button. Packaged, Windows picks the Send.scale-*.png that fits the display scale.
+    // Unpackaged, as in Debug, only a file path works, so the app uses the 100% file.
     private static readonly string SendIconUri = AppIdentity.IsPackaged
         ? "ms-appx:///Assets/Send.png"
         : new Uri(Path.Combine(AppContext.BaseDirectory, "Assets", "Send.scale-100.png")).AbsoluteUri;
 
-    // How Many Recent Toasts Can Still Be Snoozed (Their Payloads Kept In Memory)
+    // The number of recent toasts that the person can still snooze. The app keeps their payloads in memory.
     private const int SnoozableToasts = 20;
 
     private readonly AppNotificationManager _manager = AppNotificationManager.Default;
@@ -56,16 +56,17 @@ internal sealed class NotificationService(ChatStore store, AppSettings settings,
     private bool _registered;
 
     /// <summary>
-    /// Asks the App to show the main window on a conversation (a toast body click). Carries the conversation ID.
+    /// Asks the app to show the main window on a conversation after a toast body click. The argument is the
+    /// conversation ID.
     /// </summary>
     public event EventHandler<string>? OpenConversationRequested;
 
     /// <summary>
-    /// Starts receiving toast clicks and replies.
+    /// Starts to receive toast clicks and replies.
     /// </summary>
     /// <remarks>
-    /// The handler goes on before <see cref="AppNotificationManager.Register()"/>, as the Windows App SDK requires, so
-    /// clicks come to this process instead of starting a new one.
+    /// The handler goes on before <see cref="AppNotificationManager.Register()"/>, as the Windows App SDK requires.
+    /// Thus clicks come to this process, and Windows starts no new process.
     /// </remarks>
     public void Register()
     {
@@ -77,20 +78,19 @@ internal sealed class NotificationService(ChatStore store, AppSettings settings,
             _registered = true;
             AppLog.NotificationsRegistered(logger);
         }
-#pragma warning disable CA1031 // No notifications is better than no tray app; the failure is logged
         catch (Exception ex)
-#pragma warning restore CA1031
         {
+            // A tray app with no notifications is better than no tray app. The log holds the failure.
             AppLog.NotificationFailed(logger, "register", ex.GetType().Name, ex.HResult);
         }
     }
 
     /// <summary>
-    /// Shows a toast for an arrived message when <see cref="NotificationPolicy"/> says it should notify, once per
-    /// message: a later update of an already toasted message shows nothing (see <see cref="ToastMemory.FirstShow"/>).
+    /// Shows a toast for a new message when <see cref="NotificationPolicy"/> allows it, once per message. A later
+    /// update of a message with a toast shows nothing (see <see cref="ToastMemory.FirstShow"/>).
     /// </summary>
-    /// <param name="e">The arrived message.</param>
-    /// <returns>A task that completes once the toast was shown or skipped. It never throws.</returns>
+    /// <param name="e">The new message.</param>
+    /// <returns>A task that completes when the toast shows or the service skips it. It never throws.</returns>
     public async Task ShowAsync(MessageArrivedEventArgs e)
     {
         ArgumentNullException.ThrowIfNull(e);
@@ -101,8 +101,8 @@ internal sealed class NotificationService(ChatStore store, AppSettings settings,
             return;
         }
 
-        // One Toast Per Message: Claimed Before Any Await, So Updates Of It (Status Changes, Reactions) Never Show The
-        // Banner Again, Even When They Arrive Mid-Show
+        // A message gets a single toast. The service claims the toast before any await. Thus a later update, such as a
+        // status change or a reaction, never shows the banner again. That also holds during the show.
         if (!_toasts.FirstShow(e.Message.Id))
         {
             return;
@@ -110,8 +110,7 @@ internal sealed class NotificationService(ChatStore store, AppSettings settings,
 
         try
         {
-            // Content And The Sender's Photo
-            // The App Copies A Code From Every Message That Notifies (CopyCode), So The Toast Can Say So
+            // The app copies the code of each message with a toast (CopyCode), so the toast can tell the person.
             var content    = NotificationContent.Compose(e.Message, e.Conversation!) with { CodeCopied = settings.CopyCodes && OneTimeCode.Find(e.Message.Text) is not null };
             string? avatar = content.AvatarParticipantId is { Length: > 0 } participant ? await avatars.GetFileUriAsync(participant, CancellationToken.None) : null;
             avatars.Clear();
@@ -121,29 +120,30 @@ internal sealed class NotificationService(ChatStore store, AppSettings settings,
             Show(xml, content.Tag, content.Group);
             AppLog.ToastShown(logger, content.Tag, content.Group);
         }
-#pragma warning disable CA1031 // A message that can't become a toast must not take the tray down; the failure is logged
         catch (Exception ex)
-#pragma warning restore CA1031
         {
+            // A message that cannot become a toast must not stop the tray. The log holds the failure.
             AppLog.NotificationFailed(logger, "show", ex.GetType().Name, ex.HResult);
         }
     }
 
     /// <summary>
-    /// Removes every toast of a conversation and cancels its waiting snoozes (it was read, muted or left the main list).
+    /// Removes every toast of a conversation and cancels its waiting snoozes. The app calls it when the person reads or
+    /// mutes the conversation, or when the conversation leaves the main list.
     /// </summary>
     /// <param name="conversationId">The conversation ID.</param>
     public void RemoveConversation(string conversationId)
     {
-        // A Snoozed Toast Of This Chat Stays Away Too
+        // A snoozed toast of this chat does not come back.
         _toasts.RemoveConversation(conversationId);
         _ = RunAsync("remove", () => _manager.RemoveByGroupAsync(conversationId).AsTask());
     }
 
     /// <summary>
-    /// Removes every toast this app shows. UI test runs call it on quit, so toasts never leak between tests.
+    /// Removes every toast of this app. A sign-out calls it, and UI test runs call it on quit, so no toast leaks
+    /// between tests.
     /// </summary>
-    /// <returns>A task that completes once they're gone. It never throws.</returns>
+    /// <returns>A task that completes when the toasts are gone. It never throws.</returns>
     public Task RemoveAllAsync()
     {
         _toasts.Clear();
@@ -151,12 +151,15 @@ internal sealed class NotificationService(ChatStore store, AppSettings settings,
     }
 
     /// <summary>
-    /// Handles a toast click or button: <c>reply</c> sends the reply box's text, <c>snooze</c> shows the toast again
-    /// after the snooze length, <c>open</c> raises <see cref="OpenConversationRequested"/>. Anything else is ignored.
+    /// Handles a toast click or button.
     /// </summary>
-    /// <remarks>Called on the UI thread, also by the App for a click that started it.</remarks>
-    /// <param name="args">The click's arguments and the reply box's text.</param>
-    /// <returns>A task that completes once handled. It never throws.</returns>
+    /// <remarks>
+    /// <c>reply</c> sends the text of the reply box, and <c>snooze</c> shows the toast again after the snooze length.
+    /// <c>open</c> raises <see cref="OpenConversationRequested"/>. Other actions do nothing. The UI thread calls this
+    /// method. The app also calls it for a click that started the app.
+    /// </remarks>
+    /// <param name="args">The arguments of the click and the text of the reply box.</param>
+    /// <returns>A task that completes when the service handled the click. It never throws.</returns>
     public Task HandleAsync(AppNotificationActivatedEventArgs args)
     {
         ArgumentNullException.ThrowIfNull(args);
@@ -180,9 +183,9 @@ internal sealed class NotificationService(ChatStore store, AppSettings settings,
     }
 
     /// <summary>
-    /// Shows the toast that says a reply wasn't sent, titled with the conversation's name.
+    /// Shows the toast that tells the person that a reply did not go out. The title is the name of the conversation.
     /// </summary>
-    /// <param name="conversationId">The conversation the reply was for.</param>
+    /// <param name="conversationId">The conversation of the reply.</param>
     public void ShowReplyFailed(string conversationId)
     {
         try
@@ -190,16 +193,15 @@ internal sealed class NotificationService(ChatStore store, AppSettings settings,
             string title = store.Find(conversationId)?.Name ?? AppInfo.DisplayName;
             Show(NotificationXml.BuildReplyFailed(conversationId, title), "reply-failed", conversationId);
         }
-#pragma warning disable CA1031 // The tray must survive a toast that can't be shown; the failure is logged
         catch (Exception ex)
-#pragma warning restore CA1031
         {
+            // The tray must survive a toast that cannot show. The log holds the failure.
             AppLog.NotificationFailed(logger, "show reply failed", ex.GetType().Name, ex.HResult);
         }
     }
 
     /// <summary>
-    /// Stops receiving clicks. Later clicks start the app again.
+    /// Stops the receipt of clicks. A later click starts the app again.
     /// </summary>
     public void Dispose()
     {
@@ -212,12 +214,9 @@ internal sealed class NotificationService(ChatStore store, AppSettings settings,
         }
     }
 
-    // =========================================================================
-    // HELPERS
-    // =========================================================================
-
-    // A Conversation Read, Muted Or Moved Out Of The Main List Anywhere (Here, A Toast Reply Or The Phone) Takes Its
-    // Toasts And Waiting Snoozes With It; See NotificationPolicy.ShouldDismissOnLeave And ShouldDismissOnRead
+    // A conversation that the person reads, mutes or moves out of the main list loses its toasts and waiting snoozes.
+    // The change can come from this app, a toast reply or the phone. See NotificationPolicy.ShouldDismissOnLeave and
+    // ShouldDismissOnRead.
     private void OnConversationChanged(object? sender, ConversationInfo conversation) => dispatcher.TryEnqueue(() =>
     {
         MainViewModel? view = mainView();
@@ -228,11 +227,11 @@ internal sealed class NotificationService(ChatStore store, AppSettings settings,
         }
     });
 
-    // Raised On A Background Thread
+    // Windows raises the event on a background thread.
     private void OnNotificationInvoked(AppNotificationManager sender, AppNotificationActivatedEventArgs args) =>
         dispatcher.TryEnqueue(() => _ = HandleAsync(args));
 
-    // Sends The Reply, Then Marks The Conversation Read; Only A Send That Failed Gets The Failure Toast
+    // Sends the reply, then marks the conversation as read. Only a failed send gets the failure toast.
     private async Task ReplyAsync(NotificationArgs args, string? text)
     {
         if (string.IsNullOrWhiteSpace(text))
@@ -244,10 +243,9 @@ internal sealed class NotificationService(ChatStore store, AppSettings settings,
         {
             await store.SendTextAsync(args.ConversationId, text, GmClient.NewTmpId(), null, CancellationToken.None);
         }
-#pragma warning disable CA1031 // Any send failure (not connected, phone refused, timeout) gets the same toast
         catch (Exception ex)
-#pragma warning restore CA1031
         {
+            // Each send failure gets the same toast: no connection, a refusal of the phone or a timeout.
             AppLog.NotificationFailed(logger, "reply", ex.GetType().Name, ex.HResult);
             ShowReplyFailed(args.ConversationId);
             return;
@@ -261,9 +259,10 @@ internal sealed class NotificationService(ChatStore store, AppSettings settings,
         await RunAsync("mark read", () => store.MarkReadAsync(args.ConversationId, args.MessageId, CancellationToken.None));
     }
 
-    // Shows The Toast Again Once The Snooze Length Has Passed, Unless Its Chat Was Opened (Or The Toasts Cleared) Meanwhile
-    // ponytail: the wait is an in-memory timer, so a snooze pending when the app quits is lost; a scheduled toast
-    // (ScheduledToastNotification) would survive a quit if that ever matters
+    // Shows the toast again after the snooze length. The toast does not come back when the person opens its chat or the
+    // toasts clear during the wait.
+    // ponytail: the wait is a timer in memory, so a quit loses a pending snooze. A ScheduledToastNotification can
+    // survive a quit, if that ever matters.
     private async Task SnoozeAsync(NotificationArgs args)
     {
         if (_toasts.Snooze(args.MessageId, args.ConversationId) is not { } toast)
@@ -281,17 +280,16 @@ internal sealed class NotificationService(ChatStore store, AppSettings settings,
 
     private void Show(string xml, string tag, string group) => _manager.Show(new AppNotification(xml) { Tag = tag, Group = group });
 
-    // Runs A Call And Logs Its Failure, So No Task Goes Unobserved
+    // Runs a call and logs its failure, so no task goes unobserved.
     private async Task RunAsync(string action, Func<Task> call)
     {
         try
         {
             await call();
         }
-#pragma warning disable CA1031 // The tray must survive it; the failure is logged
         catch (Exception ex)
-#pragma warning restore CA1031
         {
+            // The tray must survive the failure. The log holds it.
             AppLog.NotificationFailed(logger, action, ex.GetType().Name, ex.HResult);
         }
     }

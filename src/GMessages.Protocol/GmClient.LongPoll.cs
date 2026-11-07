@@ -3,18 +3,10 @@ using GMessages.Protocol.Events;
 namespace GMessages.Protocol;
 
 /// <summary>
-/// The long poll: starting, stopping and reconnecting it, and the work that follows a connect.
+/// The long poll part of <see cref="GmClient"/>. It starts, stops and reconnects the long poll, and runs the work after a connect.
 /// </summary>
-/// <remarks>
-/// Part of <see cref="GmClient"/>; the other members are in GmClient.cs.
-/// </remarks>
 public sealed partial class GmClient
 {
-
-    // =========================================================================
-    // LONG POLL
-    // =========================================================================
-
     private bool IsRunning
     {
         get
@@ -25,14 +17,16 @@ public sealed partial class GmClient
             }
         }
     }
-    // Port Of Disconnect; Caller Holds _gate
+
+    // Port of Disconnect. The caller holds _gate.
     private async Task DisconnectCoreAsync()
     {
         await StopLongPollingAsync().ConfigureAwait(false);
         Rpc.FailAllWaiters();
     }
 
-    // Port Of startLongPolling: The Loop Runs The Pinger And Ack Timer; postConnect Runs Once It Opens; Caller Holds _gate
+    // Port of startLongPolling. The loop runs the pinger and the ack timer. postConnect runs when the long poll opens.
+    // The caller holds _gate.
     private async Task StartLongPollingAsync()
     {
         await StopLongPollingAsync().ConfigureAwait(false);
@@ -57,7 +51,7 @@ public sealed partial class GmClient
         }
     }
 
-    // Keeps Every postConnect Run So Stopping Can Wait For It
+    // The method keeps each postConnect run, so the stop can wait for it.
     private void TrackPostConnect(Task postConnect)
     {
         lock (_runLock)
@@ -66,7 +60,7 @@ public sealed partial class GmClient
         }
     }
 
-    // Port Of closeLongPolling Plus Waiting For The Run And postConnect To End; Caller Holds _gate
+    // Port of closeLongPolling. It also waits for the run and postConnect to end. The caller holds _gate.
     private async Task StopLongPollingAsync()
     {
         CancellationTokenSource? cts;
@@ -99,7 +93,7 @@ public sealed partial class GmClient
         cts.Dispose();
     }
 
-    // While Stopping, Any Error (Such As An Aborted Socket's IOException) Is Expected: Logged, Never Thrown
+    // A stop can cause any error, such as the IOException of an aborted socket. The method logs it and never throws.
     private async Task AwaitStoppingAsync(Task task)
     {
         try
@@ -112,7 +106,7 @@ public sealed partial class GmClient
         }
     }
 
-    // Port Of Reconnect: Close, Check, Start (No Token Refresh); Caller Holds _gate
+    // Port of Reconnect: close, check, start. It does not refresh the token. The caller holds _gate.
     private async Task ReconnectAsync()
     {
         await StopLongPollingAsync().ConfigureAwait(false);
@@ -130,14 +124,14 @@ public sealed partial class GmClient
         await StartLongPollingAsync().ConfigureAwait(false);
     }
 
-    // Port Of postConnect (Without The Bugle Default Check); Never Throws
+    // Port of postConnect without the Bugle default check. It never throws.
     private async Task PostConnectAsync(CancellationToken ct)
     {
         try
         {
             await Task.Delay(PostConnectDelay, _time, ct).ConfigureAwait(false);
 
-            // Wait Up To 3 s More For The Startup Skip Count To Drain
+            // Wait up to 3 more seconds for the startup skip count to go to 0.
             if (_dispatcher.SkipCount > 0)
             {
                 LogSkipCountWaiting(_log, _dispatcher.SkipCount);
@@ -154,7 +148,6 @@ public sealed partial class GmClient
                 Raise(new HackySetActiveMayFail());
             }
 
-            // Acks, Then GET_UPDATES
             await Rpc.FlushAcksAsync(ct).ConfigureAwait(false);
             await Task.Delay(BeforeUpdatesWait, _time, ct).ConfigureAwait(false);
             try
@@ -172,7 +165,7 @@ public sealed partial class GmClient
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            // Disconnected Before It Finished
+            // The client disconnected before the steps finished.
         }
         catch (Exception ex)
         {

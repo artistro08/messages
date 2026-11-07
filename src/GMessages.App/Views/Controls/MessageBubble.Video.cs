@@ -10,26 +10,21 @@ using Windows.UI.Xaml.Media;
 namespace GMessages.App.Views.Controls;
 
 /// <summary>
-/// The bubble's video: the first frame, playing in place, and opening the viewer.
+/// Shows the video of the bubble: its still frame, the player in place and the viewer.
 /// </summary>
 /// <remarks>
-/// Part of <see cref="MessageBubble"/>; the other members are in MessageBubble.xaml.cs.
+/// This file is a part of <see cref="MessageBubble"/>. The other members are in MessageBubble.xaml.cs.
 /// </remarks>
 public sealed partial class MessageBubble
 {
-
-    // =========================================================================
-    // VIDEO
-    // =========================================================================
-
     /// <summary>
-    /// Stops the video playing in place, wherever it is (a chat switch, the viewer opening).
+    /// Stops the video that plays in place in any bubble. A chat switch and the viewer call it.
     /// </summary>
     internal static void StopInlineVideo() => s_playingVideo?.ReleaseVideo();
 
-    // Another Video: Stopped, On The Plain Fill With Its Play Button Until Its Frame Loads (The Phone's Thumbnail, Else
-    // One Made Here; see VideoStill). The Echo Of One Sent From Here Keeps What Shows, Its Bytes Seeded Under The New
-    // Media ID; Without A Frame Yet, It Loads One
+    // A new video shows stopped on the plain fill with its play button until its frame loads. The frame is the
+    // thumbnail of the phone or a frame that VideoStill makes. The echo of a video sent from here keeps what shows. Its
+    // bytes go in the cache under the new media ID. Without a frame yet, the echo loads one.
     private void ShowVideo()
     {
         MediaPart? part = Bubble is { HasVideo: true } bubble ? bubble.Media : null;
@@ -55,7 +50,7 @@ public sealed partial class MessageBubble
         _videoBubble     = Bubble;
         _videoFrameImage = null;
 
-        // No Video: Its Part Unloads (x:Load)
+        // With no video, x:Load unloads its part.
         if (part is null)
         {
             return;
@@ -68,8 +63,8 @@ public sealed partial class MessageBubble
         LoadVideoFrame(part);
     }
 
-    // The Video's Frame, In The Background; One That Won't Load Leaves The Plain Fill. The Play Button's Item Status Says
-    // Which Shows, For The Tests: Pending, Then Frame Or NoFrame
+    // Loads the frame of the video in the background. A frame that does not load leaves the plain fill. For the tests,
+    // the item status of the play button is Pending, then Frame or NoFrame.
     private async void LoadVideoFrame(MediaPart part)
     {
         TestHooks.ShowState(VideoPlay, "Pending");
@@ -78,7 +73,7 @@ public sealed partial class MessageBubble
             return;
         }
 
-        // Decoded As Wide As The Video Shows (Sized Before This Runs)
+        // The frame decodes as wide as the video shows. The box has its size before this method runs.
         int frameWidth = (int)Math.Ceiling(Video is { Width: > 0 } box ? box.Width : MaxBubbleWidth);
         try
         {
@@ -101,11 +96,11 @@ public sealed partial class MessageBubble
         }
     }
 
-    // Play: Downloads (Or Reads From Memory) The Video And Plays It Here, With Sound, Stopping Any Other One First
+    // Play stops any other video, then gets this video from memory or a download and plays it here with sound.
     private void OnVideoPlayClick(object sender, RoutedEventArgs e) => PlayInline(TimeSpan.Zero, play: true);
 
-    // The Inline Player From A Position, Playing Or Paused There (The Viewer Hands Back Where It Got To On Close). Async
-    // Void Like A Click Handler, So A Failure Reaches The App's Unhandled Error Log
+    // Starts the inline player at a position, playing or paused there. On close, the viewer returns its position.
+    // The method is async void as a click handler is. Thus a failure reaches the unhandled error log of the app.
     private async void PlayInline(TimeSpan start, bool play)
     {
         if (_videoPart is not { IsPending: false } part || _video is not null || (Application.Current as App)?.Media is not { } media)
@@ -133,9 +128,9 @@ public sealed partial class MessageBubble
             _video         = new VideoPlayback(XamlHost.Dispatcher, bytes, part.Mime, start, id, Bubble?.VideoName ?? ChatCopy.Video, drawFrames: true);
             _video.Failed += OnVideoFailed;
 
-            // The Frames Fit The Box At The Display's Scale, Shown As Its Picture (Rounded, See ClipVideoPicture) Under The
-            // Controls; The Host Takes The Bubble's Plain Fill, So A Video Of Another Shape Than Its Box Plays On It, Not
-            // On The Still Frame
+            // The frames fit the box at the display scale and show as its rounded picture under the controls. See
+            // ClipVideoPicture. The host takes the plain fill of the bubble. Thus a video with another shape than its
+            // box plays on that fill, not on the still frame.
             double scale = XamlRoot?.RasterizationScale ?? 1;
             _video.SizeFrames((int)Math.Round(VideoHost.ActualWidth * scale), (int)Math.Round(VideoHost.ActualHeight * scale));
             VideoPicture.Source  = _video.Frames;
@@ -164,7 +159,7 @@ public sealed partial class MessageBubble
         }
     }
 
-    // The Player Couldn't Play It: Back To The Frame, Saying So
+    // The player cannot play the video, so the bubble shows the frame again with the failure.
     private void OnVideoFailed(object? sender, EventArgs e)
     {
         AppLog.MediaFailed(App.ShellLog, "video", Bubble?.Id ?? string.Empty, "MediaFailed");
@@ -172,16 +167,16 @@ public sealed partial class MessageBubble
         ShowVideoNote(ChatCopy.VideoPlayFailed, "Failed");
     }
 
-    // A Click On The Frame Opens The Viewer From The Start
+    // A click on the frame opens the viewer at the start.
     private void OnVideoFrameClick(object sender, RoutedEventArgs e) => OpenVideoInViewer(VideoFrame);
 
-    // Expand: The Viewer Carries On Where The Inline Player Got To
+    // After a click on the expand button, the viewer continues from the position of the inline player.
     private void OnVideoExpandClick(object sender, RoutedEventArgs e) => OpenVideoInViewer(VideoExpand);
 
-    // Stops The Inline Player And Shows The Video Over The Whole Window, Where It Got To And Playing Or Paused As It Was
-    // (From The Frame: From The Start, Playing). Opened From The Inline Player, The Viewer Hands Back Its Own Position And
-    // State On Close, And The Inline Player Carries On From There (Owner, Plan 10). Focus Comes Back To The Frame On
-    // Close, The Way The Clicked Button Had It (A Click Brings No Focus Ring Back)
+    // Stops the inline player and shows the video over the whole window, at its position and play state. From the
+    // frame, the video plays from the start. From the inline player, the viewer returns its position and state on
+    // close. The inline player then continues from there, as the owner asked in Plan 10. On close, focus returns to the
+    // frame in the way that the clicked button had it. Thus a click brings no focus ring.
     private void OpenVideoInViewer(Control from)
     {
         if (_videoPart is not { IsPending: false } part)
@@ -207,7 +202,7 @@ public sealed partial class MessageBubble
         (Application.Current as App)?.MainWindow?.ShowVideo(part, Bubble?.Id ?? string.Empty, Bubble?.VideoName ?? ChatCopy.Video, VideoFrame, how, start, play, _videoFrameImage, handBack);
     }
 
-    // Scrolled Out Of Sight: The Video Stops (A Realized Row Off Screen Isn't Recycled At Once)
+    // The video stops when it scrolls out of sight. The list does not recycle a realized row off screen at once.
     private void OnVideoViewportChanged(FrameworkElement sender, EffectiveViewportChangedEventArgs args)
     {
         if (OutOfSight(args.EffectiveViewport))
@@ -216,7 +211,7 @@ public sealed partial class MessageBubble
         }
     }
 
-    // Stops The Inline Player And Lets Go Of It And The Bytes, Back To The Frame And Its Play Button
+    // Stops the inline player and releases it and its bytes. The frame and its play button show again.
     private void ReleaseVideo()
     {
         _videoLoad++;
@@ -235,7 +230,7 @@ public sealed partial class MessageBubble
         video.Failed              -= OnVideoFailed;
         video.Dispose();
 
-        // The Bubble Moved On To A Message Without A Video: Its Part Is Already Gone (x:Load)
+        // The bubble now shows a message without a video, so x:Load already removed its part.
         if (Video is null)
         {
             return;
@@ -249,7 +244,8 @@ public sealed partial class MessageBubble
         TestHooks.ShowState(VideoFrame, "Stopped");
     }
 
-    // The Note Over The Frame (Downloading, Or Failed), Or None; Its State Goes On The Frame For The Tests
+    // Shows a note over the frame, such as Downloading or the failure, or no note. The state goes on the frame for the
+    // tests.
     private void ShowVideoNote(string? text, string state)
     {
         VideoNote.Text           = text ?? string.Empty;
@@ -257,8 +253,9 @@ public sealed partial class MessageBubble
         TestHooks.ShowState(VideoFrame, state);
     }
 
-    // The Playing Video's Picture Rounded To The Bubble's Corners (An Image Isn't Clipped By A Border's Corners), Reshaped
-    // With Its Size And The Corners. The Image Uses No Implicit Transitions, So Windows Hands Out Its Visual
+    // Rounds the picture of the video to the corners of the bubble. The corners of a Border do not clip an Image. The
+    // clip follows the size and the corners. The image uses no implicit transitions, so Windows lets the
+    // code take its visual.
     private void ClipVideoPicture()
     {
         if (VideoPicture is null)

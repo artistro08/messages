@@ -21,7 +21,6 @@ public sealed class ShortcutTests : UiTest
     /// <summary>
     /// Ctrl + k opens Start chat with the cursor in its search box.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task CtrlK_OpensStartChat()
     {
@@ -34,48 +33,42 @@ public sealed class ShortcutTests : UiTest
     }
 
     /// <summary>
-    /// "r" from the conversation list moves to the message box without typing; an "r" typed in the box stays as text.
+    /// "r" from the conversation list moves the focus to the message box and types nothing. An "r" typed in the box
+    /// stays as text.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task R_FocusesDraft_NotWhenTyping()
     {
         await OpenChatAsync("Row.c-ann");
 
-        // From The List: Focus Moves, Nothing Typed
         Keyboard.Type("r");
         WaitForFocusIn("Chat.Draft");
 
-        // In The Box: Just Text
         Keyboard.Type("r");
         string last = "";
         Wait.Until(() => (last = DraftText()) == "r", AppDriver.DefaultTimeout, () => $"The message box read '{last}', not 'r'.");
     }
 
     /// <summary>
-    /// Ctrl + . opens the next conversation and Ctrl + Shift + , the previous one, and the list's highlight follows.
+    /// Ctrl + . opens the next conversation and Ctrl + Shift + , opens the previous one. The list highlight follows.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task CtrlPeriod_And_CtrlShiftComma_MoveSelection()
     {
         await OpenChatAsync("Row.c-team");
 
-        // Next: Team To Ann
         Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.OEM_PERIOD);
         App.WaitForText("Chat.Header", "Ann Lee");
         WaitForSelected("Row.c-ann");
 
-        // Previous: Back To Team
         Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.SHIFT, VirtualKeyShort.OEM_COMMA);
         WaitForSelected("Row.c-team");
         Wait.Until(() => !IsSelected("Row.c-ann"), AppDriver.DefaultTimeout, () => "Ann's row stayed highlighted.");
     }
 
     /// <summary>
-    /// Escape closes the open conversation, back to the empty state with no row highlighted.
+    /// Escape closes the open conversation. The empty state shows and no row stays highlighted.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Escape_ExitsConversation()
     {
@@ -89,9 +82,8 @@ public sealed class ShortcutTests : UiTest
     }
 
     /// <summary>
-    /// Escape in the message box closes the chat too, and the typed draft comes back when the chat opens again.
+    /// Escape in the message box closes the chat too. The typed draft returns when the chat opens again.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Escape_InDraft_ExitsAndKeepsDraft()
     {
@@ -104,7 +96,6 @@ public sealed class ShortcutTests : UiTest
         Keyboard.Type(VirtualKeyShort.ESCAPE);
         Wait.Until(() => App.TryFind("Chat.Draft") is null, AppDriver.DefaultTimeout, () => "The chat stayed open after Escape in the message box.");
 
-        // Opened Again: The Draft Is Back, With The Cursor In The Box
         App.Find("Row.c-ann").Patterns.SelectionItem.Pattern.Select();
         string last = "";
         Wait.Until(() => (last = DraftText()) == "keep me", AppDriver.DefaultTimeout, () => $"The draft read '{last}' after reopening, not 'keep me'.");
@@ -112,10 +103,9 @@ public sealed class ShortcutTests : UiTest
     }
 
     /// <summary>
-    /// Arrowing through the conversation list opens each chat but keeps the focus on the list; Enter then moves to the
-    /// message box.
+    /// The arrow keys in the conversation list open each chat but keep the focus on the list. Enter then moves the
+    /// focus to the message box.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task ArrowKeys_BrowseList_EnterGoesToDraft()
     {
@@ -133,7 +123,6 @@ public sealed class ShortcutTests : UiTest
     /// <summary>
     /// Ctrl + , opens the settings page.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task CtrlComma_OpensSettings()
     {
@@ -147,7 +136,6 @@ public sealed class ShortcutTests : UiTest
     /// <summary>
     /// Ctrl + s collapses the conversation list to avatars and expands it again, as the ☰ does.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task CtrlS_TogglesSidebar()
     {
@@ -161,10 +149,9 @@ public sealed class ShortcutTests : UiTest
     }
 
     /// <summary>
-    /// Ctrl + ? (Ctrl + Shift + /) opens the help dialog listing every wired shortcut, Start new conversation first with
-    /// its keys as caps (Ctrl, K).
+    /// Ctrl + Shift + /, which is Ctrl + ?, opens the help dialog with every wired shortcut.
+    /// Start new conversation is first, and its keys show as the caps Ctrl and K.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task CtrlQuestion_ShowsHelpWithRows()
     {
@@ -183,35 +170,34 @@ public sealed class ShortcutTests : UiTest
     }
 
     /// <summary>
-    /// The help dialog has no button row: its X closes it, and so does a click on the dimmed window around it, but not a
-    /// click on the dialog itself.
+    /// The help dialog has no button row. Its X closes it, and so does a click on the dimmed window around it. A click
+    /// on the dialog itself does not close it.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task HelpDialog_ClosesByXOrDim_NotByCard()
     {
         await OpenChatAsync("Row.c-team");
         Window window = App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout);
 
-        // The X
         Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.SHIFT, VirtualKeyShort.OEM_2);
         Thread.Sleep(500);
         System.Drawing.Rectangle first = App.Find("Shortcuts.Close").BoundingRectangle;
 
-        // From The First Open, The X Sits In The Corner, Its Right Edge Past The First Row's Last Key Cap (It Once Sat
-        // Beside The Heading Until The Dialog Had Opened Before)
+        // On the first open, the X sits in the corner. Its right edge is past the last key cap of the first row.
+        // The X once sat beside the heading until the dialog had opened before.
         System.Drawing.Rectangle lastCap = App.Find("Shortcuts.Key.0.1").BoundingRectangle;
         Assert.IsGreaterThanOrEqualTo(lastCap.Right - 4, first.Right, $"The X sat at {first.Right}, short of the corner ({lastCap.Right}).");
         App.Find("Shortcuts.Close").Patterns.Invoke.Pattern.Invoke();
         WaitForGone("Shortcuts.Close");
 
-        // Opened Again, The Title Row Sits Where It Did (It Once Rose Further On Each Open)
+        // The title row must stay at the same place on a second open. It once rose higher on each open.
         Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.SHIFT, VirtualKeyShort.OEM_2);
         Thread.Sleep(500);
         System.Drawing.Rectangle close = App.Find("Shortcuts.Close").BoundingRectangle;
         Assert.AreEqual(first.Y, close.Y, "The X moved between opens.");
 
-        // A Click On The Card's Heading Leaves It Open; One On The Dim (The Window's Left Edge, Beside The Card) Closes It
+        // A click on the heading of the card leaves the dialog open. A click on the dim area closes it.
+        // The dim area is the left edge of the window, beside the card.
         System.Drawing.Rectangle win   = window.BoundingRectangle;
         FlaUI.Core.Input.Mouse.Click(new System.Drawing.Point(close.X - 120, close.Y + (close.Height / 2)));
         Thread.Sleep(500);
@@ -222,9 +208,8 @@ public sealed class ShortcutTests : UiTest
     }
 
     /// <summary>
-    /// Ctrl + j moves focus to the messages in the open conversation.
+    /// Ctrl + j moves the focus to the messages in the open conversation.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task CtrlJ_FocusesMessages()
     {
@@ -236,9 +221,8 @@ public sealed class ShortcutTests : UiTest
     }
 
     /// <summary>
-    /// Ctrl + Shift + k moves focus from the message box to the conversation list.
+    /// Ctrl + Shift + k moves the focus from the message box to the conversation list.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task CtrlShiftK_FocusesList()
     {
@@ -251,12 +235,8 @@ public sealed class ShortcutTests : UiTest
         WaitForFocusIn("Main.ConversationList");
     }
 
-    // =========================================================================
-    // HELPERS
-    // =========================================================================
-
-    // Opens The Main Window And A Row's Chat, Brings The Window To The Front, Checks That Opening The Chat Put The Cursor
-    // In The Message Box, Then Leaves The Focus On That Row
+    // Opens the main window and the chat of one row, and brings the window to the front.
+    // Opening the chat must put the cursor in the message box. The method then leaves the focus on the row.
     private async Task OpenChatAsync(string rowId)
     {
         await OpenMainAsync();

@@ -1,4 +1,5 @@
-<!-- Unpair Confirm: keep DefaultButton="Close". Primary would replace PrimaryButtonStyle and drop the Settings.UnpairConfirm AutomationId -->
+<!-- Keep DefaultButton="Close" on the unpair confirm. DefaultButton="Primary" replaces PrimaryButtonStyle and drops
+     the Settings.UnpairConfirm AutomationId. -->
 <ContentDialog
     x:Class="GMessages.App.Views.Controls.UnpairDialog"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"

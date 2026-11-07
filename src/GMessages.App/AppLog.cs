@@ -4,7 +4,8 @@ using Microsoft.Extensions.Logging;
 namespace GMessages.App;
 
 /// <summary>
-/// Every log message the app shell writes, as source-generated LoggerMessage delegates. Same pattern as Magic Buds' <c>AppLog</c>.
+/// Holds every log message of the app shell as a source-generated LoggerMessage delegate, as the <c>AppLog</c> of
+/// Magic Buds does.
 /// </summary>
 internal static partial class AppLog
 {
@@ -110,6 +111,6 @@ internal static partial class AppLog
     [LoggerMessage(EventId = 936, Level = LogLevel.Warning, Message = "Quit step failed ({ErrorType})")]
     public static partial void QuitStepFailed(ILogger logger, string errorType);
 
-    [LoggerMessage(EventId = 951,Level = LogLevel.Information, Message = "Test endpoint {Endpoint}, data folder {DataFolder}")]
+    [LoggerMessage(EventId = 951, Level = LogLevel.Information, Message = "Test endpoint {Endpoint}, data folder {DataFolder}")]
     public static partial void TestEndpoint(ILogger logger, string endpoint, string dataFolder);
 }

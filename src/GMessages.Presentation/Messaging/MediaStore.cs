@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Security.Cryptography;
 using System.Text;
 using GMessages.Protocol;
 using Microsoft.Extensions.Logging;
@@ -6,47 +7,53 @@ using Microsoft.Extensions.Logging;
 namespace GMessages.Presentation.Messaging;
 
 /// <summary>
-/// Downloads, decrypts and caches photos, videos, voice messages and files, and writes them to a private temp folder
-/// for opening in other apps.
+/// Downloads, decrypts and caches the photos, videos, voice messages and files of messages. It also writes them to a
+/// private temp folder, so that other apps can open them.
 /// </summary>
 /// <remarks>
 /// <para>
-/// A part downloads in the Go connector's order (handlegmessages.go): the full file, else the thumbnail, else the
-/// inline data, which comes back as it is, with no download and no decrypting. A thumbnail asked for prefers the
-/// thumbnail, then the inline data, then the full file. A pending part throws <see cref="MediaPendingException"/>.
+/// The store downloads a part in the order of handlegmessages.go in the Go connector. It tries the full file, then the
+/// thumbnail, then the inline data. The inline data comes back as it is, with no download and no decryption. A request
+/// for the thumbnail tries the thumbnail first, then the inline data, then the full file. A pending part throws
+/// <see cref="MediaPendingException"/>.
 /// </para>
 /// <para>
-/// Decrypted bytes stay in memory, newest used kept, up to 64 MB in all (a bigger file is handed back but not kept).
-/// Asking for a media ID already on its way shares that download. <see cref="RequestFullSizeAsync"/> asks the phone
-/// once per message for the full-size image; the phone then sends the message again with the full media ID.
+/// Decrypted bytes stay in memory up to 64 MB in all, and the least recently used go first. The store gives back a
+/// bigger file but does not keep it. Two requests for the same media ID share 1 download.
+/// <see cref="RequestFullSizeAsync"/> asks the phone for the full-size image once per message. The phone then sends the
+/// message again with the full media ID.
 /// </para>
 /// <para>
-/// <b>Privacy.</b> Media is decrypted only on this device, and lives only in memory or in the temp folder given (in the
-/// app, <c>ApplicationData.Current.TemporaryFolder\Media</c>). <see cref="Clear"/> empties both: the app calls it at
-/// start, on quit, and on sign-out or unpair (through <see cref="ChatStore.Reset"/>). Bytes, keys, file names and mime
-/// types are never logged; only counts and error type names are. Safe to call from any thread.
+/// <b>Privacy.</b> The store decrypts media only on this device. Media stays only in memory or in the temp folder. In
+/// the app, the temp folder is <c>ApplicationData.Current.TemporaryFolder\Media</c>. <see cref="Clear"/> empties both.
+/// The app calls it at start, at quit, and at sign-out or unpair through <see cref="ChatStore.Reset"/>. The log never
+/// holds bytes, keys, file names or mime types. It holds only counts and error type names. Any thread can call the
+/// store.
 /// </para>
 /// </remarks>
 public sealed partial class MediaStore : IDisposable
 {
-    /// <summary>How many bytes of decrypted media stay in memory.</summary>
-    public const long MemoryCapBytes = 64L * 1024 * 1024;
+    private const long MemoryCapBytes = 64L * 1024 * 1024;
 
-    /// <summary>How long one download may take before it fails, unless <see cref="DownloadTimeout"/> says otherwise.</summary>
-    /// <remarks>Long enough for a 100 MB file on a slow connection, under the media client's 30 minute cap.</remarks>
-    // ponytail: a whole-download deadline, not a stall check; reset a timer per chunk read if slow links need more
+    /// <summary>
+    /// The default time that 1 download can take before it fails. <see cref="DownloadTimeout"/> can change it.
+    /// </summary>
+    /// <remarks>
+    /// The time is long enough for a 100 MB file on a slow connection. It is less than the 30 minute limit of the media
+    /// client.
+    /// </remarks>
+    // ponytail: a deadline for the whole download, not a stall check. Reset a timer per chunk if slow links need more.
     public static readonly TimeSpan DefaultDownloadTimeout = TimeSpan.FromMinutes(15);
 
-    // How Long Before Asking Again For Media Google Has Nothing Of Yet
+    // Google answers with no bytes until the upload of the sender is complete. The store asks again after this time.
     private static readonly TimeSpan NotReadyRetry = TimeSpan.FromSeconds(3);
 
-    /// <summary>The longest file name written to the temp folder, extension included.</summary>
+    /// <summary>The longest file name that the store writes to the temp folder, with the extension.</summary>
     public const int MaxNameLength = 100;
 
-    // A Name With Nothing Usable Left
     private const string FallbackName = "attachment";
 
-    // Windows Device Names, Refused As A File Name With Or Without An Extension
+    // Windows refuses these device names as a file name, with or without an extension.
     private static readonly HashSet<string> ReservedNames = new(StringComparer.OrdinalIgnoreCase)
     {
         "CON", "PRN", "AUX", "NUL",
@@ -54,7 +61,7 @@ public sealed partial class MediaStore : IDisposable
         "LPT0", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
     };
 
-    // Only These Types Open In Their Default App; Anything Else Is Saved Where The Person Picks
+    // Only these types open in their default app. The person saves any other type to a folder that they pick.
     private static readonly HashSet<string> OpenableExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tif", ".tiff", ".heic", ".heif", ".avif",
@@ -70,35 +77,33 @@ public sealed partial class MediaStore : IDisposable
     private readonly ILogger _log;
     private readonly Lock _lock = new();
 
-    // Memory Cache By Media ID: The Dictionary Order Is Least Recently Used First
+    // The memory cache by media ID. The dictionary order is least recently used first.
     private readonly OrderedDictionary<string, byte[]> _cache = [];
     private long _cachedBytes;
 
-    // Downloads On Their Way, By Media ID
     private readonly Dictionary<string, Task<byte[]>> _inFlight = [];
 
-    // Video Frames Being Made, By Media ID
     private readonly Dictionary<string, Task<byte[]>> _framesInFlight = [];
 
-    // One Frame Made At A Time: Each Needs Its Whole Video, So A Chat Full Of Videos Downloads Them One By One
-    // ponytail: one at a time across all chats; a queue that drops scrolled-away videos if long chats feel slow
+    // Each frame needs its whole video, so the store makes 1 frame at a time. Thus the videos of a chat download in
+    // sequence.
+    // ponytail: 1 at a time across all chats. Add a queue that drops scrolled-away videos if long chats feel slow.
     private readonly SemaphoreSlim _frameTurn = new(1, 1);
 
-    // Messages Whose Full-Size Image Was Asked For
+    // The IDs of the messages whose full-size image the store asked for.
     private readonly HashSet<string> _fullSizeAsked = [];
 
-    // Bumped By Clear: A Download Started Before It Is Not Cached
+    // Clear increments the generation. The store does not cache a download that started before the clear.
     private int _generation;
 
-    // Canceled And Replaced By Clear: Aborts Every Download Started Before It
+    // Clear cancels and replaces this source. The cancel stops every download that started before the clear.
     private CancellationTokenSource _generationCancel = new();
 
     /// <summary>
     /// Creates the store.
     /// </summary>
-    /// <param name="client">Gets the current phone client, or null when not connected.</param>
-    /// <param name="tempFolder">The private folder files are written to for other apps; emptied by <see cref="Clear"/>.</param>
-    /// <param name="log">The logger.</param>
+    /// <param name="client">Gets the current phone client, or null when the phone is not connected.</param>
+    /// <param name="tempFolder">The private folder for the files that other apps open.</param>
     public MediaStore(Func<IMessagingClient?> client, string tempFolder, ILogger log)
     {
         ArgumentNullException.ThrowIfNull(client);
@@ -110,13 +115,15 @@ public sealed partial class MediaStore : IDisposable
         _log        = log;
     }
 
-    /// <summary>Gets the private temp folder (emptied by <see cref="Clear"/>), where voice recordings go too.</summary>
+    /// <summary>
+    /// Gets the private temp folder, which also holds voice recordings. <see cref="Clear"/> empties it.
+    /// </summary>
     public string TempFolder => _tempFolder;
 
     /// <summary>
-    /// Gets or sets how long one download may take, read as each download starts. Past it the request is aborted and
-    /// the download fails with a <see cref="TimeoutException"/>. Defaults to <see cref="DefaultDownloadTimeout"/>; the
-    /// UI test hooks shorten it.
+    /// Gets or sets the time that 1 download can take. Each download reads it when it starts. After that time, the
+    /// store stops the request, and the download fails with a <see cref="TimeoutException"/>. The default is
+    /// <see cref="DefaultDownloadTimeout"/>. The UI test hooks make it shorter.
     /// </summary>
     public Func<TimeSpan> DownloadTimeout { get; set; } = static () => DefaultDownloadTimeout;
 
@@ -125,17 +132,19 @@ public sealed partial class MediaStore : IDisposable
     // =========================================================================
 
     /// <summary>
-    /// Gets a part's decrypted bytes, from memory or downloaded.
+    /// Gets the decrypted bytes of a part, from memory or from a download.
     /// </summary>
     /// <param name="part">The media part.</param>
-    /// <param name="thumbnail">True to prefer the thumbnail (a photo's first, blurred look).</param>
-    /// <param name="ct">Cancels the wait (not a download another caller shares).</param>
+    /// <param name="thumbnail">True to prefer the thumbnail, which is the first blurred look of a photo.</param>
+    /// <param name="ct">Cancels the wait. It does not cancel a download that another caller shares.</param>
     /// <returns>The decrypted bytes.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="part"/> is null.</exception>
     /// <exception cref="MediaPendingException">The part has no media ID, thumbnail or inline data yet.</exception>
-    /// <exception cref="MessagingUnavailableException">Not connected.</exception>
+    /// <exception cref="MessagingUnavailableException">The phone is not connected.</exception>
     /// <exception cref="TimeoutException">The download took longer than <see cref="DownloadTimeout"/>.</exception>
-    /// <exception cref="OperationCanceledException"><paramref name="ct"/> was canceled, or <see cref="Clear"/> aborted the download.</exception>
+    /// <exception cref="OperationCanceledException">
+    /// <paramref name="ct"/> was canceled, or <see cref="Clear"/> stopped the download.
+    /// </exception>
     public Task<byte[]> GetAsync(MediaPart part, bool thumbnail, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(part);
@@ -145,7 +154,6 @@ public sealed partial class MediaStore : IDisposable
             throw new MediaPendingException();
         }
 
-        // Pick The Source; Inline Data Needs No Download
         (string id, byte[] key) = Source(part, thumbnail);
         if (id.Length == 0)
         {
@@ -162,7 +170,7 @@ public sealed partial class MediaStore : IDisposable
 
             if (!_inFlight.TryGetValue(id, out Task<byte[]>? download))
             {
-                // Started Off This Thread, So It Can't Finish (And Leave _inFlight) Before It Is Added
+                // The download runs on another thread. Thus it cannot leave _inFlight before this method adds it.
                 IMessagingClient client = _client() ?? throw new MessagingUnavailableException();
                 int generation          = _generation;
                 CancellationToken clear = _generationCancel.Token;
@@ -175,39 +183,41 @@ public sealed partial class MediaStore : IDisposable
     }
 
     /// <summary>
-    /// Gets a video's still frame: the thumbnail the phone sent, else one made on this device from the video and kept.
+    /// Gets the still frame of a video. It is the thumbnail that the phone sent, else a frame that this device makes
+    /// from the video and keeps.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The phone rarely sends a thumbnail for a video (LibGM passes on any <c>thumbnailMediaID</c> it gets, but has no
-    /// frame of its own), so without one the video is fetched (memory, or a download) and <paramref name="extract"/>
-    /// makes the frame. The frame is kept as a file in the temp folder (<c>{temp}\Frames</c>, named by a hash of the
-    /// media ID), so the video isn't fetched again for it; <see cref="Clear"/> empties it with the rest.
+    /// The phone rarely sends a thumbnail for a video. LibGM passes on any <c>thumbnailMediaID</c> that it gets, but
+    /// has no frame of its own. Without a thumbnail, the store gets the video from memory or a download, and
+    /// <paramref name="extract"/> makes the frame. The store keeps the frame as a file in <c>{temp}\Frames</c>, named
+    /// by a hash of the media ID. Thus the store does not get the video again for the frame. <see cref="Clear"/>
+    /// empties the frames with the rest.
     /// </para>
     /// <para>
-    /// The work runs off the calling thread, one frame at a time, and two callers asking for one video share it. A
-    /// video sent from here, still on its way, has its bytes in the part: its frame is made from them and not kept.
+    /// The work runs on another thread, 1 frame at a time. Two callers for the same video share the work. A video
+    /// that this device sent and that is not yet on the server has its bytes in the part. The store makes its frame
+    /// from those bytes and does not keep it.
     /// </para>
     /// </remarks>
-    /// <param name="part">The video's media part.</param>
-    /// <param name="extract">Makes a still image (PNG or JPEG bytes) from a video's bytes and mime type.</param>
-    /// <param name="ct">Cancels the wait (not the work another caller shares).</param>
-    /// <returns>The frame's image bytes.</returns>
+    /// <param name="part">The media part of the video.</param>
+    /// <param name="extract">Makes a still image as PNG or JPEG bytes from the bytes and mime type of a video.</param>
+    /// <param name="ct">Cancels the wait. It does not cancel work that another caller shares.</param>
+    /// <returns>The image bytes of the frame.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="part"/> or <paramref name="extract"/> is null.</exception>
     /// <exception cref="MediaPendingException">The part has no media ID, thumbnail or inline data yet.</exception>
-    /// <exception cref="MessagingUnavailableException">Not connected.</exception>
+    /// <exception cref="MessagingUnavailableException">The phone is not connected.</exception>
     public Task<byte[]> GetFrameAsync(MediaPart part, Func<byte[], string, Task<byte[]>> extract, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(part);
         ArgumentNullException.ThrowIfNull(extract);
 
-        // The Phone's Thumbnail, When It Sent One
         if (part.ThumbnailId.Length > 0)
         {
             return GetAsync(part, thumbnail: true, ct);
         }
 
-        // Sent From Here And Still On Its Way: Made From The Bytes In The Part, Not Kept
+        // This device sent the video, and it is not yet on the server. The store does not keep this frame.
         if (part.MediaId.Length == 0)
         {
             if (part.InlineData.Length == 0)
@@ -222,7 +232,7 @@ public sealed partial class MediaStore : IDisposable
         {
             if (!_framesInFlight.TryGetValue(part.MediaId, out Task<byte[]>? making))
             {
-                // Started Off This Thread, So It Can't Finish (And Leave _framesInFlight) Before It Is Added
+                // The work runs on another thread. Thus it cannot leave _framesInFlight before this method adds it.
                 int generation                = _generation;
                 making                        = Task.Run(() => MakeFrameAsync(part, extract, generation), CancellationToken.None);
                 _framesInFlight[part.MediaId] = making;
@@ -233,11 +243,11 @@ public sealed partial class MediaStore : IDisposable
     }
 
     /// <summary>
-    /// Keeps bytes this device already has under a media ID, so asking for that ID later downloads nothing.
+    /// Keeps bytes that this device already has under a media ID, so a later request for that ID downloads nothing.
     /// </summary>
     /// <remarks>
-    /// Used when a sent attachment's echo arrives: the phone gives the file a media ID, and the bytes that were sent are
-    /// that file. An ID already kept is left as it is. Kept under the same memory cap as downloads.
+    /// The app calls this when the echo of a sent attachment arrives. The phone gives the file a media ID, and the sent
+    /// bytes are that file. The store does not change an ID that it already keeps. The memory cap of downloads applies.
     /// </remarks>
     /// <param name="mediaId">The media ID.</param>
     /// <param name="bytes">The decrypted bytes.</param>
@@ -252,33 +262,32 @@ public sealed partial class MediaStore : IDisposable
 
         lock (_lock)
         {
-            if (!_cache.ContainsKey(mediaId))
-            {
-                Keep(mediaId, bytes);
-            }
+            Keep(mediaId, bytes);
         }
     }
 
     /// <summary>
-    /// Writes a part's decrypted file to the temp folder, so another app can open it.
+    /// Writes the decrypted file of a part to the temp folder, so another app can open it.
     /// </summary>
     /// <remarks>
-    /// Each file gets its own random folder, <c>{temp}\{random}\{name}</c>, so two files with one name never clash.
-    /// The name is the sender's, made safe by <see cref="SanitizeName"/>.
+    /// Each file gets its own random folder, <c>{temp}\{random}\{name}</c>, so 2 files with the same name never clash.
+    /// The name is the name of the sender, made safe by <see cref="SanitizeName"/>.
     /// </remarks>
     /// <param name="part">The media part.</param>
     /// <param name="ct">Cancels the wait and the write.</param>
     /// <returns>The full path of the written file.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="part"/> is null.</exception>
     /// <exception cref="MediaPendingException">The part has no media ID, thumbnail or inline data yet.</exception>
-    /// <exception cref="MessagingUnavailableException">Not connected.</exception>
+    /// <exception cref="MessagingUnavailableException">The phone is not connected.</exception>
     /// <exception cref="IOException">The file could not be written.</exception>
-    /// <exception cref="OperationCanceledException"><paramref name="ct"/> was canceled, or <see cref="Clear"/> ran before the file was written.</exception>
+    /// <exception cref="OperationCanceledException">
+    /// <paramref name="ct"/> was canceled, or <see cref="Clear"/> ran before the file was written.
+    /// </exception>
     public async Task<string> SaveToTempAsync(MediaPart part, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(part);
 
-        // Note The Generation First: A Clear (Sign-Out) During The Download Means Nothing Is Written
+        // The generation comes first. A clear at sign-out during the download then means that nothing is written.
         int generation;
         lock (_lock)
         {
@@ -304,20 +313,22 @@ public sealed partial class MediaStore : IDisposable
     }
 
     /// <summary>
-    /// Writes a part's decrypted file into a folder the person keeps (their Downloads), under a name no other file there has.
+    /// Writes the decrypted file of a part into a folder that the person keeps, such as Downloads. The name is one that
+    /// no other file in the folder has.
     /// </summary>
     /// <remarks>
-    /// The name is the sender's, made safe by <see cref="SanitizeName"/>; when it is taken, <c>name (1).ext</c>, then
-    /// <c>name (2).ext</c> and so on, as Windows names a second copy. The file is made with <see cref="FileMode.CreateNew"/>,
-    /// so it never replaces one that appears meanwhile. It carries the mark of the web (<see cref="MarkFromInternet"/>).
+    /// The name is the name of the sender, made safe by <see cref="SanitizeName"/>. When that name is taken, the store
+    /// tries <c>name (1).ext</c>, then <c>name (2).ext</c> and so on. Windows names a second copy the same way. The
+    /// store creates the file with <see cref="FileMode.CreateNew"/>, so it never replaces a file that appears in the
+    /// meantime. The file gets the mark of the web from <see cref="MarkFromInternet"/>.
     /// </remarks>
     /// <param name="part">The media part.</param>
-    /// <param name="folder">The folder's full path; it must exist.</param>
+    /// <param name="folder">The full path of the folder, which must exist.</param>
     /// <param name="ct">Cancels the wait and the write.</param>
     /// <returns>The full path of the written file.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="part"/> or <paramref name="folder"/> is null.</exception>
     /// <exception cref="MediaPendingException">The part has no media ID, thumbnail or inline data yet.</exception>
-    /// <exception cref="MessagingUnavailableException">Not connected.</exception>
+    /// <exception cref="MessagingUnavailableException">The phone is not connected.</exception>
     /// <exception cref="IOException">The file could not be written.</exception>
     /// <exception cref="OperationCanceledException"><paramref name="ct"/> was canceled.</exception>
     public async Task<string> SaveToFolderAsync(MediaPart part, string folder, CancellationToken ct)
@@ -330,7 +341,7 @@ public sealed partial class MediaStore : IDisposable
         string stem      = Path.GetFileNameWithoutExtension(name);
         string extension = Path.GetExtension(name);
 
-        // The First Free Name: A Taken One Throws IOException On CreateNew, And The Next Number Is Tried
+        // CreateNew throws IOException on a taken name, and the loop tries the next number.
         for (int copy = 0; ; copy++)
         {
             string path = Path.Combine(folder, copy == 0 ? name : FormattableString.Invariant($"{stem} ({copy}){extension}"));
@@ -346,7 +357,7 @@ public sealed partial class MediaStore : IDisposable
             }
             catch (IOException) when (File.Exists(path))
             {
-                // Taken Between The Check And The Create: Try The Next Number
+                // Another file took the name between the check and the create.
                 continue;
             }
 
@@ -361,12 +372,14 @@ public sealed partial class MediaStore : IDisposable
     }
 
     /// <summary>
-    /// Marks a written file as downloaded from the internet (the mark of the web), as a browser download is.
+    /// Marks a written file as downloaded from the internet, as a browser marks a download. This mark is the mark of
+    /// the web.
     /// </summary>
     /// <remarks>
-    /// Writes the <c>Zone.Identifier</c> stream with <c>ZoneId=3</c>, so Windows applies SmartScreen, Office's Protected
-    /// View and its "downloaded from the internet" warnings to the file. Only this method writes the stream: the name
-    /// sanitizer refuses <c>:</c> in names. A drive that can't hold the stream (not NTFS) logs the error type and moves on.
+    /// The method writes the <c>Zone.Identifier</c> stream with <c>ZoneId=3</c>. Windows then applies SmartScreen to
+    /// the file, and Office applies Protected View and its internet warnings. Only this method writes the stream,
+    /// because the name sanitizer refuses <c>:</c> in names. A drive that is not NTFS cannot hold the stream. On such a
+    /// drive, the method logs the error type and returns.
     /// </remarks>
     /// <param name="path">The full path of the file.</param>
     public void MarkFromInternet(string path)
@@ -385,15 +398,15 @@ public sealed partial class MediaStore : IDisposable
     /// Asks the phone for the full-size image of a message that has only a thumbnail, once per message.
     /// </summary>
     /// <remarks>
-    /// The phone answers by sending the message again with its full media ID, which replaces the bubble's media part.
-    /// A message that already has its full file, has no thumbnail, or was asked for before is left alone. A failed ask
-    /// is forgotten, so it can be tried again.
+    /// The phone answers with the message again, with its full media ID, which replaces the media part of the bubble.
+    /// The method asks nothing for a message that has its full file, has no thumbnail, or was asked for before. The
+    /// store forgets a failed request, so the person can try again.
     /// </remarks>
     /// <param name="m">The message.</param>
-    /// <param name="again">True to ask again though asked before (the photo never came, and the person retries).</param>
-    /// <returns>A task that completes when the phone accepted the request, or at once when nothing is asked.</returns>
+    /// <param name="again">True to ask again when the photo never came and the person retries.</param>
+    /// <returns>A task that completes when the phone accepts the request, or at once when nothing is asked.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="m"/> is null.</exception>
-    /// <exception cref="MessagingUnavailableException">Not connected.</exception>
+    /// <exception cref="MessagingUnavailableException">The phone is not connected.</exception>
     public async Task RequestFullSizeAsync(ChatMessage m, bool again = false)
     {
         ArgumentNullException.ThrowIfNull(m);
@@ -435,7 +448,7 @@ public sealed partial class MediaStore : IDisposable
     }
 
     /// <summary>
-    /// Releases the token source and the frame gate. The temp folder is left to <see cref="Clear"/>.
+    /// Releases the token source and the frame gate. It does not empty the temp folder: <see cref="Clear"/> does that.
     /// </summary>
     public void Dispose()
     {
@@ -448,9 +461,9 @@ public sealed partial class MediaStore : IDisposable
     }
 
     /// <summary>
-    /// Drops the decrypted bytes held in memory (the window closed); temp files and downloads on their way are left alone.
+    /// Drops the decrypted bytes in memory when the window closes. It does not touch temp files or running downloads.
     /// </summary>
-    /// <remarks>A download still running may add one item back afterward.</remarks>
+    /// <remarks>A download that still runs can add 1 item back after this call.</remarks>
     public void ClearMemory()
     {
         lock (_lock)
@@ -461,12 +474,13 @@ public sealed partial class MediaStore : IDisposable
     }
 
     /// <summary>
-    /// Forgets every decrypted file: the memory cache, the downloads on their way, the full-size asks, and the temp folder.
+    /// Forgets every decrypted file: the memory cache, the running downloads, the full-size requests and the temp
+    /// folder.
     /// </summary>
     /// <remarks>
-    /// A file another app still holds open can't be deleted; it is left and counted in the log, and the next clear tries
-    /// again. A download on its way is aborted: its request stops, nothing is decrypted, and its callers get an
-    /// <see cref="OperationCanceledException"/>. So a file another app still holds open survives sign-out until the
+    /// The method stops a running download. Its request stops, nothing is decrypted, and its callers get an
+    /// <see cref="OperationCanceledException"/>. The method cannot delete a file that another app holds open. It leaves
+    /// that file, counts it in the log, and the next clear tries again. Thus such a file stays after sign-out until the
     /// next start or quit.
     /// </remarks>
     public void Clear()
@@ -484,7 +498,6 @@ public sealed partial class MediaStore : IDisposable
             _fullSizeAsked.Clear();
         }
 
-        // Empty The Temp Folder, Keeping Whatever Another App Still Holds Open
         if (!Directory.Exists(_tempFolder))
         {
             return;
@@ -514,7 +527,7 @@ public sealed partial class MediaStore : IDisposable
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // The Folder Itself Went Or Can't Be Read: Nothing Here To Empty
+            // The folder is gone or cannot be read, so it has nothing to empty.
             LogTempUnreadable(ex.GetType().Name);
         }
 
@@ -525,21 +538,21 @@ public sealed partial class MediaStore : IDisposable
     }
 
     /// <summary>
-    /// Makes a sender's file name safe to write.
+    /// Makes the file name of a sender safe to write.
     /// </summary>
     /// <remarks>
-    /// Path separators, characters Windows refuses, control characters and invisible format characters (such as the
-    /// right-to-left override that disguises an extension) become <c>_</c>, as does any <c>..</c>.
-    /// Leading and trailing dots and spaces go. A Windows device name (<c>CON</c>, <c>NUL</c>, <c>COM1</c>...), with or
-    /// without an extension, gets a <c>_</c> in front. The name is cut to <see cref="MaxNameLength"/>, keeping its
-    /// extension. An empty name becomes <c>attachment</c> with an extension from the mime type.
+    /// The method changes these characters to <c>_</c>: path separators, characters that Windows refuses, control
+    /// characters, and format characters. A format character such as the right-to-left override can hide an
+    /// extension. The method also changes each <c>..</c> to <c>__</c>, and removes dots and spaces at the start and the
+    /// end. A Windows device name such as <c>CON</c>, <c>NUL</c> or <c>COM1</c> gets a <c>_</c> in front, with or
+    /// without an extension. The method cuts the name to <see cref="MaxNameLength"/> and keeps its extension. An empty
+    /// name becomes <c>attachment</c> with an extension from the mime type.
     /// </remarks>
-    /// <param name="name">The sender's file name.</param>
-    /// <param name="mime">The mime type, for the extension of an empty name.</param>
+    /// <param name="name">The file name of the sender.</param>
+    /// <param name="mime">The mime type, for the extension of a name that has none.</param>
     /// <returns>A file name with no folder part.</returns>
     public static string SanitizeName(string name, string mime)
     {
-        // Replace Separators, Refused And Control Characters, And Any Parent-Folder Step
         char[] invalid = Path.GetInvalidFileNameChars();
         var built      = new StringBuilder(name ?? string.Empty);
         for (int i = 0; i < built.Length; i++)
@@ -557,13 +570,14 @@ public sealed partial class MediaStore : IDisposable
             safe = FallbackName + ExtensionOf(mime);
         }
 
-        // A Name With No Extension (Phones Often Send "image" Or An ID) Gets The Mime Type's, So It Opens And Saves As Its Type
+        // Phones often send a name with no extension, such as "image" or an ID. The mime type gives the extension, so
+        // the file opens and saves as its type.
         else if (Path.GetExtension(safe).Length <= 1)
         {
             safe += ExtensionOf(mime);
         }
 
-        // Device Names Are Refused Whatever Follows The First Dot
+        // Windows refuses a device name, whatever follows the first dot.
         int dot     = safe.IndexOf('.', StringComparison.Ordinal);
         string stem = dot < 0 ? safe : safe[..dot];
         if (ReservedNames.Contains(stem.TrimEnd(' ')))
@@ -571,7 +585,7 @@ public sealed partial class MediaStore : IDisposable
             safe = "_" + safe;
         }
 
-        // Cut To Length, Keeping A Short Extension
+        // The cut keeps an extension of up to 16 characters.
         if (safe.Length > MaxNameLength)
         {
             string extension = Path.GetExtension(safe);
@@ -583,16 +597,16 @@ public sealed partial class MediaStore : IDisposable
     }
 
     /// <summary>
-    /// Tells whether a received file may open in its default app.
+    /// Tells whether a received file can open in its default app.
     /// </summary>
     /// <remarks>
-    /// Only an allowlist of photo, video, audio, document and contact types opens. Anything else (programs, scripts,
-    /// web pages, SVG, themes, shortcuts, certificates...) can only be saved or sent to "Open with", and the person
-    /// decides what to do with it. The check is made on the name the file is written under (see
-    /// <see cref="SanitizeName"/>), so trailing dots or spaces can't hide the extension.
+    /// Only an allowlist of photo, video, audio, document and contact types opens. The person can only save any other
+    /// type or send it to "Open with". The person then decides what to do with it. Other types include programs,
+    /// scripts, web pages, SVG, themes, shortcuts and certificates. The check uses the name that
+    /// <see cref="SanitizeName"/> gives the file, so dots or spaces at the end cannot hide the extension.
     /// </remarks>
-    /// <param name="name">The sender's file name.</param>
-    /// <param name="mime">The mime type, for the extension of an empty name.</param>
+    /// <param name="name">The file name of the sender.</param>
+    /// <param name="mime">The mime type, for the extension of a name that has none.</param>
     /// <returns>True for an allowlisted type; false otherwise.</returns>
     public static bool CanOpen(string name, string mime) =>
         OpenableExtensions.Contains(Path.GetExtension(SanitizeName(name, mime)));
@@ -601,7 +615,7 @@ public sealed partial class MediaStore : IDisposable
     // HELPERS
     // =========================================================================
 
-    // The ID And Key To Download, Or An Empty ID For The Inline Data
+    // The ID and key to download, or an empty ID for the inline data.
     private static (string Id, byte[] Key) Source(MediaPart part, bool thumbnail)
     {
         if (thumbnail && part.ThumbnailId.Length > 0)
@@ -622,8 +636,8 @@ public sealed partial class MediaStore : IDisposable
         return part.ThumbnailId.Length > 0 ? (part.ThumbnailId, part.ThumbnailKey) : (string.Empty, []);
     }
 
-    // Downloads One Media ID For Everyone Waiting On It, Then Keeps It Unless Clear Ran Meanwhile. Clear Aborts It; A
-    // Stalled One Gives Up After DownloadTimeout
+    // Downloads 1 media ID for all callers that wait on it. The store keeps the bytes unless a clear ran in the
+    // meantime. A clear stops the download. A stalled download fails after DownloadTimeout.
     private async Task<byte[]> DownloadAsync(IMessagingClient client, string id, byte[] key, int generation, CancellationToken clear)
     {
         using var limit = CancellationTokenSource.CreateLinkedTokenSource(clear);
@@ -634,8 +648,8 @@ public sealed partial class MediaStore : IDisposable
             byte[] bytes;
             try
             {
-                // Not Ready Yet: Google Answers With Nothing Until The Sender's Upload Is Done (A Video Arriving), So Nothing
-                // Is Asked For Again Shortly, Never Kept, Until The Timeout
+                // Google answers with no bytes until the upload of the sender is complete, as for an arriving video.
+                // The store asks again after a short time until the timeout, and never keeps the empty answer.
                 while ((bytes = await client.DownloadMediaAsync(id, key, limit.Token).ConfigureAwait(false)).Length == 0)
                 {
                     await Task.Delay(NotReadyRetry, limit.Token).ConfigureAwait(false);
@@ -658,7 +672,7 @@ public sealed partial class MediaStore : IDisposable
         }
         catch (Exception ex) when (ex is not OutOfMemoryException && !clear.IsCancellationRequested)
         {
-            // A Sign-Out Aborting It Isn't A Failure Worth Logging
+            // A clear at sign-out stops a download on purpose. The filter keeps that stop out of the log.
             LogDownloadFailed(id, ex.GetType().Name);
             throw;
         }
@@ -674,11 +688,11 @@ public sealed partial class MediaStore : IDisposable
         }
     }
 
-    // A Video's Frame: The Kept File, Else Made From The Video (One At A Time) And Kept Unless Clear Ran Meanwhile. The
-    // File Is Written Under The Lock, So A Clear Never Leaves One Behind
+    // Gets the frame of a video from its file, else makes it from the video, 1 at a time. The store keeps the frame
+    // unless a clear ran in the meantime. The write happens under the lock, so a clear never leaves a frame file.
     private async Task<byte[]> MakeFrameAsync(MediaPart part, Func<byte[], string, Task<byte[]>> extract, int generation)
     {
-        string path = Path.Combine(_tempFolder, "Frames", Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(part.MediaId)))[..32] + ".frame");
+        string path = Path.Combine(_tempFolder, "Frames", Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(part.MediaId)))[..32] + ".frame");
         try
         {
             if (File.Exists(path))
@@ -724,15 +738,15 @@ public sealed partial class MediaStore : IDisposable
         }
     }
 
-    // Adds To The Memory Cache, Dropping The Least Recently Used Past The Cap; A File Over The Cap Is Not Kept
+    // Adds to the memory cache and drops the least recently used past the cap. The cache does not keep a file over the
+    // cap. When a seed and a download both add an ID, the first bytes stay. The caller holds the lock.
     private void Keep(string id, byte[] bytes)
     {
-        if (bytes.LongLength > MemoryCapBytes)
+        if (bytes.LongLength > MemoryCapBytes || !_cache.TryAdd(id, bytes))
         {
             return;
         }
 
-        _cache.Add(id, bytes);
         _cachedBytes += bytes.LongLength;
         while (_cachedBytes > MemoryCapBytes)
         {
@@ -746,21 +760,21 @@ public sealed partial class MediaStore : IDisposable
     /// <c>video/mp4</c>.
     /// </summary>
     /// <remarks>
-    /// Types whose subtype isn't their usual extension come from a short table (<c>video/quicktime</c> as <c>.mov</c>,
-    /// <c>audio/mpeg</c> as <c>.mp3</c>, <c>audio/mp4</c> as <c>.m4a</c>...). Any other type uses its subtype when that is
-    /// up to five letters or digits (<c>image/png</c> as <c>.png</c>); otherwise there is none.
+    /// A short table holds the types whose subtype is not their usual extension. Examples are <c>video/quicktime</c>
+    /// as <c>.mov</c>, <c>audio/mpeg</c> as <c>.mp3</c> and <c>audio/mp4</c> as <c>.m4a</c>. Any other type uses a
+    /// subtype of 1 to 5 letters or digits, such as <c>image/png</c> as <c>.png</c>. Else the type gives no extension.
     /// </remarks>
     /// <param name="mime">The mime type.</param>
     /// <returns>The extension with its dot, or empty when the type gives none.</returns>
     public static string ExtensionOf(string mime)
     {
-        // ponytail: a short table plus the subtype; add rows when a type's subtype isn't its extension
-        string type   = (mime ?? string.Empty).Split(';')[0].Trim().ToLowerInvariant();
+        // ponytail: a short table plus the subtype. Add rows when the subtype of a type is not its extension.
+        string type    = (mime ?? string.Empty).Split(';')[0].Trim().ToLowerInvariant();
         string subtype = type[(type.IndexOf('/', StringComparison.Ordinal) + 1)..];
 
         return type switch
         {
-            "image/jpeg" or "image/jpg" or "image/pjpeg"  => ".jpg",
+            "image/jpeg" or "image/jpg" or "image/pjpeg"    => ".jpg",
             "image/svg+xml"                                 => ".svg",
             "image/x-ms-bmp"                                => ".bmp",
             "audio/mp4" or "audio/x-m4a"                    => ".m4a",

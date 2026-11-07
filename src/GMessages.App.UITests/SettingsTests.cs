@@ -18,17 +18,15 @@ namespace GMessages.App.UITests;
 [DoNotParallelize]
 public sealed class SettingsTests : UiTest
 {
-    // Theme ComboBox Items, In Order
+    // The items of the theme ComboBox, in order.
     private static readonly string[] ThemeNames = ["Use system setting", "Light", "Dark"];
     private const int LightIndex                = 1;
     private const int DarkIndex                 = 2;
 
     /// <summary>
-    /// Theme, both notification switches, the snooze length and Start with Windows (the test marker file) survive a quit
-    /// and relaunch.
-    /// The tray menu follows a theme change live.
+    /// The theme, both notification switches, the snooze length and Start with Windows survive a quit and a relaunch.
+    /// The test marker file shows the Start with Windows value. The tray menu follows a theme change live.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Settings_ToggleAndRestart_Persists()
     {
@@ -36,17 +34,16 @@ public sealed class SettingsTests : UiTest
         OpenSettings();
         AssertTitleBar("Main.TitleBar", AppInfo.WindowTitle);
 
-        // Defaults
         Assert.AreEqual(0, ThemeIndex(), "Theme should start at 'Use system setting'.");
         WaitForToggle("Settings.Notifications", ToggleState.On);
         WaitForToggle("Settings.NotifyViewedChat", ToggleState.Off);
         WaitForToggle("Settings.ReceivedLinkPreviews", ToggleState.On);
         WaitForToggle("Settings.StartWithWindows", ToggleState.Off);
         Assert.AreEqual(ChatCopy.Minutes15, SnoozeLength(), "Snooze length should start at 15 minutes.");
-        // "Windows Default" Can Name Today's Default Microphone After It: "Windows default (…)"
+        // The "Windows default" item can carry the name of the current default microphone after it.
         Wait.Until(() => Microphone().StartsWith(ChatCopy.WindowsDefault, StringComparison.Ordinal), AppDriver.DefaultTimeout, () => $"Microphone shows '{Microphone()}', not Windows default.");
 
-        // Theme Flips The Tray Menu Live, Both Ways (So It Doesn't Depend On The System Theme)
+        // The test checks both directions, so the result does not depend on the system theme.
         SelectTheme(LightIndex);
         AssertCloseGlyph(light: true);
         AssertTitleBarIcon();
@@ -55,22 +52,19 @@ public sealed class SettingsTests : UiTest
         AssertCloseGlyph(light: false);
         Assert.IsTrue(TrayMenuBrightness() < 96, "The tray menu didn't turn dark after choosing Dark.");
 
-        // Switches; Start With Windows Writes The Test Marker
         Toggle("Settings.Notifications", ToggleState.Off);
         Toggle("Settings.NotifyViewedChat", ToggleState.On);
         Toggle("Settings.ReceivedLinkPreviews", ToggleState.Off);
         Toggle("Settings.StartWithWindows", ToggleState.On);
         Wait.Until(() => File.Exists(marker), AppDriver.DefaultTimeout, () => "Start with Windows didn't write the startup-enabled marker.");
 
-        // Snooze Length: The Card's Choices Are The Old Toast Picker's
         ComboBox snooze = App.Find("Settings.SnoozeLength").AsComboBox();
         snooze.Select(2);
         snooze.Collapse();
         Wait.Until(() => SnoozeLength() == ChatCopy.Hour1, AppDriver.DefaultTimeout, () => $"Snooze length shows '{SnoozeLength()}', not 1 hour.");
 
-        // Restart: Everything Comes Back
-        // The Restart Opens The Main Window On Pairing And Brings It Forward (A User Launch); The Tray Menu Waits For
-        // That, So The Window Coming Forward Can't Close The Menu
+        // The restart is a launch by the user. It opens the main window on pairing and brings it forward.
+        // The tray menu waits for that, so the window cannot close the menu when it comes forward.
         await App.RestartAsync();
         WaitForPairing();
         OpenSettings();
@@ -83,16 +77,16 @@ public sealed class SettingsTests : UiTest
     }
 
     /// <summary>
-    /// A second open of settings, after a microphone was picked, still shows the theme, the snooze length and that
-    /// microphone, and saves a new pick (the reopened page once threw on the saved microphone, left the dropdowns blank
-    /// and saved nothing picked on it).
+    /// A second open of settings, after the test picks a microphone, shows the theme, the snooze length and that
+    /// microphone. The page also saves a new pick. The reopened page once threw an error on the saved microphone,
+    /// left the dropdowns blank and saved no pick.
     /// </summary>
     [TestMethod]
     public void Settings_Reopen_AfterPickingMicrophone_ShowsEveryValue()
     {
         OpenSettings();
 
-        // Pick The First Named Microphone (This PC Needs One)
+        // The test picks the first named microphone. This PC needs one.
         ComboBox microphone = App.Find("Settings.Microphone").AsComboBox();
         microphone.Expand();
         Wait.Until(() => microphone.Items.Length > 1, AppDriver.DefaultTimeout, () => "This PC has no microphone to pick.");
@@ -101,19 +95,17 @@ public sealed class SettingsTests : UiTest
         microphone.Collapse();
         Wait.Until(() => Microphone() == picked, AppDriver.DefaultTimeout, () => $"Microphone shows '{Microphone()}', not the one picked.");
 
-        // Back, Then Settings Again
         App.Find("Settings.Back").Patterns.Invoke.Pattern.Invoke();
         WaitForGone("Settings.Back");
         OpenSettings();
 
-        // Every Dropdown Shows Its Value
         Wait.Until(() => Microphone() == picked, AppDriver.DefaultTimeout, () => $"Microphone came back as '{Microphone()}', not the one picked.");
         Wait.Until(() => ThemeIndex() == 0, AppDriver.DefaultTimeout, () => $"Theme came back as index {ThemeIndex()}, not 'Use system setting'.");
         Wait.Until(() => SnoozeLength() == ChatCopy.Minutes15, AppDriver.DefaultTimeout, () => $"Snooze length came back as '{SnoozeLength()}', not 15 minutes.");
         WaitForToggle("Settings.Notifications", ToggleState.On);
 
-        // A Pick On The Reopened Page Is Saved Too (It Wasn't: The Failed Binding Pass Left Its Write-Backs Off, So The
-        // Recorder Kept The Old Microphone)
+        // The reopened page must save a pick too. It once did not: the failed binding pass left the write-backs off,
+        // so the recorder kept the old microphone.
         microphone = App.Find("Settings.Microphone").AsComboBox();
         microphone.Expand();
         Wait.Until(() => microphone.Items.Length > 2, AppDriver.DefaultTimeout, () => "This PC has no second microphone to pick.");
@@ -128,7 +120,7 @@ public sealed class SettingsTests : UiTest
     }
 
     /// <summary>
-    /// Settings covers pairing, keeping its sign-in alive; Back returns to the same sign-in.
+    /// Settings covers pairing and keeps the sign-in alive. Back returns to the same sign-in.
     /// </summary>
     [TestMethod]
     public void Settings_Back_ReturnsToPairing()
@@ -136,11 +128,9 @@ public sealed class SettingsTests : UiTest
         WaitForSignInButton();
         int pageLoads = Server.RequestedPaths.Count(p => p == "/web/authentication");
 
-        // Settings Over Pairing
         OpenSettings();
         WaitForGone("Pairing.Cancel");
 
-        // Back: The Same Sign-In, Not A New One
         App.Find("Settings.Back").Patterns.Invoke.Pattern.Invoke();
         WaitForGone("Settings.Back");
         WaitForPairing();
@@ -149,43 +139,38 @@ public sealed class SettingsTests : UiTest
     }
 
     /// <summary>
-    /// Unpair asks first; confirming closes settings, deletes the session and switches the main window to pairing.
+    /// Unpair asks for confirmation first. A confirm closes settings, deletes the session and switches the main window
+    /// to pairing.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Settings_Unpair_Confirm_ReturnsToPairing()
     {
         await PairAsync();
         OpenSettings();
 
-        // Confirm Dialog
         App.Find("Settings.Unpair").Patterns.Invoke.Pattern.Invoke();
         AutomationElement confirm = App.Find("Settings.UnpairConfirm");
         Assert.IsTrue(confirm.Patterns.Invoke.IsSupported, "Settings.UnpairConfirm can't be invoked.");
         confirm.Patterns.Invoke.Pattern.Invoke();
 
-        // Back To Pairing
         WaitForGone("Settings.Back");
         WaitForPairing();
         Wait.Until(() => !File.Exists(SessionFile), AppDriver.DefaultTimeout, () => "Unpair left session.bin behind.");
     }
 
     /// <summary>
-    /// Unpairing deletes the message database the opened chat left behind.
+    /// Unpairing deletes the message database that an opened chat creates.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Unpair_DeletesMessageDatabase()
     {
         string database = Path.Combine(App.DataDir, "messages.db");
 
-        // Opening A Chat Saves It
         await OpenMainAsync();
         App.Find("Row.c-ann").Patterns.SelectionItem.Pattern.Select();
         Wait.Until(() => File.Exists(database), AppDriver.DefaultTimeout, () => "Opening a chat left no messages.db.");
         CloseMainWindow();
 
-        // Unpair
         OpenSettings();
         App.Find("Settings.Unpair").Patterns.Invoke.Pattern.Invoke();
         App.Find("Settings.UnpairConfirm").Patterns.Invoke.Pattern.Invoke();
@@ -194,17 +179,13 @@ public sealed class SettingsTests : UiTest
         Wait.Until(() => !File.Exists(database), AppDriver.DefaultTimeout, () => "Unpair left messages.db behind.");
     }
 
-    // =========================================================================
-    // HELPERS
-    // =========================================================================
-
     private void OpenSettings()
     {
         InvokeTrayMenu("TrayMenu.Settings");
         WaitForSettings().Focus();
     }
 
-    // The Selected Item's Text, Mapped Back To Its Index
+    // Maps the text of the selected item back to its index.
     private int ThemeIndex() => Array.IndexOf(ThemeNames, AppDriver.SafeName(App.Find("Settings.Theme").AsComboBox().SelectedItem));
 
     private string SnoozeLength() => AppDriver.SafeName(App.Find("Settings.SnoozeLength").AsComboBox().SelectedItem);
@@ -237,14 +218,16 @@ public sealed class SettingsTests : UiTest
             () => $"'{automationId}' is {last}, not {wanted}.");
     }
 
-    // Opens The Tray Menu, Measures Its Open Item's Average Brightness (0-255) On Screen, Then Closes The Menu.
-    // UIA Has No Theme Property, So The Pixels Are The Honest Check: The Light Menu Is Near White, The Dark Near Black
+    // Opens the tray menu and measures the average brightness of its Open item on screen. The scale is 0 to 255.
+    // Then it closes the menu.
+    // UI Automation has no theme property, so the pixels are the check.
+    // A light menu is near white, and a dark menu is near black.
     private double TrayMenuBrightness()
     {
         Tray.RightClick();
         AutomationElement item = App.Find("TrayMenu.Open");
 
-        // The Menu Fades In; Wait Until Two Captures Agree, So The Animation Is Over
+        // The menu fades in. Two captures that agree show that the animation is over.
         double last    = -1;
         double current = Brightness(item);
         Wait.Until(() =>
@@ -254,7 +237,7 @@ public sealed class SettingsTests : UiTest
             return Math.Abs(current - last) < 1;
         }, TimeSpan.FromSeconds(5), () => "The tray menu never stopped changing.");
 
-        // Escape Closes The Menu (Its Host Window Has The Foreground)
+        // Escape closes the menu because its host window has the foreground.
         Keyboard.Type(VirtualKeyShort.ESCAPE);
         Wait.Until(() => App.TryFind("TrayMenu.Open") is null, AppDriver.DefaultTimeout, () => "Escape did not close the tray menu.");
         Tray.CloseOverflow();
@@ -262,9 +245,10 @@ public sealed class SettingsTests : UiTest
         return current;
     }
 
-    // The System-Drawn Close Button Must Contrast With Its Background In The App Theme: A Dark Glyph On Light, A Light
-    // Glyph On Dark (A Mismatch With The Windows Theme Would Leave It Invisible). The Button Is Found By Position,
-    // Since UIA Gives Pixels No Theme: A Strip Inside The Window's Top-Right, Clear Of The Invisible Resize Border
+    // The system draws the close button. In the app theme, it must contrast with its background: a dark glyph on
+    // light, a light glyph on dark. A mismatch with the Windows theme makes the glyph invisible.
+    // The method finds the button by position, because UI Automation gives pixels no theme. The area is a strip
+    // inside the top right of the window, clear of the invisible resize border.
     private void AssertCloseGlyph(bool light)
     {
         Window window = App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout);
@@ -280,7 +264,7 @@ public sealed class SettingsTests : UiTest
         TestContext.WriteLine($"Close glyph ({(light ? "Light" : "Dark")}): background {background:0}, glyph {glyph:0}");
     }
 
-    // The Title Bar Icon Area Must Show An Icon: Its Brightness Varies Instead Of Being One Flat Background
+    // The title bar icon area must show an icon: its brightness varies instead of one flat background.
     private void AssertTitleBarIcon()
     {
         Window window = App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout);
@@ -294,7 +278,8 @@ public sealed class SettingsTests : UiTest
         }, TimeSpan.FromSeconds(5), () => $"The title bar icon area looks blank (brightness spread {spread:0}).");
     }
 
-    // Background Is The Strip's Corner Pixel; Glyph Is Its Darkest (Light) Or Lightest (Dark) Pixel
+    // The background is the corner pixel of the strip. In the light theme, the glyph is its darkest pixel.
+    // In the dark theme, the glyph is its lightest pixel.
     private static (double Background, double Glyph) Extremes(Rectangle area, bool light)
     {
         using CaptureImage capture = Capture.Rectangle(area);

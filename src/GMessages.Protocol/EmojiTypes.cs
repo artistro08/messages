@@ -3,13 +3,13 @@ using GMessages.Protocol.Proto;
 namespace GMessages.Protocol;
 
 /// <summary>
-/// Maps reaction emoji to LibGM's <see cref="EmojiType"/> and back.
+/// Maps reaction emoji to the LibGM <see cref="EmojiType"/> and back.
 /// </summary>
 /// <remarks>
 /// Ported from
 /// <see href="https://github.com/mautrix/gmessages/blob/ba33f4875a491f5cb47db8a6baf42a8869f5f383/pkg/libgm/gmproto/emojitype.go">gmproto/emojitype.go</see>.
-/// The phone shows a reaction by its type when it knows it, and by its text when the type is
-/// <see cref="EmojiType.Custom"/>, so both are sent.
+/// The phone shows a reaction by its type when it knows the type. For <see cref="EmojiType.Custom"/>, it shows the
+/// text. Thus the request sends both.
 /// </remarks>
 public static class EmojiTypes
 {
@@ -18,7 +18,7 @@ public static class EmojiTypes
     /// </summary>
     /// <remarks>Ported from <c>EmojiType.Unicode</c>.</remarks>
     /// <param name="type">The reaction type.</param>
-    /// <returns>The emoji, or an empty string for a type with no fixed emoji (custom, unspecified and so on).</returns>
+    /// <returns>The emoji, or an empty string for a type with no fixed emoji, such as custom or unspecified.</returns>
     public static string Unicode(EmojiType type) => type switch
     {
         EmojiType.Like        => "\U0001F44D",
@@ -38,7 +38,7 @@ public static class EmojiTypes
     /// <summary>
     /// Gets the reaction type of an emoji.
     /// </summary>
-    /// <remarks>Ported from <c>UnicodeToEmojiType</c>: the heart counts with or without its variation selector.</remarks>
+    /// <remarks>Ported from <c>UnicodeToEmojiType</c>. The heart matches with or without its variation selector.</remarks>
     /// <param name="emoji">The emoji.</param>
     /// <returns>The type, or <see cref="EmojiType.Custom"/> for any other emoji.</returns>
     public static EmojiType FromUnicode(string emoji) => emoji switch
@@ -58,7 +58,7 @@ public static class EmojiTypes
     };
 
     /// <summary>
-    /// Makes the reaction data for an emoji: the emoji as given and its type.
+    /// Makes the reaction data for an emoji: the emoji as it is and its type.
     /// </summary>
     /// <remarks>Ported from <c>MakeReactionData</c>.</remarks>
     /// <param name="emoji">The emoji.</param>

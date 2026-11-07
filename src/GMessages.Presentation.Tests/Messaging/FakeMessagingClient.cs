@@ -4,7 +4,7 @@ using GMessages.Protocol.Proto;
 namespace GMessages.Presentation.Tests.Messaging;
 
 /// <summary>
-/// An in-memory <see cref="IMessagingClient"/>: tests set the answers and read what was sent.
+/// An in-memory <see cref="IMessagingClient"/>. A test sets the answers and reads what the client sent.
 /// </summary>
 internal sealed class FakeMessagingClient : IMessagingClient
 {
@@ -18,7 +18,10 @@ internal sealed class FakeMessagingClient : IMessagingClient
 
     public ListConversationsResponse ConversationsPage { get; set; } = new();
 
-    /// <summary>Pages the next list calls return, in order, before falling back to <see cref="ConversationsPage"/>.</summary>
+    /// <summary>
+    /// The next list calls return these pages in order. After the queue is empty, they return
+    /// <see cref="ConversationsPage"/>.
+    /// </summary>
     public Queue<ListConversationsResponse> NextPages { get; } = new();
 
     public ListMessagesResponse MessagesPage { get; set; } = new();
@@ -27,20 +30,22 @@ internal sealed class FakeMessagingClient : IMessagingClient
 
     public List<SendMessageRequest> Sent { get; } = [];
 
-    /// <summary>When set, sending throws this instead of answering.</summary>
+    /// <summary>When set, a send throws this exception and gives no answer.</summary>
     public Exception? SendThrows { get; set; }
 
     public List<(string ConversationId, string MessageId)> MarkedRead { get; } = [];
 
     public List<(ListConversationsRequest.Types.Folder Folder, long Count)> ListCalls { get; } = [];
 
-    /// <summary>The cursor each list call sent (null for the newest page), in call order.</summary>
+    /// <summary>The cursor of each list call, in call order. A null cursor asks for the newest page.</summary>
     public List<Cursor?> ListCursors { get; } = [];
 
-    /// <summary>When set, the next list call returns the page it had when called, but only after this completes.</summary>
+    /// <summary>
+    /// When set, the next list call picks its page at once and returns the page after this completes.
+    /// </summary>
     public TaskCompletionSource? ListGate { get; set; }
 
-    /// <summary>When set, listing conversations fails with this.</summary>
+    /// <summary>When set, a list call fails with this exception.</summary>
     public Exception? ListThrows { get; set; }
 
     public async Task<ListConversationsResponse> ListConversationsAsync(ListConversationsRequest.Types.Folder folder, long count, Cursor? cursor, CancellationToken ct)
@@ -63,7 +68,7 @@ internal sealed class FakeMessagingClient : IMessagingClient
         return page;
     }
 
-    /// <summary>When set, the next conversation fetch answers only after this completes.</summary>
+    /// <summary>When set, the next conversation fetch gives its answer after this completes.</summary>
     public TaskCompletionSource? GetConversationGate { get; set; }
 
     public async Task<Conversation?> GetConversationAsync(string conversationId, CancellationToken ct)
@@ -92,10 +97,10 @@ internal sealed class FakeMessagingClient : IMessagingClient
 
     public List<GetOrCreateConversationRequest> CreateCalls { get; } = [];
 
-    /// <summary>When set, creating a conversation fails with this.</summary>
+    /// <summary>When set, a create call fails with this exception.</summary>
     public Exception? CreateThrows { get; set; }
 
-    /// <summary>When set, the next create call answers only after this completes.</summary>
+    /// <summary>When set, the next create call gives its answer after this completes.</summary>
     public TaskCompletionSource? CreateGate { get; set; }
 
     public async Task<GetOrCreateConversationResponse> GetOrCreateConversationAsync(GetOrCreateConversationRequest request, CancellationToken ct)
@@ -112,10 +117,10 @@ internal sealed class FakeMessagingClient : IMessagingClient
 
     public List<UpdateConversationRequest> ConversationUpdates { get; } = [];
 
-    /// <summary>When set, conversation updates are answered with <c>Success = false</c>.</summary>
+    /// <summary>When set, each conversation update answers with <c>Success = false</c>.</summary>
     public bool RefuseUpdates { get; set; }
 
-    /// <summary>When set, the next conversation update answers only after this completes.</summary>
+    /// <summary>When set, the next conversation update gives its answer after this completes.</summary>
     public TaskCompletionSource? UpdateGate { get; set; }
 
     public async Task<UpdateConversationResponse> UpdateConversationAsync(UpdateConversationRequest request, CancellationToken ct)
@@ -130,18 +135,28 @@ internal sealed class FakeMessagingClient : IMessagingClient
         return new UpdateConversationResponse { Success = !RefuseUpdates };
     }
 
-    /// <summary>Pages returned by successive message fetches before falling back to <see cref="MessagesPage"/>.</summary>
+    /// <summary>
+    /// Successive message fetches return these pages. After the queue is empty, they return
+    /// <see cref="MessagesPage"/>.
+    /// </summary>
     public Queue<ListMessagesResponse> MessagePages { get; } = new();
 
-    /// <summary>When set, the next message fetch picks its page now but returns it only after this completes.</summary>
+    /// <summary>
+    /// When set, the next message fetch picks its page at once and returns the page after this completes.
+    /// </summary>
     public TaskCompletionSource? FetchGate { get; set; }
 
     public int FetchCount { get; private set; }
 
-    /// <summary>When set, message fetches with a cursor (older pages) fail with this.</summary>
+    /// <summary>
+    /// When set, a message fetch with a cursor, which asks for older pages, fails with this exception.
+    /// </summary>
     public Exception? OlderFetchThrows { get; set; }
 
-    /// <summary>When set, answers each message fetch from its count and cursor, as the phone does, ahead of the queue.</summary>
+    /// <summary>
+    /// When set, each message fetch gets its page from the count and cursor, as the phone does.
+    /// This takes priority over the queue.
+    /// </summary>
     public Func<long, Cursor?, ListMessagesResponse>? PageFor { get; set; }
 
     public async Task<ListMessagesResponse> FetchMessagesAsync(string conversationId, long count, Cursor? cursor, CancellationToken ct)
@@ -163,10 +178,10 @@ internal sealed class FakeMessagingClient : IMessagingClient
         return page;
     }
 
-    /// <summary>When set, the next send answers only after this completes.</summary>
+    /// <summary>When set, the next send gives its answer after this completes.</summary>
     public TaskCompletionSource? SendAnswerGate { get; set; }
 
-    /// <summary>When set, a send it answers true for throws an <see cref="HttpRequestException"/>.</summary>
+    /// <summary>When set, a send for which this returns true throws an <see cref="HttpRequestException"/>.</summary>
     public Func<SendMessageRequest, bool>? SendFails { get; set; }
 
     public async Task<SendMessageResponse> SendMessageAsync(SendMessageRequest request, CancellationToken ct)
@@ -189,7 +204,7 @@ internal sealed class FakeMessagingClient : IMessagingClient
 
     public List<SendReactionRequest> Reactions { get; } = [];
 
-    /// <summary>When set, sending a reaction fails with this.</summary>
+    /// <summary>When set, a reaction send fails with this exception.</summary>
     public Exception? ReactionThrows { get; set; }
 
     public Task<SendReactionResponse> SendReactionAsync(SendReactionRequest request, CancellationToken ct)
@@ -198,10 +213,10 @@ internal sealed class FakeMessagingClient : IMessagingClient
         return ReactionThrows is { } ex ? Task.FromException<SendReactionResponse>(ex) : Task.FromResult(ReactionAnswer);
     }
 
-    /// <summary>Every message ID a delete asked for.</summary>
+    /// <summary>Every message ID that a delete call asked for.</summary>
     public List<string> Deletes { get; } = [];
 
-    /// <summary>Whether the phone says it deleted the message.</summary>
+    /// <summary>Whether the phone reports that it deleted the message.</summary>
     public bool DeleteSucceeds { get; set; } = true;
 
     public Task<DeleteMessageResponse> DeleteMessageAsync(string messageId, CancellationToken ct)
@@ -228,13 +243,13 @@ internal sealed class FakeMessagingClient : IMessagingClient
 
     public ListTopContactsResponse TopContactsAnswer { get; set; } = new();
 
-    /// <summary>When set, the full contact list fails with this (the top contacts still load).</summary>
+    /// <summary>When set, the full contact list fails with this exception. The top contacts still load.</summary>
     public Exception? ContactsThrows { get; set; }
 
     public Task<ListContactsResponse> ListContactsAsync(CancellationToken ct) =>
         ContactsThrows is { } ex ? Task.FromException<ListContactsResponse>(ex) : Task.FromResult(ContactsAnswer);
 
-    /// <summary>When set, the next top contacts call answers only after this completes.</summary>
+    /// <summary>When set, the next top contacts call gives its answer after this completes.</summary>
     public TaskCompletionSource? TopContactsGate { get; set; }
 
     public async Task<ListTopContactsResponse> ListTopContactsAsync(CancellationToken ct)
@@ -248,14 +263,22 @@ internal sealed class FakeMessagingClient : IMessagingClient
         return TopContactsAnswer;
     }
 
-    /// <summary>Photos by participant ID; IDs not here get no thumbnail.</summary>
+    /// <summary>Photos by participant ID. A participant ID that is not here gets no thumbnail.</summary>
     public Dictionary<string, byte[]> Photos { get; } = [];
 
     public List<IReadOnlyList<string>> ThumbnailCalls { get; } = [];
 
-    public Task<GetThumbnailResponse> GetParticipantThumbnailAsync(IReadOnlyList<string> participantIds, CancellationToken ct)
+    /// <summary>When set, the next thumbnail call gives its answer after this completes.</summary>
+    public TaskCompletionSource? ThumbnailGate { get; set; }
+
+    public async Task<GetThumbnailResponse> GetParticipantThumbnailAsync(IReadOnlyList<string> participantIds, CancellationToken ct)
     {
         ThumbnailCalls.Add([.. participantIds]);
+        if (ThumbnailGate is { } gate)
+        {
+            ThumbnailGate = null;
+            await gate.Task;
+        }
 
         var response = new GetThumbnailResponse();
         foreach (string id in participantIds.Where(Photos.ContainsKey))
@@ -263,15 +286,15 @@ internal sealed class FakeMessagingClient : IMessagingClient
             response.Thumbnail.Add(new GetThumbnailResponse.Types.Thumbnail { Identifier = id, Data = new ThumbnailData { ImageBuffer = Google.Protobuf.ByteString.CopyFrom(Photos[id]) } });
         }
 
-        return Task.FromResult(response);
+        return response;
     }
 
     public Task<GetThumbnailResponse> GetContactThumbnailAsync(IReadOnlyList<string> contactIds, CancellationToken ct) => throw new NotSupportedException();
 
-    /// <summary>Uploaded files by media ID (plain bytes), and what downloads answer with.</summary>
+    /// <summary>Uploaded files by media ID, as plain bytes. A download answers with these bytes.</summary>
     public Dictionary<string, byte[]> Media { get; } = [];
 
-    /// <summary>When set, uploading throws this instead of answering.</summary>
+    /// <summary>When set, an upload throws this exception and gives no answer.</summary>
     public Exception? UploadThrows { get; set; }
 
     public List<(string MessageId, string ActionMessageId)> FullSizeCalls { get; } = [];
@@ -289,10 +312,13 @@ internal sealed class FakeMessagingClient : IMessagingClient
         return Task.FromResult(new MediaContent { MediaID = id, MediaName = fileName, MimeType = mime, Size = plain.Length, Format = GMessages.Protocol.MediaFormatsMap.FromMime(mime) });
     }
 
-    /// <summary>Every media ID a download asked for, in order (downloads run on the thread pool, so lock it to read).</summary>
+    /// <summary>
+    /// Every media ID that a download asked for, in order.
+    /// Downloads run on the thread pool, so a reader must lock this list.
+    /// </summary>
     public List<string> DownloadCalls { get; } = [];
 
-    /// <summary>When set, downloads wait for it before answering.</summary>
+    /// <summary>When set, a download waits for this before it answers.</summary>
     public TaskCompletionSource? DownloadGate { get; set; }
 
     public async Task<byte[]> DownloadMediaAsync(string mediaId, ReadOnlyMemory<byte> key, CancellationToken ct)

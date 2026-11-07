@@ -6,7 +6,7 @@ namespace GMessages.Presentation.Tests.Messaging;
 [TestClass]
 public sealed class EmojiCatalogTests
 {
-    // Code Points In The Catalog That Show As Plain Text Unless U+FE0F Follows (Unicode's Emoji_Presentation=No)
+    // These catalog code points show as plain text unless U+FE0F follows. Unicode sets Emoji_Presentation=No for them.
     private static readonly HashSet<int> TextByDefault =
     [
         0x00A9, 0x00AE, 0x0023, 0x203C, 0x2049, 0x2122, 0x2328, 0x2600, 0x2603, 0x2611, 0x261D, 0x262E, 0x262F, 0x267B,
@@ -58,7 +58,6 @@ public sealed class EmojiCatalogTests
         }
     }
 
-    // The Emoji A Search Finds, In Order
     private static List<string> Found(string query) =>
         [.. EmojiCatalog.Search(query).SelectMany(c => c.Emoji).Select(e => e.Emoji)];
 }

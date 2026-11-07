@@ -19,9 +19,9 @@ namespace GMessages.Protocol.Tests.Pairing;
 /// against Go's <c>pair_google.go</c>, using <c>pairing.json</c>.
 /// </summary>
 /// <remarks>
-/// Normalized fields: the 32 random bytes of the client init (copied from Go), and the random request IDs of the
-/// client init, client finished and unpair requests (copied from Go). The unpair payload is encrypted with a random
-/// IV, so both sides are decrypted with the golden key and compared, then Go's ciphertext is copied over.
+/// Some fields are random. The test copies them from Go: the 32 random bytes of the client init, and the request IDs
+/// of the client init, client finished and unpair requests. The unpair payload uses a random IV. The test
+/// decrypts both payloads with the golden key and compares them. It then copies the Go ciphertext over.
 /// See <see href="https://github.com/mautrix/gmessages/blob/ba33f4875a491f5cb47db8a6baf42a8869f5f383/pkg/libgm/pair_google.go"/>.
 /// </remarks>
 [TestClass]
@@ -51,7 +51,7 @@ public class PairingGoldenTests
     private static GaiaPairingResponseContainer Container(JsonElement c) => GaiaPairingResponseContainer.Parser.ParseFrom(Golden.Hex(c.GetProperty("containerHex")));
 
     /// <summary>
-    /// Both emoji lists equal Go's, item by item, compared ordinally (ZWJ sequences and missing variation selectors included).
+    /// Both emoji lists equal the Go lists, item by item, in an ordinal comparison. The lists include ZWJ sequences and emoji without a variation selector.
     /// </summary>
     [TestMethod]
     public void EmojiLists_EqualGo_OrdinalPerItem()
@@ -68,7 +68,7 @@ public class PairingGoldenTests
     }
 
     /// <summary>
-    /// The client finished payload is deterministic and equals Go's bytes.
+    /// The client finished payload is deterministic and equals the Go bytes.
     /// </summary>
     [TestMethod]
     public void FinishPayload_EqualsGoBytes()
@@ -82,7 +82,7 @@ public class PairingGoldenTests
     }
 
     /// <summary>
-    /// The client init payload equals Go's once Go's 32 random bytes are copied in.
+    /// The client init payload equals the Go payload after the test copies in the 32 random bytes from Go.
     /// </summary>
     [TestMethod]
     public void InitPayload_EqualsGo_ExceptRandom()
@@ -120,7 +120,7 @@ public class PairingGoldenTests
     }
 
     /// <summary>
-    /// For all four version combinations, the request keys match the ones Go's FinishGaiaPairing stored.
+    /// For all four version combinations, the request keys match the keys that the Go FinishGaiaPairing stored.
     /// </summary>
     [TestMethod]
     public void DeriveRequestKeys_MatchGo_AllFourCases()
@@ -138,15 +138,15 @@ public class PairingGoldenTests
     }
 
     /// <summary>
-    /// For all four version combinations, FinishAsync stores the keys, pairing ID and phone ID and returns the phone ID
-    /// Go's FinishGaiaPairing produced.
+    /// For all four version combinations, FinishAsync stores the keys, the pairing ID and the phone ID. It returns the
+    /// phone ID that the Go FinishGaiaPairing returned.
     /// </summary>
     [TestMethod]
     public async Task FinishAsync_StoresKeysAndIds_MatchGo_AllFourCases()
     {
         foreach (JsonElement c in Go.GetProperty("serverInit").EnumerateArray())
         {
-            // Rig: The Phone Accepts The Finish With An Empty Answer, Like The Export
+            // The fake phone accepts the finish with an empty answer, as in the Go export.
             AuthData auth   = AuthDataGoldenTests.BuildGolden();
             var time        = new SignalingTimeProvider();
             var handler     = new FakeHttpHandler { Time = time };
@@ -172,7 +172,7 @@ public class PairingGoldenTests
     }
 
     /// <summary>
-    /// Every invalid server init fails with Go's error text.
+    /// Every invalid server init fails with the Go error text.
     /// </summary>
     [TestMethod]
     public void ProcessServerInit_InvalidInputs_FailLikeGo()
@@ -188,14 +188,14 @@ public class PairingGoldenTests
     }
 
     /// <summary>
-    /// The client init, client finished, cancel and unpair requests match Go's.
+    /// The client init, client finished, cancel and unpair requests match the Go requests.
     /// </summary>
     [TestMethod]
     public async Task PairingRequests_MatchGo()
     {
         JsonElement go = Go.GetProperty("requests");
 
-        // Rig: Every Send Gets Go's Version-2 Server Init Back, Like The Export
+        // Every send gets the Go version-2 server init back, as in the Go export.
         AuthData auth   = AuthDataGoldenTests.BuildGolden();
         var time        = new SignalingTimeProvider();
         var handler     = new FakeHttpHandler { Time = time };
@@ -209,7 +209,6 @@ public class PairingGoldenTests
         };
         (GaiaPairing pairing, _) = GaiaPairingTests.CreatePairing(http, rpc, auth, time);
 
-        // Send Like The Export
         PairingSession session = SessionWithGoInit();
         await pairing.SendGaiaPairingMessageAsync(session, ActionType.CreateGaiaPairingClientInit, session.InitPayload, CancellationToken.None);
         await pairing.SendGaiaPairingMessageAsync(session, ActionType.CreateGaiaPairingClientFinished, session.FinishPayload, CancellationToken.None);
@@ -227,7 +226,7 @@ public class PairingGoldenTests
             var goData    = OutgoingRPCData.Parser.ParseFrom(goMsg.Data.MessageData);
             var csData    = OutgoingRPCData.Parser.ParseFrom(csMsg.Data.MessageData);
 
-            // Normalize Random Request IDs (Cancel Uses The Fixed Session UUID)
+            // The cancel request uses the fixed session UUID, so only the other requests have random IDs.
             if (names[i] != "cancel")
             {
                 Assert.IsTrue(Guid.TryParse(csData.RequestID, out _), names[i]);
@@ -236,7 +235,7 @@ public class PairingGoldenTests
                 csMsg.Auth.RequestID = goMsg.Auth.RequestID;
             }
 
-            // Normalize The Random IV: Plaintexts Must Match
+            // The IV is random, so compare the plaintexts and copy the Go ciphertext.
             if (goData.EncryptedProtoData.Length > 0)
             {
                 CollectionAssert.AreEqual(auth.RequestCrypto.Decrypt(goData.EncryptedProtoData.Span), auth.RequestCrypto.Decrypt(csData.EncryptedProtoData.Span), names[i]);
@@ -250,7 +249,7 @@ public class PairingGoldenTests
     }
 
     /// <summary>
-    /// Every finish error code maps to the same failure and message as Go's FinishGaiaPairing.
+    /// Every finish error code maps to the same failure and message as in the Go FinishGaiaPairing.
     /// </summary>
     [TestMethod]
     public void FinishErrorCodes_MapLikeGo()
@@ -263,7 +262,7 @@ public class PairingGoldenTests
 
             string code = f.GetProperty("codeName").GetString()!;
             Assert.AreEqual(Enum.Parse<PairingFailure>(f.GetProperty("failure").GetString()!), ex.Failure, code);
-            // Owner Wording: the two phone-cancel messages deliberately differ from Go's text
+            // The owner chose different wording for the two phone-cancel messages than the Go text.
             string expected = f.GetProperty("error").GetString()!.Replace("user cancelled pairing on phone", GaiaPairing.CanceledOnPhoneMessage, StringComparison.Ordinal);
             Assert.AreEqual(expected, ex.Message, code);
         }

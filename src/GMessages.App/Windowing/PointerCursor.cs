@@ -4,11 +4,13 @@ using Windows.UI.Xaml;
 namespace GMessages.App.Windowing;
 
 /// <summary>
-/// The pointer's shape over an element: WinUI 3's UIElement.ProtectedCursor, which system XAML doesn't have.
+/// Sets the shape of the pointer over an element, as UIElement.ProtectedCursor of WinUI 3 does. System XAML does not
+/// have that property.
 /// </summary>
 /// <remarks>
-/// Set with Win32 SetCursor each time the pointer moves over the element. The island puts the arrow back on the next
-/// WM_SETCURSOR, so it's set again on every move; leaving the element leaves the arrow.
+/// The class calls Win32 SetCursor each time the pointer moves over the element. The island sets the arrow again on
+/// the next WM_SETCURSOR, so the class sets the cursor again on each move. When the pointer leaves the element, the
+/// arrow stays.
 /// </remarks>
 internal static partial class PointerCursor
 {

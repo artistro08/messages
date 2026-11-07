@@ -1,4 +1,6 @@
 using GMessages.Presentation.Messaging;
+using Windows.Foundation;
+using Windows.System;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Automation;
 using Windows.UI.Xaml.Automation.Peers;
@@ -6,32 +8,33 @@ using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Input;
 using Windows.UI.Xaml.Media;
 using Path = Windows.UI.Xaml.Shapes.Path;
-using Windows.System;
 
 namespace GMessages.App.Views.Controls;
 
 /// <summary>
-/// A voice message's waveform: a row of rounded bars, the played part bright and the rest dim.
+/// Draws the waveform of a voice message as a row of rounded bars. The played part is bright, and the rest is dim.
 /// </summary>
 /// <remarks>
 /// <para>
-/// <see cref="Show"/> draws a message's bars (see <see cref="VoiceWave"/>) and <see cref="ShowProgress"/> fills them
-/// as it plays; a click raises <see cref="SeekRequested"/> with where it landed. While recording, <see cref="Push"/>
-/// adds the newest input level on the right and moves the rest left, for a live waveform.
+/// <see cref="Show"/> draws the bars of a message from <see cref="VoiceWave"/>. <see cref="ShowProgress"/> fills them
+/// as the message plays. A click raises <see cref="SeekRequested"/> with its place. During a recording,
+/// <see cref="Push"/> adds the newest input level on the right and moves the rest left for a live waveform.
 /// </para>
 /// <para>
-/// Once a message's <see cref="Length"/> is set, the waveform takes keyboard focus: Left and Right seek 5 seconds back
-/// or on, and Home and End jump to the start and the end. Its UI Automation name is its value, how far it has played
-/// over its length (<c>0:01 / 0:03</c>), named when shown, paused or sought (not on every tick while it plays).
+/// After the <see cref="Length"/> of a message is set, the waveform takes keyboard focus. Left and Right seek 5 seconds
+/// back or forward. Home and End jump to the start and the end. The UI Automation name of the waveform is its value:
+/// the played time over the length, such as <c>0:01 / 0:03</c>. The name changes on show, pause and seek, but not on
+/// each tick of the playback.
 /// </para>
 /// <para>
-/// The bars take <see cref="BarBrush"/>: the primary text brush, or the on-accent text brush on an SMS bubble (so they read on
-/// every bubble color and in high contrast).
+/// The bars take <see cref="BarBrush"/>: the primary text brush, or the on-accent text brush on an SMS bubble. Thus
+/// the bars stay visible on each bubble color and in high contrast.
 /// </para>
 /// <para>
-/// The bars are drawn, not made of elements: each is a line with round ends in one of two paths, the played one bright and
-/// the rest dim, so a waveform is two elements however many bars it has. Playing moves only the bars it passes from the
-/// dim path to the bright one. Each path has its own geometry (Windows can't share one between paths).
+/// The bars are lines in paths, not elements. Each bar is a round-ended line in the bright played path or in the dim
+/// path. Thus a waveform is 2 elements for any number of bars. The playback moves only the bars that it
+/// passes from the dim path to the bright path. Each path has its own geometry, because Windows cannot share a geometry
+/// between paths.
 /// </para>
 /// </remarks>
 public sealed partial class Waveform : UserControl
@@ -40,23 +43,25 @@ public sealed partial class Waveform : UserControl
     public static readonly DependencyProperty BarBrushProperty =
         DependencyProperty.Register(nameof(BarBrush), typeof(Brush), typeof(Waveform), new PropertyMetadata(null, OnBarBrushChanged));
 
-    // A Bar: Its Width And The Gap After It, And The Shortest A Bar Gets (A Share Of The Height), In Effective Pixels
+    // A bar has a width and a gap after it in effective pixels. MinBar is the shortest bar as a share of the height.
     private const double BarWidth   = 3;
     private const double BarGap     = 2;
     private const double MinBar     = 0.1;
     private const double WaveHeight = 28;
 
-    // The Part Not Played Yet Shows This Dim
+    // The part that did not play yet shows at this opacity.
     private const double Unplayed = 0.4;
 
-    // The Shortest Line A Bar Draws: Its Round Ends Make Up The Rest. Never Quite Zero, So No Line Is Empty
+    // MinLine is the shortest line of a bar, and the round ends make the rest of the bar. The value is not zero, so no
+    // line is empty.
     private const double MinLine = 0.01;
 
-    // How Far Left And Right Seek
+    // Left and Right seek by this step.
     private static readonly TimeSpan KeyStep = TimeSpan.FromSeconds(5);
 
-    // Bars: Two Paths The Full Height (So The Tallest Bar Never Moves Them), The Played Bars In The Bright One. Every Bar Is
-    // Centered Unrounded, So It Grows Up And Down From The Same Center Line (Snapping To Whole Pixels Nudged Each By Up To One)
+    // The 2 paths have the full height, so the tallest bar never moves them. The bright path holds the played bars.
+    // Each bar centers with no rounding, so it grows up and down from the same center line. A snap to whole pixels
+    // moved each bar by up to 1 px.
     private readonly GeometryGroup _playedBars   = new();
     private readonly GeometryGroup _unplayedBars = new();
     private readonly Path _played;
@@ -67,11 +72,11 @@ public sealed partial class Waveform : UserControl
     private double _progress;
     private TimeSpan _length;
 
-    // A Click Or Key Asked For A Seek: The Next Progress Names The Waveform's New Value
+    // A click or a key asked for a seek, so the next progress names the new value of the waveform.
     private bool _seeking;
 
     /// <summary>
-    /// Creates the waveform: flat bars, nothing played.
+    /// Creates the waveform with flat bars and nothing played.
     /// </summary>
     public Waveform()
     {
@@ -79,7 +84,7 @@ public sealed partial class Waveform : UserControl
         _unplayed = NewPath(_unplayedBars, Unplayed);
         SetBarCount(VoiceWave.BarCount);
 
-        // Transparent, So A Click Between The Bars Still Seeks
+        // The transparent background lets a click between the bars seek.
         Content               = new Grid { Height = WaveHeight, Background = new SolidColorBrush(Windows.UI.Colors.Transparent), Children = { _unplayed, _played } };
         IsTabStop             = false;
         UseSystemFocusVisuals = true;
@@ -89,18 +94,21 @@ public sealed partial class Waveform : UserControl
     }
 
     /// <summary>
-    /// Gets or sets whether the bars fill the waveform's width (the live waveform while recording): as many bars as fit,
-    /// added or dropped on the left as the width changes, the newest kept on the right. Off, it draws a message's
-    /// <see cref="VoiceWave.BarCount"/> bars at their own width.
+    /// Gets or sets whether the bars fill the width of the waveform, as the live waveform does during a recording.
     /// </summary>
+    /// <remarks>
+    /// When the value is true, the waveform draws as many bars as fit. A width change adds or drops bars on the left
+    /// and keeps the newest bar on the right. When the value is false, the waveform draws the
+    /// <see cref="VoiceWave.BarCount"/> bars of a message at their own width.
+    /// </remarks>
     public bool FillsWidth { get; set; }
 
     /// <summary>
-    /// Raised by a click on the waveform, with where it landed: from 0 (the start) to 1 (the end).
+    /// Raised by a click or a seek key with the new place: 0 at the start, 1 at the end.
     /// </summary>
     public event EventHandler<double>? SeekRequested;
 
-    /// <summary>Gets or sets the bars' brush.</summary>
+    /// <summary>Gets or sets the brush of the bars.</summary>
     public Brush? BarBrush
     {
         get => (Brush?)GetValue(BarBrushProperty);
@@ -108,9 +116,12 @@ public sealed partial class Waveform : UserControl
     }
 
     /// <summary>
-    /// Gets or sets how long the message plays: zero (the live waveform, or still loading) leaves it out of keyboard
-    /// focus; a length lets the keys seek, and names its value.
+    /// Gets or sets the play length of the message.
     /// </summary>
+    /// <remarks>
+    /// Zero keeps the waveform out of keyboard focus, as for the live waveform or during a load. A length lets the keys
+    /// seek and names the value.
+    /// </remarks>
     public TimeSpan Length
     {
         get => _length;
@@ -123,7 +134,7 @@ public sealed partial class Waveform : UserControl
     }
 
     /// <summary>
-    /// Draws a message's bars, nothing played; null draws flat bars (still loading).
+    /// Draws the bars of a message with nothing played. Null draws flat bars during a load.
     /// </summary>
     /// <param name="peaks">The bars, from 0 to 1, or null.</param>
     public void Show(float[]? peaks)
@@ -136,13 +147,13 @@ public sealed partial class Waveform : UserControl
     }
 
     /// <summary>
-    /// Fills the bars up to how much has played.
+    /// Fills the bars up to the played share.
     /// </summary>
     /// <remarks>
-    /// The waveform's name (its value) follows only while it isn't playing, or right after a seek: a name changed every
-    /// tick would have a screen reader read it on and on.
+    /// The name of the waveform is its value. The name changes only while the message does not play, or directly after
+    /// a seek. A screen reader reads each name change. Thus a change on each tick makes it read the name all the time.
     /// </remarks>
-    /// <param name="share">How much has played, from 0 to 1.</param>
+    /// <param name="share">The played share, from 0 to 1.</param>
     /// <param name="playing">True while it plays.</param>
     public void ShowProgress(double share, bool playing)
     {
@@ -156,7 +167,7 @@ public sealed partial class Waveform : UserControl
     }
 
     /// <summary>
-    /// Adds the newest input level on the right, moving the others left (the live waveform while recording).
+    /// Adds the newest input level on the right and moves the others left, for the live waveform during a recording.
     /// </summary>
     /// <param name="level">The level, from 0 to 1.</param>
     public void Push(float level)
@@ -168,11 +179,11 @@ public sealed partial class Waveform : UserControl
     }
 
     /// <summary>
-    /// Measures how far the bars' centers sit from the waveform's center line, as last laid out.
+    /// Measures the distance of the bar centers from the center line of the waveform in the last layout.
     /// </summary>
     /// <remarks>
-    /// Every bar grows up and down from one fixed line, so this stays at zero however loud it gets. The UI tests read it
-    /// (through a test hook) while recording; the bars themselves aren't in the UI Automation tree.
+    /// Each bar grows up and down from 1 fixed line, so the distance stays at zero for all levels. The UI tests read it
+    /// through a test hook during a recording. The bars are not in the UI Automation tree.
     /// </remarks>
     /// <returns>The largest distance, in effective pixels.</returns>
     internal double CenterDrift()
@@ -192,15 +203,18 @@ public sealed partial class Waveform : UserControl
     protected override AutomationPeer OnCreateAutomationPeer() => new FrameworkElementAutomationPeer(this);
 
     /// <summary>
-    /// Asks for the bars' height only when <see cref="FillsWidth"/> is on, so the slot's width decides how many bars fit
-    /// (asking for the bars' own width would keep a shrinking window from ever dropping one).
+    /// Asks only for the height of the bars when <see cref="FillsWidth"/> is on. Thus the width of the slot sets the
+    /// number of bars.
     /// </summary>
-    /// <param name="availableSize">The space on offer.</param>
-    /// <returns>The size wanted.</returns>
-    protected override Windows.Foundation.Size MeasureOverride(Windows.Foundation.Size availableSize)
+    /// <remarks>
+    /// A request for the width of the bars keeps the slot as wide as the bars. Then a smaller window never drops a bar.
+    /// </remarks>
+    /// <param name="availableSize">The available space.</param>
+    /// <returns>The desired size.</returns>
+    protected override Size MeasureOverride(Size availableSize)
     {
-        Windows.Foundation.Size wanted = base.MeasureOverride(availableSize);
-        return FillsWidth ? new Windows.Foundation.Size(0, wanted.Height) : wanted;
+        Size wanted = base.MeasureOverride(availableSize);
+        return FillsWidth ? new Size(0, wanted.Height) : wanted;
     }
 
     private static void OnBarBrushChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -210,7 +224,8 @@ public sealed partial class Waveform : UserControl
         wave._unplayed.Stroke = wave.BarBrush;
     }
 
-    // A Path Of Bars: Lines As Thick As A Bar, With Round Ends, Left-Aligned In The Row At Its Full Height
+    // Creates a path of bars. Its lines are as thick as a bar and have round ends. The path aligns left in the row at
+    // the full height.
     private static Path NewPath(GeometryGroup bars, double opacity) => new()
     {
         Data                = bars,
@@ -223,7 +238,7 @@ public sealed partial class Waveform : UserControl
         UseLayoutRounding   = false,
     };
 
-    // Filling The Width: As Many Bars As Fit Once The Width Changes
+    // When the bars fill the width, a width change sets as many bars as fit.
     private void OnSizeChanged(object sender, SizeChangedEventArgs e)
     {
         if (!FillsWidth)
@@ -234,8 +249,8 @@ public sealed partial class Waveform : UserControl
         SetBarCount(Math.Max(1, (int)((e.NewSize.Width + BarGap) / (BarWidth + BarGap))));
     }
 
-    // Rebuilds The Bars With This Many, Keeping The Newest Peaks On The Right, All Dim Until Drawn. The Paths Are As Wide
-    // As The Bars With Their Gaps
+    // Builds the bars again with this count and keeps the newest peaks on the right. All bars are dim until the next
+    // draw. The paths are as wide as the bars with their gaps.
     private void SetBarCount(int count)
     {
         if (count == _bars.Length)
@@ -262,8 +277,9 @@ public sealed partial class Waveform : UserControl
         Draw();
     }
 
-    // Each Bar's Height From Its Peak (Never Below The Floor), Grown Up And Down From The Center Line: A Line Through Its
-    // Middle, Short Of Its Height By The Round Ends (Half A Bar's Width Each). Then The Played Ones Bright
+    // Sets the height of each bar from its peak, never below the floor. Each bar grows up and down from the center
+    // line. Its line runs through its middle and is shorter than its height by the round ends. Each round end is half
+    // the bar width. Then the played bars become bright.
     private void Draw()
     {
         for (int i = 0; i < _bars.Length; i++)
@@ -271,14 +287,14 @@ public sealed partial class Waveform : UserControl
             double height       = Math.Max(MinBar, _peaks[i]) * WaveHeight;
             double reach        = Math.Max(MinLine, height - BarWidth) / 2;
             double x            = (i * (BarWidth + BarGap)) + (BarWidth / 2);
-            _bars[i].StartPoint = new Windows.Foundation.Point(x, (WaveHeight / 2) - reach);
-            _bars[i].EndPoint   = new Windows.Foundation.Point(x, (WaveHeight / 2) + reach);
+            _bars[i].StartPoint = new Point(x, (WaveHeight / 2) - reach);
+            _bars[i].EndPoint   = new Point(x, (WaveHeight / 2) + reach);
         }
 
         DrawPlayed();
     }
 
-    // Moves Only The Bars Whose Played State Changed Between The Dim Path And The Bright One
+    // Moves only the bars with a changed played state between the dim path and the bright path.
     private void DrawPlayed()
     {
         int played = (int)Math.Round(_progress * _bars.Length);
@@ -297,7 +313,7 @@ public sealed partial class Waveform : UserControl
         }
     }
 
-    // Its Value For Screen Readers: Played Over Length
+    // Sets the value for screen readers: the played time over the length.
     private void ShowName()
     {
         if (_length > TimeSpan.Zero)
@@ -306,7 +322,7 @@ public sealed partial class Waveform : UserControl
         }
     }
 
-    // Left And Right Seek 5 Seconds; Home And End Jump To The Start And The End
+    // Left and Right seek 5 seconds. Home and End jump to the start and the end.
     private void OnKeyDown(object sender, KeyRoutedEventArgs e)
     {
         if (_length <= TimeSpan.Zero)
@@ -332,15 +348,18 @@ public sealed partial class Waveform : UserControl
         SeekRequested?.Invoke(this, Math.Clamp(to, 0, 1));
     }
 
+    // A quote or a caption can make the bubble wider than the bars. The bars stay at the left, so the share is of their
+    // width, not of the control width.
     private void OnTapped(object sender, TappedRoutedEventArgs e)
     {
-        if (ActualWidth <= 0)
+        double x = e.GetPosition(this).X;
+        if (_played.Width is not > 0 || x > _played.Width)
         {
             return;
         }
 
         e.Handled = true;
         _seeking  = true;
-        SeekRequested?.Invoke(this, Math.Clamp(e.GetPosition(this).X / ActualWidth, 0, 1));
+        SeekRequested?.Invoke(this, Math.Clamp(x / _played.Width, 0, 1));
     }
 }

@@ -7,8 +7,8 @@
     xmlns:muxc="using:Microsoft.UI.Xaml.Controls"
     FontFamily="{ThemeResource ContentControlThemeFontFamily}">
 
-    <!-- The Window's Content: Mica comes from the window itself (DWM, see XamlWindow), so nothing here paints a background.
-         Its font (App.xaml's, with the Fluent emoji) passes down to every unstyled text -->
+    <!-- The window itself draws the Mica through DWM, so nothing here paints a background. See XamlWindow. The font
+         of App.xaml with the Fluent emoji passes down to all unstyled text. -->
 
 
     <Grid
@@ -19,24 +19,26 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- Title Bar: ☰ on the left (the title bar's own Back in its place on Settings and Spam & blocked), the title from
-             code, the profile picture (the owner's photo, else the default glyph) beside the caption buttons. Tall (48 px)
-             like the caption buttons, which the window asks for in code. ☰ and the profile hide while pairing. ☰ and Back
-             are the title bar's own buttons, as in the WinUI Gallery: Windows' spacing, hover and press fills, and the
-             animated icons (the lines squeeze, the arrow nudges). WinUI 2.8 has no TitleBar, so this is WinUI 3's rebuilt
-             (controls:TitleBar), with the caption buttons drawn in it. Leaf Calendar's layout: the content fills the space
-             up to the caption buttons, with a narrow drag strip -->
+        <!-- The title bar shows ☰ on the left. On Settings and Spam & blocked, Back of the title bar takes its place.
+             The code sets the title. The profile picture sits beside the caption buttons. It shows the photo of the
+             owner, else the default glyph. The bar is 48 px tall like the caption buttons, and the window asks for
+             that in code. ☰ and the profile hide while pairing. ☰ and Back are buttons of the title bar itself, as in
+             the WinUI Gallery. They have the spacing, the hover and press fills and the animated icons of Windows.
+             The lines squeeze, and the arrow nudges. WinUI 2.8 has no TitleBar, so controls:TitleBar rebuilds the
+             TitleBar of WinUI 3 and draws the caption buttons. The layout comes from Leaf Calendar. The content fills
+             the space up to the caption buttons, with a narrow drag strip. -->
         <controls:TitleBar
             x:Name="AppTitleBar"
             AutomationProperties.AutomationId="Main.TitleBar"
             BackRequested="OnTitleBarBackRequested"
             PaneToggleRequested="OnPaneToggleRequested">
 
-            <!-- Profile Button: Archived, Spam & blocked, Settings and Unpair. Just the picture, no hover or pressed background. It
-                 sits at the right end of the title bar's content, which fills the space up to the caption buttons, so it
-                 moves with the window edge in the same layout pass (Leaf Calendar's way). Only the picture takes clicks;
-                 the empty content around it drags the window. The icon button style's clear 1 px border plus 7 px padding
-                 keep the picture 8 px from each side, where it sat before -->
+            <!-- The profile button opens Archived, Spam & blocked, Settings and Unpair. It shows only the picture, with
+                 no hover or pressed background. It sits at the right end of the content of the title bar. The content
+                 fills the space up to the caption buttons. Thus the button moves with the window edge in the same
+                 layout pass, as in Leaf Calendar. Only the picture takes clicks, and the empty content around it drags
+                 the window. The icon button style has a clear 1 px border, and the button adds 7 px padding. Thus
+                 the picture stays 8 px from each side, where it sat before. -->
             <controls:TitleBar.MainContent>
                 <Grid x:Name="TitleBarContent">
                     <Button
@@ -83,14 +85,14 @@
                                     IsEnabled="{x:Bind local:SettingsPage.Not(Settings.IsUnpairing), Mode=OneWay}"
                                     Text="Unpair"
                                     Visibility="{x:Bind Settings.CanUnpair, Mode=OneWay}">
-                                    <!-- Phone With A Slash: Segoe Fluent Icons has none, so Material Symbols' mobile_off (Apache 2.0),
-                                         outlined, drawn on 16 px -->
+                                    <!-- Segoe Fluent Icons has no phone with a slash. Thus the icon is mobile_off
+                                         of Material Symbols, Apache 2.0, outlined and drawn on 16 px. -->
                                     <MenuFlyoutItem.Icon>
                                         <PathIcon Data="M13.667 15.533 0.467 2.333 l0.933 -0.933 L14.6 14.6 l-0.933 0.933ZM3.333 4.283 l1.333 1.333 v6.383 h6.4 l1.6 1.6 v0.4 q0 0.55 -0.392 0.942 T11.333 15.333 H4.667 q-0.55 0 -0.942 -0.392 T3.333 14 v-9.717Zm1.333 9.05 v0.667 h6.667 v-0.667 H4.667Zm1.217 -9.333 -1.317 -1.333 h6.767 v-0.667 H3.9 l-0.467 -0.467 q0.167 -0.383 0.492 -0.625 T4.667 0.667 h6.667 q0.55 0 0.942 0.392 T12.667 2 v8.767 l-1.333 -1.333 v-5.433 H5.883Zm2.117 9.333Zm-0.383 -10.667Z" />
                                     </MenuFlyoutItem.Icon>
                                 </MenuFlyoutItem>
 
-                                <!-- Quit: only with the tray icon off, since the tray's menu quits otherwise -->
+                                <!-- Quit shows only with the tray icon off. Otherwise the menu of the tray quits. -->
                                 <MenuFlyoutItem
                                     AutomationProperties.AutomationId="Main.Profile.Quit"
                                     Click="OnQuitClick"
@@ -107,11 +109,11 @@
             </controls:TitleBar.MainContent>
         </controls:TitleBar>
 
-        <!-- Body: the pairing steps until paired, then the chats (set from code) -->
+        <!-- The code puts the pairing steps in the body until pairing ends, then the chats. -->
         <Border x:Name="BodyHost" Grid.Row="1" />
 
-        <!-- Settings: over the whole body while open, entering with the standard page entrance; the title bar's Back closes
-             it (set from code) -->
+        <!-- The open settings page covers the whole body and enters with the standard page entrance. Back of the
+             title bar closes it through the code. -->
         <Border x:Name="SettingsHost" Grid.Row="1">
             <Border.ChildTransitions>
                 <TransitionCollection>
@@ -120,11 +122,12 @@
             </Border.ChildTransitions>
         </Border>
 
-        <!-- Photo Viewer: a clicked photo over the whole window, the title bar row too, with its toolbar in that row -->
+        <!-- The photo viewer shows a clicked photo over the whole window, the title bar row included. Its toolbar
+             sits in that row. -->
         <controls:PhotoViewer x:Name="PhotoViewer" Grid.RowSpan="2" />
 
-        <!-- Download Confirm: "Saved to Downloads" with Show in folder, at the bottom over everything; closes itself after a few
-             seconds -->
+        <!-- The download confirmation shows "Saved to Downloads" with Show in folder, at the bottom over everything.
+             It closes itself after a few seconds. -->
         <muxc:InfoBar
             x:Name="DownloadedBar"
             Grid.Row="1"
@@ -143,10 +146,9 @@
             </muxc:InfoBar.ActionButton>
         </muxc:InfoBar>
 
-        <!-- Unpair Confirm -->
         <controls:UnpairDialog x:Name="UnpairDialog" Grid.Row="1" />
 
-        <!-- Shortcut Help (Ctrl + ?) -->
+        <!-- Ctrl + ? opens the shortcut help. -->
         <local:ShortcutHelpDialog x:Name="ShortcutDialog" Grid.Row="1" />
     </Grid>
 </UserControl>

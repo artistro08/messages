@@ -5,20 +5,12 @@ using GMessages.Presentation.Messaging;
 namespace GMessages.Presentation.Main;
 
 /// <summary>
-/// Live updates for the open chat: arriving messages, typing, resyncs, conversation changes and Dispose.
+/// Keeps the open chat current with the live updates: new messages, typing, resyncs, changes to the conversation and
+/// <see cref="Dispose"/>.
 /// </summary>
-/// <remarks>
-/// Part of <see cref="ChatViewModel"/>; the other members are in ChatViewModel.cs.
-/// </remarks>
 public sealed partial class ChatViewModel
 {
-    // "Ann is typing", For Screen Readers
     private static readonly CompositeFormat TypingFormat = CompositeFormat.Parse(ChatCopy.TypingFormat);
-
-
-    // =========================================================================
-    // LIVE UPDATES
-    // =========================================================================
 
     private void OnMessageArrived(object? sender, MessageArrivedEventArgs e)
     {
@@ -28,7 +20,8 @@ public sealed partial class ChatViewModel
             return;
         }
 
-        // A System Line Can Switch Encryption On Or Off (The Lock); Only A Group's Name Change Shows, As A Line
+        // A system line can start or stop the encryption, and thus the lock. Only the name change of a group shows as a
+        // line.
         if (m.Kind == MessageKind.Tombstone)
         {
             IsEncrypted = _store.IsEncrypted(ConversationId);
@@ -39,9 +32,9 @@ public sealed partial class ChatViewModel
             }
         }
 
-        // Only A Message New To This PC Animates In. The Phone Also Sends A Chat's Recent History As Live Messages (On A
-        // Catch-Up, And After Start Chat Opens One), Which Showed As The History Loading A Second Time, Bubble By Bubble;
-        // Those Go In Quietly, In Time Order
+        // Only a message new to this PC animates in. The phone also sends the recent history of a chat as live
+        // messages. It does so on a catch-up and after Start chat opens a chat. That history animated in as a second
+        // load, 1 bubble at a time. Now it goes in with no animation, in time order.
         MessageBubbleViewModel? bubble = FindBubble(m);
         if (bubble is not null)
         {
@@ -50,8 +43,9 @@ public sealed partial class ChatViewModel
         }
         else
         {
-            // Older Than The Oldest Bubble After A Trim (A Reaction Or Status On A Trimmed Message): The Store Saved It, And
-            // The Older Page Brings It Back In Place. Catch-Up History Before Any Trim Still Goes In Above
+            // After a trim, a message older than the oldest bubble is a reaction or a status on a trimmed message. The
+            // store saved it, and the older page puts it back in its place. Catch-up history before a trim still goes
+            // in above.
             if (_trimmed && _older is not null && Messages.Count > 0 && m.Time < Messages[0].SentAt)
             {
                 return;
@@ -74,20 +68,19 @@ public sealed partial class ChatViewModel
 
         RefreshAround(bubble);
 
-        // Their Message Ends Their Typing
         if (!m.FromMe && m.ParticipantId == _typingParticipant)
         {
             StopTyping();
         }
 
-        // Reading Along: Tell The Phone
+        // The user sees the message in the focused chat, so the chat marks it read on the phone.
         if (IsActive && !m.FromMe && m.Id.Length > 0)
         {
             _ = MarkReadAsync(m.Id);
         }
     }
 
-    // Posted, So It Can Run After The Chat Closed: Then It Does Nothing
+    // The post can run after the chat closed. Then it does nothing.
     private void OnResynced(object? sender, EventArgs e) => _post(() =>
     {
         if (!_disposed)
@@ -96,8 +89,8 @@ public sealed partial class ChatViewModel
         }
     });
 
-    // This Conversation Changed (A New Message, Muted, Moved): Keep It Current, Raising Only A Mute Change, Since Every
-    // Message Lands Here Too
+    // Each new message, mute and move of the conversation comes here. A property raises only when its value changes,
+    // except after a rename or a new avatar, when every property raises.
     private void OnConversationChanged(object? sender, ConversationInfo c)
     {
         if (c.Id != ConversationId)
@@ -107,15 +100,21 @@ public sealed partial class ChatViewModel
 
         bool couldMute   = CanMute;
         string wasHolder = DraftPlaceholder;
-        Conversation     = c;
 
-        // Turned RCS Or Back To SMS: The Placeholder Follows
+        // A rename or a new avatar changes the header. Only then do all the properties raise.
+        if (c.Name != Title || AvatarParts.Of(c) != _avatar)
+        {
+            ApplyConversation(c);
+        }
+
+        Conversation = c;
+
         if (wasHolder != DraftPlaceholder)
         {
             Raise(nameof(DraftPlaceholder));
         }
 
-        // Encrypted Or Not Any More (The Phone Says So On The Conversation): The Lock Follows
+        // The conversation from the phone also carries the encryption state.
         bool encrypted = _store.IsEncrypted(ConversationId);
         if (encrypted != IsEncrypted)
         {
@@ -129,20 +128,19 @@ public sealed partial class ChatViewModel
             Raise(nameof(IsMuted));
         }
 
-        // Moved Into Or Out Of Spam & Blocked: The Mute Button Follows
         if (couldMute != CanMute)
         {
             Raise(nameof(CanMute));
         }
 
-        // Someone Joined, Left Or Was Renamed: Every Bubble's Sender, Avatar And Reactions Follow
+        // A participant joined, left or got a new name. The sender, the avatar and the reactions of each bubble change.
         if (!SameForBubbles(_bubblesFor, c))
         {
             RefreshBubbles();
         }
     }
 
-    // Typing In: A Start Shows The Dots For Up To 15 Seconds, A Stop Hides Them At Once
+    // A start shows the dots for 15 seconds at most. A stop hides them at once.
     private void OnTypingChanged(object? sender, TypingEventArgs e)
     {
         if (e.ConversationId != ConversationId)
@@ -167,8 +165,8 @@ public sealed partial class ChatViewModel
         _typingTimer.Change(TypingTimeout, Timeout.InfiniteTimeSpan);
     }
 
-    // The Typer's Avatar Beside The Dots: A Group Shows The Person's Own, As Beside Their Bubbles; A One On One Shows The
-    // Conversation's, As In The Header. Screen Readers Hear Their Name
+    // Shows who types, with an avatar beside the dots. A group shows the avatar of the person, as beside their bubbles.
+    // A one-on-one chat shows the avatar of the conversation, as in the header. Screen readers hear the name.
     private void ShowTyper(string participantId)
     {
         ConversationInfo? c    = _store.Find(ConversationId);
@@ -196,10 +194,9 @@ public sealed partial class ChatViewModel
         Raise(nameof(TypingName));
     }
 
-    // The Timer Fired; A Start That Came Since Moved The Deadline
+    // A start after the timer began moves the deadline. The post can run after Dispose disposed the timer.
     private void OnTypingTimeout()
     {
-        // The Post Can Run After The Chat Closed: The Timer Is Disposed Then
         if (!_disposed && _time.GetUtcNow() >= _typingUntil)
         {
             StopTyping();
@@ -221,7 +218,7 @@ public sealed partial class ChatViewModel
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            // The Phone Learns It The Next Time The Chat Opens Unread
+            // The phone learns it the next time that the chat opens unread.
             _store.LogFailure("mark read", ex);
         }
     }

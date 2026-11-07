@@ -4,26 +4,22 @@ using GMessages.Protocol.Proto;
 namespace GMessages.Presentation.Messaging;
 
 /// <summary>
-/// The phone's live events: a message, a typing line, a conversation change or the battery turned into chat events.
+/// Turns the live events of the phone into chat events: a message, a typing line, a conversation change or the battery.
 /// </summary>
 /// <remarks>
-/// Part of <see cref="ChatStore"/>; the other members are in ChatStore.cs.
+/// This part of <see cref="ChatStore"/> holds the live events. ChatStore.cs holds the other members.
 /// </remarks>
 public sealed partial class ChatStore
 {
-
-    // =========================================================================
-    // LIVE EVENTS
-    // =========================================================================
-
-    // Fire And Forget; HandleEventAsync Logs Its Own Failures
+    // HandleEventAsync logs its own failures, so nothing waits for the task.
     private void OnClientEvent(object? sender, object e) => _ = HandleEventAsync(e);
 
     /// <summary>
-    /// Maps one protocol event to the store's state and events (the constructor subscribes the real source; tests call this directly).
+    /// Maps 1 protocol event to the state and the events of the store. The constructor subscribes the real source, and
+    /// tests call this method directly.
     /// </summary>
     /// <param name="e">A record from <c>GMessages.Protocol.Events</c>.</param>
-    /// <returns>A task that completes when the event was handled.</returns>
+    /// <returns>A task that completes when the store handled the event.</returns>
     internal async Task HandleEventAsync(object e)
     {
         switch (e)
@@ -31,7 +27,7 @@ public sealed partial class ChatStore
             case ConversationUpdated updated:
                 ConversationInfo info = WithSnippetMedia(ConversationInfo.From(updated.Conversation));
 
-                // The Phone Says It's Read: The Live Unread Count Starts Over
+                // The phone says that the conversation is read, so the live unread texts start again.
                 if (!info.Unread)
                 {
                     _unreadTexts.TryRemove(info.Id, out _);
@@ -64,14 +60,13 @@ public sealed partial class ChatStore
                 Resynced?.Invoke(this, EventArgs.Empty);
                 break;
 
-            // Qualified: The Store's Own Event Has The Same Name
+            // The full name is necessary, because the store has an event with the same name.
             case GMessages.Protocol.Events.TypingChanged typing:
                 RaiseTyping(typing.Data);
                 break;
         }
     }
 
-    // Sets The Battery State And Raises Only On A Change
     private void SetBatteryLow(bool low)
     {
         if (Interlocked.Exchange(ref _batteryLow, low) != low)
@@ -80,9 +75,10 @@ public sealed partial class ChatStore
         }
     }
 
-    // Maps The Typing Person's Number To A Participant Of The Cached Conversation, As getPhoneNumberParticipantID Does
-    // In The Go Connector. No Cached Conversation Or No Match Means No Event
-    // ponytail: first match wins; the connector prefers a visible participant, add IsVisible if duplicate numbers show up
+    // Maps the number of the typing person to a participant of the cached conversation. getPhoneNumberParticipantID in
+    // the Go connector does the same. With no cached conversation or no match, the store raises no event.
+    // ponytail: the first match wins. The connector prefers a visible participant. Add IsVisible if duplicate numbers
+    // occur.
     private void RaiseTyping(TypingData data)
     {
         string number = data.User?.Number ?? string.Empty;
@@ -100,14 +96,15 @@ public sealed partial class ChatStore
         TypingChanged?.Invoke(this, new TypingEventArgs(conversation.Id, who.Id, data.Type == TypingTypes.StartedTyping));
     }
 
-    // Raises MessageArrived With The Conversation From The Cache, Fetching It On A Miss
+    // Raises MessageArrived with the conversation from the cache. On a cache miss, it fetches the conversation first.
     private async Task HandleMessageAsync(MessageReceived received)
     {
         ChatMessage message = ChatMessage.From(received.Message);
         int generation      = Generation;
 
-        // A Live Stand-In The Phone Shows Nowhere: Not Saved, Shown Or Notified, And Its ID Isn't Marked Notified, So The
-        // Real Message (Same ID, Often Moved Into A Group) Still Notifies. A Deletion Notice Drops The Kept Copy
+        // The phone shows a live stand-in nowhere. The store does not save, show or notify it, and does not mark its ID
+        // notified. Thus the real message, with the same ID and often moved into a group, still notifies. A deletion
+        // notice removes the kept copy.
         if (message.IsPlaceholder)
         {
             if (message.Status == MessageStatusType.MessageDeleted && message.Id.Length > 0)
@@ -118,20 +115,22 @@ public sealed partial class ChatStore
             return;
         }
 
-        // No ConfigureAwait(false) Below: Events Must Be Raised On The Thread That Delivered The Client Event
-        // Decide IsNew Before Any Await, So Two Quick Events Of One Message Can't Both Be New. A Message Older Than A Day
-        // Is Never New Either: A Reaction Or Status Update To It Must Not Notify (mautrix-gmessages, GetReactions). Nor
-        // Is A Message Already In Its Cached Page, Or One Carrying My Own Reaction: Both Are The Phone Echoing An Update
-        // (A Reaction Made Here Or On The Phone), Which The Notified Ring Misses After A Restart. Others' Reactions Don't Count
+        // No ConfigureAwait(false) below: the store must raise events on the thread that delivered the client event.
+        // The store decides isNew before any await, so 2 quick events of 1 message cannot both be new. A message older
+        // than 1 day is never new. A reaction or status update to it must not notify, as GetReactions in
+        // mautrix-gmessages decides. A message already in its cached page is not new. A message with my own reaction
+        // is not new. Both are echoes of an update from the phone, such as a reaction made here or on the phone. The
+        // notified ring misses these echoes after a restart. The reactions of other people do not count.
         bool isNew = MarkNotified(message.Id)
                      && !HasMyReaction(message)
                      && !IsCached(message)
                      && message.Time >= _time.GetUtcNow() - NewMessageAge;
 
-        // A New Received Message Adds One To Its Conversation's Unread Count, Only While The Phone Says It's Unread (Its
-        // Conversation Update Comes First): One Read Meanwhile Mustn't Carry Into The Next Count. Since That Update Was
-        // Already Shown, A Pinned Tile Re-Reads The Count Below Even When Nothing Else Changed. A System Line (Someone
-        // Joined, A Chat Created) Isn't From Me, But It's Nothing To Read Either
+        // A new received message adds 1 to the unread count of its conversation. It counts only while the phone says
+        // that the conversation is unread, because the conversation update comes first. Thus a chat read meanwhile does
+        // not carry into the next count. The store already showed that update, so a pinned tile reads the count again
+        // below, also when nothing else changed. A system line, such as a join or a chat creation, is not from me. It
+        // is also not something to read, so it never counts.
         bool receivedNew           = isNew && !message.FromMe && message.Kind != MessageKind.Tombstone;
         ConversationInfo? unreadIn = receivedNew && Find(message.ConversationId) is { Unread: true } found ? found : null;
         bool counted               = unreadIn is not null;
@@ -153,16 +152,20 @@ public sealed partial class ChatStore
 
         ConversationInfo? conversation = Find(message.ConversationId);
 
-        // A Live Message Newer Than The Cached Conversation's Last Moves It To The Top At Once (The List Sorts By This
-        // Time), Sent Or Received, Without Waiting For Google's Conversation Update, Which Doesn't Always Come. A Received
-        // One's Update Comes First With Its Snippet; For One Of Mine It Often Never Came (The Row Kept The Old Snippet), So
-        // Mine Brings Its Own (A System Line Keeps It). A Received One Makes The Chat Unread: When It Beats The Update, The
-        // Cached Copy Is Still Read, And Raising That Would Take This Message's Toast With It. Only A New One Does: The
-        // Phone Re-Sends A Message It Read (A Status Update), And An MMS's Whole-Second Time Can Sit A Millisecond Past
-        // The Conversation's, Which Turned A Chat Read On The Phone Unread Again. The Update, When It Comes, Has The Last
-        // Word. A Conversation Fetched Below Is Already Current. The Message's Status Becomes The Newest One's, So A Chat
-        // That Held Only Its Created Line (Hidden, ConversationInfo.IsEmpty) Shows As Soon As A Message Lands In It;
-        // That One Brings Its Snippet Too, Mine Or Not, So The Row Doesn't Show The Created Line's Until The Update
+        // A live message newer than the last message of the cached conversation moves the conversation to the top at
+        // once. The list sorts by this time. This applies to sent and received messages, because Google does not always
+        // send the conversation update.
+        // For a received message, the update usually comes first with its snippet. For a message of mine, the update
+        // often never came, and the row kept the old snippet. Thus my message brings its own snippet. A system line
+        // keeps the old snippet.
+        // A received message turns the chat unread. When it comes before the update, the cached copy is still read.
+        // Raising that read copy dismisses the toast of this message. Only a new message turns the chat unread. The
+        // phone sends a read message again as a status update. The whole-second time of an MMS can sit 1 ms past the
+        // time of its conversation. Without this rule, a chat read on the phone turns unread again.
+        // When the update comes, it replaces this copy. A conversation that the code below fetches is already current.
+        // The status of the message becomes the newest status. Thus a chat with only its created line shows when a
+        // message lands in it, see ConversationInfo.IsEmpty. That message also brings its snippet, mine or not. Thus
+        // the row does not show the snippet of the created line until the update.
         if (!received.IsOld && conversation is not null && message.Time > conversation.LastMessageTime)
         {
             bool bringsSnippet = (message.FromMe || conversation.IsEmpty) && message.Kind is not (MessageKind.Tombstone or MessageKind.Other);
@@ -206,14 +209,13 @@ public sealed partial class ChatStore
             }
         }
 
-        // Unpaired Or Signed Out Meanwhile: Nothing Of The Old Account Is Raised
+        // After an unpair or a sign-out during the fetch, the store raises nothing of the old account.
         if (generation != Generation)
         {
             return;
         }
 
-        // The Conversation (Its Update, Or The One Fetched Above) Has No Snippet Text For This Media: Name It From The
-        // Message Itself
+        // The conversation has no snippet text for this media, so the message itself names it.
         if (conversation is { Snippet.Length: 0, SnippetMedia.Length: 0 } && conversation.LatestMessageId == message.Id && message.Media is { } media)
         {
             conversation = conversation with { SnippetMedia = ChatFormat.MediaLabel(media) };
@@ -222,7 +224,8 @@ public sealed partial class ChatStore
             shown = true;
         }
 
-        // Counted But Not Shown Yet: The Lists Re-Read The Conversation (And Its Count). Only A Pinned One Shows A Count
+        // The message counts, but the lists did not get a change yet. This event makes them read the conversation and
+        // its count again. Only a pinned conversation shows a count.
         if (counted && !shown && conversation is { Pinned: true })
         {
             ConversationChanged?.Invoke(this, conversation);

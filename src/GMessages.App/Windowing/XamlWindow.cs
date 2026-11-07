@@ -10,58 +10,77 @@ using static GMessages.App.Windowing.WindowInterop;
 namespace GMessages.App.Windowing;
 
 /// <summary>
-/// How a <see cref="XamlWindow"/> looks: the app's main window, or an invisible frameless popup (the tray menu's host).
+/// Tells how a <see cref="XamlWindow"/> looks: the main window of the app, or an invisible frameless popup that hosts
+/// the tray menu.
 /// </summary>
 internal enum XamlWindowKind
 {
-    /// <summary>A resizable window with Mica, its content drawn into the title bar (see <see cref="XamlWindow.SetTitleBar"/>).</summary>
+    /// <summary>
+    /// A resizable window with Mica, whose content draws into the title bar (see <see cref="XamlWindow.SetTitleBar"/>).
+    /// </summary>
     Main,
 
-    /// <summary>A frameless, see-through, always-on-top window that's in no switcher; only what its content draws shows.</summary>
+    /// <summary>
+    /// A frameless, see-through, always-on-top window in no switcher. Only what its content draws shows.
+    /// </summary>
     Popup,
 }
 
 /// <summary>
-/// A Win32 top-level window hosting system XAML (WinUI 2.8) in a XAML Island: what WinUI 3's Window and AppWindow did.
+/// Hosts system XAML (WinUI 2.8) in a XAML Island in a Win32 top-level window. It does what Window and AppWindow of
+/// WinUI 3 did.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Every window lives on the UI thread and is pumped by <see cref="RunMessageLoop"/>, which hands each message to the
-/// islands first (Tab, arrow keys and accelerators reach XAML). Sizes and positions are physical pixels of the whole
-/// window, as AppWindow's were.
+/// Every window lives on the UI thread, and <see cref="RunMessageLoop"/> pumps its messages. The loop gives each
+/// message to the islands first, so Tab, the arrow keys and the accelerators reach XAML. Sizes and positions are
+/// physical pixels of the whole window, as in AppWindow.
 /// </para>
 /// <para>
-/// Resize Sync (the reason for WinUI 2.8): system XAML renders through the OS compositor, and four steps make DWM hold
-/// each resized frame until XAML has laid out at the new size, as UWP's CoreWindow does, so the content never trails
-/// the frame: user32's private EnableResizeLayoutSynchronization on the window; the XAML Application's private
-/// SetSynchronizationWindow naming it; each WM_SIZE sizes the island, then the thread's hidden CoreWindow to match (its
-/// size is also the most a popup may fill: left at 1 × 1, the emoji picker's repeater made one row); and once XAML has
-/// laid out and drawn a frame at the new size, CoreWindowResizeManager.NotifyLayoutCompleted. An island never sends
-/// that last one itself, so without it Windows waits after the first step of every drag and the window freezes until
-/// the mouse is let go (measured: one WM_SIZE per drag without it, every step with it). Only a shown window's real
-/// size change waits for the frame; any other WM_SIZE releases XAML at once. Only the main window synchronizes.
+/// Resize sync is the reason for WinUI 2.8. System XAML renders through the compositor of the OS. DWM holds each
+/// resized frame until XAML has laid out at the new size, as the CoreWindow of UWP does. Thus the content never trails
+/// the frame. That takes 4 steps:
+/// </para>
+/// <list type="number">
+/// <item>The private EnableResizeLayoutSynchronization of user32 turns on for the window.</item>
+/// <item>The private SetSynchronizationWindow of the XAML Application names the window.</item>
+/// <item>
+/// Each WM_SIZE sizes the island, then sizes the hidden CoreWindow of the thread to match. Its size is also the most
+/// that a popup can fill. At 1 × 1, the repeater of the emoji picker made a single row.
+/// </item>
+/// <item>
+/// When XAML has laid out and drawn a frame at the new size, the window calls
+/// CoreWindowResizeManager.NotifyLayoutCompleted.
+/// </item>
+/// </list>
+/// <para>
+/// An island never sends that last call itself. Without it, Windows waits after the first step of each drag. The
+/// window then freezes until the person releases the mouse. A measure showed 1 WM_SIZE for each drag without the
+/// call, and every step with it. Only a real size change of a shown window waits for the frame. Each other WM_SIZE
+/// releases XAML at once. Only the main window synchronizes.
 /// </para>
 /// <para>
-/// The main window draws its own title bar: the system caption is taken off (WM_NCCALCSIZE) and Mica from DWM fills the
-/// whole window. A <see cref="TitleBarInput"/> child over the title bar row gives back what the caption did: dragging,
-/// the top resize edge, the caption buttons (with Snap Layouts on Maximize) and the system menu.
+/// The main window draws its own title bar. WM_NCCALCSIZE removes the system caption, and Mica from DWM fills the
+/// whole window. A <see cref="TitleBarInput"/> child over the title bar row gives back what the caption did. That is
+/// the drag, the top resize edge, the caption buttons and the system menu. Maximize also keeps its Snap Layouts.
 /// </para>
 /// </remarks>
-/// @link https://github.com/microsoft/microsoft-ui-xaml/issues/5148#issuecomment-6139475689
-[System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA1001", Justification = "The island is disposed when the window is destroyed (WM_DESTROY); Close is the window's dispose.")]
+/// <seealso href="https://github.com/microsoft/microsoft-ui-xaml/issues/5148#issuecomment-6139475689"/>
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA1001", Justification = "The window disposes the island when Windows destroys the window (WM_DESTROY). Close is the dispose of the window.")]
 internal unsafe class XamlWindow
 {
-    // Native Interface IDs
     private static readonly Guid IidDesktopWindowXamlSourceNative2 = new("e3dcd8c7-3057-4692-99c3-7b7720afda31");
     private static readonly Guid IidCoreWindowInterop              = new("45d64a29-a63e-4cb6-b498-5781d298cb4f");
 
-    // IXamlSourceTransparency (Windows.UI.Xaml, Not Projected): IInspectable, Then get_ And put_IsBackgroundTransparent
+    // IXamlSourceTransparency of Windows.UI.Xaml has no projection. Its vtable holds IInspectable, then
+    // get_IsBackgroundTransparent and put_IsBackgroundTransparent.
     // https://learn.microsoft.com/windows/apps/api-reference/interface-members/ixamlsourcetransparency-isbackgroundtransparent
     private static readonly Guid IidXamlSourceTransparency = new("06636c29-5a17-458d-8ea2-2422d997a922");
     private const int SlotPutIsBackgroundTransparent       = 7;
 
-    // Private (TranslucentFlyouts' DiagnosticsHandler.cpp): IInspectable, then StartOnCurrentThread, CreateIsland,
-    // CreateIslandWithAppWindow, CreateIslandWithContentBridge, RemoveIsland, SetSynchronizationWindow
+    // A private interface, from DiagnosticsHandler.cpp of TranslucentFlyouts. Its vtable holds IInspectable, then
+    // StartOnCurrentThread, CreateIsland, CreateIslandWithAppWindow, CreateIslandWithContentBridge, RemoveIsland and
+    // SetSynchronizationWindow.
     private static readonly Guid IidFrameworkApplicationPrivate = new("b3ab45d8-6a4e-4e76-a00d-32d4643a9f1a");
     private const int SlotSetSynchronizationWindow = 11;
 
@@ -69,10 +88,11 @@ internal unsafe class XamlWindow
     private const int WaInactive    = 0;
     private const int SizeMinimized = 1;
 
-    // Every Open Window, By Handle (The Window Procedure Is Static) And In Order (The Message Loop)
+    // Every open window, by handle for the static window procedure, and in order for the message loop.
     private static readonly Dictionary<nint, XamlWindow> ByHandle = [];
     private static readonly List<XamlWindow> Open = [];
     private static bool s_registered;
+    private static bool s_transparent;
     private static nint s_bigIcon;
     private static nint s_smallIcon;
 
@@ -103,7 +123,6 @@ internal unsafe class XamlWindow
         RegisterClass();
         MakeIslandsTransparent();
 
-        // Create The Window
         uint style   = kind == XamlWindowKind.Main ? WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN : WS_POPUP | WS_CLIPCHILDREN;
         uint exStyle = WS_EX_NOREDIRECTIONBITMAP | (kind == XamlWindowKind.Popup ? WS_EX_TOOLWINDOW | WS_EX_TOPMOST : 0);
         Hwnd         = CreateWindowExW(exStyle, ClassName, string.Empty, style, CW_USEDEFAULT, CW_USEDEFAULT, 1100, 760, 0, 0, GetModuleHandleW(null), 0);
@@ -124,7 +143,6 @@ internal unsafe class XamlWindow
             ApplySeeThrough();
         }
 
-        // Attach The XAML Island
         _source       = new DesktopWindowXamlSource();
         _sourceNative = QueryInterface(_source, IidDesktopWindowXamlSourceNative2);
         Marshal.ThrowExceptionForHR(((delegate* unmanaged[Stdcall]<nint, nint, int>)VTable(_sourceNative, 3))(_sourceNative, Hwnd));
@@ -133,7 +151,8 @@ internal unsafe class XamlWindow
         Marshal.ThrowExceptionForHR(((delegate* unmanaged[Stdcall]<nint, nint*, int>)VTable(_sourceNative, 4))(_sourceNative, &island));
         _island = island;
 
-        // Resize Sync: the user32 switch, the XAML core's synchronization window, and the CoreWindow WM_SIZE goes on to
+        // Resize sync needs the user32 switch, the synchronization window of the XAML core, and the CoreWindow that
+        // WM_SIZE also sizes.
         if (kind == XamlWindowKind.Main)
         {
             _ = EnableResizeLayoutSynchronization(Hwnd, true);
@@ -142,7 +161,7 @@ internal unsafe class XamlWindow
             SetSynchronizationWindow(Hwnd);
         }
 
-        // The Frame Change Applies The Custom Frame (WM_NCCALCSIZE)
+        // The frame change applies the custom frame through WM_NCCALCSIZE.
         _ = SetWindowPos(Hwnd, 0, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
         ResizeIsland();
     }
@@ -153,23 +172,24 @@ internal unsafe class XamlWindow
     public event EventHandler<bool>? Activated;
 
     /// <summary>
-    /// Raised once the window is closed (by <see cref="Close"/> or by the person), while its content still exists.
+    /// Raised after a <see cref="Close"/> call or after the person closes the window, while the content still exists.
     /// </summary>
     public event EventHandler? Closed;
 
     /// <summary>
-    /// Raised when the person closes the window; cancel it to keep the window (<see cref="Close"/> doesn't raise it).
+    /// Raised when the person closes the window. A cancel keeps the window. <see cref="Close"/> does not raise it.
     /// </summary>
     public event EventHandler<System.ComponentModel.CancelEventArgs>? Closing;
 
     /// <summary>
-    /// Raised after the window moved, resized, or was maximized, minimized or restored.
+    /// Raised after the window moves or resizes, or after a maximize, a minimize or a restore.
     /// </summary>
     public event EventHandler? BoundsChanged;
 
     /// <summary>
-    /// Raised when the pointer moves onto, off, or presses a caption button: the hit test code hovered and pressed
-    /// (<see cref="WindowInterop.HTMINBUTTON"/>, <see cref="WindowInterop.HTMAXBUTTON"/>, <see cref="WindowInterop.HTCLOSE"/>, or 0).
+    /// Raised when the pointer moves onto or off a caption button, or presses it. The argument holds the hit test codes
+    /// of the hovered and the pressed button: <see cref="WindowInterop.HTMINBUTTON"/>,
+    /// <see cref="WindowInterop.HTMAXBUTTON"/>, <see cref="WindowInterop.HTCLOSE"/> or 0.
     /// </summary>
     public event EventHandler<(int Hovered, int Pressed)>? CaptionButtonsChanged;
 
@@ -206,7 +226,7 @@ internal unsafe class XamlWindow
     public XamlRoot? XamlRoot => _content?.XamlRoot;
 
     /// <summary>
-    /// Sets the window's title (the taskbar, Alt + Tab and Narrator read it).
+    /// Sets the title of the window, which the taskbar, Alt + Tab and Narrator read.
     /// </summary>
     public string Title
     {
@@ -234,7 +254,7 @@ internal unsafe class XamlWindow
     public double Scale => GetDpiForWindow(Hwnd) / 96.0;
 
     /// <summary>
-    /// Gets the window's bounds on screen, physical pixels, frame included.
+    /// Gets the bounds of the window on screen in physical pixels, with the frame.
     /// </summary>
     public RECT Bounds
     {
@@ -247,7 +267,7 @@ internal unsafe class XamlWindow
     }
 
     /// <summary>
-    /// Gets the client area's size, physical pixels.
+    /// Gets the size of the client area in physical pixels.
     /// </summary>
     public (int Width, int Height) ClientSize
     {
@@ -260,9 +280,11 @@ internal unsafe class XamlWindow
     }
 
     /// <summary>
-    /// Gets the handle of the window whose island holds this XAML root (for a file picker's owner, say), or 0.
-    /// WinUI 3's XamlRoot.ContentIslandEnvironment.AppWindowId, which system XAML doesn't have.
+    /// Gets the handle of the window whose island holds this XAML root, or 0. A file picker uses it as its owner.
     /// </summary>
+    /// <remarks>
+    /// It replaces XamlRoot.ContentIslandEnvironment.AppWindowId of WinUI 3, which system XAML does not have.
+    /// </remarks>
     /// <param name="root">An element's XAML root.</param>
     /// <returns>The window's handle, or 0 when no open window shows it.</returns>
     public static nint HwndFor(XamlRoot? root)
@@ -283,7 +305,7 @@ internal unsafe class XamlWindow
     // =========================================================================
 
     /// <summary>
-    /// Pumps messages for every window until <see cref="ExitMessageLoop"/>. Each message goes to the islands first.
+    /// Pumps the messages of every window until <see cref="ExitMessageLoop"/>. Each message goes to the islands first.
     /// </summary>
     public static void RunMessageLoop()
     {
@@ -305,7 +327,7 @@ internal unsafe class XamlWindow
     /// </summary>
     public static void ExitMessageLoop() => PostQuitMessage(0);
 
-    // The Islands' Own Keyboard Handling, Window By Window, Until One Takes The Message
+    // Gives the message to the keyboard handling of each island in turn, until an island takes it.
     private static bool PreTranslate(MSG* msg)
     {
         for (int i = 0; i < Open.Count; i++)
@@ -327,7 +349,8 @@ internal unsafe class XamlWindow
     // =========================================================================
 
     /// <summary>
-    /// Shows the window (maximized, when <see cref="Maximize"/> was asked for while hidden) and brings it forward.
+    /// Shows the window and brings it to the front. After a <see cref="Maximize"/> call while hidden, the window shows
+    /// maximized.
     /// </summary>
     public void Activate()
     {
@@ -338,10 +361,11 @@ internal unsafe class XamlWindow
 
         if (!IsWindowVisible(Hwnd))
         {
-            // The First Show Stays Cloaked Until Its First Frame Is Drawn: Building A Fresh Window Takes A Second Under
-            // Memory Pressure, Which Showed As A Blank Window (WinUI 3 Windows Do The Same). XAML Draws Only When Something
-            // Changed, So Rendering Is Subscribed Too: That Asks For A Frame Every Tick Until One Is Drawn. XAML Can Also
-            // Hold Its Frames For A Window It Takes For Hidden (A UI Test Once Waited 20 s), So Half A Second Shows It Anyway
+            // The first show stays cloaked until XAML draws the first frame, as WinUI 3 windows do. Under memory
+            // pressure, the build of a new window takes about 1 second, which showed as a blank window. XAML draws
+            // only after a change. Thus the window also listens to Rendering, which asks for a frame on each tick
+            // until XAML draws a frame. XAML can also hold its frames for a window that it takes as hidden. A UI
+            // test once waited 20 s. Thus the window shows after half a second in any case.
             if (!_shownOnce)
             {
                 _shownOnce = true;
@@ -362,15 +386,17 @@ internal unsafe class XamlWindow
         _ = SetForegroundWindow(Hwnd);
     }
 
-    // Empty On Purpose: While Anything Listens To Rendering, XAML Draws A Frame Every Tick, So The First One Comes
+    // This handler is empty on purpose. While a handler listens to Rendering, XAML draws a frame on each tick, so the
+    // first frame comes.
     private static void OnFirstFrameRendering(object? sender, object e)
     {
     }
 
-    // The First Frame Is Drawn: The Window Shows
+    // XAML drew the first frame, so the window shows.
     private void OnFirstFrameRendered(object? sender, RenderedEventArgs e) => Uncloak();
 
-    // Shows The Cloaked Window And Stops Asking For Frames (The First Frame, The Half-Second Fallback, Or The Close)
+    // Shows the cloaked window and stops the requests for frames. The first frame, the fallback after half a second or
+    // the close calls it.
     private void Uncloak()
     {
         CompositionTarget.Rendering -= OnFirstFrameRendering;
@@ -383,7 +409,7 @@ internal unsafe class XamlWindow
         }
     }
 
-    // Hides Or Shows The Window Through DWM, Which Still Lets It Draw While Hidden
+    // Hides or shows the window through DWM, which still lets the window draw while hidden.
     private void SetCloak(bool cloaked)
     {
         int value = cloaked ? 1 : 0;
@@ -393,7 +419,7 @@ internal unsafe class XamlWindow
     /// <summary>
     /// Shows the window without changing its state.
     /// </summary>
-    /// <param name="activate">True to make it the active window too.</param>
+    /// <param name="activate">True to also make the window active.</param>
     public void Show(bool activate) => _ = ShowWindow(Hwnd, activate ? SW_SHOW : SW_SHOWNOACTIVATE);
 
     /// <summary>
@@ -402,7 +428,7 @@ internal unsafe class XamlWindow
     public void Hide() => _ = ShowWindow(Hwnd, SW_HIDE);
 
     /// <summary>
-    /// Closes the window: <see cref="Closed"/> is raised, then the island and the window go.
+    /// Closes the window. The window raises <see cref="Closed"/>, then destroys the island and itself.
     /// </summary>
     public void Close()
     {
@@ -413,7 +439,7 @@ internal unsafe class XamlWindow
     }
 
     /// <summary>
-    /// Maximizes the window; while it's hidden, the next <see cref="Activate"/> shows it maximized.
+    /// Maximizes the window. While the window is hidden, the next <see cref="Activate"/> shows it maximized.
     /// </summary>
     public void Maximize()
     {
@@ -427,19 +453,19 @@ internal unsafe class XamlWindow
     }
 
     /// <summary>
-    /// Moves and sizes the window, physical pixels, frame included.
+    /// Moves and sizes the window in physical pixels, with the frame.
     /// </summary>
     public void MoveAndResize(int x, int y, int width, int height) =>
         _ = SetWindowPos(Hwnd, 0, x, y, width, height, SWP_NOZORDER | SWP_NOACTIVATE);
 
     /// <summary>
-    /// Sizes the window, physical pixels, frame included.
+    /// Sizes the window in physical pixels, with the frame.
     /// </summary>
     public void Resize(int width, int height) =>
         _ = SetWindowPos(Hwnd, 0, 0, 0, width, height, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
 
     /// <summary>
-    /// Sets the least size the person can resize the window to, physical pixels, frame included.
+    /// Sets the smallest size that the person can give the window, in physical pixels with the frame.
     /// </summary>
     public void SetMinimumSize(int width, int height)
     {
@@ -448,13 +474,14 @@ internal unsafe class XamlWindow
     }
 
     /// <summary>
-    /// Sets the taskbar and Alt + Tab icon from an .ico file.
+    /// Sets the icon of the taskbar and Alt + Tab from an .ico file.
     /// </summary>
     /// <param name="path">The icon file.</param>
     public void SetIcon(string path)
     {
-        // Loaded Once For The Process: WM_SETICON Doesn't Take The Icons, And The Main Window Is Made On Every Open
-        // ponytail: one icon file for every window; key the cache by path if a second ever comes
+        // The process loads the icons once. WM_SETICON does not take ownership of the icons, and the app makes the main
+        // window on each open.
+        // ponytail: a single icon file for every window. Key the cache by path if a second file ever comes.
         if (s_bigIcon == 0)
         {
             s_bigIcon   = LoadImageW(0, path, IMAGE_ICON, 0, 0, LR_LOADFROMFILE);
@@ -479,8 +506,8 @@ internal unsafe class XamlWindow
     // =========================================================================
 
     /// <summary>
-    /// Places the title bar's input over its row: where it drags the window, where the caption buttons are, and the
-    /// holes where clicks reach the content instead (client pixels). Called after every layout change of the title bar.
+    /// Places the input of the title bar over its row, in client pixels. The title bar calls it after each change of
+    /// its layout.
     /// </summary>
     /// <param name="layout">The title bar's areas.</param>
     public void SetTitleBar(TitleBarLayout layout)
@@ -519,14 +546,15 @@ internal unsafe class XamlWindow
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
     private static nint WndProc(nint hwnd, uint msg, nint wParam, nint lParam)
     {
-        // Messages Before The Constructor Stored The Handle (WM_CREATE And Friends)
+        // These messages, such as WM_CREATE, come before the constructor stores the handle.
         if (!ByHandle.TryGetValue(hwnd, out XamlWindow? window))
         {
             return DefWindowProcW(hwnd, msg, wParam, lParam);
         }
 
-        // An Exception Can't Cross Into Windows: The App's Handler Logs It (As WinUI 3 Sent Event Handlers' Exceptions To
-        // Application.UnhandledException); One It Doesn't Handle Ends The App Here
+        // An exception cannot cross into Windows. The handler of the app logs it, as WinUI 3 sent the exceptions of
+        // event handlers to Application.UnhandledException. An exception that the handler does not handle ends the app
+        // here.
         try
         {
             return window.OnMessage(msg, wParam, lParam);
@@ -541,12 +569,12 @@ internal unsafe class XamlWindow
     {
         switch (msg)
         {
-            // The Island And Mica Cover The Client Area: Never Paint A GDI Background Under Them
+            // The island and Mica cover the client area, so the window never paints a GDI background under them.
             case WM_ERASEBKGND:
                 return 1;
 
-            // Main: No System Caption; The Side And Bottom Frame Stay (Resize Edges), And A Maximized Window Keeps Its Top
-            // Clear Of The Screen Edge
+            // The main window has no system caption. The side and bottom frames stay as resize edges. A maximized
+            // window keeps its top clear of the screen edge.
             case WM_NCCALCSIZE when _kind == XamlWindowKind.Main && wParam != 0:
                 var calc = (NCCALCSIZE_PARAMS*)lParam;
                 int top  = calc->rgrc0.Top;
@@ -554,15 +582,17 @@ internal unsafe class XamlWindow
                 calc->rgrc0.Top = top + (IsZoomed(Hwnd) ? FrameThickness() : 0);
                 return 0;
 
-            // Popup: Not A Single Pixel Of Frame
+            // The popup has no frame at all.
             case WM_NCCALCSIZE when _kind == XamlWindowKind.Popup && wParam != 0:
                 return 0;
 
-            // Island First, Then The Hidden CoreWindow (Left Alone While Minimized: Popups Can't Be Bigger), Then Wait For
-            // XAML's Frame At The New Size (See The Remarks). Only A Shown Window's Real Size Change Waits: One That Changes
-            // No Layout Draws No Frame, And XAML Would Wait For The Release Forever
+            // The island resizes first, then the hidden CoreWindow. Then the window waits for the XAML frame at the new
+            // size (see the remarks). A minimized window leaves the CoreWindow alone, because popups cannot be bigger
+            // than it. Only a real size change of a shown window waits. A change with no layout draws no frame, and
+            // XAML then waits for the release forever.
             case WM_SIZE:
-                // Minimized Keeps The Island's Size: At 0 × 0 The Chats Went Narrow, And The List Slid Back In On Restore
+                // A minimized window keeps the size of the island. At 0 × 0 the chats went narrow, and the list slid
+                // back in on restore.
                 bool minimized = wParam == SizeMinimized;
                 if (!minimized)
                 {
@@ -591,8 +621,8 @@ internal unsafe class XamlWindow
                 Activated?.Invoke(this, LowWord(wParam) != WaInactive);
                 break;
 
-            // No Menu-Bar Mode On F10 Or A Lone Alt: There's No Menu Bar, And The Mode Swallowed Every Key After It (Shift +
-            // F10 Then Typing Went Nowhere). Alt + Space (lParam ' ') Still Opens The Window Menu
+            // F10 or a lone Alt starts no menu bar mode. The window has no menu bar. The mode took every key after it,
+            // so Shift + F10 and then typed text went nowhere. Alt + Space (lParam ' ') still opens the window menu.
             case WM_SYSCOMMAND when ((int)wParam & 0xFFF0) == SC_KEYMENU && lParam == 0:
                 return 0;
 
@@ -610,19 +640,19 @@ internal unsafe class XamlWindow
                 info->ptMinTrackSize.Y    = Math.Max(info->ptMinTrackSize.Y, _minHeight);
                 return 0;
 
-            // Moved To A Monitor With Another Scale: Take The Size Windows Suggests
+            // After a move to a monitor with another scale, the window takes the size that Windows suggests.
             case WM_DPICHANGED:
                 var suggested = (RECT*)lParam;
                 _ = SetWindowPos(Hwnd, 0, suggested->Left, suggested->Top, suggested->Right - suggested->Left, suggested->Bottom - suggested->Top, SWP_NOZORDER | SWP_NOACTIVATE);
                 return 0;
 
-            // DefWindowProc Sends WM_SIZE And WM_MOVE From Here, So It Runs First
+            // DefWindowProc sends WM_SIZE and WM_MOVE from here, so it runs first.
             case WM_WINDOWPOSCHANGED:
                 nint result = DefWindowProcW(Hwnd, msg, wParam, lParam);
                 BoundsChanged?.Invoke(this, EventArgs.Empty);
                 return result;
 
-            // The Person Closed It (Close Button, Alt+F4, The Taskbar): The Owner May Hide It Instead
+            // The person closed the window with the Close button, Alt+F4 or the taskbar. The owner can hide it instead.
             case WM_CLOSE:
                 var closing = new System.ComponentModel.CancelEventArgs();
                 Closing?.Invoke(this, closing);
@@ -641,7 +671,7 @@ internal unsafe class XamlWindow
         return DefWindowProcW(Hwnd, msg, wParam, lParam);
     }
 
-    // Closed While The Content Still Exists, Then The Island Goes
+    // Raises Closed while the content still exists, then destroys the island.
     private void OnDestroyed()
     {
         _destroyed = true;
@@ -657,8 +687,9 @@ internal unsafe class XamlWindow
         Open.Remove(this);
     }
 
-    // Layout Done At The New Size: Wait For That Frame To Be Drawn (Releasing Now Lets Windows Show The Old Frame Stretched)
-    // ponytail: one pass per WM_SIZE; a size change that somehow lays nothing out waits for Windows' own timeout
+    // The layout at the new size is done, so the window waits until XAML draws that frame. A release now lets Windows
+    // show the old frame stretched.
+    // ponytail: a single pass for each WM_SIZE. A size change with no layout waits for the timeout of Windows.
     private void OnContentLayoutUpdated(object? sender, object e)
     {
         if (!_layoutPending)
@@ -670,7 +701,7 @@ internal unsafe class XamlWindow
         CompositionTarget.Rendered += OnResizedFrameRendered;
     }
 
-    // Frame At The New Size Drawn: Release The Frame Windows Is Holding
+    // XAML drew the frame at the new size, so the window releases the frame that Windows holds.
     private void OnResizedFrameRendered(object? sender, RenderedEventArgs e)
     {
         CompositionTarget.Rendered -= OnResizedFrameRendered;
@@ -681,7 +712,7 @@ internal unsafe class XamlWindow
     // HELPERS
     // =========================================================================
 
-    // Fill The Client Area With The Island
+    // Fills the client area with the island.
     private void ResizeIsland()
     {
         if (_island == 0)
@@ -693,14 +724,14 @@ internal unsafe class XamlWindow
         _ = SetWindowPos(_island, 0, 0, 0, width, height, SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW);
     }
 
-    // The Resize Edge's Thickness, Also How Far A Maximized Window Hangs Past The Screen
+    // Gets the thickness of the resize edge. A maximized window also hangs past the screen by this distance.
     private int FrameThickness()
     {
         uint dpi = GetDpiForWindow(Hwnd);
         return GetSystemMetricsForDpi(SM_CYFRAME, dpi) + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
     }
 
-    // Mica From DWM Over The Whole Window; The Content Draws On It
+    // Puts Mica from DWM over the whole window. The content draws on the Mica.
     private void ApplyMica()
     {
         int backdrop = DWMSBT_MAINWINDOW;
@@ -710,8 +741,8 @@ internal unsafe class XamlWindow
         _ = DwmExtendFrameIntoClientArea(Hwnd, &margins);
     }
 
-    // Nothing But The Content: Blur-Behind With A Region That Covers Nothing Turns On Alpha Without Any Blur, No 1 px
-    // Outline, Square Corners (WinUIEx's TransparentTintBackdrop Way)
+    // Shows nothing but the content, as TransparentTintBackdrop of WinUIEx does. A blur-behind with a region that
+    // covers nothing turns on alpha without blur. The window also gets no 1 px outline and square corners.
     private void ApplySeeThrough()
     {
         var margins    = new MARGINS();
@@ -727,10 +758,8 @@ internal unsafe class XamlWindow
         _ = DwmSetWindowAttribute(Hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &square, sizeof(int));
     }
 
-    // Islands Paint An Opaque (Black) Background Of Their Own Unless Told Not To, Which Hid Mica And Made The Popup's
-    // Corner Black. One Setting For Every Island On The Thread, From The Thread's XAML Window
-    private static bool s_transparent;
-
+    // Without this setting, islands paint their own opaque black background. That background hid Mica and made the
+    // corner of the popup black. The XAML window of the thread holds a single setting for every island on the thread.
     private static void MakeIslandsTransparent()
     {
         if (s_transparent || Window.Current is not { } xamlWindow)
@@ -749,7 +778,7 @@ internal unsafe class XamlWindow
         s_transparent = true;
     }
 
-    // The Hidden CoreWindow XAML Islands Makes On This Thread
+    // Gets the hidden CoreWindow that XAML Islands makes on this thread.
     private static nint GetCoreWindowHandle()
     {
         if (CoreWindow.GetForCurrentThread() is not { } coreWindow)
@@ -769,8 +798,8 @@ internal unsafe class XamlWindow
         return coreHwnd;
     }
 
-    // Names The Window As The XAML Core's Resize Synchronization Window. A Missing Interface (Another Windows Build) Just
-    // Leaves Resizing Unsynced
+    // Names the window as the resize synchronization window of the XAML core. When another Windows build does not have
+    // the interface, the resize stays without sync.
     private static void SetSynchronizationWindow(nint hwnd)
     {
         if (Application.Current is null)
@@ -788,13 +817,14 @@ internal unsafe class XamlWindow
         Marshal.Release(appPrivate);
     }
 
-    // QI The Native Object Behind A Projected WinRT Object; 0 When It Doesn't Implement The Interface
+    // Queries the native object behind a projected WinRT object for an interface. Returns 0 when the object does not
+    // implement the interface.
     private static nint QueryInterface(object projected, Guid iid)
     {
         nint native = ((IWinRTObject)projected).NativeObject.ThisPtr;
         return Marshal.QueryInterface(native, in iid, out nint result) == 0 ? result : 0;
     }
 
-    // Function Pointer In A COM Object's Vtable
+    // Gets a function pointer from the vtable of a COM object.
     private static nint VTable(nint comObject, int slot) => (*(nint**)comObject)[slot];
 }

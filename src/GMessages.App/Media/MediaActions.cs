@@ -8,14 +8,20 @@ using Windows.UI.Xaml;
 namespace GMessages.App.Media;
 
 /// <summary>
-/// What a photo or file can do, shared by the bubble's menu and the photo viewer: open it in its default app, open it
-/// with an app the person picks (Open with), save a copy where the person picks (Save as), or save it to their
-/// Downloads folder (Download).
+/// Runs the actions on a photo or a file for the bubble menu and the photo viewer: Open, Open with, Save as and
+/// Download.
 /// </summary>
 /// <remarks>
-/// Every action reads the decrypted bytes from the app's <see cref="MediaStore"/>. Failures are logged by the message ID
-/// and the error type only, never the file's name, path or type. A test run (see <see cref="TestHooks"/>) notes what
-/// would open instead of opening it, answers the Save as dialog with its own path, and downloads to its data folder.
+/// <para>
+/// Open opens the file in its default app. Open with opens it with an app that the person picks. Save as saves a copy
+/// where the person picks. Download saves it to the Downloads folder.
+/// </para>
+/// <para>
+/// Every action reads the decrypted bytes from the <see cref="MediaStore"/> of the app. For a failure, the log gets
+/// only the message ID and the error type. It never gets the name, path or type of the file. A test run notes what
+/// would open and does not open it. See <see cref="TestHooks"/>. A test run also answers the Save as dialog with its
+/// own path and downloads to its data folder.
+/// </para>
 /// </remarks>
 internal static class MediaActions
 {
@@ -23,13 +29,13 @@ internal static class MediaActions
     /// Writes the file to the private temp folder and opens it in its default app.
     /// </summary>
     /// <remarks>
-    /// A program, script or installer is never opened (see <see cref="MediaStore.CanOpen"/>): the Save as dialog shows
-    /// instead, so the person decides.
+    /// The method never opens a program, a script or an installer. See <see cref="MediaStore.CanOpen"/>. The Save as
+    /// dialog shows instead, so the person decides.
     /// </remarks>
-    /// <param name="root">The window's XAML root, for the Save as dialog.</param>
+    /// <param name="root">The XAML root of the window, for the Save as dialog.</param>
     /// <param name="part">The media part.</param>
-    /// <param name="messageId">The message's ID, for the log.</param>
-    /// <returns>True when opened, or offered for saving.</returns>
+    /// <param name="messageId">The ID of the message, for the log.</param>
+    /// <returns>True when the file opened or the Save as dialog showed.</returns>
     public static async Task<bool> OpenAsync(XamlRoot? root, MediaPart part, string messageId)
     {
         if ((Application.Current as App)?.Media is not { } media)
@@ -65,16 +71,16 @@ internal static class MediaActions
     }
 
     /// <summary>
-    /// Writes the file to the private temp folder, as Open does (with the mark of the web), and opens it with Windows'
-    /// app picker, so the person chooses the app.
+    /// Writes the file to the private temp folder with the mark of the web, as Open does. Then the app picker of
+    /// Windows opens it, so the person picks the app.
     /// </summary>
     /// <remarks>
-    /// Offered for every attachment, a program or script included (owner): Open never opens those, while the picker and
-    /// the launcher refuse to run a program themselves.
+    /// The menu offers Open with for every attachment, also for a program or a script, as the owner asked. Open never
+    /// opens those files. The picker and the launcher refuse to run a program themselves.
     /// </remarks>
     /// <param name="part">The media part.</param>
-    /// <param name="messageId">The message's ID, for the log.</param>
-    /// <returns>A task that ends once Windows was asked.</returns>
+    /// <param name="messageId">The ID of the message, for the log.</param>
+    /// <returns>A task that ends when the app has asked Windows.</returns>
     public static async Task OpenWithAsync(MediaPart part, string messageId)
     {
         if ((Application.Current as App)?.Media is not { } media)
@@ -101,18 +107,18 @@ internal static class MediaActions
     }
 
     /// <summary>
-    /// The Windows Save dialog over the window, named as the sender named the file (made safe); the picked file gets the
-    /// bytes and the mark of the web.
+    /// Shows the Save dialog of Windows over the window, with the safe form of the file name from the sender. The
+    /// picked file gets the bytes and the mark of the web.
     /// </summary>
     /// <remarks>
-    /// The file type list is a named <see cref="List{T}"/>: the Native AOT build only makes WinRT wrappers for
-    /// conversions it can see, and a collection expression hid this one, so the dialog's setup threw
-    /// <see cref="InvalidCastException"/> and nothing showed (the owner's "Save as doesn't work").
+    /// The file type list must be a named <see cref="List{T}"/>. The Native AOT build makes WinRT wrappers only for the
+    /// conversions that it can see. A collection expression hid this conversion, so the setup of the dialog threw
+    /// <see cref="InvalidCastException"/>. Then no dialog showed, and the owner reported that Save as did not work.
     /// </remarks>
-    /// <param name="root">The window's XAML root.</param>
+    /// <param name="root">The XAML root of the window.</param>
     /// <param name="part">The media part.</param>
-    /// <param name="messageId">The message's ID, for the log.</param>
-    /// <returns>A task that ends when the file is written, or the dialog was cancelled.</returns>
+    /// <param name="messageId">The ID of the message, for the log.</param>
+    /// <returns>A task that ends when the file is written or the person cancels the dialog.</returns>
     public static async Task SaveAsAsync(XamlRoot? root, MediaPart part, string messageId)
     {
         nint owner = XamlWindow.HwndFor(root);
@@ -158,12 +164,12 @@ internal static class MediaActions
     }
 
     /// <summary>
-    /// Saves the file to the person's Downloads folder under a name no other file there has, with the mark of the web,
-    /// then shows the window's "Saved to Downloads" confirmation with Show in folder.
+    /// Saves the file to the Downloads folder with a unique name and the mark of the web. Then the window shows its
+    /// "Saved to Downloads" confirmation with Show in folder.
     /// </summary>
     /// <param name="part">The media part.</param>
-    /// <param name="messageId">The message's ID, for the log.</param>
-    /// <returns>The saved file's full path, or null when it failed (logged).</returns>
+    /// <param name="messageId">The ID of the message, for the log.</param>
+    /// <returns>The full path of the saved file, or null when the save failed. The log gets the failure.</returns>
     public static async Task<string?> DownloadAsync(MediaPart part, string messageId)
     {
         if ((Application.Current as App) is not { Media: { } media } app)
@@ -186,10 +192,11 @@ internal static class MediaActions
     }
 
     /// <summary>
-    /// Opens File Explorer on the file's folder with the file selected (a test run notes the folder instead).
+    /// Opens File Explorer on the folder of the file, with the file selected. A test run notes the folder and opens
+    /// nothing.
     /// </summary>
-    /// <param name="path">The file's full path.</param>
-    /// <returns>A task that ends once Explorer was asked.</returns>
+    /// <param name="path">The full path of the file.</param>
+    /// <returns>A task that ends when the app has asked Explorer.</returns>
     public static async Task ShowInFolderAsync(string path)
     {
         string folderPath = Path.GetDirectoryName(path) ?? string.Empty;
@@ -211,7 +218,7 @@ internal static class MediaActions
         }
     }
 
-    // The Test's Picked Path As The Dialog Hands It Back: An Empty File, Made
+    // Makes an empty file at the path that the test picked, as the dialog gives it back.
     private static async Task<StorageFile> TestSaveFileAsync(string path)
     {
         await File.WriteAllBytesAsync(path, []);

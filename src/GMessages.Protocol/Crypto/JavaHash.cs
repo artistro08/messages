@@ -1,11 +1,11 @@
 namespace GMessages.Protocol.Crypto;
 
 /// <summary>
-/// The Java-style 31-multiplier hash over signed bytes, used to order the two UKEY2 keys.
+/// Computes the Java-style hash with the multiplier 31 over signed bytes. Pairing uses it to put the 2 UKEY2 keys in order.
 /// </summary>
 /// <remarks>
 /// Ports <c>byteHash</c> in <see href="https://github.com/mautrix/gmessages/blob/ba33f4875a491f5cb47db8a6baf42a8869f5f383/pkg/libgm/pair_google.go"/>.
-/// Bytes are treated as signed and the arithmetic wraps, exactly like Go's int32 math.
+/// The bytes are signed and the arithmetic wraps, exactly as the Go int32 math does.
 /// </remarks>
 public static class JavaHash
 {
@@ -13,7 +13,7 @@ public static class JavaHash
     /// Computes the hash.
     /// </summary>
     /// <remarks>
-    /// Starts at 1 and computes <c>31 * hash + (sbyte)b</c> for each byte.
+    /// The hash starts at 1 and becomes <c>31 * hash + (sbyte)b</c> for each byte.
     /// </remarks>
     /// <param name="bytes">The bytes to hash.</param>
     /// <returns>The 32-bit hash.</returns>

@@ -8,19 +8,24 @@ using Windows.UI.Xaml.Hosting;
 namespace GMessages.App.Views.Controls;
 
 /// <summary>
-/// The icon buttons' press feedback (owner): pressing shrinks the icon, releasing springs it slightly larger, then it
-/// settles back to its normal size.
+/// Gives the icon buttons the press feedback that the owner asked for. A press shrinks the icon with an ease. A release
+/// springs it a little larger, then returns it to its normal size.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Turned on once, by <c>IconButtonStyle</c>'s setter for <see cref="IsEnabledProperty"/>, so every icon button gets it.
-/// It watches the button's <see cref="ButtonBase.IsPressed"/> (pointer, touch, pen and Space or Enter alike) and runs a
-/// Composition scale animation on the template's content presenter, centered on its middle. The presenter's own
-/// background and border are clear in that style, so only the icon looks smaller; the focus rectangle isn't scaled.
+/// The setter of <c>IconButtonStyle</c> for <see cref="IsEnabledProperty"/> turns it on once, so each icon button gets
+/// it. It watches <see cref="ButtonBase.IsPressed"/> of the button. A pointer, touch, a pen, Space and Enter all set
+/// that state. It then runs a Composition scale animation on the content presenter of the template, centered on its
+/// middle. That style keeps the background and border of the presenter clear, so only the icon looks smaller. The
+/// animation does not scale the focus rectangle.
 /// </para>
 /// <para>
-/// Runs only while Windows' animation effects are on (<see cref="UISettings.AnimationsEnabled"/>); with them off the
-/// icon keeps its size.
+/// The icon buttons have no hover fill. Back and ☰ in the title bar have their own style, so they keep the default
+/// feedback.
+/// </para>
+/// <para>
+/// The animation runs only while the Windows animation effects are on, as <see cref="UISettings.AnimationsEnabled"/>
+/// tells. With the effects off, the icon keeps its size.
 /// </para>
 /// </remarks>
 public static class IconPress
@@ -49,14 +54,16 @@ public static class IconPress
     public static bool GetIsEnabled(DependencyObject element) => (bool)element.GetValue(IsEnabledProperty);
 
     /// <summary>
-    /// Sets whether a button runs the press animation. Turning it on starts watching the button's pressed state; it
-    /// isn't turned off again (the style sets it once).
+    /// Sets whether a button runs the press animation.
     /// </summary>
+    /// <remarks>
+    /// A true value starts a watch on the pressed state of the button. The class never stops the watch, because the
+    /// style sets the value once.
+    /// </remarks>
     /// <param name="element">The button.</param>
     /// <param name="value">True to animate.</param>
     public static void SetIsEnabled(DependencyObject element, bool value) => element.SetValue(IsEnabledProperty, value);
 
-    // Watch The Pressed State Once The Style Turns It On
     private static void OnIsEnabledChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         if (e.NewValue is not true)
@@ -67,8 +74,9 @@ public static class IconPress
         d.RegisterPropertyChangedCallback(ButtonBase.IsPressedProperty, OnIsPressedChanged);
     }
 
-    // Shrink On Press; On Release Spring Slightly Larger, Then Settle At Normal Size, Eased. The Content Presenter Is The
-    // Template's Root (Fluent's Button Template), Found By Name As AOT Requires
+    // A press shrinks the icon. A release springs it a little larger, then returns it to its normal size, with an ease.
+    // The content presenter is the root of the Fluent Button template. The code finds it by name, as Native AOT
+    // requires.
     private static void OnIsPressedChanged(DependencyObject sender, DependencyProperty dp)
     {
         if (!Ui.AnimationsEnabled || UiHelpers.FindPart<UIElement>(sender, "ContentPresenter") is not { } content)

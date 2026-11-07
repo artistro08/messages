@@ -8,20 +8,21 @@ using Windows.UI.Xaml.Media;
 namespace GMessages.App.Views.Controls;
 
 /// <summary>
-/// A small rounded square standing for a quoted or replied-to message's media, in a bubble's quote and in the reply chip
-/// over the message box.
+/// Shows a small rounded square for the media of a quoted message. The square sits in the quote of a bubble and in the
+/// reply chip over the message box.
 /// </summary>
 /// <remarks>
 /// <para>
-/// A photo or video shows its thumbnail, decoded 80 px wide (sharp at 200% scale), cropped to fill the 40 px square; a
-/// GIF shows still (a brush draws its first frame). Until the picture arrives, the square shows a neutral fill, and the
-/// picture swaps in when it does: the media store reads it from memory, or downloads it in the background, so nothing
-/// waits on it. A video shows the bubble's still frame (the phone's thumbnail, else one made here and kept; see
-/// <see cref="GMessages.App.Media.VideoStill"/>). A file or voice message shows a file icon.
+/// A photo or a video shows its thumbnail, cropped to fill the 40 px square. The thumbnail decodes at 80 px wide, so it
+/// is sharp at 200% scale. A GIF shows still, because a brush draws only its first frame. Until the picture arrives,
+/// the square shows a neutral fill. The media store reads the picture from memory or downloads it in the background,
+/// so nothing waits for it. A video shows the same still frame as its bubble. That frame is the thumbnail of the phone,
+/// or else a frame that <see cref="GMessages.App.Media.VideoStill"/> makes and keeps. A file or a voice message shows a
+/// file icon.
 /// </para>
 /// <para>
-/// A test run puts its state in its item status: <c>Thumb</c> once the picture shows, <c>Placeholder</c> while it waits
-/// or when none came, <c>Icon</c> for a file.
+/// In a test run, the item status holds the state of the square. The state is <c>Thumb</c> after the picture shows,
+/// and <c>Placeholder</c> while it waits or when no picture came. It is <c>Icon</c> for a file.
 /// </para>
 /// </remarks>
 public sealed partial class MediaThumb : UserControl
@@ -30,11 +31,11 @@ public sealed partial class MediaThumb : UserControl
     public static readonly DependencyProperty MediaProperty =
         DependencyProperty.Register(nameof(Media), typeof(MediaPart), typeof(MediaThumb), new PropertyMetadata(null, OnMediaChanged));
 
-    // The Thumbnail's Decode Width: The 40 px Square At 200% Scale
+    // The decode width fits the 40 px square at 200% scale.
     private const int DecodeWidth = 80;
 
     /// <summary>
-    /// Creates the square, empty.
+    /// Creates an empty square.
     /// </summary>
     public MediaThumb()
     {
@@ -42,14 +43,14 @@ public sealed partial class MediaThumb : UserControl
     }
 
     /// <summary>
-    /// Gives the square an automation peer, so its AutomationId and state reach UI Automation (a UserControl has none of
-    /// its own, which left it out of the tree).
+    /// Gives the square an automation peer, so its AutomationId and state reach UI Automation. A UserControl has no
+    /// peer, and without a peer the square is not in the tree.
     /// </summary>
     /// <returns>The peer.</returns>
     protected override AutomationPeer OnCreateAutomationPeer() => new FrameworkElementAutomationPeer(this);
 
     /// <summary>
-    /// Gets or sets the media the square stands for, or null.
+    /// Gets or sets the media that the square shows, or null.
     /// </summary>
     public MediaPart? Media
     {
@@ -57,7 +58,7 @@ public sealed partial class MediaThumb : UserControl
         set => SetValue(MediaProperty, value);
     }
 
-    // Another Media: Its Icon, Or Its Picture Once It Arrives (A Recycled Quote May Have Moved On By Then)
+    // Shows the icon of the new media, or its picture after it arrives. By then, a recycled quote can show other media.
     private static async void OnMediaChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         var view                = (MediaThumb)d;
@@ -71,7 +72,7 @@ public sealed partial class MediaThumb : UserControl
             return;
         }
 
-        // A Picture That Won't Load Keeps The Fill
+        // When the picture does not load, the square keeps the fill.
         try
         {
             byte[] bytes      = part.Kind == MessageKind.Video ? await VideoStill.GetAsync(media, part) : await media.GetAsync(part, thumbnail: true, CancellationToken.None);

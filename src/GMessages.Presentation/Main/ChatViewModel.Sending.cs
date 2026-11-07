@@ -5,38 +5,30 @@ using GMessages.Protocol.Proto;
 namespace GMessages.Presentation.Main;
 
 /// <summary>
-/// Sending from the open chat: the draft, the chips, replies, reactions and retries.
+/// Sends from the open chat: the draft, the chips, the replies, the reactions and the retries.
 /// </summary>
-/// <remarks>
-/// Part of <see cref="ChatViewModel"/>; the other members are in ChatViewModel.cs.
-/// </remarks>
 public sealed partial class ChatViewModel
 {
-
-    // =========================================================================
-    // SENDING
-    // =========================================================================
-
     /// <summary>
-    /// Sends the draft and the attachments: a bubble appears at once for each, and the draft and chips clear.
+    /// Sends the draft and the attachments. A bubble shows at once for each, and the draft and the chips clear.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// A send that fails for any reason marks its bubble failed instead of throwing. Does nothing when <see cref="CanSend"/> is false.
-    /// A reply to an RCS message carries its ID and the bubble shows the quote; a reply to SMS or MMS goes as plain
-    /// text, as the Go connector sends it (<c>handlematrix.go</c>). The reply clears once sent.
+    /// Any failure marks its bubble failed and throws nothing. The call does nothing when <see cref="CanSend"/> is
+    /// false. A reply to an RCS message carries its ID, and the bubble shows the quote. A reply to SMS or MMS goes as
+    /// plain text, as the Go connector sends it in <c>handlematrix.go</c>. The reply clears after the send.
     /// </para>
     /// <para>
-    /// A recording waiting in the preview chip goes first, as <c>Voice message.m4a</c> (<c>audio/mp4</c>), its temp file
-    /// deleted. Attachments go first, one at a time in order, each its own bubble showing its upload. Off RCS the text rides on
-    /// the last one as its caption; RCS refuses captions on media, so there the text follows as its own message. A reply
-    /// rides on the text, or on the first attachment when there is no text message. A failed attachment fails only its
-    /// own bubble, which retries on its own.
+    /// A recording in the preview chip goes first, as <c>Voice message.m4a</c> with <c>audio/mp4</c>. Its temp file
+    /// goes at once. The attachments go before the text, 1 at a time in order. Each gets its own bubble, which shows
+    /// its upload. Off RCS, the text goes on the last attachment as its caption. RCS refuses captions on media, so
+    /// there the text goes after as its own message. A reply goes on the text, or on the first attachment with no text
+    /// message. A failed attachment fails only its own bubble, which retries alone.
     /// </para>
     /// <para>
-    /// The picked files are read only now, each into one array. A file that can no longer be read stays as its chip,
-    /// with <see cref="ChatCopy.AttachSendFailed"/> over the chips. An attachment's bytes are let go once its upload is
-    /// done; only a failure before that keeps them for the retry.
+    /// The call reads the picked files only now, each into 1 array. A file that it can no longer read stays as its
+    /// chip, with <see cref="ChatCopy.AttachSendFailed"/> over the chips. The chat frees the bytes of an attachment
+    /// when its upload is done. Only a failure before then keeps them for the retry.
     /// </para>
     /// </remarks>
     /// <returns>A task that completes when the phone answered or the bubbles failed.</returns>
@@ -52,15 +44,15 @@ public sealed partial class ChatViewModel
         bool isRcs                          = _store.Find(ConversationId)?.IsRcs == true;
         string? replyTo                     = ReplyingTo is { IsRcs: true, Id.Length: > 0 } quoted ? quoted.Id : null;
 
-        // Cleared Before Reading, So A Second Send Can't Send The Same Files Again; The Kept Draft Goes Too, So The List Row
-        // Stops Showing It
+        // The chips clear before the read, so a second Send cannot send the same files again. The saved draft also
+        // goes, so the list row stops showing it.
         Draft = string.Empty;
         Attachments.Clear();
         AttachError = string.Empty;
         CancelReply();
         _store.SaveDraft(ConversationId, string.Empty);
 
-        // Read The Picked Files Now; One That Can't Be Read Goes Back As Its Chip
+        // A file that the read fails on goes back as its chip.
         List<(string Name, string Mime, byte[] Bytes, int Width, int Height)> ready = [];
         foreach (PendingAttachment attachment in attachments)
         {
@@ -76,7 +68,7 @@ public sealed partial class ChatViewModel
             }
         }
 
-        // The Recording Goes First, As An Attachment (Its Temp File Is Deleted Now)
+        // Take deletes the temp file of the recording.
         if (Voice.Take() is { } voice)
         {
             ready.Insert(0, (VoiceDraft.FileName, VoiceDraft.Mime, voice, 0, 0));
@@ -85,16 +77,16 @@ public sealed partial class ChatViewModel
         bool captionOnMedia = ready.Count > 0 && !isRcs && text.Length > 0;
         bool textApart      = text.Length > 0 && !captionOnMedia;
 
-        // Optimistic Bubbles: The Attachments (Showing Their Own Bytes), Then The Text. A Reply With No Text Message
-        // Rides On The First Attachment
+        // The bubbles show before the phone answers. The attachments show their own bytes.
         List<MessageBubbleViewModel> bubbles = [];
         for (int i = 0; i < ready.Count; i++)
         {
-            var a                              = ready[i];
+            (string name, string mime, byte[] bytes, int width, int height) = ready[i];
+
             string caption                     = captionOnMedia && i == ready.Count - 1 ? text : string.Empty;
             string? mediaReply                 = i == 0 && !textApart ? replyTo : null;
-            MessageBubbleViewModel mediaBubble = AddPending(MediaMessage(a.Name, a.Mime, a.Bytes, a.Width, a.Height, caption, mediaReply, isRcs));
-            _outgoing[mediaBubble]             = new OutgoingMedia(a.Bytes, a.Name, a.Mime);
+            MessageBubbleViewModel mediaBubble = AddPending(MediaMessage(name, mime, bytes, width, height, caption, mediaReply, isRcs));
+            _outgoing[mediaBubble]             = new OutgoingMedia(bytes, name, mime);
             bubbles.Add(mediaBubble);
         }
 
@@ -107,7 +99,7 @@ public sealed partial class ChatViewModel
             }));
         }
 
-        // One At A Time, So They Arrive In Order
+        // The sends go 1 at a time, so the messages arrive in order.
         foreach (MessageBubbleViewModel bubble in bubbles)
         {
             await SendBubbleAsync(bubble);
@@ -118,16 +110,19 @@ public sealed partial class ChatViewModel
     /// Adds a picked or pasted photo or file as a chip, unless <see cref="CanAttach"/> refuses its size.
     /// </summary>
     /// <remarks>
-    /// The file is not read now: <paramref name="open"/> opens it for the chip's picture, and Send reads it. A refused
-    /// file shows <see cref="AttachError"/> until the next pick (<see cref="ClearAttachError"/>), a removed chip or Send.
+    /// The call does not read the file. <paramref name="open"/> opens it for the picture of the chip, and Send reads
+    /// it. A refused file shows <see cref="AttachError"/> until the next pick, a removed chip or Send. The next pick
+    /// calls <see cref="ClearAttachError"/>.
     /// </remarks>
     /// <param name="name">The file name the other side sees.</param>
     /// <param name="mime">The mime type.</param>
-    /// <param name="size">The file's size in bytes.</param>
-    /// <param name="open">Opens the file for reading.</param>
-    /// <param name="width">A photo's width in pixels, or 0 when unknown.</param>
-    /// <param name="height">A photo's height in pixels, or 0 when unknown.</param>
-    /// <param name="thumbnail">Opens the file's thumbnail (a video's frame) for the chip, or null for none.</param>
+    /// <param name="size">The size of the file in bytes.</param>
+    /// <param name="open">Opens the file for the read.</param>
+    /// <param name="width">The width of a photo in pixels, or 0 when unknown.</param>
+    /// <param name="height">The height of a photo in pixels, or 0 when unknown.</param>
+    /// <param name="thumbnail">
+    /// Opens the thumbnail of the file for the chip, such as the frame of a video, or null for none.
+    /// </param>
     /// <returns>True when the chip was added.</returns>
     public bool Attach(string name, string mime, long size, Func<Task<Stream>> open, int width = 0, int height = 0, Func<Task<Stream>>? thumbnail = null)
     {
@@ -145,13 +140,13 @@ public sealed partial class ChatViewModel
     }
 
     /// <summary>
-    /// Adds bytes already in memory as a chip (see the overload that opens a file).
+    /// Adds bytes in memory as a chip. The overload that opens a file does the work.
     /// </summary>
     /// <param name="name">The file name the other side sees.</param>
     /// <param name="mime">The mime type.</param>
-    /// <param name="bytes">The file's bytes.</param>
-    /// <param name="width">A photo's width in pixels, or 0 when unknown.</param>
-    /// <param name="height">A photo's height in pixels, or 0 when unknown.</param>
+    /// <param name="bytes">The bytes of the file.</param>
+    /// <param name="width">The width of a photo in pixels, or 0 when unknown.</param>
+    /// <param name="height">The height of a photo in pixels, or 0 when unknown.</param>
     /// <returns>True when the chip was added.</returns>
     public bool Attach(string name, string mime, byte[] bytes, int width = 0, int height = 0)
     {
@@ -161,11 +156,12 @@ public sealed partial class ChatViewModel
     }
 
     /// <summary>
-    /// Tells whether a file of this size may be attached; when not, <see cref="AttachError"/> says it is too big.
+    /// Tells whether the chat can attach a file of this size. When it cannot, <see cref="AttachError"/> says that the
+    /// file is too big.
     /// </summary>
-    /// <param name="size">The file's size in bytes.</param>
+    /// <param name="size">The size of the file in bytes.</param>
     /// <returns>
-    /// False when the file is over <see cref="ChatStore.MaxAttachmentBytes"/>, or would take the chips past
+    /// False when the file is over <see cref="ChatStore.MaxAttachmentBytes"/>, or when it takes the chips past
     /// <see cref="MaxTotalAttachmentBytes"/> together.
     /// </returns>
     public bool CanAttach(long size)
@@ -186,18 +182,19 @@ public sealed partial class ChatViewModel
     }
 
     /// <summary>
-    /// Hides the too-big note (a new pick starts).
+    /// Hides the too-big note when a new pick starts.
     /// </summary>
     public void ClearAttachError() => AttachError = string.Empty;
 
     /// <summary>
-    /// Says over the chips that a recording ended with Done couldn't be finished (<see cref="ChatCopy.RecordingFailed"/>),
-    /// so it is never lost without a word; the note goes like the too-big note, or when the next recording starts.
+    /// Shows <see cref="ChatCopy.RecordingFailed"/> over the chips when a recording that ended with Done failed. Thus
+    /// no recording goes without a word.
     /// </summary>
+    /// <remarks>The note goes as the too-big note goes, or when the next recording starts.</remarks>
     public void NoteRecordingFailed() => AttachError = ChatCopy.RecordingFailed;
 
     /// <summary>
-    /// Drops a chip (its remove button).
+    /// Removes a chip when the user clicks its remove button.
     /// </summary>
     /// <param name="attachment">The attachment.</param>
     public void RemoveAttachment(PendingAttachment attachment)
@@ -209,7 +206,7 @@ public sealed partial class ChatViewModel
     }
 
     /// <summary>
-    /// Starts a reply to a bubble: the reply chip shows until the next send or <see cref="CancelReply"/>.
+    /// Starts a reply to a bubble. The reply chip shows until the next send or <see cref="CancelReply"/>.
     /// </summary>
     /// <param name="bubble">The bubble to reply to.</param>
     public void StartReply(MessageBubbleViewModel bubble)
@@ -220,14 +217,17 @@ public sealed partial class ChatViewModel
     }
 
     /// <summary>
-    /// Drops the reply being written (the reply chip's close button).
+    /// Cancels the reply when the user clicks the close button of the reply chip.
     /// </summary>
     public void CancelReply() => ReplyingTo = null;
 
     /// <summary>
-    /// Reacts to a bubble: adds the emoji, switches my other emoji to it, or removes it when it is already mine.
+    /// Reacts to a bubble. The call adds the emoji, changes my other emoji to it, or removes it when it is mine.
     /// </summary>
-    /// <remarks>The bubble changes when the phone's echo arrives, not before. A failure is logged by type and swallowed.</remarks>
+    /// <remarks>
+    /// The bubble changes when the echo from the phone arrives, not before. The call logs a failure by type and throws
+    /// nothing.
+    /// </remarks>
     /// <param name="bubble">The bubble reacted to.</param>
     /// <param name="emoji">The emoji.</param>
     /// <returns>A task that completes when the phone answered.</returns>
@@ -236,7 +236,7 @@ public sealed partial class ChatViewModel
         ArgumentNullException.ThrowIfNull(bubble);
         ArgumentException.ThrowIfNullOrEmpty(emoji);
 
-        // Not Reported By The Phone Yet: Nothing To React To
+        // The phone did not report the message yet.
         if (bubble.Id.Length == 0)
         {
             return;
@@ -260,16 +260,18 @@ public sealed partial class ChatViewModel
     }
 
     /// <summary>
-    /// Deletes a bubble's message from the phone; the bubble goes once the phone says it did.
+    /// Deletes the message of a bubble from the phone. The bubble goes when the phone says that it did.
     /// </summary>
-    /// <remarks>Only this side's copy goes. A failure (or the phone saying no) is logged and the bubble stays.</remarks>
+    /// <remarks>
+    /// Only the copy on this side goes. The call logs a failure or a refusal from the phone, and the bubble stays.
+    /// </remarks>
     /// <param name="bubble">The bubble to delete.</param>
-    /// <returns>True when it was deleted.</returns>
+    /// <returns>True when the phone deleted it.</returns>
     public async Task<bool> DeleteAsync(MessageBubbleViewModel bubble)
     {
         ArgumentNullException.ThrowIfNull(bubble);
 
-        // Not Reported By The Phone Yet: Nothing To Delete There
+        // The phone did not report the message yet.
         if (bubble.Id.Length == 0)
         {
             return false;
@@ -297,8 +299,8 @@ public sealed partial class ChatViewModel
     /// Sends a failed bubble again with a new temporary ID: its text, or its attachment with its caption.
     /// </summary>
     /// <remarks>
-    /// An attachment sends the same upload again (its media ID and key), and uploads again only when the first try
-    /// failed before its upload was done. A bubble from before the chat opened sends the media its echo carried.
+    /// An attachment sends the same upload again, with its media ID and key. It uploads again only when the first try
+    /// failed before the end of its upload. A bubble from before the chat opened sends the media of its echo.
     /// </remarks>
     /// <param name="failed">The bubble that failed.</param>
     /// <returns>A task that completes when the phone answered or the bubble failed again.</returns>
@@ -311,7 +313,7 @@ public sealed partial class ChatViewModel
             return;
         }
 
-        // A New Temporary ID: The Old One Leaves The Lookup
+        // The old temporary ID leaves the lookup.
         _byTmpId.Remove(failed.TmpId);
         failed.MarkSending(GmClient.NewTmpId());
         Index(failed);
@@ -319,15 +321,15 @@ public sealed partial class ChatViewModel
         await SendBubbleAsync(failed);
     }
 
-    // Sends A Bubble's Attachment (Uploading It, With Its Caption), Or Its Text (As A Reply When It Quotes One); Any
-    // Failure (Phone, Refusal, Network, Timeout, Decode, Too Big) Fails The Bubble Instead Of Escaping
+    // Sends the attachment of a bubble with its caption, or its text. Each failure fails the bubble and does not
+    // escape: the phone, a refusal, the network, a timeout, a decode or a file that is too big.
     private async Task SendBubbleAsync(MessageBubbleViewModel bubble)
     {
         try
         {
             if (OutgoingOf(bubble) is { } outgoing)
             {
-                // Upload Once; A Retry Sends The Same Upload Again
+                // The upload runs 1 time. A retry sends the same upload again.
                 if (outgoing.Uploaded is null)
                 {
                     var progress      = new PostedProgress(share => _post(() => bubble.SetUploadShare(share)));
@@ -352,7 +354,6 @@ public sealed partial class ChatViewModel
         }
     }
 
-    // Tells The Other Side I'm Typing; A Failure Is Only Logged
     private async Task SendTypingAsync()
     {
         try

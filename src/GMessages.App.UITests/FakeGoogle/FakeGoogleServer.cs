@@ -16,22 +16,29 @@ namespace GMessages.App.UITests.FakeGoogle;
 /// real Google and no real phone.
 /// </summary>
 /// <remarks>
-/// Serves the paths of <see cref="GmEndpoints"/> when all three bases are <see cref="BaseUrl"/>. Protocol answers are
-/// PBLite (<c>application/json+protobuf</c>), as Google sends them. <c>/web/authentication</c> is a simulated login
-/// page: it sets no cookies until its "Sign in" button (<c>id="signin"</c>) posts to <c>/web/authentication/login</c>.
-/// The long poll answers <c>[[</c> and a startup ack (counting the phone's catch-up messages, which come first) at once, then pushed payloads, with a heartbeat every 10 seconds,
-/// and stays open until the client leaves or <see cref="KillLongPoll"/>. <c>SendMessage</c> requests go to
-/// <see cref="Phone"/>, whose answers come back on the long poll. <c>/upload</c> serves media as Google does: a
-/// <c>start</c> POST answers with an upload URL and granularity, a <c>upload, finalize</c> POST to that URL stores the
-/// encrypted file in the phone's <see cref="FakePhone.Chats"/> and answers with a base64 <c>UploadMediaResponse</c>,
-/// and a GET answers with the stored bytes of the attachment ID in <c>x-goog-download-metadata</c> (404 when there are
-/// none). A finalize to a session it never started, or at an offset other than 0, and any <c>/upload</c> request that
-/// carries <c>cookie</c> or <c>x-goog-api-key</c>, get 400. Each request is served on its own task. Binds
-/// 127.0.0.1 only and never contacts anything.
+/// The server serves the paths of <see cref="GmEndpoints"/> when all 3 bases are <see cref="BaseUrl"/>.
+/// Protocol answers are PBLite (<c>application/json+protobuf</c>), as Google sends them.
+/// <c>/web/authentication</c> is a simulated login page. It sets no cookies until its "Sign in" button
+/// (<c>id="signin"</c>) posts to <c>/web/authentication/login</c>.
+/// <para>
+/// The long poll answers at once with <c>[[</c> and a startup ack. The ack counts the catch-up messages of the phone,
+/// which come first. Pushed payloads follow, with a heartbeat every 10 seconds.
+/// The long poll stays open until the client leaves or <see cref="KillLongPoll"/> ends it.
+/// <c>SendMessage</c> requests go to <see cref="Phone"/>, and its answers come back on the long poll.
+/// </para>
+/// <para>
+/// <c>/upload</c> serves media as Google does. A <c>start</c> POST answers with an upload URL and a granularity.
+/// An <c>upload, finalize</c> POST to that URL stores the encrypted file in <see cref="FakePhone.Chats"/>
+/// and answers with a base64 <c>UploadMediaResponse</c>. A GET answers with the stored bytes of the attachment ID in
+/// <c>x-goog-download-metadata</c>, or with 404 when no bytes exist.
+/// A finalize to a session that never started, or at an offset other than 0, gets 400.
+/// Any <c>/upload</c> request that carries <c>cookie</c> or <c>x-goog-api-key</c> also gets 400.
+/// </para>
+/// The server serves each request on its own task. It binds 127.0.0.1 only and never contacts anything.
 /// </remarks>
 public sealed class FakeGoogleServer : IAsyncDisposable
 {
-    /// <summary>How often an idle long poll gets a heartbeat.</summary>
+    /// <summary>The interval between heartbeats on an idle long poll.</summary>
     public static readonly TimeSpan HeartbeatInterval = TimeSpan.FromSeconds(10);
 
     /// <summary>
@@ -51,7 +58,7 @@ public sealed class FakeGoogleServer : IAsyncDisposable
 
     private const string PbLiteMime = "application/json+protobuf";
 
-    // Ports Chromium Refuses (net/base/port_util.cc); WebView2 Could Never Load A Page On Them
+    // Chromium refuses these ports (net/base/port_util.cc). WebView2 can never load a page on them.
     private static readonly FrozenSet<int> ChromiumUnsafePorts = new[] { 6000, 6566, 6665, 6666, 6667, 6668, 6669, 6697, 10080 }.ToFrozenSet();
 
     private const string SignInPage = """
@@ -85,14 +92,14 @@ public sealed class FakeGoogleServer : IAsyncDisposable
         """;
 
     /// <summary>
-    /// Gets or sets the GIF served at <c>/web-gif.gif</c>, as Tenor serves the emoji panel's GIFs (a 1 x 1 GIF until set).
+    /// Gets or sets the GIF served at <c>/web-gif.gif</c>, as Tenor serves the GIFs of the emoji panel.
+    /// Until a test sets it, the GIF is 1 x 1 pixel.
     /// </summary>
     public byte[] WebGif { get; set; } = Convert.FromHexString("4749463839610100010080000000FFFFFF00000021F90400000000002C00000000010001000002024401003B");
 
     /// <summary>The <c>og:title</c> of the page at <c>/preview-page</c>, which a link preview card shows.</summary>
     public const string PreviewPageTitle = "Fake Preview Page";
 
-    // A Linked Page For The Link Preview Card
     private const string PreviewPage = $"""
         <!doctype html>
         <html>
@@ -132,7 +139,7 @@ public sealed class FakeGoogleServer : IAsyncDisposable
     /// <summary>
     /// Starts the server on a free port of 127.0.0.1.
     /// </summary>
-    /// <exception cref="HttpListenerException">No free port could be bound after several tries.</exception>
+    /// <exception cref="HttpListenerException">No free port binds after 5 tries.</exception>
     public FakeGoogleServer()
     {
         Phone = new FakePhone(
@@ -145,7 +152,7 @@ public sealed class FakeGoogleServer : IAsyncDisposable
                 }
             });
 
-        // Free Port: Bind Port 0, Release It, Listen; Retry If Someone Took It Meanwhile
+        // Bind port 0, release it, then listen on it. Retry when another process takes the port in between.
         for (int attempt = 1; ; attempt++)
         {
             int port      = FreePort();
@@ -168,7 +175,7 @@ public sealed class FakeGoogleServer : IAsyncDisposable
     }
 
     /// <summary>
-    /// Gets the server's base address, for example <c>http://127.0.0.1:50123/</c>.
+    /// Gets the base address of the server, for example <c>http://127.0.0.1:50123/</c>.
     /// </summary>
     public Uri BaseUrl { get; }
 
@@ -187,12 +194,12 @@ public sealed class FakeGoogleServer : IAsyncDisposable
     }
 
     /// <summary>
-    /// Gets or sets whether the app's start-up is slow: tokens are handed out with 30 minutes left, so every start
-    /// refreshes first, and each refresh is answered 3 s late.
+    /// Gets or sets whether the start-up of the app is slow. The server issues tokens with 30 minutes left, so every
+    /// start refreshes first, and the server answers each refresh 3 s late.
     /// </summary>
     /// <remarks>
-    /// Start-up never fetches <c>/web/config</c> (only pairing does); the token refresh is the request a start waits
-    /// on. Set it before pairing, so the saved session already needs a refresh.
+    /// Start-up never fetches <c>/web/config</c>, because only pairing does. The token refresh is the request that a
+    /// start waits for. Set this property before pairing, so the saved session already needs a refresh.
     /// </remarks>
     public bool SlowStart
     {
@@ -201,7 +208,7 @@ public sealed class FakeGoogleServer : IAsyncDisposable
     }
 
     /// <summary>
-    /// Gets or sets whether media downloads are answered with a 500, as a failing download.
+    /// Gets or sets whether media downloads get a 500 answer, as a failing download.
     /// </summary>
     public bool FailMediaDownloads
     {
@@ -210,12 +217,12 @@ public sealed class FakeGoogleServer : IAsyncDisposable
     }
 
     /// <summary>
-    /// Gets or sets how long an upload's finalize waits before it answers, so a test can see the upload bar.
+    /// Gets or sets how long the finalize of an upload waits before it answers, so a test can see the upload bar.
     /// </summary>
     public TimeSpan UploadDelay { get; set; }
 
     /// <summary>
-    /// Gets or sets how long a media download waits before it answers (zero: at once), as a stalled download.
+    /// Gets or sets how long a media download waits before it answers, as a stalled download. Zero answers at once.
     /// </summary>
     public TimeSpan MediaDownloadDelay
     {
@@ -234,7 +241,7 @@ public sealed class FakeGoogleServer : IAsyncDisposable
     public IReadOnlyList<string> RequestedPaths => [.. _paths];
 
     /// <summary>
-    /// Gets every unexpected server error so far: failed accepts and requests answered with 500.
+    /// Gets every unexpected server error so far: failed accepts and requests that got a 500 answer.
     /// </summary>
     public IReadOnlyList<Exception> Errors => [.. _errors];
 
@@ -249,7 +256,8 @@ public sealed class FakeGoogleServer : IAsyncDisposable
         byte[] bytes = PbLiteSerializer.Serialize(payload);
         lock (_lock)
         {
-            // ponytail: a payload written to a stream the client just dropped is lost, as with real Google; fine for tests
+            // ponytail: a payload written to a stream that the client just dropped is lost, as with real Google.
+            // This is fine for tests.
             if (_stream is null || !_stream.Writer.TryWrite(bytes))
             {
                 _pending.Add(bytes);
@@ -258,9 +266,12 @@ public sealed class FakeGoogleServer : IAsyncDisposable
     }
 
     /// <summary>
-    /// Ends the open long poll; later long polls get <paramref name="status"/> instead of a stream.
+    /// Ends the open long poll. Later long polls get <paramref name="status"/> instead of a stream.
     /// </summary>
-    /// <param name="status">The HTTP status for later long polls, such as 401; 0 only ends the stream and lets the client reconnect.</param>
+    /// <param name="status">
+    /// The HTTP status for later long polls, such as 401.
+    /// A value of 0 only ends the stream and lets the client reconnect.
+    /// </param>
     public void KillLongPoll(int status)
     {
         lock (_lock)
@@ -273,7 +284,7 @@ public sealed class FakeGoogleServer : IAsyncDisposable
     /// <summary>
     /// Stops the server, ends every open request and waits for the request tasks to finish.
     /// </summary>
-    /// <returns>A task that completes when everything has stopped.</returns>
+    /// <returns>A task that completes when the server has stopped.</returns>
     public async ValueTask DisposeAsync()
     {
         if (_stop.IsCancellationRequested)
@@ -303,12 +314,12 @@ public sealed class FakeGoogleServer : IAsyncDisposable
             }
             catch (Exception) when (_stop.IsCancellationRequested || !_listener.IsListening)
             {
-                // Stopping Or Disposed
+                // The server is stopping or disposed.
                 return;
             }
             catch (Exception ex)
             {
-                // One Bad Accept Must Not Kill The Server; Keep It Visible And Keep Listening
+                // One bad accept must not kill the server. Record the error so a test can see it, and keep listening.
                 _errors.Enqueue(ex);
                 continue;
             }
@@ -319,7 +330,7 @@ public sealed class FakeGoogleServer : IAsyncDisposable
         }
     }
 
-    // One Request; A Failure Answers 500 With The Error, So A Test Sees It Instead Of Hanging
+    // A failure answers 500 with the error, so a test sees the error instead of a hang.
     private async Task HandleAsync(HttpListenerContext context)
     {
         HttpListenerRequest request = context.Request;
@@ -337,7 +348,7 @@ public sealed class FakeGoogleServer : IAsyncDisposable
                 case "/web/authentication/login" when request.HttpMethod == "POST":
                     foreach ((string name, string value) in SignInCookies)
                     {
-                        // A __Secure- Cookie Must Carry Secure Or Browsers Drop It
+                        // A __Secure- cookie must carry Secure, or browsers drop it.
                         string secure = name.StartsWith("__Secure-", StringComparison.Ordinal) ? "; Secure" : "";
                         context.Response.Headers.Add("Set-Cookie", $"{name}={value}; Path=/{secure}");
                     }
@@ -381,12 +392,12 @@ public sealed class FakeGoogleServer : IAsyncDisposable
                     await RespondAsync(context.Response, 200, PbLiteMime, "[]"u8.ToArray());
                     break;
 
-                // Media: Never With Cookies Or The Api Key
+                // Media requests never carry cookies or the API key.
                 case not null when path.StartsWith("/upload", StringComparison.Ordinal) && (request.Headers["cookie"] is not null || request.Headers["x-goog-api-key"] is not null):
                     await RespondAsync(context.Response, 400, "text/plain", "Media requests carry no credentials"u8.ToArray());
                     break;
 
-                // Media: Upload Start, Upload Finalize, Download
+                // The next 3 cases are the media upload start, the upload finalize and the download.
                 case "/upload" when request.HttpMethod == "POST" && request.Headers["x-goog-upload-command"] == "start":
                     string session = Guid.NewGuid().ToString("N");
                     _uploadSessions[session] = 0;
@@ -443,12 +454,12 @@ public sealed class FakeGoogleServer : IAsyncDisposable
             }
             catch (Exception)
             {
-                // The Client Is Gone Or The Answer Was Already Started
+                // The client is gone, or the answer already started.
             }
         }
         catch (Exception)
         {
-            // Stopping
+            // The server is stopping.
         }
     }
 
@@ -456,7 +467,8 @@ public sealed class FakeGoogleServer : IAsyncDisposable
     // LONG POLL
     // =========================================================================
 
-    // "[[" Plus A Startup Ack At Once, Then Payloads As They Come, A Heartbeat When Idle, "]]" When Killed
+    // The answer is "[[" and a startup ack at once. Payloads follow as they come, with a heartbeat when idle.
+    // A killed long poll ends with "]]".
     private async Task LongPollAsync(HttpListenerResponse response)
     {
         var channel = Channel.CreateUnbounded<byte[]>();
@@ -467,7 +479,8 @@ public sealed class FakeGoogleServer : IAsyncDisposable
             kill = _killStatus;
             if (kill <= 0)
             {
-                // The Newest Long Poll Takes Over: The Old One's Unread Payloads, Then Anything Queued While None Was Open
+                // The newest long poll replaces the old one. It gets the unread payloads of the old one first, then
+                // everything queued while no long poll was open.
                 if (_stream is { } old)
                 {
                     old.Writer.TryComplete();
@@ -479,7 +492,7 @@ public sealed class FakeGoogleServer : IAsyncDisposable
 
                 _stream = channel;
 
-                // Catch-Up Messages Wait For A Paired Client's Poll, Go First, And Are Counted By The Startup Ack
+                // Catch-up messages wait for the poll of a paired client and go first. The startup ack counts them.
                 if (Phone.RequestCrypto is not null)
                 {
                     foreach (byte[] catchUp in _catchUp)
@@ -516,7 +529,7 @@ public sealed class FakeGoogleServer : IAsyncDisposable
             byte[] heartbeat = PbLiteSerializer.Serialize(new LongPollingPayload { Heartbeat = new EmptyArr() });
             while (true)
             {
-                // Wait For A Payload; Canceling WaitToReadAsync Consumes Nothing
+                // Canceling WaitToReadAsync consumes no payload, so the heartbeat timeout loses nothing.
                 bool more;
                 using (var idle = CancellationTokenSource.CreateLinkedTokenSource(_stop.Token))
                 {
@@ -546,7 +559,7 @@ public sealed class FakeGoogleServer : IAsyncDisposable
         }
         catch (Exception)
         {
-            // The Client Left Or The Server Is Stopping
+            // The client left, or the server is stopping.
         }
         finally
         {
@@ -557,7 +570,7 @@ public sealed class FakeGoogleServer : IAsyncDisposable
                     _stream = null;
                 }
 
-                // Unsent Payloads Go To The Live Long Poll, Or Wait For The Next One
+                // Unsent payloads go to the live long poll, or wait for the next one.
                 channel.Writer.TryComplete();
                 while (channel.Reader.TryRead(out byte[]? left))
                 {
@@ -574,7 +587,7 @@ public sealed class FakeGoogleServer : IAsyncDisposable
             }
             catch (Exception)
             {
-                // Already Gone
+                // The client is already gone.
             }
         }
     }
@@ -593,14 +606,14 @@ public sealed class FakeGoogleServer : IAsyncDisposable
     // ANSWERS
     // =========================================================================
 
-    // Web Config: The Device ID Becomes The Client's Session ID
+    // The device ID in the web config becomes the session ID of the client.
     private Config Config() => new()
     {
         ClientVersion = $"{GmConstants.ConfigVersion.Year:D4}{GmConstants.ConfigVersion.Month:D2}{GmConstants.ConfigVersion.Day:D2}",
         DeviceInfo    = new Config.Types.DeviceInfo { DeviceID = _configDeviceId },
     };
 
-    // Sign-In: A Token, The Browser Device, And One Phone Seen Just Now
+    // The sign-in answer holds a token, the browser device and one phone seen just now.
     private SignInGaiaResponse SignIn()
     {
         var deviceData = new SignInGaiaResponse.Types.DeviceData
@@ -621,7 +634,8 @@ public sealed class FakeGoogleServer : IAsyncDisposable
         return new SignInGaiaResponse { TokenData = Token(), DeviceData = deviceData };
     }
 
-    // A Token Valid For 24 Hours, Or 30 Minutes (Inside The Client's 1 Hour Refresh Window) For A Slow Start
+    // The token is valid for 24 hours. For a slow start it is valid for 30 minutes, which is inside the 1 hour
+    // refresh window of the client.
     private TokenData Token() => new()
     {
         TachyonAuthToken = ByteString.CopyFromUtf8("fake-tachyon-token"),
@@ -648,7 +662,7 @@ public sealed class FakeGoogleServer : IAsyncDisposable
         return buffer.ToArray();
     }
 
-    // Port 0 Picks A Free Port; Chromium-Unsafe Ones Are Skipped
+    // Port 0 picks a free port. The loop skips the ports that Chromium refuses.
     private static int FreePort()
     {
         while (true)

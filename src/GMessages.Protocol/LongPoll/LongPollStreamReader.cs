@@ -12,33 +12,34 @@ namespace GMessages.Protocol.LongPoll;
 /// <remarks>
 /// Ported from <c>readLongPoll</c> in
 /// <see href="https://github.com/mautrix/gmessages/blob/ba33f4875a491f5cb47db8a6baf42a8869f5f383/pkg/libgm/longpoll.go">longpoll.go</see>.
-/// Google sends one endless response shaped <c>[[</c>, payloads separated by commas, then <c>]]</c>. Go assumes
-/// every network read holds exactly one payload and re-checks the buffered text with <c>json.Valid</c>. This reader
-/// does not rely on read sizes: it scans the bytes for where each top-level array ends, tracking strings and escapes
-/// so brackets inside text never confuse it, so any way of cutting the stream into reads gives the same payloads.
-/// The buffer is compacted after each payload so a connection that runs all day does not grow it.
+/// Google sends 1 endless response: <c>[[</c>, then payloads with commas between them, then <c>]]</c>. Go expects 1
+/// payload in each network read and checks the buffered text again with <c>json.Valid</c>. This reader does not
+/// depend on read sizes. It scans the bytes for the end of each top-level array. It tracks strings and escapes, so
+/// brackets inside text do not confuse it. Thus each split of the stream into reads gives the same payloads. The
+/// reader compacts the buffer after each payload, so a connection that runs all day does not grow it.
 /// </remarks>
 public static partial class LongPollStreamReader
 {
     private const int InitialBufferSize = 8 * 1024;
     private const int ShrinkAboveSize   = 1024 * 1024;
 
-    // ponytail: fixed 32 MB cap on one in-progress payload (real ones are KBs); make it a setting if a legit payload ever exceeds it.
+    // ponytail: a fixed 32 MB limit on 1 payload in progress. Real payloads are a few KB. Make it a setting when a real payload is larger.
     private const int MaxPayloadBytes = 32 * 1024 * 1024;
 
     /// <summary>
-    /// Reads payloads from the response body until the end marker or end of stream.
+    /// Reads payloads from the response body until the end marker or the end of the stream.
     /// </summary>
     /// <remarks>
-    /// Needs the body to start with <c>[[</c>. Each complete top-level array is decoded as PBLite; one that fails to
-    /// decode is logged (length only, never contents) and skipped. A clean stop happens at the closing <c>]]</c> or
-    /// when the stream ends. The idle timer restarts on every read, so only silence (not total length) times out.
+    /// The body must start with <c>[[</c>. The reader decodes each complete top-level array as PBLite. It logs the
+    /// length of an array that does not decode, never the contents, and skips it. The read stops cleanly at the closing
+    /// <c>]]</c> or at the end of the stream. The idle timer starts again on each read, so only silence causes a
+    /// timeout, not the total length.
     /// </remarks>
     /// <param name="body">The response body stream.</param>
-    /// <param name="idleTimeout">How long to wait for any bytes before giving up.</param>
-    /// <param name="time">The clock used for the idle timer.</param>
+    /// <param name="idleTimeout">The longest wait for bytes.</param>
+    /// <param name="time">The clock for the idle timer.</param>
+    /// <param name="logger">The log for skipped payloads. Null logs nothing.</param>
     /// <param name="ct">Cancels the read.</param>
-    /// <param name="logger">Where skipped payloads are logged; null logs nothing.</param>
     /// <returns>The decoded payloads in arrival order.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="body"/> or <paramref name="time"/> is null.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="idleTimeout"/> is zero or negative (and not <see cref="Timeout.InfiniteTimeSpan"/>).</exception>
@@ -49,11 +50,11 @@ public static partial class LongPollStreamReader
         Stream body,
         TimeSpan idleTimeout,
         TimeProvider time,
-        CancellationToken ct,
-        ILogger? logger = null)
+        ILogger? logger,
+        CancellationToken ct)
         => ReadWithCapAsync(body, idleTimeout, time, logger, MaxPayloadBytes, ct);
 
-    // Same as the public method with a settable payload cap, so tests need not allocate 32 MB.
+    // The same as the public method, with a payload limit that tests set. Thus tests do not allocate 32 MB.
     internal static IAsyncEnumerable<LongPollingPayload> ReadWithCapAsync(
         Stream body,
         TimeSpan idleTimeout,
@@ -80,7 +81,6 @@ public static partial class LongPollStreamReader
         int maxPayloadBytes,
         [EnumeratorCancellation] CancellationToken ct)
     {
-        // Scanner State (Kept Across Reads)
         byte[] buffer     = new byte[InitialBufferSize];
         int length        = 0;
         int pos           = 0;
@@ -92,7 +92,6 @@ public static partial class LongPollStreamReader
 
         while (true)
         {
-            // Scan Buffered Bytes
             while (opened ? pos < length : length >= 2)
             {
                 if (!opened)
@@ -111,7 +110,7 @@ public static partial class LongPollStreamReader
 
                 if (depth == 0)
                 {
-                    // Between Payloads
+                    // Depth 0 is the space between payloads.
                     if (b == (byte)'[')
                     {
                         payloadStart  = pos;
@@ -119,7 +118,7 @@ public static partial class LongPollStreamReader
                     }
                     else if (b == (byte)']')
                     {
-                        // End Marker
+                        // The closing ]] ends the stream.
                         yield break;
                     }
                     else if (b is not ((byte)',' or (byte)' ' or (byte)'\t' or (byte)'\r' or (byte)'\n'))
@@ -129,7 +128,6 @@ public static partial class LongPollStreamReader
                 }
                 else if (inString)
                 {
-                    // Inside A JSON String
                     if (escaped)
                     {
                         escaped = false;
@@ -157,7 +155,6 @@ public static partial class LongPollStreamReader
 
                     if (depth == 0)
                     {
-                        // Payload Complete
                         LongPollingPayload? payload = Decode(buffer.AsSpan(payloadStart, pos - payloadStart + 1), logger);
                         payloadStart = -1;
 
@@ -173,13 +170,11 @@ public static partial class LongPollStreamReader
                 pos++;
             }
 
-            // Cap One In-Progress Payload
             if (payloadStart >= 0 && length - payloadStart > maxPayloadBytes)
             {
                 throw new InvalidDataException($"Long-poll payload is larger than {maxPayloadBytes} bytes.");
             }
 
-            // Compact Consumed Bytes
             int keep = payloadStart >= 0 ? payloadStart : pos;
             if (keep > 0)
             {
@@ -198,11 +193,10 @@ public static partial class LongPollStreamReader
             }
             else if (buffer.Length > ShrinkAboveSize && length < buffer.Length / 4)
             {
-                // A Huge Payload Is Gone, Give The Memory Back
+                // A huge payload is gone, so give the memory back.
                 Array.Resize(ref buffer, Math.Max(InitialBufferSize, length * 2));
             }
 
-            // Read With Idle Timeout
             int read;
             using (var idle = new CancellationTokenSource(idleTimeout, time))
             using (var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, idle.Token))
@@ -219,7 +213,7 @@ public static partial class LongPollStreamReader
 
             if (read == 0)
             {
-                // Stream Ended (Log Any Half-Received Payload)
+                // The stream ended. Log any payload that arrived only in part.
                 if (payloadStart >= 0)
                 {
                     LogDroppedPartial(logger, length - payloadStart);

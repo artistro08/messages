@@ -1,29 +1,20 @@
 using GMessages.App.Media;
 using GMessages.Presentation.Messaging;
 using Windows.UI.Xaml;
-using Windows.UI.Xaml.Controls;
 
 namespace GMessages.App.Views.Controls;
 
 /// <summary>
-/// The bubble menu's Open, Open with, Save as and Download.
+/// Runs Open, Open with, Save as and Download from the bubble menu.
 /// </summary>
 /// <remarks>
-/// Part of <see cref="MessageBubble"/>; the other members are in MessageBubble.xaml.cs.
+/// This file is a part of <see cref="MessageBubble"/>. The other members are in MessageBubble.xaml.cs.
 /// </remarks>
 public sealed partial class MessageBubble
 {
-
-    // =========================================================================
-    // OPEN AND SAVE
-    // =========================================================================
-
-    // Opens The File In Its Default App (See MediaActions.OpenAsync). True When Opened Or Offered For Saving
-    private Task<bool> OpenMediaAsync(MediaPart part) => MediaActions.OpenAsync(XamlRoot, part, Bubble?.Id ?? string.Empty);
-
     /// <summary>
-    /// The bubble menu's Open: as a click on the photo (the viewer), the video's frame, the voice message, or the file
-    /// card (its default app).
+    /// Runs Open from the bubble menu. A photo or a video opens in the viewer. A voice message opens in the default
+    /// audio app. A file card opens its file.
     /// </summary>
     public void Open()
     {
@@ -35,15 +26,22 @@ public sealed partial class MessageBubble
         {
             OpenVideoInViewer(VideoFrame);
         }
-        else if (Bubble?.Media is { IsPending: false } part && ((Control?)Photo ?? VoicePlay) is { } from)
+        else if (Bubble?.HasVoice == true)
         {
-            // A Photo, Or A Voice Message (Whose Bubble Has No Photo Part, So Focus Goes Back To Its Play Button)
-            ShowInViewer(part, from);
+            // The owner wants a voice message to open in the default audio app, as a file does.
+            if (Bubble.Media is { IsPending: false } voice)
+            {
+                _ = MediaActions.OpenAsync(XamlRoot, voice, Bubble.Id);
+            }
+        }
+        else if (Bubble?.Media is { IsPending: false } part && Photo is not null)
+        {
+            ShowInViewer(part, Photo);
         }
     }
 
     /// <summary>
-    /// The bubble menu's Open with: the photo, video, voice message or file with Windows' app picker.
+    /// Runs Open with from the bubble menu. The app picker of Windows opens the photo, video, voice message or file.
     /// </summary>
     public void OpenWith()
     {
@@ -54,7 +52,7 @@ public sealed partial class MessageBubble
     }
 
     /// <summary>
-    /// The bubble menu's Save as: the Windows Save dialog for the photo or file.
+    /// Runs Save as from the bubble menu with the Save dialog of Windows.
     /// </summary>
     public void SaveAs()
     {
@@ -65,7 +63,7 @@ public sealed partial class MessageBubble
     }
 
     /// <summary>
-    /// The bubble menu's Download: into the Downloads folder, with the window's confirmation.
+    /// Runs Download from the bubble menu. The file goes to the Downloads folder, and the window confirms it.
     /// </summary>
     public void Download()
     {

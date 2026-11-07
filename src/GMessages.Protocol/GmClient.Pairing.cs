@@ -9,29 +9,21 @@ using GMessages.Protocol.Session;
 namespace GMessages.Protocol;
 
 /// <summary>
-/// Pairing: showing the emoji for the phone to confirm, finishing the pairing, and unpairing.
+/// The pairing part of <see cref="GmClient"/>. It shows the emoji for the phone to confirm, finishes the pairing and unpairs.
 /// </summary>
-/// <remarks>
-/// Part of <see cref="GmClient"/>; the other members are in GmClient.cs.
-/// </remarks>
 public sealed partial class GmClient
 {
-
-    // =========================================================================
-    // PAIRING
-    // =========================================================================
-
     /// <summary>
     /// Pairs with the phone of the signed-in Google account, then connects.
     /// </summary>
     /// <remarks>
-    /// Ported from <c>DoGaiaPairing</c>, with the config fetch the bridge's Google login does first (it sets the
-    /// session ID that the sign-in sends). <paramref name="showEmoji"/> is called with the emoji the user must tap on
-    /// the phone; the call then waits for the tap. Session saves are paused throughout. Once paired, the pairing long
-    /// poll is stopped and awaited, the session is saved, <see cref="PairSuccessful"/> is raised and the client
-    /// reconnects logged in (Go's <c>Reconnect</c>, without a token refresh). On any failure the half-set pairing
-    /// data is cleared (<see cref="AuthData.ClearPairing"/>) and nothing is saved. Pairing a connected client throws:
-    /// disconnect first.
+    /// Ported from <c>DoGaiaPairing</c>. First it fetches the config, as the Google login of the bridge does. The
+    /// config sets the session ID that the sign-in sends. The method calls <paramref name="showEmoji"/> with the emoji
+    /// that the user must tap on the phone, then waits for the tap. Session saves stop during the pairing. After the
+    /// pairing, the method stops the pairing long poll and waits for it. Then it saves the session, raises
+    /// <see cref="PairSuccessful"/> and reconnects logged in. That is Go's <c>Reconnect</c>, without a token refresh.
+    /// On a failure, <see cref="AuthData.ClearPairing"/> clears the half-set pairing data and the method saves nothing. A
+    /// connected client throws. Disconnect first.
     /// </remarks>
     /// <param name="showEmoji">Shows the emoji to the user.</param>
     /// <param name="ct">Cancels the pairing.</param>
@@ -58,13 +50,13 @@ public sealed partial class GmClient
                 throw new InvalidOperationException("Disconnect before pairing.");
             }
 
-            // Pair With Saves Paused; Disconnect And Dispose Cancel It
+            // Disconnect and dispose cancel the pairing through _pairCts.
             string phoneId;
             using var pairCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             Volatile.Write(ref _pairCts, pairCts);
             if (Volatile.Read(ref _finished) != 0)
             {
-                // Dispose Ran Before _pairCts Was Visible
+                // Dispose ran before _pairCts was visible.
                 await pairCts.CancelAsync().ConfigureAwait(false);
             }
 
@@ -84,7 +76,6 @@ public sealed partial class GmClient
                 SetSavesSuspended(false);
             }
 
-            // Save, Announce, Reconnect
             LogPaired(_log, Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(phoneId)))[..8]);
             SaveNow();
             Raise(new PairSuccessful(phoneId));
@@ -100,11 +91,11 @@ public sealed partial class GmClient
     /// Tells the phone to forget this browser, disconnects, clears the pairing and deletes the saved session.
     /// </summary>
     /// <remarks>
-    /// Ported from <c>Unpair</c>: a Google account that never finished pairing has nothing to revoke; otherwise an
-    /// <c>UNPAIR_GAIA_PAIRING</c> is sent. Go's QR-code (Bugle) unpair is not ported, since this app only pairs
-    /// through Google accounts; that case is logged and skipped. Unlike Go, the local session is removed even when
-    /// the request fails (the error is still thrown), so the user is never stuck signed in. Afterwards the client is
-    /// finished: create a new one to pair again.
+    /// Ported from <c>Unpair</c>. A Google account that did not finish the pairing has nothing to revoke. Otherwise
+    /// the method sends <c>UNPAIR_GAIA_PAIRING</c>. This port does not include Go's QR-code unpair for Bugle, because
+    /// the app pairs only through Google accounts. The method logs and skips that case. Unlike Go, the method removes
+    /// the local session also when the request fails. It still throws the error. Thus the user never stays signed in
+    /// by mistake. After the call, the client is finished. Create a new client to pair again.
     /// </remarks>
     /// <param name="ct">Cancels the wait for another operation and the request.</param>
     /// <returns>A task that completes when the session file is gone.</returns>
@@ -142,7 +133,7 @@ public sealed partial class GmClient
                 }
                 finally
                 {
-                    // Always Remove The Local Session; A Failed Delete Must Not Hide The Server's Error
+                    // Always remove the local session. A failed delete must not hide the error of the server.
                     StopSaves();
                     try
                     {
@@ -166,7 +157,7 @@ public sealed partial class GmClient
         }
     }
 
-    // Cancels A Running Pairing So It Fails At Once And Gives Up The Gate
+    // A canceled pairing fails at once and releases _gate.
     private void CancelPairing()
     {
         try
@@ -175,10 +166,11 @@ public sealed partial class GmClient
         }
         catch (ObjectDisposedException)
         {
-            // It Just Ended
+            // The pairing ended just before the cancel.
         }
     }
-    // Config, Start, Emoji, Finish; The Pairing Long Poll Always Ends Here
+
+    // The pairing long poll always ends in this method.
     private async Task<string> PairCoreAsync(Action<string> showEmoji, CancellationToken ct)
     {
         await _signIn.FetchConfigAsync(ct).ConfigureAwait(false);
@@ -194,7 +186,7 @@ public sealed partial class GmClient
         }
     }
 
-    // Stops And Awaits The Pairing Long Poll; Its Late Error Is Logged So It Can't Hide The Pairing Result
+    // The method logs a late error of the pairing long poll, so that error cannot hide the pairing result.
     private async Task StopPairingLongPollAsync()
     {
         try

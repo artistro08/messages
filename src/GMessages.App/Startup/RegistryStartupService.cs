@@ -5,15 +5,15 @@ using Microsoft.Win32;
 namespace GMessages.App.Startup;
 
 /// <summary>
-/// <see cref="IStartupService"/> over the current user's Run key. Used by the unpackaged install, which has no
-/// MSIX startup task.
+/// Implements <see cref="IStartupService"/> over the Run key of the current user. The unpackaged install uses it,
+/// because it has no MSIX startup task.
 /// </summary>
 /// <remarks>
-/// Ported from Magic Buds' <c>RegistryStartupService</c>. Windows starts everything listed under
-/// <c>HKCU\Software\Microsoft\Windows\CurrentVersion\Run</c> at sign-in. The value is named
-/// <see cref="AppInfo.DisplayName"/> and holds the quoted path of this exe.
-/// https://learn.microsoft.com/windows/win32/setupapi/run-and-runonce-registry-keys
+/// Ported from the <c>RegistryStartupService</c> of Magic Buds. At sign-in, Windows starts each entry under
+/// <c>HKCU\Software\Microsoft\Windows\CurrentVersion\Run</c>. The name of the value is
+/// <see cref="AppInfo.DisplayName"/>, and the value holds the quoted path of this exe.
 /// </remarks>
+/// <seealso href="https://learn.microsoft.com/windows/win32/setupapi/run-and-runonce-registry-keys"/>
 internal sealed class RegistryStartupService : IStartupService
 {
     private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
@@ -23,7 +23,7 @@ internal sealed class RegistryStartupService : IStartupService
     /// <summary>
     /// Creates the service for an exe.
     /// </summary>
-    /// <param name="executablePath">Full path to this exe (<see cref="Environment.ProcessPath"/>).</param>
+    /// <param name="executablePath">The full path of this exe (<see cref="Environment.ProcessPath"/>).</param>
     public RegistryStartupService(string executablePath)
     {
         _command = $"\"{executablePath}\"";

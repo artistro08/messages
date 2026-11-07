@@ -4,12 +4,12 @@ namespace GMessages.App;
 
 #if EnableTestHooks
 /// <summary>
-/// UI test hooks: point the app at a local fake Google server and an isolated data folder.
+/// Holds the UI test hooks, which point the app at a local fake Google server and an isolated data folder.
 /// </summary>
 /// <remarks>
-/// Compiled only when <c>EnableTestHooks</c> is defined, which is Debug builds only. Release builds get the stub
-/// below that always answers null, so the flags are ignored. Flags: <c>--test-endpoints &lt;base url&gt;</c> and
-/// <c>--test-data-dir &lt;path&gt;</c>. If either flag is present both must be valid, or the app refuses to start.
+/// Only Debug builds define <c>EnableTestHooks</c> and compile this class. Release builds get the stub below, which
+/// always answers null, so Release ignores the flags. The flags are <c>--test-endpoints &lt;base url&gt;</c> and
+/// <c>--test-data-dir &lt;path&gt;</c>. When either flag is present, both must be valid, or the app refuses to start.
 /// </remarks>
 internal static class TestHooks
 {
@@ -17,45 +17,48 @@ internal static class TestHooks
         GMessages.Presentation.TestHookArgs.Validate(Environment.GetCommandLineArgs());
 
     /// <summary>
-    /// The fake server base address from <c>--test-endpoints</c>, else null.
+    /// Gets the base address of the fake server from <c>--test-endpoints</c>, or null.
     /// </summary>
     public static Uri? EndpointBase { get; } = Parsed.EndpointBase;
 
     /// <summary>
-    /// The data folder from <c>--test-data-dir</c>, else null.
+    /// Gets the data folder from <c>--test-data-dir</c>, or null.
     /// </summary>
     public static string? DataDir { get; } = Parsed.DataDir;
 
     /// <summary>
-    /// A one-line reason when the test flags are unusable, else null. The app must then refuse to start.
+    /// Gets a one-line reason when the test flags are not usable, or null. The app must then refuse to start.
     /// </summary>
     public static string? Error { get; } = Parsed.Error;
 
     /// <summary>
-    /// Every server address pointed at <see cref="EndpointBase"/>, else null (use the real servers).
+    /// Gets the server addresses, all pointed at <see cref="EndpointBase"/>. It is null when the app uses the real
+    /// servers.
     /// </summary>
     /// <remarks>Authentication resolves to <c>{base}/web/authentication</c>.</remarks>
     public static GmEndpoints? Endpoints { get; } = Parsed.EndpointBase is { } b ? new GmEndpoints(b, b, b) : null;
 
     /// <summary>
-    /// True when pointed at the fake server, so link previews may fetch its <c>http://127.0.0.1</c> pages.
+    /// Gets whether the app uses the fake server. Then link previews can fetch its <c>http://127.0.0.1</c> pages.
     /// </summary>
     public static bool AllowLoopbackPreviews => EndpointBase is not null;
 
     /// <summary>
-    /// True when pointed at the fake server: a clicked link is only logged, never opened in a browser.
+    /// Gets whether the app uses the fake server. Then the app only logs a clicked link and never opens a browser.
     /// </summary>
     public static bool BlockLaunches => EndpointBase is not null;
 
     /// <summary>
-    /// When pointed at the fake server, notes a file the app would open in its default app, or a Windows page it would
-    /// open (such as <c>ms-settings:privacy-microphone</c>), in <c>{data folder}\launched.txt</c> (one full path or
-    /// address per line) instead of opening it. A file opened with Windows' app picker (Open with) is noted with
-    /// <c> picker</c> after its path, and no picker shows.
+    /// With the fake server, writes a launch to <c>{data folder}\launched.txt</c> and does not open it. A launch is a
+    /// file for its default app, or a Windows page such as <c>ms-settings:privacy-microphone</c>.
     /// </summary>
-    /// <param name="path">The file's full path, or the page's address.</param>
-    /// <param name="picker">True when it would open with Windows' app picker.</param>
-    /// <returns>True when noted (the caller must not launch it); false on a normal run.</returns>
+    /// <remarks>
+    /// Each line holds a full path or an address. A file for the app picker of Windows (Open with) gets <c> picker</c>
+    /// after its path, and no picker shows.
+    /// </remarks>
+    /// <param name="path">The full path of the file, or the address of the page.</param>
+    /// <param name="picker">True when the file opens with the app picker of Windows.</param>
+    /// <returns>True when the hook wrote the launch, so the caller must not launch it. False on a normal run.</returns>
     public static bool RecordLaunch(string path, bool picker = false)
     {
         if (!BlockLaunches || DataDir is null)
@@ -68,11 +71,12 @@ internal static class TestHooks
     }
 
     /// <summary>
-    /// When pointed at the fake server, puts an element's internal state (such as a photo's "Blurred" or "Full") in its
-    /// UI Automation item status, for the tests to read. Does nothing on a normal run.
+    /// With the fake server, puts the internal state of an element in its UI Automation item status for the tests. The
+    /// hook does nothing on a normal run.
     /// </summary>
+    /// <remarks>An example is "Blurred" or "Full" for a photo.</remarks>
     /// <param name="element">The element.</param>
-    /// <param name="state">The state's name.</param>
+    /// <param name="state">The name of the state.</param>
     public static void ShowState(Windows.UI.Xaml.DependencyObject element, string state)
     {
         if (BlockLaunches)
@@ -82,11 +86,15 @@ internal static class TestHooks
     }
 
     /// <summary>
-    /// When pointed at the fake server, writes a part's internal state to <c>{data folder}\{name}.txt</c> (replacing it),
-    /// for the tests to read, such as the voice player's real playback state and position. Does nothing on a normal run.
+    /// With the fake server, writes the internal state of a part to <c>{data folder}\{name}.txt</c> for the tests. The
+    /// hook does nothing on a normal run.
     /// </summary>
-    /// <param name="name">The file's name, without <c>.txt</c>.</param>
-    /// <param name="state">The state, one line.</param>
+    /// <remarks>
+    /// An example is the real playback state and position of the voice player. Each note replaces the earlier state in
+    /// the file.
+    /// </remarks>
+    /// <param name="name">The name of the file, without <c>.txt</c>.</param>
+    /// <param name="state">The state, on a single line.</param>
     public static void NoteState(string name, string state)
     {
         if (!BlockLaunches || DataDir is null)
@@ -100,17 +108,21 @@ internal static class TestHooks
         }
         catch (IOException)
         {
-            // The Test Is Reading It: The Next Note Lands
+            // The test reads the file at this time. The next note writes it.
         }
     }
 
     /// <summary>
-    /// When pointed at the fake server, stands in for the file picker: notes which picker opened ("files" or "photos")
-    /// in <c>{data folder}\picker.txt</c>, and answers with the full paths in <c>{data folder}\pick.txt</c> (one per
-    /// line), which it then deletes. No real picker ever opens in a test.
+    /// With the fake server, takes the place of the file picker, so no real picker opens in a test.
     /// </summary>
+    /// <remarks>
+    /// The hook writes the picker ("files" or "photos") to <c>{data folder}\picker.txt</c>. It answers with the full
+    /// paths in <c>{data folder}\pick.txt</c>, a path on each line, then deletes that file.
+    /// </remarks>
     /// <param name="photos">True for the photo picker.</param>
-    /// <returns>The picked paths (empty when nothing waits), or null on a normal run (open the real picker).</returns>
+    /// <returns>
+    /// The picked paths, empty when no file waits. Null on a normal run, where the app opens the real picker.
+    /// </returns>
     public static IReadOnlyList<string>? PickFiles(bool photos)
     {
         if (!BlockLaunches || DataDir is null)
@@ -131,19 +143,30 @@ internal static class TestHooks
     }
 
     /// <summary>
-    /// When pointed at the fake server, stands in for the clipboard on a paste into the message box: builds what
-    /// <c>{data folder}\paste.txt</c> describes, which it then deletes. Each line is a format and a value:
-    /// <c>text &lt;text&gt;</c>, <c>html &lt;fragment&gt;</c> (as the emoji panel hands over a GIF: an <c>img</c> of it),
-    /// <c>file &lt;path&gt;</c> (the files, as Explorer copies them), <c>bitmap &lt;path&gt;</c>
-    /// (a picture, as a screenshot is copied) or <c>format &lt;name&gt; &lt;path&gt;</c> (a file's bytes under a named format,
-    /// such as <c>GIF</c>). No file reads the real clipboard, which the copy tests check by pasting what the app's Copy put
-    /// there.
+    /// With the fake server, takes the place of the clipboard for a paste into the message box. The hook builds what
+    /// <c>{data folder}\paste.txt</c> describes, then deletes that file.
     /// </summary>
     /// <remarks>
-    /// The paste takes itself at once in a test run (see <see cref="BlockLaunches"/>), so the caller decides before
-    /// awaiting this (test runs only).
+    /// <para>
+    /// Each line of the file is a format and a value:
+    /// <list type="bullet">
+    /// <item><c>text &lt;text&gt;</c>.</item>
+    /// <item><c>html &lt;fragment&gt;</c>, as the emoji panel gives a GIF: an <c>img</c> of the GIF.</item>
+    /// <item><c>file &lt;path&gt;</c>, the files as Explorer copies them.</item>
+    /// <item><c>bitmap &lt;path&gt;</c>, a picture as Windows copies a screenshot.</item>
+    /// <item><c>format &lt;name&gt; &lt;path&gt;</c>, the bytes of a file under a named format, such as <c>GIF</c>.
+    /// </item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// Without the file, the paste reads the real clipboard. The copy tests use that: they paste what the Copy of the
+    /// app put there. In a test run the paste always takes itself at once (see <see cref="BlockLaunches"/>). Thus the
+    /// caller decides before the await. Only test runs use this hook.
+    /// </para>
     /// </remarks>
-    /// <returns>The clipboard's content, or null to read the real clipboard (a normal run, or no file).</returns>
+    /// <returns>
+    /// The content of the clipboard. Null on a normal run or without the file, so the paste reads the real clipboard.
+    /// </returns>
     public static async Task<Windows.ApplicationModel.DataTransfer.DataPackageView?> PasteContentAsync()
     {
         if (!BlockLaunches || DataDir is null)
@@ -199,11 +222,16 @@ internal static class TestHooks
     }
 
     /// <summary>
-    /// When pointed at the fake server, stands in for the Save as dialog's pick (the dialog is still made and set up, so
-    /// that code runs): notes "save" in <c>{data folder}\picker.txt</c>, and answers with the full path in
-    /// <c>{data folder}\save-pick.txt</c>, which it then deletes.
+    /// With the fake server, takes the place of the pick in the Save as dialog. The app still makes and sets up the
+    /// dialog, so that code runs.
     /// </summary>
-    /// <returns>The picked path (empty when nothing waits, as a cancel), or null on a normal run (show the real dialog).</returns>
+    /// <remarks>
+    /// The hook writes "save" to <c>{data folder}\picker.txt</c>. It answers with the full path in
+    /// <c>{data folder}\save-pick.txt</c>, then deletes that file.
+    /// </remarks>
+    /// <returns>
+    /// The picked path, empty as for a cancel when no file waits. Null on a normal run, where the real dialog shows.
+    /// </returns>
     public static string? PickSaveFile()
     {
         if (!BlockLaunches || DataDir is null)
@@ -224,10 +252,10 @@ internal static class TestHooks
     }
 
     /// <summary>
-    /// When pointed at the fake server, the folder Download saves to: <c>{data folder}\Downloads</c> (made when missing),
-    /// so no test writes to the real Downloads folder.
+    /// With the fake server, returns <c>{data folder}\Downloads</c> for Download, so no test writes to the real
+    /// Downloads folder. The hook makes the folder when it is missing.
     /// </summary>
-    /// <returns>The folder, or null on a normal run (use the user's Downloads folder).</returns>
+    /// <returns>The folder, or null on a normal run, where Download uses the Downloads folder of the user.</returns>
     public static string? DownloadsFolder()
     {
         if (!BlockLaunches || DataDir is null)
@@ -239,12 +267,17 @@ internal static class TestHooks
     }
 
     /// <summary>
-    /// When pointed at the fake server, stands in for the microphone, so no test ever records from a real one:
-    /// <c>{data folder}\microphone.txt</c> reads <c>denied</c> (access off), <c>unfinished</c> (a recording whose file
-    /// can't be finished), or holds the path of an audio file the fake recording copies. Without the file there is no
-    /// microphone.
+    /// With the fake server, takes the place of the microphone, so no test records from a real microphone.
     /// </summary>
-    /// <returns><c>denied</c>, <c>none</c>, <c>unfinished</c> or a file path; null on a normal run (use the real microphone).</returns>
+    /// <remarks>
+    /// <c>{data folder}\microphone.txt</c> holds <c>denied</c> when access is off, or <c>unfinished</c> for a recording
+    /// whose file cannot finish. Otherwise it holds the path of an audio file that the fake recording copies. Without
+    /// the file, there is no microphone.
+    /// </remarks>
+    /// <returns>
+    /// <c>denied</c>, <c>none</c>, <c>unfinished</c> or a file path. Null on a normal run, where the real microphone
+    /// records.
+    /// </returns>
     public static string? FakeMicrophone()
     {
         if (!BlockLaunches || DataDir is null)
@@ -257,11 +290,12 @@ internal static class TestHooks
     }
 
     /// <summary>
-    /// When pointed at the fake server, shortens a wait for a test: <c>{data folder}\{name}.txt</c> holds the seconds
-    /// (such as <c>download-timeout</c> or <c>full-size-wait</c>). Read each time the wait starts.
+    /// With the fake server, makes a wait shorter for a test. <c>{data folder}\{name}.txt</c> holds the seconds, for
+    /// names such as <c>download-timeout</c> or <c>full-size-wait</c>.
     /// </summary>
-    /// <param name="name">The wait's file name, without <c>.txt</c>.</param>
-    /// <returns>The shortened wait, or null when the file is missing or on a normal run (use the real wait).</returns>
+    /// <remarks>The hook reads the file each time the wait starts.</remarks>
+    /// <param name="name">The file name of the wait, without <c>.txt</c>.</param>
+    /// <returns>The shorter wait, or null on a normal run or without the file. Null means the real wait.</returns>
     public static TimeSpan? ShortWait(string name)
     {
         if (!BlockLaunches || DataDir is null)
@@ -276,76 +310,76 @@ internal static class TestHooks
     }
 }
 #else
-// Release Stub: Parameters Mirror The Debug Signatures And Go Unused
+// The stub keeps the Debug signatures, so it does not use its parameters.
 #pragma warning disable IDE0060
 
 /// <summary>
-/// Release stub: the test hooks do not exist, so every flag is ignored.
+/// Takes the place of the test hooks in Release. The hooks do not exist there, so Release ignores every flag.
 /// </summary>
 internal static class TestHooks
 {
-    /// <summary>Always null in Release.</summary>
+    /// <summary>Gets null in Release.</summary>
     public static Uri? EndpointBase => null;
 
-    /// <summary>Always null in Release.</summary>
+    /// <summary>Gets null in Release.</summary>
     public static string? DataDir => null;
 
-    /// <summary>Always null in Release.</summary>
+    /// <summary>Gets null in Release.</summary>
     public static string? Error => null;
 
-    /// <summary>Always null in Release: the app uses the real servers.</summary>
+    /// <summary>Gets null in Release, so the app uses the real servers.</summary>
     public static GmEndpoints? Endpoints => null;
 
-    /// <summary>Always false in Release: link previews never fetch loopback addresses.</summary>
+    /// <summary>Gets false in Release, so link previews never fetch loopback addresses.</summary>
     public static bool AllowLoopbackPreviews => false;
 
-    /// <summary>Always false in Release: a clicked link opens in the default browser.</summary>
+    /// <summary>Gets false in Release, so a clicked link opens in the default browser.</summary>
     public static bool BlockLaunches => false;
 
-    /// <summary>Always false in Release: the file opens in its default app.</summary>
-    /// <param name="path">The file's full path.</param>
-    /// <param name="picker">True when it would open with Windows' app picker.</param>
+    /// <summary>Returns false in Release, so the file opens in its default app.</summary>
+    /// <param name="path">The full path of the file.</param>
+    /// <param name="picker">True when the file opens with the app picker of Windows.</param>
     /// <returns>False.</returns>
     public static bool RecordLaunch(string path, bool picker = false) => false;
 
     /// <summary>Does nothing in Release.</summary>
     /// <param name="element">The element.</param>
-    /// <param name="state">The state's name.</param>
+    /// <param name="state">The name of the state.</param>
     public static void ShowState(Windows.UI.Xaml.DependencyObject element, string state)
     {
     }
 
     /// <summary>Does nothing in Release.</summary>
-    /// <param name="name">The file's name.</param>
+    /// <param name="name">The name of the file.</param>
     /// <param name="state">The state.</param>
     public static void NoteState(string name, string state)
     {
     }
 
-    /// <summary>Always null in Release: the real file picker opens.</summary>
+    /// <summary>Returns null in Release, so the real file picker opens.</summary>
     /// <param name="photos">True for the photo picker.</param>
     /// <returns>Null.</returns>
     public static IReadOnlyList<string>? PickFiles(bool photos) => null;
 
-    /// <summary>Always null in Release: a paste reads the real clipboard.</summary>
+    /// <summary>Returns null in Release, so a paste reads the real clipboard.</summary>
     /// <returns>Null.</returns>
     public static Task<Windows.ApplicationModel.DataTransfer.DataPackageView?> PasteContentAsync() =>
         Task.FromResult<Windows.ApplicationModel.DataTransfer.DataPackageView?>(null);
 
-    /// <summary>Always null in Release: the real Save as dialog opens.</summary>
+    /// <summary>Returns null in Release, so the real Save as dialog opens.</summary>
     /// <returns>Null.</returns>
     public static string? PickSaveFile() => null;
 
-    /// <summary>Always null in Release: Download saves to the user's Downloads folder.</summary>
+    /// <summary>Returns null in Release, so Download saves to the Downloads folder of the user.</summary>
     /// <returns>Null.</returns>
     public static string? DownloadsFolder() => null;
 
-    /// <summary>Always null in Release: the real microphone records.</summary>
+    /// <summary>Returns null in Release, so the real microphone records.</summary>
     /// <returns>Null.</returns>
     public static string? FakeMicrophone() => null;
 
-    /// <summary>Always null in Release: every wait is its real length.</summary>
-    /// <param name="name">The wait's name.</param>
+    /// <summary>Returns null in Release, so each wait has its real length.</summary>
+    /// <param name="name">The name of the wait.</param>
     /// <returns>Null.</returns>
     public static TimeSpan? ShortWait(string name) => null;
 }

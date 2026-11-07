@@ -6,7 +6,7 @@ using GMessages.Presentation.Connection;
 namespace GMessages.App.UITests;
 
 /// <summary>
-/// The app's life as a tray app: one copy only, a lost session, and closing windows without quitting.
+/// The app life as a tray app: one copy only, a lost session, and closing windows without a quit.
 /// </summary>
 [TestClass]
 [TestCategory("UI")]
@@ -14,19 +14,17 @@ namespace GMessages.App.UITests;
 public sealed class LifecycleTests : UiTest
 {
     /// <summary>
-    /// A second launch with the same flags exits quickly, the first copy opens its main window, and only one copy runs.
+    /// A second launch with the same flags exits quickly. The first copy opens its main window, and only one copy runs.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task SecondLaunch_OpensExistingWindow_NoSecondProcess()
     {
         await PairAsync();
         Assert.IsNull(App.FindWindow(AppInfo.WindowTitle), "A window was already open before the second launch.");
 
-        // Second Copy Hands Over And Exits
         using (Process second = AppDriver.StartExe(App.TestArguments))
         {
-            // A Broken Hand-Off Must Not Leave A Second Copy Running Into Later Tests
+            // A broken hand-off must not leave a second copy running into later tests.
             try
             {
                 using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
@@ -46,15 +44,14 @@ public sealed class LifecycleTests : UiTest
             }
         }
 
-        // The First Copy Shows Its Main Window; Still One Process
         App.Find("Main.ConversationList");
         CollectionAssert.AreEqual(new[] { App.Process.Id }, AppDriver.RunningTestExeIds().ToArray(), "Expected exactly the first Messages process.");
     }
 
     /// <summary>
-    /// <c>--quit</c> with a chat open ends the process within 5 s, and the log times each quit step (milliseconds only).
+    /// <c>--quit</c> with a chat open ends the process within 5 s. The log records the time of each quit step in
+    /// milliseconds, with no message text.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task Quit_WithChatOpen_ExitsWithinFiveSeconds()
     {
@@ -69,10 +66,9 @@ public sealed class LifecycleTests : UiTest
     }
 
     /// <summary>
-    /// The user starting the app (here, paired) shows the main window without a tray click; only Windows' startup task
-    /// at sign-in keeps it in the tray (LaunchWindow's unit tests).
+    /// A paired app that the user starts shows the main window without a tray click. Only the Windows startup task at
+    /// sign-in keeps the app in the tray. The LaunchWindow unit tests cover that case.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task UserLaunch_Paired_ShowsMainWindow()
     {
@@ -84,26 +80,26 @@ public sealed class LifecycleTests : UiTest
     }
 
     /// <summary>
-    /// A tray click while start-up still waits on the server is kept and opens the main window once start-up ends.
+    /// A tray click while start-up still waits for the server is kept. The main window opens when start-up ends.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task TrayClickDuringSlowStart_OpensWhenReady()
     {
-        // Slow From The Start, So The Saved Session Needs A (Slow) Refresh At The Next Launch
+        // The slow server makes the saved session need a slow token refresh at the next launch.
         Server.SlowStart = true;
         await PairAsync();
         int refreshes = Refreshes();
 
         await App.RestartAsync();
 
-        // Click While The 3 s Refresh Is Still Unanswered
+        // The click comes while the 3 s refresh has no answer yet.
         Wait.Until(() => Refreshes() > refreshes, AppDriver.DefaultTimeout, () => "The restarted app never asked for a token refresh.");
         Tray.LeftClick();
 
         App.Find("Main.ConversationList");
 
-        // The Click Really Came Before Start-Up Ended (The Restarted Run's First State Line), Or This Proved Nothing
+        // The click must come before start-up ends, which is the first state line of the restarted run.
+        // Otherwise the test proves nothing.
         string log        = ReadLog();
         string secondRun  = log[log.LastIndexOf(" started (", StringComparison.Ordinal)..];
         int clickedAt     = secondRun.IndexOf("Open requested (tray)", StringComparison.Ordinal);
@@ -114,10 +110,9 @@ public sealed class LifecycleTests : UiTest
     }
 
     /// <summary>
-    /// Google ending the session (401 on the long poll) while connected opens the main window on pairing with the
-    /// signed-out reason above the sign-in.
+    /// A 401 on the long poll while connected opens the main window on pairing. The signed-out reason shows above the
+    /// sign-in.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task SessionKilled_ShowsPairingWithSignedOutMessage()
     {
@@ -132,25 +127,23 @@ public sealed class LifecycleTests : UiTest
     }
 
     /// <summary>
-    /// Closing the main window (on pairing or on settings) leaves the app and its tray icon running, and the icon
-    /// still works.
+    /// Closing the main window on pairing or on settings leaves the app and the tray icon running. The icon still
+    /// works.
     /// </summary>
     [TestMethod]
     public void ClosingWindows_KeepsTrayRunning()
     {
-        // Cancel Pairing: The Window Closes
         WaitForPairing();
         App.Find("Pairing.Cancel").Patterns.Invoke.Pattern.Invoke();
         App.WaitForNoWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout);
         AssertStillRunning();
 
-        // Close The Window On Settings With Its Close Button
         InvokeTrayMenu("TrayMenu.Settings");
         WaitForSettings().Close();
         App.WaitForNoWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout);
         AssertStillRunning();
 
-        // The Icon Still Answers: Unpaired, A Left-Click Brings Pairing Back; Close It Too
+        // The app is not paired, so a left-click shows pairing again.
         Tray.LeftClick();
         WaitForPairing().Close();
         App.WaitForNoWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout);
@@ -158,17 +151,16 @@ public sealed class LifecycleTests : UiTest
     }
 
     /// <summary>
-    /// Once paired and connected, closing the main window leaves the tray idle; once the kept window is dropped (a
-    /// second here, minutes for real) the app trims its memory (a debug-build note, <c>trim-done.txt</c>, says when) and
-    /// its private bytes end below what they were right after the close.
+    /// After pairing and connecting, closing the main window leaves the tray idle. The app drops the kept window
+    /// after 1 second here, and after minutes in a real run. Then the app trims its memory, and its private bytes end
+    /// below the value right after the close. A debug build writes <c>trim-done.txt</c> when the trim ends.
     /// </summary>
-    /// <returns>A task for the test.</returns>
     [TestMethod]
     public async Task TrayIdle_AfterConnectAndClose_Trims()
     {
         await OpenMainAsync();
 
-        // No Trim Note Yet: A Trim Skipped For The Open Window Writes None
+        // A trim that the open window skips writes no note, so the file must not exist yet.
         string done = Path.Combine(App.DataDir, "trim-done.txt");
         File.Delete(done);
         File.WriteAllText(Path.Combine(App.DataDir, "keep-window.txt"), "1");

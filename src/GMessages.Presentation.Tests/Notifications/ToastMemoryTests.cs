@@ -10,7 +10,8 @@ public sealed class ToastMemoryTests
     private static ShownToast Toast(string tag, string group = "c1") => new(tag, group, "<toast/>");
 
     /// <summary>
-    /// A waiting snooze survives any number of newer toasts, and once shown again it can be snoozed again.
+    /// A waiting snooze stays after any number of newer toasts.
+    /// After the toast shows again, the user can snooze it again.
     /// </summary>
     [TestMethod]
     public void Snooze_SurvivesNewerToasts_AndCanSnoozeAgain()
@@ -29,7 +30,7 @@ public sealed class ToastMemoryTests
     }
 
     /// <summary>
-    /// Only the latest toasts can be snoozed; the oldest drop out past the capacity.
+    /// Only the latest toasts can be snoozed. The oldest toast leaves the memory when the capacity is full.
     /// </summary>
     [TestMethod]
     public void Snooze_OldToastPastCapacity_IsNull()
@@ -44,7 +45,8 @@ public sealed class ToastMemoryTests
     }
 
     /// <summary>
-    /// Opening the chat or clearing every toast cancels its waiting snoozes; other chats' snoozes stay.
+    /// Opening a chat cancels the waiting snoozes of that chat. Clearing every toast cancels all waiting snoozes.
+    /// The snoozes of other chats stay when one chat opens.
     /// </summary>
     [TestMethod]
     public void OpeningTheChatOrClearing_CancelsTheSnooze()
@@ -66,8 +68,8 @@ public sealed class ToastMemoryTests
     }
 
     /// <summary>
-    /// A snoozed toast whose chat is then archived or muted doesn't wake: the gate NotificationService runs on a
-    /// conversation change dismisses it, as a read does. A still active, unread chat's snooze stays.
+    /// A snoozed toast does not wake after its chat is archived or muted. The gate that NotificationService runs on
+    /// a conversation change dismisses the toast, as a read does. The snooze of an active, unread chat stays.
     /// </summary>
     [TestMethod]
     public void LeftTheInboxOrMuted_CancelsTheSnooze()
@@ -80,7 +82,7 @@ public sealed class ToastMemoryTests
         ShownToast muted    = memory.Snooze("m2", "c2")!;
         ShownToast active   = memory.Snooze("m3", "c3")!;
 
-        // The Gate NotificationService.OnConversationChanged Runs, With Every Chat Still Unread
+        // This loop copies the gate of NotificationService.OnConversationChanged. Every chat is still unread.
         ConversationInfo[] changed =
         [
             Unread("c1") with { Status = ConversationStatus.Archived },
@@ -104,8 +106,9 @@ public sealed class ToastMemoryTests
         new(id, "Ann", false, ConversationStatus.Active, true, false, DateTimeOffset.UnixEpoch, "", false, "", [], "me", "m1");
 
     /// <summary>
-    /// The real phone sends several updates per incoming message (status changes, reactions). Even when every one of
-    /// them reaches the toast gate as new, the message gets one toast; a snooze wake still shows its own toast again.
+    /// The real phone sends several updates for each incoming message, for example status changes and reactions.
+    /// Each update reaches the toast gate as new, but the message gets only one toast.
+    /// A snooze wake still shows its own toast again.
     /// </summary>
     [TestMethod]
     public void RepeatedArrivals_SameMessage_ShowOneToast()
@@ -114,7 +117,7 @@ public sealed class ToastMemoryTests
         var conversation = new ConversationInfo("c1", "Ann", false, ConversationStatus.Active, false, true, DateTimeOffset.UnixEpoch, "", false, "", [], "me", "m1");
         int shows        = 0;
 
-        // The Gate NotificationService.ShowAsync Runs: The Policy, Then The First-Show Check
+        // This loop copies the gate of NotificationService.ShowAsync: the policy, then the first-show check.
         for (int i = 0; i < 4; i++)
         {
             var message = new ChatMessage("m1", "", "c1", "p1", DateTimeOffset.UnixEpoch, false, MessageKind.Text, "hi", MessageStatusType.IncomingComplete);
@@ -128,14 +131,13 @@ public sealed class ToastMemoryTests
 
         Assert.AreEqual(1, shows);
 
-        // Snoozed And Waiting, Or Its Chat Opened: Still Not Shown Again By An Update
+        // A waiting snooze, or an opened chat, stops a later update from showing the toast again.
         ShownToast snoozed = memory.Snooze("m1", "c1")!;
         Assert.IsFalse(memory.FirstShow("m1"));
         memory.RemoveConversation("c1");
         Assert.IsFalse(memory.FirstShow("m1"));
         Assert.IsFalse(memory.Wake(snoozed), "Opening the chat cancelled the snooze.");
 
-        // A Snooze Wake Still Shows Its Own Toast
         memory.Remember(Toast("m2"));
         ShownToast second = memory.Snooze("m2", "c1")!;
         Assert.IsTrue(memory.Wake(second));

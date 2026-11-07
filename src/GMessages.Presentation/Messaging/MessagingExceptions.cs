@@ -1,7 +1,7 @@
 namespace GMessages.Presentation.Messaging;
 
 /// <summary>
-/// Thrown when a chat request needs the phone connection and there is none.
+/// The exception that is thrown when a chat request needs the phone connection and there is none.
 /// </summary>
 public sealed class MessagingUnavailableException : Exception
 {
@@ -12,23 +12,24 @@ public sealed class MessagingUnavailableException : Exception
 }
 
 /// <summary>
-/// Thrown when the phone answers a send with a status other than success.
+/// The exception that is thrown when the phone answers a send with a status other than success.
 /// </summary>
 public sealed class MessageSendException : Exception
 {
     /// <summary>Creates the exception.</summary>
-    /// <param name="status">The status the phone answered with.</param>
+    /// <param name="status">The status that the phone answered with.</param>
     public MessageSendException(string status) : base($"The phone refused the message ({status}).")
     {
         Status = status;
     }
 
-    /// <summary>Gets the status the phone answered with.</summary>
+    /// <summary>Gets the status that the phone answered with.</summary>
     public string Status { get; }
 }
 
 /// <summary>
-/// Thrown when media is asked for that hasn't reached the phone's servers yet (no media ID, thumbnail or inline data).
+/// The exception that is thrown when a request asks for media that is not yet on the phone servers. The media has no
+/// media ID, thumbnail or inline data.
 /// </summary>
 public sealed class MediaPendingException : Exception
 {
@@ -39,7 +40,8 @@ public sealed class MediaPendingException : Exception
 }
 
 /// <summary>
-/// Thrown when an attachment is over <see cref="ChatStore.MaxAttachmentBytes"/>, before anything uploads.
+/// The exception that is thrown when an attachment is over <see cref="ChatStore.MaxAttachmentBytes"/>, before any
+/// upload starts.
 /// </summary>
 public sealed class AttachmentTooBigException : Exception
 {

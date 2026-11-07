@@ -4,19 +4,14 @@ using GMessages.Protocol.Proto;
 namespace GMessages.Presentation.Messaging;
 
 /// <summary>
-/// The memory caches: slim conversation records, the newest page of recent chats, and the ring of notified message IDs.
+/// Holds the memory caches: slim conversation records, the newest page of recent chats, and the ring of notified IDs.
 /// </summary>
 /// <remarks>
-/// Part of <see cref="ChatStore"/>; the other members are in ChatStore.cs.
+/// This part of <see cref="ChatStore"/> holds the memory caches. ChatStore.cs holds the other members.
 /// </remarks>
 public sealed partial class ChatStore
 {
-
-    // =========================================================================
-    // CACHE
-    // =========================================================================
-
-    // Caches And Saves A Protocol Conversation, Raising ConversationChanged When The Cache Changed
+    // Caches and saves a protocol conversation. It raises ConversationChanged when the cache changed.
     private ConversationInfo CacheConversation(Conversation c, int generation)
     {
         ConversationInfo info = WithSnippetMedia(ConversationInfo.From(c));
@@ -29,10 +24,10 @@ public sealed partial class ChatStore
         return info;
     }
 
-    // Names The Newest Message's Media When The Phone Sent No Snippet Text (A Photo, Video, Voice Message Or File With
-    // No Caption): Kept From The Cached Copy Of The Same Message, Else From That Message Seen Live, Else From Its Page In
-    // Memory. Never Waits (No Database Here): Events Stay In Order, And The List Never Waits Behind Queued Saves. The
-    // Saved Copies Are Named At Start-Up (LoadSavedAsync)
+    // The phone sends no snippet text for a photo, video, voice message or file with no caption. The label comes from
+    // the cached copy of the same message. Else it comes from that message seen live, or from its page in memory.
+    // This never waits for the database, so events stay in order and the list never waits for queued saves.
+    // LoadSavedAsync names the saved copies at start-up.
     private ConversationInfo WithSnippetMedia(ConversationInfo info)
     {
         if (info.Snippet.Length > 0 || info.SnippetMedia.Length > 0 || info.LatestMessageId.Length == 0)
@@ -59,8 +54,8 @@ public sealed partial class ChatStore
         return media is null ? info : info with { SnippetMedia = ChatFormat.MediaLabel(media) };
     }
 
-    // Stores A Conversation; True When It Differs From What Was Cached (Participants Compared By Value). A Live Change
-    // (Not A Fetched Copy) Is Timed, So A List Page Asked For Before It Doesn't Put The Older Copy Back (LoadFolderAsync)
+    // True when the conversation differs from the cached copy, with the participants compared by value. A live change
+    // gets a timestamp. Thus a list page asked for before the change does not put the older copy back.
     private bool Upsert(ConversationInfo info, bool live = true)
     {
         _me ??= info.Participants.FirstOrDefault(p => p.IsMe);
@@ -77,9 +72,9 @@ public sealed partial class ChatStore
             || !old.Participants.SequenceEqual(info.Participants);
     }
 
-    // Keeps A Conversation's Newest Page As The Most Recently Used, Dropping The Least Recently Used Past 20. Messages
-    // Cached While The Page Was On Its Way (Newer Than Anything In It, And Not In It) Stay Below It. The Generation Is
-    // Checked Under The Lock, So A Page Can't Land After Reset Cleared The Pages
+    // The page becomes the most recently used, and the least recently used page past 20 goes. Some messages arrived
+    // while the page was on its way. They stay below the page when they are newer than all of it and not in it. The
+    // generation check runs under the lock, so a page cannot land after Reset cleared the pages.
     private void CachePage(string conversationId, List<ChatMessage> page, bool onlyIfAbsent, int generation)
     {
         lock (_pagesLock)
@@ -108,8 +103,8 @@ public sealed partial class ChatStore
         }
     }
 
-    // Puts An Arrived Or Sent Message Into Its Cached Page (Only Conversations Opened Before Have One): It Replaces The
-    // Copy With Its ID, Or Its Pending Copy By Temporary ID, And Goes In By Time. The Page Keeps Its Newest 25
+    // Only a conversation that the user opened before has a cached page. The message replaces the copy with its ID,
+    // or the pending copy with its temporary ID. It goes in by time. The page keeps its newest 25 messages.
     private void CacheMessage(ChatMessage message)
     {
         lock (_pagesLock)
@@ -119,7 +114,8 @@ public sealed partial class ChatStore
                 return;
             }
 
-            // A Pending Copy Never Replaces The Delivered One: The Echo Can Arrive Before The Send Call Returns
+            // A pending copy never replaces the delivered copy, because the echo can arrive before the send call
+            // returns.
             if (message.Id.Length == 0 && page.Any(m => m.Id.Length > 0 && SameMessage(m, message)))
             {
                 return;
@@ -136,11 +132,15 @@ public sealed partial class ChatStore
         }
     }
 
-    // True When One Of The Message's Reactions Is Mine (My Participant ID Is Known Once Any Conversation Has Loaded)
-    private bool HasMyReaction(ChatMessage message) =>
-        _me is { } me && message.Reactions.Any(r => r.ParticipantIds.Contains(me.Id));
+    // Each SIM has its own participant ID for me. Thus the check also uses the IDs of the chat, as the bubble view
+    // does.
+    private bool HasMyReaction(ChatMessage message)
+    {
+        ConversationInfo? conversation = Find(message.ConversationId);
+        return message.Reactions.Any(r => r.ParticipantIds.Any(id =>
+            (id.Length > 0 && id == _me?.Id) || conversation?.IsMine(id) == true));
+    }
 
-    // True When A Message With This ID Is Already In Its Conversation's Cached Page
     private bool IsCached(ChatMessage message)
     {
         lock (_pagesLock)
@@ -152,11 +152,11 @@ public sealed partial class ChatStore
         }
     }
 
-    // The Same Message: The Same ID, Or The Same Temporary ID (A Pending Copy And Its Echo)
+    // A pending copy and its echo share the temporary ID.
     private static bool SameMessage(ChatMessage a, ChatMessage b) =>
         (a.Id.Length > 0 && a.Id == b.Id) || (a.TmpId.Length > 0 && a.TmpId == b.TmpId);
 
-    // Remembers A Message ID; True The First Time It Is Seen
+    // True the first time the store sees the message ID.
     private bool MarkNotified(string messageId)
     {
         lock (_ringLock)

@@ -5,20 +5,21 @@ using Windows.UI.Xaml.Media;
 namespace GMessages.App.Views.Controls;
 
 /// <summary>
-/// <c>x:Bind</c> function helpers that turn view model values into brushes and font weights.
+/// Gives <c>x:Bind</c> functions that turn view model values into brushes and font styles.
 /// </summary>
 /// <remarks>
-/// Plain static methods the XAML compiler calls directly, so Native AOT needs no <c>IValueConverter</c> reflection.
+/// The XAML compiler calls these plain static methods directly. Thus Native AOT needs no <c>IValueConverter</c>
+/// reflection.
 /// </remarks>
 public static class ColorConverters
 {
-    // Brushes Made So Far, By Color: Every Avatar And Sender Name Of One Color Shares One (Only The UI Thread Calls)
+    // Holds the brushes by color. All avatars and sender names of a color share 1 brush. Only the UI thread calls.
     private static readonly Dictionary<uint, SolidColorBrush> Brushes = [];
 
     /// <summary>
-    /// Gives a solid brush for an opaque ARGB color, the same one each time for a color.
+    /// Gives a solid brush for an opaque ARGB color. Each call for a color gives the same brush.
     /// </summary>
-    /// <remarks>Shared, so callers never change it.</remarks>
+    /// <remarks>Callers share the brush, so they must never change it.</remarks>
     /// <param name="argb">The color as <c>0xAARRGGBB</c>.</param>
     /// <returns>The brush.</returns>
     public static SolidColorBrush ToBrush(uint argb)
@@ -40,7 +41,7 @@ public static class ColorConverters
     public static FontWeight Weight(bool bold) => bold ? FontWeights.Bold : FontWeights.Normal;
 
     /// <summary>
-    /// Italic or normal text, for <c>x:Bind</c>.
+    /// Gives italic for drafts and normal for the rest.
     /// </summary>
     /// <param name="italic">True for italic.</param>
     /// <returns>The font style.</returns>

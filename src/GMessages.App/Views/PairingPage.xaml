@@ -11,7 +11,7 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- Signed-Out Reason: only above the sign-in -->
+        <!-- The reason for a sign-out shows only above the sign-in. -->
         <muxc:InfoBar
             Margin="16,16,16,0"
             IsClosable="False"
@@ -19,14 +19,13 @@
             Message="{x:Bind ViewModel.SignedOutReason}"
             Severity="Warning" />
 
-        <!-- Sign-In: the WebView2 is added in code, fresh for each attempt -->
+        <!-- The code adds a fresh WebView2 here for each sign-in attempt. -->
         <Border
             x:Name="SignInHost"
             Grid.Row="1"
             Margin="0,8,0,0"
             Visibility="{x:Bind ViewModel.IsSigningIn, Mode=OneWay}" />
 
-        <!-- Waiting For Phone -->
         <StackPanel
             Grid.Row="1"
             MaxWidth="440"
@@ -47,17 +46,15 @@
                 TextAlignment="Center"
                 TextWrapping="Wrap" />
         </StackPanel>
-        <!-- /Waiting For Phone -->
 
-        <!-- Emoji -->
         <StackPanel
             Grid.Row="1"
             HorizontalAlignment="Center"
             VerticalAlignment="Center"
             Spacing="16"
             Visibility="{x:Bind ViewModel.IsShowingEmoji, Mode=OneWay}">
-            <!-- The Emoji As The Website Draws It: Noto Color Emoji's image, bundled (set from code); the system emoji font
-                 only if the image is missing -->
+            <!-- The emoji shows as the website draws it: the bundled image of Noto Color Emoji, which the code sets.
+                 The system emoji font shows only when the image is missing. -->
             <Grid HorizontalAlignment="Center">
                 <Image
                     x:Name="EmojiImage"
@@ -78,9 +75,7 @@
                 Style="{StaticResource SubtitleTextBlockStyle}"
                 Text="Tap this emoji on your phone" />
         </StackPanel>
-        <!-- /Emoji -->
 
-        <!-- Failure -->
         <StackPanel
             Grid.Row="1"
             MaxWidth="440"
@@ -103,9 +98,7 @@
                 Content="Try again"
                 Style="{StaticResource AccentButtonStyle}" />
         </StackPanel>
-        <!-- /Failure -->
 
-        <!-- Footer -->
         <Button
             Grid.Row="2"
             Margin="16"

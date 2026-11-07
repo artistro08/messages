@@ -3,15 +3,15 @@ using GMessages.Protocol.Proto;
 namespace GMessages.Protocol;
 
 /// <summary>
-/// The requests the chat code sends to the phone; <see cref="GmClient"/> is the real implementation.
+/// The requests that the chat code sends to the phone. <see cref="GmClient"/> is the real implementation.
 /// </summary>
-/// <remarks>Exists so the chat code can be tested with a fake. Each member matches the <c>GmClient</c> method of the same name.</remarks>
+/// <remarks>The interface lets tests use a fake. Each member matches the <c>GmClient</c> method with the same name.</remarks>
 public interface IMessagingClient
 {
     /// <summary>Lists the conversations of a folder, newest first.</summary>
     Task<ListConversationsResponse> ListConversationsAsync(ListConversationsRequest.Types.Folder folder, long count, Cursor? cursor, CancellationToken ct);
 
-    /// <summary>Gets one conversation; null when the phone has none.</summary>
+    /// <summary>Gets one conversation, or null when the phone has none.</summary>
     Task<Conversation?> GetConversationAsync(string conversationId, CancellationToken ct);
 
     /// <summary>Finds the conversation with the given numbers, or creates it.</summary>
@@ -29,10 +29,10 @@ public interface IMessagingClient
     /// <summary>Adds, switches or removes a reaction on a message.</summary>
     Task<SendReactionResponse> SendReactionAsync(SendReactionRequest request, CancellationToken ct);
 
-    /// <summary>Deletes a message from the phone (the other side keeps theirs).</summary>
+    /// <summary>Deletes a message from the phone. The other side keeps its copy.</summary>
     Task<DeleteMessageResponse> DeleteMessageAsync(string messageId, CancellationToken ct);
 
-    /// <summary>Tells the other side of a conversation that the user is typing; waits for no answer.</summary>
+    /// <summary>Tells the other side of a conversation that the user is typing. It does not wait for an answer.</summary>
     Task SetTypingAsync(string conversationId, SIMPayload? sim, CancellationToken ct);
 
     /// <summary>Tells the phone a conversation was read up to a message.</summary>
@@ -50,7 +50,7 @@ public interface IMessagingClient
     /// <summary>Gets the photos of contacts.</summary>
     Task<GetThumbnailResponse> GetContactThumbnailAsync(IReadOnlyList<string> contactIds, CancellationToken ct);
 
-    /// <summary>Encrypts and uploads an attachment; the result goes in a sent message.</summary>
+    /// <summary>Encrypts and uploads an attachment. The result goes in a sent message.</summary>
     Task<MediaContent> UploadMediaAsync(ReadOnlyMemory<byte> plain, string fileName, string mime, IProgress<double>? progress, CancellationToken ct);
 
     /// <summary>Downloads and decrypts an attachment.</summary>

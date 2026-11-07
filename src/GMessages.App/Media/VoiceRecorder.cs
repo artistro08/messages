@@ -15,32 +15,35 @@ using Windows.Storage.Streams;
 namespace GMessages.App.Media;
 
 /// <summary>
-/// Thrown when the microphone can't record: access is off (Settings > Privacy &amp; security > Microphone) or there is no
-/// microphone.
+/// The exception that is thrown when the microphone cannot record. Access is off in Settings > Privacy &amp; security
+/// > Microphone, or there is no microphone.
 /// </summary>
 internal sealed class MicrophoneUnavailableException : Exception
 {
     /// <summary>
-    /// Creates the exception.
+    /// Initializes a new instance of the <see cref="MicrophoneUnavailableException"/> class with a reason.
     /// </summary>
-    /// <param name="reason">Why, for the log: <c>AccessDenied</c>, <c>NoDevice</c>, the error type or the graph's status.</param>
+    /// <param name="reason">
+    /// The reason for the log: <c>AccessDenied</c>, <c>NoDevice</c>, the error type or the status of the graph.
+    /// </param>
     public MicrophoneUnavailableException(string reason)
         : base(reason)
     {
     }
 
     /// <summary>
-    /// Creates the exception without a reason.
+    /// Initializes a new instance of the <see cref="MicrophoneUnavailableException"/> class without a reason.
     /// </summary>
     public MicrophoneUnavailableException()
     {
     }
 
     /// <summary>
-    /// Creates the exception with the error that caused it.
+    /// Initializes a new instance of the <see cref="MicrophoneUnavailableException"/> class with a reason and the error
+    /// that caused it.
     /// </summary>
-    /// <param name="reason">Why, for the log.</param>
-    /// <param name="inner">The error that caused it.</param>
+    /// <param name="reason">The reason for the log.</param>
+    /// <param name="inner">The error that caused the exception.</param>
     public MicrophoneUnavailableException(string reason, Exception inner)
         : base(reason, inner)
     {
@@ -48,42 +51,44 @@ internal sealed class MicrophoneUnavailableException : Exception
 }
 
 /// <summary>
-/// Records a voice message from the microphone chosen in Settings (or Windows' default) straight to an M4A/AAC temp
-/// file, with live input levels.
+/// Records a voice message to an M4A/AAC temp file, with live input levels. The microphone is the one chosen in
+/// Settings, or the Windows default.
 /// </summary>
 /// <remarks>
 /// <para>
-/// One <see cref="AudioGraph"/>: the device input node feeds a file output node (M4A, AAC) and a frame output node,
-/// whose frames give the level the live waveform shows (<see cref="TakeLevel"/>). Reading a frame copies its samples
-/// with <c>Buffer.CreateCopyFromMemoryBuffer</c>, so no COM interface (<c>IMemoryBufferByteAccess</c>) or unsafe code
-/// is needed under Native AOT; the copy's <c>Length</c> must be set to the frame's, since it comes back 0.
+/// The recorder uses 1 <see cref="AudioGraph"/>. Its device input node feeds an M4A/AAC file output node and a frame
+/// output node. The frames give the level that the live waveform shows. See <see cref="TakeLevel"/>. The read of a
+/// frame copies its samples with <c>Buffer.CreateCopyFromMemoryBuffer</c>. Thus Native AOT needs no COM interface such
+/// as <c>IMemoryBufferByteAccess</c> and no unsafe code. The copy has a <c>Length</c> of 0. The code must
+/// set it to the length of the frame.
 /// </para>
 /// <para>
-/// Before the graph, <see cref="AppCapability"/> checks that microphone access is on. If the user hasn't decided yet,
-/// <see cref="MicrophoneConsent"/> asks through <c>ActivateAudioInterfaceAsync</c>, which shows Windows' consent prompt
-/// to desktop apps (<c>AppCapability.RequestAccessAsync</c> needs a CoreWindow, which a desktop app doesn't have).
-/// Access that ends up off throws, and the chat pane's own dialog points to Windows' settings.
+/// Before the graph starts, <see cref="AppCapability"/> checks that microphone access is on. When the user has not
+/// decided yet, <see cref="MicrophoneConsent"/> asks through <c>ActivateAudioInterfaceAsync</c>. That call shows the
+/// consent prompt of Windows to desktop apps. <c>AppCapability.RequestAccessAsync</c> needs a CoreWindow, and a desktop
+/// app has none. When access stays off, the recorder throws, and the dialog of the chat pane points to the settings of
+/// Windows.
 /// </para>
 /// <para>
-/// <see cref="StopAsync"/> finishes the file; disposing without it drops the graph (the caller deletes the file). Access
-/// off or no microphone throws <see cref="MicrophoneUnavailableException"/>. A test run never touches the real
-/// microphone: the test hook either refuses or copies a fixture file (see <see cref="TestHooks.FakeMicrophone"/>).
-/// The audio and the path are never logged.
+/// <see cref="StopAsync"/> finishes the file. A dispose without it drops the graph, and the caller deletes the file.
+/// When access is off or there is no microphone, the recorder throws <see cref="MicrophoneUnavailableException"/>. A
+/// test run never touches the real microphone. The test hook refuses or copies a fixture file. See
+/// <see cref="TestHooks.FakeMicrophone"/>. The log never gets the audio or the path.
 /// </para>
 /// </remarks>
 internal sealed class VoiceRecorder : IDisposable
 {
-    // AAC At Windows' Medium Quality: Clear Speech, Small Files
+    // The medium AAC quality of Windows gives clear speech in small files.
     private const AudioEncodingQuality Quality = AudioEncodingQuality.Medium;
 
     private readonly AudioGraph? _graph;
     private readonly AudioFileOutputNode? _file;
     private readonly AudioFrameOutputNode? _frames;
 
-    // The File, For Its Size In The Log (Never Its Path)
+    // The path of the file, for its size in the log. The log never gets the path.
     private readonly string _path;
 
-    // A Test Run's Fake Level Follows The Clock; Its "unfinished" Microphone Fails To Finish The File
+    // The fake level of a test run follows the clock. The "unfinished" fake microphone fails to finish the file.
     private readonly long _fakeStart = Environment.TickCount64;
     private readonly bool _fakeUnfinished;
 
@@ -99,22 +104,23 @@ internal sealed class VoiceRecorder : IDisposable
     }
 
     /// <summary>
-    /// Starts recording to a new file.
+    /// Starts a recording to a new file.
     /// </summary>
-    /// <param name="path">The temp file to record to (its folder is made if missing).</param>
+    /// <param name="path">The temp file for the recording. The method makes its folder when it is missing.</param>
     /// <param name="microphoneId">
-    /// The Windows device ID of the microphone chosen in Settings, or null for Windows' default. A chosen microphone that
-    /// isn't plugged in records from the default instead.
+    /// The Windows device ID of the microphone chosen in Settings, or null for the Windows default. When the chosen
+    /// microphone is not plugged in, the recording uses the default.
     /// </param>
     /// <returns>The running recorder.</returns>
-    /// <exception cref="MicrophoneUnavailableException">Microphone access is off, or there is no microphone.</exception>
+    /// <exception cref="MicrophoneUnavailableException">
+    /// Microphone access is off, or there is no microphone.
+    /// </exception>
     public static async Task<VoiceRecorder> StartAsync(string path, string? microphoneId)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
 
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
 
-        // Test Run: Refuse, Or Record The Fixture
         if (TestHooks.FakeMicrophone() is { } fake)
         {
             if (fake is "denied" or "none")
@@ -122,7 +128,7 @@ internal sealed class VoiceRecorder : IDisposable
                 throw new MicrophoneUnavailableException(fake == "denied" ? "AccessDenied" : "NoDevice");
             }
 
-            // A File That Never Finishes, For The Failure Note
+            // The "unfinished" fake makes a file that never finishes, for the failure note.
             if (fake == "unfinished")
             {
                 await File.WriteAllBytesAsync(path, []);
@@ -133,13 +139,14 @@ internal sealed class VoiceRecorder : IDisposable
             return new VoiceRecorder(path, null, null, null);
         }
 
-        // Access Must Be On First: Ask Windows (Its Prompt) If Undecided, Since An AudioGraph Alone Is Only Refused
+        // Access must be on first. An AudioGraph alone gets only a refusal. Thus the app asks Windows for its prompt
+        // when the user is undecided.
         await EnsureMicrophoneAsync();
 
         AudioGraph? graph = null;
         try
         {
-            // The Graph; Its Clock Needs An Output Device, Which Any PC With A Microphone Has
+            // The clock of the graph needs an output device, which any PC with a microphone has.
             CreateAudioGraphResult created = await AudioGraph.CreateAsync(new AudioGraphSettings(AudioRenderCategory.Speech));
             if (created.Status != AudioGraphCreationStatus.Success)
             {
@@ -148,7 +155,6 @@ internal sealed class VoiceRecorder : IDisposable
 
             graph = created.Graph;
 
-            // The Microphone
             CreateAudioDeviceInputNodeResult input = await CreateInputAsync(graph, microphoneId);
             if (input.Status != AudioDeviceNodeCreationStatus.Success)
             {
@@ -156,11 +162,11 @@ internal sealed class VoiceRecorder : IDisposable
                 throw new MicrophoneUnavailableException(input.Status.ToString());
             }
 
-            // TODO: Diagnostic (Owner: The Chosen Microphone Isn't Used). Cause Found In 0.5.9: A Pick On A Reopened Settings
-            // Page Was Never Saved, So The Old Microphone Recorded. Trim Once The Owner Confirms The Fix
+            // TODO: This diagnostic is for the owner report that the app did not use the chosen microphone. Version
+            // 0.5.9 found the cause. A pick on a reopened Settings page was not saved, so the old microphone recorded.
+            // Remove the diagnostic when the owner confirms the fix.
             LogOpenedDevice(input.DeviceInputNode.Device?.Id, microphoneId);
 
-            // The File (M4A, AAC) And The Levels
             await File.WriteAllBytesAsync(path, []);
             StorageFile storage                      = await StorageFile.GetFileFromPathAsync(path);
             CreateAudioFileOutputNodeResult outFile  = await graph.CreateFileOutputNodeAsync(storage, MediaEncodingProfile.CreateM4a(Quality));
@@ -189,16 +195,16 @@ internal sealed class VoiceRecorder : IDisposable
     }
 
     /// <summary>
-    /// Makes the graph's input node from the microphone chosen in Settings, or from Windows' default microphone when
-    /// none is chosen or the chosen one isn't plugged in.
+    /// Makes the input node of the graph from the microphone chosen in Settings. The method uses the Windows default
+    /// when no microphone is chosen or the chosen one is not plugged in.
     /// </summary>
     /// <remarks>
-    /// The chosen device comes from <see cref="DeviceInformation.CreateFromIdAsync(string)"/>; a device that's gone either
-    /// throws there or reads <see cref="DeviceInformation.IsEnabled"/> false. Only "chosen" or "default" is logged, never
-    /// the device's name or ID.
+    /// The chosen device comes from <see cref="DeviceInformation.CreateFromIdAsync(string)"/>. A removed device throws
+    /// there or reads <see cref="DeviceInformation.IsEnabled"/> as false. The log gets only "chosen" or "default",
+    /// never the name or the ID of the device.
     /// </remarks>
     /// <param name="graph">The graph to add the node to.</param>
-    /// <param name="microphoneId">The chosen microphone's device ID, or null for the default.</param>
+    /// <param name="microphoneId">The device ID of the chosen microphone, or null for the default.</param>
     /// <returns>The node creation result.</returns>
     private static async Task<CreateAudioDeviceInputNodeResult> CreateInputAsync(AudioGraph graph, string? microphoneId)
     {
@@ -211,25 +217,25 @@ internal sealed class VoiceRecorder : IDisposable
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
-                // Unplugged Or Removed: Record From The Default
+                // The device is unplugged or removed, so the recording uses the default.
                 device = null;
             }
         }
 
-        // Windows' Default Microphone: The Other Category Follows Settings' "Default" Device; Speech Would Follow The
-        // Communications Default Instead (On The Owner's PC The Yeti, While The Default Is The Surface)
+        // MediaCategory.Other follows the "Default" device in Settings. Speech follows the communications default
+        // instead. On the PC of the owner, that is the Yeti, and the default is the Surface.
         if (device is not { IsEnabled: true })
         {
             MicrophoneConsent.Log("device", "default");
             return await graph.CreateDeviceInputNodeAsync(MediaCategory.Other);
         }
 
-        // The Chosen Microphone
         MicrophoneConsent.Log("device", "chosen");
         return await graph.CreateDeviceInputNodeAsync(MediaCategory.Other, null, device);
     }
 
-    // Which Device The Graph Really Opened, Against The Chosen One And Windows' Defaults; Names And IDs Never Logged
+    // Logs which device the graph opened, compared with the chosen device and the defaults of Windows. The log never
+    // gets names or IDs.
     private static void LogOpenedDevice(string? openedId, string? chosenId)
     {
         string defaultId        = MediaDevice.GetDefaultAudioCaptureId(AudioDeviceRole.Default);
@@ -244,26 +250,30 @@ internal sealed class VoiceRecorder : IDisposable
     }
 
     /// <summary>
-    /// Makes sure Windows lets Messages use the microphone, asking with Windows' own prompt if the user hasn't decided.
+    /// Checks that Windows lets Messages use the microphone. When the user has not decided, the method asks with the
+    /// prompt of Windows.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Runs on the UI thread (no <c>ConfigureAwait(false)</c> on the way from the chat pane), since
-    /// <c>ActivateAudioInterfaceAsync</c> must be called there for Windows to show its prompt. Microsoft documents that
-    /// call for desktop apps; <see cref="AppCapability.RequestAccessAsync"/> isn't supported in them (it needs a
-    /// CoreWindow) and failed with <c>RPC_E_DISCONNECTED</c> (0x80010108) in the owner's 0.5.2 log, as
-    /// <c>MediaCapture</c> did in 0.5.1. An <see cref="AudioGraph"/> alone is only refused.
+    /// The method runs on the UI thread, so the call path from the chat pane must have no <c>ConfigureAwait(false)</c>.
+    /// Windows shows its prompt only when <c>ActivateAudioInterfaceAsync</c> runs there. Microsoft documents that call
+    /// for desktop apps. Desktop apps do not support <see cref="AppCapability.RequestAccessAsync"/>, because it needs a
+    /// CoreWindow. It failed with <c>RPC_E_DISCONNECTED</c> 0x80010108 in the 0.5.2 log of the owner.
+    /// <c>MediaCapture</c> failed in the same way in 0.5.1. An <see cref="AudioGraph"/> alone gets only a refusal.
     /// </para>
     /// <para>
-    /// Allowed records. Anything else asks through <see cref="MicrophoneConsent"/> (Windows prompts when the user can
-    /// still decide, and answers at once when they can't), then checks again, and <see cref="MicrophoneAccess.CanRecord"/>
-    /// decides. The first check alone isn't trusted: it read "DeniedByUser" in the owner's 0.5.5 log while Windows'
-    /// consent store said "Prompt". Anything that can't record throws <see cref="MicrophoneUnavailableException"/>, and the
-    /// chat pane shows its own dialog that opens Windows' microphone settings.
+    /// When access is allowed, the recording starts. Else the method asks through <see cref="MicrophoneConsent"/> and
+    /// checks again. Windows prompts when the user can still decide, and answers at once when the user cannot. Then
+    /// <see cref="MicrophoneAccess.CanRecord"/> decides. The method does not trust the first check alone. In the 0.5.5
+    /// log of the owner, that check read "DeniedByUser" while the consent store of Windows said "Prompt". When the app
+    /// cannot record, the method throws <see cref="MicrophoneUnavailableException"/>. The chat pane then shows its own
+    /// dialog, which opens the microphone settings of Windows.
     /// </para>
     /// </remarks>
-    /// <returns>A task that completes once access is on.</returns>
-    /// <exception cref="MicrophoneUnavailableException">Access isn't on, there's no microphone, or the check failed.</exception>
+    /// <returns>A task that completes when access is on.</returns>
+    /// <exception cref="MicrophoneUnavailableException">
+    /// Access is not on, there is no microphone, or the check failed.
+    /// </exception>
     private static async Task EnsureMicrophoneAsync()
     {
         AppCapability capability;
@@ -280,13 +290,11 @@ internal sealed class VoiceRecorder : IDisposable
 
         MicrophoneConsent.Log("check before", before.ToString());
 
-        // Allowed Already: Record
         if (!MicrophoneAccess.ShouldAsk(AccessOf(before)))
         {
             return;
         }
 
-        // Not Allowed Yet: Windows Shows Its Prompt If The User Can Still Decide, Then Check Again
         int activated = await MicrophoneConsent.RequestAsync();
         AppCapabilityAccessStatus after;
         try
@@ -305,7 +313,6 @@ internal sealed class VoiceRecorder : IDisposable
         }
     }
 
-    // Windows' Access Status, As The Decision Reads It
     private static MicrophoneAccessStatus AccessOf(AppCapabilityAccessStatus status) => status switch
     {
         AppCapabilityAccessStatus.Allowed            => MicrophoneAccessStatus.Allowed,
@@ -319,13 +326,13 @@ internal sealed class VoiceRecorder : IDisposable
     /// <returns>The level, from 0 to 1.</returns>
     public float TakeLevel()
     {
-        // Test Run: A Steady Wave
+        // A test run gets a steady wave.
         if (_frames is null)
         {
             return (float)(0.5 + (0.4 * Math.Sin((Environment.TickCount64 - _fakeStart) / 150.0)));
         }
 
-        // The Graph's Samples Are 32-Bit Floats
+        // The samples of the graph are 32-bit floats.
         using AudioFrame frame   = _frames.GetFrame();
         using AudioBuffer buffer = frame.LockBuffer(AudioBufferAccessMode.Read);
         if (buffer.Length == 0)
@@ -333,18 +340,19 @@ internal sealed class VoiceRecorder : IDisposable
             return 0;
         }
 
-        // The Copy Comes Back With Length 0 (Only Its Capacity Set): Its Bytes Count Once Its Length Is The Frame's
+        // The copy has a Length of 0 and only its Capacity set. Its bytes count only when its Length is the
+        // length of the frame.
         var copy    = Windows.Storage.Streams.Buffer.CreateCopyFromMemoryBuffer(buffer);
         copy.Length = Math.Min(copy.Capacity, buffer.Length);
         return VoiceWave.LevelOf(copy.ToArray());
     }
 
     /// <summary>
-    /// Pauses recording: the graph stops, so no audio reaches the file or the levels until <see cref="Resume"/>.
+    /// Pauses the recording. The graph stops, so no audio reaches the file or the levels until <see cref="Resume"/>.
     /// </summary>
     /// <remarks>
-    /// A stopped graph processes no quanta, and the file output node isn't finalized, so resuming adds to the same file
-    /// and the paused time is never in it.
+    /// A stopped graph processes no quanta, and the file output node is not finalized. Thus a resume adds to the same
+    /// file, and the file never holds the paused time.
     /// </remarks>
     public void Pause() => _graph?.Stop();
 
@@ -354,20 +362,20 @@ internal sealed class VoiceRecorder : IDisposable
     public void Resume() => _graph?.Start();
 
     /// <summary>
-    /// Stops recording, finishes the file and lets go of it, so it can be read back at once.
+    /// Stops the recording, then finishes and closes the file, so that the caller can read it at once.
     /// </summary>
     /// <remarks>
-    /// The owner's 0.5.10 log shows Done failing with an <see cref="IOException"/> whose cause wasn't logged. A finalize
-    /// that fails (<c>Unknown</c>) can leave the file open while the graph lives (a sharing violation on read, seen in a
-    /// scratch graph), so the graph is disposed here before the file is read, and the finalize result and the file's size
-    /// in bytes are logged (never its path). A finalized file output node is already closed: closing it again throws
-    /// <see cref="ObjectDisposedException"/>, so only the graph is disposed.
+    /// In the 0.5.10 log of the owner, Done failed with an <see cref="IOException"/> whose cause was not in the log.
+    /// A finalize that fails with <c>Unknown</c> can keep the file open while the graph lives. A scratch graph showed
+    /// this as a sharing violation on read. Thus the method disposes the graph before the file is read. The log gets
+    /// the finalize result and the size of the file in bytes, never its path. A finalized file output node is already
+    /// closed. A second close throws <see cref="ObjectDisposedException"/>, so the method disposes only the graph.
     /// </remarks>
     /// <returns>A task that completes when the file is complete and closed.</returns>
-    /// <exception cref="IOException">The file couldn't be finished.</exception>
+    /// <exception cref="IOException">The recorder cannot finish the file.</exception>
     public async Task StopAsync()
     {
-        // Test Run: The Fixture Is Already Complete, Or Never Finishes
+        // In a test run, the fixture is already complete or never finishes.
         if (_graph is null || _file is null)
         {
             if (_fakeUnfinished)
@@ -392,7 +400,8 @@ internal sealed class VoiceRecorder : IDisposable
     }
 
     /// <summary>
-    /// Stops the graph and lets go of the microphone and the file (unfinished unless <see cref="StopAsync"/> ran).
+    /// Stops the graph and releases the microphone and the file. The file stays unfinished unless
+    /// <see cref="StopAsync"/> ran.
     /// </summary>
     public void Dispose()
     {

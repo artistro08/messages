@@ -3,14 +3,13 @@ using GMessages.Presentation.Settings;
 namespace GMessages.App;
 
 /// <summary>
-/// The tray icon: which icon identity this run uses, and the right-click menu window made on first use.
+/// Holds the tray icon side of the app: the icon identity of this run, and the right-click menu window.
 /// </summary>
 /// <remarks>
-/// Part of <see cref="App"/>; the other members are in App.xaml.cs.
+/// This part of <see cref="App"/> holds the tray icon side. App.xaml.cs holds the other members.
 /// </remarks>
 public sealed partial class App
 {
-
     private static Guid SelectTrayGuid()
     {
 #if EnableTestHooks
@@ -22,7 +21,7 @@ public sealed partial class App
         return AppIdentity.IsPackaged ? PackagedTrayGuid : ClassicTrayGuid;
     }
 
-    // The right-click menu's window is made on first use, since most sessions never open it
+    // The app makes the menu window on the first right-click, because most sessions never open the menu.
     private void ShowTrayMenu(int pointX, int pointY)
     {
         if (_quitting)
@@ -34,19 +33,13 @@ public sealed partial class App
         {
             _trayMenu = new TrayMenuWindow();
             _trayMenu.ApplyTheme(_settings?.Theme ?? AppTheme.System);
-            _trayMenu.OpenRequested     += (_, _) => ShowMainWindowRequested?.Invoke(this, "menu");
+            _trayMenu.OpenRequested     += (_, _) => OnShowMainWindowRequested("menu");
             _trayMenu.SettingsRequested += (_, _) => ShowSettings();
             _trayMenu.QuitRequested     += (_, _) => Quit();
 
-            // Kept Once Made, Hidden Between Uses: Closing A Menu Window (Its XAML Island) Stopped XAML Drawing Anything
-            // In The Next Window Opened. Trimmed Once It Hides
-            _trayMenu.Hidden += (_, _) =>
-            {
-                if (!_quitting)
-                {
-                    _memoryTrim?.Schedule();
-                }
-            };
+            // The app keeps the menu window and hides it between uses. A close of the window also closes its XAML
+            // island, and XAML then draws nothing in the next window. The memory trims after each hide.
+            _trayMenu.Hidden += (_, _) => ScheduleTrim();
         }
 
         var (x, y, edge) = ScreenGeometry.GetMenuAnchor(pointX, pointY);

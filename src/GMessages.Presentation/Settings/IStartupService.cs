@@ -1,28 +1,28 @@
 namespace GMessages.Presentation.Settings;
 
 /// <summary>
-/// The "Start with Windows" switch. Ported from Magic Buds' <c>IStartupTaskService</c>.
+/// Controls the "Start with Windows" switch. Ported from <c>IStartupTaskService</c> of Magic Buds.
 /// </summary>
 /// <remarks>
-/// The App picks the MSIX startup task when packaged and the current user's Run key when not, so the interface
-/// covers two real implementations (plus a marker file under UI test).
+/// The App uses the MSIX startup task in a package, and the Run key of the current user without a package. Thus the
+/// interface has 2 real implementations. Under UI test, a marker file replaces the switch.
 /// </remarks>
 public interface IStartupService
 {
     /// <summary>
-    /// Reads whether the app currently starts with Windows.
+    /// Reads whether the app starts with Windows.
     /// </summary>
-    /// <returns>True when it starts with Windows.</returns>
+    /// <returns>True when the app starts with Windows.</returns>
     Task<bool> IsEnabledAsync();
 
     /// <summary>
-    /// Turns starting with Windows on or off.
+    /// Sets whether the app starts with Windows.
     /// </summary>
     /// <remarks>
-    /// Windows can refuse an enable when the user or a policy turned it off in Settings, so the result is what
-    /// actually took effect.
+    /// Windows can refuse an enable when the user or a policy disabled the switch in Settings. Thus the result is the
+    /// state that took effect.
     /// </remarks>
-    /// <param name="enabled">The wanted state.</param>
-    /// <returns>Whether it ended up enabled.</returns>
+    /// <param name="enabled">The requested state.</param>
+    /// <returns>True when the start with Windows is on after the call.</returns>
     Task<bool> SetEnabledAsync(bool enabled);
 }

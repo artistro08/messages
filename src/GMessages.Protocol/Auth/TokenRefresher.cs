@@ -15,38 +15,40 @@ namespace GMessages.Protocol.Auth;
 /// <remarks>
 /// Ported from <c>refreshAuthToken</c>, <c>updateTachyonAuthToken</c> and <c>isFatalRefreshError</c> in
 /// <see href="https://github.com/mautrix/gmessages/blob/ba33f4875a491f5cb47db8a6baf42a8869f5f383/pkg/libgm/client.go">client.go</see>.
-/// The token is refreshed once less than an hour is left. The request is signed with the account's refresh key over
-/// <c>"{requestId}:{timestampMicros}"</c>. Push keys are never sent: this app has no web push, so Go's
-/// <c>MoreParameters</c> block stays empty. The token itself is never logged.
+/// The refresher gets a new token when less than 1 hour is left. The refresh key of the account signs the request
+/// over <c>"{requestId}:{timestampMicros}"</c>. The request never holds push keys, because this app has no web push.
+/// Thus the Go <c>MoreParameters</c> block stays empty. The token never goes in a log.
 /// </remarks>
 /// <param name="http">The HTTP client.</param>
-/// <param name="auth">The account whose token is refreshed.</param>
+/// <param name="auth">The account that owns the token.</param>
 /// <param name="endpoints">The server addresses.</param>
 /// <param name="time">The clock for the expiry check and the new expiry.</param>
 /// <param name="log">The logger.</param>
 public sealed partial class TokenRefresher(GmHttpClient http, AuthData auth, GmEndpoints endpoints, TimeProvider time, ILogger log)
 {
-    /// <summary>Refresh once less than this is left (Go: <c>RefreshTachyonBuffer</c>).</summary>
+    /// <summary>The refresher gets a new token when less than this time is left. Go calls it <c>RefreshTachyonBuffer</c>.</summary>
     public static readonly TimeSpan RefreshBuffer = TimeSpan.FromHours(1);
 
-    /// <summary>How long a token lasts when the server gives no TTL.</summary>
+    /// <summary>The life of a token when the server gives no TTL.</summary>
     public static readonly TimeSpan DefaultValidFor = TimeSpan.FromHours(24);
 
-    // Google Errors That Mean The Credentials Are Gone (Go: ErrInvalidCredentials, ErrRequestedEntityNotFound)
+    // These Google errors tell that the credentials are gone. Go names them ErrInvalidCredentials and
+    // ErrRequestedEntityNotFound.
     private const string InvalidCredentialsMessage = "Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.";
     private const string EntityNotFoundMessage     = "Requested entity was not found.";
 
     /// <summary>
-    /// Raised with <see cref="AuthTokenRefreshed"/> after a new token is stored.
+    /// Occurs with <see cref="AuthTokenRefreshed"/> after the refresher stores a new token.
     /// </summary>
     public event Action<object>? EventRaised;
 
     /// <summary>
-    /// Refreshes the token if less than an hour is left.
+    /// Refreshes the token when less than 1 hour is left.
     /// </summary>
     /// <remarks>
-    /// Does nothing when the account has no browser device (not paired) or more than an hour is left. On success the
-    /// new token, expiry and TTL are stored on the <see cref="AuthData"/> and <see cref="AuthTokenRefreshed"/> is raised.
+    /// The method does nothing when the account has no browser device, or when more than 1 hour is left. An account
+    /// that is not paired has no browser device. On success, the method stores the new token, expiry and TTL on the
+    /// <see cref="AuthData"/>. Then it raises <see cref="AuthTokenRefreshed"/>.
     /// </remarks>
     /// <param name="ct">Cancels the request.</param>
     /// <returns>A task that completes when the token is fresh.</returns>
@@ -62,7 +64,7 @@ public sealed partial class TokenRefresher(GmHttpClient http, AuthData auth, GmE
             return;
         }
 
-        // Sign "{id}:{micros}"
+        // The signed text is "{id}:{micros}".
         string requestId  = Guid.NewGuid().ToString();
         long timestamp    = now.ToUnixTimeMilliseconds() * 1000;
         byte[] signature  = auth.RefreshKey.SignSha256Der(Encoding.UTF8.GetBytes(requestId + ":" + timestamp.ToString(CultureInfo.InvariantCulture)));
@@ -89,7 +91,7 @@ public sealed partial class TokenRefresher(GmHttpClient http, AuthData auth, GmE
         {
             RegisterRefreshResponse res = await http.PostTypedAsync<RegisterRefreshResponse>(endpoints.RegisterRefresh, payload, GmContentType.PbLite, ct).ConfigureAwait(false);
 
-            // Note: Length > 0 stands in for Go's != nil, as elsewhere in this port
+            // Go checks the token for nil. This port checks for Length > 0 instead, as in other places.
             if (res.TokenData is not { TachyonAuthToken.Length: > 0 } data)
             {
                 throw new InvalidDataException("No tachyon auth token in refresh response.");
@@ -99,39 +101,26 @@ public sealed partial class TokenRefresher(GmHttpClient http, AuthData auth, GmE
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {
-            // Diagnosis: Which Failure, And The HTTP Status When There Was One (0 Otherwise)
+            // For diagnosis, the log tells the failure type and the HTTP status. The status is 0 when no response arrived.
             int status = ex is GmRequestException req ? req.StatusCode : 0;
             string errorType = ex.GetType().Name;
             LogRefreshFailed(log, errorType, status);
             throw;
         }
 
-        Update(token);
+        Apply(auth, token, time);
+        TimeSpan validFor = TimeSpan.FromMicroseconds(auth.TachyonTtlMicros);
+        LogUpdated(log, auth.TachyonExpiry, validFor);
         EventRaised?.Invoke(new AuthTokenRefreshed());
     }
 
     /// <summary>
-    /// Stores a new token with its expiry and TTL.
+    /// Stores a token with its expiry and TTL on an account.
     /// </summary>
     /// <remarks>
-    /// Ported from <c>updateTachyonAuthToken</c>. A TTL of 0 means 24 hours. Also used by pairing, which gets its
-    /// first token the same way.
-    /// </remarks>
-    /// <param name="data">The token and its TTL in microseconds.</param>
-    public void Update(TokenData data)
-    {
-        Apply(auth, data, time);
-        TimeSpan validFor = TimeSpan.FromMicroseconds(auth.TachyonTtlMicros);
-        LogUpdated(log, auth.TachyonExpiry, validFor);
-    }
-
-    /// <summary>
-    /// Stores a token with its expiry and TTL on an account; the shared core of <see cref="Update"/>.
-    /// </summary>
-    /// <remarks>
-    /// Ported from <c>updateTachyonAuthToken</c>. A TTL of 0 means 24 hours. Kept static so sign-in can store its
-    /// first token without a refresher. The token, expiry and TTL are stored as one <see cref="TachyonToken"/> in a
-    /// single write, so they never tear.
+    /// Ported from <c>updateTachyonAuthToken</c>. A TTL of 0 means 24 hours. The method is static, so the sign-in can
+    /// store its first token without a refresher. It stores the token, expiry and TTL as 1 <see cref="TachyonToken"/>
+    /// in 1 write, so they never tear.
     /// </remarks>
     /// <param name="auth">The account to update.</param>
     /// <param name="data">The token and its TTL in microseconds.</param>
@@ -143,21 +132,21 @@ public sealed partial class TokenRefresher(GmHttpClient http, AuthData auth, GmE
 
         TimeSpan validFor = data.TTL == 0 ? DefaultValidFor : TimeSpan.FromMicroseconds(data.TTL);
 
-        // One Swap, So A Concurrent Save Never Sees A New Token With An Old Expiry
+        // The method writes 1 value, so a concurrent save never sees a new token with an old expiry.
         auth.Tachyon = new TachyonToken(data.TachyonAuthToken.ToByteArray(), time.GetUtcNow() + validFor, (long)validFor.TotalMicroseconds);
     }
 
     /// <summary>
-    /// Tells whether a refresh error means the session is gone for good.
+    /// Tells whether a refresh error means that the session is gone permanently.
     /// </summary>
     /// <remarks>
-    /// Ported from <c>isFatalRefreshError</c>: HTTP 401, 403 and 404 are fatal, and so are Google's "invalid
-    /// credentials" and "entity not found" errors with any status (matched on type and message, like Go's
-    /// <c>RequestError.Is</c>). Everything else, including network errors and 5xx, is worth retrying. Inner exceptions
-    /// are checked too, standing in for Go's error wrapping.
+    /// Ported from <c>isFatalRefreshError</c>. HTTP 401, 403 and 404 are fatal. The Google "invalid credentials" and
+    /// "entity not found" errors are fatal with any status. The method matches them on type and message, as Go
+    /// <c>RequestError.Is</c> does. All other errors can clear on a retry, also network errors and 5xx. The method
+    /// also checks the inner exceptions, in place of the Go error wrapping.
     /// </remarks>
     /// <param name="e">The error from <see cref="RefreshIfNeededAsync"/>.</param>
-    /// <returns>True when retrying cannot help.</returns>
+    /// <returns>True when a retry cannot help.</returns>
     public static bool IsFatal(Exception e)
     {
         for (Exception? current = e; current is not null; current = current.InnerException)

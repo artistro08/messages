@@ -5,20 +5,21 @@ using WinRT;
 namespace GMessages.App.Views.Controls;
 
 /// <summary>
-/// Gives every dialog WinUI's built-in Fluent look: rounded corners, the title and the button row.
+/// Gives each dialog the built-in Fluent look of WinUI: rounded corners, the title and the button row.
 /// </summary>
 /// <remarks>
-/// WinUI's implicit dialog style only reaches a plain <see cref="ContentDialog"/> in the visual tree. One built in code,
-/// or a subclass such as <see cref="UnpairDialog"/>, falls back to the old square style unless its style is set. Every
-/// dialog built in code goes through <see cref="Create"/>, and the XAML subclasses call <see cref="UseFluentStyle"/> in their constructors; the resource is read with a WinRT cast (Native AOT safe).
+/// The implicit dialog style of WinUI reaches only a plain <see cref="ContentDialog"/> in the visual tree. A dialog
+/// from code, or a subclass such as <see cref="UnpairDialog"/>, gets the old square style unless its style is set. Each
+/// dialog from code goes through <see cref="Create"/>. The XAML subclasses call <see cref="UseFluentStyle"/> in their
+/// constructors. A WinRT cast reads the resource, which is safe under Native AOT.
 /// </remarks>
 internal static class Dialogs
 {
     /// <summary>
-    /// Creates a Fluent-styled dialog on a window's root, in the window's current theme.
+    /// Creates a dialog with the Fluent style on the root of a window, in the current theme of the window.
     /// </summary>
-    /// <param name="root">The XAML root the dialog opens on.</param>
-    /// <returns>The dialog; the caller sets its title, content and buttons.</returns>
+    /// <param name="root">The XAML root that the dialog opens on.</param>
+    /// <returns>The dialog. The caller sets its title, content and buttons.</returns>
     public static ContentDialog Create(XamlRoot root)
     {
         ArgumentNullException.ThrowIfNull(root);
@@ -34,7 +35,7 @@ internal static class Dialogs
     }
 
     /// <summary>
-    /// Sets a dialog's style to WinUI's <c>DefaultContentDialogStyle</c>.
+    /// Sets the style of a dialog to the <c>DefaultContentDialogStyle</c> of WinUI.
     /// </summary>
     /// <param name="dialog">The dialog.</param>
     public static void UseFluentStyle(ContentDialog dialog)

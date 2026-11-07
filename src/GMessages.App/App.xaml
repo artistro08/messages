@@ -10,12 +10,13 @@
             <ResourceDictionary.MergedDictionaries>
                 <muxc:XamlControlsResources />
 
-                <!-- Subtle Button Brushes: WinUI 2.8 has no SubtleButtonStyle, so WinUI 3's (Windows App SDK 2.3) is copied
-                     below with its brushes. Icon Buttons (owner, Task 22): a button that is just an icon gets no background
-                     or border on hover or press, so the hover and press brushes, which only SubtleButtonStyle (and so
-                     IconButtonStyle) reads, are clear in Light and Dark. The title bar's Back and ☰ keep Windows' default
-                     feedback (owner, Plan 7): they have their own style (TitleBar). High contrast keeps WinUI 3's system
-                     hover and press colors; the foreground, focus visual and disabled look stay Fluent's -->
+                <!-- WinUI 2.8 has no SubtleButtonStyle. This file copies the style of WinUI 3, Windows App SDK 2.3,
+                     below with its brushes. A button that is only an icon gets no background or border on hover or
+                     press. The owner chose that in Task 22. Only SubtleButtonStyle and thus IconButtonStyle read the
+                     hover and press brushes, so these brushes are clear in Light and Dark. The Back and ☰ buttons of
+                     the title bar keep the default feedback of Windows, as the owner chose in Plan 7. They have their
+                     own TitleBar style. High contrast keeps the system hover and press colors of WinUI 3. The
+                     foreground, the focus visual and the disabled look stay Fluent. -->
                 <ResourceDictionary>
                     <ResourceDictionary.ThemeDictionaries>
                         <ResourceDictionary x:Key="Light">
@@ -64,16 +65,20 @@
                 </ResourceDictionary>
             </ResourceDictionary.MergedDictionaries>
 
-            <!-- Sent RCS Bubble: a lighter (Light) or darker (Dark) shade of the accent, with the regular text color on it
-                 (sent SMS and MMS take the full accent). Its border matches the fill there; in high contrast the fill is the
-                 window color, so the border is the text color to keep the bubble's edge.
-                 Reply Quote: a tint of the bubble it sits in with an accent bar. On the card color and on the RCS shade it is the
-                 accent, faint; on the full accent (SMS) it is the text-on-accent color, faint, with a bar of that color. In
-                 high contrast the quote takes the bubble's own color (window, or highlight on SMS) and a highlight bar.
-                 Reaction Pill Edge: none (clear) in Light and Dark; the text color in high contrast, so the pill keeps an edge.
-                 Reaction Pill Mine: a soft accent tint as the fill (no ring).
-                 Here, not in the pill's own resources: a ThemeResource on an element can't see keys its own Resources define
-                 after it, and the failed lookup crashed the app as soon as a bubble was made -->
+            <!-- A sent RCS bubble takes a lighter shade of the accent in Light and a darker shade in Dark. The text
+                 keeps the regular text color. Sent SMS and MMS take the full accent. The border of the bubble matches
+                 the fill. In high contrast the fill is the window color, so the border takes the text color to keep
+                 the edge.
+                 A reply quote takes a tint of its bubble, with an accent bar. On the card color and on the RCS shade,
+                 the tint is a faint accent. On the full accent of SMS, the tint is a faint text-on-accent color, with
+                 a bar of that color. In high contrast the quote takes the color of its bubble and a highlight bar.
+                 That color is the window color, or the highlight on SMS.
+                 The edge of a reaction pill is clear in Light and Dark. In high contrast the edge takes the text
+                 color, so the pill keeps an edge. The fill of a reaction pill of the user is a soft accent tint, with
+                 no ring.
+                 These brushes are here, not in the resources of the pill. A ThemeResource on an element cannot see
+                 the keys that its own Resources define after it. That failed lookup crashed the app when it made a
+                 bubble. -->
             <ResourceDictionary.ThemeDictionaries>
                 <ResourceDictionary x:Key="Light">
                     <SolidColorBrush x:Key="RcsBubbleBrush" Color="{ThemeResource SystemAccentColorLight2}" />
@@ -104,15 +109,18 @@
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
 
-            <!-- Font: Windows 11's Fluent emoji. Windows' own text engine draws Segoe UI Emoji's older look (WinUI 3 brought a
-                 newer engine), so emoji come from a Fluent emoji font shipped with the app (tetunori/fluent-emoji-webfont,
-                 its bitmap glyphs only, see scripts/Make-EmojiFont.ps1). It comes first, so an emoji joined from several
-                 (👨‍👩‍👧) stays in it whole; the script took its space, digits, # * © ® out, so text takes Segoe UI Variable's,
-                 and a script neither font has falls to Windows' own fallback. Controls read it here; the main window passes it
-                 to its plain text, and text styled elsewhere that can hold a name takes it by hand -->
+            <!-- Emoji take the Fluent look of Windows 11. The text engine of Windows draws the older look of Segoe
+                 UI Emoji, and only WinUI 3 brought a newer engine. Thus emoji come from a Fluent emoji font that
+                 ships with the app: the bitmap glyphs of tetunori/fluent-emoji-webfont (see
+                 scripts/Make-EmojiFont.ps1). The font comes first, so an emoji joined from several emoji
+                 (👨‍👩‍👧) stays whole in it. The script took the space, the digits and # * © ® out of the font. Text
+                 takes them from Segoe UI Variable. A script that neither font has falls to the fallback of Windows.
+                 Controls read this key. The main window passes it to its plain text. Text styled elsewhere that can
+                 hold a name takes it by hand. -->
             <FontFamily x:Key="ContentControlThemeFontFamily">ms-appx:///Assets/Fonts/FluentEmojiColor.ttf#Fluent Emoji Color, Segoe UI Variable Text, XamlAutoFontFamily</FontFamily>
 
-            <!-- Subtle Button: WinUI 3's SubtleButtonStyle (Windows App SDK 2.3's generic.xaml), which WinUI 2.8 lacks -->
+            <!-- This style copies SubtleButtonStyle of WinUI 3 from generic.xaml of Windows App SDK 2.3. WinUI 2.8
+                 lacks it. -->
             <Style x:Key="SubtleButtonStyle" TargetType="Button">
                 <Setter Property="Background" Value="{ThemeResource SubtleButtonBackground}" />
                 <Setter Property="BackgroundSizing" Value="InnerBorderEdge" />
@@ -185,10 +193,10 @@
                 </Setter>
             </Style>
 
-            <!-- Icon Button: every button that is just an icon (or a picture). Fluent's subtle button with no padding, so the
-                 icon centers in the button's set size; its hover and press backgrounds are clear (Icon Buttons, above).
-                 Pressing shrinks the icon and releasing springs it back (IconPress). Defined here, before any page or
-                 control that uses it loads -->
+            <!-- Every button that is only an icon or a picture uses this style. It is the Fluent subtle button with no
+                 padding, so the icon centers in the set size of the button. Its hover and press backgrounds are clear,
+                 as the comment on the subtle button brushes tells. A press shrinks the icon, and a release springs it
+                 back (IconPress). The style is here, so it exists before a page or control that uses it loads. -->
             <Style
                 x:Key="IconButtonStyle"
                 BasedOn="{StaticResource SubtleButtonStyle}"
@@ -197,7 +205,8 @@
                 <Setter Property="controls:IconPress.IsEnabled" Value="True" />
             </Style>
 
-            <!-- Who Reacted: the flyout's thin edge matches a menu's, so the compact rows sit close to its border -->
+            <!-- The thin edge of the flyout that lists who reacted matches the edge of a menu, so its compact rows
+                 sit close to its border. -->
             <Style
                 x:Key="ReactorsFlyoutPresenterStyle"
                 BasedOn="{StaticResource DefaultFlyoutPresenterStyle}"

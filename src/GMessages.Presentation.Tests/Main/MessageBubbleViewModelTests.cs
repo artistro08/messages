@@ -59,7 +59,7 @@ public sealed class MessageBubbleViewModelTests
     }
 
     /// <summary>
-    /// Emoji alone show big with no bubble (issue #11); a reply keeps its bubble, which holds the quote.
+    /// Emoji alone show big with no bubble, as issue #11 asks. A reply keeps its bubble, which holds the quote.
     /// </summary>
     [TestMethod]
     public void Bubble_IsEmojiOnly_TextWithoutQuote()
@@ -126,7 +126,7 @@ public sealed class MessageBubbleViewModelTests
     }
 
     /// <summary>
-    /// Every public property is watched, so a change raises it by name; one left out would never update its binding.
+    /// Every public property is watched, so a change raises it by name. A property left out never updates its binding.
     /// </summary>
     [TestMethod]
     public void Watched_CoversEveryPublicProperty()
@@ -139,8 +139,8 @@ public sealed class MessageBubbleViewModelTests
     }
 
     /// <summary>
-    /// The phone's echo of a sent message raises only what moved (its ID, the sending state and what follows from them),
-    /// never the empty name that re-reads every binding.
+    /// The echo of the phone for a sent message raises only what moved. This is the ID, the sending state and what
+    /// follows from them. The echo never raises the empty name, which reads every binding again.
     /// </summary>
     [TestMethod]
     public void Update_Echo_RaisesOnlyWhatChanged()
@@ -160,7 +160,7 @@ public sealed class MessageBubbleViewModelTests
     }
 
     /// <summary>
-    /// My newest message sent as SMS says "SMS" in place of the delivery icon; one sent as RCS keeps its icon.
+    /// My newest message sent as SMS says "SMS" in place of the delivery icon. A message sent as RCS keeps its icon.
     /// </summary>
     [TestMethod]
     public void SentAsSms_SaysSms_NotTheIcon()
@@ -179,7 +179,6 @@ public sealed class MessageBubbleViewModelTests
         Assert.IsFalse(rcs.ShowsSmsLabel);
         Assert.AreEqual(MessageStatusIcon.Delivered, rcs.StatusIcon);
 
-        // While Sending, The Clock
         Assert.IsFalse(sending.ShowsSmsLabel);
         Assert.AreEqual(MessageStatusIcon.Sending, sending.StatusIcon);
     }
@@ -295,7 +294,6 @@ public sealed class MessageBubbleViewModelTests
         Assert.IsFalse(new MessageBubbleViewModel(Message() with { Status = MessageStatusType.OutgoingFailedGeneric }).CanAct);
         Assert.IsFalse(new MessageBubbleViewModel(Message() with { Id = string.Empty, TmpId = "t1" }).CanAct);
 
-        // Marked Failed After Sending
         var bubble = new MessageBubbleViewModel(Message());
         bubble.MarkFailed();
         Assert.IsFalse(bubble.CanAct);
@@ -429,9 +427,10 @@ public sealed class MessageBubbleViewModelTests
     }
 
     /// <summary>
-    /// The full image decodes wide enough to fill its box once cropped, never wider than its own pixels: a landscape
-    /// photo in the square box of unknown dimensions (the blur: decoded only 240 wide, then stretched 1.33x to the box's
-    /// height), a photo whose reported sides were swapped, a photo matching its box, a small photo, and an unknown size.
+    /// The full image decodes wide enough to fill its box once cropped, never wider than its own pixels.
+    /// The cases are a landscape photo in the square box of unknown dimensions, a photo with swapped reported sides,
+    /// a photo that matches its box, a small photo and an unknown size.
+    /// The landscape case was blurry: the app decoded it only 240 wide, then stretched it 1.33 times to the box height.
     /// </summary>
     /// <param name="pixelWidth">The image's own width.</param>
     /// <param name="pixelHeight">The image's own height.</param>

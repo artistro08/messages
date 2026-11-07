@@ -6,17 +6,17 @@ using GMessages.Protocol.Events;
 namespace GMessages.Presentation.Main;
 
 /// <summary>
-/// The main window's state: the inbox and folder lists, which conversation is open, the narrow layout, conversation
-/// actions and the banners.
+/// Holds the state of the main window: the folder lists, the open conversation, the actions and the banners.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Created when the window opens and dropped when it closes; call <see cref="Dispose"/> then, because the connection
-/// and the store outlive it. The view sets <see cref="IsNarrow"/> and <see cref="IsWindowFocused"/>.
+/// The window creates the view model when it opens. The connection and the store live longer than the window, so call
+/// <see cref="Dispose"/> when the window closes. The view sets <see cref="IsNarrow"/> and
+/// <see cref="IsWindowFocused"/>.
 /// </para>
 /// <para>
-/// Each change raises <see cref="PropertyChanged"/> once with an empty property name, which tells <c>x:Bind</c> to
-/// re-read every property. Call everything on the UI thread.
+/// Each change raises <see cref="PropertyChanged"/> 1 time with an empty property name. That name tells <c>x:Bind</c>
+/// to read every property again. Call every member on the UI thread.
 /// </para>
 /// </remarks>
 public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
@@ -26,45 +26,44 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     private readonly ConnectionController _connection;
     private readonly ChatStore _store;
     private readonly TimeProvider _time;
-
-    // The Conversations Archived This Session That Undo (The Bar's Button, Or Ctrl + Z Any Time) Puts Back, Latest Last,
-    // And The Timer That Hides The Bar. One Unarchived, Trashed Or Blocked Another Way Leaves The List
-    private readonly List<string> _archived = [];
-    private ITimer? _undoTimer;
     private readonly Action<Action> _post;
-
-    // Fetches Link Preview Cards For The Open Chat; Null Means None
     private readonly LinkPreviewer? _previews;
-
-    // Whether Received Messages' Links Get Previews (Settings); Null Means Always
     private readonly Func<bool>? _showReceivedPreviews;
 
-    // The Folder Lists (Spam And Blocked, Archived), Made The First Time Each Opens
+    // The conversations that the user archived in this session, with the latest last. Undo puts them back with the
+    // button of the bar, or with Ctrl + Shift + Z at any time. Each other action on a conversation removes it from the
+    // list.
+    private readonly List<string> _archived = [];
+    private ITimer? _undoTimer;
+
     private readonly Dictionary<ConversationFolder, ConversationListViewModel> _folders = [];
 
-    // Conversations With An Action Waiting On The Phone, So A Double Click Sends One Request
+    // A double click sends 1 request: a conversation with an action that waits on the phone accepts no other action.
     private readonly HashSet<string> _running = new(StringComparer.Ordinal);
 
     private ConnectionState _state;
     private bool _phoneSilent;
-
-    // Battery Banner: The Store's State, And Whether The User Closed The Banner Since The Last Low Alert
     private bool _batteryLow;
     private bool _batteryDismissed;
 
-    // Closed With The Window: Late Callbacks (A Start Chat That Finishes After Closing) Must Not Open Anything
+    // A late callback must not open anything after Dispose. An example is a Start chat that ends after the window
+    // closes.
     private bool _disposed;
 
     /// <summary>
-    /// Creates the view model with the inbox list (not loaded yet) and starts watching the connection.
+    /// Creates the view model with an inbox list that is not loaded yet, and starts to watch the connection.
     /// </summary>
-    /// <param name="connection">Gives the connection state and the phone's live events.</param>
+    /// <param name="connection">Gives the connection state and the live events of the phone.</param>
     /// <param name="store">Loads the conversations.</param>
     /// <param name="time">Gives the current time for the list times.</param>
     /// <param name="post">Runs an action on the UI thread.</param>
-    /// <param name="previews">Fetches link preview cards for the open chat; null for none. The caller owns it.</param>
-    /// <param name="showReceivedPreviews">Says whether received messages' links get previews; null for always.</param>
-    /// <exception cref="ArgumentNullException">An argument other than <paramref name="previews"/> or <paramref name="showReceivedPreviews"/> is null.</exception>
+    /// <param name="previews">Fetches the link cards for the open chat, or null for none. The caller owns it.</param>
+    /// <param name="showReceivedPreviews">
+    /// Tells whether a link in a received message gets a preview, or null for always.
+    /// </param>
+    /// <exception cref="ArgumentNullException">
+    /// An argument other than <paramref name="previews"/> or <paramref name="showReceivedPreviews"/> is null.
+    /// </exception>
     public MainViewModel(ConnectionController connection, ChatStore store, TimeProvider time, Action<Action> post, LinkPreviewer? previews = null, Func<bool>? showReceivedPreviews = null)
     {
         ArgumentNullException.ThrowIfNull(connection);
@@ -93,16 +92,18 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     public event PropertyChangedEventHandler? PropertyChanged;
 
     /// <summary>
-    /// Raised when the connection arrives at <see cref="ConnectionState.Connected"/>, so the window can retry what
-    /// failed while it was down (photos). The lists reload then by themselves, and again when the phone answers after
-    /// a silence.
+    /// Occurs when the connection reaches <see cref="ConnectionState.Connected"/>. The window can then retry the photos
+    /// that failed while the connection was down.
     /// </summary>
+    /// <remarks>
+    /// The lists reload by themselves at that time. They also reload when the phone answers after a silence.
+    /// </remarks>
     public event EventHandler? Connected;
 
     /// <summary>Gets the inbox list.</summary>
     public ConversationListViewModel Inbox { get; }
 
-    /// <summary>Gets the spam and blocked list, or null until it is first opened.</summary>
+    /// <summary>Gets the spam and blocked list, or null until the user opens it for the first time.</summary>
     public ConversationListViewModel? SpamBlocked => _folders.GetValueOrDefault(ConversationFolder.SpamBlocked);
 
     /// <summary>Gets the folder whose list shows now.</summary>
@@ -111,7 +112,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// <summary>Gets whether the archived list shows instead of the inbox.</summary>
     public bool IsArchivedView => Folder == ConversationFolder.Archived;
 
-    /// <summary>Gets whether a folder list shows instead of the inbox (the Back button shows).</summary>
+    /// <summary>Gets whether a folder list shows instead of the inbox. The Back button then shows.</summary>
     public bool IsFolderView => Folder != ConversationFolder.Inbox;
 
     /// <summary>Gets the list that shows now.</summary>
@@ -120,13 +121,16 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// <summary>Gets the open conversation's ID, or null when none is open.</summary>
     public string? SelectedConversationId { get; private set; }
 
-    /// <summary>Gets whether a conversation is open (for bindings, which skip their function when an argument is null).</summary>
+    /// <summary>
+    /// Gets whether a conversation is open. A binding uses it because a binding skips its function when an argument is
+    /// null.
+    /// </summary>
     public bool IsChatOpen => SelectedConversationId is not null;
 
     /// <summary>Gets whether the list is collapsed to avatars.</summary>
     public bool IsListCollapsed { get; private set; }
 
-    /// <summary>Gets or sets whether the window is narrow (set by the view).</summary>
+    /// <summary>Gets or sets whether the window is narrow. The view sets it.</summary>
     public bool IsNarrow
     {
         get;
@@ -137,7 +141,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
-    /// <summary>Gets or sets whether the window has focus (set by the view).</summary>
+    /// <summary>Gets or sets whether the window has focus. The view sets it.</summary>
     public bool IsWindowFocused
     {
         get;
@@ -151,22 +155,39 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// <summary>Gets the open conversation's chat, or null when none is open.</summary>
     public ChatViewModel? Chat { get; private set; }
 
-    /// <summary>Gets the phone owner's participant ID (for the profile picture), or null until a conversation names them.</summary>
+    /// <summary>
+    /// Gets the participant ID of the phone owner for the profile picture. The value is null until a conversation names
+    /// the owner.
+    /// </summary>
     public string? MeId => _store.Me?.Id;
 
     /// <summary>Gets whether Start chat shows in place of a conversation.</summary>
     public bool IsStartChatOpen { get; private set; }
 
-    /// <summary>Gets the Start chat pane's state while it is open, or null.</summary>
+    /// <summary>Gets the state of the Start chat pane while it is open, or null.</summary>
     public StartChatViewModel? StartChat { get; private set; }
 
-    /// <summary>Gets whether the chat pane shows instead of the list (narrow only: a conversation or Start chat is open).</summary>
-    public bool ShowChatPane => IsNarrow && (SelectedConversationId is not null || IsStartChatOpen);
+    /// <summary>
+    /// Gets whether the chat pane shows instead of the list. This occurs only in a narrow window with a conversation or
+    /// Start chat open.
+    /// </summary>
+    public bool ShowChatPane => ShowsChatPane(IsNarrow);
 
-    /// <summary>Gets whether the connection banner shows (for bindings, which skip their function when an argument is null).</summary>
+    /// <summary>
+    /// Gets whether the chat pane shows instead of the list at a given window mode, with the rule of
+    /// <see cref="ShowChatPane"/>.
+    /// </summary>
+    /// <param name="isNarrow">Whether the window is narrow.</param>
+    /// <returns>True when only the chat pane shows.</returns>
+    public bool ShowsChatPane(bool isNarrow) => isNarrow && (SelectedConversationId is not null || IsStartChatOpen);
+
+    /// <summary>
+    /// Gets whether the connection banner shows. A binding uses it because a binding skips its function when an
+    /// argument is null.
+    /// </summary>
     public bool HasStatusBanner => StatusBanner is not null;
 
-    /// <summary>Gets the connection banner text, or null when connected and the phone answers.</summary>
+    /// <summary>Gets the connection banner text, or null when the app is connected and the phone answers.</summary>
     public string? StatusBanner => _state switch
     {
         ConnectionState.Connecting or ConnectionState.Reconnecting => ChatCopy.Connecting,
@@ -174,27 +195,31 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _                                                          => null,
     };
 
-    /// <summary>Gets the failure banner text after a conversation action failed, or null.</summary>
+    /// <summary>Gets the failure banner text after a conversation action fails, or null.</summary>
     public string? ActionError { get; private set; }
 
-    /// <summary>Gets whether the failure banner shows (for bindings, which skip their function when an argument is null).</summary>
+    /// <summary>
+    /// Gets whether the failure banner shows. A binding uses it because a binding skips its function when an argument
+    /// is null.
+    /// </summary>
     public bool HasActionError => ActionError is not null;
 
     /// <summary>
-    /// Gets whether the low battery banner shows: the phone reported a low battery live (its level isn't known at
-    /// start) and the user hasn't closed the banner since the last low alert.
+    /// Gets whether the low battery banner shows. The banner shows after a live low battery alert, until the phone
+    /// reports a recovery or the user closes it.
     /// </summary>
+    /// <remarks>The level of the phone is not known at start, so the banner waits for a live alert.</remarks>
     public bool IsPhoneBatteryLow => _batteryLow && !_batteryDismissed;
 
-    /// <summary>Hides the battery banner until the next low battery alert (the banner's own close button).</summary>
+    /// <summary>
+    /// Hides the battery banner until the next low battery alert. The close button of the banner calls it.
+    /// </summary>
     public void DismissPhoneBattery()
     {
-        // The Bar Already Closed Itself; Clearing This Lets The Next Low Alert Open It Again
         _batteryDismissed = true;
         Changed();
     }
 
-    // Reads The Store's State On The UI Thread
     private void OnPhoneBatteryChanged(object? sender, EventArgs e) => _post(() =>
     {
         if (_disposed)
@@ -206,7 +231,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         Changed();
     });
 
-    // Every Low Alert, Even A Repeat, Brings Back A Banner The User Closed
+    // Each low alert shows a closed banner again, also a repeat alert.
     private void OnPhoneBatteryLowAlerted(object? sender, EventArgs e) => _post(() =>
     {
         if (_disposed)
@@ -222,10 +247,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     // NAVIGATION
     // =========================================================================
 
-    /// <summary>Shows a folder's list, creating and loading it the first time.</summary>
+    /// <summary>Shows the list of a folder, and creates and loads the list the first time.</summary>
     /// <remarks>
-    /// A narrow window shows one pane, so an open chat (or Start chat) closes first, as Escape does, and the folder's
-    /// list shows. A wide window keeps the open chat beside the list.
+    /// A narrow window shows 1 pane. An open chat or Start chat closes first, as Escape does, and then the list shows.
+    /// A wide window keeps the open chat beside the list.
     /// </remarks>
     /// <param name="folder">The folder; <see cref="ConversationFolder.Inbox"/> shows the inbox.</param>
     public void OpenFolder(ConversationFolder folder)
@@ -235,7 +260,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
-        // Narrow: The Folder's List Takes The Chat's Place
         if (ShowChatPane)
         {
             ExitConversation();
@@ -252,17 +276,20 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         Changed();
     }
 
-    /// <summary>Shows the spam and blocked list, creating and loading it the first time.</summary>
+    /// <summary>Shows the spam and blocked list, and creates and loads the list the first time.</summary>
     public void OpenSpamBlocked() => OpenFolder(ConversationFolder.SpamBlocked);
 
-    /// <summary>Shows the archived list, creating and loading it the first time.</summary>
+    /// <summary>Shows the archived list, and creates and loads the list the first time.</summary>
     public void OpenArchived() => OpenFolder(ConversationFolder.Archived);
 
     /// <summary>Shows the inbox again.</summary>
     public void BackToInbox() => OpenFolder(ConversationFolder.Inbox);
 
-    /// <summary>Opens a conversation (closing Start chat).</summary>
-    /// <remarks>Does nothing once disposed, so a Start chat that finishes after the window closed opens no chat.</remarks>
+    /// <summary>Opens a conversation and closes Start chat.</summary>
+    /// <remarks>
+    /// The call does nothing after <see cref="Dispose"/>. Thus a Start chat that ends after the window closes opens no
+    /// chat.
+    /// </remarks>
     /// <param name="conversationId">The conversation ID.</param>
     public void Select(string conversationId)
     {
@@ -277,7 +304,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         IsStartChatOpen        = false;
         StartChat              = null;
 
-        // Picking The Open Conversation Again Keeps Its Chat (And The Draft)
+        // A pick of the open conversation keeps its chat and the draft.
         if (Chat?.ConversationId != conversationId)
         {
             ReplaceChat(conversationId);
@@ -287,7 +314,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         Changed();
     }
 
-    /// <summary>Escape: closes the open conversation or Start chat; in narrow mode that shows the list. The draft is kept for the next open.</summary>
+    /// <summary>
+    /// Closes the open conversation or Start chat, as Escape does. A narrow window then shows the list.
+    /// </summary>
+    /// <remarks>The store keeps the draft for the next open.</remarks>
     public void ExitConversation()
     {
         SelectedConversationId = null;
@@ -297,13 +327,19 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         Changed();
     }
 
-    /// <summary>Opens the conversation below the open one in the current list (the last one stays open; none open selects the first).</summary>
+    /// <summary>
+    /// Opens the conversation below the open one in the current list. The last conversation stays open at the end.
+    /// </summary>
+    /// <remarks>With no conversation open, the call opens the first conversation.</remarks>
     public void NextConversation() => MoveSelection(1);
 
-    /// <summary>Opens the conversation above the open one in the current list (the first one stays open).</summary>
+    /// <summary>
+    /// Opens the conversation above the open one in the current list. The first conversation stays open at the top.
+    /// </summary>
+    /// <remarks>With no conversation open, the call opens the first conversation.</remarks>
     public void PreviousConversation() => MoveSelection(-1);
 
-    /// <summary>Shows Start chat in place of the open conversation, loading the contacts the first time.</summary>
+    /// <summary>Shows Start chat in place of the open conversation, and loads the contacts the first time.</summary>
     public void OpenStartChat()
     {
         if (_disposed)
@@ -315,10 +351,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         IsStartChatOpen        = true;
         ReplaceChat(null);
 
-        // Already Open: Keep What Was Typed And Picked
+        // An open pane keeps what the user typed and picked.
         if (StartChat is null)
         {
-            StartChat = new StartChatViewModel(_store, _post);
+            StartChat = new StartChatViewModel(_store);
             _ = StartChat.LoadAsync();
         }
 
@@ -347,7 +383,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             list.Dispose();
         }
 
-        // Closing The Window Keeps The Open Chat's Draft
         if (Chat is { } open)
         {
             KeepDraft(open);
@@ -355,8 +390,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
-    // Saves A Closing Chat's Draft And Files (An Empty One Forgets It, See ChatStore.SaveDraft), Only When They Were Changed
-    // While It Was Open: A Saved Draft That Loaded After The Chat Opened Was Never Shown, And Mustn't Be Wiped By The Empty Box
+    // Saves the draft and files of a closing chat only when the user changed them in the chat. An empty draft forgets
+    // the saved draft. A saved draft can load after the chat opens. The chat never showed it, so the empty box must not
+    // clear it.
     private void KeepDraft(ChatViewModel chat)
     {
         if (!chat.IsDraftEdited)
@@ -367,8 +403,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _store.SaveDraft(chat.ConversationId, chat.Draft, [.. chat.Attachments]);
     }
 
-    // Disposes The Open Chat And Opens One For The New Selection (Null Closes It). The Closing Chat's Draft Is Kept And The
-    // Opening Chat's Put Back
     private void ReplaceChat(string? conversationId)
     {
         if (Chat is { } closing)
@@ -398,7 +432,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
-    // Moves The Open Conversation By One Row, Stopping At Either End. The Pinned Grid (When Shown) Comes First, As On Screen
+    // The pinned grid comes first, as on the screen. Pinned is empty when the grid does not show.
     private void MoveSelection(int step)
     {
         List<ConversationRowViewModel> rows = [.. CurrentList.Pinned, .. CurrentList.Rows];
@@ -407,17 +441,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
-        int current = -1;
-        for (int i = 0; i < rows.Count; i++)
-        {
-            if (rows[i].Id == SelectedConversationId)
-            {
-                current = i;
-                break;
-            }
-        }
-
-        int next = current < 0 ? 0 : Math.Clamp(current + step, 0, rows.Count - 1);
+        int current = rows.FindIndex(r => r.Id == SelectedConversationId);
+        int next    = current < 0 ? 0 : Math.Clamp(current + step, 0, rows.Count - 1);
         Select(rows[next].Id);
     }
 
@@ -425,31 +450,30 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     // CONVERSATION ACTIONS
     // =========================================================================
 
-    /// <summary>Finds a conversation the store knows, for its menu and Details.</summary>
+    /// <summary>Finds a conversation that the store knows, for its menu and the Details dialog.</summary>
     /// <param name="id">The conversation ID.</param>
-    /// <returns>The conversation, or null when the store doesn't know it.</returns>
+    /// <returns>The conversation, or null when the store does not know it.</returns>
     public ConversationInfo? FindConversation(string id) => _store.Find(id);
 
     /// <summary>
     /// Archives, unarchives, mutes, unmutes, blocks, unblocks or deletes a conversation on the phone.
     /// </summary>
     /// <remarks>
-    /// Call on the UI thread. While a run for the same conversation waits on the phone, another returns false at once
-    /// and sends nothing. Any failure (not connected, refused, not answering, a network error) is logged and shows
-    /// <see cref="ActionError"/>; nothing is thrown at the view. A success clears the banner, and closes the open chat
-    /// when the action moves it out of its folder (every action but mute and unmute).
+    /// Call it on the UI thread. While a run for a conversation waits on the phone, another run for it returns false at
+    /// once and sends nothing. The method logs each failure and shows <see cref="ActionError"/>. A failure can be no
+    /// connection, a refusal, no answer or a network error. The view gets no exception. A success clears the banner. A
+    /// success also closes the open chat when the action moves the chat out of its folder. Each action except mute and
+    /// unmute moves it.
     /// </remarks>
     /// <param name="conversationId">The conversation ID.</param>
     /// <param name="action">What to do.</param>
     /// <returns>True when the phone made the change.</returns>
     public Task<bool> RunAsync(string conversationId, ConversationAction action) => RunAsync(conversationId, action, offerUndo: true);
 
-    // Runs The Action; An Archive Offers Undo Unless It Is The Undo Itself
     private async Task<bool> RunAsync(string conversationId, ConversationAction action, bool offerUndo)
     {
         ArgumentException.ThrowIfNullOrEmpty(conversationId);
 
-        // Closed, Or Already Running For This Conversation
         if (_disposed || !_running.Add(conversationId))
         {
             return false;
@@ -461,7 +485,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            // Any Failure Is Shown, Never Thrown At The Click Handler
+            // The click handler must get no exception.
             _store.LogFailure("update conversation", ex);
             ShowActionError(ChatCopy.ActionFailed);
             return false;
@@ -471,7 +495,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             _running.Remove(conversationId);
         }
 
-        // Closed While The Phone Answered
         if (_disposed)
         {
             return true;
@@ -479,14 +502,13 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
         ActionError = null;
 
-        // An Archive Offers Undo For A Few Seconds On The Bar, And Any Time By Ctrl + Z; Another Action Replaces The Offer
+        // Each action removes the conversation from the undo list. An archive adds it again as the latest.
         _archived.Remove(conversationId);
         if (offerUndo)
         {
             ShowUndo(conversationId, action);
         }
 
-        // The Open Chat Left Its Folder
         bool moved = action is not (ConversationAction.Mute or ConversationAction.Unmute);
         if (moved && conversationId == SelectedConversationId)
         {
@@ -503,43 +525,57 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// <summary>Hides the failure banner.</summary>
     public void DismissActionError() => ShowActionError(null);
 
-    /// <summary>How long the Undo bar shows after an archive.</summary>
+    /// <summary>The Undo bar shows for this time after an archive.</summary>
     public static readonly TimeSpan UndoTime = TimeSpan.FromSeconds(5);
 
     /// <summary>
-    /// Gets what the Undo bar says ("Chat archived"), or null while it is hidden. Only archiving offers Undo
-    /// (owner: one way only).
+    /// Gets the text of the Undo bar, or null while the bar is hidden. Only an archive offers Undo, because the owner
+    /// wants undo in 1 direction only.
     /// </summary>
     public string? UndoNotice { get; private set; }
 
     /// <summary>Gets whether the Undo bar shows.</summary>
     public bool HasUndo => UndoNotice is not null;
 
-    /// <summary>Gets whether a conversation archived this session is left to put back (Ctrl + Z).</summary>
+    /// <summary>
+    /// Gets whether Ctrl + Shift + Z can put back a conversation that the user archived in this session.
+    /// </summary>
     public bool CanUndo => _archived.Count > 0;
 
     /// <summary>
-    /// Undoes the latest archive of this session (the Undo bar's, or an earlier one once the bar has hidden): an
-    /// unarchive, through <see cref="RunAsync"/>, so the row goes back to its place in the inbox. The bar hides at once.
+    /// Puts back the latest archive of this session with an unarchive through <see cref="RunAsync"/>. The row goes back
+    /// to its place in the inbox.
     /// </summary>
+    /// <remarks>
+    /// The bar hides at once. When the undo fails, the conversation goes back to its place in the undo list. The next
+    /// undo then tries the same conversation, unless the user archived another conversation during the undo.
+    /// </remarks>
     /// <returns>True when the phone made the change.</returns>
-    public Task<bool> UndoAsync()
+    public async Task<bool> UndoAsync()
     {
         if (_archived.Count == 0)
         {
-            return Task.FromResult(false);
+            return false;
         }
 
-        string id = _archived[^1];
-        _archived.RemoveAt(_archived.Count - 1);
+        int at    = _archived.Count - 1;
+        string id = _archived[at];
+        _archived.RemoveAt(at);
         HideUndo();
-        return RunAsync(id, ConversationAction.Unarchive, offerUndo: false);
+
+        // An archive made during the undo stays the latest, because the Undo bar shows that archive.
+        bool undone = await RunAsync(id, ConversationAction.Unarchive, offerUndo: false);
+        if (!undone && !_disposed)
+        {
+            _archived.Insert(Math.Min(at, _archived.Count), id);
+        }
+
+        return undone;
     }
 
     /// <summary>Hides the Undo bar.</summary>
     public void DismissUndo() => HideUndo();
 
-    // Shows The Undo Bar For An Archive (Replacing One Showing), Hidden Again After UndoTime; Other Actions Hide It
     private void ShowUndo(string conversationId, ConversationAction action)
     {
         _undoTimer?.Dispose();
@@ -561,7 +597,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }), null, UndoTime, Timeout.InfiniteTimeSpan);
     }
 
-    // Hides The Bar; The Archives Stay Undoable By Ctrl + Z
+    // The archives stay in the list, so Ctrl + Shift + Z can still put them back.
     private void HideUndo()
     {
         _undoTimer?.Dispose();
@@ -575,7 +611,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         Changed();
     }
 
-    // Sets The Failure Banner (Null Hides It); Nothing Once Closed
     private void ShowActionError(string? error)
     {
         if (_disposed)
@@ -591,10 +626,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     // CONNECTION BANNER
     // =========================================================================
 
-    // The Controller Raises StateChanged Through Its Own Post; Read The State Again On The UI Thread
+    // The controller raises StateChanged through its own post. The view model reads the state again on the UI thread.
     private void OnStateChanged(object? sender, EventArgs e) => _post(() => ApplyState(_connection.State));
 
-    // Client Events Are Already Posted To The UI Thread By The Controller
+    // The controller already posts the client events to the UI thread.
     private void OnClientEvent(object? sender, object e) => ApplyEvent(e);
 
     internal void ApplyState(ConnectionState state)
@@ -604,7 +639,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
-        // A New State Starts Fresh: The Phone Is Not Silent Until It Says So
+        // A new state clears the silence. The phone is silent only after it says so again.
         bool arrived = _state != state;
         if (arrived)
         {
@@ -643,8 +678,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
-    // Back Online Or The Phone Answers Again: A Load That Failed Meanwhile Left The Lists Empty Or Stale. A Reload
-    // Asked For During A Running Load Waits For It, So Overlapping Triggers Cost One Extra Fetch At Most
+    // A load that failed while the connection was down left the lists empty or stale. A reload during a running load
+    // waits for that load. Thus triggers that overlap cost 1 extra fetch at most.
     private void ReloadLists()
     {
         _ = Inbox.LoadAsync();

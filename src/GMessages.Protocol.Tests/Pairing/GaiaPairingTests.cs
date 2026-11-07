@@ -44,10 +44,10 @@ public class GaiaPairingTests
 
         public required SignalingTimeProvider Time { get; init; }
 
-        // ReceiveMessages Answer; Null Means An Open Quiet Stream
+        // The ReceiveMessages answer. Null means an open, quiet stream.
         public Func<HttpResponseMessage>? Receive { get; set; }
 
-        // Response Bytes Delivered For Each Pairing Action; Missing Means The Phone Stays Quiet
+        // The answer bytes for each pairing action. For a missing action, the phone stays quiet.
         public Dictionary<ActionType, byte[]> Responses { get; } = [];
 
         public ActionType[] SentActions()
@@ -56,6 +56,23 @@ public class GaiaPairingTests
             {
                 return [.. Handler.Requests.Where(r => r.Url.EndsWith("/SendMessage", StringComparison.Ordinal)).Select(ActionOf)];
             }
+        }
+    }
+
+    // An empty body that runs an action on its first dispose. The client disposes the body after it builds the refusal.
+    private sealed class DisposeHookContent(Action onDispose) : ByteArrayContent([])
+    {
+        private bool _disposed;
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing && !_disposed)
+            {
+                _disposed = true;
+                onDispose();
+            }
+
+            base.Dispose(disposing);
         }
     }
 
@@ -134,7 +151,7 @@ public class GaiaPairingTests
         return rig;
     }
 
-    // A Valid Server Init From A Fresh Server Key
+    // A valid server init from a new server key.
     internal static byte[] ServerInit(int verificationVersion, int keyDerivationVersion)
     {
         using var server = System.Security.Cryptography.ECDiffieHellman.Create(System.Security.Cryptography.ECCurve.NamedCurves.nistP256);
@@ -173,6 +190,72 @@ public class GaiaPairingTests
         Assert.AreEqual(PairingFailure.InitTimeout, ex.Failure);
         Assert.AreEqual("client init timed out (had multiple primary-looking devices)", ex.Message);
         CollectionAssert.AreEqual(new[] { ActionType.CreateGaiaPairingClientInit, ActionType.CancelGaiaPairing }, rig.SentActions());
+    }
+
+    /// <summary>
+    /// The server refuses the client init, and the 20 second init timer ends during the cancel request. The start
+    /// throws the refusal, not an init timeout.
+    /// </summary>
+    [TestMethod]
+    public async Task Start_InitRefused_TimerEndsDuringCancel_ThrowsRefusal()
+    {
+        Rig rig              = CreateRig();
+        rig.Auth.DestPhoneId = 0;
+        rig.Handler.Hang     = req => req.Url.EndsWith("/SendMessage", StringComparison.Ordinal) && ActionOf(req) == ActionType.CancelGaiaPairing;
+        Func<int, RecordedRequest, HttpResponseMessage> respond = rig.Handler.Respond;
+        rig.Handler.Respond  = (index, req) => req.Url.EndsWith("/SendMessage", StringComparison.Ordinal) && ActionOf(req) == ActionType.CreateGaiaPairingClientInit
+            ? FakeHttpHandler.Response(HttpStatusCode.BadRequest)
+            : respond(index, req);
+
+        Task<(string, PairingSession)> start = rig.Pairing.StartAsync(CancellationToken.None);
+        Assert.IsTrue(SpinWait.SpinUntil(() => rig.SentActions().Contains(ActionType.CancelGaiaPairing), HangGuard), "cancel request");
+        rig.Time.Advance(TimeSpan.FromSeconds(GaiaPairing.GaiaInitTimeoutSeconds));
+
+        var ex = await Assert.ThrowsExactlyAsync<GmRequestException>(() => start.WaitAsync(HangGuard));
+        Assert.AreEqual(400, ex.StatusCode);
+    }
+
+    /// <summary>
+    /// The server refuses the client init, and the 20 second init timer ends before the start sees the refusal. The
+    /// start throws the refusal, not an init timeout.
+    /// </summary>
+    [TestMethod]
+    public async Task Start_InitRefused_TimerEndsBeforeCatch_ThrowsRefusal()
+    {
+        Rig rig              = CreateRig();
+        rig.Auth.DestPhoneId = 0;
+        Func<int, RecordedRequest, HttpResponseMessage> respond = rig.Handler.Respond;
+        rig.Handler.Respond  = (index, req) => req.Url.EndsWith("/SendMessage", StringComparison.Ordinal) && ActionOf(req) == ActionType.CreateGaiaPairingClientInit
+            ? new HttpResponseMessage(HttpStatusCode.BadRequest) { Content = new DisposeHookContent(() => rig.Time.Advance(TimeSpan.FromSeconds(GaiaPairing.GaiaInitTimeoutSeconds))) }
+            : respond(index, req);
+
+        var ex = await Assert.ThrowsExactlyAsync<GmRequestException>(() => rig.Pairing.StartAsync(CancellationToken.None).WaitAsync(HangGuard));
+
+        Assert.AreEqual(400, ex.StatusCode);
+        CollectionAssert.AreEqual(new[] { ActionType.CreateGaiaPairingClientInit, ActionType.CancelGaiaPairing }, rig.SentActions());
+    }
+
+    /// <summary>
+    /// The 20 second init timer ends, and the caller cancels the start during the cancel request. The start throws an
+    /// init timeout.
+    /// </summary>
+    [TestMethod]
+    public async Task Start_InitTimeout_CallerCancelsDuringCancel_ThrowsInitTimeout()
+    {
+        Rig rig              = CreateRig();
+        rig.Auth.DestPhoneId = 0;
+        rig.Handler.Hang     = req => req.Url.EndsWith("/SendMessage", StringComparison.Ordinal) && ActionOf(req) == ActionType.CancelGaiaPairing;
+        using var cts        = new CancellationTokenSource();
+
+        Task<(string, PairingSession)> start = rig.Pairing.StartAsync(cts.Token);
+        Assert.IsTrue(SpinWait.SpinUntil(() => rig.Time.CountTimers(TimeSpan.FromSeconds(GaiaPairing.GaiaInitTimeoutSeconds)) > 0, HangGuard), "init timer");
+        rig.Time.Advance(TimeSpan.FromSeconds(GaiaPairing.GaiaInitTimeoutSeconds));
+        Assert.IsTrue(SpinWait.SpinUntil(() => rig.SentActions().Contains(ActionType.CancelGaiaPairing), HangGuard), "cancel request");
+        await cts.CancelAsync();
+        rig.Time.Advance(TimeSpan.FromSeconds(10));
+
+        var ex = await Assert.ThrowsExactlyAsync<PairingException>(() => start.WaitAsync(HangGuard));
+        Assert.AreEqual(PairingFailure.InitTimeout, ex.Failure);
     }
 
     /// <summary>
@@ -234,19 +317,6 @@ public class GaiaPairingTests
 
         Assert.AreEqual(PairingFailure.PhoneNotFound, ex.Failure);
         Assert.IsFalse(rig.Handler.Requests.Any(r => r.Url.EndsWith("/ReceiveMessages", StringComparison.Ordinal)));
-    }
-
-    /// <summary>
-    /// A negative device switcher is refused when set (C#-only: Go's modulo would pick no phone).
-    /// </summary>
-    [TestMethod]
-    public void HackyDeviceSwitcher_Negative_Throws()
-    {
-        Rig rig = CreateRig();
-
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => rig.Pairing.HackyDeviceSwitcher = -1);
-        rig.Pairing.HackyDeviceSwitcher = 1;
-        Assert.AreEqual(1, rig.Pairing.HackyDeviceSwitcher);
     }
 
     /// <summary>

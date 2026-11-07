@@ -5,48 +5,52 @@ using Windows.Media.Devices;
 namespace GMessages.App.Media;
 
 /// <summary>
-/// Asks Windows for the microphone the way a desktop app can, which shows Windows' "Let Messages use your microphone?"
-/// prompt the first time.
+/// Asks Windows for the microphone in the way that a desktop app can. The first time, Windows shows its "Let Messages
+/// use your microphone?" prompt.
 /// </summary>
 /// <remarks>
 /// <para>
-/// <c>ActivateAudioInterfaceAsync</c> (mmdevapi) is the call Microsoft documents for desktop apps: it "may display a
-/// consent prompt the first time it is called" to activate <c>IAudioClient</c> on a microphone, and "must be called on
-/// the main UI thread so that the consent prompt can be shown"
-/// (https://learn.microsoft.com/en-us/windows/win32/api/mmdeviceapi/nf-mmdeviceapi-activateaudiointerfaceasync).
-/// <c>AppCapability.RequestAccessAsync</c> isn't supported in desktop apps, since it needs a CoreWindow
-/// (https://learn.microsoft.com/en-us/windows/apps/desktop/modernize/desktop-to-uwp-supported-api), which is why it
+/// Microsoft documents <c>ActivateAudioInterfaceAsync</c> of mmdevapi for desktop apps. The call activates
+/// <c>IAudioClient</c> on a microphone and "may display a consent prompt the first time it is called". It also "must
+/// be called on the main UI thread so that the consent prompt can be shown". See
+/// https://learn.microsoft.com/en-us/windows/win32/api/mmdeviceapi/nf-mmdeviceapi-activateaudiointerfaceasync.
+/// Desktop apps do not support <c>AppCapability.RequestAccessAsync</c>, because it needs a CoreWindow. See
+/// https://learn.microsoft.com/en-us/windows/apps/desktop/modernize/desktop-to-uwp-supported-api. For that reason it
 /// failed with <c>RPC_E_DISCONNECTED</c>.
 /// </para>
 /// <para>
-/// Native AOT safe: the call is a <see cref="LibraryImportAttribute"/> and the two COM interfaces are source generated.
-/// GUIDs and method order match <c>mmdeviceapi.h</c>, <c>audioclient.h</c> and <c>objidlbase.h</c> (SDK 10.0.26100.0).
+/// The class is safe under Native AOT. The call is a <see cref="LibraryImportAttribute"/>, and the source generator
+/// makes the COM interfaces. The GUIDs and the method order match <c>mmdeviceapi.h</c>, <c>audioclient.h</c> and
+/// <c>objidlbase.h</c> of SDK 10.0.26100.0.
 /// </para>
 /// </remarks>
 internal static partial class MicrophoneConsent
 {
-    // IAudioClient (audioclient.h): The Interface Whose Activation On A Microphone Asks For Consent
+    // The ID of IAudioClient in audioclient.h. Its activation on a microphone asks for consent.
     private static readonly Guid AudioClientId = new("1CB9AD4C-DBFA-4c32-B178-C2F568A703B2");
 
     /// <summary>
-    /// Asks Windows for the default microphone, showing its consent prompt if the user hasn't decided yet.
+    /// Asks Windows for the default microphone. Windows shows its consent prompt when the user has not decided yet.
     /// </summary>
     /// <remarks>
-    /// Call it on the UI thread, so Windows can show the prompt. The task completes once the user answers (or at once
-    /// when access is already decided). The activated audio client is released straight away; only the answer matters.
+    /// The caller must call it on the UI thread, so that Windows can show the prompt. The task completes when the user
+    /// answers, or at once when access is already decided. The method releases the activated audio client at once,
+    /// because only the answer matters.
     /// </remarks>
-    /// <returns>The activation's HRESULT: <c>S_OK</c> when access is given, <c>E_ACCESSDENIED</c> (0x80070005) when refused.</returns>
+    /// <returns>
+    /// The HRESULT of the activation: <c>S_OK</c> when the user gives access, <c>E_ACCESSDENIED</c> 0x80070005 when the
+    /// user refuses.
+    /// </returns>
     /// <exception cref="MicrophoneUnavailableException">There is no microphone.</exception>
     public static async Task<int> RequestAsync()
     {
-        // The Default Microphone; None Means No Device
         string device = MediaDevice.GetDefaultAudioCaptureId(AudioDeviceRole.Default);
         if (string.IsNullOrEmpty(device))
         {
             throw new MicrophoneUnavailableException("NoDevice");
         }
 
-        // Ask: Windows Shows Its Prompt, Then Calls The Handler On A Worker Thread
+        // Windows shows its prompt, then calls the handler on a worker thread.
         var handler = new CompletionHandler();
         int called  = ActivateAudioInterfaceAsync(device, in AudioClientId, 0, handler, out IActivateAudioInterfaceAsyncOperation operation);
         Log("activate call", $"0x{called:X8}");
@@ -57,28 +61,25 @@ internal static partial class MicrophoneConsent
 
         int result = await handler.Result;
 
-        // Windows Holds Both Until The Callback; Keep Them Alive Until Then Too
+        // Windows holds both objects until the callback, so the app must keep them alive until then too.
         GC.KeepAlive(handler);
         GC.KeepAlive(operation);
         return result;
     }
 
     /// <summary>
-    /// Logs one step of the microphone request, with the thread it ran on (names and numbers only).
+    /// Logs a step of the microphone request and the thread that it ran on. The log gets only names and numbers.
     /// </summary>
     /// <param name="step">The step, such as <c>check before</c> or <c>activate call</c>.</param>
-    /// <param name="result">Its status name or HRESULT.</param>
+    /// <param name="result">The status name or the HRESULT of the step.</param>
     public static void Log(string step, string result)
     {
         string apartment = Thread.CurrentThread.GetApartmentState().ToString();
         AppLog.MicrophoneStep(App.ShellLog, step, result, Environment.CurrentManagedThreadId, apartment);
     }
 
-    // =========================================================================
-    // NATIVE INTEROP
-    // =========================================================================
-
-    // mmdeviceapi.h: STDAPI ActivateAudioInterfaceAsync(LPCWSTR, REFIID, PROPVARIANT*, Handler*, Operation**)
+    // The native signature in mmdeviceapi.h is
+    // STDAPI ActivateAudioInterfaceAsync(LPCWSTR, REFIID, PROPVARIANT*, Handler*, Operation**).
     [LibraryImport("Mmdevapi.dll", StringMarshalling = StringMarshalling.Utf16)]
     private static partial int ActivateAudioInterfaceAsync(
         string deviceInterfacePath,
@@ -88,43 +89,44 @@ internal static partial class MicrophoneConsent
         out IActivateAudioInterfaceAsyncOperation activationOperation);
 
     /// <summary>
-    /// The handler Windows calls when the activation finishes (<c>mmdeviceapi.h</c>).
+    /// Declares the handler that Windows calls when the activation finishes. See <c>mmdeviceapi.h</c>.
     /// </summary>
     [GeneratedComInterface]
     [Guid("41D949AB-9862-444A-80F6-C261334DA5EB")]
     internal partial interface IActivateAudioInterfaceCompletionHandler
     {
         /// <summary>
-        /// Called once the activation finishes.
+        /// Windows calls this method when the activation finishes.
         /// </summary>
         /// <param name="activateOperation">The finished activation, which holds its result.</param>
         void ActivateCompleted(IActivateAudioInterfaceAsyncOperation activateOperation);
     }
 
     /// <summary>
-    /// The activation in progress, and its result once finished (<c>mmdeviceapi.h</c>).
+    /// Declares the activation in progress, which holds its result when it finishes. See <c>mmdeviceapi.h</c>.
     /// </summary>
     [GeneratedComInterface]
     [Guid("72A22D78-CDE4-431D-B8CC-843A71199B6D")]
     internal partial interface IActivateAudioInterfaceAsyncOperation
     {
         /// <summary>
-        /// Gives the activation's result.
+        /// Gives the result of the activation.
         /// </summary>
-        /// <param name="activateResult">The activation's HRESULT.</param>
-        /// <param name="activatedInterface">The activated interface (an <c>IUnknown</c>), or 0 when it failed.</param>
+        /// <param name="activateResult">The HRESULT of the activation.</param>
+        /// <param name="activatedInterface">The activated <c>IUnknown</c>, or 0 when the activation failed.</param>
         void GetActivateResult(out int activateResult, out nint activatedInterface);
     }
 
     /// <summary>
-    /// Marks an object as callable from any thread without marshaling (<c>objidlbase.h</c>).
+    /// Marks an object that any thread can call without marshaling. See <c>objidlbase.h</c>.
     /// </summary>
     [GeneratedComInterface]
     [Guid("94EA2B94-E9CC-49E0-C0FF-EE64CA8F5B90")]
     internal partial interface IAgileObject;
 
     /// <summary>
-    /// Completes <see cref="Result"/> with the activation's HRESULT. Agile, since Windows calls it on a worker thread.
+    /// Completes <see cref="Result"/> with the HRESULT of the activation. The class is agile, because Windows calls it
+    /// on a worker thread.
     /// </summary>
     [GeneratedComClass]
     internal sealed partial class CompletionHandler : IActivateAudioInterfaceCompletionHandler, IAgileObject
@@ -132,7 +134,7 @@ internal static partial class MicrophoneConsent
         private readonly TaskCompletionSource<int> _result = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         /// <summary>
-        /// The activation's HRESULT, once Windows calls back.
+        /// Gets the HRESULT of the activation when Windows calls back.
         /// </summary>
         public Task<int> Result => _result.Task;
 
@@ -144,7 +146,7 @@ internal static partial class MicrophoneConsent
             {
                 activateOperation.GetActivateResult(out result, out nint activated);
 
-                // Only The Answer Matters: Let Go Of The Audio Client
+                // Only the answer matters, so the handler releases the audio client.
                 if (activated != 0)
                 {
                     Marshal.Release(activated);

@@ -1,19 +1,19 @@
 namespace GMessages.Protocol.PbLite;
 
 /// <summary>
-/// Thrown when PBLite text cannot be read as, or written from, the requested protobuf message.
+/// The exception that is thrown when PBLite text cannot be read as, or written from, the requested protobuf message.
 /// </summary>
 /// <remarks>
-/// Go's pblite returns plain errors here; this type carries the same information (the slot index and the full
-/// protobuf field name) so callers can log which field of a server response was malformed, and it derives from
-/// <see cref="FormatException"/> so generic format handling still catches it.
+/// The Go pblite package returns plain errors here. This type holds the same information: the slot index and the full
+/// protobuf field name. Thus a caller can log the malformed field of a server response. The type derives from
+/// <see cref="FormatException"/>, so a generic format handler also catches it.
 /// </remarks>
 public sealed class PbLiteException : FormatException
 {
     /// <summary>
-    /// Creates the exception with a message that names the offending field.
+    /// Creates the exception with a message that names the field.
     /// </summary>
-    /// <param name="message">What went wrong, including the field name where there is one.</param>
+    /// <param name="message">The error, with the field name when there is one.</param>
     public PbLiteException(string message) : base(message)
     {
     }
@@ -21,8 +21,8 @@ public sealed class PbLiteException : FormatException
     /// <summary>
     /// Creates the exception with a message and the lower-level error that caused it.
     /// </summary>
-    /// <param name="message">What went wrong, including the field name where there is one.</param>
-    /// <param name="innerException">The JSON, base64 or protobuf error underneath.</param>
+    /// <param name="message">The error, with the field name when there is one.</param>
+    /// <param name="innerException">The JSON, base64 or protobuf error below this one.</param>
     public PbLiteException(string message, Exception innerException) : base(message, innerException)
     {
     }

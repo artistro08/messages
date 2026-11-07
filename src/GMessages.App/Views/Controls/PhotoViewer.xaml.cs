@@ -18,96 +18,111 @@ using Windows.UI.Xaml.Media.Imaging;
 namespace GMessages.App.Views.Controls;
 
 /// <summary>
-/// The in-app photo viewer: a clicked photo over the whole window, title bar row included, on a dark scrim (ruling R7-3:
-/// an in-window overlay, not a separate window).
+/// Shows a clicked photo over the whole window, with the title bar row, on a dark scrim.
 /// </summary>
 /// <remarks>
 /// <para>
-/// The toolbar sits in the title bar row's top-left corner, Close first, then Open in Photos, Open with
-/// (<c>PhotoViewer.OpenWith</c>, Windows' app picker; owner, 2026-11-01), Download and Save as (owner, Plan 8). Close is a plain back arrow with no plate or fill (owner, Plan 9), and the icons
-/// dim while the window is inactive (<see cref="ShowActive"/>). The window lets clicks through to the toolbar there,
-/// keeps the rest of the row dragging the window, and turns the caption buttons dark to read on the scrim, all while
-/// <see cref="IsOpenChanged"/> says the viewer is open (see <c>MainWindow</c>).
+/// Ruling R7-3 made the viewer an overlay in the window, not a separate window.
 /// </para>
 /// <para>
-/// The photo is fitted and centered at 1x in a zoomable <see cref="ScrollViewer"/> (<c>PhotoViewer.Photo</c>, named by
-/// the photo's caption or "Photo"): Ctrl + mouse wheel and pinch zoom it up to 8x, and a double-click zooms in to 2x at
-/// the pointer, or back out to 1x. The toolbar has Save as (<c>PhotoViewer.SaveAs</c>), Download
-/// (<c>PhotoViewer.Download</c>), Open in Photos (<c>PhotoViewer.OpenInPhotos</c>, the old click's default app) and
-/// Close (<c>PhotoViewer.Close</c>).
+/// The toolbar sits in the top-left corner of the title bar row. Close comes first, then Open in Photos, Open with,
+/// Download and Save as. The owner asked for Download and Save as in Plan 8. Open with <c>PhotoViewer.OpenWith</c>
+/// opens the app picker of Windows, as the owner asked on 2026-11-01. Close is a plain back arrow with no plate or
+/// fill, as the owner asked in Plan 9. The icons dim while the window is inactive. See <see cref="ShowActive"/>.
 /// </para>
 /// <para>
-/// Escape (handled by the main window before its own shortcuts, so it doesn't also close the chat), Close, or a click
-/// beside the photo closes it, and focus goes back to the photo in the chat. Tab cycles inside the viewer. The decrypted
-/// bytes come from the media store's memory and are never written for the viewer; closing drops the image.
+/// While <see cref="IsOpenChanged"/> says that the viewer is open, the window lets clicks through to the toolbar. The
+/// rest of the row still drags the window. The caption buttons turn dark, so they read on the scrim. See
+/// <c>MainWindow</c>.
 /// </para>
 /// <para>
-/// A test run puts the zoom in the photo's item status (<c>Zoom1</c>, <c>Zoom2</c>, ...) for the tests to read.
+/// The photo fits and centers at 1x in a zoomable <see cref="ScrollViewer"/> <c>PhotoViewer.Photo</c>. Its name is the
+/// caption of the photo or "Photo". Ctrl + mouse wheel and pinch zoom it up to 8x. A double-click zooms in to 2x at the
+/// pointer, or back out to 1x. The toolbar has Save as <c>PhotoViewer.SaveAs</c>, Download
+/// <c>PhotoViewer.Download</c> and Close <c>PhotoViewer.Close</c>. Open in Photos <c>PhotoViewer.OpenInPhotos</c>
+/// opens the default app, as the old click did.
 /// </para>
 /// <para>
-/// Opening grows the photo or video out of its bubble (from the bubble's place and size to its own, 300 ms, Fluent's
-/// decelerate curve) while the backdrop and toolbar fade in; closing by Escape, Close or a click beside the photo
-/// shrinks it back (200 ms, accelerate) while they fade out (owner, Plan 8). A uniform Composition scale and a
-/// translation on the stage that holds both, with an inset clip that opens from the bubble's crop to the whole photo,
-/// so a cropped photo reveals itself undistorted and no layout moves. With Windows' animation effects off it shows and hides at once. A
-/// video grows and shrinks as the bubble's still frame (a playing video's picture doesn't scale smoothly); its player
-/// takes over once it plays. A test run notes <c>Grew</c>, <c>GrewStill</c>, <c>Player</c>, <c>Shown</c> (no bubble to
-/// grow from) or <c>Shrank</c> in <c>viewer-motion.txt</c>.
+/// Escape, Close or a click beside the photo closes the viewer. Focus then returns to the photo in the chat. The main
+/// window handles Escape before its own shortcuts, so Escape does not also close the chat. Tab cycles inside the
+/// viewer. The decrypted bytes come from the memory of the media store, and the viewer never writes them to disk. A
+/// close drops the image.
 /// </para>
 /// <para>
-/// A video (<see cref="ShowVideoAsync"/>) plays in place of the photo (<c>PhotoViewer.Video</c>) with Windows' full
-/// transport controls, from where the bubble's player got to; Open in Photos reads Open in default app. Opening the
-/// viewer stops a video playing in a bubble, and closing it stops its own.
+/// A test run puts the zoom in the item status of the photo for the tests: <c>Zoom1</c>, <c>Zoom2</c> and so on.
+/// </para>
+/// <para>
+/// An open grows the photo or video out of its bubble while the backdrop and the toolbar fade in. It goes from the
+/// place and size of the bubble to its own in 300 ms. The grow uses the decelerate curve of Fluent. Escape, Close or a
+/// click beside the photo shrinks it back in 200 ms on the accelerate curve. The backdrop and the toolbar then fade
+/// out. The owner asked for this in Plan 8.
+/// </para>
+/// <para>
+/// A uniform Composition scale and a translation move the stage that holds both. An inset clip opens from the crop of
+/// the bubble to the whole photo. Thus a cropped photo shows with no distortion, and no layout moves. With the
+/// animation effects of Windows off, the viewer shows and hides at once.
+/// </para>
+/// <para>
+/// A video grows and shrinks as the still frame of the bubble. The picture of a playing video does not scale smoothly.
+/// Its player replaces the still when it plays. A test run notes <c>Grew</c>, <c>GrewStill</c>, <c>Player</c>,
+/// <c>Shown</c> or <c>Shrank</c> in <c>viewer-motion.txt</c>. <c>Shown</c> means that no bubble was there to grow
+/// from.
+/// </para>
+/// <para>
+/// A video plays in place of the photo in <c>PhotoViewer.Video</c>, with the full transport controls of Windows. See
+/// <see cref="ShowVideoAsync"/>. It starts where the player of the bubble stopped. Open in Photos then reads Open in
+/// default app. An open of the viewer stops a video that plays in a bubble. A close stops the own video of the viewer.
 /// </para>
 /// </remarks>
-[System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1001", Justification = "Close disposes the video's player; a control has no Dispose of its own.")]
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1001", Justification = "Close disposes the player of the video. A control has no Dispose.")]
 public sealed partial class PhotoViewer : UserControl
 {
-    // The Space Kept Around The Photo At 1x, In Effective Pixels
+    // The space around the photo at 1x, in effective pixels.
     private const double PhotoMargin = 24;
 
-    // The Toolbar's Gap From The Window's Left Edge
+    // The gap of the toolbar from the left edge of the window.
     private const double ToolbarInset = 8;
 
-    // The Widest A Photo Is Ever Decoded, In Physical Pixels (A 30000 px Photo Can't Exhaust Memory), And The Zoom Past
-    // Which It Decodes Again At Its Own Width
+    // The widest decode of a photo in physical pixels, so that a 30000 px photo cannot exhaust the memory. Past the
+    // zoom in the second field, the photo decodes again at its own width.
     private const int MaxDecodeWidth  = 8192;
     private const float FullDecodeZoom = 2;
 
-    // Opening Grows The Photo Out Of Its Bubble (Fluent's Decelerate Curve), Closing Shrinks It Back Faster (Accelerate)
+    // An open grows the photo out of its bubble on the decelerate curve of Fluent. A close shrinks it back faster on
+    // the accelerate curve.
     private static readonly TimeSpan GrowTime   = TimeSpan.FromMilliseconds(300);
     private static readonly TimeSpan ShrinkTime = TimeSpan.FromMilliseconds(200);
     private static readonly UISettings Ui       = new();
 
-    // Bumped On Each Open And Close, So A Shrink That Finishes After The Viewer Opened Again Changes Nothing
+    // Each open and close adds 1 to the run. Thus a shrink that ends after the viewer opens again changes nothing.
     private int _closeRun;
     private bool _closing;
 
-    // The Shown Photo, Its Message, And Where Focus Goes On Close
+    // The shown photo, its message, and the control that gets focus on close.
     private MediaPart? _part;
     private string _messageId = string.Empty;
     private Control? _returnFocus;
 
-    // The Shown Photo's Own Size (0 x 0 When Unknown) And The Width It Is Decoded At, All In Physical Pixels
+    // The own size of the shown photo and its decode width, in physical pixels. The size is 0 x 0 when unknown.
     private int _photoWidth;
     private int _photoHeight;
     private int _decodedWidth;
 
-    // How The Photo In The Chat Had Focus When The Viewer Opened (Pointer For A Click), So Closing Gives It Back The Same
-    // Way: A Clicked Photo Gets No Focus Ring Back, Even When Escape Closes The Viewer
+    // The focus state that the photo in the chat had when the viewer opened, such as Pointer for a click. A close gives
+    // focus back in the same way. Thus a clicked photo gets no focus ring back, also when Escape closes the viewer.
     private FocusState _returnState = FocusState.Programmatic;
 
-    // The Playing Video, While One Shows, And The Still It Grows And Shrinks As
+    // The playing video while one shows, and the still that it grows and shrinks as.
     private VideoPlayback? _video;
     private ImageSource? _poster;
 
-    // Who Carries The Video On After Close (The Bubble's Player), And Where It Got To And Whether It Played, Noted As The
-    // Close Starts
+    // The player of the bubble, which continues the video after the close. The close notes the position and the play
+    // state when it starts.
     private Action<TimeSpan, bool>? _videoClosed;
     private (TimeSpan Position, bool Playing)? _closedAt;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="PhotoViewer"/> class, hidden.
+    /// Initializes a new instance of the <see cref="PhotoViewer"/> class, which is hidden.
     /// </summary>
     public PhotoViewer()
     {
@@ -115,37 +130,41 @@ public sealed partial class PhotoViewer : UserControl
         VideoHost.SizeChanged += (_, _) => FitVideo(_video);
     }
 
-    /// <summary>Gets the Save as button's name and tooltip.</summary>
+    /// <summary>Gets the name and tooltip of the Save as button.</summary>
     public static string SaveAsText => ChatCopy.SaveAs;
 
-    /// <summary>Gets the Download button's name and tooltip.</summary>
+    /// <summary>Gets the name and tooltip of the Download button.</summary>
     public static string DownloadText => ChatCopy.Download;
 
-    /// <summary>Gets the Open with button's name and tooltip.</summary>
+    /// <summary>Gets the name and tooltip of the Open with button.</summary>
     public static string OpenWithText => ChatCopy.OpenWith;
 
-    /// <summary>Gets the Close button's name and tooltip.</summary>
+    /// <summary>Gets the name and tooltip of the Close button.</summary>
     public static string CloseText => ChatCopy.Close;
 
     /// <summary>
-    /// Gets a value indicating whether the viewer is showing a photo.
+    /// Gets a value indicating whether the viewer is open.
     /// </summary>
     public bool IsOpen => Visibility == Visibility.Visible;
 
     /// <summary>
-    /// Gets the toolbar, which sits in the window's title bar row; the window lets clicks through to it there.
+    /// Gets the toolbar, which sits in the title bar row of the window. The window lets clicks through to it there.
     /// </summary>
     public FrameworkElement Toolbar => ToolbarPanel;
 
     /// <summary>
-    /// Raised when the viewer opens or closes, so the window can give the title bar row to the toolbar and back.
+    /// Occurs when the viewer opens or closes. The window then gives the title bar row to the toolbar or takes it back.
     /// </summary>
     public event EventHandler? IsOpenChanged;
 
     /// <summary>
-    /// Keeps the toolbar in the title bar row's top-left corner, 8 px in, past anything the system keeps on the left.
+    /// Keeps the toolbar 8 px in from the top-left corner of the title bar row. The toolbar also stays past any space
+    /// that the system keeps on the left.
     /// </summary>
-    /// <param name="leftInset">The width the system keeps on the row's left, in effective pixels (0 unless right to left).</param>
+    /// <param name="leftInset">
+    /// The width that the system keeps on the left of the row, in effective pixels. It is 0 unless the layout is right
+    /// to left.
+    /// </param>
     public void FitToolbar(double leftInset)
     {
         var margin = new Thickness(leftInset + ToolbarInset, 0, 0, 0);
@@ -156,8 +175,8 @@ public sealed partial class PhotoViewer : UserControl
     }
 
     /// <summary>
-    /// Dims the toolbar's icons while the window is inactive, as the title bar's text dims, and brings them back when
-    /// it is active again. A test run puts <c>Active</c> or <c>Inactive</c> in Close's item status.
+    /// Dims the toolbar icons while the window is inactive, as the title bar text dims. The icons return when the
+    /// window is active again. A test run puts <c>Active</c> or <c>Inactive</c> in the item status of Close.
     /// </summary>
     /// <param name="active">True while the window is active.</param>
     public void ShowActive(bool active)
@@ -170,14 +189,15 @@ public sealed partial class PhotoViewer : UserControl
     /// Shows a photo, fitted at 1x, and moves focus to it.
     /// </summary>
     /// <remarks>
-    /// The full image is read from the media store (memory, or a download when it was evicted) and decoded at its own
-    /// size. A photo that won't load closes the viewer again and logs the error type only.
+    /// The full image comes from the media store: from memory, or from a download after an eviction. It decodes at its
+    /// own size, but no wider than twice the window. A photo that does not load closes the viewer again, and the log
+    /// gets only the error type.
     /// </remarks>
-    /// <param name="part">The photo's media part.</param>
-    /// <param name="messageId">The message's ID, for the log and the actions.</param>
-    /// <param name="name">What Narrator calls the photo: its caption, or "Photo".</param>
-    /// <param name="returnFocus">The photo in the chat, focused again on close.</param>
-    /// <returns>A task that ends once the photo shows, or failed.</returns>
+    /// <param name="part">The media part of the photo.</param>
+    /// <param name="messageId">The ID of the message, for the log and the actions.</param>
+    /// <param name="name">The name that Narrator reads for the photo: its caption, or "Photo".</param>
+    /// <param name="returnFocus">The photo in the chat, which gets focus again on close.</param>
+    /// <returns>A task that ends when the photo shows or the load fails.</returns>
     public async Task ShowAsync(MediaPart part, string messageId, string name, Control returnFocus)
     {
         ArgumentNullException.ThrowIfNull(part);
@@ -188,11 +208,10 @@ public sealed partial class PhotoViewer : UserControl
         PhotoImage.Source = null;
         Zoomer.ChangeView(0, 0, 1, disableAnimation: true);
 
-        // Focus Moves In Once The Viewer Is Laid Out (Before That It Can't Take It), After The Click Has Finished With
-        // The Photo In The Chat
+        // Focus moves in after the layout of the viewer, because the viewer cannot take it before. The move also waits
+        // for the end of the click on the photo in the chat.
         XamlHost.Dispatcher.TryEnqueue(Windows.System.DispatcherQueuePriority.Low, () => Zoomer.Focus(FocusState.Programmatic));
 
-        // The Full Image, Decoded From Memory
         try
         {
             if ((Application.Current as App)?.Media is not { } media)
@@ -200,8 +219,8 @@ public sealed partial class PhotoViewer : UserControl
                 throw new InvalidOperationException("No media store.");
             }
 
-            // Decoded No Wider Than Twice The Window In Physical Pixels (Sharp To 2x Zoom), And Neither Side Past
-            // MaxDecodeWidth
+            // The photo decodes no wider than twice the window in physical pixels, so it stays sharp to 2x zoom.
+            // Neither side goes past MaxDecodeWidth.
             byte[] bytes = await media.GetAsync(part, thumbnail: false, CancellationToken.None);
             double twice = (XamlRoot?.Size.Width ?? 0) * (XamlRoot?.RasterizationScale ?? 1) * 2;
             int fit      = twice > 0 ? (int)Math.Min(Math.Ceiling(twice), MaxDecodeWidth) : MaxDecodeWidth;
@@ -233,25 +252,30 @@ public sealed partial class PhotoViewer : UserControl
     }
 
     /// <summary>
-    /// Shows a video and plays it with Windows' full transport controls, from where the bubble's player got to.
+    /// Shows a video and plays it with the full transport controls of Windows. It starts where the player of the bubble
+    /// stopped.
     /// </summary>
     /// <remarks>
-    /// The bytes come from the media store's memory (or a download) and play from memory, as media, like the bubble's
-    /// player (see <see cref="VideoPlayback"/>). A video that won't load closes the viewer again and logs the error type
-    /// only. Escape or Close stops it and lets go of the player.
+    /// The bytes come from the memory of the media store or from a download. They play from memory, as media, as in the
+    /// player of the bubble. See <see cref="VideoPlayback"/>. A video that does not load closes the viewer again, and
+    /// the log gets only the error type. Escape or Close stops the video and releases the player.
     /// </remarks>
-    /// <param name="part">The video's media part.</param>
-    /// <param name="messageId">The message's ID, for the log and the actions.</param>
-    /// <param name="name">What Narrator calls the video: its caption, or "Video".</param>
-    /// <param name="returnFocus">The video's frame in the chat, focused again on close.</param>
-    /// <param name="returnState">How the clicked button had focus, so closing gives it back the same way.</param>
+    /// <param name="part">The media part of the video.</param>
+    /// <param name="messageId">The ID of the message, for the log and the actions.</param>
+    /// <param name="name">The name that Narrator reads for the video: its caption, or "Video".</param>
+    /// <param name="returnFocus">The video frame in the chat, which gets focus again on close.</param>
+    /// <param name="returnState">The focus state of the clicked button, which a close restores.</param>
     /// <param name="start">Where to start playing.</param>
     /// <param name="play">True to play from <paramref name="start"/>, false to stay paused there.</param>
-    /// <param name="frame">The bubble's still frame, which grows out of the bubble while the video loads (the player
-    /// shows once it plays); null when none showed, and the player itself then grows once it is in.</param>
-    /// <param name="closed">Given the viewer's position and whether it was playing when it closes, so the bubble's
-    /// player carries on from there; null when nothing carries on.</param>
-    /// <returns>A task that ends once the video plays, or failed.</returns>
+    /// <param name="frame">
+    /// The still frame of the bubble, which grows out of the bubble while the video loads. The player shows when it
+    /// plays. With no frame, this is null, and the player itself grows when it is in.
+    /// </param>
+    /// <param name="closed">
+    /// Gets the position and the play state of the viewer when it closes. The player of the bubble then continues from
+    /// there. It is null when nothing continues.
+    /// </param>
+    /// <returns>A task that ends when the video plays or the load fails.</returns>
     public async Task ShowVideoAsync(MediaPart part, string messageId, string name, Control returnFocus, FocusState returnState, TimeSpan start, bool play, ImageSource? frame, Action<TimeSpan, bool>? closed)
     {
         ArgumentNullException.ThrowIfNull(part);
@@ -260,7 +284,7 @@ public sealed partial class PhotoViewer : UserControl
         Open(part, messageId, returnFocus, returnState, isVideo: true);
         _videoClosed = closed;
 
-        // The Still Grows At Once, Over The Player, Which Stays Clear Until It Plays
+        // The still grows at once over the player, which stays clear until it plays.
         bool poster = frame is not null && Ui.AnimationsEnabled;
         _poster     = poster ? frame : null;
         ShowPoster(_poster);
@@ -293,7 +317,7 @@ public sealed partial class PhotoViewer : UserControl
                 return;
             }
 
-            // The Player Takes Over From The Still Once Its Picture Moves
+            // The player replaces the still when its picture moves.
             video.Player.PlaybackSession.PlaybackStateChanged += (session, _) =>
             {
                 if (session.PlaybackState == Windows.Media.Playback.MediaPlaybackState.Playing)
@@ -309,7 +333,7 @@ public sealed partial class PhotoViewer : UserControl
                 }
             };
 
-            // Paused In The Bubble: Paused Here Too, The Player Showing Where It Stopped
+            // A video that was paused in the bubble stays paused here, and the player shows where it stopped.
             if (play)
             {
                 video.Player.Play();
@@ -335,9 +359,10 @@ public sealed partial class PhotoViewer : UserControl
     /// Hides the viewer, stops a playing video, drops the image, and focuses the photo or video in the chat again.
     /// </summary>
     /// <remarks>
-    /// Animated (Escape, Close, a click beside the photo), the photo shrinks back into its bubble while the backdrop and
-    /// toolbar fade out, and the viewer hides once that ends; a video pauses at once. It hides at once when Windows'
-    /// animation effects are off, when the bubble is gone (scrolled away or another chat), or when asked to.
+    /// An animated close comes from Escape, Close or a click beside the photo. The photo then shrinks back into its
+    /// bubble while the backdrop and the toolbar fade out. The viewer hides when that ends, and a video pauses at once.
+    /// The viewer hides at once when the animation effects of Windows are off or the bubble is gone. The bubble is gone
+    /// after a scroll or a chat switch. The viewer also hides at once when the caller does not ask for the animation.
     /// </remarks>
     /// <param name="animate">True to shrink back into the bubble first.</param>
     public void Close(bool animate = false)
@@ -347,7 +372,8 @@ public sealed partial class PhotoViewer : UserControl
             return;
         }
 
-        // Where The Video Got To And Whether It Played, Before The Shrink Pauses It: Handed Back Once Closed
+        // The close notes the position and the play state of the video before the shrink pauses it. FinishClose gives
+        // them back.
         _closedAt = _video is { } video ? (video.Position, video.IsPlaying) : null;
         if (animate && Shrink())
         {
@@ -357,7 +383,7 @@ public sealed partial class PhotoViewer : UserControl
         FinishClose();
     }
 
-    // Hides The Viewer Now, Putting The Animated Layers Back As They Were
+    // Hides the viewer now and restores the animated layers.
     private void FinishClose()
     {
         _closeRun++;
@@ -372,7 +398,7 @@ public sealed partial class PhotoViewer : UserControl
         _returnFocus = null;
         IsOpenChanged?.Invoke(this, EventArgs.Empty);
 
-        // The Bubble's Player Carries On From Where This One Got To
+        // The player of the bubble continues from where this player stopped.
         Action<TimeSpan, bool>? closed = _videoClosed;
         _videoClosed                   = null;
         if (closed is not null && _closedAt is { } at)
@@ -383,8 +409,8 @@ public sealed partial class PhotoViewer : UserControl
         _closedAt = null;
     }
 
-    // Shows The Viewer For A Photo Or A Video: Any Video Playing (Here Or In A Bubble) Stops, The Right Layer Shows, And
-    // Open In Photos Becomes Open In Default App For A Video
+    // Shows the viewer for a photo or a video. Any video that plays here or in a bubble stops, and the right layer
+    // shows. For a video, Open in Photos becomes Open in default app.
     private void Open(MediaPart part, string messageId, Control returnFocus, FocusState returnState, bool isVideo)
     {
         StopVideo();
@@ -401,7 +427,7 @@ public sealed partial class PhotoViewer : UserControl
         Zoomer.Visibility    = isVideo ? Visibility.Collapsed : Visibility.Visible;
         VideoHost.Visibility = isVideo ? Visibility.Visible : Visibility.Collapsed;
 
-        // Opened Again While Shrinking: The Shrink Is Dropped And The Layers Put Back
+        // An open during a shrink drops the shrink and restores the layers.
         if (_closing)
         {
             _closeRun++;
@@ -410,7 +436,8 @@ public sealed partial class PhotoViewer : UserControl
             ResetLayers();
         }
 
-        // The Stage Waits Unseen Until Its Photo Or Video Is In (Then It Grows), While The Backdrop And Toolbar Fade In
+        // The stage stays hidden until its photo or video is in, and then it grows. Meanwhile the backdrop and the
+        // toolbar fade in.
         if (Ui.AnimationsEnabled)
         {
             ElementCompositionPreview.GetElementVisual(Stage).Opacity = 0;
@@ -431,8 +458,8 @@ public sealed partial class PhotoViewer : UserControl
     // GROW AND SHRINK
     // =========================================================================
 
-    // The Photo Or Video Is In: The Stage Shows, Growing From The Bubble's Place, Size And Crop Into Its Own (See Morph).
-    // Without The Bubble, Or With Animations Off, It Just Shows. The Task Ends When The Growth Has
+    // The photo or video is in, so the stage shows. It grows from the place, size and crop of the bubble into its own.
+    // See Morph. Without the bubble, or with animations off, it only shows. The task ends when the growth ends.
     private Task GrowAsync(FrameworkElement target, MediaPart? video, string grew = "Grew")
     {
         if (!Ui.AnimationsEnabled)
@@ -458,7 +485,7 @@ public sealed partial class PhotoViewer : UserControl
         return ended.Task;
     }
 
-    // The Video's Still Over Its Player (Which Is Clear Meanwhile), Or Gone With The Player Shown
+    // Shows the still of the video over its player, which is clear meanwhile. With no still, the player shows.
     private void ShowPoster(ImageSource? frame)
     {
         VideoPoster.Source     = frame;
@@ -466,8 +493,9 @@ public sealed partial class PhotoViewer : UserControl
         VideoHost.Opacity      = frame is null ? 1 : 0;
     }
 
-    // Shrinks The Stage Back Into The Bubble While The Backdrop And Toolbar Fade Out, Then Hides The Viewer. False (Nothing
-    // Run) When Animations Are Off Or The Bubble Or The Shown Photo Isn't There To Shrink Between
+    // Shrinks the stage back into the bubble while the backdrop and the toolbar fade out, then hides the viewer.
+    // Returns false and runs nothing when animations are off. It also returns false when the bubble or the shown photo
+    // is not there.
     private bool Shrink()
     {
         FrameworkElement target = _video is null ? PhotoImage : VideoHost;
@@ -480,13 +508,13 @@ public sealed partial class PhotoViewer : UserControl
         IsHitTestVisible = false;
         _video?.Player.Pause();
 
-        // A Video Shrinks As Its Still, Over The Paused Player, As Smoothly As It Grew
+        // A video shrinks as its still over the paused player, as smoothly as it grew.
         if (_video is not null && _poster is { } still)
         {
             ShowPoster(still);
         }
 
-        // The Batch Ends Once Every Animation Started Inside It Has
+        // The batch ends when every animation that started in it ends.
         int run                     = ++_closeRun;
         Visual visual               = ElementCompositionPreview.GetElementVisual(Stage);
         CompositionScopedBatch done = visual.Compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
@@ -504,7 +532,8 @@ public sealed partial class PhotoViewer : UserControl
         return true;
     }
 
-    // The Bubble's Photo Or Video Frame In The Stage's Space; Null When It's Gone Or Not Laid Out
+    // Gives the photo or video frame of the bubble in the space of the stage. Returns null when the frame is gone or
+    // not laid out.
     private Rect? BubbleRect()
     {
         if (_returnFocus is not { IsLoaded: true } bubble || bubble.ActualWidth <= 0 || bubble.ActualHeight <= 0 || !ReferenceEquals(bubble.XamlRoot, XamlRoot))
@@ -522,8 +551,9 @@ public sealed partial class PhotoViewer : UserControl
         }
     }
 
-    // Where The Photo Or Video Shows In The Stage's Space: The Image's Own Bounds, Or For A Video Its Host Fitted To The
-    // Bubble's Shape (The Player Letterboxes It So). Null Before It Has A Size
+    // Gives where the photo or video shows in the space of the stage. For a photo, that is the bounds of the image. For
+    // a video, it is the host fitted to the shape of the bubble, because the player letterboxes it so. Returns null
+    // before the target has a size.
     private Rect? ShownRect(FrameworkElement target, MediaPart? video, Rect bubble)
     {
         if (target.ActualWidth <= 0 || target.ActualHeight <= 0)
@@ -543,10 +573,11 @@ public sealed partial class PhotoViewer : UserControl
         return new Rect(box.X + ((box.Width - width) / 2), box.Y + ((box.Height - height) / 2), width, height);
     }
 
-    // Moves The Stage Between The Bubble And The Shown Photo Without Distorting It: One Uniform Scale About The Shown
-    // Photo's Middle, Just Big Enough To Cover The Bubble (As The Bubble's Crop Does), A Translation Onto The Bubble's
-    // Middle, And An Inset Clip From The Bubble's Crop (In The Stage's Own Space, Before The Scale) Out To The Whole
-    // Stage. Growing Runs Bubble To Shown; Shrinking Runs It Back
+    // Moves the stage between the bubble and the shown photo with no distortion. A uniform scale about the middle of
+    // the shown photo makes it just big enough to cover the bubble. The crop of the bubble does the same. A translation
+    // moves it onto the middle of the bubble. An inset clip opens from the crop of the bubble out to the whole stage.
+    // The clip is in the own space of the stage, before the scale. A grow runs from the bubble to the shown photo, and
+    // a shrink runs back.
     private void Morph(Visual visual, Rect bubble, Rect shown, bool growing, TimeSpan time, CompositionEasingFunction ease)
     {
         Compositor compositor = visual.Compositor;
@@ -554,7 +585,8 @@ public sealed partial class PhotoViewer : UserControl
         float scale           = (float)Math.Max(bubble.Width / shown.Width, bubble.Height / shown.Height);
         var shift             = new Vector3((float)(bubble.X + (bubble.Width / 2)) - middle.X, (float)(bubble.Y + (bubble.Height / 2)) - middle.Y, 0);
 
-        // The Bubble's Crop Before The Scale: The Bubble's Size Over The Scale, On The Shown Photo's Middle
+        // Before the scale, the crop of the bubble is the bubble size over the scale. It sits on the middle of the
+        // shown photo.
         float cropWidth   = (float)bubble.Width / scale;
         float cropHeight  = (float)bubble.Height / scale;
         float stageWidth  = (float)Stage.ActualWidth;
@@ -570,7 +602,7 @@ public sealed partial class PhotoViewer : UserControl
         InsetClip clip     = compositor.CreateInsetClip();
         visual.Clip        = clip;
 
-        // Each Property From Its Bubble Value To Its Shown Value, Or Back
+        // Each property goes from its bubble value to its shown value, or back.
         Vector3KeyFrameAnimation size = compositor.CreateVector3KeyFrameAnimation();
         size.InsertKeyFrame(0, growing ? new Vector3(scale, scale, 1) : Vector3.One);
         size.InsertKeyFrame(1, growing ? Vector3.One : new Vector3(scale, scale, 1), ease);
@@ -595,7 +627,6 @@ public sealed partial class PhotoViewer : UserControl
         }
     }
 
-    // Fades The Backdrop And The Toolbar Together
     private void Fade(float from, float to, TimeSpan time, CompositionEasingFunction ease)
     {
         foreach (UIElement layer in (ReadOnlySpan<UIElement>)[Backdrop, ToolbarPanel])
@@ -609,7 +640,8 @@ public sealed partial class PhotoViewer : UserControl
         }
     }
 
-    // Puts The Stage, Backdrop And Toolbar Back At Rest (Shown, Full Size, In Place); Untouched With Animations Off
+    // Puts the stage, the backdrop and the toolbar back at rest: shown, at full size and in place. With animations
+    // off, the method changes nothing.
     private void ResetLayers()
     {
         if (!Ui.AnimationsEnabled)
@@ -632,14 +664,14 @@ public sealed partial class PhotoViewer : UserControl
         }
     }
 
-    // Fluent's Decelerate (Things Arriving) And Accelerate (Things Leaving) Curves
+    // The decelerate curve of Fluent is for things that arrive. The accelerate curve is for things that leave.
     private CubicBezierEasingFunction Decelerate() =>
         ElementCompositionPreview.GetElementVisual(Stage).Compositor.CreateCubicBezierEasingFunction(new Vector2(0.1f, 0.9f), new Vector2(0.2f, 1));
 
     private CubicBezierEasingFunction Accelerate() =>
         ElementCompositionPreview.GetElementVisual(Stage).Compositor.CreateCubicBezierEasingFunction(new Vector2(0.7f, 0), new Vector2(1, 0.5f));
 
-    // Stops The Viewer's Video And Lets Go Of Its Player And Bytes
+    // Stops the video of the viewer and releases its player and bytes.
     private void StopVideo()
     {
         _poster = null;
@@ -678,7 +710,7 @@ public sealed partial class PhotoViewer : UserControl
     {
         if (_part is { } part)
         {
-            // A Video Pauses Here While Its Default App Plays It
+            // A video pauses here while its default app plays it.
             _video?.Player.Pause();
             _ = MediaActions.OpenAsync(XamlRoot, part, _messageId);
         }
@@ -688,7 +720,7 @@ public sealed partial class PhotoViewer : UserControl
     {
         if (_part is { } part)
         {
-            // A Video Pauses Here While The Picked App Plays It
+            // A video pauses here while the picked app plays it.
             _video?.Player.Pause();
             _ = MediaActions.OpenWithAsync(part, _messageId);
         }
@@ -700,8 +732,9 @@ public sealed partial class PhotoViewer : UserControl
     // ZOOM
     // =========================================================================
 
-    // The Player Sized To The Video's Picture, Fitted In Its Host, So Its Bar Spans The Picture As In The Bubble (Owner,
-    // Plan 11), Not The Empty Bands Beside It. Left To Fill The Host Until The Video's Size Is Known
+    // Sizes the player to the picture of the video, fitted in its host. Thus its bar spans the picture as in the
+    // bubble, not the empty bands beside it. The owner asked for this in Plan 11. Until the size of the video is known,
+    // the player fills the host.
     private void FitVideo(VideoPlayback? video)
     {
         if (video is null || !ReferenceEquals(video, _video))
@@ -721,15 +754,15 @@ public sealed partial class PhotoViewer : UserControl
         video.Element.Height = Math.Floor(height * scale);
     }
 
-    // At 1x The Photo Fits The Viewport, Inside A 24 px Margin (A Smaller Photo Shows At Its Own Size); Zooming Scales It
-    // From There. The Image Is Only As Big As The Photo, So A Click Beside It Isn't On It
+    // At 1x the photo fits the viewport inside a 24 px margin. A smaller photo shows at its own size. A zoom scales it
+    // from there. The image is only as big as the photo, so a click beside the photo is not on it.
     private void OnZoomerSizeChanged(object sender, SizeChangedEventArgs e)
     {
         PhotoImage.MaxWidth  = Math.Max(0, e.NewSize.Width - (PhotoMargin * 2));
         PhotoImage.MaxHeight = Math.Max(0, e.NewSize.Height - (PhotoMargin * 2));
     }
 
-    // Double-Click: 2x At The Pointer, Or Back To 1x When Zoomed
+    // A double-click zooms to 2x at the pointer, or back to 1x after a zoom.
     private void OnPhotoDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
     {
         e.Handled = true;
@@ -739,11 +772,11 @@ public sealed partial class PhotoViewer : UserControl
             return;
         }
 
-        Windows.Foundation.Point at = e.GetPosition(PhotoImage);
+        Point at = e.GetPosition(PhotoImage);
         Zoomer.ChangeView((at.X * 2) - (Zoomer.ViewportWidth / 2), (at.Y * 2) - (Zoomer.ViewportHeight / 2), 2);
     }
 
-    // A Click Beside The Photo Closes The Viewer; On The Photo It Doesn't (Its Double-Click Zooms)
+    // A click beside the photo closes the viewer. A click on the photo does not, because its double-click zooms.
     private void OnZoomerTapped(object sender, TappedRoutedEventArgs e)
     {
         if (!ReferenceEquals(e.OriginalSource, PhotoImage))
@@ -767,8 +800,9 @@ public sealed partial class PhotoViewer : UserControl
         TestHooks.ShowState(Zoomer, "Zoom" + Math.Round(Zoomer.ZoomFactor).ToString(System.Globalization.CultureInfo.InvariantCulture));
     }
 
-    // The Width To Decode A Photo At: Its Own, No Wider Than The Limit, And Narrow Enough That Its Height Stays Within
-    // MaxDecodeWidth Too (A 100 x 20000 Photo Would Otherwise Decode Full Height); The Limit When Its Size Is Unknown
+    // Gives the decode width of a photo: its own width, no wider than the limit. The width is also narrow enough that
+    // the height stays within MaxDecodeWidth. Else a 100 x 20000 photo would decode at full height. For an unknown
+    // size, the method gives the limit.
     private static int CappedWidth(int width, int height, int limit)
     {
         if (width <= 0 || height <= 0)
@@ -780,8 +814,8 @@ public sealed partial class PhotoViewer : UserControl
         return Math.Max(1, Math.Min(width, Math.Min(limit, heightCap)));
     }
 
-    // Zoomed Past 2x: The Photo Decodes Again At Its Own Width (Neither Side Past MaxDecodeWidth), Once, So It Stays
-    // Sharp Up Close
+    // Past 2x zoom, the photo decodes again once at its own width, so it stays sharp up close. Neither side goes past
+    // MaxDecodeWidth.
     private async Task DecodeFullAsync()
     {
         int full = _photoWidth > 0 ? CappedWidth(_photoWidth, _photoHeight, MaxDecodeWidth) : 0;
@@ -803,7 +837,7 @@ public sealed partial class PhotoViewer : UserControl
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            // The Sharper Decode Failed: The First Keeps Showing
+            // The sharper decode failed, so the first decode keeps showing.
             AppLog.MediaFailed(App.ShellLog, "view", _messageId, ex.GetType().Name);
         }
     }

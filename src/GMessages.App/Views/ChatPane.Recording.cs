@@ -10,20 +10,16 @@ using Windows.UI.Xaml.Controls;
 namespace GMessages.App.Views;
 
 /// <summary>
-/// The compose area's recording: the mic, the recording bar, pause and cancel, and the voice preview chip.
+/// Handles the recording of the compose area: the mic, the recording bar, pause and cancel, and the voice preview chip.
 /// </summary>
 /// <remarks>
-/// Part of <see cref="ChatPane"/>; the other members are in ChatPane.xaml.cs.
+/// This part of <see cref="ChatPane"/> holds the recording members. ChatPane.xaml.cs holds the other members.
 /// </remarks>
 public sealed partial class ChatPane
 {
-
-    // =========================================================================
-    // RECORDING
-    // =========================================================================
-
-    // The Mic: Records To A New Temp File In The Media Store's Private Folder. Access Off Or No Microphone Shows The
-    // Settings Message; Any Other Failure Goes Back To The Mic. A Cancel Or Chat Switch While Starting Drops The Recorder
+    // The mic records to a new temp file in the private folder of the media store. When access is off or no microphone
+    // exists, the settings message shows. Any other failure goes back to the mic. A cancel or a chat switch during the
+    // start drops the recorder.
     private async void OnRecordClick(object sender, RoutedEventArgs e)
     {
         if (Chat is not { Voice.IsIdle: true } chat || (Application.Current as App) is not { Media: { } media } app)
@@ -31,7 +27,8 @@ public sealed partial class ChatPane
             return;
         }
 
-        // The Bar Shows At Once, While The Microphone Opens: Empty, Not The Last Recording's Waveform And Time
+        // The bar shows at once, empty, while the microphone opens. It does not show the waveform and time of the last
+        // recording.
         string path = System.IO.Path.Combine(media.TempFolder, "voice-" + Guid.NewGuid().ToString("N") + ".m4a");
         RecordBars.Show(null);
         RecordTimer.Text = VoiceWave.LengthText(TimeSpan.Zero);
@@ -58,7 +55,7 @@ public sealed partial class ChatPane
             return;
         }
 
-        // Cancelled Or Switched Away While Starting
+        // A cancel or a chat switch came during the start.
         if (!ReferenceEquals(chat, Chat) || !chat.Voice.IsCapturing || chat.Voice.FilePath != path)
         {
             recorder.Dispose();
@@ -74,12 +71,12 @@ public sealed partial class ChatPane
         ShowRecording();
         _recordTimer.Start();
 
-        // The Mic Is Covered Now: Focus Goes To Done
+        // The bar covers the mic now, so focus goes to Done.
         StopRecordingButton.Focus(FocusState.Programmatic);
     }
 
-    // Microphone Off Or Missing: A Desktop App Can't Show Windows' Own Prompt, So This Dialog Asks The User To Turn It On,
-    // And Open Settings Goes To Windows' Microphone Page
+    // The microphone is off or missing. A desktop app cannot show the prompt of Windows, so this dialog asks the user
+    // to turn access on. Open settings goes to the microphone page of Windows.
     private async Task AskMicrophoneSettingsAsync()
     {
         if (XamlRoot is not { } root)
@@ -101,7 +98,8 @@ public sealed partial class ChatPane
         }
     }
 
-    // Windows' Microphone Privacy Page. A Test Run Only Notes The Address; A Failure Logs Its Error Type Only
+    // Opens the microphone privacy page of Windows. A test run only notes the address. The log names only the error
+    // type of a failure.
     private async Task OpenMicrophoneSettingsAsync()
     {
         var page               = new Uri("ms-settings:privacy-microphone");
@@ -124,8 +122,9 @@ public sealed partial class ChatPane
         }
     }
 
-    // Done: The File Is Finished, Read Back With Its Waveform, And Waits In The Preview Chip. From Here The Recording Is
-    // This Handler's, So Hiding The Window Meanwhile Doesn't Drop It. A Failure Says So Over The Chips, Never Silently
+    // Done finishes the file and reads it back with its waveform. The recording then waits in the preview chip. From
+    // here this handler owns the recording, so a hide of the window meanwhile does not drop it. A failure shows a note
+    // over the chips.
     private async void OnStopRecordingClick(object sender, RoutedEventArgs e)
     {
         if (_recorder is not { } recorder || Chat is not { } chat)
@@ -144,7 +143,7 @@ public sealed partial class ChatPane
             await recorder.StopAsync();
             recorder.Dispose();
 
-            // Read Sharing Whatever Handle Windows Still Holds On The Finished File
+            // The read shares any handle that Windows still holds on the finished file.
             byte[] audio;
             using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, 4096, useAsync: true))
             {
@@ -154,7 +153,7 @@ public sealed partial class ChatPane
 
             VoiceWave wave = await WaveformReader.ReadAsync(audio);
 
-            // Dropped Meanwhile (A Chat Switch): The File Goes
+            // A chat switch dropped the recording meanwhile, so the file goes.
             if (!chat.Voice.Stop(audio, wave))
             {
                 VoiceDraft.DeleteFile(path);
@@ -165,7 +164,7 @@ public sealed partial class ChatPane
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            // The Error Type And Code Only (A File Error's Message Names The Path)
+            // The log names only the error type and code, because the message of a file error names the path.
             AppLog.MediaFailed(App.ShellLog, "record", chat.ConversationId, $"{ex.GetType().Name} 0x{ex.HResult:X8}");
             recorder.Dispose();
             chat.Voice.Cancel();
@@ -174,8 +173,8 @@ public sealed partial class ChatPane
         }
     }
 
-    // Pause Or Resume: The Recorder Stops Or Restarts Into The Same File, And The Time And Waveform Hold Still Meanwhile,
-    // So The Time Counts Recorded Time Only
+    // Pause stops the recorder, and Resume restarts it into the same file. The time and the waveform hold still during
+    // a pause, so the time counts only recorded time.
     private void OnPauseRecordingClick(object sender, RoutedEventArgs e)
     {
         if (_recorder is not { } recorder || Chat is not { } chat)
@@ -183,7 +182,6 @@ public sealed partial class ChatPane
             return;
         }
 
-        // Pause
         if (chat.Voice.Pause())
         {
             recorder.Pause();
@@ -193,7 +191,6 @@ public sealed partial class ChatPane
             return;
         }
 
-        // Resume
         if (chat.Voice.Resume())
         {
             recorder.Resume();
@@ -203,7 +200,7 @@ public sealed partial class ChatPane
         }
     }
 
-    // Pause Becomes Resume (Play, To Record More) While Paused, And Back
+    // While paused, Pause becomes Resume with a play glyph, to record more.
     private void ShowPaused(bool paused)
     {
         string name                = paused ? ChatCopy.Resume : ChatCopy.Pause;
@@ -212,7 +209,7 @@ public sealed partial class ChatPane
         ToolTipService.SetToolTip(PauseRecordingButton, name);
     }
 
-    // Cancel Recording: The Recorder Lets Go Of The File, Which Is Deleted
+    // Cancel recording releases the file of the recorder and deletes it.
     private void OnCancelRecordingClick(object sender, RoutedEventArgs e)
     {
         DropRecorder();
@@ -220,9 +217,9 @@ public sealed partial class ChatPane
         DraftBox.Focus(FocusState.Programmatic);
     }
 
-    // Stops A Running Recorder And Deletes Its File (A Cancel, A Chat Switch Or The Pane Unloading). Its Chat Goes Back
-    // To Idle Too: A Chat Kept Over A Closed Window Was Left Recording With No Recorder, So Its Bar Came Back In The Next
-    // Window With A Done That Did Nothing
+    // Stops a running recorder and deletes its file, on a cancel, a chat switch or an unload of the pane. Its chat also
+    // goes back to idle. A chat kept over a closed window once stayed in the recording state with no recorder. Its bar
+    // then came back in the next window with a Done that did nothing.
     private void DropRecorder()
     {
         if (_recordChat is { Voice.IsCapturing: true } recording)
@@ -238,7 +235,7 @@ public sealed partial class ChatPane
         _recordPath = string.Empty;
     }
 
-    // The Recorded Time (Whole Seconds, Pauses Left Out) And The Newest Input Level
+    // Shows the recorded time in whole seconds without the pauses, and the newest input level.
     private void ShowRecording()
     {
         if (_recorder is not { } recorder)
@@ -251,17 +248,18 @@ public sealed partial class ChatPane
         RecordTimer.Text = VoiceWave.LengthText(TimeSpan.FromSeconds(seconds));
         RecordBars.Push(level);
 
-        // Test Run: The Newest Bar, So A Test Sees The Waveform Move
+        // A test run notes the newest bar, so a test sees the waveform move.
         TestHooks.NoteState("record-level", level.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture));
 
-        // Test Run: How Far The Bars Strayed From The Center Line (Measured Only Then: It Walks Every Bar)
+        // A test run notes how far the bars strayed from the center line. Only a test run measures it, because the
+        // measure walks every bar.
         if (TestHooks.BlockLaunches)
         {
             TestHooks.NoteState("record-drift", RecordBars.CenterDrift().ToString("0.000", System.Globalization.CultureInfo.InvariantCulture));
         }
     }
 
-    // The Preview Chip: Play Or Pause, And A Click On Its Waveform Seeks
+    // The preview chip plays or pauses, and a click on its waveform seeks.
     private void OnPreviewPlayClick(object sender, RoutedEventArgs e) => RequestPreview(null);
 
     private void OnPreviewSeekRequested(object? sender, double share) => RequestPreview(share);
@@ -276,14 +274,14 @@ public sealed partial class ChatPane
         OnVoiceRequested(this, new VoiceRequest(PreviewKey, voice.Audio, wave.Length, seekTo, ShowPreviewPlaying));
     }
 
-    // The Preview Chip's Remove: The Recording And Its File Go
+    // The remove button of the preview chip drops the recording and its file.
     private void OnPreviewRemoveClick(object sender, RoutedEventArgs e)
     {
         Chat?.Voice.Cancel();
         DraftBox.Focus(FocusState.Programmatic);
     }
 
-    // The Preview's Play Becomes Pause While It Plays, And Its Waveform Fills Up To How Much Has Played
+    // While the preview plays, Play becomes Pause and the waveform fills to the played part.
     private void ShowPreviewPlaying(bool playing, double share)
     {
         string name        = playing ? ChatCopy.Pause : ChatCopy.Play;

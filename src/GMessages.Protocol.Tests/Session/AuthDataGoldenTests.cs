@@ -10,7 +10,6 @@ namespace GMessages.Protocol.Tests.Session;
 /// Checks <see cref="AuthData"/> against the Go LibGM's <c>AuthData</c> using <c>authdata.json</c>.
 /// </summary>
 /// <remarks>
-/// Go's <c>CopyForRepair</c> creates new random keys, so only the deterministic parts are compared.
 /// See <see href="https://github.com/mautrix/gmessages/blob/ba33f4875a491f5cb47db8a6baf42a8869f5f383/pkg/libgm/client.go"/>.
 /// </remarks>
 [TestClass]
@@ -21,11 +20,11 @@ public class AuthDataGoldenTests
     private static byte[] Seq(int start, int count) => [.. Enumerable.Range(start, count).Select(i => (byte)i)];
 
     /// <summary>
-    /// Builds the same fixed AuthData the Go exporter uses, plus the extra fields it sets before clearing.
+    /// Builds the fixed AuthData of the Go exporter, with the extra fields that it sets before the clear.
     /// </summary>
     internal static AuthData BuildGolden()
     {
-        // Fixed Refresh Key (Scalar 0x01..0x20)
+        // The refresh key scalar is the bytes 0x01 to 0x20, as in the Go exporter.
         using ECDsa ecdsa = ECDsa.Create(new ECParameters { Curve = ECCurve.NamedCurves.nistP256, D = Seq(1, 32) });
         ECParameters p    = ecdsa.ExportParameters(true);
 
@@ -83,23 +82,6 @@ public class AuthDataGoldenTests
         AssertCommon(go, ad);
         Assert.AreEqual(go.GetProperty("requestCryptoAesHex").GetString(), Convert.ToHexStringLower(ad.RequestCrypto.AesKey));
         Assert.IsNull(ad.WebEncryptionKey);
-    }
-
-    /// <summary>
-    /// CopyForRepair keeps cookies and DestPhoneId only; keys are fresh and random in both Go and C#.
-    /// </summary>
-    [TestMethod]
-    public void CopyForRepair_MatchesGo()
-    {
-        JsonElement go = Golden.Load("authdata").GetProperty("repaired");
-        AuthData src   = BuildGolden();
-
-        AuthData ad = src.CopyForRepair();
-
-        AssertCommon(go, ad);
-        CollectionAssert.AreNotEqual(src.RequestCrypto.AesKey, ad.RequestCrypto.AesKey);
-        CollectionAssert.AreNotEqual(src.RefreshKey.D, ad.RefreshKey.D);
-        Assert.AreNotSame(src.Cookies, ad.Cookies);
     }
 
     /// <summary>
