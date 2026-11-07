@@ -1,22 +1,22 @@
 namespace GMessages.Presentation.Settings;
 
 /// <summary>
-/// App theme choice. Ported from Magic Buds.
+/// Specifies the app theme. Ported from Magic Buds.
 /// </summary>
 public enum AppTheme
 {
     /// <summary>
-    /// Follow the Windows theme.
+    /// The app follows the Windows theme.
     /// </summary>
     System,
 
     /// <summary>
-    /// Always light.
+    /// The app is always light.
     /// </summary>
     Light,
 
     /// <summary>
-    /// Always dark.
+    /// The app is always dark.
     /// </summary>
     Dark,
 }

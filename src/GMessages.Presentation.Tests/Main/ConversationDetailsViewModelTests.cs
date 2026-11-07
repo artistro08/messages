@@ -20,20 +20,19 @@ public sealed class ConversationDetailsViewModelTests
         proto.Participants.Add(new Participant { ID = new SmallInfo { ParticipantID = "p-bo", Number = "+15550000002" }, IsVisible = true, FullName = "Bo", FormattedNumber = "(555) 000-0002", AvatarHexColor = "#112233" });
         proto.Participants.Add(new Participant { ID = new SmallInfo { ParticipantID = "p-x", Number = "+15550000009" }, IsVisible = true });
 
-        // Hidden Ones The Phone Lists But Never Shows: An Old Copy Of Me, Unknown Sender, Someone Who Left
+        // The phone lists some people but never shows them: an old copy of me, an unknown sender and someone who left.
         proto.Participants.Add(new Participant { ID = new SmallInfo { ParticipantID = "me-old", Number = "+15550000000" }, FullName = "Me", FormattedNumber = "(555) 000-0000" });
         proto.Participants.Add(new Participant { ID = new SmallInfo { ParticipantID = "unknown", Number = "UNKNOWN_SENDER" }, FormattedNumber = "Unknown sender" });
         proto.Participants.Add(new Participant { ID = new SmallInfo { ParticipantID = "p-left", Number = "+15550000005" }, FullName = "Left" });
 
         var details = new ConversationDetailsViewModel(ConversationInfo.From(proto));
 
-        // Me And The Hidden Ones Are Left Out; The Phone's Order Is Kept
         Assert.HasCount(2, details.People);
 
-        // A Saved Person: Full Name, Formatted Number, Their Letter, Color And Photo
         Assert.AreEqual(new PersonRow("Bo", "(555) 000-0002", "B", 0xFF112233, "p-bo"), details.People[0]);
 
-        // A Number Only: The Raw Number Once (As The Name, No Second Line), No Letter (The Person Icon), The Fallback Gray
+        // A person with a number only shows the raw number once, as the name, with no second line.
+        // The row has no letter, so it shows the person icon, and it takes the fallback gray.
         Assert.AreEqual(new PersonRow("+15550000009", string.Empty, string.Empty, AvatarParts.FallbackColor, "p-x"), details.People[1]);
     }
 

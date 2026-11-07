@@ -1,22 +1,22 @@
 namespace GMessages.Presentation.Connection;
 
 /// <summary>
-/// Where the app stands with the phone.
+/// Specifies the connection state of the app with the phone.
 /// </summary>
 public enum ConnectionState
 {
-    /// <summary>No saved pairing: the user has to sign in and pair.</summary>
+    /// <summary>No saved pairing exists. The user must sign in and pair.</summary>
     NotPaired,
 
-    /// <summary>A saved pairing was found and the first connect is running.</summary>
+    /// <summary>The app found a saved pairing, and the first connect runs.</summary>
     Connecting,
 
-    /// <summary>Paired and listening for texts.</summary>
+    /// <summary>The phone is paired, and the app listens for texts.</summary>
     Connected,
 
-    /// <summary>Paired, but the connection dropped for a moment and is being retried.</summary>
+    /// <summary>The phone is paired, but the connection dropped for a short time. The client tries again.</summary>
     Reconnecting,
 
-    /// <summary>Google ended the session: the user has to sign in and pair again.</summary>
+    /// <summary>Google ended the session. The user must sign in and pair again.</summary>
     SignedOut,
 }

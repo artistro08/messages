@@ -1,48 +1,54 @@
 namespace GMessages.Presentation.Messaging;
 
 /// <summary>
-/// Whether Windows lets the app use the microphone, as its access check reports it.
+/// Tells whether Windows lets the app use the microphone, as the access check of Windows reports it.
 /// </summary>
 public enum MicrophoneAccessStatus
 {
     /// <summary>Access is on.</summary>
     Allowed,
 
-    /// <summary>The user hasn't decided yet, so Windows can ask.</summary>
+    /// <summary>The user did not decide yet, so Windows can ask.</summary>
     Undecided,
 
-    /// <summary>Access is off: refused by the user, off for the whole PC, or not declared by the app.</summary>
+    /// <summary>Access is off: the user refused it, it is off for the PC, or the app did not declare it.</summary>
     Refused,
 }
 
 /// <summary>
-/// Decides whether a voice recording can start, from the microphone access checks around Windows' consent prompt.
+/// Decides whether a voice recording can start, from the microphone access checks around the consent prompt of Windows.
 /// </summary>
 /// <remarks>
-/// The app checks access first. Anything but allowed asks Windows, through <c>ActivateAudioInterfaceAsync</c>, which
-/// shows the consent prompt when Windows still lets the user decide. The check alone can't be trusted: the owner's
-/// 0.5.5 log read "DeniedByUser" while Windows' consent store already said "Prompt" again. Windows' answer to the
-/// activation decides; anything that can't record shows the settings dialog.
+/// The app checks access first. Any result other than allowed asks Windows through
+/// <c>ActivateAudioInterfaceAsync</c>. Windows then shows the consent prompt when it still lets the user decide. The
+/// check alone is not reliable. The 0.5.5 log of the owner read "DeniedByUser" while the consent store of Windows
+/// already said "Prompt" again. The answer of Windows to the activation decides. Any result that cannot record shows
+/// the settings dialog.
 /// </remarks>
 public static class MicrophoneAccess
 {
     /// <summary>
-    /// Whether the app should ask Windows for the microphone, which shows its consent prompt when Windows allows one.
+    /// Tells whether the app must ask Windows for the microphone. Windows then shows its consent prompt when it allows
+    /// one.
     /// </summary>
-    /// <param name="before">The access check before asking.</param>
+    /// <param name="before">The access check before the request.</param>
     /// <returns><see langword="true"/> unless access is already on.</returns>
     public static bool ShouldAsk(MicrophoneAccessStatus before) => before != MicrophoneAccessStatus.Allowed;
 
     /// <summary>
-    /// Whether recording can start, or the settings dialog shows instead.
+    /// Tells whether the recording can start, or the settings dialog shows instead.
     /// </summary>
     /// <remarks>
-    /// Allowed before records at once. Otherwise Windows' answer decides: the activation succeeding (<c>S_OK</c>) records,
-    /// and so does a second check that says allowed, since either means Windows gave the microphone.
+    /// When access was allowed before, the recording starts at once. Else the answer of Windows decides. A successful
+    /// activation with <c>S_OK</c> records. A second check that says allowed also records, because either result means
+    /// that Windows gave the microphone.
     /// </remarks>
-    /// <param name="before">The access check before asking.</param>
-    /// <param name="activateResult">The activation's HRESULT (<c>S_OK</c> given, <c>E_ACCESSDENIED</c> refused); ignored unless asked.</param>
-    /// <param name="after">The access check after asking; ignored unless asked.</param>
+    /// <param name="before">The access check before the request.</param>
+    /// <param name="activateResult">
+    /// The HRESULT of the activation: <c>S_OK</c> when given, <c>E_ACCESSDENIED</c> when refused. The method ignores it
+    /// when it did not ask.
+    /// </param>
+    /// <param name="after">The access check after the request. The method ignores it when it did not ask.</param>
     /// <returns><see langword="true"/> to record, <see langword="false"/> to show the settings dialog.</returns>
     public static bool CanRecord(MicrophoneAccessStatus before, int activateResult, MicrophoneAccessStatus after)
     {

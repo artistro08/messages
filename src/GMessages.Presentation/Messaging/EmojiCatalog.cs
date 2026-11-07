@@ -1,20 +1,21 @@
 namespace GMessages.Presentation.Messaging;
 
 /// <summary>
-/// The emoji the reaction picker's More reactions offers: common emoji in Windows' emoji panel categories, each with a few
-/// search words.
+/// Holds the emoji that More reactions in the reaction picker offers. They are common emoji in the categories of the
+/// Windows emoji panel, each with a few search words.
 /// </summary>
 /// <remarks>
-/// The search words are English and never shown except the first (the emoji's tooltip); they match what is typed in the
-/// picker's search box (see <see cref="Search"/>). Each category's entries are one string: an emoji, its words, then
-/// <c>|</c> before the next. An emoji whose first character shows as plain text by default carries U+FE0F (the emoji
-/// variation selector) after it.
+/// The search words are English. The picker shows only the first word, as the tooltip of the emoji. The words match
+/// the text in the search box of the picker, through <see cref="Search"/>. The entries of each category are 1 string:
+/// an emoji, its words, then <c>|</c> before the next entry. An emoji whose first character shows as plain text by
+/// default has U+FE0F, the emoji variation selector, after it.
 /// </remarks>
-// ponytail: about 550 hand-picked emoji with short search words; load Unicode's full CLDR table if people miss ones
+// ponytail: about 550 hand-picked emoji with short search words. Load the full Unicode CLDR table if people miss some.
 public static class EmojiCatalog
 {
     /// <summary>
-    /// Gets the categories in order, each with its name (shown over its emoji) and its emoji with their search words.
+    /// Gets the categories in order. Each has its name, which shows over its emoji, and its emoji with their search
+    /// words.
     /// </summary>
     public static IReadOnlyList<(string Name, IReadOnlyList<(string Emoji, string Words)> Emoji)> Categories { get; } =
     [
@@ -88,13 +89,13 @@ public static class EmojiCatalog
     ];
 
     /// <summary>
-    /// Gets the categories with only the emoji that match what was typed, leaving out categories with none.
+    /// Gets the categories with only the emoji that match the typed text. A category with no match stays out.
     /// </summary>
     /// <remarks>
-    /// Every typed word must appear in the emoji's search words, ignoring case, anywhere in them ("eye" finds "eyes"); a
-    /// typed plural also matches its singular ("eyes" finds "eye"). Nothing typed returns every category.
+    /// Each typed word must appear anywhere in the search words of the emoji, in upper or lower case. Thus "eye" finds
+    /// "eyes". A typed plural also matches its singular, so "eyes" finds "eye". An empty query gives every category.
     /// </remarks>
-    /// <param name="query">What was typed in the search box.</param>
+    /// <param name="query">The text in the search box.</param>
     /// <returns>The matching categories in order, each with its matching emoji in order.</returns>
     public static IReadOnlyList<(string Name, IReadOnlyList<(string Emoji, string Words)> Emoji)> Search(string? query)
     {
@@ -117,7 +118,8 @@ public static class EmojiCatalog
         return found;
     }
 
-    // A Typed Word In The Search Words (Ignoring Case), Or Its Singular: "Eyes" Also Finds "Eye", "Peaches" Also "Peach"
+    // Tells whether the search words hold a typed word or its singular, in upper or lower case. "eyes" also finds
+    // "eye", and "peaches" also finds "peach".
     private static bool Matches(string words, string typed)
     {
         if (words.Contains(typed, StringComparison.OrdinalIgnoreCase))
@@ -133,7 +135,7 @@ public static class EmojiCatalog
         return typed.Length > 2 && typed.EndsWith("s", StringComparison.OrdinalIgnoreCase) && words.Contains(typed[..^1], StringComparison.OrdinalIgnoreCase);
     }
 
-    // One Category's String: "Emoji Words|Emoji Words|..."
+    // Reads the string of 1 category: "emoji words|emoji words|...".
     private static List<(string Emoji, string Words)> Parse(string entries)
     {
         var list = new List<(string Emoji, string Words)>();

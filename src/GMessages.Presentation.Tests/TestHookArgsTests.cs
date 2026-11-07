@@ -17,7 +17,9 @@ public sealed class TestHookArgsTests
         Assert.IsNull(error);
     }
 
-    /// <summary>Both flags valid: read in any case and order, data folder made a full path.</summary>
+    /// <summary>
+    /// Both flags are valid. The check reads them in any case and order. It makes the data folder a full path.
+    /// </summary>
     [TestMethod]
     public void Validate_BothValid_ReadsValues()
     {

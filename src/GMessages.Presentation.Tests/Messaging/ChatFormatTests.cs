@@ -10,8 +10,8 @@ public sealed class ChatFormatTests
     private static readonly CultureInfo EnUs = CultureInfo.GetCultureInfo("en-US");
 
     /// <summary>
-    /// The pinned tile's badge: the message itself when it's the one unread and one or two words, else the count; none
-    /// while read.
+    /// The badge of a pinned tile shows the message when it is the one unread message and has 1 or 2 words.
+    /// Otherwise the badge shows the unread count. A read chat has no badge.
     /// </summary>
     [TestMethod]
     [DataRow(false, 3, "hi", "")]
@@ -60,7 +60,8 @@ public sealed class ChatFormatTests
     }
 
     /// <summary>
-    /// An unread message in the tooltip: the sender's first name in front in a group, none in a one-to-one chat.
+    /// The tooltip line of an unread message starts with the first name of the sender in a group.
+    /// A one-to-one chat has no name.
     /// </summary>
     [TestMethod]
     [DataRow(true, "Rachel: hi")]
@@ -80,7 +81,7 @@ public sealed class ChatFormatTests
     [DataRow("2026-10-27T15:04:00-04:00", "2026-10-29T18:00:00-04:00", "Tue")]       // within 7 days: weekday
     [DataRow("2026-03-02T15:04:00-05:00", "2026-10-29T18:00:00-04:00", "Mar 2")]     // same year: month day
     [DataRow("2025-03-02T15:04:00-05:00", "2026-10-29T18:00:00-04:00", "3/2/25")]    // older: short date
-    [DataRow("2026-10-30T02:00:00+00:00", "2026-10-29T18:00:00-04:00", "10:00 PM")]  // other offset: compared in now's offset
+    [DataRow("2026-10-30T02:00:00+00:00", "2026-10-29T18:00:00-04:00", "10:00 PM")]  // different offset: converted to the offset of now
     public void ListTime_MatchesGoogleStyle(string time, string now, string expected) =>
         Assert.AreEqual(expected, ChatFormat.ListTime(DateTimeOffset.Parse(time, CultureInfo.InvariantCulture), DateTimeOffset.Parse(now, CultureInfo.InvariantCulture), EnUs).Replace(' ', ' '));
 
@@ -148,16 +149,13 @@ public sealed class ChatFormatTests
         Assert.AreEqual(Like, ChatFormat.ReactionSummary([new ReactionInfo(Like, ["p1"])]));
         Assert.AreEqual(Like + Laugh + " 3", ChatFormat.ReactionSummary([new ReactionInfo(Laugh, ["p1"]), new ReactionInfo(Like, ["p2", "p3"])]));
 
-        // Ties Keep First-Seen Order, Then Only The Top 3 Show; The Count Is Everyone
+        // Equal counts keep the order of first sight. Only the top 3 show, and the count includes everyone.
         Assert.AreEqual(Sad + Love + Like + " 4", ChatFormat.ReactionSummary([new ReactionInfo(Sad, ["p1"]), new ReactionInfo(Love, ["p2"]), new ReactionInfo(Like, ["p3"]), new ReactionInfo(Laugh, ["p4"])]));
     }
 
-    // =========================================================================
-    // GROUP SNIPPETS AND COLOR EMOJI
-    // =========================================================================
-
     /// <summary>
-    /// A group's last message from someone else starts with their first name, as Google shows it ("Rachel: Awe!").
+    /// The last message of a group from another person starts with the first name of the sender.
+    /// Google shows it the same way, for example "Rachel: Awe!".
     /// </summary>
     [TestMethod]
     [DataRow(true, 0L, "Rachel Green", "Awe!", "Rachel: Awe!")]
@@ -186,67 +184,68 @@ public sealed class ChatFormatTests
     }
 
     /// <summary>
-    /// Symbols that are emoji but default to text style get VS16, so they draw in color; anything else is left alone.
+    /// An emoji symbol with a text style default gets VS16, so that it draws in color. Other text does not change.
     /// </summary>
     [TestMethod]
     [DataRow("", "")]
-    [DataRow("\u263A", "\u263A\uFE0F")]                                    // Smiling Face
-    [DataRow("I \u2764 it \u2600", "I \u2764\uFE0F it \u2600\uFE0F")]       // Heart, Sun
-    [DataRow("\u270C", "\u270C\uFE0F")]                                    // Victory Hand
-    [DataRow("\u263A\uFE0F", "\u263A\uFE0F")]                              // Already Emoji Style
-    [DataRow("\u263A\uFE0E", "\u263A\uFE0E")]                              // Text Style Asked For
-    [DataRow("\u261D\U0001F3FD", "\u261D\U0001F3FD")]                      // A Skin Tone Follows
-    [DataRow("\u2764\u200D\U0001F525", "\u2764\uFE0F\u200D\U0001F525")]    // Heart On Fire
+    [DataRow("\u263A", "\u263A\uFE0F")]                                    // Smiling face
+    [DataRow("I \u2764 it \u2600", "I \u2764\uFE0F it \u2600\uFE0F")]       // Heart and sun
+    [DataRow("\u270C", "\u270C\uFE0F")]                                    // Victory hand
+    [DataRow("\u263A\uFE0F", "\u263A\uFE0F")]                              // Already in emoji style
+    [DataRow("\u263A\uFE0E", "\u263A\uFE0E")]                              // The sender requests text style
+    [DataRow("\u261D\U0001F3FD", "\u261D\U0001F3FD")]                      // A skin tone follows
+    [DataRow("\u2764\u200D\U0001F525", "\u2764\uFE0F\u200D\U0001F525")]    // Heart on fire
     [DataRow("\U0001F600 1 # * \u00A9 \u00AE \u2122 \u2192", "\U0001F600 1 # * \u00A9 \u00AE \u2122 \u2192")]
-    [DataRow("\U0001F441", "\U0001F441\uFE0F")]                            // Eye (Astral, Text Default)
+    [DataRow("\U0001F441", "\U0001F441\uFE0F")]                            // Eye: astral, text default
     public void WithColorEmoji_AddsVs16ToTextDefaultEmoji(string text, string expected) =>
         Assert.AreEqual(expected, ChatFormat.WithColorEmoji(text));
 
     /// <summary>
-    /// The lookup finds both ends of the ranges and nothing in the gaps between them.
+    /// The lookup finds both ends of each range and finds nothing in the gaps between the ranges.
     /// </summary>
     [TestMethod]
-    [DataRow("\u203C", "\u203C\uFE0F")]                      // First Range
-    [DataRow("\U0001F6F3", "\U0001F6F3\uFE0F")]              // Last Range
-    [DataRow("\u2199", "\u2199\uFE0F")]                      // A Range's End
-    [DataRow("\u219A", "\u219A")]                            // Just After It
-    [DataRow("\u203B", "\u203B")]                            // Just Before The First
-    [DataRow("\U0001F6F4", "\U0001F6F4")]                    // Just After The Last (Emoji Style Already)
+    [DataRow("\u203C", "\u203C\uFE0F")]                      // First range
+    [DataRow("\U0001F6F3", "\U0001F6F3\uFE0F")]              // Last range
+    [DataRow("\u2199", "\u2199\uFE0F")]                      // End of a range
+    [DataRow("\u219A", "\u219A")]                            // Just after that end
+    [DataRow("\u203B", "\u203B")]                            // Just before the first range
+    [DataRow("\U0001F6F4", "\U0001F6F4")]                    // Just after the last range, already in emoji style
     public void WithColorEmoji_RangeEdges(string text, string expected) =>
         Assert.AreEqual(expected, ChatFormat.WithColorEmoji(text));
 
     /// <summary>
-    /// Emoji alone (spaces between allowed) show big with no bubble; any letter, digit or plain symbol keeps the bubble.
+    /// A message of only emoji, with spaces allowed, shows big and has no bubble.
+    /// A letter, a digit or a plain symbol keeps the bubble.
     /// </summary>
     [TestMethod]
-    [DataRow("\U0001F600", true)]                                          // Grinning Face
-    [DataRow(" \U0001F600 \U0001F44D\U0001F3FD ", true)]                   // Spaces, A Skin Tone
-    [DataRow("❤", true)]                                              // Heart (Text Default)
-    [DataRow("❤️‍\U0001F525", true)]                        // Heart On Fire
-    [DataRow("\U0001F1FA\U0001F1F8", true)]                                // A Flag
-    [DataRow("1️⃣", true)]                                       // Keycap One
-    [DataRow("⭐⚡", true)]                                        // Star, Zap (Emoji Style Already)
+    [DataRow("\U0001F600", true)]                                          // Grinning face
+    [DataRow(" \U0001F600 \U0001F44D\U0001F3FD ", true)]                   // Spaces and a skin tone
+    [DataRow("❤", true)]                                              // Heart with a text default
+    [DataRow("❤️‍\U0001F525", true)]                        // Heart on fire
+    [DataRow("\U0001F1FA\U0001F1F8", true)]                                // A flag
+    [DataRow("1️⃣", true)]                                       // Keycap 1
+    [DataRow("⭐⚡", true)]                                        // Star and zap, already in emoji style
     [DataRow("", false)]
     [DataRow("   ", false)]
     [DataRow("ok \U0001F600", false)]
     [DataRow("1", false)]
-    [DataRow("© ™ →", false)]                               // (c), TM, An Arrow
-    [DataRow("★✓■", false)]                                 // Star, Check Mark, Square (Plain Symbols)
-    [DataRow("───", false)]                                 // Box Drawing
+    [DataRow("© ™ →", false)]                               // Copyright, trademark and an arrow
+    [DataRow("★✓■", false)]                                 // Star, check mark and square, all plain symbols
+    [DataRow("───", false)]                                 // Box drawing
     [DataRow("⠁", false)]                                             // Braille
-    [DataRow("a️", false)]                                            // VS16 On A Letter
-    [DataRow("#️", false)]                                            // VS16 Without A Keycap
-    [DataRow("☺︎", false)]                                       // Text Style Asked For
-    [DataRow("\U0001F1FA", false)]                                         // Half A Flag
-    [DataRow("\U0001F130", false)]                                         // A Boxed Letter
-    [DataRow("\U0001F004", true)]                                          // Mahjong Red Dragon (An Emoji Tile)
-    [DataRow("\uD83D", false)]                                             // A Broken Surrogate
+    [DataRow("a️", false)]                                            // VS16 on a letter
+    [DataRow("#️", false)]                                            // VS16 without a keycap
+    [DataRow("☺︎", false)]                                       // The sender requests text style
+    [DataRow("\U0001F1FA", false)]                                         // Half of a flag
+    [DataRow("\U0001F130", false)]                                         // A boxed letter
+    [DataRow("\U0001F004", true)]                                          // Mahjong red dragon, an emoji tile
+    [DataRow("\uD83D", false)]                                             // A broken surrogate
     public void IsEmojiOnly(string text, bool expected) =>
         Assert.AreEqual(expected, ChatFormat.IsEmojiOnly(text));
 
     /// <summary>
-    /// A selection in the shown text copies as the original text: the VS16 added for showing is dropped, one the sender
-    /// typed is kept.
+    /// A selection in the shown text copies as the original text.
+    /// The copy drops the VS16 that the display added and keeps a VS16 that the sender typed.
     /// </summary>
     [TestMethod]
     [DataRow("I \u2764 it", "\u2764\uFE0F it", "\u2764 it")]

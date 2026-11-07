@@ -11,11 +11,12 @@ namespace GMessages.Presentation.Notifications;
 public static class NotificationXml
 {
     /// <summary>
-    /// Builds the toast: title, body, optional avatar, reply box, Snooze and Dismiss.
+    /// Builds a message toast with the title, the body, an optional avatar, a reply box, Snooze and Dismiss.
     /// </summary>
     /// <remarks>
-    /// Every value goes in through <see cref="XElement"/>/<see cref="XAttribute"/>, so markup in a message is escaped.
-    /// Characters XML can't hold at all (control characters, lone surrogates) are dropped from the title and body.
+    /// Every value goes in through <see cref="XElement"/> or <see cref="XAttribute"/>, so the XML escapes markup in a
+    /// message. The method removes the characters that XML cannot hold from the title and the body. Control characters
+    /// and lone surrogates are examples.
     /// </remarks>
     /// <param name="n">The toast content.</param>
     /// <param name="avatarFileUri">A file URI for the avatar picture, or null for none.</param>
@@ -27,7 +28,6 @@ public static class NotificationXml
 
         string id = Uri.EscapeDataString(n.Group);
 
-        // Visual
         var binding = new XElement("binding", new XAttribute("template", "ToastGeneric"), new XElement("text", XmlSafe(n.Title)), new XElement("text", XmlSafe(n.Body)));
 
         if (avatarFileUri is not null)
@@ -35,16 +35,15 @@ public static class NotificationXml
             binding.Add(new XElement("image", new XAttribute("placement", "appLogoOverride"), new XAttribute("hint-crop", "circle"), new XAttribute("src", avatarFileUri)));
         }
 
-        // The Code Was Copied: Said In Windows' Small Line Under The Text
+        // The attribution text is the small line that Windows shows under the body.
         if (n.CodeCopied)
         {
             binding.Add(new XElement("text", new XAttribute("placement", "attribution"), ChatCopy.CodeCopied));
         }
 
-        // Actions: Windows' Quick Reply (A Text Input With A Button Tied To It By hint-inputId, Its Icon From imageUri),
-        // The App's Own Snooze (Its Length Is A Setting, Which Windows' System Snooze Can't Take Without A Picker) And
-        // Windows' Dismiss. Every <input> Before Any <action>, As The Toast Schema Requires (Else Windows Shows "New
-        // notification")
+        // The reply button belongs to the text input through hint-inputId and gets its icon from imageUri.
+        // The app has its own Snooze, because the system Snooze cannot use the length setting without a picker.
+        // The toast schema requires every <input> before the first <action>. Else Windows shows "New notification".
         string about = $"conversation={id}&message={Uri.EscapeDataString(n.Tag)}";
         var actions  = new XElement("actions",
             new XElement("input", new XAttribute("id", "reply"), new XAttribute("type", "text"), new XAttribute("placeHolderContent", ChatCopy.Reply)),
@@ -64,7 +63,7 @@ public static class NotificationXml
     }
 
     /// <summary>
-    /// Builds the toast that says a reply from a toast wasn't sent. Clicking it opens the conversation.
+    /// Builds the toast that says the app did not send a reply from a toast. A click on it opens the conversation.
     /// </summary>
     /// <param name="conversationId">The conversation the reply was for.</param>
     /// <param name="title">The conversation name.</param>
@@ -81,7 +80,7 @@ public static class NotificationXml
         return toast.ToString(SaveOptions.DisableFormatting);
     }
 
-    // Drops Characters XML Can't Hold, Keeping Valid Surrogate Pairs (Emoji)
+    // Removes the characters that XML cannot hold. A valid surrogate pair, such as an emoji, stays.
     private static string XmlSafe(string s)
     {
         var kept = new StringBuilder(s.Length);

@@ -21,7 +21,8 @@ public sealed class VoiceDraftTests
     public void Cleanup() => File.Delete(_path);
 
     /// <summary>
-    /// Idle, then Recording, then Preview, then Idle when taken for sending: the audio comes out and the temp file is gone.
+    /// The state goes from Idle to Recording to Preview, then to Idle when the app takes the audio for sending.
+    /// The audio comes out and the temp file is gone.
     /// </summary>
     [TestMethod]
     public void RecordStopTake_IdleRecordingPreviewIdle_DeletesFile()
@@ -65,7 +66,8 @@ public sealed class VoiceDraftTests
     }
 
     /// <summary>
-    /// Recording, then Paused, then Recording again, then Done from either: the recording keeps its file until Preview.
+    /// The state goes from Recording to Paused, then to Recording again, then to Done from either state.
+    /// The recording keeps its file until Preview.
     /// </summary>
     [TestMethod]
     public void PauseResume_RecordingPausedRecording_ThenPreview()
@@ -84,7 +86,6 @@ public sealed class VoiceDraftTests
         Assert.IsTrue(voice.Stop([7], Wave));
         Assert.IsTrue(voice.IsPreview);
 
-        // Done Straight From Paused
         var paused = new VoiceDraft();
         paused.Start(_path);
         paused.Pause();
@@ -93,7 +94,8 @@ public sealed class VoiceDraftTests
     }
 
     /// <summary>
-    /// Cancel from Paused goes back to Idle and deletes the temp file; Pause and Resume from the wrong state do nothing.
+    /// Cancel from Paused goes back to Idle and deletes the temp file.
+    /// Pause and Resume from the wrong state do nothing.
     /// </summary>
     [TestMethod]
     public void Paused_CancelDeletesFile_WrongStepsChangeNothing()
@@ -113,7 +115,8 @@ public sealed class VoiceDraftTests
     }
 
     /// <summary>
-    /// Steps from the wrong state change nothing: a second start, a stop that comes after Cancel, a take with nothing recorded.
+    /// Steps from the wrong state change nothing. Examples are a second start, a stop after Cancel and a take with
+    /// nothing recorded.
     /// </summary>
     [TestMethod]
     public void WrongState_ChangesNothing()
@@ -132,8 +135,8 @@ public sealed class VoiceDraftTests
     }
 
     /// <summary>
-    /// Send sends the recording first as "Voice message.m4a" (audio/mp4), then the text; closing the chat drops a
-    /// recording in progress with its file.
+    /// Send sends the recording first as "Voice message.m4a" with type audio/mp4, then the text. Closing the chat drops
+    /// a recording in progress with its file.
     /// </summary>
     [TestMethod]
     public async Task ChatSend_SendsVoiceAsAudioMp4_CloseDeletesRecording()

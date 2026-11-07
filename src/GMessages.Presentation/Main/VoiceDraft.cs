@@ -4,45 +4,51 @@ using GMessages.Presentation.Messaging;
 namespace GMessages.Presentation.Main;
 
 /// <summary>
-/// Where a voice message being made stands: nothing yet, recording, or recorded and waiting to be sent.
+/// Tells the state of a new voice message: nothing yet, a recording, or a recording that waits for Send.
 /// </summary>
 public enum VoiceDraftState
 {
-    /// <summary>No voice message: the mic button shows.</summary>
+    /// <summary>No voice message exists, and the mic button shows.</summary>
     Idle,
 
-    /// <summary>Recording: the compose area shows the timer, the live waveform, Cancel recording, Pause and Done.</summary>
+    /// <summary>
+    /// The recording runs. The compose area shows the timer, the live waveform, Cancel recording, Pause and Done.
+    /// </summary>
     Recording,
 
-    /// <summary>Paused: the recording bar stays, with its timer and waveform still, and Pause becomes Resume.</summary>
+    /// <summary>
+    /// The recording is paused. The recording bar stays with a still timer and waveform, and Pause becomes Resume.
+    /// </summary>
     Paused,
 
-    /// <summary>Recorded: the preview chip shows over the message box, to play, send or remove.</summary>
+    /// <summary>
+    /// The recording is done. The preview chip shows over the message box, to play, send or remove it.
+    /// </summary>
     Preview,
 }
 
 /// <summary>
-/// The chat's voice message being made: Idle, then Recording (paused and resumed any number of times), then Preview,
-/// then Idle again once sent or removed.
+/// Holds the new voice message of the chat. It goes from Idle to Recording, then to Preview, then to Idle after Send or
+/// a removal.
 /// </summary>
 /// <remarks>
 /// <para>
-/// The recording goes straight to a temp file (in the media store's private temp folder). <see cref="Cancel"/> (from
-/// any state) and <see cref="Take"/> (sending) delete it, so no recording outlives its use; the chat cancels on close.
-/// A step from the wrong state does nothing and says so, so a late callback (a recorder that finished after Cancel)
-/// can't bring a recording back.
+/// A recording can pause and resume any number of times. It goes directly to a temp file in the private temp folder of
+/// the media store. <see cref="Cancel"/> from any state and <see cref="Take"/> for the send delete the file. Thus no
+/// recording lives longer than its use, and the chat cancels on close. A step from the wrong state does nothing and
+/// returns false. Thus a late callback cannot bring a recording back, such as a recorder that finished after Cancel.
 /// </para>
 /// <para>
-/// When the microphone can't be used (access off, or no device), the chat pane cancels and shows its microphone
-/// dialog. The audio and file path are never logged.
+/// When the chat cannot use the microphone, the chat pane cancels and shows its microphone dialog. The access can be
+/// off, or no device exists. The log never gets the audio or the file path.
 /// </para>
 /// </remarks>
 public sealed class VoiceDraft : INotifyPropertyChanged
 {
-    /// <summary>The file name a voice message is sent with, as the official app names it.</summary>
+    /// <summary>A voice message goes with this file name, as the official app names it.</summary>
     public const string FileName = "Voice message.m4a";
 
-    /// <summary>The mime type a voice message is sent with (LibGM's AUDIO_MP4).</summary>
+    /// <summary>A voice message goes with this mime type, the AUDIO_MP4 of LibGM.</summary>
     public const string Mime = "audio/mp4";
 
     private static readonly PropertyChangedEventArgs AllChanged = new(string.Empty);
@@ -50,40 +56,41 @@ public sealed class VoiceDraft : INotifyPropertyChanged
     /// <inheritdoc/>
     public event PropertyChangedEventHandler? PropertyChanged;
 
-    /// <summary>Gets where the voice message stands.</summary>
+    /// <summary>Gets the state of the voice message.</summary>
     public VoiceDraftState State { get; private set; }
 
-    /// <summary>Gets whether nothing is recorded or recording (the mic button shows).</summary>
+    /// <summary>Gets whether nothing is recorded or in a recording. The mic button then shows.</summary>
     public bool IsIdle => State == VoiceDraftState.Idle;
 
-    /// <summary>Gets whether recording is under way.</summary>
+    /// <summary>Gets whether the recording runs.</summary>
     public bool IsRecording => State == VoiceDraftState.Recording;
 
-    /// <summary>Gets whether recording is paused.</summary>
+    /// <summary>Gets whether the recording is paused.</summary>
     public bool IsPaused => State == VoiceDraftState.Paused;
 
-    /// <summary>Gets whether a recording is under way or paused (the recording bar shows).</summary>
+    /// <summary>Gets whether the recording runs or is paused. The recording bar then shows.</summary>
     public bool IsCapturing => IsRecording || IsPaused;
 
-    /// <summary>Gets whether a recording waits to be sent (the preview chip shows).</summary>
+    /// <summary>Gets whether a recording waits for Send. The preview chip then shows.</summary>
     public bool IsPreview => State == VoiceDraftState.Preview;
 
-    /// <summary>Gets the temp file being recorded to, or empty when Idle.</summary>
+    /// <summary>Gets the temp file of the recording, or empty when Idle.</summary>
     public string FilePath { get; private set; } = string.Empty;
 
     /// <summary>Gets the recorded audio while in Preview, else empty.</summary>
     public byte[] Audio { get; private set; } = [];
 
-    /// <summary>Gets the recording's waveform and length while in Preview, else null.</summary>
+    /// <summary>Gets the waveform and the length of the recording while in Preview, else null.</summary>
     public VoiceWave? Wave { get; private set; }
 
-    /// <summary>Gets the recording's length as the chip shows it, or empty.</summary>
+    /// <summary>Gets the length of the recording as the chip shows it, or empty.</summary>
     public string LengthText => Wave is null ? string.Empty : VoiceWave.LengthText(Wave.Length);
 
     /// <summary>
-    /// Deletes a recording's temp file, if it is there; a file still held open stays (the caller deletes it again later).
+    /// Deletes the temp file of a recording when it exists. A file that is still open stays, and the caller deletes it
+    /// again later.
     /// </summary>
-    /// <param name="path">The file's path, or empty for none.</param>
+    /// <param name="path">The path of the file, or empty for none.</param>
     public static void DeleteFile(string path)
     {
         if (path.Length == 0)
@@ -104,10 +111,10 @@ public sealed class VoiceDraft : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Starts recording to a temp file: Idle to Recording.
+    /// Starts the recording to a temp file: Idle to Recording.
     /// </summary>
-    /// <param name="path">The temp file the recording goes to.</param>
-    /// <returns>False (nothing changes) unless Idle.</returns>
+    /// <param name="path">The temp file for the recording.</param>
+    /// <returns>False, with no change, unless Idle.</returns>
     public bool Start(string path)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
@@ -123,9 +130,10 @@ public sealed class VoiceDraft : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Pauses recording: Recording to Paused. The file keeps what was recorded, and resuming adds to it.
+    /// Pauses the recording: Recording to Paused. The file keeps the recorded audio, and <see cref="Resume"/> adds to
+    /// it.
     /// </summary>
-    /// <returns>False (nothing changes) unless Recording.</returns>
+    /// <returns>False, with no change, unless Recording.</returns>
     public bool Pause()
     {
         if (!IsRecording)
@@ -140,7 +148,7 @@ public sealed class VoiceDraft : INotifyPropertyChanged
     /// <summary>
     /// Resumes a paused recording: Paused to Recording.
     /// </summary>
-    /// <returns>False (nothing changes) unless Paused.</returns>
+    /// <returns>False, with no change, unless Paused.</returns>
     public bool Resume()
     {
         if (!IsPaused)
@@ -153,11 +161,11 @@ public sealed class VoiceDraft : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Ends recording with what was recorded: Recording or Paused to Preview.
+    /// Ends the recording with the recorded audio: Recording or Paused to Preview.
     /// </summary>
-    /// <param name="audio">The recorded file's bytes.</param>
-    /// <param name="wave">Its waveform and length.</param>
-    /// <returns>False (nothing changes) unless Recording or Paused.</returns>
+    /// <param name="audio">The bytes of the recorded file.</param>
+    /// <param name="wave">The waveform and the length of the recording.</param>
+    /// <returns>False, with no change, unless Recording or Paused.</returns>
     public bool Stop(byte[] audio, VoiceWave wave)
     {
         ArgumentNullException.ThrowIfNull(audio);
@@ -175,11 +183,11 @@ public sealed class VoiceDraft : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Drops the recording, from any state: back to Idle with its temp file deleted.
+    /// Drops the recording from any state. The state goes to Idle, and the call deletes the temp file.
     /// </summary>
     public void Cancel()
     {
-        if (IsIdle && FilePath.Length == 0)
+        if (IsIdle)
         {
             return;
         }
@@ -189,9 +197,9 @@ public sealed class VoiceDraft : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Hands the recording over for sending: Preview to Idle, with its temp file deleted.
+    /// Gives the recording to the send: Preview to Idle. The call deletes the temp file.
     /// </summary>
-    /// <returns>The recorded audio, or null (nothing changes) unless in Preview.</returns>
+    /// <returns>The recorded audio, or null with no change unless in Preview.</returns>
     public byte[]? Take()
     {
         if (!IsPreview)
@@ -205,7 +213,6 @@ public sealed class VoiceDraft : INotifyPropertyChanged
         return audio;
     }
 
-    // Deletes The Temp File And Lets Go Of The Audio
     private void Reset()
     {
         DeleteFile(FilePath);

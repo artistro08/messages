@@ -3,20 +3,17 @@ using GMessages.Protocol.Proto;
 namespace GMessages.Presentation.Messaging;
 
 /// <summary>
-/// The slim version of a conversation the chat list needs.
+/// Holds the slim copy of a conversation that the chat list needs.
 /// </summary>
-/// <param name="Id">The conversation ID.</param>
-/// <param name="Name">The conversation name.</param>
 /// <param name="IsGroup">True for a group chat.</param>
-/// <param name="Status">Where the phone keeps the conversation (active, archived, spam...).</param>
-/// <param name="Unread">True when there are unread messages.</param>
-/// <param name="Pinned">True when pinned.</param>
+/// <param name="Status">Where the phone keeps the conversation: active, archived, spam and so on.</param>
+/// <param name="Unread">True when the conversation has unread messages.</param>
 /// <param name="LastMessageTime">When the newest message arrived.</param>
 /// <param name="Snippet">The text of the newest message.</param>
-/// <param name="SnippetFromMe">True when the newest message is the owner's.</param>
+/// <param name="SnippetFromMe">True when the newest message is from the owner.</param>
 /// <param name="AvatarHexColor">The avatar color as hex, or empty.</param>
-/// <param name="Participants">Everyone in the conversation.</param>
-/// <param name="DefaultOutgoingId">The participant ID messages are sent as.</param>
+/// <param name="Participants">All people in the conversation.</param>
+/// <param name="DefaultOutgoingId">The participant ID that messages go as.</param>
 /// <param name="LatestMessageId">The ID of the newest message.</param>
 public sealed record ConversationInfo(
     string Id,
@@ -33,48 +30,58 @@ public sealed record ConversationInfo(
     string DefaultOutgoingId,
     string LatestMessageId)
 {
-    /// <summary>True for conversations in the main list (not archived, spam or deleted), and not <see cref="IsEmpty"/>.</summary>
+    /// <summary>Gets whether the conversation is in the main list: active and not <see cref="IsEmpty"/>.</summary>
     public bool IsMainView => Status == ConversationStatus.Active && !IsEmpty;
 
     /// <summary>
-    /// True when the chat holds no message, only the "conversation created" system line of a one-on-one chat: the
-    /// phone keeps the conversation but shows it nowhere, and neither does the app.
+    /// Gets whether a one-on-one chat holds no message, only its "conversation created" system line. The phone keeps
+    /// the conversation but shows it nowhere, and the app also does not show it.
     /// </summary>
     /// <remarks>
-    /// A group MMS from someone not on RCS first lands, undownloaded, in a one-on-one chat the phone makes for them
-    /// (just this line and the stand-in); the phone then moves the message into the group and leaves the chat active
-    /// with the line as its newest message. A new group's own created line keeps the group visible, as on the phone.
+    /// A person not on RCS sends a group MMS. The MMS first lands, not downloaded, in a one-on-one chat that the phone
+    /// makes for that person. That chat holds only this line and the stand-in. The phone then moves the message into
+    /// the group. The chat stays active, with the line as its newest message. The created line of a new group keeps
+    /// the group visible, as on the phone.
     /// </remarks>
     public bool IsEmpty => LatestMessageStatus is MessageStatusType.TombstoneOneOnOneSmsCreated
         or MessageStatusType.TombstoneOneOnOneRcsCreated
         or MessageStatusType.TombstoneEncryptedOneOnOneRcsCreated;
 
-    /// <summary>Gets the phone's status of the newest message (its delivery state, or the system line it is), or unknown.</summary>
+    /// <summary>Gets the phone status of the newest message: its delivery state, its system line, or unknown.</summary>
     public MessageStatusType LatestMessageStatus { get; init; }
 
-    /// <summary>Gets whether the conversation is an RCS (chat) conversation rather than SMS.</summary>
+    /// <summary>Gets whether the conversation is an RCS chat conversation and not SMS.</summary>
     public bool IsRcs { get; init; }
 
-    /// <summary>Gets whether the phone says the chat is end-to-end encrypted (conversation field 39), or null when it didn't say.</summary>
+    /// <summary>
+    /// Gets whether the phone says that the chat is end-to-end encrypted, or null when the phone did not say. The flag
+    /// comes from field 39 of the conversation.
+    /// </summary>
     public bool? IsEncrypted { get; init; }
 
-    /// <summary>Gets the name the phone gives the newest message's sender (shown before a group's snippet), or empty.</summary>
+    /// <summary>
+    /// Gets the name that the phone gives the sender of the newest message, or empty. A group snippet shows it first.
+    /// </summary>
     public string SnippetSender { get; init; } = string.Empty;
 
-    /// <summary>Gets whether the conversation is muted on the phone, so its messages don't notify.</summary>
+    /// <summary>Gets whether the conversation is muted on the phone, so its messages do not notify.</summary>
     public bool IsMuted { get; init; }
 
     /// <summary>
-    /// Gets the label of the newest message's media ("Image", "Video", "GIF", "Voice message" or the file name), shown
-    /// when the phone sent no snippet text; empty when unknown or not media.
+    /// Gets the label of the media of the newest message: "Image", "Video", "GIF", "Voice message" or the file name.
+    /// The list shows it when the phone sent no snippet text. It is empty when unknown or not media.
     /// </summary>
-    /// <remarks>The phone's snippet is empty for media with no caption; the store fills this from the saved message.</remarks>
+    /// <remarks>
+    /// The phone snippet is empty for media with no caption, so the store fills this from the saved message.
+    /// </remarks>
     public string SnippetMedia { get; init; } = string.Empty;
 
     /// <summary>
-    /// Copies the fields the app needs out of a protocol conversation.
+    /// Copies the fields that the app needs from a protocol conversation.
     /// </summary>
-    /// <remarks>The phone's timestamps are in microseconds (<c>time.UnixMicro</c> in the Go connector).</remarks>
+    /// <remarks>
+    /// The timestamps of the phone are in microseconds, as <c>time.UnixMicro</c> in the Go connector reads them.
+    /// </remarks>
     /// <param name="c">The protocol conversation.</param>
     /// <returns>The slim record.</returns>
     public static ConversationInfo From(Conversation c)
@@ -105,20 +112,28 @@ public sealed record ConversationInfo(
     }
 
     /// <summary>
-    /// Gets whether the phone says a conversation is muted.
+    /// Gets whether the phone says that a conversation is muted.
     /// </summary>
     /// <remarks>
-    /// Field 7 of the conversation, which LibGM doesn't name: the Plan 5 probe saw the phone set it to 1 when a chat
-    /// was muted and drop it on unmute.
+    /// The flag is field 7 of the conversation, which LibGM does not name. In the Plan 5 probe, the phone set it to 1
+    /// on mute. The phone dropped it on unmute.
     /// </remarks>
     /// <param name="c">The protocol conversation.</param>
-    /// <returns>True when muted.</returns>
+    /// <returns>True when the conversation is muted.</returns>
     internal static bool MutedOf(Conversation c) => c.Muted == ConversationMuteStatus.Mute;
 
     /// <summary>
     /// Finds a participant by ID.
     /// </summary>
-    /// <param name="id">The participant ID.</param>
-    /// <returns>The participant, or null when not in this conversation.</returns>
+    /// <returns>The participant, or null when the participant is not in this conversation.</returns>
     public ParticipantInfo? FindParticipant(string id) => Participants.FirstOrDefault(p => p.Id == id);
+
+    /// <summary>
+    /// Tells whether a participant ID is the owner: the default outgoing ID, or a participant marked as the owner.
+    /// An empty ID is never the owner.
+    /// </summary>
+    /// <param name="participantId">The participant ID to check.</param>
+    /// <returns>True when the ID is the owner in this conversation.</returns>
+    public bool IsMine(string participantId) =>
+        participantId.Length > 0 && (participantId == DefaultOutgoingId || FindParticipant(participantId)?.IsMe == true);
 }

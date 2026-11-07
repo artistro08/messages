@@ -14,10 +14,6 @@ public sealed class AvatarCacheTests
 
     private static readonly string[] AnnAndBo = ["p-ann", "p-bo"];
 
-    // =========================================================================
-    // RIG
-    // =========================================================================
-
     private sealed class Rig : IDisposable
     {
         public Rig()
@@ -48,10 +44,9 @@ public sealed class AvatarCacheTests
         }
     }
 
-    // =========================================================================
-    // TESTS
-    // =========================================================================
-
+    /// <summary>
+    /// Requests that arrive within 50 ms go to the phone in one batch call.
+    /// </summary>
     [TestMethod]
     public async Task RequestsWithin50ms_OneBatchCall()
     {
@@ -85,7 +80,7 @@ public sealed class AvatarCacheTests
     {
         using var rig = new Rig();
 
-        // 201 IDs In One Batch: The First Is The Oldest And Falls Out
+        // 201 IDs in one batch: the first ID is the oldest and leaves the cache.
         await Task.WhenAll(Enumerable.Range(0, 201).Select(i => rig.Cache.GetAsync("p-" + i, Ct)));
         await rig.Cache.GetAsync("p-200", Ct);
         Assert.HasCount(1, rig.Client.ThumbnailCalls, "newest still cached");
@@ -107,12 +102,32 @@ public sealed class AvatarCacheTests
         Assert.EndsWith(".png", path);
         Assert.MatchesRegex(@"^[0-9a-f]{32}\.png$", Path.GetFileName(path), "a hash, never the ID, names the file");
 
-        // A Second Cache (Like The Notifications' Own) Reuses The File Without Asking The Phone
+        // A second cache, like the one the notifications use, reuses the file and does not ask the phone.
         var other = new AvatarCache(rig.Store, rig.Folder);
         Assert.AreEqual(uri, await other.GetFileUriAsync("p-ann", Ct));
         Assert.HasCount(1, rig.Client.ThumbnailCalls);
 
-        // No Photo: No File
         Assert.IsNull(await rig.Cache.GetFileUriAsync("p-bo", Ct));
+    }
+
+    /// <summary>
+    /// A sign-out clears the cache while a batch waits on the old phone. The batch still answers its callers, but the
+    /// cache does not remember that answer.
+    /// </summary>
+    [TestMethod]
+    public async Task Clear_DuringABatch_ForgetsItsAnswer()
+    {
+        using var rig            = new Rig();
+        var gate                 = new TaskCompletionSource();
+        rig.Client.ThumbnailGate = gate;
+
+        Task<byte[]?> first = rig.Cache.GetAsync("p-ann", Ct);
+        Assert.IsTrue(SpinWait.SpinUntil(() => rig.Client.ThumbnailCalls.Count == 1, TimeSpan.FromSeconds(10)), "batch sent");
+        rig.Cache.Clear();
+        gate.SetResult();
+        CollectionAssert.AreEqual(AnnPhoto, await first);
+
+        await rig.Cache.GetAsync("p-ann", Ct);
+        Assert.HasCount(2, rig.Client.ThumbnailCalls, "the cleared batch must not fill the cache");
     }
 }

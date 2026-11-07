@@ -48,7 +48,6 @@ public sealed class MainViewModelTests
         Assert.IsTrue(vm.IsStartChatOpen);
         Assert.IsTrue(vm.ShowChatPane);
 
-        // Wide: Never Hides The List
         vm.IsNarrow = false;
         Assert.IsFalse(vm.ShowChatPane);
     }
@@ -125,8 +124,8 @@ public sealed class MainViewModelTests
     }
 
     /// <summary>
-    /// The archived list is made and loaded once, shows in place of the inbox, reloads with the other lists, and Back
-    /// returns to the inbox.
+    /// The archived list is made and loaded once. It shows in place of the inbox and reloads with the other lists.
+    /// Back returns to the inbox.
     /// </summary>
     [TestMethod]
     public async Task OpenArchived_LoadsArchiveFolder_BackToInbox()
@@ -145,7 +144,6 @@ public sealed class MainViewModelTests
         Assert.AreEqual("z", string.Join(",", vm.CurrentList.Rows.Select(r => r.Id)));
         Assert.AreEqual(ListConversationsRequest.Types.Folder.Archive, rig.Client.ListCalls.Last().Folder);
 
-        // Opening Again Keeps The List And Loads Nothing
         ConversationListViewModel archived = vm.CurrentList;
         int calls                          = rig.Client.ListCalls.Count;
         vm.BackToInbox();
@@ -158,14 +156,12 @@ public sealed class MainViewModelTests
         Assert.AreSame(archived, vm.CurrentList);
         Assert.AreEqual(calls, rig.Client.ListCalls.Count);
 
-        // The Spam List Is Its Own
         vm.OpenSpamBlocked();
         Assert.AreEqual(ConversationFolder.SpamBlocked, vm.Folder);
         Assert.IsFalse(vm.IsArchivedView);
         Assert.AreSame(vm.SpamBlocked, vm.CurrentList);
         Assert.AreNotSame(archived, vm.CurrentList);
 
-        // Back Online: The Inbox, Archived And Spam Lists Reload, Once Each
         calls = rig.Client.ListCalls.Count;
         vm.ApplyState(ConnectionState.Reconnecting);
         vm.ApplyState(ConnectionState.Connected);
@@ -173,7 +169,7 @@ public sealed class MainViewModelTests
     }
 
     /// <summary>
-    /// An action that moves the open conversation out of its folder closes the chat; one on another conversation
+    /// An action that moves the open conversation out of its folder closes the chat. An action on another conversation
     /// leaves the open chat alone.
     /// </summary>
     [TestMethod]
@@ -198,8 +194,9 @@ public sealed class MainViewModelTests
     }
 
     /// <summary>
-    /// Archiving shows the Undo bar ("Chat archived"); Undo unarchives it, its row goes back in its place, and no
-    /// second offer shows. A second archive replaces the bar, which hides after five seconds; mute and unarchive show none.
+    /// Archiving shows the Undo bar with "Chat archived". Undo unarchives the conversation, its row goes back in its
+    /// place, and no second offer shows. A second archive replaces the bar, which hides after 5 seconds.
+    /// Mute and unarchive show no bar.
     /// </summary>
     [TestMethod]
     public async Task Archive_OffersUndo_UndoPutsTheRowBack_BarTimesOut()
@@ -218,7 +215,6 @@ public sealed class MainViewModelTests
         Assert.IsFalse(vm.HasUndo);
         Assert.AreEqual("a,b,c", string.Join(",", vm.Inbox.Rows.Select(r => r.Id)));
 
-        // A Second Archive Replaces The Bar, Which Times Out
         Assert.IsTrue(await vm.RunAsync("a", ConversationAction.Archive));
         Assert.IsTrue(await vm.RunAsync("c", ConversationAction.Archive));
         time.Advance(MainViewModel.UndoTime - TimeSpan.FromSeconds(1));
@@ -229,14 +225,14 @@ public sealed class MainViewModelTests
         Assert.IsTrue(await vm.RunAsync("b", ConversationAction.Mute));
         Assert.IsFalse(vm.HasUndo);
 
-        // Unarchive Offers No Undo (Owner: One Way Only)
+        // Unarchive offers no undo. The owner wants undo for archive only.
         Assert.IsTrue(await vm.RunAsync("a", ConversationAction.Unarchive));
         Assert.IsFalse(vm.HasUndo);
     }
 
     /// <summary>
-    /// Undo (Ctrl + Z) works any time in the session, bar or no bar: each one puts back the latest archive left, newest
-    /// first; a conversation unarchived another way is no longer offered.
+    /// Undo with Ctrl + Z works at any time in the session, with the bar or without it. Each undo puts back the latest
+    /// archive that remains, newest first. A conversation unarchived another way is no longer offered.
     /// </summary>
     [TestMethod]
     public async Task Undo_PutsBackEachArchiveOfTheSession_AfterTheBarHid()
@@ -255,7 +251,6 @@ public sealed class MainViewModelTests
         Assert.IsFalse(vm.HasUndo);
         Assert.IsTrue(vm.CanUndo);
 
-        // Bo Put Back By Hand: Not Offered Again
         Assert.IsTrue(await vm.RunAsync("b", ConversationAction.Unarchive));
 
         Assert.IsTrue(await vm.UndoAsync());
@@ -264,6 +259,50 @@ public sealed class MainViewModelTests
         Assert.AreEqual("a,b,c", string.Join(",", vm.Inbox.Rows.Select(r => r.Id)));
         Assert.IsFalse(vm.CanUndo);
         Assert.IsFalse(await vm.UndoAsync());
+    }
+
+    /// <summary>
+    /// An undo that fails keeps its archive as the latest one, so the next undo puts back the same conversation.
+    /// </summary>
+    [TestMethod]
+    public async Task Undo_Fails_NextUndoPutsBackTheSameConversation()
+    {
+        using var rig = new MainRig();
+        using MainViewModel vm = await NewMainAsync(rig);
+        Assert.IsTrue(await vm.RunAsync("a", ConversationAction.Archive));
+        Assert.IsTrue(await vm.RunAsync("b", ConversationAction.Archive));
+
+        rig.Client.RefuseUpdates = true;
+        Assert.IsFalse(await vm.UndoAsync());
+
+        rig.Client.RefuseUpdates = false;
+        Assert.IsTrue(await vm.UndoAsync());
+        Assert.AreEqual("b,c", string.Join(",", vm.Inbox.Rows.Select(r => r.Id)));
+    }
+
+    /// <summary>
+    /// An archive happens while an undo waits on the phone, and the undo then fails. The next undo puts back the newer
+    /// archive, which the Undo bar shows.
+    /// </summary>
+    [TestMethod]
+    public async Task Undo_FailsAfterANewerArchive_NextUndoPutsBackTheNewerOne()
+    {
+        using var rig = new MainRig();
+        using MainViewModel vm = await NewMainAsync(rig);
+        Assert.IsTrue(await vm.RunAsync("a", ConversationAction.Archive));
+
+        var gate              = new TaskCompletionSource();
+        rig.Client.UpdateGate = gate;
+        Task<bool> undo       = vm.UndoAsync();
+        Assert.IsTrue(await vm.RunAsync("b", ConversationAction.Archive));
+        rig.Client.RefuseUpdates = true;
+        gate.SetResult();
+        Assert.IsFalse(await undo);
+
+        rig.Client.RefuseUpdates = false;
+        Assert.IsTrue(await vm.UndoAsync());
+        Assert.AreEqual("b", rig.Client.ConversationUpdates[^1].UpdateData.ConversationID);
+        Assert.AreEqual("b,c", string.Join(",", vm.Inbox.Rows.Select(r => r.Id)));
     }
 
     /// <summary>
@@ -292,8 +331,8 @@ public sealed class MainViewModelTests
     }
 
     /// <summary>
-    /// A refused or impossible update shows the failure banner and keeps the chat open; the next success or Dismiss
-    /// clears it.
+    /// A refused or impossible update shows the failure banner and keeps the chat open. The next success or Dismiss
+    /// clears the banner.
     /// </summary>
     [TestMethod]
     public async Task Run_Fails_SetsActionError_ChatStays()
@@ -309,13 +348,12 @@ public sealed class MainViewModelTests
         Assert.AreEqual("a", vm.SelectedConversationId);
         Assert.AreEqual("a,b,c", string.Join(",", vm.Inbox.Rows.Select(r => r.Id)));
 
-        // Success Clears It
         rig.Client.RefuseUpdates = false;
         Assert.IsTrue(await vm.RunAsync("a", ConversationAction.Mute));
         Assert.IsNull(vm.ActionError);
         Assert.IsFalse(vm.HasActionError);
 
-        // Not Connected: Logged Once, By Error Type Only
+        // Not connected: the app logs the error once, by error type only.
         rig.Connected = false;
         int logged    = rig.Log.Messages.Length;
         Assert.IsFalse(await vm.RunAsync("a", ConversationAction.Delete));
@@ -329,8 +367,8 @@ public sealed class MainViewModelTests
     }
 
     /// <summary>
-    /// A second run on a conversation still waiting on the phone sends nothing and shows no error; another conversation
-    /// isn't held up, and once the first answers the conversation can run again.
+    /// A second run on a conversation that still waits on the phone sends nothing and shows no error. Another
+    /// conversation is not held up. When the first run answers, the conversation can run again.
     /// </summary>
     [TestMethod]
     public async Task Run_SameConversationTwice_OneRequest()
@@ -356,7 +394,7 @@ public sealed class MainViewModelTests
     }
 
     /// <summary>
-    /// Reaching Connected (and only the arrival, not staying there) tells the window to retry its photos.
+    /// Reaching Connected tells the window to retry its photos. Staying connected does not.
     /// </summary>
     [TestMethod]
     public async Task Connected_RaisedOnArrivalOnly()
@@ -399,7 +437,7 @@ public sealed class MainViewModelTests
         vm.ApplyState(ConnectionState.Reconnecting);
         Assert.AreEqual(ChatCopy.Connecting, vm.StatusBanner);
 
-        // Stale Silence Doesn't Survive A Reconnect
+        // Stale silence does not survive a reconnect.
         vm.ApplyState(ConnectionState.Connected);
         vm.ApplyEvent(new PhoneNotResponding());
         vm.ApplyState(ConnectionState.Reconnecting);
@@ -408,8 +446,8 @@ public sealed class MainViewModelTests
     }
 
     /// <summary>
-    /// A list load that failed while the phone slept fills once the phone answers again, and again when the connection
-    /// comes back; both lists reload.
+    /// A list load that failed while the phone slept fills when the phone answers again. It fills again when the
+    /// connection comes back. Both lists reload.
     /// </summary>
     [TestMethod]
     public async Task PhoneRespondingAgainOrConnected_ReloadsBothLists()
@@ -421,7 +459,6 @@ public sealed class MainViewModelTests
         vm.OpenSpamBlocked();
         Assert.AreEqual(0, vm.Inbox.Rows.Count);
 
-        // The Phone Answers Again
         rig.Client.ListThrows = null;
         rig.Page(MainRig.Conv("a", "Ann", 1), MainRig.Conv("s", "Spammer", 2, status: ConversationStatus.SpamFolder));
         int calls = rig.Client.ListCalls.Count;
@@ -431,7 +468,6 @@ public sealed class MainViewModelTests
         Assert.AreEqual("s", string.Join(",", vm.SpamBlocked!.Rows.Select(r => r.Id)));
         Assert.AreEqual(calls + 2, rig.Client.ListCalls.Count, "the inbox and spam lists, once each");
 
-        // Back To Connected
         rig.Page(MainRig.Conv("a", "Ann", 1), MainRig.Conv("b", "Bo", 2));
         vm.ApplyState(ConnectionState.Reconnecting);
         vm.ApplyState(ConnectionState.Connected);
@@ -440,8 +476,8 @@ public sealed class MainViewModelTests
     }
 
     /// <summary>
-    /// A Start chat that finishes after the window closed (the view model is disposed) opens nothing: no chat is made,
-    /// so nothing stays subscribed to the store or fetches messages.
+    /// A Start chat that finishes after the window closed, with the view model disposed, opens nothing. No chat is
+    /// made, so nothing stays subscribed to the store or fetches messages.
     /// </summary>
     [TestMethod]
     public async Task Disposed_SelectAndOpenDoNothing()
@@ -484,7 +520,6 @@ public sealed class MainViewModelTests
         Assert.AreEqual("a", first.ConversationId);
         Assert.IsTrue(vm.IsChatOpen);
 
-        // Same Conversation Again Keeps The Chat
         vm.Select("a");
         Assert.AreSame(first, vm.Chat);
 
@@ -512,7 +547,6 @@ public sealed class MainViewModelTests
         vm.OpenStartChat();
         StartChatViewModel first = vm.StartChat!;
 
-        // Opening Again Keeps The Pane (And What Was Typed)
         vm.OpenStartChat();
         Assert.AreSame(first, vm.StartChat);
 
@@ -557,8 +591,8 @@ public sealed class MainViewModelTests
     }
 
     /// <summary>
-    /// Each chat keeps its own draft while the window is open: switching chats or closing one with Escape and opening
-    /// it again brings back what was typed.
+    /// Each chat keeps its own draft while the window is open. Switching chats, or closing one with Escape and opening
+    /// it again, brings back what the user typed.
     /// </summary>
     [TestMethod]
     public async Task Drafts_KeptPerConversation()
@@ -579,7 +613,6 @@ public sealed class MainViewModelTests
         vm.Select("b");
         Assert.AreEqual("for bo", vm.Chat!.Draft);
 
-        // Sent (Cleared) Drafts Are Forgotten
         vm.Chat.Draft = string.Empty;
         vm.Select("a");
         vm.Select("b");
@@ -605,8 +638,8 @@ public sealed class MainViewModelTests
     }
 
     /// <summary>
-    /// A chat left with a draft shows "Draft: " and the text on its row (in italics); one left with only files names them,
-    /// and the files come back as chips; clearing the draft brings the newest message back.
+    /// A chat left with a draft shows "Draft: " and the text on its row, in italics. A chat left with only files names
+    /// them, and the files come back as chips. Clearing the draft brings the newest message back.
     /// </summary>
     [TestMethod]
     public async Task Drafts_ShowOnTheRow_TextOrFiles()
@@ -617,14 +650,12 @@ public sealed class MainViewModelTests
         ConversationRowViewModel bo  = vm.Inbox.Rows.Single(r => r.Id == "b");
         string annSnippet            = ann.Snippet;
 
-        // Text
         vm.Select("a");
         vm.Chat!.Draft = "for ann";
         vm.Select("b");
         Assert.AreEqual("Draft: for ann", ann.Snippet);
         Assert.IsTrue(ann.IsDraft);
 
-        // Files Only
         vm.Chat!.Attach("plan.pdf", "application/pdf", [1]);
         vm.Chat.Attach("pic.png", "image/png", [2], 4, 3);
         vm.Select("a");
@@ -632,14 +663,12 @@ public sealed class MainViewModelTests
         vm.Select("b");
         Assert.AreEqual(2, vm.Chat!.Attachments.Count);
 
-        // Cleared: The Newest Message Again
         vm.Select("a");
         vm.Chat!.Draft = string.Empty;
         vm.Select("b");
         Assert.AreEqual(annSnippet, ann.Snippet);
         Assert.IsFalse(ann.IsDraft);
 
-        // Blank Text Isn't A Draft
         vm.Select("a");
         vm.Chat!.Draft = "  \n ";
         vm.Select("b");
@@ -647,7 +676,7 @@ public sealed class MainViewModelTests
     }
 
     /// <summary>
-    /// A chat opened and left untouched keeps its saved draft as it is, and a draft cleared and typed again is kept.
+    /// A chat opened and left untouched keeps its saved draft as it is. A draft cleared and typed again is kept.
     /// </summary>
     [TestMethod]
     public async Task Drafts_UntouchedKept_RetypedSaved()
@@ -656,12 +685,10 @@ public sealed class MainViewModelTests
         rig.Store.SaveDraft("a", "saved");
         using MainViewModel vm = await NewMainAsync(rig);
 
-        // Untouched
         vm.Select("a");
         vm.Select("b");
         Assert.AreEqual("saved", rig.Store.Draft("a"));
 
-        // Cleared, Then The Same Text Typed Again
         vm.Select("a");
         vm.Chat!.Draft = string.Empty;
         vm.Chat.Draft  = "saved";
@@ -684,7 +711,7 @@ public sealed class MainViewModelTests
         Assert.IsTrue(vm.IsPhoneBatteryLow);
     }
 
-    /// <summary>Closing the banner hides it; a low alert after a restored one shows it again.</summary>
+    /// <summary>Closing the banner hides it. A low alert after a restored alert shows the banner again.</summary>
     [TestMethod]
     public async Task BatteryLow_ClosedThenRestoredThenLow_ShowsAgain()
     {
@@ -698,13 +725,12 @@ public sealed class MainViewModelTests
         vm.DismissPhoneBattery();
         Assert.IsFalse(vm.IsPhoneBatteryLow);
 
-        // Restored Then Low Again
         await rig.Store.HandleEventAsync(Alert(AlertType.MobileBatteryRestored));
         await rig.Store.HandleEventAsync(Alert(AlertType.MobileBatteryLow));
         Assert.IsTrue(vm.IsPhoneBatteryLow);
     }
 
-    /// <summary>Closing the banner hides it; a repeat low alert with no restored between shows it again.</summary>
+    /// <summary>Closing the banner hides it. A repeat low alert with no restored alert shows it again.</summary>
     [TestMethod]
     public async Task BatteryLow_ClosedThenRepeatLow_ShowsAgain()
     {

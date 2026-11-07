@@ -167,10 +167,9 @@ public sealed partial class App : Application, IDisposable
         _startup = SelectStartupService(paths);
 
         // Logging
-        var levelSwitch = new LogLevelSwitch { MinimumLevel = _settings.LogLevel };
-        _logProvider    = new RollingFileLoggerProvider(paths.LogsFolder, levelSwitch, TimeProvider.System);
-        _logger         = _logProvider.CreateLogger("GMessages.App");
-        ShellLog        = _logger;
+        _logProvider = new RollingFileLoggerProvider(paths.LogsFolder, _settings.LogLevel, TimeProvider.System);
+        _logger      = _logProvider.CreateLogger("GMessages.App");
+        ShellLog     = _logger;
         AppLog.Started(_logger, AppInfo.DisplayName, AppInfo.Version, AppIdentity.IsPackaged, Program.IsTestRun);
         if (TestHooks.Endpoints is { } fake)
         {

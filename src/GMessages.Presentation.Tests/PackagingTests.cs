@@ -4,8 +4,8 @@ namespace GMessages.Presentation.Tests;
 /// Checks the MSIX manifest the build generates from the <c>$AppDisplayName$</c> template.
 /// </summary>
 /// <remarks>
-/// <c>GMessages.App.csproj</c> writes <c>Package.generated.appxmanifest</c> into its <c>obj</c> folder on every build,
-/// so this needs the app built first (any configuration). Without it the test is inconclusive rather than failing.
+/// <c>GMessages.App.csproj</c> writes <c>Package.generated.appxmanifest</c> into its <c>obj</c> folder on every build.
+/// This test needs the app built first, in any configuration. Without it the test is inconclusive and does not fail.
 /// </remarks>
 [TestClass]
 public sealed class PackagingTests
@@ -27,7 +27,7 @@ public sealed class PackagingTests
     [TestCategory("RequiresBuild")]
     public void GeneratedManifest_StartupTaskIdMatchesTheDisplayName()
     {
-        // StartupTaskService looks the task up by AppInfo.DisplayName
+        // StartupTaskService looks up the task by AppInfo.DisplayName.
         var text = File.ReadAllText(FindGeneratedManifest());
 
         StringAssert.Contains(text, $"TaskId=\"{AppInfo.DisplayName}\"");
@@ -37,13 +37,13 @@ public sealed class PackagingTests
     [TestCategory("RequiresBuild")]
     public void GeneratedManifest_IdentityVersionMatchesTheAppVersion()
     {
-        // AppInfo.Version (log, settings page) must agree with the package version
+        // AppInfo.Version, which the log and the settings page use, must agree with the package version.
         var text = File.ReadAllText(FindGeneratedManifest());
 
         StringAssert.Matches(text, new System.Text.RegularExpressions.Regex($"<Identity[^>]*\\sVersion=\"{System.Text.RegularExpressions.Regex.Escape(AppInfo.Version)}[.\"]"));
     }
 
-    // Generated Manifest: the newest copy under src/GMessages.App/obj, whichever configuration and platform built it
+    // The generated manifest is the newest copy under src/GMessages.App/obj, from any configuration and platform.
     private static string FindGeneratedManifest()
     {
         var obj      = Path.Combine(AppInfoTests.FindRepoRoot(), "src", "GMessages.App", "obj");

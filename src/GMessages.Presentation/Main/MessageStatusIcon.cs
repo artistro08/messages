@@ -1,26 +1,27 @@
 namespace GMessages.Presentation.Main;
 
 /// <summary>
-/// The delivery icon under a sent bubble, matching Google Messages' read receipts.
+/// Names the delivery icon under a sent bubble, as the read receipts of Google Messages show it.
 /// </summary>
 /// <remarks>
-/// Google's icon set (2024 redesign): a single check in a ring for sent, a double check in a ring for delivered and a
-/// double check in a filled circle for read; a message still sending shows a clock (the "timer" of Google's help page).
+/// The icons follow the 2024 icon set of Google. Sent shows a single check in a ring, and delivered a double check in a
+/// ring. Read shows a double check in a filled circle. A message that still sends shows a clock, the "timer" of the
+/// help page of Google.
 /// </remarks>
 public enum MessageStatusIcon
 {
-    /// <summary>No icon.</summary>
+    /// <summary>The bubble shows no icon.</summary>
     None,
 
-    /// <summary>Still being sent: a clock.</summary>
+    /// <summary>The message still sends: a clock.</summary>
     Sending,
 
-    /// <summary>Sent: a single check in a ring.</summary>
+    /// <summary>The message went: a single check in a ring.</summary>
     Sent,
 
-    /// <summary>Delivered: a double check in a ring.</summary>
+    /// <summary>The message arrived: a double check in a ring.</summary>
     Delivered,
 
-    /// <summary>Read: a double check in a filled circle.</summary>
+    /// <summary>The other side read the message: a double check in a filled circle.</summary>
     Read,
 }

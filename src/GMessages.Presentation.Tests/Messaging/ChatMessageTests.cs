@@ -21,7 +21,9 @@ public sealed class ChatMessageTests
 
     private static MessageInfo Media(MediaFormats f) => new() { MediaContent = new MediaContent { Format = f } };
 
-    // Undownloaded MMS And Deletion Notices Are Hidden; The Same Status With Content, Or A Plain Message, Shows
+    /// <summary>
+    /// An undownloaded MMS and a deletion notice are hidden. The same status with content, or a plain message, shows.
+    /// </summary>
     [TestMethod]
     [DataRow(MessageStatusType.IncomingAutoDownloading, false, true)]
     [DataRow(MessageStatusType.IncomingAwaitingAutoDownload, false, true)]
@@ -131,10 +133,6 @@ public sealed class ChatMessageTests
         Assert.IsTrue(ChatMessage.From(Make(MessageStatusType.TombstoneProtocolSwitchToEncryptedRcs)).EncryptionChange);
         Assert.IsNull(ChatMessage.From(Make(MessageStatusType.IncomingComplete)).EncryptionChange);
     }
-
-    // =========================================================================
-    // MEDIA
-    // =========================================================================
 
     [TestMethod]
     public void From_PhotoWithCaption_KeepsBoth()

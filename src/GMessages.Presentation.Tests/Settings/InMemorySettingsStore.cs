@@ -15,7 +15,6 @@ internal sealed class InMemorySettingsStore : ISettingsStore
     /// <inheritdoc />
     public void SetString(string key, string? value)
     {
-        // Remove On Null
         if (value is null)
         {
             _values.Remove(key);

@@ -1,28 +1,28 @@
 namespace GMessages.Presentation.Placement;
 
 /// <summary>
-/// Where the tray menu opens on the monitor that holds the tray icon.
+/// Finds the place where the tray menu opens on the monitor of the tray icon.
 /// </summary>
 /// <remarks>
-/// Ported from Magic Buds: the edge detection and margin are <c>FlyoutPlacement.DetectEdge</c> and
-/// <c>FlyoutPlacement.MarginDip</c>, and the anchor math is <c>ScreenGeometry.GetMenuAnchor</c> with the Win32
-/// monitor lookup left in the App. The flyout rectangle math was dropped; this app has no flyout.
+/// Ported from Magic Buds. The edge detection and the margin come from <c>FlyoutPlacement.DetectEdge</c> and
+/// <c>FlyoutPlacement.MarginDip</c>. The anchor math comes from <c>ScreenGeometry.GetMenuAnchor</c>. The Win32
+/// monitor lookup stays in the App. This app has no flyout, so the port leaves out the flyout rectangle math.
 /// </remarks>
 public static class MenuPlacement
 {
     /// <summary>
-    /// Gap between the menu and the taskbar, in device-independent pixels.
+    /// The gap between the menu and the taskbar, in device-independent pixels.
     /// </summary>
     public const int MarginDip = 12;
 
     /// <summary>
-    /// Finds the taskbar edge by comparing the monitor to its work area.
+    /// Finds the taskbar edge from a comparison of the monitor with its work area.
     /// </summary>
     /// <remarks>
-    /// An auto-hidden taskbar takes no work area, so it counts as bottom.
+    /// An auto-hidden taskbar takes no work area, so the method returns the bottom edge for it.
     /// </remarks>
-    /// <param name="monitor">Full bounds of the monitor.</param>
-    /// <param name="workArea">That monitor's work area.</param>
+    /// <param name="monitor">The full bounds of the monitor.</param>
+    /// <param name="workArea">The work area of that monitor.</param>
     /// <returns>The edge the taskbar sits on.</returns>
     public static TaskbarEdge DetectEdge(PixelRect monitor, PixelRect workArea)
     {
@@ -46,21 +46,21 @@ public static class MenuPlacement
     }
 
     /// <summary>
-    /// Moves a tray click point off the taskbar to the work area's edge plus the margin.
+    /// Moves a tray click point from the taskbar to the edge of the work area plus the margin.
     /// </summary>
     /// <remarks>
-    /// The coordinate along the taskbar stays where the click was; the other one moves to the work area edge.
+    /// The coordinate along the taskbar stays at the click. The other coordinate moves to the edge of the work area.
     /// </remarks>
-    /// <param name="x">Click X in screen pixels.</param>
-    /// <param name="y">Click Y in screen pixels.</param>
-    /// <param name="monitor">Full bounds of the monitor under the click.</param>
-    /// <param name="workArea">That monitor's work area.</param>
-    /// <param name="scale">Monitor DPI divided by 96.</param>
-    /// <returns>The anchor point and the taskbar edge the menu grows away from.</returns>
+    /// <param name="x">The X of the click, in screen pixels.</param>
+    /// <param name="y">The Y of the click, in screen pixels.</param>
+    /// <param name="monitor">The full bounds of the monitor under the click.</param>
+    /// <param name="workArea">The work area of that monitor.</param>
+    /// <param name="scale">The DPI of the monitor divided by 96.</param>
+    /// <returns>The anchor point and the taskbar edge. The menu opens on the work area side of that edge.</returns>
     public static (int X, int Y, TaskbarEdge Edge) GetAnchor(int x, int y, PixelRect monitor, PixelRect workArea, double scale)
     {
-        var edge   = DetectEdge(monitor, workArea);
-        var margin = (int)Math.Round(MarginDip * scale);
+        TaskbarEdge edge = DetectEdge(monitor, workArea);
+        int margin       = (int)Math.Round(MarginDip * scale);
 
         return edge switch
         {
