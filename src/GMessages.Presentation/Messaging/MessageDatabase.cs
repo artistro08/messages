@@ -127,10 +127,9 @@ public sealed partial class MessageDatabase
     /// </summary>
     /// <remarks>
     /// A change made here touches only the slim cached copy. Without this method, the saved row keeps its old state.
-    /// The next start then shows the old state until the page from the phone replaces it. The chat is bold or in the
-    /// wrong list.
-    /// The method rewrites only the body and keeps the saved order. It does nothing when the conversation is not saved
-    /// or the change keeps it the same.
+    /// The next start then shows the old state until the page from the phone replaces it. The chat is then bold, or in
+    /// the wrong list. The method rewrites only the body and keeps the saved order. It does nothing when the
+    /// conversation is not saved or the change keeps it the same.
     /// </remarks>
     /// <param name="change">
     /// Changes the saved conversation. It returns false when the conversation already had the change.

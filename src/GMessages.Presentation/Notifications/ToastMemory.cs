@@ -17,8 +17,8 @@ public sealed record ShownToast(string Tag, string Group, string Xml);
 /// such as status changes and reactions. <see cref="FirstShow"/> keeps the last 256 toasted message IDs, so no update
 /// shows the banner again. An open of the chat or a clear of the toasts keeps these IDs. A snooze wake is not a first
 /// show. The user can snooze only the latest <c>capacity</c> shown toasts. The oldest toast goes first. A waiting
-/// snooze is kept apart, so newer toasts never push it out. <see cref="RemoveConversation"/> cancels the waiting
-/// snoozes of a conversation. <see cref="Clear"/> cancels every waiting snooze.
+/// snooze stays in its own set, so newer toasts never push it out. <see cref="RemoveConversation"/> cancels the
+/// waiting snoozes of a conversation. <see cref="Clear"/> cancels every waiting snooze.
 /// </remarks>
 /// <param name="capacity">The number of recent shown toasts that the user can snooze.</param>
 public sealed class ToastMemory(int capacity)

@@ -125,8 +125,8 @@ public static class ChatFormat
     }
 
     /// <summary>
-    /// Gives what the list row of a chat says about its unsent draft. It is the text, else the kinds of the files 1
-    /// after the other. A kind is "Photo", or the name of a file. The row puts "Draft: " in front.
+    /// Gives what the list row of a chat says about its unsent draft. It is the text, else the kind of each file in
+    /// order. A kind is "Photo", or the name of a file. The row puts "Draft: " in front.
     /// </summary>
     /// <param name="text">The draft text.</param>
     /// <param name="files">The files picked to send with it.</param>

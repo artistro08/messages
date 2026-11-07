@@ -92,8 +92,8 @@ public static class EmojiCatalog
     /// Gets the categories with only the emoji that match the typed text. A category with no match stays out.
     /// </summary>
     /// <remarks>
-    /// Each typed word must appear anywhere in the search words of the emoji, in any case. Thus "eye" finds "eyes". A
-    /// typed plural also matches its singular, so "eyes" finds "eye". An empty query gives every category.
+    /// Each typed word must appear anywhere in the search words of the emoji, in upper or lower case. Thus "eye" finds
+    /// "eyes". A typed plural also matches its singular, so "eyes" finds "eye". An empty query gives every category.
     /// </remarks>
     /// <param name="query">The text in the search box.</param>
     /// <returns>The matching categories in order, each with its matching emoji in order.</returns>
@@ -118,8 +118,8 @@ public static class EmojiCatalog
         return found;
     }
 
-    // Tells whether the search words hold a typed word or its singular, in any case. "eyes" also finds "eye", and
-    // "peaches" also finds "peach".
+    // Tells whether the search words hold a typed word or its singular, in upper or lower case. "eyes" also finds
+    // "eye", and "peaches" also finds "peach".
     private static bool Matches(string words, string typed)
     {
         if (words.Contains(typed, StringComparison.OrdinalIgnoreCase))

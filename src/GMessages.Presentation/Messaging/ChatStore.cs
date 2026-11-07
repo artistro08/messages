@@ -161,7 +161,10 @@ public sealed partial class ChatStore : IDisposable
     /// <summary>Gets the decrypted media cache, or null when the store has none.</summary>
     public MediaStore? Media => _media;
 
-    /// <summary>Gets the first participant marked as the owner of the phone in any cached conversation.</summary>
+    /// <summary>
+    /// Gets the first participant marked as the owner in any cached conversation. A phone with 2 SIMs has 2 such IDs.
+    /// The App reads this one only for the profile photo.
+    /// </summary>
     public ParticipantInfo? Me => _me;
 
     /// <summary>

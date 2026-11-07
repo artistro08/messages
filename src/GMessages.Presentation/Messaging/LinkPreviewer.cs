@@ -220,10 +220,8 @@ public sealed partial class LinkPreviewer : IDisposable
     /// <remarks>
     /// The link must be HTTPS on port 443, to a named host with a dot in it. The method refuses an IP literal,
     /// <c>localhost</c>, <c>*.local</c> and a single-label intranet name. It also refuses a user name and password in
-    /// the link. With
-    /// <paramref name="allowLoopback"/> in UI test runs, it also allows an <c>http</c> or <c>https</c> link to
-    /// <c>127.0.0.1</c>. The handler checks where the host really points when it
-    /// connects.
+    /// the link. With <paramref name="allowLoopback"/> in UI test runs, it also allows an <c>http</c> or <c>https</c>
+    /// link to <c>127.0.0.1</c>. The handler checks where the host really points when it connects.
     /// </remarks>
     /// <param name="url">The link.</param>
     /// <param name="allowLoopback">True only in UI test runs.</param>
@@ -350,9 +348,9 @@ public sealed partial class LinkPreviewer : IDisposable
     /// <remarks>
     /// The title is <c>og:title</c>, else <c>&lt;title&gt;</c>. The site is always the real host of the page without
     /// <c>www.</c>, never the claim of the page. Thus a card cannot pose as another site. The attributes can come in
-    /// any order and with any quotes. The method removes tags, decodes entities, removes direction-control characters and
-    /// collapses spaces in the title. It then cuts the title to 300 characters. The image is <c>og:image</c> resolved
-    /// against <paramref name="page"/>, and the method keeps it only when <see cref="IsAllowed"/> allows it.
+    /// any order and with any quotes. The method removes tags, decodes entities, removes direction-control characters
+    /// and collapses spaces in the title. It then cuts the title to 300 characters. The image is <c>og:image</c>
+    /// resolved against <paramref name="page"/>, and the method keeps it only when <see cref="IsAllowed"/> allows it.
     /// </remarks>
     /// <param name="html">The page.</param>
     /// <param name="page">The address of the page after redirects, for relative image links and the host.</param>
@@ -800,7 +798,7 @@ public sealed partial class LinkPreviewer : IDisposable
         return text[..cut].TrimEnd() + "\u2026";
     }
 
-    // Removes the punctuation of a sentence from the end. A closing bracket stays when the link opened 1 itself.
+    // Removes the punctuation of a sentence from the end. A closing bracket stays when the link opened that bracket.
     private static string TrimLink(string link)
     {
         // The method counts the brackets once, then updates the counts as characters come off. Thus a long run of ")"

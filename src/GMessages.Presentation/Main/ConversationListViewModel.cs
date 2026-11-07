@@ -177,8 +177,8 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
     /// Call it on the UI thread. An empty list first shows the conversations that the store already has, so the list
     /// never waits on the phone. The store has them when the window opens again. The page then updates those rows in
     /// place and drops the rows that it does not list. A row that got a new message or first showed during the load
-    /// stays. A call during a load runs when that load ends. When the load fails, the rows stay as they were. A load can fail with no
-    /// connection, no answer or a network error.
+    /// stays. A call during a load runs when that load ends. When the load fails, the rows stay as they were. A load
+    /// can fail with no connection, no answer or a network error.
     /// </remarks>
     /// <returns>A task that completes when the page is shown.</returns>
     public async Task LoadAsync()
@@ -237,8 +237,8 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
     /// <remarks>
     /// <para>
     /// Call it on the UI thread. The call does nothing when no more pages are left. A call during a load runs when that
-    /// load ends. The view asks when the last row shows. A row that showed during a load does not show again until the
-    /// user scrolls it out of view and then into view again. Without the wait, the paging sometimes stopped.
+    /// load ends. The view asks when the last row shows. A row that showed during a load does not show again until it
+    /// scrolls out of view and back in. Without the wait, the paging sometimes stopped.
     /// </para>
     /// <para>
     /// A page with no conversation that the earlier pages did not list ends the paging. Such a page is empty, or the
@@ -443,7 +443,7 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
     private ConversationRowViewModel? Find(string id) =>
         Pinned.FirstOrDefault(r => r.Id == id) ?? Rows.FirstOrDefault(r => r.Id == id);
 
-    // A row goes after each row that sorts before it. A row with the same time stays above it.
+    // A row goes after each row that sorts before it. A row with the same time stays above the new row.
     private static int TargetIndex(ObservableCollection<ConversationRowViewModel> list, ConversationRowViewModel row, ConversationRowViewModel? skip)
     {
         int count = 0;

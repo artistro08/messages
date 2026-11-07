@@ -91,7 +91,7 @@ public sealed class ChatViewModelTests
         using ChatViewModel chat = NewChat(rig, null, Msg("m1", "one"));
         await chat.LoadAsync();
 
-        List<string?> raised = [];
+        List<string?> raised  = [];
         chat.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
 
         Conversation renamed = rig.Client.Conversations["a"].Clone();

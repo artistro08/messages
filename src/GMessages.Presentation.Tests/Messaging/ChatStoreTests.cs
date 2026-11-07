@@ -241,8 +241,8 @@ public sealed class ChatStoreTests
     }
 
     /// <summary>
-    /// Someone texts me in this one-on-one chat that has only a created line, and the message arrives before the update of the phone. The chat shows at once
-    /// as unread. Its snippet is that message, not the created line.
+    /// Someone texts me in a one-on-one chat that holds only its created line. The message arrives before the update
+    /// of the phone. The chat shows at once as unread. Its snippet is that message, not the created line.
     /// </summary>
     [TestMethod]
     public async Task EmptyOneOnOneChat_ReceivedMessageShowsItWithItsSnippet()
@@ -1988,7 +1988,9 @@ public sealed class ChatStoreTests
 
     private static UserAlert Alert(AlertType type) => new(new UserAlertEvent { AlertType = type });
 
-    /// <summary>Low sets the flag and raises once, and a repeat is silent. Restored clears the flag and raises.</summary>
+    /// <summary>
+    /// Low sets the flag and raises once, and a repeat is silent. Restored clears the flag and raises.
+    /// </summary>
     [TestMethod]
     public async Task BatteryLow_SetsAndRaisesOnce_RestoredClears()
     {

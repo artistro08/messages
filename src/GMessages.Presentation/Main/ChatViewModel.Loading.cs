@@ -30,7 +30,7 @@ public sealed partial class ChatViewModel
         IsLoading        = true;
         IsLoadingHistory = Messages.Count == 0;
 
-        // The chat opened before, also before a restart, so the saved page shows during the phone fetch.
+        // The chat opened before this run or an earlier run, so the saved page shows during the phone fetch.
         if (Messages.Count == 0)
         {
             _ = ShowSavedPageAsync(_store.CachedMessagesAsync(ConversationId), _phonePages);

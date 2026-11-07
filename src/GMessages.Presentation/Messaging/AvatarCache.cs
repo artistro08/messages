@@ -83,7 +83,7 @@ public sealed class AvatarCache
                 return waiting.Task.WaitAsync(ct);
             }
 
-            // The ID joins the batch that collects, and starts a batch when none is open.
+            // The ID joins the open batch. When no batch is open, the call starts one.
             var answer = new TaskCompletionSource<byte[]?>(TaskCreationOptions.RunContinuationsAsynchronously);
             _pending[participantId] = answer;
             if (_batch is null)

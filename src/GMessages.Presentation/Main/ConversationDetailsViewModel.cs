@@ -36,8 +36,8 @@ public sealed class ConversationDetailsViewModel
         AvatarParts header                       = AvatarParts.Of(c);
         IReadOnlyList<ConversationMenuItem> menu = ConversationMenu.For(c, inHeader: true);
 
-        // The dialog shows only the people that the phone shows. A conversation also lists hidden people that Google
-        // Messages never shows: old copies of the number of the owner, "Unknown sender" and people who left a group.
+        // The dialog shows only the people that the phone shows. A conversation also lists hidden people. Google
+        // Messages never shows old copies of the number of the owner, "Unknown sender" or people who left a group.
         People   = [.. c.Participants.Where(p => !p.IsMe && p.IsVisible).Select(p => RowOf(p, c.IsGroup ? null : header))];
         IsMuted  = c.IsMuted;
         CanMute  = menu.Contains(ConversationMenuItem.Mute) || menu.Contains(ConversationMenuItem.Unmute);

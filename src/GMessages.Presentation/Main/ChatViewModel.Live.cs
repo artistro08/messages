@@ -89,8 +89,8 @@ public sealed partial class ChatViewModel
         }
     });
 
-    // Each new message, mute and move of the conversation comes here. Thus each property raises only when its value
-    // changes.
+    // Each new message, mute and move of the conversation comes here. A property raises only when its value changes,
+    // except after a rename or a new avatar, when every property raises.
     private void OnConversationChanged(object? sender, ConversationInfo c)
     {
         if (c.Id != ConversationId)

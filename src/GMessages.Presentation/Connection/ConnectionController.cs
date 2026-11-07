@@ -244,7 +244,9 @@ public sealed partial class ConnectionController : IAsyncDisposable
     /// <exception cref="InvalidOperationException">Already paired: unpair first.</exception>
     /// <exception cref="Protocol.Pairing.PairingException">No phone, a timeout, or the user declined or chose wrong.</exception>
     /// <exception cref="GmRequestException">The server refused a request.</exception>
-    /// <exception cref="OperationCanceledException"><paramref name="ct"/> was canceled, or an unpair canceled the pairing.</exception>
+    /// <exception cref="OperationCanceledException">
+    /// <paramref name="ct"/> was canceled, or an unpair canceled the pairing.
+    /// </exception>
     public async Task PairAsync(IReadOnlyDictionary<string, string> cookies, Action<string> showEmoji, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(cookies);

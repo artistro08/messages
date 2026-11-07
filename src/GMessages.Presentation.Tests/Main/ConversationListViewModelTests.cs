@@ -695,8 +695,8 @@ public sealed class ConversationListViewModelTests
     }
 
     /// <summary>
-    /// A conversation that arrives live while a reload waits on the phone keeps its row, although the page does not list
-    /// it. The phone made the page before the conversation arrived.
+    /// A conversation that arrives live while a reload waits on the phone keeps its row, although the page does not
+    /// list it. The phone made the page before the conversation arrived.
     /// </summary>
     [TestMethod]
     public async Task Load_ConversationArrivesLiveMidLoad_KeepsItsRow()
