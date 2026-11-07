@@ -103,9 +103,10 @@ public sealed partial class MessageBubble
     // Starts a photo load and gives its number. The method cancels the wait of an older load for the full size.
     private int NextPhotoLoad()
     {
+        int load = ++_photoLoad;
         _cancelPhotoWait?.Invoke();
         _cancelPhotoWait = null;
-        return ++_photoLoad;
+        return load;
     }
 
     // Sizes the photo or the video from its dimensions, fitted to the bubble. See MessageBubbleViewModel.PhotoSize. The
