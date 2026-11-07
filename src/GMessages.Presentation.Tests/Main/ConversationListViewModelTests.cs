@@ -551,12 +551,12 @@ public sealed class ConversationListViewModelTests
     }
 
     /// <summary>
-    /// The next page, asked for while the first page still loads, runs when that load ends. The last row showed during
-    /// the load and does not show again until the user scrolls away and back. The page runs from the cursor that the
-    /// load sent back, instead of being dropped. After a failed page, the next ask loads again.
+    /// A next page asked for while the first page still loads does nothing. The view asks again when the load ends, and
+    /// only while the list is at its bottom. That ask uses the cursor that the load sent back. After a failed page, the
+    /// next ask loads again.
     /// </summary>
     [TestMethod]
-    public async Task LoadMore_AskedMidLoad_RunsAfter_AndAfterAFailure()
+    public async Task LoadMore_AskedMidLoad_DoesNothing_AndAfterAFailure()
     {
         using var rig = new MainRig();
         rig.Page(MainRig.Conv("a", "Ann"));
@@ -566,11 +566,12 @@ public sealed class ConversationListViewModelTests
         using var list      = NewList(rig);
 
         Task first = list.LoadAsync();
-        await list.LoadMoreAsync();
-        Assert.HasCount(1, rig.Client.ListCalls);
+        Assert.IsFalse(await list.LoadMoreAsync());
         gate.SetResult();
         await first;
+        Assert.HasCount(1, rig.Client.ListCalls, "The ask during the load ran by itself.");
 
+        Assert.IsTrue(await list.LoadMoreAsync());
         Assert.HasCount(2, rig.Client.ListCalls);
         Assert.AreEqual("next", rig.Client.ListCursors[1]?.LastItemID);
         Assert.IsFalse(list.IsLoading);

@@ -97,6 +97,9 @@ public sealed partial class ChatsView : UserControl
     private ScrollViewer? _listScroller;
     private double _listOffset;
 
+    // The last page failed. The list does not ask again until the next scroll down or the next list.
+    private bool _pageFailed;
+
     // Reads the animation setting of Windows live: Settings > Accessibility > Visual effects.
     private static readonly UISettings Ui = new();
 
@@ -176,6 +179,7 @@ public sealed partial class ChatsView : UserControl
         {
             _shownList.RowsChanging             -= OnRowsChanging;
             _shownList.Pinned.CollectionChanged -= OnRowsChanged;
+            _shownList.PropertyChanged          -= OnListPropertyChanged;
         }
 
         _settings.PropertyChanged -= OnSettingsChanged;
@@ -327,6 +331,7 @@ public sealed partial class ChatsView : UserControl
         {
             _shownList.RowsChanging             -= OnRowsChanging;
             _shownList.Pinned.CollectionChanged -= OnRowsChanged;
+            _shownList.PropertyChanged          -= OnListPropertyChanged;
         }
 
         _shownRows                          = rows;
@@ -334,7 +339,19 @@ public sealed partial class ChatsView : UserControl
         _shownList                           = list;
         _shownList.RowsChanging             += OnRowsChanging;
         _shownList.Pinned.CollectionChanged += OnRowsChanged;
+        _shownList.PropertyChanged          += OnListPropertyChanged;
+        _pageFailed                          = false;
         ShowPinnedGrid();
+    }
+
+    // A user who came to the bottom during a load gets the next page when the load ends. A first page that the phone
+    // sends late is such a load.
+    private void OnListPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ConversationListViewModel.IsLoading) && !ViewModel.CurrentList.IsLoading)
+        {
+            LoadMoreIfAtBottom();
+        }
     }
 
     // The grid shows only while the shown list keeps pinned rows apart. Only the inbox does, with the setting on.
@@ -523,14 +540,15 @@ public sealed partial class ChatsView : UserControl
             return;
         }
 
-        // Only a scroll down by the user asks for a page here. Otherwise the realized last row asks. A list that cannot
-        // scroll, or whose rows just moved, also raises this event. The owner reported that it asked for a page with no
-        // scroll at all.
+        // Only a scroll down by the user asks for a page here. Otherwise the realized last row or the end of a load asks.
+        // A list that cannot scroll, or whose rows just moved, also raises this event. The owner reported that it asked
+        // for a page with no scroll at all. A scroll down also tries again after a failed page.
         bool scrolledDown = scroller.ScrollableHeight > 0 && scroller.VerticalOffset > _listOffset;
         _listOffset       = scroller.VerticalOffset;
-        if (scrolledDown && !ViewModel.CurrentList.IsLoading && AtBottom(scroller))
+        if (scrolledDown)
         {
-            _ = LoadMoreAtBottomAsync();
+            _pageFailed = false;
+            LoadMoreIfAtBottom();
         }
 
         if (!_startChatHider.Scrolled(scroller.VerticalOffset))
@@ -668,7 +686,7 @@ public sealed partial class ChatsView : UserControl
 
         if (args.ItemIndex == sender.Items.Count - 1 && ViewModel.CurrentList.Rows.Count == 0)
         {
-            _ = LoadMoreAtBottomAsync();
+            LoadMoreIfAtBottom();
         }
     }
 
@@ -752,13 +770,7 @@ public sealed partial class ChatsView : UserControl
 
         if (args.ItemIndex == sender.Items.Count - 1)
         {
-            XamlHost.Dispatcher.TryEnqueue(DispatcherQueuePriority.Low, () =>
-            {
-                if (_listScroller is not { } scroller || AtBottom(scroller))
-                {
-                    _ = LoadMoreAtBottomAsync();
-                }
-            });
+            LoadMoreIfAtBottom();
         }
     }
 
@@ -788,26 +800,24 @@ public sealed partial class ChatsView : UserControl
         }
     }
 
-    // Loads the next page. A page whose rows the phone already pushed adds nothing below, so the list is still at its
-    // bottom, and the next page loads. The check waits for the layout, because the scroll height is not current yet.
-    // A list that cannot scroll is always at its bottom, so it fills. After a failed page, only the next scroll tries
-    // again, so an offline list does not ask without end.
-    private async Task LoadMoreAtBottomAsync()
+    // Loads the next page when the list is at its bottom and no load runs. The end of each load checks again. Thus a
+    // page whose rows the phone already pushed, which adds nothing below, leads to the next page. A list that cannot
+    // scroll is always at its bottom, so it fills. The check waits for the layout, because the scroll height is not
+    // current yet. After a failed page, only the next scroll down tries again, so an offline list does not ask without
+    // end.
+    private void LoadMoreIfAtBottom() => XamlHost.Dispatcher.TryEnqueue(DispatcherQueuePriority.Low, () =>
     {
         ConversationListViewModel list = ViewModel.CurrentList;
-        if (!await list.LoadMoreAsync())
+        if (_pageFailed || !list.HasMorePages || list.IsLoading || (_listScroller is { } scroller && !AtBottom(scroller)))
         {
             return;
         }
 
-        XamlHost.Dispatcher.TryEnqueue(DispatcherQueuePriority.Low, () =>
-        {
-            if (ReferenceEquals(list, ViewModel.CurrentList) && list.HasMorePages && !list.IsLoading && (_listScroller is not { } scroller || AtBottom(scroller)))
-            {
-                _ = LoadMoreAtBottomAsync();
-            }
-        });
-    }
+        _ = LoadMorePageAsync(list);
+    });
+
+    private async Task LoadMorePageAsync(ConversationListViewModel list) =>
+        _pageFailed = !await list.LoadMoreAsync() && list.HasMorePages && ReferenceEquals(list, ViewModel.CurrentList);
 
     // The 1 px tolerance is for a scale that rounds the offset.
     private static bool AtBottom(ScrollViewer scroller) => scroller.VerticalOffset >= scroller.ScrollableHeight - 1;
