@@ -33,7 +33,7 @@ public sealed class ChatViewModelTests
         rig.Client.Conversations["a"] = conv ?? MainRig.Conv("a", "Ann");
         rig.Client.MessagesPage = new ListMessagesResponse();
 
-        // The Phone Answers Newest First
+        // The phone lists the newest message first.
         rig.Client.MessagesPage.Messages.AddRange(page.Reverse());
         return new ChatViewModel(rig.Store, "a", time, a => a());
     }
@@ -47,7 +47,6 @@ public sealed class ChatViewModelTests
         conv.LatestMessageID = "m2";
         using ChatViewModel chat = NewChat(rig, conv, Msg("m1", "one"), Msg("m2", "two"));
 
-        // Not Cached Yet: Load Fetches It
         await chat.LoadAsync();
 
         Assert.AreEqual("Ann", chat.Title);
@@ -59,7 +58,7 @@ public sealed class ChatViewModelTests
     }
 
     /// <summary>
-    /// R12: a group chat's header stacks its first two other people, the same as its list row.
+    /// The header of a group chat stacks the first 2 other people, the same as its list row.
     /// </summary>
     [TestMethod]
     public async Task Header_Group_StacksTwoPeople()
@@ -91,6 +90,7 @@ public sealed class ChatViewModelTests
         using var rig            = new MainRig();
         using ChatViewModel chat = NewChat(rig, null, Msg("m1", "one"));
         await chat.LoadAsync();
+
         List<string?> raised = [];
         chat.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
 
@@ -104,8 +104,8 @@ public sealed class ChatViewModelTests
     }
 
     /// <summary>
-    /// A too-short list fills with older pages only while they work: a failed older load (phone silent) stops the
-    /// pane's fill after one try instead of asking forever, and the next good newest page re-arms it.
+    /// A short list fills with older pages only while they load. A failed older load, with the phone silent, stops
+    /// the fill after one try instead of asking forever. The next good newest page starts the fill again.
     /// </summary>
     [TestMethod]
     public async Task FillOlder_FailedLoadStopsUntilNextGoodLoad()
@@ -116,7 +116,7 @@ public sealed class ChatViewModelTests
         await chat.LoadAsync();
         Assert.IsTrue(chat.CanFillOlder, "once after the newest page");
 
-        // The Pane's Fill Loop, Bounded Here: It Runs Only While CanFillOlder Holds
+        // The pane runs its fill loop only while CanFillOlder is true. This loop stops after 10 tries.
         rig.Client.OlderFetchThrows = new PhoneNotRespondingException();
         for (int i = 0; i < 10 && chat.CanFillOlder; i++)
         {
@@ -132,7 +132,7 @@ public sealed class ChatViewModelTests
     }
 
     /// <summary>
-    /// The fill goes on after an older page that added bubbles, and stops after one that added none.
+    /// The fill continues after an older page that adds bubbles. The fill stops after one that adds none.
     /// </summary>
     [TestMethod]
     public async Task FillOlder_ContinuesOnlyAfterBubblesWereAdded()
@@ -157,8 +157,8 @@ public sealed class ChatViewModelTests
     }
 
     /// <summary>
-    /// A reply's jump finds a loaded bubble at once, pages older until the quoted one shows, and gives up quietly when
-    /// the history ends without it.
+    /// A reply jump finds a loaded bubble at once. It pages older until the quoted bubble shows. It gives up quietly
+    /// when the history ends without the quoted bubble.
     /// </summary>
     [TestMethod]
     public async Task FindForJump_PagesOlderUntilFound_NullWhenGone()
@@ -186,8 +186,8 @@ public sealed class ChatViewModelTests
     }
 
     /// <summary>
-    /// History the phone sends as live messages after the page (a catch-up, or a chat Start chat opened) goes in quietly
-    /// and in time order; only a message new to this PC animates in.
+    /// History that the phone sends as live messages after the page goes in quietly and in time order. This covers a
+    /// catch-up and a chat that Start chat opened. Only a message new to this PC animates in.
     /// </summary>
     [TestMethod]
     public async Task LiveHistory_GoesInQuietly_InOrder_OnlyNewAnimates()
@@ -196,12 +196,10 @@ public sealed class ChatViewModelTests
         using ChatViewModel chat = NewChat(rig, null, Msg("m3", "three", ts: 1_761_700_000_000_000));
         await chat.LoadAsync();
 
-        // An Older Message In The Catch-Up Batch: Above m3, Not Animated
         await rig.Store.HandleEventAsync(new MessageReceived(Msg("m2", "two", ts: 1_761_699_000_000_000), true));
         Assert.AreEqual("m2,m3", string.Join(",", chat.Messages.Select(b => b.Id)));
         Assert.IsFalse(chat.Messages[0].TakeNew(), "history animated in");
 
-        // A New One: At The Bottom, Animated
         await rig.Store.HandleEventAsync(new MessageReceived(Msg("m4", "four", ts: DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() * 1000), false));
         Assert.AreEqual("m2,m3,m4", string.Join(",", chat.Messages.Select(b => b.Id)));
         Assert.IsTrue(chat.Messages[2].TakeNew(), "a new message didn't animate in");
@@ -237,7 +235,7 @@ public sealed class ChatViewModelTests
     }
 
     /// <summary>
-    /// The first page's bubbles don't animate in; a sent bubble and a live arrival do, once.
+    /// The bubbles of the first page do not animate in. A sent bubble and a live arrival animate in, once.
     /// </summary>
     [TestMethod]
     public async Task NewBubbles_OnlyLiveOnesAnimateIn_Once()
@@ -273,8 +271,8 @@ public sealed class ChatViewModelTests
     }
 
     /// <summary>
-    /// Sending adds one bubble and the phone's echo and delivery update that same bubble: the bubbles already shown are
-    /// never cleared, removed, moved or replaced, so the list only animates the new one in.
+    /// Sending adds one bubble. The echo and the delivery update of the phone change that same bubble. The bubbles
+    /// already shown are never cleared, removed, moved or replaced, so the list animates only the new one in.
     /// </summary>
     [TestMethod]
     public async Task Send_AddsOneBubble_EchoAndDeliveryChangeItInPlace_NothingRebuilt()
@@ -337,7 +335,6 @@ public sealed class ChatViewModelTests
         Assert.IsFalse(chat.Messages[0].IsSending);
         Assert.AreEqual("hello", chat.Messages[0].Text);
 
-        // Retry Resends The Same Text With A New Temporary ID
         string firstTmp  = chat.Messages[0].TmpId;
         rig.Connected    = true;
         await chat.RetryAsync(chat.Messages[0]);
@@ -352,8 +349,8 @@ public sealed class ChatViewModelTests
     }
 
     /// <summary>
-    /// Every failure (network, timeout, server, decode, not only phone problems) fails the bubble with its text, and a
-    /// retry that fails again fails it again; nothing escapes the fire-and-forget send.
+    /// Every failure fails the bubble with its text. This covers network, timeout, server and decode errors, not only
+    /// phone problems. A retry that fails again fails the bubble again. Nothing escapes the fire-and-forget send.
     /// </summary>
     [TestMethod]
     public async Task Send_AnyFailure_BubbleFailedAndRetryable_TextKept()
@@ -384,7 +381,8 @@ public sealed class ChatViewModelTests
     }
 
     /// <summary>
-    /// Attachments send first, one bubble each in order, showing their own bytes; off RCS the text is the last one's caption.
+    /// Attachments send first, one bubble each, in order, with their own bytes. Off RCS, the text is the caption of the
+    /// last attachment.
     /// </summary>
     [TestMethod]
     public async Task SendMedia_InOrder_CaptionOnLast()
@@ -414,7 +412,8 @@ public sealed class ChatViewModelTests
         Assert.AreEqual("both", rig.Client.Sent[1].MessagePayload.MessageInfo[1].MessageContent.Content);
         Assert.AreEqual(chat.Messages[0].TmpId, rig.Client.Sent[0].TmpID);
 
-        // The Phone's Echo Carries No Dimensions: The Bubble Keeps The Picked Photo's, So It Keeps Its Shape
+        // The echo of the phone has no dimensions. The bubble keeps the dimensions of the picked photo.
+        // This keeps the shape of the bubble.
         Message echo = Mine("m9", string.Empty, chat.Messages[0].TmpId, MessageStatusType.OutgoingComplete);
         echo.MessageInfo.Clear();
         echo.MessageInfo.Add(new MessageInfo { MediaContent = new MediaContent { MediaID = "media-1", MediaName = "a.png", Format = MediaFormats.ImagePng } });
@@ -476,8 +475,8 @@ public sealed class ChatViewModelTests
     }
 
     /// <summary>
-    /// A photo the phone reports failed after its echo retries with the same upload (media ID and key) and its caption,
-    /// not as text only, and without uploading again.
+    /// A photo that the phone reports as failed after its echo retries with the same media ID, the same key and its
+    /// caption. It does not retry as text only. It does not upload again.
     /// </summary>
     [TestMethod]
     public async Task RetryFailedMedia_ResendsSameMediaContent()
@@ -490,7 +489,7 @@ public sealed class ChatViewModelTests
         await chat.SendAsync();
         MediaContent uploaded = rig.Client.Sent[0].MessagePayload.MessageInfo[0].MediaContent;
 
-        // The Echo Carries The Media, Then The Phone Reports It Failed
+        // The echo carries the media. Then the phone reports the send as failed.
         Message echo = Mine("m9", "look", chat.Messages[0].TmpId, MessageStatusType.OutgoingFailedGeneric);
         echo.MessageInfo.Insert(0, new MessageInfo { MediaContent = new MediaContent { MediaID = uploaded.MediaID, MediaName = "a.png", Format = MediaFormats.ImagePng } });
         await rig.LiveMessage(echo);
@@ -506,7 +505,7 @@ public sealed class ChatViewModelTests
     }
 
     /// <summary>
-    /// An attachment whose upload failed uploads again from the bytes kept for it when retried.
+    /// An attachment whose upload failed uploads again from its kept bytes when the user retries.
     /// </summary>
     [TestMethod]
     public async Task RetryBeforeUpload_UploadsAgain()
@@ -530,8 +529,8 @@ public sealed class ChatViewModelTests
     }
 
     /// <summary>
-    /// A file over 100 MiB never becomes a chip: the note says so (a good file picked with it keeps the note), and a
-    /// removed chip or a new pick clears it.
+    /// A file over 100 MiB never becomes a chip, and a note says so. A good file picked with it keeps the note.
+    /// A removed chip or a new pick clears the note.
     /// </summary>
     [TestMethod]
     public async Task Attach_TooBig_Refused()
@@ -559,7 +558,7 @@ public sealed class ChatViewModelTests
     }
 
     /// <summary>
-    /// The chips together hold at most 200 MiB: a file that would take them past it is refused with the owner's note.
+    /// The chips together hold at most 200 MiB. A file that takes them past 200 MiB is refused with the owner note.
     /// </summary>
     [TestMethod]
     public async Task Attach_TotalOver200MB_Refused()
@@ -578,7 +577,8 @@ public sealed class ChatViewModelTests
     }
 
     /// <summary>
-    /// A picked file is read only at Send, once; a file that can't be read by then stays as its chip with the note.
+    /// The app reads a picked file once, at Send. A file that the app cannot read by then stays as its chip with the
+    /// note.
     /// </summary>
     [TestMethod]
     public async Task Attach_ReadOnlyAtSend()
@@ -604,7 +604,8 @@ public sealed class ChatViewModelTests
     }
 
     /// <summary>
-    /// A reply sent with attachments and no text rides on the first attachment's message, which shows the quote.
+    /// A reply sent with attachments and no text rides on the message of the first attachment. That message shows the
+    /// quote.
     /// </summary>
     [TestMethod]
     public async Task Reply_AttachmentsOnly_RidesOnFirstMedia()
@@ -625,8 +626,8 @@ public sealed class ChatViewModelTests
     }
 
     /// <summary>
-    /// A load or older-page load that fails with any error (not only phone problems) leaves the bubbles alone and stops
-    /// the short-list fill, so the view never loops.
+    /// A load or an older-page load that fails with any error, not only a phone problem, leaves the bubbles alone.
+    /// It stops the short-list fill, so the view never loops.
     /// </summary>
     [TestMethod]
     public async Task Load_AnyFailure_NoThrow_StopsFill()
@@ -675,7 +676,7 @@ public sealed class ChatViewModelTests
 
         Assert.IsTrue(chat.Messages[0].IsFailed);
 
-        // Screen Readers Hear The Text And That It Failed (A List Item Reads Its Item's ToString)
+        // A screen reader reads the text and the failed state. A list item reads the ToString of its item.
         Assert.AreEqual("hello, " + ChatCopy.NotSentRetry, chat.Messages[0].ToString());
     }
 
@@ -711,8 +712,8 @@ public sealed class ChatViewModelTests
     }
 
     /// <summary>
-    /// A group sender's name takes the color of that person's letter circle; a sender without a color gets the
-    /// avatar's fallback gray.
+    /// The name of a group sender takes the color of the letter circle of that person. A sender without a color gets
+    /// the fallback gray of the avatar.
     /// </summary>
     [TestMethod]
     public async Task GroupReceived_SenderNameUsesAvatarColor()
@@ -759,8 +760,8 @@ public sealed class ChatViewModelTests
     }
 
     /// <summary>
-    /// The refresh after a cache hit merges into the bubbles already shown: known ones are kept (and updated), new ones
-    /// go in, ones the phone no longer has go away.
+    /// The refresh after a cache hit merges into the bubbles already shown. It keeps and updates the known bubbles.
+    /// It adds the new bubbles. It removes the bubbles that the phone no longer has.
     /// </summary>
     [TestMethod]
     public async Task Load_CacheHit_RefreshMerges()
@@ -872,7 +873,7 @@ public sealed class ChatViewModelTests
     }
 
     /// <summary>
-    /// A message that arrives while a refresh is in flight keeps its bubble when the (older) page lands.
+    /// A message that arrives while a refresh is in flight keeps its bubble when the older page lands.
     /// </summary>
     [TestMethod]
     public async Task ArrivalDuringRefresh_KeepsBubble()
@@ -954,7 +955,6 @@ public sealed class ChatViewModelTests
         using ChatViewModel chat = NewChat(rig);
         await chat.LoadAsync();
 
-        // Away: A Message Comes And The Phone Says The Chat Is Unread
         Conversation unread  = MainRig.Conv("a", "Ann");
         unread.Unread          = true;
         unread.LatestMessageID = "m1";
@@ -996,7 +996,7 @@ public sealed class ChatViewModelTests
         rig.Client.MessagesPage.Cursor = new Cursor { LastItemID = "older" };
         await chat.LoadAsync();
 
-        // The Older Page Is Newest First, With No Cursor (As Google Sends It), Then An Empty Page: The End
+        // The older page is newest first with no cursor, as Google sends it. Then an empty page ends the history.
         var older = new ListMessagesResponse();
         older.Messages.Add(Msg("m2", "two"));
         older.Messages.Add(Msg("m1", "one"));
@@ -1034,8 +1034,8 @@ public sealed class ChatViewModelTests
     }
 
     /// <summary>
-    /// A message from someone else arriving inside a group splits it: the bubbles on either side of it end and start
-    /// their own groups, with only them refreshed.
+    /// A message from someone else that arrives inside a group splits the group. The bubbles on either side of it end
+    /// and start their own groups, and only those bubbles refresh.
     /// </summary>
     [TestMethod]
     public async Task LiveInsert_MidGroup_RegroupsNeighbors()
@@ -1057,8 +1057,9 @@ public sealed class ChatViewModelTests
         Assert.IsFalse(chat.Messages[1].IsNewest);
     }
 
-    // A Phone With A Long History: m1 (Oldest) To m{count}, A Second Apart. Each Fetch Answers The Page Before The
-    // Cursor's Time (In Milliseconds), Newest First, With No Cursor (As Google Sends It)
+    // A phone with a long history: m1 is the oldest and m{count} is the newest, a second apart.
+    // Each fetch answers with the page before the cursor time in milliseconds, newest first, with no cursor.
+    // Google sends the pages this way.
     private static Func<long, Cursor?, ListMessagesResponse> History(int count) => (size, cursor) =>
     {
         var page = new ListMessagesResponse();
@@ -1070,7 +1071,6 @@ public sealed class ChatViewModelTests
         return page;
     };
 
-    // Opens The Chat And Pages Older Until It Shows Every Message Of The History
     private static async Task<ChatViewModel> LoadAll(MainRig rig, int count)
     {
         ChatViewModel chat = NewChat(rig);
@@ -1111,7 +1111,7 @@ public sealed class ChatViewModelTests
 
         await chat.LoadOlderAsync();
 
-        // Messages 201 To 225, Counting Back From The Newest: m200 Down To m176
+        // Messages 201 to 225, counted back from the newest, are m200 down to m176.
         Assert.AreEqual(225, chat.Messages.Count);
         Assert.AreEqual("m176", chat.Messages[0].Id);
         Assert.AreEqual("m200", chat.Messages[24].Id);
@@ -1133,7 +1133,8 @@ public sealed class ChatViewModelTests
     }
 
     /// <summary>
-    /// A live update (a reaction, a status) for a message trimmed away adds no bubble at the top; the older page brings it back.
+    /// A live update for a trimmed message adds no bubble at the top. A reaction or a status is such an update.
+    /// The older page brings the message back.
     /// </summary>
     [TestMethod]
     public async Task LiveUpdate_ForTrimmedMessage_NotInsertedAtTop()
@@ -1158,7 +1159,7 @@ public sealed class ChatViewModelTests
         using ChatViewModel chat = await LoadAll(rig, 400);
         chat.TrimToNewest();
 
-        // m200 Lands With m201's Time, So It Shows; The Older Page Holds m200 Too
+        // m200 arrives with the time of m201, so it shows. The older page holds m200 too.
         await rig.LiveMessage(Msg("m200", "text 200", ts: 1_761_000_000_000_000 + (201 * 1_000_000L)));
         Assert.AreEqual(ChatViewModel.MaxLoaded + 1, chat.Messages.Count);
 
@@ -1190,7 +1191,8 @@ public sealed class ChatViewModelTests
     // SAVED COPY (DATABASE)
     // =========================================================================
 
-    // A Database In Its Own Temp Folder Holding One Saved Message Of Chat "a"; A Short Wait On A Locked File
+    // A database in its own temp folder. It holds one saved message of chat "a".
+    // It waits a short time on a locked file.
     private static (MessageDatabase Database, string Path) SavedDatabase()
     {
         string folder = Path.Combine(Path.GetTempPath(), "chat-vm-db-" + Guid.NewGuid().ToString("N"));
@@ -1238,8 +1240,8 @@ public sealed class ChatViewModelTests
     }
 
     /// <summary>
-    /// A locked database never holds the chat: the big ring shows and the phone is asked at once, its page shows, and
-    /// the saved copy that lands later is dropped.
+    /// A locked database never holds the chat. The big ring shows and the app asks the phone at once. The page of the
+    /// phone shows, and the saved copy that lands later is dropped.
     /// </summary>
     [TestMethod]
     public async Task Load_LockedDatabase_PhoneFetchStartsAtOnce()
@@ -1248,7 +1250,7 @@ public sealed class ChatViewModelTests
         using var rig            = new MainRig(database);
         using ChatViewModel chat = NewChat(rig, null, Msg("m1", "one"));
 
-        // Another Process Holds The File
+        // Another process holds the file.
         using (var holder = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = path, Pooling = false }.ToString()))
         {
             holder.Open();
@@ -1269,7 +1271,7 @@ public sealed class ChatViewModelTests
             Assert.AreEqual("one", string.Join(",", chat.Messages.Select(b => b.Text)));
         }
 
-        // The Saved Copy Lands After The Phone's Page: Dropped
+        // The saved copy lands after the page of the phone. The app drops it.
         await rig.Store.FlushAsync();
         await Task.Delay(50);
         Assert.AreEqual("one", string.Join(",", chat.Messages.Select(b => b.Text)));
@@ -1283,7 +1285,7 @@ public sealed class ChatViewModelTests
     private const string Like  = "\U0001F44D";
     private const string Laugh = "\U0001F602";
 
-    // An RCS Chat Sent As "me", With A SIM For "me", So A Request's SIM Can Be Checked
+    // An RCS chat sent as "me", with a SIM for "me", so a test can check the SIM of a request.
     private static async Task<ChatViewModel> RcsChat(MainRig rig, TimeProvider time, params Message[] page)
     {
         Conversation conv      = MainRig.Conv("a", "Ann");
@@ -1352,7 +1354,7 @@ public sealed class ChatViewModelTests
         Assert.AreEqual(EmojiType.Laugh, sent.ReactionData.Type);
         Assert.AreEqual(3, sent.SIMPayload.SIMNumber);
 
-        // A Refusal Or Failure Is Logged And Swallowed
+        // The app logs a refusal or a failure and swallows it.
         rig.Client.ReactionAnswer = new SendReactionResponse { Success = false };
         await chat.ReactAsync(chat.Messages[0], Laugh);
         rig.Client.ReactionThrows = new PhoneNotRespondingException();
@@ -1373,7 +1375,6 @@ public sealed class ChatViewModelTests
 
         Assert.AreEqual("m1", rig.Client.Sent.Single().Reply?.MessageID);
 
-        // The Optimistic Bubble Shows The Quote
         MessageBubbleViewModel sent = chat.Messages[^1];
         Assert.IsTrue(sent.HasQuote);
         Assert.AreEqual("one", sent.QuoteText);
@@ -1389,7 +1390,7 @@ public sealed class ChatViewModelTests
         chat.Draft = "hi";
         Task send  = chat.SendAsync();
 
-        // Before The Echo: Already In The RCS Colors, So It Doesn't Flash The SMS Ones
+        // Before the echo, the bubble already has the RCS colors. This stops a flash of the SMS colors.
         Assert.IsTrue(chat.Messages[^1].IsRcs);
         await send;
     }
@@ -1475,7 +1476,8 @@ public sealed class ChatViewModelTests
     }
 
     /// <summary>
-    /// Only the chat's newest bubble shows the caption row, mine or received; a received one shows no delivery status.
+    /// Only the newest bubble of the chat shows the caption row, mine or received. A received bubble shows no delivery
+    /// status.
     /// </summary>
     [TestMethod]
     public async Task Status_OnlyNewestBubble()
@@ -1487,7 +1489,6 @@ public sealed class ChatViewModelTests
         Assert.IsTrue(chat.Messages[1].ShowsStatusRow);
         Assert.AreEqual(MessageStatusIcon.None, chat.Messages[1].StatusIcon);
 
-        // A Newer Send Still Sending: It Takes The Row, With The Clock
         chat.Draft = "three";
         await chat.SendAsync();
         MessageBubbleViewModel sent = chat.Messages[^1];
@@ -1495,7 +1496,6 @@ public sealed class ChatViewModelTests
         Assert.IsTrue(sent.ShowsStatusRow);
         Assert.AreEqual(MessageStatusIcon.Sending, sent.StatusIcon);
 
-        // The Phone's Echo: The Newer One Takes The Status, The Older One Loses It
         await rig.LiveMessage(Mine("m3", "three", sent.TmpId, MessageStatusType.OutgoingComplete));
         Assert.AreEqual(string.Empty, chat.Messages[0].StatusText);
         Assert.AreEqual(ChatCopy.Sent, sent.StatusText);
@@ -1511,7 +1511,7 @@ public sealed class ChatViewModelTests
         Type           = started ? TypingTypes.StartedTyping : TypingTypes.StoppedTyping,
     });
 
-    // Ann Types From +15550100
+    // Ann types from +15550100.
     private static async Task<ChatViewModel> TypingChat(MainRig rig, TimeProvider time)
     {
         ChatViewModel chat             = await RcsChat(rig, time);
@@ -1522,8 +1522,8 @@ public sealed class ChatViewModelTests
     }
 
     /// <summary>
-    /// A group's name change shows as a system line in Google's words, and the status stays on the newest real message;
-    /// other system lines (encryption) stay hidden.
+    /// A group name change shows as a system line in the words of Google. The status stays on the newest real message.
+    /// Other system lines, such as encryption, stay hidden.
     /// </summary>
     [TestMethod]
     public async Task GroupRename_ShowsAsLine_OthersHidden()
@@ -1545,7 +1545,7 @@ public sealed class ChatViewModelTests
     }
 
     /// <summary>
-    /// Delete asks the phone, and the bubble goes once it says it did; when it says no, the bubble stays.
+    /// Delete asks the phone. The bubble goes when the phone confirms. The bubble stays when the phone refuses.
     /// </summary>
     [TestMethod]
     public async Task Delete_RemovesTheBubble_OnlyWhenThePhoneDid()
@@ -1567,7 +1567,8 @@ public sealed class ChatViewModelTests
     }
 
     /// <summary>
-    /// The empty message box reads "RCS Message" in an RCS chat and "Text message" once it is SMS, with a change raised.
+    /// The empty message box reads "RCS Message" in an RCS chat and "Text message" once the chat is SMS. A change is
+    /// raised.
     /// </summary>
     [TestMethod]
     public async Task DraftPlaceholder_FollowsTheChatType()
@@ -1576,7 +1577,6 @@ public sealed class ChatViewModelTests
         using ChatViewModel chat = await RcsChat(rig, TimeProvider.System);
         Assert.AreEqual(ChatCopy.RcsMessage, chat.DraftPlaceholder);
 
-        // Back To SMS: The Placeholder Follows, With A Change Raised
         var raised            = new List<string?>();
         chat.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
         Conversation sms      = MainRig.Conv("a", "Ann");
@@ -1603,17 +1603,13 @@ public sealed class ChatViewModelTests
         time.Advance(TimeSpan.FromSeconds(1));
         Assert.IsFalse(chat.IsTyping);
 
-        // A Stop Clears It At Once
         await rig.Store.HandleEventAsync(Typing(true));
         Assert.IsTrue(chat.IsTyping);
         await rig.Store.HandleEventAsync(Typing(false));
         Assert.IsFalse(chat.IsTyping);
     }
 
-    /// <summary>
-    /// The timeout's post can run after the chat closed: it does nothing instead of touching the disposed timer.
-    /// </summary>
-    // A Fake Clock Whose Timers Throw After Dispose, As System.Threading.Timer Does
+    // A fake clock whose timers throw after Dispose, as System.Threading.Timer does.
     private sealed class StrictTimeProvider(DateTimeOffset now) : FakeTimeProvider(now)
     {
         public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period) =>
@@ -1639,6 +1635,9 @@ public sealed class ChatViewModelTests
         }
     }
 
+    /// <summary>
+    /// The timeout post can run after the chat closed. It does nothing instead of touching the disposed timer.
+    /// </summary>
     [TestMethod]
     public async Task TypingIn_TimeoutPostedAfterDispose_NoThrow()
     {
@@ -1658,14 +1657,14 @@ public sealed class ChatViewModelTests
     }
 
     /// <summary>
-    /// A bubble made before its conversation was cached learns which reaction is mine once the conversation arrives.
+    /// A bubble made before its conversation was cached learns which reaction is mine when the conversation arrives.
     /// </summary>
     [TestMethod]
     public async Task React_ConversationArrivesLater_SameEmojiSendsRemove()
     {
         using var rig = new MainRig();
 
-        // Not Cached Yet (The Phone Doesn't Know It Either): The Bubble Is Made Without It
+        // Not cached yet, because the phone does not know it either. The bubble is made without it.
         using var chat = new ChatViewModel(rig.Store, "a", TimeProvider.System, a => a());
         await rig.LiveMessage(Reacted("m1", Like, "me"));
         Assert.IsNull(chat.Messages[0].MyReaction);
@@ -1712,7 +1711,6 @@ public sealed class ChatViewModelTests
         chat.Draft = "hey";
         Assert.AreEqual(2, rig.Client.Typing.Count);
 
-        // An SMS Chat Never Says It
         using var smsRig             = new MainRig();
         using ChatViewModel smsChat  = NewChat(smsRig, time);
         await smsChat.LoadAsync();
@@ -1767,7 +1765,7 @@ public sealed class ChatViewModelTests
     }
 
     /// <summary>
-    /// Owner decision D2: with the setting turned off, a received message's link is never fetched.
+    /// With the setting off, the app never fetches the link of a received message. The owner decided this as D2.
     /// </summary>
     [TestMethod]
     public async Task ReceivedLink_SettingOff_NoFetch()
@@ -1790,7 +1788,7 @@ public sealed class ChatViewModelTests
     }
 
     /// <summary>
-    /// Owner decision D2: a fresh settings store (the default is on) lets a received message's link fetch.
+    /// A fresh settings store has the setting on by default. The app then fetches the link of a received message.
     /// </summary>
     [TestMethod]
     public async Task ReceivedLink_Default_Fetches()
@@ -1814,7 +1812,7 @@ public sealed class ChatViewModelTests
     }
 
     /// <summary>
-    /// Owner decision D2: the user's own links keep their previews with the setting off.
+    /// The links of the user own messages keep their previews with the setting off.
     /// </summary>
     [TestMethod]
     public async Task OwnLink_SettingOff_Fetches()
@@ -1840,7 +1838,7 @@ public sealed class ChatViewModelTests
     }
 
     /// <summary>
-    /// Review Focus 5: a spam or blocked chat's links are never fetched.
+    /// The app never fetches the links of a spam chat or a blocked chat.
     /// </summary>
     [TestMethod]
     [DataRow(ConversationStatus.SpamFolder)]
@@ -1870,8 +1868,8 @@ public sealed class ChatViewModelTests
     // =========================================================================
 
     /// <summary>
-    /// Messages from the same sender a few minutes apart form a group: the first and last are marked, a sender change
-    /// or a long gap starts a new one, and mine group the same way.
+    /// Messages from the same sender a few minutes apart form a group. The first and the last message are marked.
+    /// A sender change or a long gap starts a new group. My messages group the same way.
     /// </summary>
     [TestMethod]
     public async Task Groups_SameSenderWithinAFewMinutes()
@@ -1899,8 +1897,8 @@ public sealed class ChatViewModelTests
     }
 
     /// <summary>
-    /// In a group chat a received group shows the sender's name over its first bubble and their avatar beside its last;
-    /// a one-on-one chat shows neither.
+    /// In a group chat, a received group shows the sender name over its first bubble and the avatar beside its last
+    /// bubble. A one-on-one chat shows neither.
     /// </summary>
     [TestMethod]
     public async Task Groups_GroupChatAvatarOnLastNameOnFirst()
@@ -1933,8 +1931,8 @@ public sealed class ChatViewModelTests
     }
 
     /// <summary>
-    /// The newest bubble's status shows as Google's icon when it is mine; a bubble being sent shows the clock; the
-    /// others show none.
+    /// The status of the newest bubble shows as the icon of Google when the bubble is mine. A bubble in the send state
+    /// shows the clock. The other bubbles show none.
     /// </summary>
     [TestMethod]
     public async Task StatusIcon_FollowsTheStatus()
@@ -1955,8 +1953,8 @@ public sealed class ChatViewModelTests
     }
 
     /// <summary>
-    /// In an encrypted chat every RCS bubble has the lock (the newest's caption row, the others' clicked time), mine or
-    /// received; one that fell back to SMS has none.
+    /// In an encrypted chat every RCS bubble has the lock, mine or received. The newest bubble shows it in the caption
+    /// row. The other bubbles show it in the clicked time. A bubble that fell back to SMS has none.
     /// </summary>
     [TestMethod]
     public async Task Lock_OnEveryRcsBubble_NotOneSentAsSms()
@@ -1990,8 +1988,8 @@ public sealed class ChatViewModelTests
     }
 
     /// <summary>
-    /// A bubble whose time was shown by a click forgets it once it becomes the newest (newer bubbles dropped by a
-    /// reload), so hiding its caption row hides the time too instead of showing the footer time in its place.
+    /// A bubble whose time a click showed forgets that time when it becomes the newest, for example after a reload
+    /// dropped newer bubbles. Then hiding its caption row hides the time too. The footer time does not take its place.
     /// </summary>
     [TestMethod]
     public void ToggleTime_ShownThenNewest_HidingCaptionHidesTime()
@@ -2008,8 +2006,8 @@ public sealed class ChatViewModelTests
     }
 
     /// <summary>
-    /// A click on the newest bubble hides its caption row and a second click shows it again; another bubble's click
-    /// still shows and hides its own time.
+    /// A click on the newest bubble hides its caption row, and a second click shows it again. A click on another bubble
+    /// still shows and hides the time of that bubble.
     /// </summary>
     [TestMethod]
     public async Task ToggleTime_OnNewest_HidesThenShowsCaptionRow()
@@ -2030,7 +2028,7 @@ public sealed class ChatViewModelTests
     }
 
     /// <summary>
-    /// The bubble text shows text-style emoji in color; the text it sends again on a retry stays as typed.
+    /// The bubble text shows text-style emoji in color. The text that a retry sends again stays as typed.
     /// </summary>
     [TestMethod]
     public async Task DisplayText_ShowsColorEmoji()
@@ -2045,7 +2043,7 @@ public sealed class ChatViewModelTests
     }
 
     /// <summary>
-    /// Restoring a draft (reopening a chat) sets it without telling the other side I'm typing.
+    /// Restoring a draft on a reopened chat sets it without telling the other side that the user is typing.
     /// </summary>
     [TestMethod]
     public async Task RestoreDraft_SendsNoTyping()

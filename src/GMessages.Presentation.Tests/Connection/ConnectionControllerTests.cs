@@ -25,8 +25,9 @@ namespace GMessages.Presentation.Tests.Connection;
 /// server and a fake clock.
 /// </summary>
 /// <remarks>
-/// Every test's <c>post</c> runner flags that it is running, so each event handler can check it was called through
-/// <c>post</c>. Waits use <see cref="SpinWait.SpinUntil(Func{bool}, TimeSpan)"/> with a 10 s guard, never a sleep.
+/// The <c>post</c> runner of every test flags that it is running. Each event handler can then check that the call came
+/// through <c>post</c>. Waits use <see cref="SpinWait.SpinUntil(Func{bool}, TimeSpan)"/> with a 10 s guard.
+/// A wait is never a sleep.
 /// </remarks>
 [TestClass]
 public sealed class ConnectionControllerTests
@@ -52,7 +53,7 @@ public sealed class ConnectionControllerTests
             Paths      = new AppPaths(DataFolder);
             Handler    = new FakeHttpHandler { Time = Time };
 
-            // Inline Post That Flags Itself, Unless The Test Brings Its Own
+            // An inline post that flags itself, unless the test brings its own.
             Action<Action> inline = a =>
             {
                 lock (_postLock)
@@ -70,7 +71,7 @@ public sealed class ConnectionControllerTests
             };
             Controller = new ConnectionController(Paths, GmEndpoints.Production, Time, NullLoggerFactory.Instance, post ?? inline, Handler);
 
-            // Record Events And Whether They Came Through Post
+            // Record events and whether they came through post.
             Controller.StateChanged += (_, _) =>
             {
                 CheckPosted();
@@ -116,7 +117,8 @@ public sealed class ConnectionControllerTests
 
         public int NotPosted;
 
-        // Answer For A Request, Or Null For The Default (An Open Quiet Stream For The Long Poll, "[]" Otherwise)
+        // The answer for a request, or null for the default.
+        // The default is an open quiet stream for the long poll and "[]" for any other request.
         public Func<RecordedRequest, HttpResponseMessage?>? Respond { get; set; }
 
         public RecordedRequest[] Requests(string suffix)
@@ -147,7 +149,7 @@ public sealed class ConnectionControllerTests
         }
     }
 
-    // A Logged-In Google Account Session With A Token Valid For The Given Time
+    // A logged-in Google account session with a token valid for the given time.
     private static AuthData BuildSession(DateTimeOffset tokenExpiry)
     {
         AuthData ad = new()
@@ -177,7 +179,7 @@ public sealed class ConnectionControllerTests
     private static ActionType ActionOf(RecordedRequest req) =>
         OutgoingRPCData.Parser.ParseFrom(PbLiteSerializer.Deserialize<OutgoingRPCMessage>(req.Body).Data.MessageData).Action;
 
-    // Hands A Response To The Waiter Of A Recorded SendMessage, As If The Phone Answered
+    // Hands a response to the waiter of a recorded SendMessage, as if the phone answered.
     private static void Deliver(RpcSession rpc, RecordedRequest request, byte[] response)
     {
         var outgoing = PbLiteSerializer.Deserialize<OutgoingRPCMessage>(request.Body);
@@ -189,7 +191,7 @@ public sealed class ConnectionControllerTests
         });
     }
 
-    // A Valid UKEY2 Server Init With A Fresh P-256 Key
+    // A valid UKEY2 server init with a fresh P-256 key.
     private static byte[] ServerInit()
     {
         using var server = ECDiffieHellman.Create(ECCurve.NamedCurves.nistP256);
@@ -210,7 +212,8 @@ public sealed class ConnectionControllerTests
         }.ToByteArray();
     }
 
-    // Scripts The Config, Sign-In And Phone Answers; The Finish Answer Decides Success Or Failure (Null: Never Tapped)
+    // Scripts the config, the sign-in and the phone answers.
+    // The finish answer decides success or failure. Null means the user never tapped.
     internal static void ScriptPairing(Rig rig, byte[]? finished)
     {
         using JsonDocument doc = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Golden", "signin.json")));
@@ -254,7 +257,7 @@ public sealed class ConnectionControllerTests
     // =========================================================================
 
     /// <summary>
-    /// No session file means not paired; nothing is sent and no client exists.
+    /// No session file means not paired. Nothing is sent and no client exists.
     /// </summary>
     [TestMethod]
     public async Task Start_NoSession_IsNotPaired()
@@ -270,7 +273,7 @@ public sealed class ConnectionControllerTests
     }
 
     /// <summary>
-    /// A valid session connects: Connecting, then Connected, and the long poll opens.
+    /// A valid session connects. The state goes to Connecting, then Connected, and the long poll opens.
     /// </summary>
     [TestMethod]
     public async Task Start_ValidSession_IsConnected()
@@ -308,7 +311,8 @@ public sealed class ConnectionControllerTests
     }
 
     /// <summary>
-    /// A session with a browser and cookies but no Tachyon token is not logged in: signed out, session file deleted.
+    /// A session with a browser and cookies but no Tachyon token is not logged in. The app signs out and deletes the
+    /// session file.
     /// </summary>
     [TestMethod]
     public async Task Start_SessionWithoutToken_IsSignedOut()
@@ -326,8 +330,8 @@ public sealed class ConnectionControllerTests
     }
 
     /// <summary>
-    /// A session file another process holds open at boot (antivirus) is retried 1 s apart, then loads; it is never
-    /// taken for a missing or dead session.
+    /// A session file that another process holds open at boot, for example antivirus, is retried 1 s apart, then loads.
+    /// The app never takes it for a missing or dead session.
     /// </summary>
     [TestMethod]
     public async Task LockedSessionFile_RetriesThenLoads()
@@ -339,7 +343,7 @@ public sealed class ConnectionControllerTests
         Task start = rig.Controller.StartAsync();
         try
         {
-            // Two Waits Of 1 s While Still Locked
+            // Two waits of 1 s while the file is still locked.
             Assert.IsTrue(await rig.Time.TimerCreated.WaitAsync(HangGuard), "first retry wait");
             Assert.AreEqual(TimeSpan.FromSeconds(1), rig.Time.DueTimes.Last());
             Assert.AreEqual(ConnectionState.NotPaired, rig.Controller.State, "not settled while locked");
@@ -363,7 +367,7 @@ public sealed class ConnectionControllerTests
     // =========================================================================
 
     /// <summary>
-    /// A 401 on the long poll while connected signs out and disposes the client (off the event thread).
+    /// A 401 on the long poll while connected signs out and disposes the client. This runs off the event thread.
     /// </summary>
     [TestMethod]
     public async Task LongPollUnauthorized_IsSignedOut_AndClientDisposed()
@@ -378,7 +382,7 @@ public sealed class ConnectionControllerTests
                 return null;
             }
 
-            // The Client Making The Long Poll Is Still Current Here
+            // The client that makes the long poll is still current here.
             client ??= rig.Controller.CurrentClient;
             return FakeHttpHandler.Response(HttpStatusCode.Unauthorized);
         };
@@ -396,7 +400,8 @@ public sealed class ConnectionControllerTests
     }
 
     /// <summary>
-    /// GaiaLoggedOut (signed out on the phone) signs out, drops the client, deletes the session and is forwarded.
+    /// GaiaLoggedOut means the user signed out on the phone. The controller signs out, drops the client, deletes the
+    /// session and forwards the event.
     /// </summary>
     [TestMethod]
     public async Task GaiaLoggedOut_IsSignedOut_AndFileDeleted()
@@ -406,7 +411,7 @@ public sealed class ConnectionControllerTests
         Directory.CreateDirectory(rig.Paths.AvatarsFolder);
         await rig.Controller.StartAsync().WaitAsync(HangGuard);
 
-        // Fed Straight In: Producing It Over The Wire Needs An Encrypted GET_UPDATES Stream
+        // The test feeds the event in directly. Producing it over the wire needs an encrypted GET_UPDATES stream.
         rig.Controller.OnClientEvent(rig.Controller.CurrentClient!, new GaiaLoggedOut());
         WaitUntil(() => rig.Controller.State == ConnectionState.SignedOut, "signed out");
 
@@ -434,7 +439,6 @@ public sealed class ConnectionControllerTests
         WaitUntil(() => rig.Controller.State == ConnectionState.Reconnecting, "reconnecting");
         Assert.IsTrue(rig.Events.OfType<ListenTemporaryError>().Any());
 
-        // Wait Out The Backoff On The Fake Clock
         TimeSpan backoff = LongPollLoop.RetryDelay(2);
         WaitUntil(() => rig.Time.CountTimers(backoff) > 0, "backoff wait");
         rig.Time.Advance(backoff);
@@ -446,7 +450,7 @@ public sealed class ConnectionControllerTests
     }
 
     /// <summary>
-    /// A session save that fails (its temp file path is a folder) is forwarded through ClientEvent.
+    /// A session save that fails, because its temp file path is a folder, is forwarded through ClientEvent.
     /// </summary>
     [TestMethod]
     public async Task SessionSaveFailed_IsForwarded()
@@ -461,7 +465,7 @@ public sealed class ConnectionControllerTests
                 return null;
             }
 
-            // A Rotated Cookie Triggers A Save Right Away
+            // A rotated cookie triggers a save right away.
             var res = new HttpResponseMessage(HttpStatusCode.OK) { Content = new StreamContent(new OpenStream("[["u8.ToArray())) };
             res.Headers.TryAddWithoutValidation("Set-Cookie", "SID=rotated-sid; Path=/");
             return res;
@@ -475,7 +479,8 @@ public sealed class ConnectionControllerTests
     }
 
     /// <summary>
-    /// Resume while connected makes the long poll reconnect once (Plan 1 R24): exactly one more /ReceiveMessages.
+    /// Resume while connected makes the long poll reconnect once. The test counts exactly one more /ReceiveMessages
+    /// request. Plan 1 R24 sets this rule.
     /// </summary>
     [TestMethod]
     public async Task ReconnectAsync_WhileConnected_ReconnectsOnce()
@@ -573,7 +578,7 @@ public sealed class ConnectionControllerTests
     }
 
     /// <summary>
-    /// Dispose during the emoji wait cancels the pairing at once instead of waiting out the tap: dispose finishes and
+    /// Dispose during the emoji wait cancels the pairing at once instead of waiting out the tap. Dispose finishes and
     /// PairAsync throws a cancellation.
     /// </summary>
     [TestMethod]
@@ -612,7 +617,7 @@ public sealed class ConnectionControllerTests
     }
 
     /// <summary>
-    /// Unpair deletes the avatar folder too: it holds contacts' photos.
+    /// Unpair deletes the avatar folder too. The folder holds the photos of contacts.
     /// </summary>
     [TestMethod]
     public async Task Unpair_DeletesAvatarFolder()
@@ -633,7 +638,7 @@ public sealed class ConnectionControllerTests
     // =========================================================================
 
     /// <summary>
-    /// With a queued post, no handler runs until the queue is pumped; then every state change and event arrives in
+    /// With a queued post, no handler runs until the queue is pumped. Then every state change and event arrives in
     /// order.
     /// </summary>
     [TestMethod]

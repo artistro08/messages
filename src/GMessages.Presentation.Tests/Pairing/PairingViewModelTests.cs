@@ -22,11 +22,7 @@ public sealed class PairingViewModelTests
     private const string NotAccepted = "Google didn't accept the sign-in. Try again.";
     private const string Generic     = "Something went wrong while pairing. Try again.";
 
-    // =========================================================================
-    // RIG
-    // =========================================================================
-
-    // A View Model On A Rig Controller That Records Every Step It Moves Through
+    // A view model on a rig controller that records every step it moves through.
     private sealed class Watched
     {
         public Watched(Rig rig)
@@ -46,12 +42,8 @@ public sealed class PairingViewModelTests
         public ConcurrentQueue<PairingStep> Steps { get; } = new();
     }
 
-    // =========================================================================
-    // FAILURE MESSAGES
-    // =========================================================================
-
     /// <summary>
-    /// Every pairing failure maps to the owner's exact copy.
+    /// Every pairing failure maps to the exact text that the owner wrote.
     /// </summary>
     /// <param name="failure">The failure.</param>
     /// <param name="expected">The exact text shown.</param>
@@ -69,7 +61,7 @@ public sealed class PairingViewModelTests
         Assert.AreEqual(expected, PairingViewModel.MessageFor(new PairingException(failure, "go text")));
 
     /// <summary>
-    /// 401 and 403 mean Google refused the sign-in; any other status is the generic message.
+    /// A 401 or 403 means Google refused the sign-in. Any other status gives the generic message.
     /// </summary>
     /// <param name="status">The HTTP status.</param>
     /// <param name="expected">The exact text shown.</param>
@@ -81,18 +73,14 @@ public sealed class PairingViewModelTests
         Assert.AreEqual(expected, PairingViewModel.MessageFor(new GmRequestException(status, null, [])));
 
     /// <summary>
-    /// Anything else (network, protocol) is the generic message.
+    /// Any other failure, such as a network or protocol error, gives the generic message.
     /// </summary>
     [TestMethod]
     public void MessageFor_OtherError_IsGeneric() =>
         Assert.AreEqual(Generic, PairingViewModel.MessageFor(new HttpRequestException("offline")));
 
-    // =========================================================================
-    // STEPS
-    // =========================================================================
-
     /// <summary>
-    /// A successful pairing moves SigningIn, WaitingForPhone, ShowingEmoji, Done and keeps the emoji.
+    /// A successful pairing moves through SigningIn, WaitingForPhone, ShowingEmoji and Done. It keeps the emoji.
     /// </summary>
     [TestMethod]
     public async Task Pair_Success_MovesThroughEverySteps()
@@ -131,7 +119,7 @@ public sealed class PairingViewModelTests
     }
 
     /// <summary>
-    /// A 401 from SignInGaia (stale cookies) ends Failed with the sign-in message.
+    /// A 401 from SignInGaia, which means stale cookies, ends Failed with the sign-in message.
     /// </summary>
     [TestMethod]
     public async Task Pair_SignInUnauthorized_IsFailedWithSignInMessage()
@@ -192,7 +180,7 @@ public sealed class PairingViewModelTests
     }
 
     /// <summary>
-    /// An unpair while the emoji waits (the controller cancels the pairing) is no failure: the window goes back to the
+    /// An unpair while the emoji waits is no failure. The controller cancels the pairing. The window goes back to the
     /// sign-in without "Something went wrong".
     /// </summary>
     [TestMethod]
@@ -263,7 +251,8 @@ public sealed class PairingViewModelTests
     }
 
     /// <summary>
-    /// A sign-in page that can't load (no WebView2 runtime) ends Failed with the generic message; Try again resets.
+    /// A sign-in page that cannot load, because the WebView2 runtime is missing, ends Failed with the generic message.
+    /// Try again resets it.
     /// </summary>
     [TestMethod]
     public async Task SignInFailed_IsFailedWithGenericMessage()
@@ -298,12 +287,8 @@ public sealed class PairingViewModelTests
         Assert.HasCount(1, rig.Requests("/SignInGaia"));
     }
 
-    // =========================================================================
-    // SIGNED-OUT REASON
-    // =========================================================================
-
     /// <summary>
-    /// After Google signs the user out, the reason is shown above the sign-in.
+    /// After Google signs the user out, the sign-in shows the reason above it.
     /// </summary>
     [TestMethod]
     public async Task SignedOut_ShowsReason()
@@ -335,8 +320,8 @@ public sealed class PairingViewModelTests
     }
 
     /// <summary>
-    /// The pairing emoji are drawn from Noto Color Emoji images bundled with the app, named by their code points
-    /// without VS16, and every emoji either list can pick has one.
+    /// The pairing window draws the emoji from Noto Color Emoji images bundled with the app. The image names use the
+    /// code points without VS16. Every emoji that either list can pick has an image.
     /// </summary>
     [TestMethod]
     public void EmojiImage_NamedByCodePoints_AndAllBundled()

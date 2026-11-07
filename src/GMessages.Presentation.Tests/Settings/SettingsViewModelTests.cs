@@ -15,11 +15,7 @@ public sealed class SettingsViewModelTests
 {
     private const string LogsFolder = @"C:\Data\Logs";
 
-    // =========================================================================
-    // RIG
-    // =========================================================================
-
-    // Records Every Change; Can Refuse An Enable The Way Windows Does
+    // Records every change. Can refuse an enable, the way Windows does.
     private sealed class FakeStartupService : IStartupService
     {
         public bool Enabled { get; set; }
@@ -45,16 +41,12 @@ public sealed class SettingsViewModelTests
         Action<string>? openFolder = null) =>
         new(new AppSettings(store), startup ?? new FakeStartupService(), controller ?? IdleController(), openFolder ?? (_ => { }), LogsFolder, NullLogger.Instance);
 
-    // Never Started, So It Touches No Files And Opens No Connections
+    // The controller never starts, so it touches no files and opens no connections.
     private static ConnectionController IdleController() =>
         new(new AppPaths(Path.Combine(Path.GetTempPath(), "settings-test-unused")), Protocol.Http.GmEndpoints.Production, TimeProvider.System, NullLoggerFactory.Instance, a => a());
 
-    // =========================================================================
-    // SETTINGS
-    // =========================================================================
-
     /// <summary>
-    /// The snooze length starts at 15 minutes; picking a choice saves its minutes, and an index past the choices is
+    /// The snooze length starts at 15 minutes. Picking a choice saves its minutes. An index past the choices is
     /// ignored.
     /// </summary>
     [TestMethod]
@@ -74,8 +66,8 @@ public sealed class SettingsViewModelTests
     }
 
     /// <summary>
-    /// The microphone box starts on "Windows default" with only that choice; once the devices load, picking one saves
-    /// its ID, and picking "Windows default" clears it.
+    /// The microphone box starts on "Windows default" with only that choice. After the devices load, picking one saves
+    /// its ID. Picking "Windows default" clears the saved ID.
     /// </summary>
     [TestMethod]
     public void MicrophoneIndex_DefaultsToWindowsDefault_SavesTheChosenDevice()
@@ -99,8 +91,8 @@ public sealed class SettingsViewModelTests
     }
 
     /// <summary>
-    /// A saved microphone that isn't plugged in shows "Windows default" but stays saved, so it's picked again once it
-    /// comes back.
+    /// A saved microphone that is not plugged in shows "Windows default" but stays saved. The box picks it again when
+    /// it comes back.
     /// </summary>
     [TestMethod]
     public void MicrophoneIndex_SavedDeviceMissing_ShowsWindowsDefaultAndKeepsTheChoice()
@@ -112,7 +104,7 @@ public sealed class SettingsViewModelTests
         vm.SetMicrophones([("mic-1", "Headset")]);
         Assert.AreEqual(0, vm.MicrophoneIndex);
 
-        // The Box Writing Its Shown Index Back Doesn't Forget The Saved Device
+        // The box writes its shown index back. This does not make the box forget the saved device.
         vm.MicrophoneIndex = 0;
         Assert.AreEqual("mic-2", new AppSettings(store).MicrophoneId);
 
@@ -140,7 +132,7 @@ public sealed class SettingsViewModelTests
     }
 
     /// <summary>
-    /// The theme dropdown index maps to the theme in enum order, and a bad index is ignored.
+    /// The theme dropdown index maps to the theme in enum order. A bad index is ignored.
     /// </summary>
     [TestMethod]
     public void ThemeIndex_MapsToTheme()
@@ -244,12 +236,8 @@ public sealed class SettingsViewModelTests
         Assert.IsTrue(new AppSettings(store).CopyCodes);
     }
 
-    // =========================================================================
-    // START WITH WINDOWS
-    // =========================================================================
-
     /// <summary>
-    /// Load reads the service; flipping the switch asks the service, both ways.
+    /// Load reads the service. Flipping the switch asks the service, in both directions.
     /// </summary>
     [TestMethod]
     public async Task StartWithWindows_CallsTheStartupService()
@@ -282,7 +270,7 @@ public sealed class SettingsViewModelTests
     }
 
     /// <summary>
-    /// A refused enable says why with the owner's copy; the next flip clears it.
+    /// A refused enable says why, with the text that the owner wrote. The next flip clears the text.
     /// </summary>
     [TestMethod]
     public void StartWithWindows_Refused_ShowsWhy_NextFlipClears()
@@ -305,12 +293,8 @@ public sealed class SettingsViewModelTests
         Assert.IsFalse(vm.HasStartupMessage);
     }
 
-    // =========================================================================
-    // UNPAIR AND LOGS
-    // =========================================================================
-
     /// <summary>
-    /// Unpair goes through the controller: the session file is gone and the app is not paired.
+    /// Unpair goes through the controller. The session file is gone and the app is not paired.
     /// </summary>
     [TestMethod]
     public async Task Unpair_CallsTheController()
@@ -327,8 +311,8 @@ public sealed class SettingsViewModelTests
     }
 
     /// <summary>
-    /// A window opened while not paired shows Unpair once pairing (here a start with a saved session) finishes, and stops
-    /// following the controller once disposed.
+    /// A window opened while not paired shows Unpair when pairing finishes. Here a start with a saved session ends the
+    /// pairing. The window stops following the controller after it is disposed.
     /// </summary>
     [TestMethod]
     public async Task CanUnpair_FollowsStateChanges_UntilDisposed()
@@ -352,7 +336,7 @@ public sealed class SettingsViewModelTests
     }
 
     /// <summary>
-    /// Unpair is offered only while paired, and is busy while it runs.
+    /// Unpair shows only while paired. Unpair is busy while it runs.
     /// </summary>
     [TestMethod]
     public async Task Unpair_IsUnpairingWhileRunning_CanUnpairOnlyWhenPaired()
@@ -366,7 +350,7 @@ public sealed class SettingsViewModelTests
         Assert.IsTrue(vm.CanUnpair);
         Assert.IsFalse(vm.IsUnpairing);
 
-        // Busy Seen From Inside The Call; Both Flags Raised
+        // The test reads the busy state from inside the call. Both flags are raised.
         var busySeen  = new List<bool>();
         var raised    = new List<string?>();
         vm.PropertyChanged += (_, e) =>

@@ -82,8 +82,8 @@ public sealed class RollingFileLoggerTests
     }
 
     /// <summary>
-    /// The provider has no secret handling. This pins that a line holds only what the caller passes, so callers must
-    /// log safe values (ids, counts), never tokens or message text.
+    /// The provider has no secret handling. This test pins that a line holds only what the caller passes. Callers must
+    /// log safe values, such as IDs and counts, never tokens or message text.
     /// </summary>
     [TestMethod]
     public void LogsOnlyWhatTheCallerPassesNeverAnUnloggedSecret()
@@ -92,7 +92,7 @@ public sealed class RollingFileLoggerTests
         using var provider = new RollingFileLoggerProvider(_directory, new LogLevelSwitch(), TimeProvider.System);
         var logger = provider.CreateLogger("Tests");
 
-        // The Secret Exists In Scope But Is Not Passed To The Logger
+        // The secret exists in scope but the test does not pass it to the logger.
         _ = Secret.Length;
         logger.Log(LogLevel.Information, "paired device {Count}", 1);
 

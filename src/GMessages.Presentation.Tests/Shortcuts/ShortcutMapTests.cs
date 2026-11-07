@@ -51,7 +51,7 @@ public sealed class ShortcutMapTests
         Assert.AreEqual(ShortcutCommand.ExitConversation, ShortcutMap.Resolve(VirtualKey.Escape, false, false, false, true, false));
 
     /// <summary>
-    /// The conversation shortcuts work while typing too, and Ctrl + Alt + h is the only Alt chord.
+    /// The conversation shortcuts work while typing too. Ctrl + Alt + h is the only Alt chord.
     /// </summary>
     [TestMethod]
     [DataRow(VirtualKey.D, true, false, false, ShortcutCommand.DeleteConversation)]
@@ -72,7 +72,8 @@ public sealed class ShortcutMapTests
     [DataRow(false, true)]
     public void AltH_WithoutExactlyCtrl_IsNull(bool ctrl, bool shift) => Assert.IsNull(ShortcutMap.Resolve(VirtualKey.H, ctrl, shift, true, false, false));
 
-    // Ruling R5-7: AltGr Is Left Ctrl + Right Alt, So With Right Alt Down The Key Is Left To The Layout
+    // AltGr is Left Ctrl plus Right Alt. With Right Alt down, the app leaves the key to the keyboard layout.
+    // Ruling R5-7 sets this rule.
     [TestMethod]
     [DataRow(false)]
     [DataRow(true)]

@@ -35,13 +35,11 @@ public sealed class StartChatViewModelTests
         using var rig = new MainRig();
         StartChatViewModel vm = await NewPaneAsync(rig);
 
-        // Top Contact First, Rest After, No Duplicate
         Assert.AreEqual("Ann Lee|Bob Stone|annabel", Names(vm));
 
         vm.Query = "ANN";
         Assert.AreEqual("Ann Lee|annabel", Names(vm));
 
-        // Digits Only, Punctuation In The Number Ignored
         vm.Query = "020-00";
         Assert.AreEqual("Send to 020-00|Bob Stone", Names(vm));
     }
@@ -63,7 +61,6 @@ public sealed class StartChatViewModelTests
         vm.Query = "Bob";
         Assert.IsFalse(vm.Results.Any(r => r.IsSendTo));
 
-        // Picking The Send-To Row Makes A Chip And Clears The Query
         vm.Query = "+15559998888";
         vm.Toggle(vm.Results[0]);
         Assert.AreEqual("+15559998888", vm.Selected.Single().Number);
@@ -129,14 +126,14 @@ public sealed class StartChatViewModelTests
         vm.Toggle(first);
         Assert.IsTrue(vm.CanStart);
 
-        // The Chip Removes Them
         vm.Toggle(vm.Selected[0]);
         Assert.IsFalse(vm.CanStart);
         await Assert.ThrowsExactlyAsync<InvalidOperationException>(vm.StartAsync);
     }
 
     /// <summary>
-    /// A picked person leaves the suggestions (their chip shows them), and removing the chip puts them back in place.
+    /// A picked person leaves the suggestions, because the chip shows the person. Removing the chip puts the person
+    /// back in place.
     /// </summary>
     [TestMethod]
     public async Task Toggle_HidesPickedFromResults_RemovingPutsThemBack()
@@ -159,6 +156,9 @@ public sealed class StartChatViewModelTests
         CollectionAssert.AreEqual(new[] { System.Collections.Specialized.NotifyCollectionChangedAction.Add }, changes, "removing the chip didn't just put the row back");
     }
 
+    /// <summary>
+    /// A lookup that still answers CreateRcs after the retry shows the start error and starts nothing.
+    /// </summary>
     [TestMethod]
     public async Task Start_NotSuccessAfterRetry_ShowsError()
     {
@@ -173,11 +173,8 @@ public sealed class StartChatViewModelTests
     }
 
     /// <summary>
-    /// R11: a start the phone can't do says so in the pane, keeps everyone picked, and the next attempt clears it.
-    /// </summary>
-    /// <summary>
-    /// Go never throws at the click handler: every failure (network, timeout, server, decode, phone) shows the error and
-    /// keeps everyone picked.
+    /// Go never throws at the click handler. Every failure shows the error and keeps everyone picked. This covers
+    /// network, timeout, server, decode and phone errors.
     /// </summary>
     [TestMethod]
     public async Task Start_AnyFailure_ShowsError_NeverThrows()
@@ -196,6 +193,10 @@ public sealed class StartChatViewModelTests
         }
     }
 
+    /// <summary>
+    /// A start that the phone cannot do says so in the pane and keeps everyone picked. The next attempt clears the
+    /// error.
+    /// </summary>
     [TestMethod]
     public async Task Start_PhoneProblem_ShowsError_NextAttemptClears()
     {
@@ -211,7 +212,6 @@ public sealed class StartChatViewModelTests
         Assert.IsTrue(vm.HasError);
         Assert.IsTrue(vm.CanStart, "still picked");
 
-        // The Next Attempt Clears It Before Asking (And It Stays Clear On Success)
         string? seen = "unset";
         vm.PropertyChanged += (_, e) =>
         {
@@ -234,7 +234,8 @@ public sealed class StartChatViewModelTests
     }
 
     /// <summary>
-    /// A phone that fails the contact load (not answering, connection closed) is no crash; the next open loads again.
+    /// A phone that fails the contact load does not crash the pane. The phone can fail by not answering or by closing
+    /// the connection. The next open loads again.
     /// </summary>
     [TestMethod]
     public async Task Load_PhoneProblem_NextLoadRetries()
@@ -254,8 +255,8 @@ public sealed class StartChatViewModelTests
     }
 
     /// <summary>
-    /// A refresh that matches the same rows (the full contact list arriving after the top contacts) leaves the list
-    /// alone, so a row being clicked isn't swapped out from under the click.
+    /// A refresh that matches the same rows leaves the list alone. This happens when the full contact list arrives
+    /// after the top contacts. A row that the user clicks is not swapped out during the click.
     /// </summary>
     [TestMethod]
     public async Task Refresh_SameRows_LeavesListAlone()

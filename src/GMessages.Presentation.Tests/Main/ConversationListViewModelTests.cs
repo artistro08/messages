@@ -33,8 +33,8 @@ public sealed class ConversationListViewModelTests
     }
 
     /// <summary>
-    /// With PinnedApart on, pinned conversations sit in Pinned (newest first) and not in Rows; pinning or unpinning on
-    /// the phone moves the same row across, and turning it off puts them back at the top of Rows.
+    /// With PinnedApart on, pinned conversations sit in Pinned, newest first, and not in Rows. Pinning or unpinning on
+    /// the phone moves the same row across. Turning PinnedApart off puts them back at the top of Rows.
     /// </summary>
     [TestMethod]
     public async Task PinnedApart_SplitsPinnedRows_AndFollowsPinChanges()
@@ -53,7 +53,6 @@ public sealed class ConversationListViewModelTests
         Assert.AreEqual("pin2,pin", string.Join(",", list.Pinned.Select(r => r.Id)));
         Assert.AreEqual("new,old", Ids(list));
 
-        // Pinned On The Phone: The Same Row Moves Into The Grid
         ConversationRowViewModel oldRow = list.Rows[1];
         await rig.Live(MainRig.Conv("old", "Old", minutesAgo: 90, pinned: true));
 
@@ -61,13 +60,11 @@ public sealed class ConversationListViewModelTests
         Assert.AreSame(oldRow, list.Pinned[0]);
         Assert.AreEqual("new", Ids(list));
 
-        // Unpinned: Back Among The Rows
         await rig.Live(MainRig.Conv("pin2", "Pin 2", minutesAgo: 300));
 
         Assert.AreEqual("old,pin", string.Join(",", list.Pinned.Select(r => r.Id)));
         Assert.AreEqual("new,pin2", Ids(list));
 
-        // Off: Every Row Back In Rows, Pinned First
         list.PinnedApart = false;
 
         Assert.AreEqual(0, list.Pinned.Count);
@@ -114,14 +111,13 @@ public sealed class ConversationListViewModelTests
         var group = new ConversationRowViewModel(gr, MainRig.Now);
         var alone = new ConversationRowViewModel(bare, MainRig.Now);
 
-        // One On One: The Conversation's Letter And Color, The Other Person's Photo
         Assert.AreEqual("A", one.Initial);
         Assert.AreEqual(0xFF00FF00u, one.AvatarColor);
         Assert.AreEqual("p-bo", one.PhotoId);
         Assert.AreEqual(string.Empty, one.SecondPhotoId);
         Assert.AreEqual(0u, one.SecondColor);
 
-        // R12 Group: Front Circle Is The First Other Person, Back Circle The Second
+        // In a group, the front circle is the first other person and the back circle is the second.
         Assert.AreEqual("B", group.Initial);
         Assert.AreEqual(0xFF1A73E8u, group.AvatarColor);
         Assert.AreEqual("p-bo", group.PhotoId);
@@ -129,7 +125,7 @@ public sealed class ConversationListViewModelTests
         Assert.AreNotEqual(0u, group.SecondColor);
         Assert.AreEqual("p-cy", group.SecondPhotoId);
 
-        // A Group With Nobody Else: The Conversation's Letter, One Circle
+        // A group with nobody else shows the letter of the conversation in one circle.
         Assert.AreEqual("T", alone.Initial);
         Assert.AreEqual(0xFF00FF00u, alone.AvatarColor);
         Assert.AreEqual(string.Empty, alone.PhotoId);
@@ -154,16 +150,15 @@ public sealed class ConversationListViewModelTests
         Assert.AreEqual("fresh", rowC.Snippet);
         Assert.AreEqual(1, changed);
 
-        // A Brand New Conversation Is Inserted In Order
         await rig.Live(MainRig.Conv("d", "Di", minutesAgo: 7));
 
         Assert.AreEqual("c,a,d,b", Ids(list));
     }
 
     /// <summary>
-    /// A live message (sent or received) newer than its conversation's last moves the row to the top at once, without
-    /// Google's conversation update: with the first page only, and on a row a later page added. A status update to an
-    /// older message, or a catch-up message, moves nothing.
+    /// A live message newer than the last message of its conversation, sent or received, moves the row to the top at
+    /// once, without the conversation update of Google. This holds with the first page only, and on a row that a later
+    /// page added. A status update to an older message, or a catch-up message, moves nothing.
     /// </summary>
     [TestMethod]
     public async Task LiveMessage_MovesRowToTop_WithAndWithoutPaging()
@@ -174,26 +169,23 @@ public sealed class ConversationListViewModelTests
         using var list = NewList(rig);
         await list.LoadAsync();
 
-        // The Page Untouched: A Message In The Lowest Row
         await rig.LiveMessage(LiveMsg("m1", "c", minutesAgo: 1));
         Assert.AreEqual("c,a,b", Ids(list));
 
-        // After Paging: A Message In A Row The Second Page Added, Sent From Here
         rig.Page(MainRig.Conv("d", "Di", minutesAgo: 60));
         await list.LoadMoreAsync();
         Assert.AreEqual("c,a,b,d", Ids(list));
         await rig.LiveMessage(LiveMsg("m2", "d", minutesAgo: 0, from: "me"));
         Assert.AreEqual("d,c,a,b", Ids(list));
 
-        // An Update To An Older Message, And A Catch-Up Message, Move Nothing
         await rig.LiveMessage(LiveMsg("m3", "b", minutesAgo: 30));
         await rig.Store.HandleEventAsync(new MessageReceived(LiveMsg("m4", "a", minutesAgo: 0), true));
         Assert.AreEqual("d,c,a,b", Ids(list));
     }
 
     /// <summary>
-    /// Only live changes animate: a live message lifts its row with motion; the first load, a page and a reload land in
-    /// place.
+    /// Only live changes animate. A live message lifts its row with motion. The first load, a page and a reload land
+    /// in place.
     /// </summary>
     [TestMethod]
     public async Task OnlyLiveChangesAnimate()
@@ -205,25 +197,21 @@ public sealed class ConversationListViewModelTests
         List<bool> changing = [];
         list.RowsChanging  += (_, live) => changing.Add(live);
 
-        // First Load And A Page: Rows Come In, None Animate
         await list.LoadAsync();
         rig.Page(MainRig.Conv("d", "Di", minutesAgo: 60));
         await list.LoadMoreAsync();
         Assert.AreEqual("a,b,c,d", Ids(list));
         Assert.IsTrue(changing.Count > 0 && changing.All(live => !live), "Loads and pages never animate.");
 
-        // A Received Message Lifts Its Row: It Animates
         changing.Clear();
         await rig.LiveMessage(LiveMsg("m1", "c", minutesAgo: 1));
         Assert.AreEqual("c,a,b,d", Ids(list));
         Assert.AreEqual("True", string.Join(",", changing));
 
-        // A New Conversation Below Newer Ones (Unarchived) Animates In
         changing.Clear();
         await rig.Live(MainRig.Conv("e", "Ed", minutesAgo: 7));
         Assert.AreEqual("True", string.Join(",", changing));
 
-        // A Reload Moves Rows Without Animation
         changing.Clear();
         rig.Page(MainRig.Conv("b", "Bo", minutesAgo: -2), MainRig.Conv("f", "Fa", minutesAgo: -1));
         await list.LoadAsync();
@@ -231,8 +219,9 @@ public sealed class ConversationListViewModelTests
     }
 
     /// <summary>
-    /// New received messages count up a pinned tile's badge (a repeat of one, or my own, doesn't count); the phone saying
-    /// the conversation is read clears it, and an unread conversation with nothing counted shows its short newest message.
+    /// New received messages count up the badge of a pinned tile. A repeat of one, or my own message, does not count.
+    /// When the phone says the conversation is read, the badge clears. An unread conversation with nothing counted
+    /// shows its short newest message.
     /// </summary>
     [TestMethod]
     public async Task LiveMessages_CountUnreadBadge_UntilRead()
@@ -243,8 +232,8 @@ public sealed class ConversationListViewModelTests
         list.PinnedApart = true;
         await list.LoadAsync();
 
-        // As The Phone Sends Them: The Unread Conversation First, Then The Message. New Is Judged Against The Real
-        // Clock, So These Are Sent Now
+        // As the phone sends them: the unread conversation first, then the message.
+        // The app judges new against the real clock, so these messages are sent now.
         DateTimeOffset now  = DateTimeOffset.UtcNow;
         Conversation unread = MainRig.Conv("a", "Ann", pinned: true, snippet: "ok");
         unread.Unread       = true;
@@ -261,23 +250,22 @@ public sealed class ConversationListViewModelTests
         Assert.IsTrue(list.Pinned[0].HasUnreadList);
         Assert.AreEqual("Ann\nx\nx", list.Pinned[0].HoverText);
 
-        // Read On The Phone: Nothing Counted, No Badge
         await rig.Live(MainRig.Conv("a", "Ann", pinned: true, snippet: "ok"));
         Assert.AreEqual(0, rig.Store.LiveUnreadTexts("a").Count);
         Assert.AreEqual(string.Empty, list.Pinned[0].UnreadBadge);
         Assert.IsFalse(list.Pinned[0].HasUnreadList);
         Assert.AreEqual("Ann\nok", list.Pinned[0].HoverText);
 
-        // A Message While It Reads As Read (Read Along On The Phone) Isn't Counted Into The Next Unread Spell
+        // A message while the conversation reads as read on the phone does not count toward the next unread spell.
         await rig.LiveMessage(LiveMsg("m4", "a", 0, at: now));
         Assert.AreEqual(0, rig.Store.LiveUnreadTexts("a").Count);
 
-        // Unread Again With Nothing Counted (It Came While The App Was Closed): The Short Message Itself
+        // Unread again with nothing counted, because it came while the app was closed. The row shows the short message.
         await rig.Live(unread);
         Assert.AreEqual("ok", list.Pinned[0].UnreadBadge);
     }
 
-    // A Live Message In A Conversation, Sent The Given Minutes Before MainRig.Now (Or At A Given Time)
+    // A live message in a conversation, sent the given minutes before MainRig.Now or at a given time.
     private static Message LiveMsg(string id, string conversation, long minutesAgo, string from = "p-x", DateTimeOffset? at = null, MessageStatusType status = MessageStatusType.IncomingDelivered)
     {
         var m = new Message
@@ -358,8 +346,8 @@ public sealed class ConversationListViewModelTests
     }
 
     /// <summary>
-    /// A load or load-more that fails with any error (phone asleep, network, server, decode) keeps the rows and never
-    /// throws; the next load fills the list.
+    /// A load or load-more that fails with any error keeps the rows and never throws. This covers phone asleep,
+    /// network, server and decode errors. The next load fills the list.
     /// </summary>
     [TestMethod]
     public async Task Load_AnyFailure_KeepsRows_NextLoadFills()
@@ -421,8 +409,8 @@ public sealed class ConversationListViewModelTests
     }
 
     /// <summary>
-    /// Google sends no cursor back, so the next page starts at the last conversation shown (its time in milliseconds),
-    /// and an empty page ends the paging.
+    /// Google sends no cursor back, so the next page starts at the last conversation shown, by its time in
+    /// milliseconds. An empty page ends the paging.
     /// </summary>
     [TestMethod]
     public async Task LoadMore_NoCursorBack_PagesFromLastConversation_StopsAtEmptyPage()
@@ -448,7 +436,7 @@ public sealed class ConversationListViewModelTests
     }
 
     /// <summary>
-    /// A page with nothing new (the phone ignored the cursor) ends the paging, so the list never asks for it forever.
+    /// A page with nothing new, because the phone ignored the cursor, ends the paging. The list never asks forever.
     /// </summary>
     [TestMethod]
     public async Task LoadMore_PageWithNothingNew_Stops()
@@ -466,9 +454,9 @@ public sealed class ConversationListViewModelTests
     }
 
     /// <summary>
-    /// The next page's conversations can reach the list first as live updates (the phone pushes them): that page is
-    /// still new to the paging, so the paging goes on. Its rows were already on screen, so the last row never changed to
-    /// ask for the next page: it loads at once instead.
+    /// The conversations of the next page can reach the list first as live updates, which the phone pushes. That page
+    /// is still new to the paging, so the paging continues. The rows were already on screen, so the last row never
+    /// changed to ask for the next page. The next page loads at once instead.
     /// </summary>
     [TestMethod]
     public async Task LoadMore_PageAlreadyShownByLiveUpdates_KeepsPaging()
@@ -479,7 +467,6 @@ public sealed class ConversationListViewModelTests
         using var list = NewList(rig);
         await list.LoadAsync();
 
-        // Page 2's Conversation Arrives Live Before Page 2 Is Asked For
         Conversation bo = MainRig.Conv("b", "Bo", minutesAgo: 30);
         await rig.Live(bo);
         Assert.AreEqual("a,b", Ids(list));
@@ -498,7 +485,6 @@ public sealed class ConversationListViewModelTests
         Assert.AreEqual(3, rig.Client.ListCalls.Count);
         Assert.AreEqual("p3", rig.Client.ListCursors[2]?.LastItemID);
 
-        // Page 3 Added A Row, So The Next Page Waits For The List To Ask; The Empty Page After It Ends The Paging
         await list.LoadMoreAsync();
         await list.LoadMoreAsync();
         Assert.AreEqual(4, rig.Client.ListCalls.Count);
@@ -533,9 +519,9 @@ public sealed class ConversationListViewModelTests
     }
 
     /// <summary>
-    /// The next page asked for while the first is still loading (its last row showed mid-load, and won't show again
-    /// until scrolled away and back) runs once that load ends, from the cursor it sent back, instead of being dropped.
-    /// After a failed page, the next ask loads again.
+    /// The next page, asked for while the first page still loads, runs when that load ends. The last row showed during
+    /// the load and does not show again until the user scrolls away and back. The page runs from the cursor that the
+    /// load sent back, instead of being dropped. After a failed page, the next ask loads again.
     /// </summary>
     [TestMethod]
     public async Task LoadMore_AskedMidLoad_RunsAfter_AndAfterAFailure()
@@ -558,7 +544,6 @@ public sealed class ConversationListViewModelTests
         Assert.IsFalse(list.IsLoading);
         Assert.IsFalse(list.IsLoadingMore);
 
-        // A Failed Page Keeps The Cursor And Resets The Flags; The Next Ask Tries Again
         rig.Page(MainRig.Conv("a", "Ann"), MainRig.Conv("b", "Bo", minutesAgo: 30));
         rig.Client.ConversationsPage.Cursor = new Cursor { LastItemID = "next" };
         await list.LoadAsync();
@@ -633,7 +618,6 @@ public sealed class ConversationListViewModelTests
         await first;
         Assert.IsFalse(list.IsLoadingFirstPage);
 
-        // Reload And More Keep The Rows On Screen
         rig.Client.ListGate = gate = new TaskCompletionSource();
         Task reload         = list.LoadAsync();
         Assert.IsFalse(list.IsLoadingFirstPage);
@@ -648,7 +632,7 @@ public sealed class ConversationListViewModelTests
     }
 
     /// <summary>
-    /// A live row that lands during the first load hides the ring at once (it is no longer an empty list).
+    /// A live row that lands during the first load hides the ring at once. The list is no longer empty.
     /// </summary>
     [TestMethod]
     public async Task IsLoadingFirstPage_LiveRowDuringFirstLoad_HidesRing()
@@ -676,8 +660,9 @@ public sealed class ConversationListViewModelTests
         await first;
     }
     /// <summary>
-    /// A list made after another one loaded (the window reopened) shows the store's conversations at once, with no
-    /// ring, then the phone's page updates the same rows and drops the ones it no longer lists.
+    /// A list made after another list loaded, for example when the window reopened, shows the conversations of the
+    /// store at once, with no ring. Then the page of the phone updates the same rows and drops the rows it no longer
+    /// lists.
     /// </summary>
     [TestMethod]
     public async Task Load_ShowsCachedRowsAtOnce_ThenRefreshUpdatesThem()
@@ -692,14 +677,12 @@ public sealed class ConversationListViewModelTests
             await first.LoadAsync();
         }
 
-        // The Phone's Next Answer No Longer Lists Bo
         rig.Page(MainRig.Conv("a", "Ann", minutesAgo: 5, snippet: "new"));
         using var list      = NewList(rig);
         var gate            = new TaskCompletionSource();
         rig.Client.ListGate = gate;
         Task load           = list.LoadAsync();
 
-        // From The Store, Before The Phone Answers
         Assert.AreEqual("b,a", Ids(list));
         Assert.IsFalse(list.IsLoadingFirstPage);
         ConversationRowViewModel ann = list.Rows[1];

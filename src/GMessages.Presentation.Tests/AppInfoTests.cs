@@ -18,11 +18,13 @@ public sealed class AppInfoTests
     [TestMethod]
     public void NoSourceFileHardCodesTheDisplayName()
     {
-        // Scans the app and presentation sources for the name quoted or as element text; Directory.Build.props isn't scanned
+        // Scans the app and presentation sources for the name, quoted or as element text.
+        // The scan does not read Directory.Build.props.
         var src = Path.Combine(FindRepoRoot(), "src");
         var self = Path.GetFullPath(Path.Combine(src, "GMessages.Presentation.Tests", "AppInfoTests.cs"));
 
-        // AppInfo.cs Holds The Window Title, "Messages", Which Is What The App Is For, Not Its Name (They Match Today)
+        // AppInfo.cs holds the window title "Messages". That title says what the app is for, not what its name is.
+        // They match today.
         var info = Path.GetFullPath(Path.Combine(src, "GMessages.Presentation", "AppInfo.cs"));
         var offenders = new List<string>();
 
@@ -31,7 +33,7 @@ public sealed class AppInfoTests
             var files = ScannedPatterns.SelectMany(pattern => Directory.EnumerateFiles(Path.Combine(src, project), pattern, SearchOption.AllDirectories));
             foreach (var file in files)
             {
-                // Skip build output, this test and AppInfo.cs
+                // The scan skips build output, this test and AppInfo.cs.
                 var relative = Path.GetRelativePath(src, file);
                 if (relative.Split(Path.DirectorySeparatorChar).Any(part => part is "bin" or "obj")
                     || string.Equals(Path.GetFullPath(file), self, StringComparison.OrdinalIgnoreCase)
@@ -51,7 +53,7 @@ public sealed class AppInfoTests
         Assert.AreEqual(0, offenders.Count, "Hard-coded display name in: " + string.Join(", ", offenders));
     }
 
-    // Repo Root: the folder above src that holds GMessages.sln
+    // The repo root is the folder above src that holds GMessages.sln.
     internal static string FindRepoRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

@@ -3,8 +3,9 @@ using GMessages.Presentation.Settings;
 namespace GMessages.Presentation.Tests.Settings;
 
 /// <summary>
-/// Checks <see cref="LaunchWindow"/>: the user's launch shows the window, the startup task and toast clicks don't (the
-/// startup task does when the app doesn't run in the background), and when closing the window quits.
+/// Checks <see cref="LaunchWindow"/>. A launch by the user shows the window. The startup task and toast clicks do not
+/// show it. The startup task does show it when the app does not run in the background. The test also checks when
+/// closing the window quits the app.
 /// </summary>
 [TestClass]
 public sealed class LaunchWindowTests
