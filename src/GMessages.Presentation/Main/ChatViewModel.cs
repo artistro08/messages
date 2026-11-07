@@ -9,124 +9,129 @@ using GMessages.Protocol.Proto;
 namespace GMessages.Presentation.Main;
 
 /// <summary>
-/// One open conversation: its bubbles, the draft, sending with retry, and live updates.
+/// Shows 1 open conversation: its bubbles, the draft, the sends with their retries and the live updates.
 /// </summary>
 /// <remarks>
 /// <para>
-/// <see cref="ChatStore"/> raises its events on the UI thread, so bubbles change there. The view model subscribes to
-/// the store (which outlives the window), so call <see cref="Dispose"/> when the chat closes.
+/// <see cref="ChatStore"/> raises its events on the UI thread. Thus the bubbles change on the UI thread. The store
+/// lives longer than the window, and the view model listens to its events. Call <see cref="Dispose"/> when the chat
+/// closes.
 /// </para>
 /// <para>
-/// Opening a conversation shows the page <see cref="ChatStore"/> kept from last time at once, then the phone's page
-/// is merged into it quietly. Only with nothing to show does <see cref="IsLoadingHistory"/> ask for the loading ring.
+/// When the chat opens, it shows at once the page that <see cref="ChatStore"/> kept from the last time. Then the chat
+/// merges the page of the phone into it with no ring. <see cref="IsLoadingHistory"/> asks for the loading ring only
+/// when the chat has nothing to show.
 /// </para>
 /// <para>
-/// A send adds a bubble at once. If it fails for any reason (not connected, not answering, refused, a network error) the bubble is
-/// marked failed and keeps its text so <see cref="RetryAsync"/> can resend it; nothing is thrown at the view.
+/// A send adds a bubble at once. Any failure marks the bubble failed: no connection, no answer, a refusal or a network
+/// error. The bubble keeps its text, so <see cref="RetryAsync"/> can send it again. The view gets no exception.
 /// </para>
 /// </remarks>
 public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
 {
-    /// <summary>How long "typing" shows without a stop from the phone (the Go connector's timeout, handlegmessages.go).</summary>
+    /// <summary>
+    /// The typing dots show for this time when no stop comes from the phone. The Go connector uses the same timeout in
+    /// <c>handlegmessages.go</c>.
+    /// </summary>
     public static readonly TimeSpan TypingTimeout = TimeSpan.FromSeconds(15);
 
-    /// <summary>How long after telling the other side I'm typing before telling them again.</summary>
+    /// <summary>The chat tells the other side about typing again only after this time.</summary>
     public static readonly TimeSpan TypingResend = TimeSpan.FromSeconds(10);
 
-    /// <summary>The longest gap between two messages from the same sender that still groups their bubbles.</summary>
+    /// <summary>2 bubbles from the same sender stay in 1 group when this time or less separates them.</summary>
     public static readonly TimeSpan GroupGap = TimeSpan.FromMinutes(3);
 
-    /// <summary>The most the chips may hold together, in bytes: 200 MiB.</summary>
+    /// <summary>The chips together can hold this number of bytes at most: 200 MiB.</summary>
     public const long MaxTotalAttachmentBytes = 200L * 1024 * 1024;
 
-    /// <summary>The most older pages a reply quote's jump loads looking for the quoted message (25 messages each).</summary>
+    /// <summary>
+    /// The jump from a reply quote loads this number of older pages at most to find the quoted message. Each page holds
+    /// 25 messages.
+    /// </summary>
     public const int ReplyJumpPages = 10;
 
-    // The Most Bubbles Kept Once The List Is Back At The Newest Message (See TrimToNewest)
+    // TrimToNewest keeps this number of bubbles at most.
     internal const int MaxLoaded = 200;
 
     private readonly ChatStore _store;
     private readonly TimeProvider _time;
     private readonly Action<Action> _post;
-
-    // Fetches Link Preview Cards; Null Means None
     private readonly LinkPreviewer? _previews;
 
-    // Whether A Received Message's Link May Be Fetched For A Preview (Settings; Read On Each Refresh); Null Means Always
+    // Each refresh reads the setting. Null means that a link in a received message always gets a preview.
     private readonly Func<bool>? _showReceivedPreviews;
 
-    // Clears The Typing Dots When No Stop Arrives In Time
     private readonly ITimer _typingTimer;
 
-    // Who Is Typing, And Until When; One Person At A Time
-    // ponytail: a group shows one typer; track a set per participant if group typing needs to be exact
+    // ponytail: a group shows 1 typer at a time. Keep a set for each participant if group typing must be exact.
     private string _typingParticipant = string.Empty;
     private DateTimeOffset _typingUntil;
     private bool _isTyping;
-
-    // When I Last Told The Other Side I'm Typing
     private DateTimeOffset? _typingSentAt;
 
     private bool _isEncrypted;
     private MessageBubbleViewModel? _replyingTo;
 
-    // Set By Dispose, So A Callback Posted Before It Does Nothing After
+    // A callback that was posted before Dispose does nothing after it.
     private bool _disposed;
 
-    // Where The Last Older Page Ended; Null Means No More Pages
+    // Null means that no older page is left.
     private Cursor? _older;
 
-    // Whether Older Bubbles Were Trimmed Away: A Live Update For One Then Waits For The Older Page (See OnMessageArrived)
+    // After a trim, a live update for a trimmed message waits for the older page. See OnMessageArrived.
     private bool _trimmed;
 
-    // Whether A Too-Short List May Load The Next Older Page On Its Own: Once After The Newest Page, Then Only After An
-    // Older Page That Added Bubbles. A Failed Load Stops It Until The Next Good Load (The Resync After Reconnecting)
+    // A list that is too short loads the next older page on its own only while this is true. It is true 1 time after
+    // the newest page. Then it is true only after an older page that added bubbles. A failed load stops it until the
+    // next good load. The resync after a reconnect brings that load.
     private bool _fillOlder;
     private bool _isLoading;
     private bool _isLoadingHistory;
     private bool _isLoadingOlder;
 
-    // A Reload Asked For While A Load Was Running; Runs When That Load Ends
+    // A reload request during a load runs when that load ends.
     private bool _reloadPending;
 
-    // How Many Phone Pages Were Shown; A Saved Copy That Lands After One Is Stale And Dropped
+    // The chat counts the phone pages that showed. A saved page that comes after a phone page is stale, and the chat
+    // drops it.
     private int _phonePages;
 
-    // A Page (Saved Or From The Phone) Has Shown: Bubbles Added Live From Now On Animate In
+    // After the first page shows, a bubble that the chat adds live animates in. The page can be saved or from the
+    // phone.
     private bool _pageShown;
 
     private string _draft = string.Empty;
-
-    // The Too-Big Note Over The Chips, Or Empty; And The Next Chip's Number
     private string _attachError = string.Empty;
     private int _nextAttachmentId;
 
-    // Each Attachment Bubble Sent From Here: Its Bytes Until The Upload Is Done, Then The Upload, Which A Retry Sends
-    // Again. Dropped When The Chat Closes
+    // The dictionary holds each attachment bubble sent from here. Its bytes stay until the upload is done. Then the
+    // upload stays, so a retry sends it again. Dispose clears the dictionary.
     private readonly Dictionary<MessageBubbleViewModel, OutgoingMedia> _outgoing = [];
 
-    // The Bubbles By Message ID And By Temporary ID, Kept In Step With Messages (OnMessagesChanged, Index). A Lookup Checks
-    // The Bubble Still Has The Key
+    // The 2 lookups find the bubbles by message ID and by temporary ID. OnMessagesChanged and Index keep them in step
+    // with Messages. A lookup checks that the bubble still has the key.
     private readonly Dictionary<string, MessageBubbleViewModel> _byId    = [];
     private readonly Dictionary<string, MessageBubbleViewModel> _byTmpId = [];
 
-    // The Conversation The Last Full Refresh Grouped The Bubbles For; A Live Change Refreshes Everything When Its
-    // Participants Differ Since (See SameForBubbles)
+    // The last full refresh used this conversation. A live change refreshes all the bubbles when the participants
+    // changed since then. See SameForBubbles.
     private ConversationInfo? _bubblesFor;
 
     /// <summary>
-    /// Creates an empty chat and starts listening to the store.
+    /// Creates an empty chat and starts to listen to the store.
     /// </summary>
     /// <param name="store">Loads and sends messages and raises live updates.</param>
     /// <param name="conversationId">The conversation to show.</param>
     /// <param name="time">Gives the current time.</param>
     /// <param name="post">Runs an action on the UI thread.</param>
-    /// <param name="previews">Fetches link preview cards for an inbox chat's bubbles; null for none.</param>
+    /// <param name="previews">Fetches the link cards for the bubbles of an inbox chat, or null for none.</param>
     /// <param name="showReceivedPreviews">
-    /// Says whether links in received messages get a preview (a stranger's link is then fetched); null for always. Links
-    /// in the user's own messages always do.
+    /// Tells whether a link in a received message gets a preview, or null for always. A preview fetches the link of a
+    /// stranger. A link in a message from the user always gets a preview.
     /// </param>
-    /// <exception cref="ArgumentNullException">An argument other than <paramref name="previews"/> or <paramref name="showReceivedPreviews"/> is null.</exception>
+    /// <exception cref="ArgumentNullException">
+    /// An argument other than <paramref name="previews"/> or <paramref name="showReceivedPreviews"/> is null.
+    /// </exception>
     public ChatViewModel(ChatStore store, string conversationId, TimeProvider time, Action<Action> post, LinkPreviewer? previews = null, Func<bool>? showReceivedPreviews = null)
     {
         ArgumentNullException.ThrowIfNull(store);
@@ -153,7 +158,6 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
         _store.ConversationChanged += OnConversationChanged;
         ApplyConversation(_store.Find(conversationId));
 
-        // A Chip Added Or Removed: Send May Turn On Or Off, And The Draft Changed
         Attachments.CollectionChanged += (_, _) =>
         {
             IsDraftEdited = true;
@@ -161,7 +165,7 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
             Raise(nameof(CanSend));
         };
 
-        // A Recording Waiting To Be Sent Turns Send On; The Pane Follows Its Steps
+        // The pane binds to the paths under Voice, so each step of the recording raises Voice.
         Voice.PropertyChanged += (_, _) =>
         {
             Raise(nameof(Voice));
@@ -172,12 +176,14 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
     /// <inheritdoc />
     public event PropertyChangedEventHandler? PropertyChanged;
 
-    /// <summary>Gets when the chat was picked (a <see cref="Stopwatch"/> timestamp), for the open-timing log lines.</summary>
+    /// <summary>
+    /// Gets the <see cref="Stopwatch"/> timestamp of the pick of the chat. The log lines of the open time use it.
+    /// </summary>
     public long OpenedAt { get; } = Stopwatch.GetTimestamp();
 
     /// <summary>
-    /// Logs one step of opening the chat with the milliseconds since it was picked and how many bubbles show (no
-    /// content, no IDs).
+    /// Logs 1 step of the chat open with the milliseconds since the pick and the count of the bubbles. The line holds
+    /// no content and no IDs.
     /// </summary>
     /// <param name="step">The step, such as "first bubbles drawn".</param>
     public void LogOpenStep(string step)
@@ -189,38 +195,47 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
     /// <summary>Gets the conversation ID.</summary>
     public string ConversationId { get; }
 
-    /// <summary>Gets the previewer that fetches link cards, which the chat also uses to fetch a pasted web picture; null for none.</summary>
+    /// <summary>
+    /// Gets the previewer that fetches the link cards, or null for none. The chat also uses it to fetch a pasted web
+    /// picture.
+    /// </summary>
     public LinkPreviewer? Previews => _previews;
 
     /// <summary>Gets the conversation name.</summary>
     public string Title { get; private set; } = string.Empty;
 
-    /// <summary>Gets the avatar letter: the conversation's, or a group's first other person's.</summary>
+    /// <summary>
+    /// Gets the avatar letter: the letter of the conversation, or of the first other person in a group.
+    /// </summary>
     public string Initial { get; private set; } = string.Empty;
 
     /// <summary>Gets the avatar color as opaque ARGB.</summary>
     public uint AvatarColor { get; private set; } = AvatarParts.FallbackColor;
 
-    /// <summary>Gets the participant whose photo covers the avatar (the first other person), or empty.</summary>
+    /// <summary>Gets the first other person, whose photo covers the avatar, or empty.</summary>
     public string PhotoId { get; private set; } = string.Empty;
 
-    /// <summary>Gets the back circle's letter: the second other person of a group, else empty.</summary>
+    /// <summary>Gets the letter of the back circle: the second other person of a group, else empty.</summary>
     public string SecondInitial { get; private set; } = string.Empty;
 
-    /// <summary>Gets the back circle's color as opaque ARGB; 0 (no back circle) unless a group with two others.</summary>
+    /// <summary>
+    /// Gets the color of the back circle as opaque ARGB. The value is 0, with no back circle, except in a group with 2
+    /// other people.
+    /// </summary>
     public uint SecondColor { get; private set; }
 
     /// <summary>Gets the participant whose photo covers the back circle, or empty.</summary>
     public string SecondPhotoId { get; private set; } = string.Empty;
 
-    /// <summary>Gets the conversation (for its menu and Details), or null until the store knows it.</summary>
+    /// <summary>Gets the conversation for its menu and Details, or null until the store knows it.</summary>
     public ConversationInfo? Conversation { get; private set; }
 
     /// <summary>Gets whether the conversation is muted on the phone.</summary>
     public bool IsMuted { get; private set; }
 
     /// <summary>
-    /// Gets whether the header's mute button shows: as the menu's Mute or Unmute, not in the spam and blocked folders.
+    /// Gets whether the mute button of the header shows, as Mute or Unmute in the menu. It does not show in the spam
+    /// and blocked folders.
     /// </summary>
     public bool CanMute => Conversation is { Status: not (ConversationStatus.SpamFolder or ConversationStatus.BlockedFolder) };
 
@@ -230,8 +245,11 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
     /// <summary>Gets the bubbles, oldest first.</summary>
     public ObservableCollection<MessageBubbleViewModel> Messages { get; } = [];
 
-    /// <summary>Gets or sets the text being typed.</summary>
-    /// <remarks>Typing in an RCS chat tells the other side, at most once every <see cref="TypingResend"/>.</remarks>
+    /// <summary>Gets or sets the text that the user types.</summary>
+    /// <remarks>
+    /// In an RCS chat, a change to the text tells the other side about typing. It does so at most 1 time in each
+    /// <see cref="TypingResend"/>.
+    /// </remarks>
     public string Draft
     {
         get => _draft;
@@ -242,7 +260,6 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
             Raise(nameof(Draft));
             Raise(nameof(CanSend));
 
-            // Typing Out: RCS Only, Not More Often Than Every 10 Seconds
             DateTimeOffset now = _time.GetUtcNow();
             if (_draft.Length > 0 && _store.Find(ConversationId) is { IsRcs: true } && (_typingSentAt is null || now - _typingSentAt >= TypingResend))
             {
@@ -253,10 +270,12 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
-    /// Puts back a draft kept from the last time the chat was open, and its files as chips, without telling the other
-    /// side I'm typing.
+    /// Restores the draft from the last time that the chat was open, with its files as chips. The other side gets no
+    /// typing signal.
     /// </summary>
-    /// <remarks>New chips number on from the kept ones, so every chip's AutomationId stays unique.</remarks>
+    /// <remarks>
+    /// New chips continue the numbers of the kept chips, so the AutomationId of each chip stays unique.
+    /// </remarks>
     /// <param name="draft">The kept draft.</param>
     /// <param name="files">The kept files, or null for none.</param>
     public void RestoreDraft(string draft, IReadOnlyList<PendingAttachment>? files = null)
@@ -274,8 +293,8 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
-    /// Gets whether the text or the files changed since the chat opened (or its draft was put back), so leaving it saves
-    /// the draft; an untouched box keeps the saved one, even one that loaded after the chat opened.
+    /// Gets whether the text or the files changed since the chat opened or since <see cref="RestoreDraft"/>. Then the
+    /// close of the chat saves the draft. An untouched box keeps the saved draft, also a draft that loaded later.
     /// </summary>
     public bool IsDraftEdited { get; private set; }
 
@@ -291,17 +310,17 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
-    /// <summary>Gets whether a reply is being written (the reply chip shows).</summary>
+    /// <summary>Gets whether the user writes a reply. The reply chip then shows.</summary>
     public bool IsReplying => _replyingTo is not null;
 
-    /// <summary>Gets whether the other person is typing (the typing dots show).</summary>
+    /// <summary>Gets whether the other person types. The typing dots then show.</summary>
     public bool IsTyping
     {
         get => _isTyping;
         private set => Set(ref _isTyping, value, nameof(IsTyping));
     }
 
-    /// <summary>Gets the typer's avatar letter, beside the typing dots.</summary>
+    /// <summary>Gets the avatar letter of the typer, beside the typing dots.</summary>
     public string TypingInitial { get; private set; } = string.Empty;
 
     /// <summary>Gets the typer's avatar color as opaque ARGB.</summary>
@@ -313,23 +332,25 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
     /// <summary>Gets the typing bubble's name for screen readers, such as "Ann is typing".</summary>
     public string TypingName { get; private set; } = ChatCopy.Typing;
 
-    /// <summary>Gets whether the conversation is end-to-end encrypted (the lock shows).</summary>
+    /// <summary>Gets whether the conversation is end-to-end encrypted. The lock then shows.</summary>
     public bool IsEncrypted
     {
         get => _isEncrypted;
         private set => Set(ref _isEncrypted, value, nameof(IsEncrypted));
     }
 
-    /// <summary>Gets whether there is something to send: text (not empty or only spaces), an attachment or a recording.</summary>
+    /// <summary>
+    /// Gets whether the chat has something to send: text that is not only white space, an attachment or a recording.
+    /// </summary>
     public bool CanSend => !string.IsNullOrWhiteSpace(_draft) || Attachments.Count > 0 || Voice.IsPreview;
 
-    /// <summary>Gets the voice message being recorded, or recorded and waiting for Send (the preview chip).</summary>
+    /// <summary>Gets the voice message: in the recording, or in the preview chip until Send.</summary>
     public VoiceDraft Voice { get; } = new();
 
-    /// <summary>Gets the photos and files picked to send with the next Send, in order (the chips).</summary>
+    /// <summary>Gets the chips: the photos and files that the next Send sends, in order.</summary>
     public ObservableCollection<PendingAttachment> Attachments { get; } = [];
 
-    /// <summary>Gets whether any attachment waits to be sent (the chips show).</summary>
+    /// <summary>Gets whether any attachment waits for Send. The chips then show.</summary>
     public bool HasAttachments => Attachments.Count > 0;
 
     /// <summary>Gets the note shown over the chips when a picked file was refused, or empty.</summary>
@@ -352,10 +373,13 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
     /// <summary>Gets whether the refused-file note shows.</summary>
     public bool HasAttachError => _attachError.Length > 0;
 
-    /// <summary>Gets or sets whether the window is focused with this chat open, so incoming messages count as read (set by <see cref="MainViewModel"/>).</summary>
+    /// <summary>
+    /// Gets or sets whether the window has focus with this chat open. Incoming messages then count as read.
+    /// <see cref="MainViewModel"/> sets it.
+    /// </summary>
     /// <remarks>
-    /// Coming back to the window reads what came in while it was away: the chat stayed open, so nothing else would (it
-    /// read only once the chat was opened again). A chat still loading reads itself when its page is in.
+    /// A return of the focus reads the messages that came while the focus was away. The chat stayed open, so nothing
+    /// else reads them. A chat that still loads reads itself when its page is in.
     /// </remarks>
     public bool IsActive
     {
@@ -372,30 +396,36 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
-    /// Gets whether a list too short to scroll should load the next older page on its own.
+    /// Gets whether a list that is too short to scroll loads the next older page on its own.
     /// </summary>
     /// <remarks>
-    /// True once after the newest page loads, then only after an older page that added bubbles, while older pages are
-    /// left. A failed load (phone not connected or not answering, a network error) stops it until the next successful newest page, so
-    /// the view never spins on a phone that can't answer.
+    /// It is true 1 time after the newest page loads. Then it is true only after an older page that added bubbles,
+    /// while older pages are left. A failed load stops it until the next good newest page. The failure can be no
+    /// connection, no answer or a network error. Thus the view never spins on a phone that cannot answer.
     /// </remarks>
     public bool CanFillOlder => _fillOlder && _older is not null;
 
-    /// <summary>Gets whether a page is loading.</summary>
+    /// <summary>Gets whether a page loads.</summary>
     public bool IsLoading
     {
         get => _isLoading;
         private set => Set(ref _isLoading, value, nameof(IsLoading));
     }
 
-    /// <summary>Gets whether the newest page is loading with no bubbles to show yet (no cached copy): the large ring.</summary>
+    /// <summary>
+    /// Gets whether the newest page loads with no bubbles to show yet, because no saved copy exists. The large ring
+    /// then shows.
+    /// </summary>
     public bool IsLoadingHistory
     {
         get => _isLoadingHistory;
         private set => Set(ref _isLoadingHistory, value, nameof(IsLoadingHistory));
     }
 
-    /// <summary>Gets whether an older page is loading above the bubbles: the small ring at the top. A refresh of the cached copy shows no ring (owner's call).</summary>
+    /// <summary>
+    /// Gets whether an older page loads above the bubbles. The small ring then shows at the top. A refresh of the saved
+    /// copy shows no ring, by a ruling of the owner.
+    /// </summary>
     public bool IsLoadingOlder
     {
         get => _isLoadingOlder;
@@ -406,18 +436,16 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
     // HELPERS
     // =========================================================================
 
-    // A Bubble Sent From Here: Added At Once, Animating In
     private MessageBubbleViewModel AddPending(ChatMessage pending)
     {
-        var bubble = NewBubble(pending);
+        MessageBubbleViewModel bubble = NewBubble(pending);
         MarkNewIfShown(bubble);
         Messages.Add(bubble);
         RefreshAround(bubble);
         return bubble;
     }
 
-    // An Attachment's Pending Message: Its Bytes Ride As Inline Data, So The Bubble Shows (And Plays) Them Before Any
-    // Upload
+    // The bytes go in as inline data. Thus the bubble shows and plays them before the upload.
     private ChatMessage MediaMessage(string name, string mime, byte[] bytes, int width, int height, string caption, string? replyTo, bool isRcs)
     {
         MessageKind kind = MediaPart.KindOf(MediaFormatsMap.FromMime(mime));
@@ -431,8 +459,8 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
         };
     }
 
-    // The Attachment A Bubble Sends: Kept From Its Send Here, Or (A Failed Bubble From Before The Chat Opened) The
-    // Uploaded Media Its Echo Carried; Null For Text
+    // A bubble sent from here keeps its attachment. A failed bubble from before the chat opened sends the uploaded
+    // media of its echo. A text bubble gives null.
     private OutgoingMedia? OutgoingOf(MessageBubbleViewModel bubble)
     {
         if (_outgoing.TryGetValue(bubble, out OutgoingMedia? kept))
@@ -461,7 +489,7 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
         return echoed;
     }
 
-    // An Attachment Sent From Here: Its Bytes Until The Upload Is Done (Then Freed), And The Upload
+    // The bytes stay until the upload is done. Then the chat frees them and keeps the upload.
     private sealed class OutgoingMedia(byte[] bytes, string name, string mime)
     {
         public byte[] Bytes { get; set; } = bytes;
@@ -473,8 +501,8 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
         public MediaContent? Uploaded { get; set; }
     }
 
-    // Reports On The UI Thread Through The Chat's Post, Not On The Upload's Thread; Only When The Whole Percent Moves,
-    // So A Big Upload Doesn't Flood The UI Thread
+    // The report goes to the UI thread through the post of the chat, not to the thread of the upload. It goes only
+    // when the whole percent moves, so a big upload does not flood the UI thread.
     private sealed class PostedProgress(Action<double> report) : IProgress<double>
     {
         private int _percent = -1;
@@ -489,15 +517,13 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
-    // Match By ID, Then By The Temporary ID Of A Bubble Sent From Here
+    // The ID matches first. Then the temporary ID matches a bubble sent from here.
     private MessageBubbleViewModel? FindBubble(ChatMessage m) =>
         ById(m.Id) ?? (m.TmpId.Length > 0 && _byTmpId.TryGetValue(m.TmpId, out MessageBubbleViewModel? b) && b.TmpId == m.TmpId ? b : null);
 
-    // The Bubble Shown For A Message ID, Or Null
     private MessageBubbleViewModel? ById(string id) =>
         id.Length > 0 && _byId.TryGetValue(id, out MessageBubbleViewModel? b) && b.Id == id ? b : null;
 
-    // Keeps The ID Lookups In Step With The Bubbles Shown
     private void OnMessagesChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         if (e.Action == NotifyCollectionChangedAction.Reset)
@@ -531,7 +557,7 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
-    // A Bubble Under Its IDs; Call Again When An Echo Gives It Its ID. The First Bubble With An ID Keeps It
+    // Call it again when an echo gives the bubble its ID. The first bubble with an ID keeps the ID.
     private void Index(MessageBubbleViewModel b)
     {
         if (b.Id.Length > 0)
@@ -545,9 +571,9 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
-    // Shows The Newest Page In Place Of The Bubbles, Reusing (And Updating) The Ones Already Shown So The List Doesn't
-    // Redraw Them. Unsent Bubbles, And Ones That Arrived While The Page Was On Its Way (Newer Than Anything In It),
-    // Stay At The Bottom Unless The Page Holds Them; Older Pages Above Are Dropped
+    // Shows the newest page in place of the bubbles. It reuses and updates the bubbles that show, so the list does not
+    // draw them again. Unsent bubbles stay at the bottom unless the page holds them. Bubbles that came during the load
+    // and are newer than the page also stay. The older pages above go.
     private void ShowPage(IReadOnlyList<ChatMessage> page)
     {
         _pageShown = true;
@@ -577,7 +603,6 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
         wanted.AddRange(newer);
         keep.UnionWith(newer);
 
-        // Drop What The Page No Longer Holds
         for (int i = Messages.Count - 1; i >= 0; i--)
         {
             if (!keep.Contains(Messages[i]))
@@ -586,8 +611,8 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
             }
         }
 
-        // Then Put Each Bubble In Its Place. Usually It Is Already There, So Only One Out Of Place Is Looked For (A
-        // Position Map Would Go Stale With Every Insert Or Move)
+        // Usually each bubble is in its place already, so the loop looks only for a bubble out of place. A position map
+        // goes stale with each insert or move.
         HashSet<MessageBubbleViewModel> shown = [.. Messages];
         for (int i = 0; i < wanted.Count; i++)
         {
@@ -616,7 +641,6 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
-        // Avatar: Stacked People For A Group (R12), The Same As The List Row
         AvatarParts avatar = AvatarParts.Of(c);
         Conversation       = c;
         IsMuted            = c.IsMuted;
@@ -630,11 +654,11 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
         Raise(string.Empty);
     }
 
-    // A Bubble That Knows The Conversation, So It Can Tell Which Reaction Is Mine
+    // The bubble gets the conversation, so it can tell which reaction is mine.
     private MessageBubbleViewModel NewBubble(ChatMessage m) => new(m, _store.Find(ConversationId));
 
-    // A Bubble Added Live (Sent, Or Arrived) Animates In, But Not Before The Chat's First Page Has Shown (The Chat's Own
-    // Fade Covers That)
+    // A bubble that the chat sends or gets live animates in. Before the first page shows, the fade of the chat covers
+    // it.
     private void MarkNewIfShown(MessageBubbleViewModel bubble)
     {
         if (_pageShown)
@@ -643,8 +667,8 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
-    // Brings Everything That Depends On The Bubbles Up To Date After A Page, An Older Page, A Trim Or A Conversation
-    // Change: Senders, Quotes, The Status Line And The Lock, On Every Bubble
+    // Updates the senders, the quotes, the status line and the lock on each bubble. A page, an older page, a trim or a
+    // change to the conversation calls it.
     private void RefreshBubbles()
     {
         ConversationInfo? c = _store.Find(ConversationId);
@@ -658,9 +682,10 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
         IsEncrypted = encrypted;
     }
 
-    // The Same After One Bubble Was Added Or Changed Live: Only It And Its Neighbors Regroup, And Only The Last Two
-    // Bubbles Can Gain Or Lose The Status Line. A Bubble No Longer Shown, Or A Conversation Whose People Changed Since
-    // The Last Full Refresh, Refreshes Everything
+    // Does the same after a live add or change of 1 bubble. Only that bubble and its neighbors group again. Only the
+    // last 2 bubbles can get or lose the status line. The status pass starts at the bubble when it is higher, so a
+    // bubble put in above them gets its lock. A bubble that no longer shows refreshes all the bubbles. A change to the
+    // participants since the last full refresh also refreshes all the bubbles.
     private void RefreshAround(MessageBubbleViewModel bubble)
     {
         ConversationInfo? c = _store.Find(ConversationId);
@@ -671,7 +696,7 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
-        // The Status Moves From The Last Real Bubble Before To The Newest One, Past Any System Line Between
+        // The status moves from the last real bubble before to the newest bubble. It skips each system line between.
         bool encrypted = _store.IsEncrypted(ConversationId);
         int from       = Messages.Count - 2;
         while (from > 0 && Messages[from].IsSystemLine)
@@ -686,14 +711,15 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
         IsEncrypted = encrypted;
     }
 
-    // Whether Two Copies Of The Conversation Show The Bubbles Alike: Group Or Not, Its People (Names, Colors, Which Is Me)
-    // And Who I Send As
+    // Tells whether 2 copies of the conversation show the bubbles the same. The group flag, the participants and the
+    // outgoing ID must match. The participants carry the names, the colors and the flag for me.
     private static bool SameForBubbles(ConversationInfo? a, ConversationInfo? b) =>
         ReferenceEquals(a, b)
         || (a is not null && b is not null && a.IsGroup == b.IsGroup && a.DefaultOutgoingId == b.DefaultOutgoingId && a.Participants.SequenceEqual(b.Participants));
 
-    // Asks Once Per Link For Each Bubble's Preview Card, Only In An Inbox Chat: Never For Spam, Blocked Or Archived
-    // Chats, Or One Not Known Yet, So A Stranger's Link Is Never Fetched. A Received Message's Link Waits For The Setting
+    // Asks 1 time for each link for the preview card of each bubble, only in an inbox chat. Spam, blocked, archived and
+    // unknown chats get no preview, so the chat never fetches the link of a stranger. A link in a received message
+    // waits for the setting.
     private void RefreshPreviews(ConversationInfo? c)
     {
         if (_previews is null || c is not { IsMainView: true })
@@ -712,7 +738,7 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
-    // GetAsync Never Throws; The Card Is Set On The UI Thread, If The Bubble Still Shows That Link
+    // GetAsync never throws. The post sets the card on the UI thread when the bubble still shows that link.
     private async Task LoadPreviewAsync(LinkPreviewer previews, MessageBubbleViewModel bubble, Uri url)
     {
         if (await previews.GetAsync(url, CancellationToken.None) is not { } preview)
@@ -729,9 +755,9 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
         });
     }
 
-    // Groups The Bubbles As Google Messages Does: The Same Sender (Me, Or One Person), Each A Few Minutes After The Last.
-    // In A Group Chat A Received Group Is Named Over Its First Bubble And Shows Its Sender's Avatar Beside Its Last. Only
-    // The Bubbles From One Index To Another (Clamped To The List)
+    // Groups the bubbles as Google Messages does: the same sender, me or 1 person, each a few minutes after the last.
+    // In a group chat, a received group shows the name of its sender over its first bubble. It shows the avatar of its
+    // sender beside its last bubble. Only the bubbles from 1 index to another change, clamped to the list.
     private void RefreshGroups(ConversationInfo? c, int from, int to)
     {
         bool isGroup  = c is { IsGroup: true };
@@ -746,18 +772,20 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
             string name              = ChatFormat.SenderName(sender);
             bool lane                = isGroup && !b.FromMe;
 
-            // The Name Takes The Color Of The Sender's Letter Circle; The Conversation Says Which Reaction Is Mine
+            // The name takes the color of the letter circle of the sender. The conversation tells which reaction is
+            // mine.
             b.SetGroup(first, last, lane, lane && first && name.Length > 0 ? name : null, AvatarParts.ColorOf(sender), ChatFormat.Initial(name), b.ParticipantId);
             b.SetConversation(c);
         }
 
-        // A System Line (A Group Rename) Breaks A Group
+        // A system line, such as a group rename, breaks a group.
         static bool SameGroup(MessageBubbleViewModel a, MessageBubbleViewModel b) =>
             !a.IsSystemLine && !b.IsSystemLine && a.FromMe == b.FromMe && (a.FromMe || a.ParticipantId == b.ParticipantId) && b.SentAt - a.SentAt <= GroupGap;
     }
 
-    // Quotes Come From The Bubbles Shown, Else The Store (Memory Or Database), Else "Original message" With No Sender.
-    // The Store Is Asked Once Per Bubble: Only While Its Quote Is Still Empty
+    // A quote comes from the bubbles that show, else from the store, else it reads "Original message" with no sender.
+    // The store answers from memory or from the database. The chat asks the store 1 time for each bubble, only while
+    // its quote is empty.
     private void RefreshQuotes(ConversationInfo? c)
     {
         foreach (MessageBubbleViewModel b in Messages.Where(b => b.HasQuote))
@@ -774,7 +802,7 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
-    // Fills A Quote From The Store When It Has The Message; The Database Answers Off The UI Thread, So The Result Is Posted
+    // The database answers off the UI thread, so the chat posts the result.
     private async Task LookUpQuoteAsync(MessageBubbleViewModel bubble, string replyToId)
     {
         if (await _store.FindMessageAsync(ConversationId, replyToId) is not { } quoted)
@@ -792,9 +820,10 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
         });
     }
 
-    // The Caption Row Goes Under The Chat's Newest Bubble Only, Mine Or Received. When It Is Mine: "Sent", "Delivered" Or
-    // "Read" (Google's Icon, Named So), Or The Clock While Sending. Every RCS Bubble Of An Encrypted Chat Has The Lock, By
-    // Its Caption Row Or Its Clicked Time (One Sent As SMS Meanwhile Hasn't). Only The Bubbles From An Index On
+    // The caption row goes only under the newest bubble of the chat, mine or received. On my bubble, it shows "Sent",
+    // "Delivered" or "Read" as the icon of Google with that name. It shows the clock while the bubble sends. Each RCS
+    // bubble of an encrypted chat has the lock, by its caption row or its clicked time. A bubble sent as SMS meanwhile
+    // has no lock. Only the bubbles from an index to the end change.
     private void RefreshStatus(bool encrypted, int from)
     {
         MessageBubbleViewModel? newest = Messages.LastOrDefault(b => !b.IsSystemLine);

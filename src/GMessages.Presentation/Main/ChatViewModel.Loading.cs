@@ -4,23 +4,21 @@ using GMessages.Protocol.Proto;
 namespace GMessages.Presentation.Main;
 
 /// <summary>
-/// Loading the open chat: the first page, older pages, jumping to a quoted message and trimming back to the newest.
+/// Loads the open chat: the first page, the older pages, the jump to a quoted message and the trim to the newest page.
 /// </summary>
-/// <remarks>
-/// Part of <see cref="ChatViewModel"/>; the other members are in ChatViewModel.cs.
-/// </remarks>
 public sealed partial class ChatViewModel
 {
-
-    // =========================================================================
-    // LOADING
-    // =========================================================================
-
     /// <summary>
-    /// Loads the newest page, merging it into the bubbles (unsent ones stay), and marks the conversation read when it was unread.
+    /// Loads the newest page and merges it into the bubbles, where the unsent bubbles stay. An unread conversation then
+    /// turns read.
     /// </summary>
-    /// <remarks>Call on the UI thread. With no bubbles yet, the cached page shows alongside the phone fetch: at once from memory, or from the database (read off the UI thread) unless the phone answered first. While a page is loading the call is remembered and runs once that load ends. When the load fails (phone not connected or not answering, a network error) the bubbles stay as they were.</remarks>
-    /// <returns>A task that completes when the page is shown.</returns>
+    /// <remarks>
+    /// Call on the UI thread. With no bubbles yet, the saved page shows during the phone fetch. A page in memory shows
+    /// at once. A page from the database shows unless the phone answered first, and the read runs off the UI thread.
+    /// A call during a load waits, and runs when that load ends. A failed load keeps the bubbles as they were. The
+    /// failure can be no connection, no answer or a network error.
+    /// </remarks>
+    /// <returns>A task that completes when the page shows.</returns>
     public async Task LoadAsync()
     {
         if (IsLoading)
@@ -32,8 +30,7 @@ public sealed partial class ChatViewModel
         IsLoading        = true;
         IsLoadingHistory = Messages.Count == 0;
 
-        // Opened Before (Also Before A Restart): The Saved Copy Shows Alongside The Phone Fetch. A Copy In Memory Shows At
-        // Once; The Database Is Read Off The UI Thread And Shows Only If The Phone's Page Hasn't Come First
+        // The chat opened before, also before a restart, so the saved page shows during the phone fetch.
         if (Messages.Count == 0)
         {
             _ = ShowSavedPageAsync(_store.CachedMessagesAsync(ConversationId), _phonePages);
@@ -41,7 +38,7 @@ public sealed partial class ChatViewModel
 
         try
         {
-            // The Conversation May Not Be Cached Yet (Opened Right After Start Chat)
+            // The store can lack the conversation when Start chat opened it just now.
             ConversationInfo? conversation = _store.Find(ConversationId) ?? await _store.GetAsync(ConversationId, CancellationToken.None);
             ApplyConversation(conversation);
 
@@ -53,7 +50,7 @@ public sealed partial class ChatViewModel
             _fillOlder = true;
             LogOpenStep("phone page shown");
 
-            // Opening An Unread Chat Reads It
+            // The open of an unread chat reads it on the phone.
             if (conversation is { Unread: true } && conversation.LatestMessageId.Length > 0)
             {
                 await _store.MarkReadAsync(ConversationId, conversation.LatestMessageId, CancellationToken.None);
@@ -61,7 +58,7 @@ public sealed partial class ChatViewModel
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            // Not Connected, Not Answering Or A Network Error: The Resync After Reconnecting Reloads
+            // The cause can be no connection, no answer or a network error. The resync after the reconnect loads again.
             _store.LogFailure("load messages", ex);
             _fillOlder = false;
         }
@@ -74,8 +71,8 @@ public sealed partial class ChatViewModel
         await RunPendingReloadAsync();
     }
 
-    // Shows The Saved Copy Unless A Phone Page Was Shown Since It Was Asked For; Over It The Big Ring Goes Away With No
-    // Ring In Its Place. A Copy In Memory Completes At Once, So It Shows Before LoadAsync Awaits Anything
+    // Shows the saved page unless a phone page showed after the request. The big ring then goes, with no ring in its
+    // place. A page in memory completes at once, so it shows before LoadAsync awaits anything.
     private async Task ShowSavedPageAsync(Task<IReadOnlyList<ChatMessage>?> saved, int phonePages)
     {
         if (await saved is not { } page || _phonePages != phonePages)
@@ -91,8 +88,8 @@ public sealed partial class ChatViewModel
     /// <summary>
     /// Loads the page of older messages above the bubbles.
     /// </summary>
-    /// <remarks>Call on the UI thread. Does nothing while a page is loading or when there are no older messages.</remarks>
-    /// <returns>A task that completes when the page is shown.</returns>
+    /// <remarks>Call on the UI thread. The call does nothing during a load or when no older message is left.</remarks>
+    /// <returns>A task that completes when the page shows.</returns>
     public async Task LoadOlderAsync()
     {
         if (IsLoading || _older is null)
@@ -108,7 +105,8 @@ public sealed partial class ChatViewModel
 
             _older = older;
 
-            // The Page Is Oldest First, So Each Bubble Goes In Above The Ones Already Placed; One Already Shown Is Skipped
+            // The page is oldest first, so its bubbles go in at the top in page order. The loop skips a message that
+            // shows already.
             int at = 0;
             foreach (ChatMessage m in page.Where(m => !ChatFormat.IsHiddenLine(m) && ById(m.Id) is null))
             {
@@ -120,7 +118,8 @@ public sealed partial class ChatViewModel
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            // Not Connected, Not Answering Or A Network Error: Scrolling Again Tries Again, Filling Waits For The Next Good Load
+            // The cause can be no connection, no answer or a network error. A new scroll tries again. The fill waits
+            // for the next good load.
             _store.LogFailure("load older messages", ex);
             _fillOlder = false;
         }
@@ -134,14 +133,14 @@ public sealed partial class ChatViewModel
     }
 
     /// <summary>
-    /// Finds the bubble a reply quotes, loading older pages until it shows (a reply quote's click jumps to it).
+    /// Finds the bubble that a reply quotes, and loads older pages until it shows. A click on the quote jumps to it.
     /// </summary>
     /// <remarks>
-    /// Call on the UI thread. Stops at <see cref="ReplyJumpPages"/> older pages, at the oldest message, when another load
-    /// is running, or when a page adds nothing (a failed load included). Never throws.
+    /// Call on the UI thread. The search stops after <see cref="ReplyJumpPages"/> older pages or at the oldest message.
+    /// It also stops during another load, or when a page adds nothing, as a failed load does. It never throws.
     /// </remarks>
-    /// <param name="messageId">The quoted message's ID.</param>
-    /// <returns>The bubble, or null when it wasn't found.</returns>
+    /// <param name="messageId">The ID of the quoted message.</param>
+    /// <returns>The bubble, or null when the search did not find it.</returns>
     public async Task<MessageBubbleViewModel?> FindForJumpAsync(string messageId)
     {
         if (string.IsNullOrEmpty(messageId))
@@ -171,12 +170,12 @@ public sealed partial class ChatViewModel
     }
 
     /// <summary>
-    /// Lets go of the older pages above the newest 200 bubbles (the list is back at the newest message).
+    /// Drops the older pages above the newest 200 bubbles, when the list is at the newest message again.
     /// </summary>
     /// <remarks>
-    /// Call on the UI thread. Does nothing while a page loads or with 200 bubbles or fewer. The next older page starts again
-    /// from the new oldest bubble, as <see cref="ChatStore"/>'s own fallback cursor does (its time in milliseconds), so
-    /// scrolling up brings the dropped messages back.
+    /// Call on the UI thread. The call does nothing during a load or with 200 bubbles or fewer. The next older page
+    /// starts from the new oldest bubble, as the fallback cursor of <see cref="ChatStore"/> does. That cursor holds the
+    /// time in milliseconds. Thus a scroll up brings the dropped messages back.
     /// </remarks>
     public void TrimToNewest()
     {
@@ -185,7 +184,7 @@ public sealed partial class ChatViewModel
             return;
         }
 
-        // Oldest First: Drop From The Top, With Any Upload A Dropped Bubble Kept
+        // The list is oldest first. A dropped bubble also drops the upload that it kept.
         while (Messages.Count > MaxLoaded)
         {
             _outgoing.Remove(Messages[0]);
@@ -199,7 +198,7 @@ public sealed partial class ChatViewModel
         RefreshBubbles();
     }
 
-    // A Resync Arrived Mid-Load: The Page Above May Be Stale, So Load Again
+    // A resync came during the load. The page can be stale, so the chat loads again.
     private async Task RunPendingReloadAsync()
     {
         if (_reloadPending)

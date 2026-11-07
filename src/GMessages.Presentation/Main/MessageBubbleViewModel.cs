@@ -6,18 +6,18 @@ using GMessages.Protocol.Proto;
 namespace GMessages.Presentation.Main;
 
 /// <summary>
-/// One message bubble in the chat.
+/// Shows 1 message bubble in the chat.
 /// </summary>
 /// <remarks>
-/// A change raises <see cref="PropertyChanged"/> once for each property whose value it moved, computed ones (such as
-/// <see cref="HasPreview"/> or <see cref="ShowsStatusRow"/>) included, so <c>x:Bind</c> re-reads only those bindings.
-/// Call everything on the UI thread.
+/// A change raises <see cref="PropertyChanged"/> 1 time for each property whose value it moved. Computed properties,
+/// such as <see cref="HasPreview"/> and <see cref="ShowsStatusRow"/>, also raise. Thus <c>x:Bind</c> reads only those
+/// bindings again. Call each member on the UI thread.
 /// </remarks>
 public sealed class MessageBubbleViewModel : INotifyPropertyChanged
 {
-    // Every Public Property, With Its Getter: A Change Compares Them Before And After And Raises Only The Ones That Moved.
-    // The Empty Name Raised Before Made x:Bind Re-Read All Of A Bubble's ~60 Bindings On Every Change. A New Public
-    // Property Goes Here Too (A Test Checks)
+    // The list holds each public property with its getter. A change compares them before and after, and raises only
+    // the properties that moved. The empty name made x:Bind read all of the about 60 bindings of a bubble again on
+    // each change. A new public property must go here too, and a test checks it.
     internal static readonly (string Name, Func<MessageBubbleViewModel, object?> Get)[] Watched =
     [
         (nameof(Id), b => b.Id),
@@ -93,39 +93,41 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         (nameof(VideoName), b => b.VideoName),
     ];
 
-    // One Event Args Per Watched Property, Made Once
     private static readonly PropertyChangedEventArgs[] WatchedArgs = [.. Watched.Select(w => new PropertyChangedEventArgs(w.Name))];
 
-    // The Conversation, For Which Reaction Is Mine; Null When Not Known
+    // The conversation tells which reaction is mine. Null means that it is not known.
     private ConversationInfo? _conversation;
 
-    // The Message's Reactions, Kept So MyReaction Can Be Worked Out Again When The Conversation Arrives
+    // The bubble keeps the reactions, so MyReaction can change when the conversation arrives.
     private IReadOnlyList<ReactionInfo> _reactions = [];
 
-    // The First Link As Sent And Where It Sits In The Text: The Card's Link, Which The Card Replaces
+    // The bubble keeps the first link as sent, with its place in the text. The card replaces this link.
     private TextLink? _link;
 
-    // The Message As Last Filled, For The Full-Size Photo Request
+    // Fill keeps the last message here. The full-size photo request needs it.
     private ChatMessage _message = null!;
 
-    // When The Chat Marked The Bubble New (Environment.TickCount64), Or 0; See TakeNew
+    // MarkNew keeps its Environment.TickCount64 value here for TakeNew. The value 0 means no mark.
     private long _newAt;
 
-    // A New Bubble Animates In Only When It Shows This Soon After It Was Added (Not Later, Scrolled Into View)
+    // A new bubble animates in only when it shows this soon after the add. A later scroll into view does not animate
+    // it.
     private const long NewWindowMs = 1000;
 
-    // The Photo Bubble's Height Cap, And The Size A Speck Of A Photo Grows To, In Effective Pixels
+    // A photo bubble has this height limit, and a speck of a photo grows to this size. Both are in effective pixels.
     private const double MaxPhotoHeight = 360;
     private const double MinPhotoSide   = 48;
 
-    // A Photo Without Dimensions Reserves A Square Of This Side
+    // A photo with no dimensions reserves a square with this side.
     private const double UnknownPhotoSide = 240;
 
     /// <summary>
     /// Creates the bubble from a message.
     /// </summary>
     /// <param name="m">The message.</param>
-    /// <param name="conversation">The conversation it belongs to, which says which reaction is mine; null when not known.</param>
+    /// <param name="conversation">
+    /// The conversation of the message, which tells which reaction is mine, or null when not known.
+    /// </param>
     public MessageBubbleViewModel(ChatMessage m, ConversationInfo? conversation = null)
     {
         ArgumentNullException.ThrowIfNull(m);
@@ -140,66 +142,81 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     /// <summary>Gets the message ID, or empty until the phone has reported the message.</summary>
     public string Id { get; private set; } = string.Empty;
 
-    /// <summary>Gets the temporary ID the app made when sending, or empty.</summary>
+    /// <summary>Gets the temporary ID that the app made for the send, or empty.</summary>
     public string TmpId { get; private set; } = string.Empty;
 
     /// <summary>
-    /// Gets what the bubble's AutomationIds end in: the message ID, or the temporary ID until the phone has reported the
-    /// message. Raised only when it changes, so the IDs are built again only then.
+    /// Gets the end of the AutomationIds of the bubble: the message ID, or the temporary ID until the phone reports the
+    /// message. It raises only when it changes, so the view builds the IDs again only then.
     /// </summary>
     public string PartKey => Id.Length > 0 ? Id : TmpId;
 
-    /// <summary>Gets the sender's participant ID.</summary>
+    /// <summary>Gets the participant ID of the sender.</summary>
     public string ParticipantId { get; private set; } = string.Empty;
 
-    /// <summary>Gets the text, or the kind label ("Photo", "Video"...) for a message without text.</summary>
+    /// <summary>Gets the text, or the kind label, such as "Photo" or "Video", for a message with no text.</summary>
     public string Text { get; private set; } = string.Empty;
 
-    /// <summary>Gets the text as shown: <see cref="Text"/> with text-style emoji in color (see <see cref="ChatFormat.WithColorEmoji"/>).</summary>
+    /// <summary>
+    /// Gets the text as it shows: <see cref="Text"/> with text-style emoji in color. See
+    /// <see cref="ChatFormat.WithColorEmoji"/>.
+    /// </summary>
     public string DisplayText { get; private set; } = string.Empty;
 
     /// <summary>
-    /// Gets the text in the bubble: <see cref="DisplayText"/>, except that while the link's preview card shows (owner ruling
-    /// R5-12) the card takes the place of the link's address. Only that address goes, with the space it leaves (no double
-    /// spaces or blank lines); other links stay. Empty when the message was only the link.
+    /// Gets the text in the bubble: <see cref="DisplayText"/>, except while the preview card of the link shows. Then
+    /// the card takes the place of the address of the link, by owner ruling R5-12.
     /// </summary>
     /// <remarks>
-    /// The message's own <see cref="Text"/> (copied by the bubble's Copy, read by screen readers through
-    /// <see cref="ToString"/>) stays whole.
+    /// Only that address goes, with the space that it leaves, so no double spaces or blank lines stay. Other links
+    /// stay. The text is empty when the message was only the link. The <see cref="Text"/> of the message stays whole.
+    /// The Copy of the bubble copies it, and screen readers read it through <see cref="ToString"/>.
     /// </remarks>
     public string BodyText { get; private set; } = string.Empty;
 
-    /// <summary>Gets whether the bubble shows any text (a link alone shows only its card).</summary>
+    /// <summary>Gets whether the bubble shows any text. A link alone shows only its card.</summary>
     public bool HasBodyText => BodyText.Length > 0;
 
     /// <summary>
-    /// Gets whether the message is only emoji with no quote (see <see cref="ChatFormat.IsEmojiOnly"/>): the bubble shows
-    /// them big, with no fill or edge around them. Worked out once per message (see <see cref="Fill"/>).
+    /// Gets whether the message is only emoji with no quote, as <see cref="ChatFormat.IsEmojiOnly"/> tells. The bubble
+    /// then shows them big, with no fill or edge.
     /// </summary>
+    /// <remarks><see cref="Fill"/> computes it 1 time for each message.</remarks>
     public bool IsEmojiOnly { get; private set; }
 
     /// <summary>Gets whether the owner sent the message.</summary>
     public bool FromMe { get; private set; }
 
-    /// <summary>Gets the sender's name when this is the first bubble of a received run in a group, else null.</summary>
+    /// <summary>Gets the sender name on the first bubble of a received run in a group, else null.</summary>
     public string? SenderName { get; private set; }
 
-    /// <summary>Gets the color of the sender's name: the same as their letter circle, as opaque ARGB.</summary>
+    /// <summary>Gets the color of the sender name as opaque ARGB. It is the color of their letter circle.</summary>
     public uint SenderColor { get; private set; } = AvatarParts.FallbackColor;
 
-    /// <summary>Gets whether <see cref="SenderName"/> is set (for bindings, which skip their function when an argument is null).</summary>
+    /// <summary>
+    /// Gets whether <see cref="SenderName"/> is set. A binding skips its function when an argument is null.
+    /// </summary>
     public bool HasSenderName => SenderName is not null;
 
-    /// <summary>Gets whether the bubble starts its group (the same sender, a few minutes apart at most); set by the chat.</summary>
+    /// <summary>
+    /// Gets whether the bubble starts its group. A group has 1 sender, with a few minutes between bubbles at most. The
+    /// chat sets it.
+    /// </summary>
     public bool IsFirstInGroup { get; private set; } = true;
 
-    /// <summary>Gets whether the bubble ends its group; set by the chat.</summary>
+    /// <summary>Gets whether the bubble ends its group. The chat sets it.</summary>
     public bool IsLastInGroup { get; private set; } = true;
 
-    /// <summary>Gets whether the bubble keeps a lane on its left for the sender's avatar (received, in a group chat).</summary>
+    /// <summary>
+    /// Gets whether the bubble keeps a lane on its left for the avatar of the sender. A received bubble in a group chat
+    /// keeps it.
+    /// </summary>
     public bool HasAvatarLane { get; private set; }
 
-    /// <summary>Gets whether the sender's avatar shows beside the bubble (the last of a received group, in a group chat).</summary>
+    /// <summary>
+    /// Gets whether the avatar of the sender shows beside the bubble. The last bubble of a received group in a group
+    /// chat shows it.
+    /// </summary>
     public bool ShowsAvatar { get; private set; }
 
     /// <summary>Gets the avatar's letter while it shows, else empty.</summary>
@@ -214,39 +231,47 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     /// <summary>Gets the time of day the message was sent.</summary>
     public string Time { get; private set; } = string.Empty;
 
-    /// <summary>Gets whether the time shows under the bubble: hidden until the bubble is clicked (see <see cref="ToggleTime"/>).</summary>
+    /// <summary>
+    /// Gets whether the time shows under the bubble. It stays hidden until a click on the bubble. See
+    /// <see cref="ToggleTime"/>.
+    /// </summary>
     public bool IsTimeShown { get; private set; }
 
-    /// <summary>Gets whether this is the chat's newest bubble, which shows the caption row until clicked; set by the chat.</summary>
+    /// <summary>
+    /// Gets whether this is the newest bubble of the chat, which shows the caption row until a click. The chat sets it.
+    /// </summary>
     public bool IsNewest { get; private set; }
 
-    /// <summary>Gets whether a click hid the newest bubble's caption row (see <see cref="ToggleTime"/>).</summary>
+    /// <summary>Gets whether a click hid the caption row of the newest bubble. See <see cref="ToggleTime"/>.</summary>
     public bool IsCaptionHidden { get; private set; }
 
-    /// <summary>Gets whether the message was not sent.</summary>
+    /// <summary>Gets whether the send of the message failed.</summary>
     public bool IsFailed { get; private set; }
 
-    /// <summary>Gets whether the message is still being sent.</summary>
+    /// <summary>Gets whether the send of the message is still in progress.</summary>
     public bool IsSending { get; private set; }
 
-    /// <summary>Gets whether the message went over RCS (chat) rather than SMS or MMS.</summary>
+    /// <summary>Gets whether the message went over RCS chat, not SMS or MMS.</summary>
     public bool IsRcs { get; private set; }
 
     /// <summary>
-    /// Gets whether the bubble takes react, reply and its menu from the hover strip: the phone has reported it, and it isn't a
-    /// tombstone, still being sent or failed.
+    /// Gets whether the hover strip gives the bubble react, reply and its menu. The phone must have reported the
+    /// message, and the bubble must not be a tombstone, a send in progress or failed.
     /// </summary>
     public bool CanAct => Id.Length > 0 && !IsSystemLine && !IsSending && !IsFailed;
 
-    /// <summary>Gets the bubble's accessible item type: "Chat message" for RCS, "Text message" for SMS.</summary>
+    /// <summary>Gets the accessible item type of the bubble: "Chat message" for RCS, "Text message" for SMS.</summary>
     public string ItemTypeName => IsRcs ? ChatCopy.ChatMessage : ChatCopy.TextMessage;
 
-    /// <summary>Gets the status of my newest bubble ("Sent", "Delivered", "Read"), or empty; set by the chat. The icon's accessible name.</summary>
+    /// <summary>
+    /// Gets the status of my newest bubble, such as "Sent", "Delivered" or "Read", or empty. The chat sets it, and the
+    /// icon uses it as its accessible name.
+    /// </summary>
     public string StatusText { get; private set; } = string.Empty;
 
     /// <summary>
-    /// Gets the delivery icon in the caption row: when the newest bubble is mine, the clock while sending, else its status;
-    /// none for one sent as SMS, which says so instead (<see cref="ShowsSmsLabel"/>).
+    /// Gets the delivery icon in the caption row when the newest bubble is mine: the clock during the send, else its
+    /// status. A bubble sent as SMS gets no icon, and <see cref="ShowsSmsLabel"/> shows in its place.
     /// </summary>
     public MessageStatusIcon StatusIcon => !IsNewest || !FromMe ? MessageStatusIcon.None : IsSending ? MessageStatusIcon.Sending : StatusText.Length == 0 || !IsRcs ? MessageStatusIcon.None : Status switch
     {
@@ -256,19 +281,31 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     };
 
     /// <summary>
-    /// Gets whether the caption row shows under the bubble: only under the chat's newest bubble (mine or received), unless
-    /// it failed to send (the retry link shows) or a click hid it. Mine shows the time, the delivery icon and the lock; a
-    /// received one the time and the lock.
+    /// Gets whether the caption row shows under the bubble. It shows only under the newest bubble of the chat, mine or
+    /// received.
     /// </summary>
+    /// <remarks>
+    /// A failed send shows the retry link in its place, and a click can hide it. My bubble shows the time, the delivery
+    /// icon and the lock. A received bubble shows the time and the lock.
+    /// </remarks>
     public bool ShowsStatusRow => IsNewest && !IsFailed && !IsCaptionHidden;
 
-    /// <summary>Gets whether the lock shows by the caption row or the clicked time: an RCS bubble of an end-to-end encrypted chat.</summary>
+    /// <summary>
+    /// Gets whether the lock shows by the caption row or the clicked time. Each RCS bubble of an end-to-end encrypted
+    /// chat shows it.
+    /// </summary>
     public bool ShowsLock { get; private set; }
 
-    /// <summary>Gets whether "SMS" shows in place of the delivery icon: my newest bubble, sent as SMS or MMS (not RCS).</summary>
+    /// <summary>
+    /// Gets whether "SMS" shows in place of the delivery icon. My newest bubble shows it when it went as SMS or MMS,
+    /// not RCS.
+    /// </summary>
     public bool ShowsSmsLabel => IsNewest && FromMe && !IsRcs && !IsSending && StatusText.Length > 0;
 
-    /// <summary>Gets whether the dot after the caption row's time shows: only when the delivery icon, "SMS" or the lock follows it.</summary>
+    /// <summary>
+    /// Gets whether the dot after the time in the caption row shows. It shows only when the delivery icon, "SMS" or the
+    /// lock follows it.
+    /// </summary>
     public bool ShowsCaptionDot => StatusIcon != MessageStatusIcon.None || ShowsSmsLabel || ShowsLock;
 
     /// <summary>Gets the reaction chip text, such as "👍😂 3", or empty.</summary>
@@ -277,152 +314,182 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     /// <summary>Gets whether anyone reacted.</summary>
     public bool HasReactions => ReactionsText.Length > 0;
 
-    /// <summary>Gets my reaction's emoji, or null when I didn't react.</summary>
+    /// <summary>Gets the emoji of my reaction, or null when I did not react.</summary>
     public string? MyReaction { get; private set; }
 
-    /// <summary>Gets whether I reacted (for bindings, which skip their function when an argument is null).</summary>
+    /// <summary>Gets whether I reacted. A binding skips its function when an argument is null.</summary>
     public bool HasMyReaction => MyReaction is not null;
 
     /// <summary>Gets whether the bubble is in a group chat, where its reaction pill lists who reacted.</summary>
     public bool IsGroupChat => _conversation?.IsGroup == true;
 
-    /// <summary>Gets the ID of the message this one replies to, or empty.</summary>
+    /// <summary>Gets the ID of the message that this message replies to, or empty.</summary>
     public string ReplyToId { get; private set; } = string.Empty;
 
-    /// <summary>Gets the quoted message's sender name; set by the chat.</summary>
+    /// <summary>Gets the sender name of the quoted message. The chat sets it.</summary>
     public string QuoteSender { get; private set; } = string.Empty;
 
-    /// <summary>Gets the quoted message's text, or "Original message" when it isn't loaded; set by the chat.</summary>
+    /// <summary>
+    /// Gets the text of the quoted message, or "Original message" when it is not loaded. The chat sets it.
+    /// </summary>
     public string QuoteText { get; private set; } = string.Empty;
 
-    /// <summary>Gets whether the message replies to another one.</summary>
+    /// <summary>Gets whether the message replies to another message.</summary>
     public bool HasQuote => ReplyToId.Length > 0;
 
     /// <summary>
-    /// Gets the quoted message's photo, video, voice message or file, or null; set by the chat. The quote then shows its
-    /// thumbnail (or a file icon) and its <see cref="ChatFormat.MediaLabel"/> in <see cref="QuoteText"/>.
+    /// Gets the photo, video, voice message or file of the quoted message, or null. The chat sets it.
     /// </summary>
+    /// <remarks>
+    /// The quote then shows its thumbnail or a file icon, and its <see cref="ChatFormat.MediaLabel"/> in
+    /// <see cref="QuoteText"/>.
+    /// </remarks>
     public MediaPart? QuoteMedia { get; private set; }
 
-    /// <summary>Gets whether the quote shows the quoted media's thumbnail or icon.</summary>
+    /// <summary>Gets whether the quote shows the thumbnail or the icon of the quoted media.</summary>
     public bool HasQuoteMedia => QuoteMedia is not null;
 
-    /// <summary>Gets whether the quote's text is a label ("Image", "Video", "GIF"), shown in italic, not a file name.</summary>
+    /// <summary>
+    /// Gets whether the text of the quote is a label in italic, such as "Image", "Video" or "GIF", not a file name.
+    /// </summary>
     public bool QuoteIsLabel => QuoteMedia is not null && IsLabel(QuoteMedia);
 
-    /// <summary>Gets whether this message's media label is a label (italic), not a file name.</summary>
+    /// <summary>Gets whether the media label of this message is a label in italic, not a file name.</summary>
     public bool MediaLabelIsLabel => Media is { } media && IsLabel(media);
 
-    /// <summary>Gets the reply chip's text: the media label for a photo, video or file, else the text.</summary>
+    /// <summary>Gets the text of the reply chip: the media label for a photo, video or file, else the text.</summary>
     public string ReplyChipText => Media is { } media ? ChatFormat.MediaLabel(media) : DisplayText;
 
     /// <summary>Gets the first web link in the text, or null.</summary>
     public Uri? LinkUrl { get; private set; }
 
-    /// <summary>Gets the link's preview card, or null; set by the chat once fetched.</summary>
+    /// <summary>Gets the preview card of the link, or null. The chat sets it after the fetch.</summary>
     public LinkPreview? Preview { get; private set; }
 
     /// <summary>Gets whether the preview card shows.</summary>
     public bool HasPreview => Preview is not null;
 
     /// <summary>
-    /// Gets the preview card's accessible name: the page title, then the link's host (the address isn't in the text
-    /// while the card shows, so Narrator still hears where it goes). Empty without a card.
+    /// Gets the accessible name of the preview card: the page title, then the host of the link. It is empty with no
+    /// card.
     /// </summary>
+    /// <remarks>
+    /// The address is not in the text while the card shows. Thus Narrator still tells where the link goes.
+    /// </remarks>
     public string PreviewName => Preview is null || LinkUrl is null ? string.Empty
         : Preview.Title.Length > 0 ? $"{Preview.Title}, {LinkUrl.Host}" : LinkUrl.Host;
 
     /// <summary>Gets the photo, video, voice message or file the message carries, or null.</summary>
     public MediaPart? Media { get; private set; }
 
-    /// <summary>Gets whether the bubble shows a photo (a received or sent image).</summary>
+    /// <summary>Gets whether the bubble shows a photo, received or sent.</summary>
     public bool HasPhoto { get; private set; }
 
-    /// <summary>Gets whether the bubble shows a card for a file (not a photo, video or voice message).</summary>
+    /// <summary>Gets whether the bubble shows a card for a file that is not a photo, video or voice message.</summary>
     public bool HasFileCard { get; private set; }
 
-    /// <summary>Gets whether the bubble shows a video: its first frame with a play button, played in place.</summary>
+    /// <summary>
+    /// Gets whether the bubble shows a video: its first frame with a play button. The video plays in place.
+    /// </summary>
     public bool HasVideo { get; private set; }
 
     /// <summary>
-    /// Gets whether a photo or a video fills the bubble edge to edge (no padding, the caption inset under it).
+    /// Gets whether a photo or a video fills the bubble from edge to edge, with no padding. The caption then has an
+    /// inset under it.
     /// </summary>
     public bool FillsBubble => HasPhoto || HasVideo;
 
-    /// <summary>Gets whether the bubble shows a voice message's player (play, waveform and length).</summary>
+    /// <summary>
+    /// Gets whether the bubble shows the player of a voice message, with play, the waveform and the length.
+    /// </summary>
     public bool HasVoice { get; private set; }
 
-    /// <summary>Gets whether the bubble shows a photo, a video, a card or a voice message, so its menu has Open and Save as.</summary>
+    /// <summary>
+    /// Gets whether the bubble shows a photo, a video, a card or a voice message, so its menu has Open and Save as.
+    /// </summary>
     public bool HasMediaFile => HasPhoto || HasVideo || HasFileCard || HasVoice;
 
     /// <summary>
-    /// Gets whether the photo or card may open in its default app, so its menu has Open. A program, script or installer
-    /// (see <see cref="MediaStore.CanOpen"/>) never opens: its menu has only Save as.
+    /// Gets whether the photo or card can open in its default app, so its menu has Open.
     /// </summary>
+    /// <remarks>
+    /// A program, script or installer never opens, so its menu has only Save as. See <see cref="MediaStore.CanOpen"/>.
+    /// </remarks>
     public bool CanOpenMedia => HasMediaFile && Media is { } media && MediaStore.CanOpen(media.Name, media.Mime);
 
     /// <summary>
-    /// Gets whether the bubble menu has Copy: not for a photo, video or file sent without a caption, whose
+    /// Gets whether the bubble menu has Copy. A photo, video or file sent with no caption has no Copy, because its
     /// <see cref="Text"/> is only the kind label.
     /// </summary>
     public bool HasCopyText { get; private set; }
 
     /// <summary>
-    /// Tells whether a focused bubble draws its own ring around its back (owner request, 2026-10-30).
+    /// Tells whether a focused bubble draws its own ring around its back. The owner asked for it on 2026-10-30.
     /// </summary>
     /// <remarks>
-    /// Only focus from the keyboard (Ctrl + j, the arrow keys, Tab) or from code rings the bubble; a click doesn't. With
-    /// high contrast on, the bubble draws no ring: the list's own system focus visual shows instead.
+    /// Only focus from the keyboard or from code rings the bubble: Ctrl + j, the arrow keys or Tab. A click does not.
+    /// With high contrast on, the bubble draws no ring. The system focus visual of the list shows in its place.
     /// </remarks>
-    /// <param name="focused">True while the bubble's row has focus.</param>
+    /// <param name="focused">True while the row of the bubble has focus.</param>
     /// <param name="byPointer">True when the focus came from a click or touch.</param>
-    /// <param name="highContrast">True while Windows' high contrast is on.</param>
+    /// <param name="highContrast">True while the high contrast of Windows is on.</param>
     /// <returns>True when the ring shows.</returns>
     public static bool ShowsFocusRing(bool focused, bool byPointer, bool highContrast) => focused && !byPointer && !highContrast;
 
     /// <summary>
-    /// Gets whether the bubble holds a file of mine not uploaded yet: the attachment's own bytes, shown and sent from
-    /// here (see <see cref="ChatViewModel.SendAsync"/>), until the phone's echo brings its media ID.
+    /// Gets whether the bubble holds a file of mine with no upload yet. It holds until the echo from the phone brings
+    /// the media ID.
     /// </summary>
+    /// <remarks>
+    /// The bubble shows the bytes of the attachment, and <see cref="ChatViewModel.SendAsync"/> sends them from here.
+    /// </remarks>
     public bool IsLocalMedia => FromMe && Media is { MediaId.Length: 0, ThumbnailId.Length: 0, InlineData.Length: > 0 };
 
-    /// <summary>Gets whether the upload bar shows: a file of mine still being sent from here.</summary>
+    /// <summary>Gets whether the upload bar shows: a file of mine that still sends from here.</summary>
     public bool IsUploading => IsSending && IsLocalMedia;
 
-    /// <summary>Gets how much of the attachment has uploaded, in whole percent (0 to 100).</summary>
+    /// <summary>Gets the uploaded part of the attachment in whole percent, from 0 to 100.</summary>
     public double UploadPercent { get; private set; }
 
-    /// <summary>Gets the failed send's retry link text: the attachment's own for a photo or file, else the text's.</summary>
+    /// <summary>
+    /// Gets the text of the retry link after a failed send. A photo or a file has its own text, and a text message has
+    /// another.
+    /// </summary>
     public string NotSentText => HasMediaFile ? ChatCopy.AttachSendFailed : ChatCopy.NotSentRetry;
 
-    // The Caption Sent With The Media (Empty Without One), As Typed
+    // Gives the caption that went with the media as the user typed it, or empty.
     internal string Caption => Media is null ? string.Empty : _message.Text;
 
-    /// <summary>Gets the card's file name: the sender's, or the kind label ("Video", "File") without one.</summary>
+    /// <summary>
+    /// Gets the file name of the card: the name from the sender, or else the kind label, such as "Video" or "File".
+    /// </summary>
     public string FileName => Media is { Name.Length: > 0 } media ? media.Name : ChatFormat.KindLabel(Kind);
 
-    /// <summary>Gets the kind of message (Text, Photo, Video, File...).</summary>
+    /// <summary>Gets the kind of message, such as Text, Photo, Video or File.</summary>
     public MessageKind Kind { get; private set; }
 
-    /// <summary>Gets the photo's accessible name: its caption, else "Photo".</summary>
+    /// <summary>Gets the accessible name of the photo: its caption, else "Photo".</summary>
     public string PhotoName => HasBodyText ? Text : ChatCopy.Photo;
 
-    /// <summary>Gets the video's accessible name (its frame, and the viewer): its caption, else "Video".</summary>
+    /// <summary>Gets the accessible name of the video frame and the viewer: the caption, else "Video".</summary>
     public string VideoName => HasBodyText ? Text : ChatCopy.Video;
 
-    // The Link The Chat Asked A Preview For, So It Asks Once Per Link
+    // The chat asks 1 time for each link, so the bubble keeps the link that got a preview request.
     internal Uri? PreviewAskedFor { get; set; }
 
-    // The Phone's Delivery Status, For The Chat's Status Line
+    // The status line of the chat reads the delivery status from the phone.
     internal MessageStatusType Status { get; private set; }
 
-    /// <summary>Gets whether the bubble is a system line (a group's name change): small centered gray text, no bubble, nothing to react or reply to.</summary>
+    /// <summary>
+    /// Gets whether the bubble is a system line, such as the name change of a group. The line is small, centered gray
+    /// text with no bubble, and takes no reaction or reply.
+    /// </summary>
     public bool IsSystemLine { get; private set; }
 
     /// <summary>
-    /// Copies new message details into the bubble (an echo or a status change).
+    /// Copies new details of the message into the bubble, such as an echo or a status change.
     /// </summary>
-    /// <remarks>An empty ID or temporary ID in <paramref name="m"/> keeps the one the bubble already has.</remarks>
+    /// <remarks>An empty ID or temporary ID in <paramref name="m"/> keeps the ID that the bubble has already.</remarks>
     /// <param name="m">The message.</param>
     public void Update(ChatMessage m)
     {
@@ -434,17 +501,17 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Gives the size a photo bubble reserves before its image loads, so nothing moves when it arrives.
+    /// Gives the size that a photo bubble reserves before its image loads, so nothing moves when the image arrives.
     /// </summary>
     /// <remarks>
-    /// The photo's own <c>Dimensions</c>, scaled down to fit the bubble's width and 360 px of height with its aspect
-    /// kept. A photo is never shown bigger than its own pixels, except a speck (both sides under 48 px), which grows to
-    /// 48 px so it can be seen and clicked. Unknown dimensions reserve a
-    /// 240 px square (narrower when the bubble is), which the image then fills, cropped.
+    /// The size is the <c>Dimensions</c> of the photo, scaled down to fit the width of the bubble and 360 px of height.
+    /// The scale keeps the aspect. A photo never shows bigger than its own pixels, except a speck with both sides under
+    /// 48 px. A speck grows to 48 px, so the user can see it and click it. Unknown dimensions reserve a 240 px square,
+    /// or less when the bubble is narrower. The image then fills the square, cropped.
     /// </remarks>
-    /// <param name="width">The photo's width in pixels, or 0 when unknown.</param>
-    /// <param name="height">The photo's height in pixels, or 0 when unknown.</param>
-    /// <param name="maxWidth">The widest the photo may be in the bubble, in effective pixels.</param>
+    /// <param name="width">The width of the photo in pixels, or 0 when unknown.</param>
+    /// <param name="height">The height of the photo in pixels, or 0 when unknown.</param>
+    /// <param name="maxWidth">The largest width of the photo in the bubble, in effective pixels.</param>
     /// <returns>The width and height to reserve, in whole effective pixels.</returns>
     public static (double Width, double Height) PhotoSize(int width, int height, double maxWidth)
     {
@@ -455,8 +522,8 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
             return (side, side);
         }
 
-        // Never Bigger Than The Photo's Own Pixels: A Crisp Small Photo Beats A Blurry Big One (Owner). Only A Speck (Under
-        // 48 px Both Ways) Grows To 48, So It Can Be Seen And Clicked
+        // A photo is never bigger than its own pixels. A sharp small photo is better than a blurry big photo, by owner
+        // ruling. Only a speck under 48 px both ways grows to 48.
         double scale = Math.Min(Math.Min(maxWidth / width, MaxPhotoHeight / height), 1);
         if (Math.Max(width, height) < MinPhotoSide)
         {
@@ -467,19 +534,22 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Gives the width to decode a photo's full image at, so it fills its bubble sharply.
+    /// Gives the decode width of the full image of a photo, so the image fills its bubble sharply.
     /// </summary>
     /// <remarks>
-    /// The bubble crops the image to fill its box (UniformToFill). Decoded only to the box's width, an image wider in
-    /// shape than the box (unknown dimensions reserve a square; a phone may report a rotated photo's sides swapped) was
-    /// then stretched up to the box's height: the blur. So it decodes wide enough to cover the box's height too, and
-    /// never wider than its own pixels (decoding up only blurs).
+    /// The bubble crops the image to fill its box with UniformToFill. An image can be wider in shape than the box.
+    /// Unknown dimensions reserve a square, and a phone can report the sides of a rotated photo swapped. A decode to
+    /// the width of the box then stretched the image to the height of the box, which caused the blur. Thus the decode
+    /// is wide enough to cover the height of the box too. It is never wider than the pixels of the image, because a
+    /// larger decode only blurs.
     /// </remarks>
-    /// <param name="pixelWidth">The image's own width in pixels (as shown, after its orientation), or 0 when unknown.</param>
-    /// <param name="pixelHeight">The image's own height in pixels, or 0 when unknown.</param>
-    /// <param name="boxWidth">The photo's box width, in effective pixels.</param>
-    /// <param name="boxHeight">The photo's box height, in effective pixels.</param>
-    /// <returns>The decode width in effective pixels; the box's width when the image's size is unknown.</returns>
+    /// <param name="pixelWidth">
+    /// The width of the image in pixels as it shows, after its orientation, or 0 when unknown.
+    /// </param>
+    /// <param name="pixelHeight">The height of the image in pixels, or 0 when unknown.</param>
+    /// <param name="boxWidth">The width of the photo box, in effective pixels.</param>
+    /// <param name="boxHeight">The height of the photo box, in effective pixels.</param>
+    /// <returns>The decode width in effective pixels, or the width of the box when the image size is unknown.</returns>
     public static int FillDecodeWidth(int pixelWidth, int pixelHeight, double boxWidth, double boxHeight)
     {
         int box = (int)Math.Ceiling(Math.Max(1, boxWidth));
@@ -493,10 +563,14 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Says whether the bubble should animate in, once: true for a bubble the chat added live (sent, or arrived while the
-    /// chat was open) that shows within a second of being added. The flag clears, so a recycled container never replays it.
+    /// Tells 1 time whether the bubble animates in. It is true for a bubble that the chat added live and that shows
+    /// within 1 second of the add.
     /// </summary>
-    /// <returns>True the first time a new bubble shows.</returns>
+    /// <remarks>
+    /// The chat adds a bubble live when it sends it, or when it arrives in the open chat. The flag clears, so a
+    /// recycled container never plays the animation again.
+    /// </remarks>
+    /// <returns>True the first time that a new bubble shows.</returns>
     public bool TakeNew()
     {
         bool isNew  = _newAt != 0 && Environment.TickCount64 - _newAt <= NewWindowMs;
@@ -505,10 +579,11 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Asks the phone for the full-size photo when only its thumbnail came (see <see cref="MediaStore.RequestFullSizeAsync"/>).
+    /// Asks the phone for the full-size photo when only its thumbnail came. See
+    /// <see cref="MediaStore.RequestFullSizeAsync"/>.
     /// </summary>
     /// <param name="media">The media store.</param>
-    /// <param name="again">True to ask again though asked before (a retry after the photo never came).</param>
+    /// <param name="again">True to ask again after an earlier request, as a retry when the photo never came.</param>
     /// <returns>A task that completes when the phone accepted the request, or at once when nothing is asked.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="media"/> is null.</exception>
     /// <exception cref="MessagingUnavailableException">Not connected.</exception>
@@ -522,13 +597,16 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     /// <summary>
     /// Gives the text, followed by the "Not sent" note when the send failed.
     /// </summary>
-    /// <remarks>A XAML list item reads its item's <c>ToString()</c> as its UI Automation name, so screen readers hear this.</remarks>
-    /// <returns>The text to read out.</returns>
+    /// <remarks>
+    /// A XAML list item reads the <c>ToString()</c> of its item as its UI Automation name. Thus screen readers hear
+    /// this text.
+    /// </remarks>
+    /// <returns>The text for screen readers.</returns>
     public override string ToString() => IsFailed ? $"{Text}, {NotSentText}" : Text;
 
     /// <summary>
-    /// Shows the time under the bubble, or hides it again (a click on the bubble). On the newest bubble it hides its caption
-    /// row instead, or shows it again.
+    /// Shows or hides the time under the bubble when the user clicks it. On the newest bubble, it shows or hides the
+    /// caption row in its place.
     /// </summary>
     public void ToggleTime()
     {
@@ -546,15 +624,15 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Lists who reacted, for a group chat's reaction pill: one row per person per emoji, the emoji in the order the pill
-    /// ranks them (<see cref="ChatFormat.RankedEmoji"/>), people in the order the phone lists them.
+    /// Lists who reacted, for the reaction pill of a group chat. The list has 1 row for each person and each emoji.
     /// </summary>
     /// <remarks>
-    /// My own reaction reads <see cref="ChatCopy.You"/>. Others are named from the conversation's participants: the full
-    /// name, else the first name, else the number. Someone with none of those, or not in the conversation, is left out,
-    /// so a raw participant ID never shows.
+    /// The emoji come in the order of <see cref="ChatFormat.RankedEmoji"/>, and the people in the order of the phone.
+    /// My own reaction reads <see cref="ChatCopy.You"/>. The participants of the conversation give the names of the
+    /// others: the full name, else the first name, else the number. The list leaves out a person with none of those,
+    /// or a person not in the conversation. Thus a raw participant ID never shows.
     /// </remarks>
-    /// <returns>The rows; empty when nobody reacted.</returns>
+    /// <returns>The rows, or empty when nobody reacted.</returns>
     public IReadOnlyList<(string Emoji, string Name)> Reactors()
     {
         List<(string Emoji, string Name)> rows = [];
@@ -573,15 +651,10 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         return rows;
     }
 
-    // A Participant's Name: Full, First, Then The Number; Empty For None (Or An Unknown Participant)
     private static string NameOf(ParticipantInfo? p) =>
-        p is null ? string.Empty
-        : p.FullName.Length > 0 ? p.FullName
-        : p.FirstName.Length > 0 ? p.FirstName
-        : !string.IsNullOrEmpty(p.FormattedNumber) ? p.FormattedNumber
-        : p.Number;
+        ChatFormat.SenderName(p) is { Length: > 0 } name ? name : p?.Number ?? string.Empty;
 
-    // A Bubble Made Before Its Conversation Was Cached Learns Which Reaction Is Mine
+    // A bubble made before the store had its conversation learns which reaction is mine.
     internal void SetConversation(ConversationInfo? conversation)
     {
         if (conversation is null || ReferenceEquals(_conversation, conversation))
@@ -595,8 +668,9 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         RaiseChanges(before);
     }
 
-    // The Newest Bubble Shows The Caption Row; One That Stops Being The Newest Forgets A Click That Hid It, And One That
-    // Becomes The Newest Forgets A Click That Showed Its Time (Else Hiding The Caption Would Show The Footer Time)
+    // The newest bubble shows the caption row. A bubble that is no longer the newest forgets a click that hid the row.
+    // A bubble that becomes the newest forgets a click that showed its time. Else a hide of the caption shows the
+    // footer time.
     internal void SetStatus(bool isNewest, string text, bool showsLock)
     {
         bool hidden     = isNewest && IsCaptionHidden;
@@ -615,7 +689,8 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         RaiseChanges(before);
     }
 
-    // Where The Bubble Sits In Its Group, Its Name Over The First And Its Avatar Beside The Last (Group Chats Only)
+    // Sets the place of the bubble in its group. In a group chat, the name shows over the first bubble and the avatar
+    // beside the last.
     internal void SetGroup(bool first, bool last, bool avatarLane, string? senderName, uint senderColor, string avatarInitial, string avatarPhotoId)
     {
         bool showsAvatar = avatarLane && last;
@@ -639,11 +714,11 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         RaiseChanges(before);
     }
 
-    // A Label (Italic), Not The Sender's File Name
+    // A label shows in italic. The file name from the sender is not a label.
     private static bool IsLabel(MediaPart media) => media is not { Kind: MessageKind.File, Name.Length: > 0 };
 
-    // The Quote Shows Text-Style Emoji In Color, Like The Bubble. Quoted Media Shows Its Label In Place Of The Text, With
-    // Its Thumbnail; The Same Media Again (A New Part From An Update) Changes Nothing
+    // The quote shows text-style emoji in color, as the bubble does. Quoted media shows its label in place of the text,
+    // with its thumbnail. The same media again changes nothing, also when an update brings it as a new part.
     internal void SetQuote(string sender, string text, MediaPart? media = null)
     {
         string shown = media is null ? ChatFormat.WithColorEmoji(text) : ChatFormat.MediaLabel(media);
@@ -674,7 +749,7 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         RaiseChanges(before);
     }
 
-    // Added Live (Sent, Or Arrived In The Open Chat): Animates In When It First Shows
+    // The chat added the bubble live, so the bubble animates in when it first shows.
     internal void MarkNew() => _newAt = Environment.TickCount64;
 
     internal void MarkFailed()
@@ -695,7 +770,8 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         RaiseChanges(before);
     }
 
-    // The Watched Values Before A Change; Null When No View Listens (A Bubble Off Screen), So Nothing Is Read
+    // Gives the watched values before a change. With no view that listens, as for a bubble off screen, it gives null
+    // and reads nothing.
     private object?[]? Snapshot()
     {
         if (PropertyChanged is null)
@@ -712,7 +788,6 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         return values;
     }
 
-    // Raises Each Watched Property Whose Value The Change Moved
     private void RaiseChanges(object?[]? before)
     {
         if (before is null)
@@ -729,7 +804,7 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         }
     }
 
-    // The Upload Moved On: Raised Only When The Whole Percent Changes, So A Big File Doesn't Flood The View
+    // The property raises only when the whole percent changes, so a big file does not flood the view.
     internal void SetUploadShare(double share)
     {
         double percent = Math.Floor(Math.Clamp(share, 0, 1) * 100);
@@ -774,20 +849,20 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         HasCopyText   = m.Media is null || m.Text.Length > 0;
         IsEmojiOnly   = m.Kind == MessageKind.Text && !HasQuote && ChatFormat.IsEmojiOnly(Text);
 
-        // A Photo, Card Or Voice Message Shows Only Its Caption Under It, Not The Kind Label
+        // A photo, card or voice message shows only its caption under it, not the kind label.
         BodyText      = HasMediaFile && m.Text.Length == 0 ? string.Empty : BodyOf(Text, DisplayText, _link, Preview);
     }
 
-    // An Echo Without Dimensions (An Upload Carries None) Keeps The Ones Already Known (The Picked Photo's), So The
-    // Sent Photo Keeps Its Shape
+    // An upload carries no dimensions, so its echo keeps the dimensions of the picked photo. Thus the sent photo keeps
+    // its shape.
     private static MediaPart? KeepSize(MediaPart? incoming, MediaPart? known) =>
         incoming is { Width: 0, Height: 0 } && known is { Width: > 0, Height: > 0 }
             ? incoming with { Width = known.Width, Height = known.Height }
             : incoming;
 
-    // The Text Shown In The Bubble: Without The Card's Link While The Card Shows. The Space On Either Side Of The Address
-    // Goes With It; What Was On Each Side Joins With One Space, Or One Line Break When Either Side Was Its Own Line, And
-    // Nothing Before Punctuation ("see https://x.com, ok" Reads "see, ok")
+    // Gives the text of the bubble, with no card link while the card shows. The space on each side of the address also
+    // goes. The 2 sides join with 1 space, or with 1 line break when a side was its own line. Before punctuation, they
+    // join with nothing: "see https://x.com, ok" reads "see, ok".
     private static string BodyOf(string text, string displayText, TextLink? link, LinkPreview? preview)
     {
         if (preview is null || link is not { } l)
@@ -800,7 +875,7 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         bool lineEnd  = before.EndsWith('\n');
         bool lineNew  = after.StartsWith('\n') || after.StartsWith("\r\n", StringComparison.Ordinal);
 
-        // A Line That Was Only The Link Goes With Its Line Break
+        // A line that was only the link goes with its line break.
         if (lineEnd && lineNew)
         {
             after = after[(after[0] == '\r' ? 2 : 1)..];
@@ -812,7 +887,7 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
 
     private string? FindMyReaction() => _reactions.FirstOrDefault(r => r.ParticipantIds.Any(IsMine))?.Emoji;
 
-    // Mine: Any Participant Marked As Me, Or The ID The Conversation Sends As
+    // Mine is the default outgoing ID of the conversation, or a participant marked as me. The store uses the same rule.
     private bool IsMine(string participantId) =>
         participantId.Length > 0 && _conversation is { } c && (participantId == c.DefaultOutgoingId || c.FindParticipant(participantId)?.IsMe == true);
 }
