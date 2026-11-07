@@ -34,6 +34,10 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
     // Live Updates Also Fill (The Phone Pushes The Next Page's Conversations Too)
     private readonly HashSet<string> _paged = [];
 
+    // The conversations that changed live while a load ran. A fresh page keeps their rows, because the phone made the
+    // page before the change.
+    private readonly HashSet<string> _changedMidLoad = [];
+
     // Where The Last Page Ended; Null Means No More Pages
     private Cursor? _next;
     private bool _isLoading;
@@ -186,6 +190,7 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
             }
         }
 
+        _changedMidLoad.Clear();
         IsLoading = true;
         try
         {
@@ -193,8 +198,9 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
 
             // Rows Stay The Same Objects, So The Selection And Scroll Survive The Refresh
             HashSet<string> listed = [.. page.Select(c => c.Id)];
-            DropUnlisted(Pinned, listed);
-            DropUnlisted(Rows, listed);
+            HashSet<string> kept   = [.. listed, .. _changedMidLoad];
+            DropUnlisted(Pinned, kept);
+            DropUnlisted(Rows, kept);
 
             _next = next;
             _paged.Clear();
@@ -315,7 +321,15 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
 
     // A Live Update Before The First Load Ends, Or While A Load Or Page Runs, Is Part Of That Load (Loading A Page
     // Raises Them): It Doesn't Animate
-    private void OnConversationChanged(object? sender, ConversationInfo c) => Apply(c, live: _hasLoaded && !IsLoading);
+    private void OnConversationChanged(object? sender, ConversationInfo c)
+    {
+        if (IsLoading)
+        {
+            _changedMidLoad.Add(c.Id);
+        }
+
+        Apply(c, live: _hasLoaded && !IsLoading);
+    }
 
     private void OnResynced(object? sender, EventArgs e) => _post(() => _ = LoadAsync());
 
@@ -389,11 +403,11 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
     }
 
     // Removes The Rows A Fresh Page Didn't List
-    private void DropUnlisted(ObservableCollection<ConversationRowViewModel> list, HashSet<string> listed)
+    private void DropUnlisted(ObservableCollection<ConversationRowViewModel> list, HashSet<string> kept)
     {
         for (int i = list.Count - 1; i >= 0; i--)
         {
-            if (!listed.Contains(list[i].Id))
+            if (!kept.Contains(list[i].Id))
             {
                 RowsChanging?.Invoke(this, false);
                 list.RemoveAt(i);

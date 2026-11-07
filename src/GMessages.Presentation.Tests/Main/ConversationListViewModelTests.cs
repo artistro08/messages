@@ -710,4 +710,26 @@ public sealed class ConversationListViewModelTests
         Assert.AreEqual("a", Ids(list));
         Assert.AreSame(ann, list.Rows[0], "the row was updated in place, not replaced");
     }
+
+    /// <summary>
+    /// A conversation that arrives live while a reload waits on the phone keeps its row, although the page does not list
+    /// it. The phone made the page before the conversation arrived.
+    /// </summary>
+    [TestMethod]
+    public async Task Load_ConversationArrivesLiveMidLoad_KeepsItsRow()
+    {
+        using var rig = new MainRig();
+        rig.Page(MainRig.Conv("a", "Ann", minutesAgo: 5));
+        using var list = NewList(rig);
+        await list.LoadAsync();
+
+        var gate            = new TaskCompletionSource();
+        rig.Client.ListGate = gate;
+        Task reload         = list.LoadAsync();
+        await rig.Live(MainRig.Conv("n", "Newcomer", minutesAgo: 1));
+        gate.SetResult();
+        await reload;
+
+        Assert.AreEqual("n,a", Ids(list));
+    }
 }
