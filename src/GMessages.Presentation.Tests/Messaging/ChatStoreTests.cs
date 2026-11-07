@@ -1116,7 +1116,7 @@ public sealed class ChatStoreTests
         await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1")));
         double reported = -1;
 
-        ChatMessage sent = await rig.Store.SendMediaAsync("c1", new byte[] { 1, 2, 3 }, "cat.png", "image/png", "look", "tmp-1", new InlineProgress(p => reported = p), Ct);
+        ChatMessage sent = await SendMediaAsync(rig, [1, 2, 3], "cat.png", "image/png", "look", new InlineProgress(p => reported = p));
 
         SendMessageRequest req = rig.Client.Sent.Single();
         Assert.AreEqual("tmp-1", req.TmpID);
@@ -1143,10 +1143,10 @@ public sealed class ChatStoreTests
         conv.Type         = ConversationType.Rcs;
         await rig.Store.HandleEventAsync(new ConversationUpdated(conv));
 
-        ChatMessage sent = await rig.Store.SendMediaAsync("c1", new byte[] { 1 }, "a.pdf", "application/pdf", "read this", "tmp-1", null, Ct);
+        ChatMessage sent = await SendMediaAsync(rig, [1], "a.pdf", "application/pdf", "read this");
 
         Assert.HasCount(2, rig.Client.Sent);
-        Assert.AreEqual(1, rig.Client.Sent[0].MessagePayload.MessageInfo.Count);
+        Assert.AreEqual(1,rig.Client.Sent[0].MessagePayload.MessageInfo.Count);
         Assert.AreEqual("media-1", rig.Client.Sent[0].MessagePayload.MessageInfo[0].MediaContent.MediaID);
         Assert.AreEqual("read this", rig.Client.Sent[1].MessagePayload.MessageInfo.Single().MessageContent.Content);
         Assert.AreNotEqual("tmp-1", rig.Client.Sent[1].TmpID);
@@ -1166,7 +1166,7 @@ public sealed class ChatStoreTests
         await rig.Store.HandleEventAsync(new ConversationUpdated(conv));
         rig.Client.SendFails = r => r.MessagePayload.MessageInfo.Any(i => i.MessageContent is not null);
 
-        ChatMessage sent = await rig.Store.SendMediaAsync("c1", new byte[] { 1 }, "a.pdf", "application/pdf", "read this", "tmp-1", null, Ct);
+        ChatMessage sent = await SendMediaAsync(rig, [1], "a.pdf", "application/pdf", "read this");
 
         Assert.HasCount(2, rig.Client.Sent);
         Assert.AreEqual("tmp-1", sent.TmpId);
@@ -1182,10 +1182,17 @@ public sealed class ChatStoreTests
         await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1")));
         byte[] big = new byte[ChatStore.MaxAttachmentBytes + 1];
 
-        await Assert.ThrowsExactlyAsync<AttachmentTooBigException>(() => rig.Store.SendMediaAsync("c1", big, "big.bin", "application/octet-stream", null, "tmp-1", null, Ct));
+        await Assert.ThrowsExactlyAsync<AttachmentTooBigException>(() => SendMediaAsync(rig, big, "big.bin", "application/octet-stream", null));
 
         Assert.IsEmpty(rig.Client.Media);
         Assert.IsEmpty(rig.Client.Sent);
+    }
+
+    // Uploads, then sends in chat c1 with the temporary ID tmp-1, as the chat view does.
+    private static async Task<ChatMessage> SendMediaAsync(Rig rig, byte[] bytes, string fileName, string mime, string? caption, IProgress<double>? progress = null)
+    {
+        MediaContent media = await rig.Store.UploadAttachmentAsync(bytes, fileName, mime, progress, Ct);
+        return await rig.Store.SendUploadedMediaAsync("c1", media, caption, "tmp-1", null, Ct);
     }
 
     // Reports As It Is Called, Unlike Progress<T>, Which Posts

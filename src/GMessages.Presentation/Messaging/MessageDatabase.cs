@@ -8,35 +8,36 @@ using Microsoft.Extensions.Logging;
 namespace GMessages.Presentation.Messaging;
 
 /// <summary>
-/// The local SQLite database of conversations and recent messages, so a chat opens instantly even right after a restart.
+/// Keeps conversations and recent messages in a local SQLite database, so a chat opens at once, also after a restart.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Every row's <c>body</c> is the protobuf bytes encrypted with DPAPI for the current Windows user, so names, numbers
-/// and text never sit on disk in plain text. IDs and timestamps stay plain so lookups and ordering work. Only the
-/// newest <see cref="KeepPerConversation"/> messages of each conversation are kept.
+/// The <c>body</c> of each row is the protobuf bytes, encrypted with DPAPI for the current Windows user. Thus names,
+/// numbers and text are never on disk as plain text. IDs and timestamps stay plain, so lookups and ordering work.
+/// The database keeps only the newest <see cref="KeepPerConversation"/> messages of each conversation.
 /// </para>
 /// <para>
-/// Runs on Windows' own <c>winsqlite3.dll</c>. A connection opens per call with pooling off, so nothing is held while
-/// idle; one lock serializes every call. The database is a cache, never a reason to fail: a damaged file, a file from
-/// another schema version, or a row that won't decrypt or parse deletes the file, logs only the error type, and the
-/// call answers empty (loads) or drops the write (saves). A passing problem (the file locked by another process, disk
-/// full, an I/O error) fails only that call the same way and keeps the file. Content is never logged.
+/// It uses the <c>winsqlite3.dll</c> of Windows. Each call opens a connection with pooling off, so nothing stays open
+/// while idle. A single lock lets 1 call run at a time. The database is a cache and never a reason to fail. A damaged
+/// file deletes the file. A file of another schema version, or a row that does not decrypt or parse, does the same.
+/// Then the call logs only the error type. A load answers empty, and a save drops the write. A temporary problem
+/// fails only that call in the same way, and the file stays. Examples are a lock by another process, a full disk or
+/// an I/O error. The database never logs content.
 /// </para>
 /// </remarks>
 public sealed partial class MessageDatabase
 {
     /// <summary>
-    /// The schema this class writes, kept in <c>PRAGMA user_version</c>. A file with another version starts over.
+    /// The schema that this class writes, kept in <c>PRAGMA user_version</c>. A file with another version starts again.
     /// </summary>
     public const int SchemaVersion = 2;
 
     /// <summary>
-    /// How many of a conversation's newest messages are kept.
+    /// The number of the newest messages of a conversation that the database keeps.
     /// </summary>
     public const int KeepPerConversation = 100;
 
-    // Version 2 Added Drafts; A Version 1 File Gets The Table In Place (See Open)
+    // Version 2 added drafts. Open adds this table to a version 1 file in place.
     private const string DraftsTable = "CREATE TABLE drafts (conversation_id TEXT PRIMARY KEY, body BLOB NOT NULL);";
 
     private const string Schema = """
@@ -52,23 +53,24 @@ public sealed partial class MessageDatabase
     private readonly ILogger _log;
     private readonly Lock _lock = new();
 
-    // Binds Windows' winsqlite3 Explicitly: Microsoft.Data.Sqlite Otherwise Finds It By Reflection, Which AOT Trims
+    // This binds the winsqlite3 of Windows explicitly. Otherwise Microsoft.Data.Sqlite finds it by reflection, which
+    // AOT trims.
     static MessageDatabase()
     {
         SQLitePCL.Batteries_V2.Init();
     }
 
     /// <summary>
-    /// Wraps the database file; nothing is opened until the first call.
+    /// Wraps the database file. Nothing opens until the first call.
     /// </summary>
-    /// <param name="path">The database file (<see cref="AppPaths.MessagesDatabase"/>).</param>
-    /// <param name="log">Gets error type names only.</param>
+    /// <param name="path">The database file, see <see cref="AppPaths.MessagesDatabase"/>.</param>
+    /// <param name="log">The logger, which gets error type names only.</param>
     public MessageDatabase(string path, ILogger log)
         : this(path, log, busyTimeoutSeconds: 30)
     {
     }
 
-    // Tests Shorten How Long A Call Waits On A File Another Process Has Locked
+    // Tests make the wait shorter for a file that another process has locked.
     internal MessageDatabase(string path, ILogger log, int busyTimeoutSeconds)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
@@ -84,9 +86,9 @@ public sealed partial class MessageDatabase
     // =========================================================================
 
     /// <summary>
-    /// Loads every saved conversation, most recent first.
+    /// Loads all saved conversations, most recent first.
     /// </summary>
-    /// <returns>The conversations, or empty when there are none or the file was unreadable.</returns>
+    /// <returns>The conversations, or empty when there are none or the file was not readable.</returns>
     public IReadOnlyList<Conversation> LoadConversations() => Run<IReadOnlyList<Conversation>>(connection =>
     {
         using SqliteCommand command = connection.CreateCommand();
@@ -103,9 +105,9 @@ public sealed partial class MessageDatabase
     }, []);
 
     /// <summary>
-    /// Saves a conversation, replacing the one with the same ID.
+    /// Saves a conversation and replaces the one with the same ID.
     /// </summary>
-    /// <param name="conversation">The conversation; its <c>LastMessageTimestamp</c> is stored plain for ordering.</param>
+    /// <param name="conversation">The conversation. Its <c>LastMessageTimestamp</c> stays plain for ordering.</param>
     public void SaveConversation(Conversation conversation)
     {
         ArgumentNullException.ThrowIfNull(conversation);
@@ -127,12 +129,15 @@ public sealed partial class MessageDatabase
     /// Changes a saved conversation in place: read, archived, muted, moved to spam or deleted here.
     /// </summary>
     /// <remarks>
-    /// A change made here only touches the slim cached copy, so without this the saved row keeps its old state and the
-    /// next launch shows it there (bold, or in the wrong list) until the phone's page replaces it. Rewrites only the
-    /// body, keeping the saved order; does nothing when the conversation isn't saved or the change leaves it as it was.
+    /// A change made here touches only the slim cached copy. Without this method, the saved row keeps its old state.
+    /// The next start then shows the old state until the page from the phone replaces it. The chat is bold or in the
+    /// wrong list.
+    /// The method rewrites only the body and keeps the saved order. It does nothing when the conversation is not saved
+    /// or the change keeps it the same.
     /// </remarks>
-    /// <param name="conversationId">The conversation ID.</param>
-    /// <param name="change">Changes the saved conversation; returns false when it was already that way.</param>
+    /// <param name="change">
+    /// Changes the saved conversation. It returns false when the conversation already had the change.
+    /// </param>
     public void UpdateConversation(string conversationId, Func<Conversation, bool> change)
     {
         ArgumentException.ThrowIfNullOrEmpty(conversationId);
@@ -140,7 +145,6 @@ public sealed partial class MessageDatabase
 
         Run(connection =>
         {
-            // Load The Saved Row
             Conversation conversation;
             using (SqliteCommand select = connection.CreateCommand())
             {
@@ -161,7 +165,6 @@ public sealed partial class MessageDatabase
                 return false;
             }
 
-            // Save The Change
             using SqliteCommand update = connection.CreateCommand();
             update.CommandText = "UPDATE conversations SET body = $body WHERE id = $id";
             update.Parameters.AddWithValue("$id", conversationId);
@@ -174,7 +177,6 @@ public sealed partial class MessageDatabase
     /// <summary>
     /// Removes a conversation deleted here, with its saved messages, encryption state and draft.
     /// </summary>
-    /// <param name="conversationId">The conversation ID.</param>
     public void DeleteConversation(string conversationId)
     {
         ArgumentException.ThrowIfNullOrEmpty(conversationId);
@@ -199,10 +201,8 @@ public sealed partial class MessageDatabase
     // =========================================================================
 
     /// <summary>
-    /// Deletes one saved message (it was deleted from the phone).
+    /// Deletes 1 saved message after its delete on the phone.
     /// </summary>
-    /// <param name="conversationId">The conversation ID.</param>
-    /// <param name="messageId">The message ID.</param>
     public void DeleteMessage(string conversationId, string messageId)
     {
         ArgumentException.ThrowIfNullOrEmpty(conversationId);
@@ -220,46 +220,44 @@ public sealed partial class MessageDatabase
     }
 
     /// <summary>
-    /// Loads a conversation's newest messages.
+    /// Loads the newest messages of a conversation.
     /// </summary>
-    /// <param name="conversationId">The conversation ID.</param>
-    /// <param name="count">How many of the newest to load.</param>
-    /// <returns>The newest <paramref name="count"/> messages, oldest first; empty when none or unreadable.</returns>
+    /// <param name="count">The number of the newest messages to load.</param>
+    /// <returns>
+    /// The newest <paramref name="count"/> messages, oldest first, or empty when there are none or the file was not
+    /// readable.
+    /// </returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> is negative.</exception>
     public IReadOnlyList<Message> LoadMessages(string conversationId, int count)
     {
-        // SQLite Reads A Negative LIMIT As No Limit
+        // SQLite reads a negative LIMIT as no limit.
         ArgumentOutOfRangeException.ThrowIfNegative(count);
 
-        return Run<IReadOnlyList<Message>>(connection => LoadMessages(connection, conversationId, count), []);
-    }
-
-    private static List<Message> LoadMessages(SqliteConnection connection, string conversationId, int count)
-    {
-        using SqliteCommand command = connection.CreateCommand();
-        command.CommandText = """
-            SELECT body FROM (SELECT body, time, id FROM messages WHERE conversation_id = $c ORDER BY time DESC, id DESC LIMIT $n)
-            ORDER BY time, id
-            """;
-        command.Parameters.AddWithValue("$c", conversationId);
-        command.Parameters.AddWithValue("$n", count);
-
-        List<Message> messages        = [];
-        using SqliteDataReader reader = command.ExecuteReader();
-        while (reader.Read())
+        return Run<IReadOnlyList<Message>>(connection =>
         {
-            messages.Add(Message.Parser.ParseFrom(Unprotect(reader)));
-        }
+            using SqliteCommand command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT body FROM (SELECT body, time, id FROM messages WHERE conversation_id = $c ORDER BY time DESC, id DESC LIMIT $n)
+                ORDER BY time, id
+                """;
+            command.Parameters.AddWithValue("$c", conversationId);
+            command.Parameters.AddWithValue("$n", count);
 
-        return messages;
+            List<Message> messages        = [];
+            using SqliteDataReader reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                messages.Add(Message.Parser.ParseFrom(Unprotect(reader)));
+            }
+
+            return messages;
+        }, []);
     }
 
     /// <summary>
-    /// Loads one message.
+    /// Loads 1 message.
     /// </summary>
-    /// <param name="conversationId">The conversation ID.</param>
-    /// <param name="messageId">The message ID.</param>
-    /// <returns>The message, or null when it isn't saved or the file was unreadable.</returns>
+    /// <returns>The message, or null when it is not saved or the file was not readable.</returns>
     public Message? LoadMessage(string conversationId, string messageId) => Run(connection =>
     {
         using SqliteCommand command = connection.CreateCommand();
@@ -272,11 +270,11 @@ public sealed partial class MessageDatabase
     }, (Message?)null);
 
     /// <summary>
-    /// Saves messages in one transaction, replacing those with the same ID, then keeps only the newest
-    /// <see cref="KeepPerConversation"/> of the conversation.
+    /// Saves messages in 1 transaction and replaces those with the same ID. Then it keeps only the newest
+    /// <see cref="KeepPerConversation"/> messages of the conversation.
     /// </summary>
-    /// <param name="conversationId">The conversation the messages belong to.</param>
-    /// <param name="messages">The messages; each one's <c>Timestamp</c> is stored plain for ordering.</param>
+    /// <param name="conversationId">The conversation that the messages belong to.</param>
+    /// <param name="messages">The messages. The <c>Timestamp</c> of each one stays plain for ordering.</param>
     public void SaveMessages(string conversationId, IReadOnlyList<Message> messages)
     {
         ArgumentException.ThrowIfNullOrEmpty(conversationId);
@@ -286,7 +284,6 @@ public sealed partial class MessageDatabase
         {
             using SqliteTransaction transaction = connection.BeginTransaction();
 
-            // Upsert
             using (SqliteCommand insert = connection.CreateCommand())
             {
                 insert.CommandText = "INSERT OR REPLACE INTO messages (conversation_id, id, time, body) VALUES ($c, $id, $time, $body)";
@@ -304,7 +301,6 @@ public sealed partial class MessageDatabase
                 }
             }
 
-            // Keep The Newest
             using (SqliteCommand trim = connection.CreateCommand())
             {
                 trim.CommandText = """
@@ -328,7 +324,10 @@ public sealed partial class MessageDatabase
     /// <summary>
     /// Loads whether each conversation is end-to-end encrypted, and when the phone reported it.
     /// </summary>
-    /// <returns>Conversation ID to encrypted and its time in microseconds; empty when none or unreadable.</returns>
+    /// <returns>
+    /// The encrypted flag and its time in microseconds by conversation ID. It is empty when there are none or the
+    /// file was not readable.
+    /// </returns>
     public IReadOnlyDictionary<string, (bool Encrypted, long At)> LoadEncryption() => Run<IReadOnlyDictionary<string, (bool Encrypted, long At)>>(connection =>
     {
         using SqliteCommand command = connection.CreateCommand();
@@ -345,11 +344,9 @@ public sealed partial class MessageDatabase
     }, new Dictionary<string, (bool Encrypted, long At)>());
 
     /// <summary>
-    /// Saves whether a conversation is end-to-end encrypted, only when newer than the state already stored.
+    /// Saves whether a conversation is end-to-end encrypted, only when the state is newer than the stored state.
     /// </summary>
-    /// <param name="conversationId">The conversation ID.</param>
-    /// <param name="encrypted">Whether it's encrypted.</param>
-    /// <param name="timestampMicros">When the phone reported it, in microseconds.</param>
+    /// <param name="timestampMicros">When the phone reported the state, in microseconds.</param>
     public void SaveEncryption(string conversationId, bool encrypted, long timestampMicros)
     {
         ArgumentException.ThrowIfNullOrEmpty(conversationId);
@@ -375,9 +372,9 @@ public sealed partial class MessageDatabase
     // =========================================================================
 
     /// <summary>
-    /// Loads every conversation's unsent draft.
+    /// Loads the unsent draft of each conversation.
     /// </summary>
-    /// <returns>Conversation ID to draft text; empty when none or unreadable.</returns>
+    /// <returns>The draft text by conversation ID, or empty when there are none or the file was not readable.</returns>
     public IReadOnlyDictionary<string, string> LoadDrafts() => Run<IReadOnlyDictionary<string, string>>(connection =>
     {
         using SqliteCommand command = connection.CreateCommand();
@@ -394,9 +391,8 @@ public sealed partial class MessageDatabase
     }, new Dictionary<string, string>());
 
     /// <summary>
-    /// Saves a conversation's unsent draft, encrypted like every other body; an empty draft deletes it.
+    /// Saves the unsent draft of a conversation, encrypted like every other body. An empty draft deletes the row.
     /// </summary>
-    /// <param name="conversationId">The conversation ID.</param>
     /// <param name="text">The draft text, or empty for none.</param>
     public void SaveDraft(string conversationId, string text)
     {
@@ -425,8 +421,8 @@ public sealed partial class MessageDatabase
     // =========================================================================
 
     /// <summary>
-    /// Deletes the database file and its <c>-journal</c>, <c>-wal</c> and <c>-shm</c> sidecars; the next call starts a
-    /// new file. A file that can't be deleted is logged by error type and left.
+    /// Deletes the database file and its <c>-journal</c>, <c>-wal</c> and <c>-shm</c> files. The next call starts a
+    /// new file. When a file does not delete, this method logs the error type and leaves the file.
     /// </summary>
     public void Delete()
     {
@@ -436,7 +432,7 @@ public sealed partial class MessageDatabase
         }
     }
 
-    // Caller Holds The Lock
+    // The caller holds the lock.
     private void DeleteFiles()
     {
         foreach (string suffix in new[] { "", "-journal", "-wal", "-shm" })
@@ -452,8 +448,8 @@ public sealed partial class MessageDatabase
         }
     }
 
-    // Opens The File, Creating The Schema On A New One, Adding The Drafts Table To A Version 1 File, And Starting Over On
-    // Any Other Version. Caller Holds The Lock
+    // Creates the schema in a new file and adds the drafts table to a version 1 file. Any other version starts again.
+    // The caller holds the lock.
     private SqliteConnection Open()
     {
         var connection = new SqliteConnection(_connectionString);
@@ -491,7 +487,7 @@ public sealed partial class MessageDatabase
         }
         catch
         {
-            // Release The File So The Caller Can Delete It
+            // The connection releases the file, so the caller can delete it.
             connection.Dispose();
             throw;
         }
@@ -504,8 +500,8 @@ public sealed partial class MessageDatabase
         return (long)command.ExecuteScalar()!;
     }
 
-    // Runs One Call Under The Lock. A Damaged Or Foreign File Or Row Deletes The Database; A Passing Problem (Locked,
-    // Disk Full, I/O) Only Fails This Call. Either Way The Call Answers The Fallback
+    // Runs 1 call under the lock. A damaged or foreign file or row deletes the database. A temporary problem, such as
+    // a lock, a full disk or an I/O error, fails only this call. In both cases, the call answers the fallback.
     private T Run<T>(Func<SqliteConnection, T> work, T fallback)
     {
         lock (_lock)
@@ -529,8 +525,9 @@ public sealed partial class MessageDatabase
         }
     }
 
-    // SQLITE_ERROR (Missing Table Or Column), SQLITE_CORRUPT, SQLITE_CONSTRAINT, SQLITE_MISMATCH, SQLITE_NOTADB: The File
-    // Isn't Ours Or Is Broken. Anything Else (BUSY, LOCKED, IOERR, FULL, CANTOPEN, ...) May Pass On Its Own
+    // These codes mean that the file is not ours or is broken: SQLITE_ERROR for a missing table or column,
+    // SQLITE_CORRUPT, SQLITE_CONSTRAINT, SQLITE_MISMATCH and SQLITE_NOTADB. Other codes can be temporary, such as
+    // BUSY, LOCKED, IOERR, FULL or CANTOPEN.
     private static bool IsDamage(SqliteException ex) =>
         (ex.SqliteErrorCode & 0xFF) is 1 or 11 or 19 or 20 or 26;
 
@@ -539,7 +536,7 @@ public sealed partial class MessageDatabase
     private static byte[] Protect(byte[] value) =>
         ProtectedData.Protect(value, null, DataProtectionScope.CurrentUser);
 
-    // A Body That Isn't A Blob (NULL, Text, Number) Is A Bad Row
+    // A body that is not a blob, such as NULL, text or a number, makes the row bad.
     private static byte[] Unprotect(SqliteDataReader reader) =>
         ProtectedData.Unprotect(reader.GetValue(0) as byte[] ?? throw new InvalidDataException("Body is not a blob"), null, DataProtectionScope.CurrentUser);
 
