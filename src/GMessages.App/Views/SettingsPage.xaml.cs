@@ -21,6 +21,8 @@ namespace GMessages.App.Views;
 /// </remarks>
 public sealed partial class SettingsPage : UserControl
 {
+    private bool _closed;
+
     /// <summary>
     /// Creates the page and reads the Start with Windows state.
     /// </summary>
@@ -90,7 +92,11 @@ public sealed partial class SettingsPage : UserControl
     /// <summary>
     /// Stops the bindings of the page after the window drops it, so the long-lived view model stops its updates.
     /// </summary>
-    public void Close() => Bindings.StopTracking();
+    public void Close()
+    {
+        _closed = true;
+        Bindings.StopTracking();
+    }
 
     // Finds the active microphones of Windows each time the page opens. Their items go in before the view model gets
     // them. Thus the saved microphone is in the box when the binding selects it. A failed search leaves only "Windows
@@ -106,6 +112,13 @@ public sealed partial class SettingsPage : UserControl
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             MicrophoneConsent.Log("devices", ex.GetType().Name);
+            return;
+        }
+
+        // A search that ends after the page closed changes nothing. A new page can have reset the list of the shared
+        // view model, and a stale list then throws out of its first binding pass.
+        if (_closed)
+        {
             return;
         }
 
