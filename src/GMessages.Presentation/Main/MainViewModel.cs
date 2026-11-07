@@ -523,17 +523,24 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// unarchive, through <see cref="RunAsync"/>, so the row goes back to its place in the inbox. The bar hides at once.
     /// </summary>
     /// <returns>True when the phone made the change.</returns>
-    public Task<bool> UndoAsync()
+    public async Task<bool> UndoAsync()
     {
         if (_archived.Count == 0)
         {
-            return Task.FromResult(false);
+            return false;
         }
 
         string id = _archived[^1];
         _archived.RemoveAt(_archived.Count - 1);
         HideUndo();
-        return RunAsync(id, ConversationAction.Unarchive, offerUndo: false);
+
+        bool undone = await RunAsync(id, ConversationAction.Unarchive, offerUndo: false);
+        if (!undone && !_disposed)
+        {
+            _archived.Add(id);
+        }
+
+        return undone;
     }
 
     /// <summary>Hides the Undo bar.</summary>

@@ -267,6 +267,25 @@ public sealed class MainViewModelTests
     }
 
     /// <summary>
+    /// An undo that fails keeps its archive as the latest one, so the next undo puts back the same conversation.
+    /// </summary>
+    [TestMethod]
+    public async Task Undo_Fails_NextUndoPutsBackTheSameConversation()
+    {
+        using var rig = new MainRig();
+        using MainViewModel vm = await NewMainAsync(rig);
+        Assert.IsTrue(await vm.RunAsync("a", ConversationAction.Archive));
+        Assert.IsTrue(await vm.RunAsync("b", ConversationAction.Archive));
+
+        rig.Client.RefuseUpdates = true;
+        Assert.IsFalse(await vm.UndoAsync());
+
+        rig.Client.RefuseUpdates = false;
+        Assert.IsTrue(await vm.UndoAsync());
+        Assert.AreEqual("b,c", string.Join(",", vm.Inbox.Rows.Select(r => r.Id)));
+    }
+
+    /// <summary>
     /// Mute and unmute keep the open chat, whose mute state follows.
     /// </summary>
     [TestMethod]
