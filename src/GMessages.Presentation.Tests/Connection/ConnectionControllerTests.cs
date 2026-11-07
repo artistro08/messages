@@ -176,7 +176,7 @@ public sealed class ConnectionControllerTests
     // FAKE PHONE (SMALL COPIES OF THE PROTOCOL TESTS' PAIRING HELPERS)
     // =========================================================================
 
-    private static ActionType ActionOf(RecordedRequest req) =>
+    internal static ActionType ActionOf(RecordedRequest req) =>
         OutgoingRPCData.Parser.ParseFrom(PbLiteSerializer.Deserialize<OutgoingRPCMessage>(req.Body).Data.MessageData).Action;
 
     // Hands a response to the waiter of a recorded SendMessage, as if the phone answered.

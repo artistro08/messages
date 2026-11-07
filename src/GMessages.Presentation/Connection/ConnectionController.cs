@@ -232,7 +232,8 @@ public sealed partial class ConnectionController : IAsyncDisposable
     /// The method builds new <see cref="AuthData"/> with the cookies and a new client, then pairs. On success, the
     /// client saves the session and the state is Connected. A temporary error after the pairing gives Reconnecting. On
     /// failure, the method disposes that client and rethrows the error for the pairing window. The state stays
-    /// NotPaired or SignedOut. An unpair that cancels the pairing moves the state to NotPaired before the rethrow.
+    /// NotPaired or SignedOut. An unpair that cancels the pairing moves the state to NotPaired. The method then throws
+    /// <see cref="OperationCanceledException"/>, whatever error the client gave.
     /// </remarks>
     /// <param name="cookies">The Google sign-in cookies.</param>
     /// <param name="showEmoji">Shows the emoji that the user must tap on the phone.</param>
@@ -243,7 +244,7 @@ public sealed partial class ConnectionController : IAsyncDisposable
     /// <exception cref="InvalidOperationException">Already paired: unpair first.</exception>
     /// <exception cref="Protocol.Pairing.PairingException">No phone, a timeout, or the user declined or chose wrong.</exception>
     /// <exception cref="GmRequestException">The server refused a request.</exception>
-    /// <exception cref="OperationCanceledException"><paramref name="ct"/> was canceled.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="ct"/> was canceled, or an unpair canceled the pairing.</exception>
     public async Task PairAsync(IReadOnlyDictionary<string, string> cookies, Action<string> showEmoji, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(cookies);
@@ -282,15 +283,17 @@ public sealed partial class ConnectionController : IAsyncDisposable
             {
                 await client.PairAsync(showEmoji, pairCts.Token).ConfigureAwait(false);
             }
-            catch
+            catch (Exception ex)
             {
                 SetCurrent(null);
                 await client.DisposeAsync().ConfigureAwait(false);
 
-                // The pairing window reads the state to tell an unpair from a failure.
+                // The pairing window reads the state to tell an unpair from a failure. After the cancel, the socket can
+                // throw any error. Thus each error of an unpair becomes a cancellation.
                 if (pairCts.IsCancellationRequested && !ct.IsCancellationRequested && !IsClosing())
                 {
                     SetState(ConnectionState.NotPaired);
+                    throw new OperationCanceledException("An unpair canceled the pairing.", ex, pairCts.Token);
                 }
 
                 throw;

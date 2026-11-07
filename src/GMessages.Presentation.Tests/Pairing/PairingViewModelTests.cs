@@ -251,6 +251,47 @@ public sealed class PairingViewModelTests
     }
 
     /// <summary>
+    /// An unpair cancels the pairing, and the socket then throws an <see cref="IOException"/>. The window goes back to
+    /// the sign-in and shows no failure.
+    /// </summary>
+    [TestMethod]
+    public async Task UnpairDuringPairing_SocketError_IsNotGenericFailure()
+    {
+        await using var rig = new Rig();
+        Directory.CreateDirectory(rig.DataFolder);
+        await rig.Controller.StartAsync().WaitAsync(Shared.HangGuard);
+        Shared.ScriptPairing(rig, finished: null);
+        Func<RecordedRequest, HttpResponseMessage?> scripted = rig.Respond!;
+        using var finishSent = new ManualResetEventSlim();
+        using var release    = new ManualResetEventSlim();
+        rig.Respond = req =>
+        {
+            // The finish request holds until the unpair cancels the pairing. The socket then fails.
+            if (req.Url.EndsWith("/SendMessage", StringComparison.Ordinal) && Shared.ActionOf(req) == ActionType.CreateGaiaPairingClientFinished)
+            {
+                finishSent.Set();
+                Assert.IsTrue(release.Wait(Shared.HangGuard), "released");
+                throw new IOException("The socket closed.");
+            }
+
+            return scripted(req);
+        };
+        var watched = new Watched(rig);
+
+        Task pairing = Task.Run(() => watched.ViewModel.OnCookiesCapturedAsync(Shared.PairCookies));
+        Assert.IsTrue(finishSent.Wait(Shared.HangGuard), "finish sent");
+        Task unpair = rig.Controller.UnpairAsync();
+        release.Set();
+        await pairing.WaitAsync(Shared.HangGuard);
+        await unpair.WaitAsync(Shared.HangGuard);
+
+        Assert.AreEqual(PairingStep.SigningIn, watched.ViewModel.Step);
+        Assert.IsNull(watched.ViewModel.Message);
+        Assert.IsFalse(watched.Steps.Contains(PairingStep.Failed), "no failure shown");
+        Assert.AreEqual(ConnectionState.NotPaired, rig.Controller.State);
+    }
+
+    /// <summary>
     /// A sign-in page that cannot load, because the WebView2 runtime is missing, ends Failed with the generic message.
     /// Try again resets it.
     /// </summary>
