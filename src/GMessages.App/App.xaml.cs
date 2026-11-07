@@ -26,10 +26,11 @@ using Windows.UI.Xaml.Hosting;
 namespace GMessages.App;
 
 /// <summary>
-/// Tray app composition root. No window opens at launch; the tray icon and its menu are the way in.
+/// Composes the tray app. No window opens at launch: the tray icon and its menu open the app.
 /// </summary>
 /// <remarks>
-/// The tray wiring, quit/show event watching and memory trim are ported from Magic Buds' <c>App.xaml.cs</c>.
+/// The app outlives its main window and keeps its toasts from the tray. The tray wiring, the quit and show event watch
+/// and the memory trim come from the <c>App.xaml.cs</c> of Magic Buds.
 /// </remarks>
 public sealed partial class App : Application, IDisposable
 {
@@ -37,15 +38,15 @@ public sealed partial class App : Application, IDisposable
     // TRAY ICON GUIDS
     // =========================================================================
 
-    // Dev note: a plain Debug run (no --test-data-dir) often shows no tray icon. Windows binds the classic icon GUID
-    // to one exe path, so a build in another folder is refused. Clear it by deleting the IconStreams and
-    // PastIconsStream values under HKCU\Software\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\TrayNotify
-    // and restarting Explorer, or run with --test-data-dir (that uses the test GUID).
-    //
-    // Fixed identities, so Windows keeps the icon's taskbar placement across updates. A GUID belongs
-    // to one exe location, so the packaged and unpackaged installs each get their own, and UI test
-    // runs get a third so they never disturb a real install's icon.
+    // Each GUID is a fixed identity, so Windows keeps the place of the icon on the taskbar across updates. Windows
+    // binds a GUID to a single exe location. Thus the packaged and the unpackaged installs each have a GUID. UI test
+    // runs have a third GUID, so they never change the icon of a real install.
     // https://learn.microsoft.com/windows/win32/api/shellapi/ns-shellapi-notifyicondataw#troubleshooting
+    //
+    // A plain Debug run without --test-data-dir often shows no tray icon. Windows refuses the classic GUID for a
+    // build in another folder. To clear the binding, delete the IconStreams and PastIconsStream values under the key
+    // HKCU\Software\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\TrayNotify. Then restart Explorer.
+    // Or run with --test-data-dir, which uses the test GUID.
     private static readonly Guid PackagedTrayGuid = new("2C8CFFE0-C9DB-4B2E-AD36-BD27A77E8033");
     private static readonly Guid ClassicTrayGuid  = new("FA25E877-3ACB-4CF3-A958-024545B7CE24");
 #if EnableTestHooks
@@ -53,7 +54,7 @@ public sealed partial class App : Application, IDisposable
 #endif
 
     /// <summary>
-    /// Gets the app shell's logger, for controls the app doesn't construct (a message bubble's Copy).
+    /// Gets the logger of the app shell. Controls that the app does not construct use it, such as the Copy of a bubble.
     /// </summary>
     internal static ILogger ShellLog { get; private set; } = Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance;
 
@@ -72,11 +73,12 @@ public sealed partial class App : Application, IDisposable
     private DispatcherQueueTimer? _launchNotificationTimeout;
     private MainWindow? _mainWindow;
 
-    // A Closed Window Is Kept Hidden For A Quick Reopen, Then Destroyed So Its Memory Goes Back To Windows
+    // The app hides a closed window for a quick reopen. Later the app destroys the window, so its memory returns to
+    // Windows.
     private static readonly TimeSpan KeepClosedWindow = TimeSpan.FromMinutes(5);
     private DispatcherQueueTimer? _dropWindow;
 
-    // The Main Window's Link Preview Fetcher: Made With The Window And Disposed On Close, So Its Cache Goes With It
+    // The app makes the link preview fetcher with the main window. The close disposes it, which also clears its cache.
     private LinkPreviewer? _linkPreviewer;
     private IStartupService? _startup;
     private AppPaths? _paths;
@@ -86,87 +88,81 @@ public sealed partial class App : Application, IDisposable
     private string? _heldShowSource;
     private string? _pendingConversationId;
 
-    // The Chat That Was Open When The Window Closed, Opened Again (From The Message Cache) In The Next One
+    // The chat that was open when the window closed. The next window opens it again from the message cache.
     private string? _lastConversationId;
     private RegisteredWaitHandle? _quitWait;
     private RegisteredWaitHandle? _showWait;
     private bool _quitting;
 
-    // Quitting: The Most Closing The Connection (It Writes A Pending Session Save, Which Matters) And Writing The Queued
-    // Message Saves (A Cache) May Take, And How Long After Exit The Process Is Ended For Sure. A Quit Ends Within About
-    // Eight Seconds Whatever Hangs, Usually Well Under One
+    // The limits of a quit: the connection close, the queued message saves, and the wait before the hard exit. The
+    // connection close writes a pending session save, which matters. The message saves are a cache. A quit ends in
+    // about 8 seconds whatever hangs, and usually in less than 1 second.
     private static readonly TimeSpan ConnectionLimit = TimeSpan.FromSeconds(4);
     private static readonly TimeSpan SavesLimit      = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan ExitGrace       = TimeSpan.FromSeconds(2);
     private bool _launched;
 
     /// <summary>
-    /// Creates the app and starts XAML on the UI thread. Closing a window never ends a tray app: the message loop runs
-    /// until <see cref="Quit"/> ends it.
+    /// Creates the app and starts XAML on the UI thread. A close of a window never ends the tray app. The message loop
+    /// runs until <see cref="Quit"/> ends it.
     /// </summary>
     public App()
     {
-        // A desktop process has no UWP launch, so XAML starts here, before App.xaml loads
+        // A desktop process has no UWP launch, so XAML starts here, before App.xaml loads.
         XamlManager = WindowsXamlManager.InitializeForCurrentThread();
         InitializeComponent();
 
-        // Last Resort For UI Event Handlers, And For Awaits That Came Back On The UI Thread
+        // These handlers get the errors that escape UI event handlers and awaits that resume on the UI thread.
         UnhandledException          += OnUnhandledException;
         XamlHost.UnhandledException  = OnEscapedException;
     }
 
     /// <summary>
-    /// Gets the UI thread's XAML core; holding it keeps XAML running between windows (the app lives on in the tray).
+    /// Gets the XAML core of the UI thread. The app holds it, so XAML runs between windows while the app lives in the
+    /// tray.
     /// </summary>
     public WindowsXamlManager XamlManager { get; }
 
     /// <summary>
-    /// Asks for the main window: tray left-click, the menu's Open, or a second launch. Carries what asked.
-    /// </summary>
-    internal event EventHandler<string>? ShowMainWindowRequested;
-
-    /// <summary>
-    /// Gets the notifications, so an opened chat can clear its toasts. Null before launch.
+    /// Gets the notifications, so an opened chat can clear its toasts. It is null before launch.
     /// </summary>
     internal NotificationService? Notifications => _notifications;
 
     /// <summary>
-    /// Gets the media store, so a bubble can show its photo or open its file. Null before launch.
+    /// Gets the media store, so a bubble can show its photo or open its file. It is null before launch.
     /// </summary>
     internal MediaStore? Media => _media;
 
     /// <summary>
-    /// Gets the main window while it is open, so a bubble can show its photo in the viewer or confirm a download. Null
-    /// when the window is closed (the app lives on in the tray).
+    /// Gets the open main window, so a bubble can show its photo in the viewer or confirm a download. It is null while
+    /// the window is closed and the app lives in the tray.
     /// </summary>
     internal MainWindow? MainWindow => _mainWindow;
 
     /// <summary>
-    /// Gets the Windows device ID of the microphone chosen in Settings, or null for Windows' default (and before launch).
+    /// Gets the Windows device ID of the microphone that Settings chose. It is null for the Windows default and before
+    /// launch.
     /// </summary>
     internal string? MicrophoneId => _settings?.MicrophoneId;
 
     /// <summary>
-    /// Sets up logging, settings and the tray icon, then starts watching for quit and show requests. Called once by
-    /// <see cref="Program"/> before the message loop starts (the command line is read there).
+    /// Starts the logging, the settings and the tray icon, then watches for quit and show requests.
+    /// <see cref="Program"/> reads the command line, then calls this method once before the message loop starts.
     /// </summary>
     internal void Launch()
     {
-        // Paths
         var paths = AppPaths.Resolve(AppIdentity.IsPackaged ? ApplicationData.Current.LocalFolder.Path : null, TestHooks.DataDir);
         _paths    = paths;
 
-        // Settings: MSIX keeps them in its package store, unpackaged uses a file
+        // A packaged app keeps its settings in the package store. An unpackaged app keeps them in a file.
         ISettingsStore settingsStore = AppIdentity.IsPackaged
             ? new LocalSettingsStore()
             : new JsonFileSettingsStore(paths.SettingsFile);
         _settings                  = new AppSettings(settingsStore);
         _settings.PropertyChanged += OnSettingChanged;
 
-        // Start With Windows: the MSIX startup task when packaged, the Run key when not
         _startup = SelectStartupService(paths);
 
-        // Logging
         _logProvider = new RollingFileLoggerProvider(paths.LogsFolder, _settings.LogLevel, TimeProvider.System);
         _logger      = _logProvider.CreateLogger("GMessages.App");
         ShellLog     = _logger;
@@ -177,22 +173,21 @@ public sealed partial class App : Application, IDisposable
             AppLog.TestEndpoint(_logger, baseUrl, paths.DataFolder);
         }
 
-        // Sign-In Profiles A Quit Or Crash Mid-Sign-In Left Behind (They Can Hold A Live Google Session)
+        // A quit or a crash during a sign-in can leave sign-in profiles. A profile can hold a live Google session.
         PairingPage.DeleteLeftoverProfiles(_logger);
 
-        // Memory Trim
         var dispatcher = DispatcherQueue.GetForCurrentThread();
         _dispatcher    = dispatcher;
         _memoryTrim    = new MemoryTrim(dispatcher, () => _trayMenu?.IsVisible != true && _mainWindow is null);
 
-        // Connection: every controller event comes back on the UI thread
-        // Debug test hooks can point it at a local fake server; Release is always production
+        // The controller raises every event on the UI thread. Debug test hooks can point it at a local fake server.
+        // Release always uses the production servers.
         var endpoints = TestHooks.Endpoints ?? GmEndpoints.Production;
         _connection   = new ConnectionController(paths, endpoints, TimeProvider.System, new SingleProviderLoggerFactory(_logProvider), a => dispatcher.TryEnqueue(() => a()));
         _connection.StateChanged += (_, _) => OnConnectionStateChanged();
 
-        // Media: decrypted files for other apps go to the package's temp folder (Temp\Media under the data folder
-        // when unpackaged); whatever the last run left there goes now
+        // Decrypted files for other apps go to the temp folder of the package. Unpackaged, they go to Temp\Media under
+        // the data folder. The app deletes the files of the last run now.
         var connection                    = _connection;
         Func<IMessagingClient?> messaging = () => connection.Client;
         string mediaFolder                = AppIdentity.IsPackaged
@@ -202,11 +197,11 @@ public sealed partial class App : Application, IDisposable
         _media.DownloadTimeout            = static () => TestHooks.ShortWait("download-timeout") ?? MediaStore.DefaultDownloadTimeout;
         _media.Clear();
 
-        // Chat Store: outlives the main window; no client until paired and connected. The one message database for this
-        // data folder and the media cache sit under it
+        // The chat store outlives the main window. It has no client until the phone is paired and connected. The store
+        // holds the single message database of this data folder, and the media cache.
         _store = new ChatStore(connection, messaging, _logProvider.CreateLogger("GMessages.Chat"), new MessageDatabase(paths.MessagesDatabase, _logProvider.CreateLogger("GMessages.Database")), media: _media);
 
-        // Notifications: a toast for each new message, also with the main window closed
+        // The app shows a toast for each new message, also while the main window is closed.
         var store      = _store;
         _notifications = new NotificationService(store, _settings, new AvatarCache(store, paths.AvatarsFolder), () => _mainWindow?.ViewModel, dispatcher, _logProvider.CreateLogger("GMessages.Notifications"));
         _notifications.OpenConversationRequested += (_, id) => OpenConversation(id);
@@ -218,7 +213,7 @@ public sealed partial class App : Application, IDisposable
         };
         _notifications.Register();
 
-        // Taskbar Badge: the unread chat count, recounted on every conversation change
+        // The taskbar badge counts the unread main-view chats again on each conversation change.
         ILogger badgeLog           = _logProvider.CreateLogger("GMessages.Badge");
         var badge                  = new UnreadBadge(store.CachedConversations, count => TaskbarBadge.Show(count, badgeLog), TimeProvider.System);
         _badge                     = badge;
@@ -228,8 +223,8 @@ public sealed partial class App : Application, IDisposable
             ScheduleBackgroundTrim();
         };
 
-        // Started By A Toast Click: Read After Register, As The Windows App SDK Requires. A Reply Waits For Connected; An
-        // Open Shows The Main Window At Once (Held Until Start-Up Ends)
+        // The app reads a launch by a toast click after Register, as the Windows App SDK requires. A reply waits for
+        // the Connected state, for 30 seconds at most. An open shows the main window as soon as the start-up ends.
         AppActivationArguments activation           = AppInstance.GetCurrent().GetActivatedEventArgs();
         AppNotificationActivatedEventArgs? launched = activation is { Kind: ExtendedActivationKind.AppNotification, Data: AppNotificationActivatedEventArgs toast } ? toast : null;
         if (launched is not null && NotificationArgs.Parse(launched.Argument) is { Action: "reply" })
@@ -246,8 +241,9 @@ public sealed partial class App : Application, IDisposable
             _ = _notifications.HandleAsync(launched);
         }
 
-        // Started By The User: The Main Window Shows (Held Until Start-Up Ends). Windows' Startup Task At Sign-In Keeps
-        // The App In The Background, Unless It Doesn't Run In The Background (Settings)
+        // A launch by the user shows the main window as soon as the start-up ends. A launch by the Windows startup task
+        // at sign-in keeps the app in the background. When the run in background setting is off, that launch also
+        // shows the window.
         if (LaunchWindow.ShowsAtLaunch(activation.Kind == ExtendedActivationKind.StartupTask, launched is not null, _settings.RunInBackground))
         {
             OnShowMainWindowRequested("launch");
@@ -255,7 +251,7 @@ public sealed partial class App : Application, IDisposable
 
         _ = StartConnectionAsync();
 
-        // Resume And Network: reconnect right away instead of waiting out the long poll's retry
+        // After a resume or a network change, the app reconnects at once. It does not wait for the long poll to retry.
         _networkDebounce                         = dispatcher.CreateTimer();
         _networkDebounce.Interval                = TimeSpan.FromSeconds(3);
         _networkDebounce.IsRepeating             = false;
@@ -263,15 +259,12 @@ public sealed partial class App : Application, IDisposable
         PowerManager.SystemSuspendStatusChanged += OnSystemSuspendStatusChanged;
         NetworkInformation.NetworkStatusChanged += OnNetworkStatusChanged;
 
-        // Tray Icon
-        ShowMainWindowRequested += (_, source) => OnShowMainWindowRequested(source);
         _trayIcon = new TrayIcon(AppInfo.DisplayName, SelectTrayGuid());
-        _trayIcon.Invoked              += (_, _) => ShowMainWindowRequested?.Invoke(this, "tray");
+        _trayIcon.Invoked              += (_, _) => OnShowMainWindowRequested("tray");
         _trayIcon.ContextMenuRequested += (_, point) => ShowTrayMenu(point.X, point.Y);
         _trayIcon.ThemeChanged         += (_, _) => OnSystemThemeChanged();
         ApplyTrayIcon();
 
-        // Quit and Show Requests
         if (Program.QuitRequest is not null)
         {
             _quitWait = WatchEvent(dispatcher, Program.QuitRequest, Quit, once: true);
@@ -279,25 +272,27 @@ public sealed partial class App : Application, IDisposable
 
         if (Program.ShowRequest is not null)
         {
-            _showWait = WatchEvent(dispatcher, Program.ShowRequest, () => ShowMainWindowRequested?.Invoke(this, "second launch"), once: false);
+            _showWait = WatchEvent(dispatcher, Program.ShowRequest, () => OnShowMainWindowRequested("second launch"), once: false);
         }
 
-        // Startup itself leaves a lot behind that the idle tray app never needs
+        // The start-up leaves much memory that the idle tray app never uses.
         _memoryTrim.Schedule();
         _launched = true;
     }
 
-    // An error that escaped a UI event handler (an async void click) is logged by type and HRESULT only, never its
-    // message (it can hold content). Once launched it is marked handled, so one failed click can't take the tray, and
-    // with it every later notification, down. Before then it still ends the app, so a broken start-up is never hidden.
-    // The stack's frames are logged too (code names only, see StackFrames), so the source can be found
+    // The log holds the type, the HRESULT and the stack frames of an error that escapes a UI event handler. An example
+    // is an async void click. The log never holds the message, because the message can hold content. The frames hold
+    // code names only, as StackFrames shows, and they show the source. After the launch, the handler marks the error
+    // as handled. Thus a failed click cannot stop the tray and all later notifications. Before the launch, the error
+    // still ends the app, so a broken start-up is never hidden.
     private void OnUnhandledException(object sender, Windows.UI.Xaml.UnhandledExceptionEventArgs e)
     {
         e.Handled = _launched && e.Exception is not OutOfMemoryException;
         AppLog.UnhandledError(_logger, e.Exception?.GetType().Name ?? "Unknown", e.Exception?.HResult ?? 0, e.Handled, ExceptionText.StackFrames(e.Exception));
     }
 
-    // The Same For An Exception That Escaped An Await Continuation On The UI Thread (An Async Void Click After Its First Await)
+    // This handler does the same for an exception that escapes an await continuation on the UI thread. An example is
+    // an async void click after its first await.
     private bool OnEscapedException(Exception ex)
     {
         bool handled = _launched && ex is not OutOfMemoryException;
@@ -309,8 +304,9 @@ public sealed partial class App : Application, IDisposable
     // CONNECTION AND PAIRING
     // =========================================================================
 
-    // Loads the saved session; no session (or a dead one) opens the main window on pairing. Start-up always ends, also
-    // when StartAsync throws (then it ends in pairing), so the tray never goes dead. A click held meanwhile runs last
+    // Loads the saved session. Without a live session, the main window opens on pairing. The start-up always ends, so
+    // the tray always responds. When StartAsync throws, the start-up ends in pairing. An open request held during the
+    // start-up runs last.
     private async Task StartConnectionAsync()
     {
         try
@@ -320,26 +316,24 @@ public sealed partial class App : Application, IDisposable
                 await connection.StartAsync();
             }
         }
-#pragma warning disable CA1031 // Start-up must not take the tray down; the failure is logged
         catch (Exception ex)
-#pragma warning restore CA1031
         {
+            // The start-up must not stop the tray. The log holds the failure.
             AppLog.ConnectionStartFailed(_logger, ex);
         }
 
-        // Paired: The Saved Chats Fill The List Before The Phone Answers (Read Off The UI Thread). A Locked File Holds
-        // Start-Up 2 s At Most; The Phone's Page Fills The List Then
+        // When paired, the saved chats fill the list before the phone answers. The store reads them off the UI thread.
+        // A locked file holds the start-up for 2 s at most. The page from the phone then fills the list.
         if (!NeedsPairing() && _store is { } store)
         {
             await Task.WhenAny(store.LoadSavedAsync(), Task.Delay(TimeSpan.FromSeconds(2)));
             _badge?.Update();
         }
 
-        // NotPaired is the starting state, so StartAsync raises nothing for it
+        // NotPaired is the first state, so StartAsync raises no event for it.
         _connectionStarted = true;
         OnConnectionStateChanged();
 
-        // The Last Open Request Made During Start-Up
         if (_heldShowSource is { } source)
         {
             _heldShowSource = null;
@@ -349,8 +343,8 @@ public sealed partial class App : Application, IDisposable
 
     private bool NeedsPairing() => _connection?.State is ConnectionState.NotPaired or ConnectionState.SignedOut;
 
-    // NotPaired or SignedOut (also a later sign-out) opens the main window on pairing; once paired an open window
-    // switches to the chats in place
+    // NotPaired or SignedOut opens the main window on pairing, also after a later sign-out. After the pairing, an open
+    // window switches to the chats in place.
     private void OnConnectionStateChanged()
     {
         if (_quitting || _connection is null || !_connectionStarted)
@@ -361,7 +355,7 @@ public sealed partial class App : Application, IDisposable
         AppLog.ConnectionStateChanged(_logger, _connection.State);
         HandleLaunchNotification(timedOut: false);
 
-        // Connecting With Nothing On Screen: Trim Once The Connect And Catch-Up Have Settled (Each Reconnect Too)
+        // With nothing on screen, the memory trims after each connect and reconnect, when the catch-up is done.
         if (_connection.State == ConnectionState.Connected && _mainWindow is null)
         {
             _memoryTrim?.Schedule(TimeSpan.FromSeconds(10));
@@ -369,9 +363,9 @@ public sealed partial class App : Application, IDisposable
 
         if (NeedsPairing())
         {
-            // The Chats Go (Showing Pairing Drops Them First), And Nothing Of The Old Phone (Names, Numbers, Owner, SIMs)
-            // Is Kept For Whichever Phone Pairs Next. The Old Session's Toasts And Waiting Snoozes Go Too (RemoveAllAsync
-            // Logs Its Own Failure, So Nothing Goes Unobserved)
+            // The pairing page drops the chats first, then the store resets. The app keeps no names, numbers, owner or
+            // SIMs of the old phone for the next phone. The toasts and waiting snoozes of the old session go too.
+            // RemoveAllAsync logs its own failure, so no task goes unobserved.
             _pendingConversationId = null;
             _lastConversationId    = null;
             ShowMainWindow();
@@ -389,7 +383,8 @@ public sealed partial class App : Application, IDisposable
     // NOTIFICATIONS
     // =========================================================================
 
-    // The Toast Reply That Started The App: Sent Once Connected. After 30 s Without A Connection It Gets The Failure Toast
+    // Sends the toast reply that started the app when the state is Connected. After 30 s without a connection, the
+    // reply gets the failure toast.
     private void HandleLaunchNotification(bool timedOut)
     {
         if (_launchNotification is not { } args || _notifications is null || (!timedOut && _connection?.State != ConnectionState.Connected))
@@ -410,15 +405,15 @@ public sealed partial class App : Application, IDisposable
         _ = ReplyFromLaunchAsync(_notifications, args);
     }
 
-    // Sends The Toast Reply That Started The App, Then Quits When The App Doesn't Run In The Background (Settings): It
-    // Started For The Reply Alone, With No Window
+    // Sends the toast reply that started the app. Then the app quits when the run in background setting is off. The
+    // app started only for the reply and has no window.
     private async Task ReplyFromLaunchAsync(NotificationService notifications, AppNotificationActivatedEventArgs args)
     {
         await notifications.HandleAsync(args);
         QuitUnlessInBackground();
     }
 
-    // Quits With No Window Open When The App Doesn't Run In The Background (Settings)
+    // Quits when the run in background setting is off and no window is open.
     private void QuitUnlessInBackground()
     {
         if (_settings?.RunInBackground != false || _mainWindow is not null)
@@ -429,14 +424,15 @@ public sealed partial class App : Application, IDisposable
         Quit();
     }
 
-    // A Toast Body Click: The Main Window Shows At Once, On That Conversation As Soon As It Can Be Shown
+    // A click on a toast body shows the main window at once. The window selects the conversation as soon as it can.
     private void OpenConversation(string conversationId)
     {
         _pendingConversationId = conversationId;
         OnShowMainWindowRequested("notification");
     }
 
-    // Selected Once Connected, Or Right Away When The Conversation Is Already Cached
+    // Selects the conversation of a toast click in the Connected state. When the store already holds the conversation,
+    // the window selects it at once.
     private void SelectPendingConversation()
     {
         if (_pendingConversationId is not { } id || _mainWindow is not { ViewModel: not null } window
@@ -453,7 +449,8 @@ public sealed partial class App : Application, IDisposable
     // MAIN WINDOW
     // =========================================================================
 
-    // Tray left-click, the menu's Open, or a second launch. Unpaired, the window opens on pairing
+    // Handles an open request from the launch, the tray icon, the menu, a second launch or a toast click. Without a
+    // paired phone, the window opens on pairing.
     private void OnShowMainWindowRequested(string source)
     {
         if (_quitting)
@@ -461,7 +458,7 @@ public sealed partial class App : Application, IDisposable
             return;
         }
 
-        // Held Until Start-Up Ends (Only The Last One), Then Run
+        // The app holds the last request until the start-up ends, then runs it.
         AppLog.OpenRequested(_logger, source);
         if (!_connectionStarted)
         {
@@ -474,8 +471,8 @@ public sealed partial class App : Application, IDisposable
         SelectPendingConversation();
     }
 
-    // Made when needed and destroyed on close, then the memory it used goes back to Windows. Shows pairing or the
-    // chats, whichever the connection calls for
+    // Makes the main window when needed, and shows pairing or the chats as the connection requires. The app destroys
+    // the window after a close, so its memory returns to Windows.
     private void ShowMainWindow()
     {
         if (_quitting || _connection is null || _store is null || _settings is null || _startup is null || _paths is null)
@@ -494,15 +491,15 @@ public sealed partial class App : Application, IDisposable
             _mainWindow.Closing           += OnMainWindowClosing;
             _mainWindow.Closed            += (_, _) =>
             {
-                // A Toast's Conversation Not Yet Shown Goes With The Window, So A Later Open Doesn't Jump To It. The Open
-                // Chat Is Remembered For The Next Window
+                // The app forgets a toast conversation that the window did not show yet. Thus a later open does not
+                // jump to that chat. The app remembers the open chat for the next window.
                 _lastConversationId    = _mainWindow?.LastConversationId;
                 _mainWindow            = null;
                 _pendingConversationId = null;
                 _linkPreviewer?.Dispose();
                 _linkPreviewer = null;
 
-                // Closing Quits When The App Doesn't Run In The Background, Or With No Tray Icon And No Phone
+                // A close quits when the run in background setting is off, or with no tray icon and no paired phone.
                 if (_settings is { } saved && LaunchWindow.QuitsOnClose(saved.RunInBackground, saved.ShowTrayIcon, NeedsPairing()))
                 {
                     Quit();
@@ -518,8 +515,8 @@ public sealed partial class App : Application, IDisposable
         _mainWindow.Activate();
     }
 
-    // Closed By The Person: Hidden And Kept A Few Minutes, So Reopening Is Instant, Then Destroyed. A Close That Quits
-    // (No Background, Or Nothing To Come Back To) Goes Through At Once
+    // When the person closes the window, the app hides it for 5 minutes, so a reopen is instant. Then the app destroys
+    // the window. A close that quits the app happens at once.
     private void OnMainWindowClosing(object? sender, CancelEventArgs e)
     {
         if (_mainWindow is not { } window || _settings is not { } saved || LaunchWindow.QuitsOnClose(saved.RunInBackground, saved.ShowTrayIcon, NeedsPairing()))
@@ -542,11 +539,11 @@ public sealed partial class App : Application, IDisposable
         _dropWindow.Start();
     }
 
-    // Asked For By The Person (Tray, Second Launch, A Toast Click): The Window Comes To The Front, Restored If Minimized.
-    // Activate Alone Can Leave It Behind Other Windows When A Toast Started It: Windows App SDK Apps Must Bring Their Own
-    // Window Forward (Microsoft's Toast Migration Guide: ShowWindow(SW_RESTORE), Then SetForegroundWindow). When Windows
-    // Still Refuses (The Foreground Lock), The Input Of The Foreground Window's Thread Is Joined For A Moment, Which Lets
-    // The Call Through, Then Let Go Again
+    // Brings the window to the front for a request of the person, and restores the window when it is minimized. When a
+    // toast started the app, Activate alone can leave the window behind other windows. A Windows App SDK app must bring
+    // its own window to the front. The toast migration guide of Microsoft calls ShowWindow(SW_RESTORE), then
+    // SetForegroundWindow. The foreground lock can still refuse the call. Then the app attaches its input to the thread
+    // of the foreground window for a moment. The call then succeeds, and the app detaches the input again.
     private static void BringToFront(MainWindow? window)
     {
         if (window is null)
@@ -577,8 +574,8 @@ public sealed partial class App : Application, IDisposable
         NativeMethods.AttachThreadInput(myThread, foregroundThread, false);
     }
 
-    // Pairing While Unpaired Or Signed Out, Else The Chats. An Open Window Switches In Place Only When That Changes, So
-    // A Sign-In In Progress Or The Open Chat Survives Other State Changes
+    // Shows pairing while no phone is paired or after a sign-out, and the chats otherwise. An open window switches in
+    // place only when that choice changes. Thus a sign-in in progress or the open chat survives other state changes.
     private void ShowBody()
     {
         if (_mainWindow is not { } window || _connection is not { } connection || _store is not { } store)
@@ -594,8 +591,8 @@ public sealed partial class App : Application, IDisposable
         }
         else if (!NeedsPairing() && window.ViewModel is null)
         {
-            // The List And The Last Open Chat Show At Once From What The Store Already Has, Then Refresh Quietly. Only An
-            // Inbox Chat Comes Back: One From Spam & Blocked, Or Moved Out Of The Inbox Meanwhile, Stays Closed
+            // The list and the last open chat show at once from the store, then refresh quietly. Only an inbox chat
+            // opens again. A chat from Spam & Blocked, or a chat that left the inbox, stays closed.
             window.ShowChats(new MainViewModel(connection, store, TimeProvider.System, a => dispatcher.TryEnqueue(() => a()), _linkPreviewer, () => _settings?.ShowReceivedLinkPreviews ?? true));
             if (_lastConversationId is { } last && store.Find(last) is { IsMainView: true })
             {
@@ -604,7 +601,7 @@ public sealed partial class App : Application, IDisposable
         }
     }
 
-    // The Tray Menu's Settings And The Window's Own (Profile Menu, Ctrl + ,): The Main Window Opens On The Settings Page
+    // Opens the main window on the Settings page. The tray menu, the profile menu of the window and Ctrl + , call it.
     private void ShowSettings()
     {
         if (_quitting)
@@ -617,9 +614,9 @@ public sealed partial class App : Application, IDisposable
         _mainWindow?.ShowSettings();
     }
 
-    // Copy Codes
-    // A New Message's One-Time Passcode Goes To The Clipboard (Settings), Kept Out Of Clipboard History And Cloud Sync. The
-    // Same Messages As Notify, Wherever The Window Is: None From Muted, Spam, Archived Or Blocked Chats
+    // When the setting is on, the one-time passcode of a new message goes to the clipboard. Clipboard history and
+    // cloud sync do not get it. The messages that show a toast copy their codes, wherever the window is. Muted, spam,
+    // archived and blocked chats copy no code.
     private void CopyCode(MessageArrivedEventArgs e)
     {
         if (_settings?.CopyCodes != true
@@ -632,7 +629,6 @@ public sealed partial class App : Application, IDisposable
         _dispatcher?.TryEnqueue(() => UiHelpers.ToClipboard(code, keepPrivate: true));
     }
 
-    // Tray Icon Shown Or Taken Off, As Its Setting Says
     private void ApplyTrayIcon()
     {
         if (_settings is null || _trayIcon is null)
@@ -650,31 +646,27 @@ public sealed partial class App : Application, IDisposable
         AppLog.TrayAdded(_logger, trayAdded);
     }
 
-    // Live Settings: The Theme And The Tray Icon
+    // Applies a live change of the tray icon setting or the theme setting.
     private void OnSettingChanged(object? sender, PropertyChangedEventArgs e)
     {
-        // Tray Icon
         if (e.PropertyName == nameof(AppSettings.ShowTrayIcon))
         {
             ApplyTrayIcon();
             return;
         }
 
-        // Theme
         if (e.PropertyName != nameof(AppSettings.Theme) || _settings is null)
         {
             return;
         }
 
         var theme = _settings.Theme;
-        RefreshTrayMenu(theme);
+        _trayMenu?.ApplyTheme(theme);
         _mainWindow?.ApplyTheme(theme);
     }
 
-    // Tray Menu: the one menu window (kept, see ShowTrayMenu) takes the new theme
-    private void RefreshTrayMenu(AppTheme theme) => _trayMenu?.ApplyTheme(theme);
-
-    // Windows Switched Light And Dark: With "System" The Tray Menu Follows It, The Same Way As A Theme Setting Change
+    // When Windows switches between light and dark and the theme setting is System, the tray menu follows Windows. The
+    // menu takes the theme again, as for a change of the setting.
     private void OnSystemThemeChanged()
     {
         if (_quitting || _settings is not { Theme: AppTheme.System } settings)
@@ -682,12 +674,12 @@ public sealed partial class App : Application, IDisposable
             return;
         }
 
-        RefreshTrayMenu(settings.Theme);
+        _trayMenu?.ApplyTheme(settings.Theme);
     }
 
-    // Drop What Only The Window Needed: Decrypted Media In Memory, And The Message Pages (Re-read From The Database). The
-    // Pages Drop Once The Queued Saves Are Written, So The Trim Waits For That; DropPagesAsync Logs Its Own Failure. The
-    // Await Comes Back On The UI Thread
+    // Drops what only the window needs: the decrypted media in memory and the message pages. The next window reads the
+    // pages again from the database. The pages drop after the queue writes its saves, so the trim waits for the drop.
+    // DropPagesAsync logs its own failure. The await resumes on the UI thread.
     private async Task DropThenTrimAsync()
     {
         _media?.ClearMemory();
@@ -707,7 +699,8 @@ public sealed partial class App : Application, IDisposable
         }
     }
 
-    // Messages Arriving With Only The Tray Up: Trim 30 s After The Last One, So A Burst Ends In One Trim
+    // While only the tray shows, the memory trims 30 s after the last new message. Thus a burst of messages ends in a
+    // single trim.
     private void ScheduleBackgroundTrim()
     {
         if (!_quitting && _mainWindow is null)
@@ -716,9 +709,7 @@ public sealed partial class App : Application, IDisposable
         }
     }
 
-    private void CloseWindows() => _mainWindow?.Close();
-
-    // Explorer makes no folder, so a fresh install's empty logs folder is made first
+    // Explorer does not make a missing folder. Thus the app makes the empty logs folder of a new install first.
     private static void OpenFolder(string folder)
     {
         Directory.CreateDirectory(folder);
@@ -740,11 +731,11 @@ public sealed partial class App : Application, IDisposable
     // RESUME AND NETWORK
     // =========================================================================
 
-    // PowerManager (WinAppSDK) rather than SystemEvents: it's a CsWinRT projection the app already ships, so it's
-    // AOT-clean and needs no extra package or hidden window thread. Raised on a background thread.
-    // AutoResume only: a normal wake raises AutoResume then ManualResume, and a second "reconnect now" would tear down
-    // the first. On Modern Standby laptops suspend/resume often isn't raised at all; network-back and the long poll's
-    // own retry cover those
+    // The app uses PowerManager of the Windows App SDK, not SystemEvents. PowerManager is a CsWinRT projection that the
+    // app already ships. Thus it gives no Native AOT warnings and needs no extra package or hidden window thread.
+    // Windows raises the event on a background thread. A normal wake raises AutoResume, then ManualResume. A second
+    // reconnect would stop the first, so only AutoResume reconnects. Modern Standby laptops often raise no suspend or
+    // resume. The return of the network and the retry of the long poll cover those laptops.
     private void OnSystemSuspendStatusChanged(object? sender, object e)
     {
         if (PowerManager.SystemSuspendStatus != SystemSuspendStatus.AutoResume)
@@ -755,8 +746,9 @@ public sealed partial class App : Application, IDisposable
         RunOnUi("resume", c => c.ReconnectAsync());
     }
 
-    // Raised on a background thread for any change. Any change with internet (including a Wi-Fi to Ethernet switch
-    // with no gap) restarts a 3 s debounce, so a burst of changes gives one reconnect
+    // Windows raises the event on a background thread for each change. Each change with internet access starts the
+    // 3 s debounce again. A switch from Wi-Fi to Ethernet with no gap also counts. Thus a burst of changes gives a
+    // single reconnect.
     private void OnNetworkStatusChanged(object? sender)
     {
         if (!HasInternet())
@@ -774,7 +766,7 @@ public sealed partial class App : Application, IDisposable
     private static bool HasInternet() =>
         NetworkInformation.GetInternetConnectionProfile()?.GetNetworkConnectivityLevel() == NetworkConnectivityLevel.InternetAccess;
 
-    // Marshals a controller call to the UI thread and logs its failure, so no task goes unobserved
+    // Runs a controller call on the UI thread and logs its failure, so no task goes unobserved.
     private void RunOnUi(string reason, Func<ConnectionController, Task> call) =>
         _dispatcher?.TryEnqueue(async () =>
         {
@@ -788,15 +780,14 @@ public sealed partial class App : Application, IDisposable
             {
                 await call(_connection);
             }
-#pragma warning disable CA1031 // A failed reconnect is retried by the client; it must not take the tray down
             catch (Exception ex)
-#pragma warning restore CA1031
             {
+                // The client retries a failed reconnect. The failure must not stop the tray.
                 AppLog.ReconnectFailed(_logger, reason, ex);
             }
         });
 
-    // Runs an action on the UI thread each time a named event is signaled
+    // Runs an action on the UI thread each time another process signals a named event.
     private static RegisteredWaitHandle WatchEvent(DispatcherQueue dispatcher, WaitHandle handle, Action action, bool once) =>
         ThreadPool.RegisterWaitForSingleObject(
             handle,
@@ -809,7 +800,7 @@ public sealed partial class App : Application, IDisposable
     // LOGGER FACTORY
     // =========================================================================
 
-    // The controller wants a factory; the app has one file provider, so a full LoggerFactory isn't needed
+    // The controller takes a factory. The app has a single file provider, so it needs no full LoggerFactory.
     private sealed class SingleProviderLoggerFactory(ILoggerProvider provider) : ILoggerFactory
     {
         public ILogger CreateLogger(string categoryName) => provider.CreateLogger(categoryName);
@@ -818,7 +809,7 @@ public sealed partial class App : Application, IDisposable
 
         public void Dispose()
         {
-            // The App owns and disposes the provider
+            // The app owns and disposes the provider.
         }
     }
 }

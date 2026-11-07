@@ -1,17 +1,17 @@
 namespace GMessages.App;
 
 /// <summary>
-/// Whether the app runs from the MSIX package or as a plain (unpackaged) exe.
+/// Tells whether the app runs from the MSIX package or as a plain exe without a package.
 /// </summary>
 /// <remarks>
-/// Ported from Magic Buds' <c>AppIdentity.cs</c>; the data folder, version and classic app ID parts were
-/// dropped (<c>AppPaths</c> and <c>AppInfo</c> cover the first two, notifications come later).
-/// https://learn.microsoft.com/windows/apps/desktop/modernize/package-identity-overview
+/// Ported from the <c>AppIdentity.cs</c> of Magic Buds, without the data folder, the version and the classic app ID.
+/// <c>AppPaths</c> holds the data folder, and <c>AppInfo</c> holds the version.
 /// </remarks>
+/// <seealso href="https://learn.microsoft.com/windows/apps/desktop/modernize/package-identity-overview"/>
 internal static class AppIdentity
 {
     /// <summary>
-    /// True when running from the installed MSIX.
+    /// Gets whether the app runs from the installed MSIX.
     /// </summary>
     public static bool IsPackaged { get; } = HasPackageIdentity();
 

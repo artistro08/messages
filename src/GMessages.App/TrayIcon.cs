@@ -5,16 +5,20 @@ using Microsoft.Win32;
 namespace GMessages.App;
 
 /// <summary>
-/// The notification-area icon.
+/// Shows the icon of the app in the notification area.
 /// </summary>
 /// <remarks>
-/// Ported from Magic Buds' <c>TrayIcon.cs</c>; the hover tooltip window, global shortcuts and icon
-/// rectangle lookup were dropped. Owns a hidden top-level window that receives the icon's callback
-/// messages, the "TaskbarCreated" broadcast (Explorer restarted, so the icon is added again) and theme
-/// changes (the icon switches between its light- and dark-taskbar versions). Uses NOTIFYICON_VERSION_4,
-/// so a click or Enter arrives as NIN_SELECT/NIN_KEYSELECT and a right-click as WM_CONTEXTMENU with the
-/// anchor point in wParam. The menu itself is WinUI (<see cref="TrayMenuWindow"/>); the hover tooltip is
-/// the standard one (NIF_SHOWTIP).
+/// <para>
+/// Ported from the <c>TrayIcon.cs</c> of Magic Buds, without the hover tooltip window, global shortcuts and icon
+/// rectangle lookup. The class owns a hidden top-level window that receives the callback messages of the
+/// icon. That window also receives the "TaskbarCreated" broadcast after an Explorer restart, and the icon goes on the
+/// tray again. A theme change switches the icon between its versions for a light and a dark taskbar.
+/// </para>
+/// <para>
+/// The icon uses NOTIFYICON_VERSION_4. Thus a click or Enter arrives as NIN_SELECT or NIN_KEYSELECT. A right-click
+/// arrives as WM_CONTEXTMENU, with the anchor point in wParam. The menu is WinUI (<see cref="TrayMenuWindow"/>). The
+/// hover tooltip is the standard tooltip (NIF_SHOWTIP).
+/// </para>
 /// </remarks>
 internal sealed class TrayIcon : IDisposable
 {
@@ -32,11 +36,11 @@ internal sealed class TrayIcon : IDisposable
     private bool _disposed;
 
     /// <summary>
-    /// Creates the icon's hidden window. The icon itself shows on <see cref="Show"/>.
+    /// Creates the hidden window of the icon. The icon shows on <see cref="Show"/>.
     /// </summary>
-    /// <param name="tooltip">Hover text, also read by screen readers.</param>
+    /// <param name="tooltip">The hover text, which screen readers also read.</param>
     /// <param name="iconGuid">
-    /// Fixed identity, so Windows keeps the icon's taskbar placement across updates. Each install location
+    /// The fixed identity, so Windows keeps the place of the icon on the taskbar across updates. Each install location
     /// needs its own GUID.
     /// </param>
     /// <exception cref="Win32Exception">The window class or window could not be created.</exception>
@@ -46,7 +50,6 @@ internal sealed class TrayIcon : IDisposable
         _iconGuid   = iconGuid;
         _windowProc = WindowProc;
 
-        // Hidden Window
         var windowClass = new NativeMethods.WNDCLASSEXW
         {
             cbSize        = (uint)Marshal.SizeOf<NativeMethods.WNDCLASSEXW>(),
@@ -69,29 +72,26 @@ internal sealed class TrayIcon : IDisposable
     }
 
     /// <summary>
-    /// Left click or Enter.
+    /// Raised on a left-click or Enter.
     /// </summary>
     public event EventHandler? Invoked;
 
     /// <summary>
-    /// Right click or the menu key, with the anchor point in screen pixels.
+    /// Raised on a right-click or the menu key. The argument is the anchor point in screen pixels.
     /// </summary>
     public event EventHandler<(int X, int Y)>? ContextMenuRequested;
 
     /// <summary>
-    /// Windows switched between light and dark (<c>WM_SETTINGCHANGE</c> with <c>ImmersiveColorSet</c>).
+    /// Raised when Windows switches between light and dark (<c>WM_SETTINGCHANGE</c> with <c>ImmersiveColorSet</c>).
     /// </summary>
     public event EventHandler? ThemeChanged;
 
     /// <summary>
-    /// The icon's hidden window.
+    /// Puts the icon on the tray. The icon goes on the tray again after each Explorer restart.
     /// </summary>
-    public IntPtr Handle => _hwnd;
-
-    /// <summary>
-    /// Puts the icon on the tray. It's added again whenever Explorer restarts.
-    /// </summary>
-    /// <returns>True when the shell took the icon now; false when it was already showing or Explorer isn't up yet.</returns>
+    /// <returns>
+    /// True when the shell took the icon now. False when the icon already shows, or when Explorer is not ready yet.
+    /// </returns>
     public bool Show()
     {
         if (_visible || _disposed)
@@ -104,7 +104,7 @@ internal sealed class TrayIcon : IDisposable
     }
 
     /// <summary>
-    /// Takes the icon off the tray. Its window stays.
+    /// Removes the icon from the tray. Its window stays.
     /// </summary>
     public void Hide()
     {
@@ -138,13 +138,13 @@ internal sealed class TrayIcon : IDisposable
         }
     }
 
-    // Fails when Explorer isn't up yet at sign-in; TaskbarCreated adds the icon later
+    // Fails when Explorer is not ready yet at sign-in. TaskbarCreated adds the icon later.
     private bool Add()
     {
         LoadIcon();
 
-        // A copy that crashed or was killed leaves its icon (same GUID) in the shell, and NIM_ADD then fails until the
-        // user hovers it away. Deleting by GUID first clears it; when there is nothing to delete this is a no-op
+        // A copy that crashed or was killed leaves its icon with the same GUID in the shell. NIM_ADD then fails until
+        // the user moves the pointer over the old icon. A delete by GUID first clears it, and does nothing otherwise.
         var stale = CreateData(0);
         NativeMethods.Shell_NotifyIconW(NativeMethods.NIM_DELETE, ref stale);
 
@@ -179,8 +179,8 @@ internal sealed class TrayIcon : IDisposable
         szInfoTitle      = "",
     };
 
-    // Light taskbar gets the dark glyph and the other way around. The .ico holds a separately
-    // drawn image per size, so Windows never has to shrink a large one.
+    // A light taskbar gets the dark glyph, and a dark taskbar gets the light glyph. The .ico file holds an image drawn
+    // for each size, so Windows never makes a large image smaller.
     private void LoadIcon()
     {
         var fileName = TaskbarUsesLightTheme() ? "TrayLight.ico" : "TrayDark.ico";
@@ -201,7 +201,6 @@ internal sealed class TrayIcon : IDisposable
 
     private IntPtr WindowProc(IntPtr hwnd, uint message, IntPtr wParam, IntPtr lParam)
     {
-        // Icon Callback
         if (message == CallbackMessage)
         {
             switch ((uint)(lParam.ToInt64() & 0xFFFF))
@@ -219,7 +218,7 @@ internal sealed class TrayIcon : IDisposable
             return IntPtr.Zero;
         }
 
-        // Explorer Restarted
+        // Explorer restarted.
         if (message == _taskbarCreatedMessage)
         {
             if (_visible)
@@ -229,7 +228,7 @@ internal sealed class TrayIcon : IDisposable
             return IntPtr.Zero;
         }
 
-        // Theme Changed: swap to the glyph that suits the taskbar
+        // A setting changed. The icon takes the glyph that suits the taskbar.
         if (message == NativeMethods.WM_SETTINGCHANGE && _visible)
         {
             LoadIcon();
@@ -237,7 +236,7 @@ internal sealed class TrayIcon : IDisposable
             NativeMethods.Shell_NotifyIconW(NativeMethods.NIM_MODIFY, ref data);
         }
 
-        // Light Or Dark Switched: The App's Own Popups Follow
+        // Windows switched between light and dark. The popups of the app follow.
         if (message == NativeMethods.WM_SETTINGCHANGE && lParam != IntPtr.Zero && Marshal.PtrToStringUni(lParam) == "ImmersiveColorSet")
         {
             ThemeChanged?.Invoke(this, EventArgs.Empty);

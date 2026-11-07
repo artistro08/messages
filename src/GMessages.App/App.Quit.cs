@@ -6,23 +6,22 @@ using Windows.Networking.Connectivity;
 namespace GMessages.App;
 
 /// <summary>
-/// Shutting down: Dispose, Quit (disconnect and flush the saves) and the hard exit that follows.
+/// Holds the shutdown of the app: the dispose, the quit and the hard exit after it.
 /// </summary>
 /// <remarks>
-/// Part of <see cref="App"/>; the other members are in App.xaml.cs.
+/// This part of <see cref="App"/> holds the shutdown. App.xaml.cs holds the other members.
 /// </remarks>
 public sealed partial class App
 {
-
     /// <summary>
-    /// Stops the watchers and timer, removes the tray icon and closes the windows and the log.
+    /// Stops the watchers and timers, removes the tray icon, and closes the windows and the log.
     /// </summary>
     /// <remarks>
-    /// The connection controller is disposed by Quit before this, since that needs an await.
+    /// Quit disposes the connection controller before this method, because that dispose needs an await.
     /// </remarks>
     public void Dispose()
     {
-        // A show request already queued must not open windows that are shutting down
+        // A show request in the queue must not open windows during the shutdown.
         _quitting = true;
 
         _memoryTrim?.Cancel();
@@ -36,14 +35,14 @@ public sealed partial class App
         _badge?.Dispose();
         _trayIcon?.Dispose();
         _trayMenu?.Close();
-        CloseWindows();
+        _mainWindow?.Close();
         _store?.Dispose();
         _media?.Dispose();
         _logProvider?.Dispose();
         GC.SuppressFinalize(this);
     }
 
-    // Async void: called from event handlers; it always ends in Exit
+    // The method is async void because event handlers call it. It always ends in the exit.
     private async void Quit()
     {
         if (_quitting)
@@ -54,7 +53,7 @@ public sealed partial class App
         AppLog.Quit(_logger);
         _quitting = true;
         long started = Stopwatch.GetTimestamp();
-        CloseWindows();
+        _mainWindow?.Close();
         long windowsMs    = (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds;
         long connectionMs = 0;
         long savesMs      = 0;
@@ -89,7 +88,7 @@ public sealed partial class App
             long totalMs = (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds;
             AppLog.QuitTimed(_logger, windowsMs, connectionMs, savesMs, savesDone, totalMs);
 
-            // No Decrypted File Outlives The App
+            // No decrypted file must stay after the app ends.
             _media?.Clear();
             Dispose();
             XamlWindow.ExitMessageLoop();
@@ -113,10 +112,11 @@ public sealed partial class App
         }
     }
 
-    // ExitMessageLoop Ends The Message Loop, Then The Process Ends Once Main Returns; Anything Native Still Winding Down (A Media
-    // Job, A Notification Or Network Teardown) Could Hold The Process Up For About A Minute (0.6.4). Nothing Is Left To
-    // Save By Now, So The Process Ends For Sure Shortly After
-    // ponytail: a hard exit after a fixed wait; find the native holder in a dump if the wait ever fires in the log-free gap
+    // ExitMessageLoop ends the message loop, and the process ends when Main returns. Native work that still shuts down
+    // can keep the process alive for about 1 minute, as seen in 0.6.4. Examples are a media job, a notification or the
+    // network teardown. No save is left at this point, so the process ends for certain after ExitGrace.
+    // ponytail: a hard exit after a fixed wait. If the wait fires in the gap with no log, find the native holder in a
+    // dump.
     private static void ExitSoon() =>
         _ = Task.Delay(ExitGrace).ContinueWith(_ => Environment.Exit(0), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
 }

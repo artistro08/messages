@@ -9,52 +9,56 @@ namespace GMessages.App.Windowing;
 /// </summary>
 /// <remarks>
 /// <para>
-/// WinUI 3's Application.Start did all of this; XAML Islands leave it to the app. Packaged, the manifest's dependency
-/// puts WinUI 2.8 (the Microsoft.UI.Xaml.2.8 framework package) in the app's package graph. Unpackaged (Debug, the UI
-/// tests), a dynamic dependency adds it to the process, which needs the framework package installed (most Windows 11
-/// PCs have it; installing the MSIX brings it). It goes ahead of the Windows App SDK runtime the bootstrapper added,
-/// whose WinUI 3 Microsoft.UI.Xaml.dll otherwise loads in its place and XAML fails to start.
+/// Application.Start of WinUI 3 did all of this. XAML Islands leave it to the app. Packaged, the dependency in the
+/// manifest puts WinUI 2.8 in the package graph of the app (the Microsoft.UI.Xaml.2.8 framework package). Unpackaged,
+/// as in Debug and the UI tests, a dynamic dependency adds it to the process. That needs the framework package on the
+/// PC. Most Windows 11 PCs have it, and an install of the MSIX brings it. The dependency goes ahead of the Windows App
+/// SDK runtime that the bootstrapper added. Otherwise the WinUI 3 Microsoft.UI.Xaml.dll of that runtime loads in its
+/// place, and XAML fails to start.
 /// </para>
 /// <para>
-/// The dispatcher queue is made before XAML starts, so XAML and the app share it (Windows Terminal's order). Awaits on
-/// the UI thread come back through it; an exception that escapes such a continuation goes to
+/// The dispatcher queue exists before XAML starts, so XAML and the app share it, in the order of Windows Terminal.
+/// Awaits on the UI thread resume through it. An exception that escapes such a continuation goes to
 /// <see cref="UnhandledException"/>, as WinUI 3 sent it to Application.UnhandledException.
 /// </para>
 /// </remarks>
-/// @link https://learn.microsoft.com/windows/apps/windows-app-sdk/use-dynamic-dependencies
+/// <seealso href="https://learn.microsoft.com/windows/apps/windows-app-sdk/use-dynamic-dependencies"/>
 internal static unsafe class XamlHost
 {
-    // Microsoft.UI.Xaml.2.8, 2.8.7 Or Later
+    // Microsoft.UI.Xaml.2.8, version 2.8.7 or later.
     private const string WinUIFramework = "Microsoft.UI.Xaml.2.8_8wekyb3d8bbwe";
     private static readonly Windows.ApplicationModel.PackageVersion WinUIMinVersion = new() { Major = 8, Minor = 2501, Build = 31001, Revision = 0 };
 
-    // DQTYPE_THREAD_CURRENT, DQTAT_COM_STA
+    // DQTYPE_THREAD_CURRENT and DQTAT_COM_STA.
     private const int ThreadCurrent = 2;
     private const int ComSta        = 2;
 
     /// <summary>
-    /// Gets the UI thread's dispatcher queue (every window and element lives on that one thread). WinUI 3's
-    /// DependencyObject.DispatcherQueue, which system XAML doesn't have.
+    /// Gets the dispatcher queue of the UI thread, where every window and element lives. It replaces
+    /// DependencyObject.DispatcherQueue of WinUI 3, which system XAML does not have.
     /// </summary>
     public static DispatcherQueue Dispatcher { get; private set; } = null!;
 
-    // Kept For The Life Of The Process: The Queue's Controller, And WinUI 2.8 In The Package Graph
+    // The process keeps the controller of the queue and WinUI 2.8 in the package graph for its whole life.
     internal static nint DispatcherQueueController { get; private set; }
 
     internal static PackageDependencyContext? WinUIContext { get; private set; }
 
     /// <summary>
-    /// Handles an exception that escaped an await continuation on the UI thread; returns true when it was handled.
-    /// Unhandled, the app ends (as before launch, so a broken start-up is never hidden).
+    /// Handles an exception that escapes an await continuation on the UI thread, and returns true when it handled it.
     /// </summary>
+    /// <remarks>
+    /// An exception that it does not handle ends the app, as before the launch. Thus a broken start-up is never hidden.
+    /// </remarks>
     public static Func<Exception, bool>? UnhandledException { get; set; }
 
     /// <summary>
-    /// Makes WinUI 2.8 loadable, then the UI thread's dispatcher queue and await context. Call once, before the App.
+    /// Makes WinUI 2.8 loadable, then makes the dispatcher queue and the await context of the UI thread. Call it once,
+    /// before the app.
     /// </summary>
     public static void Start()
     {
-        // WinUI 2.8 For An Unpackaged Run
+        // An unpackaged run gets WinUI 2.8 from a dynamic dependency.
         if (!AppIdentity.IsPackaged)
         {
             var options = new CreatePackageDependencyOptions { LifetimeArtifactKind = PackageDependencyLifetimeArtifactKind.Process };
@@ -62,7 +66,6 @@ internal static unsafe class XamlHost
             WinUIContext = dependency.Add(new AddPackageDependencyOptions { Rank = -1 });
         }
 
-        // Dispatcher Queue On This Thread
         var queueOptions = new DispatcherQueueOptions { dwSize = sizeof(DispatcherQueueOptions), threadType = ThreadCurrent, apartmentType = ComSta };
         nint controller;
         System.Runtime.InteropServices.Marshal.ThrowExceptionForHR(CreateDispatcherQueueController(queueOptions, &controller));
@@ -72,9 +75,7 @@ internal static unsafe class XamlHost
         SynchronizationContext.SetSynchronizationContext(new UiSynchronizationContext(Dispatcher));
     }
 
-    /// <summary>
-    /// Runs awaits' continuations on the UI thread's dispatcher queue.
-    /// </summary>
+    // Runs the continuations of awaits on the dispatcher queue of the UI thread.
     private sealed class UiSynchronizationContext(DispatcherQueue queue) : SynchronizationContext
     {
         public override void Post(SendOrPostCallback d, object? state) =>
@@ -86,7 +87,7 @@ internal static unsafe class XamlHost
                 }
                 catch (Exception ex) when (UnhandledException?.Invoke(ex) == true)
                 {
-                    // Handled And Logged By The App
+                    // The app handled and logged the exception.
                 }
             });
 
