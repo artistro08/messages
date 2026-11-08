@@ -33,6 +33,8 @@ internal static unsafe partial class WindowInterop
     public const uint WM_NCMBUTTONDOWN    = 0x00A7;
     public const uint WM_NCMBUTTONUP      = 0x00A8;
     public const uint WM_SYSCOMMAND       = 0x0112;
+    public const uint WM_ENTERSIZEMOVE    = 0x0231;
+    public const uint WM_EXITSIZEMOVE     = 0x0232;
     public const uint WM_NCMOUSELEAVE     = 0x02A2;
     public const uint WM_DPICHANGED       = 0x02E0;
 
@@ -83,6 +85,9 @@ internal static unsafe partial class WindowInterop
     public const uint IMAGE_ICON      = 1;
     public const uint LR_LOADFROMFILE = 0x0010;
     public const int  IDC_ARROW       = 32512;
+
+    public const uint LSFW_LOCK   = 1;
+    public const uint LSFW_UNLOCK = 2;
 
     public const uint LWA_ALPHA   = 0x2;
     public const int  RGN_DIFF    = 4;
@@ -276,6 +281,10 @@ internal static unsafe partial class WindowInterop
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool SetForegroundWindow(nint hwnd);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool LockSetForegroundWindow(uint lockCode);
 
     [LibraryImport("user32.dll")]
     public static partial uint GetDpiForWindow(nint hwnd);

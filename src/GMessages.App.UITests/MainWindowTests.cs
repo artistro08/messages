@@ -208,6 +208,22 @@ public sealed class MainWindowTests : UiTest
     }
 
     /// <summary>
+    /// A press on the drag area of the title bar closes the open profile menu, as a press on the content does.
+    /// </summary>
+    [TestMethod]
+    public async Task TitleBar_Press_ClosesOpenFlyout()
+    {
+        await OpenMainAsync();
+
+        System.Drawing.Rectangle menu = App.Find("Main.MenuButton").BoundingRectangle;
+        Invoke("Main.ProfileButton");
+        App.Find("Main.Profile.Settings");
+
+        FlaUI.Core.Input.Mouse.Click(new System.Drawing.Point(menu.Right + 120, menu.Y + (menu.Height / 2)));
+        WaitForGone("Main.Profile.Settings");
+    }
+
+    /// <summary>
     /// The Spam &amp; blocked item of the profile menu replaces the list with the spam conversations under a titled
     /// header. The back button in the title bar replaces ☰ and returns to the inbox.
     /// </summary>
@@ -528,7 +544,7 @@ public sealed class MainWindowTests : UiTest
     }
 
     /// <summary>
-    /// The window stops shrinking at its minimum size. The minimum width is the narrowest chat list, 300 px.
+    /// The window stops shrinking at its minimum size. The minimum width is 352 px.
     /// The minimum height is 500 px. Both values use the display scale and add the frame.
     /// </summary>
     [TestMethod]
@@ -543,7 +559,7 @@ public sealed class MainWindowTests : UiTest
         Thread.Sleep(500);
 
         System.Drawing.Rectangle box = window.BoundingRectangle;
-        Assert.IsTrue(box.Width >= (300 * scale) - 1 && box.Width <= (300 * scale) + (40 * scale), $"The window shrank to {box.Width} px wide, not about {300 * scale:F0} px (scale {scale:F2}).");
+        Assert.IsTrue(box.Width >= (352 * scale) - 1 && box.Width <= (352 * scale) + (40 * scale), $"The window shrank to {box.Width} px wide, not about {352 * scale:F0} px (scale {scale:F2}).");
         Assert.IsTrue(box.Height >= (500 * scale) - 1 && box.Height <= (500 * scale) + (40 * scale), $"The window shrank to {box.Height} px tall, not about {500 * scale:F0} px (scale {scale:F2}).");
         App.Find("Main.ConversationList");
     }

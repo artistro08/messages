@@ -2,6 +2,7 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Windows.UI.Core;
 using Windows.UI.Xaml;
+using Windows.UI.Xaml.Controls.Primitives;
 using Windows.UI.Xaml.Hosting;
 using Windows.UI.Xaml.Media;
 using WinRT;
@@ -640,6 +641,23 @@ internal unsafe class XamlWindow
                 info->ptMinTrackSize.Y    = Math.Max(info->ptMinTrackSize.Y, _minHeight);
                 return 0;
 
+            // A press on the title bar or the frame does not reach XAML, so the open flyouts close here. A click on the
+            // content closes them in the same way.
+            case WM_NCLBUTTONDOWN:
+            case WM_NCRBUTTONDOWN:
+                CloseLightDismissPopups();
+                break;
+
+            // Other apps cannot take the foreground during a move or a resize. Some apps take the foreground when the
+            // pointer goes onto another monitor. Windows then stops the drag and puts the window back.
+            case WM_ENTERSIZEMOVE:
+                _ = LockSetForegroundWindow(LSFW_LOCK);
+                break;
+
+            case WM_EXITSIZEMOVE:
+                _ = LockSetForegroundWindow(LSFW_UNLOCK);
+                break;
+
             // After a move to a monitor with another scale, the window takes the size that Windows suggests.
             case WM_DPICHANGED:
                 var suggested = (RECT*)lParam;
@@ -711,6 +729,22 @@ internal unsafe class XamlWindow
     // =========================================================================
     // HELPERS
     // =========================================================================
+
+    private void CloseLightDismissPopups()
+    {
+        if (XamlRoot is not { } root)
+        {
+            return;
+        }
+
+        foreach (Popup popup in VisualTreeHelper.GetOpenPopupsForXamlRoot(root))
+        {
+            if (popup.IsLightDismissEnabled)
+            {
+                popup.IsOpen = false;
+            }
+        }
+    }
 
     // Fills the client area with the island.
     private void ResizeIsland()
