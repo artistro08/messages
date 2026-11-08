@@ -206,6 +206,26 @@ public sealed class ChatViewModelTests
     }
 
     [TestMethod]
+    public async Task Load_Unread_ShowsReadBeforeThePage()
+    {
+        using var rig = new MainRig();
+        Conversation conv    = MainRig.Conv("a", "Ann");
+        conv.Unread          = true;
+        conv.LatestMessageID = "m1";
+        using ChatViewModel chat = NewChat(rig, conv, Msg("m1", "one"));
+        await rig.Store.HandleEventAsync(new ConversationUpdated(conv));
+        var gate = new TaskCompletionSource();
+        rig.Client.FetchGate = gate;
+
+        Task loading = chat.LoadAsync();
+        Assert.IsFalse(rig.Store.Find("a")?.Unread, "the chat stayed unread until its page came");
+
+        gate.SetResult();
+        await loading;
+        Assert.AreEqual(("a", "m1"), rig.Client.MarkedRead.Single());
+    }
+
+    [TestMethod]
     public async Task Load_Read_DoesNotMarkRead()
     {
         using var rig = new MainRig();

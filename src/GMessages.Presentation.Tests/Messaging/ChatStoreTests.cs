@@ -1687,6 +1687,40 @@ public sealed class ChatStoreTests
         Assert.AreEqual(1, raised.Count);
     }
 
+    [TestMethod]
+    public async Task MarkRead_ShowsReadBeforeThePhoneAnswers()
+    {
+        using var rig = new Rig();
+        Conversation unread = Conv("c1", "Ann");
+        unread.Unread = true;
+        await rig.Store.HandleEventAsync(new ConversationUpdated(unread));
+        rig.Client.MarkReadGate = new TaskCompletionSource();
+
+        Task marking = rig.Store.MarkReadAsync("c1", "m1", Ct);
+        Assert.IsFalse(rig.Store.Find("c1")?.Unread, "the chat stayed unread until the phone answered");
+
+        rig.Client.MarkReadGate.SetResult();
+        await marking;
+        Assert.IsFalse(rig.Store.Find("c1")?.Unread);
+    }
+
+    [TestMethod]
+    public async Task MarkRead_PhoneRefuses_ShowsUnreadAgain()
+    {
+        using var rig = new Rig();
+        Conversation unread = Conv("c1", "Ann");
+        unread.Unread = true;
+        await rig.Store.HandleEventAsync(new ConversationUpdated(unread));
+        rig.Client.MarkReadThrows = new InvalidOperationException("no answer");
+        var raised = new List<bool>();
+        rig.Store.ConversationChanged += (_, c) => raised.Add(c.Unread);
+
+        await Assert.ThrowsExactlyAsync<InvalidOperationException>(() => rig.Store.MarkReadAsync("c1", "m1", Ct));
+
+        Assert.IsTrue(rig.Store.Find("c1")?.Unread);
+        Assert.AreEqual("False,True", string.Join(",", raised));
+    }
+
     /// <summary>
     /// A chat read here stays read after a restart. The saved row is marked read, so the list does not show the
     /// chat as unread before the page of the phone arrives.
