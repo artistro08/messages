@@ -62,9 +62,9 @@ public sealed partial class MainWindow : UserControl
     // photo.
     private bool _profileAsked;
 
-    // The least window size, in effective pixels. The width is the least width of the chat list. The height holds the
-    // title bar, a few rows and the message box.
-    private const double MinWindowWidth  = ChatsView.MinListPaneWidth;
+    // The least window size, in effective pixels. The owner chose the width. The height holds the title bar, a few rows
+    // and the message box.
+    private const double MinWindowWidth  = 352;
     private const double MinWindowHeight = 500;
 
     // The file of the last download for Show in folder, and the timer that closes its confirmation.
@@ -589,7 +589,9 @@ public sealed partial class MainWindow : UserControl
                 return;
             }
 
+            // A move onto a monitor with another scale changes the size. The second call sets the saved size again.
             _window.MoveAndResize(saved.Left, saved.Top, saved.Width, saved.Height);
+            _window.Resize(saved.Width, saved.Height);
         }
 
         if (_appSettings.WindowMaximized)

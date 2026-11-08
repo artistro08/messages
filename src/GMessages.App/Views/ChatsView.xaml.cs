@@ -79,7 +79,7 @@ public sealed partial class ChatsView : UserControl
     // 1 more column.
     private const double NarrowBelow       = 720;
     private const double ListPaneWidth     = 360;
-    internal const double MinListPaneWidth = 300;
+    private const double MinListPaneWidth  = 300;
     private const float StartChatDrop      = 96;
     private const float StartChatLift      = 16;
     private const float StartChatGap       = 8;
