@@ -14,7 +14,7 @@ public sealed partial class ChatViewModel
     /// </summary>
     /// <remarks>
     /// Call on the UI thread. With no bubbles yet, the saved page shows during the phone fetch. A page in memory shows
-    /// at once. A page from the database shows unless the phone answered first, and the read runs off the UI thread.
+    /// at once. A page from the database shows unless the phone answered first. An unread chat turns read at once.
     /// A call during a load waits, and runs when that load ends. A failed load keeps the bubbles as they were. The
     /// failure can be no connection, no answer or a network error.
     /// </remarks>
@@ -42,6 +42,12 @@ public sealed partial class ChatViewModel
             ConversationInfo? conversation = _store.Find(ConversationId) ?? await _store.GetAsync(ConversationId, CancellationToken.None);
             ApplyConversation(conversation);
 
+            // The open of an unread chat reads it on the phone. The list shows it read at once, before the page.
+            if (conversation is { Unread: true } && conversation.LatestMessageId.Length > 0)
+            {
+                _ = MarkReadAsync(conversation.LatestMessageId);
+            }
+
             (IReadOnlyList<ChatMessage> page, Cursor? older) = await _store.LoadMessagesAsync(ConversationId, null, CancellationToken.None);
 
             _older = older;
@@ -49,12 +55,6 @@ public sealed partial class ChatViewModel
             ShowPage(page);
             _fillOlder = true;
             LogOpenStep("phone page shown");
-
-            // The open of an unread chat reads it on the phone.
-            if (conversation is { Unread: true } && conversation.LatestMessageId.Length > 0)
-            {
-                await _store.MarkReadAsync(ConversationId, conversation.LatestMessageId, CancellationToken.None);
-            }
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
