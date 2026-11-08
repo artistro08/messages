@@ -233,10 +233,24 @@ internal sealed class FakeMessagingClient : IMessagingClient
         return Task.CompletedTask;
     }
 
-    public Task MarkReadAsync(string conversationId, string messageId, CancellationToken ct)
+    /// <summary>When set, a mark read answers after this completes.</summary>
+    public TaskCompletionSource? MarkReadGate { get; set; }
+
+    /// <summary>When set, a mark read fails with this exception.</summary>
+    public Exception? MarkReadThrows { get; set; }
+
+    public async Task MarkReadAsync(string conversationId, string messageId, CancellationToken ct)
     {
         MarkedRead.Add((conversationId, messageId));
-        return Task.CompletedTask;
+        if (MarkReadGate is { } gate)
+        {
+            await gate.Task;
+        }
+
+        if (MarkReadThrows is { } ex)
+        {
+            throw ex;
+        }
     }
 
     public ListContactsResponse ContactsAnswer { get; set; } = new();
