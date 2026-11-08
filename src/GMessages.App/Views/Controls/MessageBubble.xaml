@@ -603,9 +603,11 @@
                              style. A click, Enter or Space opens the link in the default browser. The card is named by
                              its title and the host of the link. A right-click, the Application key or Shift + F10 opens
                              its own menu with Copy link. That menu is PreviewMenu of the chat pane, which finds the
-                             card by its name. The look of the card is on PreviewCard. IconButtonStyle gives the button
-                             no hover or press fill. Thus the card never flashes another color under the pointer, as the
-                             owner reported. Through LinkCardButton, the hand cursor shows over it, as over a link. -->
+                             card by its name. The look of the card is on PreviewCard. SubtleButtonStyle gives the
+                             button no hover or press fill. Thus the card never flashes another color under the pointer,
+                             as the owner reported. The card does not shrink on a press, as the owner asked, so it does
+                             not use IconButtonStyle. Through LinkCardButton, the hand cursor shows over it, as over a
+                             link. -->
                         <local:LinkCardButton
                             x:Name="Preview"
                             Margin="{x:Bind local:MessageBubble.PreviewMargin(Bubble.HasBodyText), Mode=OneWay}"
@@ -618,7 +620,7 @@
                             Click="OnPreviewClick"
                             CornerRadius="8"
                             Loaded="OnPartLoaded"
-                            Style="{StaticResource IconButtonStyle}">
+                            Style="{StaticResource SubtleButtonStyle}">
                             <Border
                                 x:Name="PreviewCard"
                                 Background="{ThemeResource ControlFillColorDefaultBrush}"

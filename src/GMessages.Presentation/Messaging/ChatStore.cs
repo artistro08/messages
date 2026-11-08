@@ -883,9 +883,10 @@ public sealed partial class ChatStore : IDisposable
     /// Tells the phone that a conversation is read up to a message, then marks the cached conversation read.
     /// </summary>
     /// <remarks>
-    /// The cached copy changes when the phone answers and raises <see cref="ConversationChanged"/>. Thus the list stops
-    /// showing it unread before the phone sends the conversation back. The saved row turns read too, so the chat does
-    /// not show unread for a moment on the next start.
+    /// The cached copy turns read before the request and raises <see cref="ConversationChanged"/>. Thus the list stops
+    /// showing an opened chat unread at once, as the owner asked. If the phone refuses, the cached copy turns unread
+    /// again. If the phone sends the conversation back unread before it answers, the answer turns it read again. The
+    /// saved row turns read too, so the chat does not show unread for a moment on the next start.
     /// </remarks>
     /// <param name="messageId">The newest message that the user read.</param>
     /// <returns>A task that completes when the phone answered.</returns>
@@ -893,19 +894,39 @@ public sealed partial class ChatStore : IDisposable
     public async Task MarkReadAsync(string conversationId, string messageId, CancellationToken ct)
     {
         // No ConfigureAwait(false): the store must raise ConversationChanged on the thread of the caller.
-        int generation = Generation;
-        await RequireClient().MarkReadAsync(conversationId, messageId, ct);
+        int generation          = Generation;
+        IMessagingClient client = RequireClient();
+        ConversationInfo? shown = ShowRead(conversationId);
+
+        try
+        {
+            await client.MarkReadAsync(conversationId, messageId, ct);
+        }
+        catch when (shown is not null)
+        {
+            if (generation == Generation && ReferenceEquals(Find(conversationId), shown))
+            {
+                ConversationInfo unread = shown with { Unread = true };
+                Upsert(unread);
+                ConversationChanged?.Invoke(this, unread);
+            }
+
+            throw;
+        }
 
         // The live unread texts start again, also when the cached conversation never turned unread.
         _unreadTexts.TryRemove(conversationId, out _);
 
-        if (generation != Generation || Find(conversationId) is not { Unread: true } cached)
+        if (generation != Generation)
         {
             return;
         }
 
-        ConversationInfo read = cached with { Unread = false };
-        Upsert(read);
+        ConversationInfo? read = ShowRead(conversationId);
+        if (read is null && shown is null)
+        {
+            return;
+        }
 
         // The saved row turns read only when its newest message is the read one or mine. Mine can be a reply from a
         // toast. The check runs with the write, so a message that came in meanwhile keeps the row unread on disk.
@@ -919,8 +940,21 @@ public sealed partial class ChatStore : IDisposable
             c.Unread = false;
             return true;
         }));
+    }
 
+    // Turns the cached conversation read and raises ConversationChanged. It gives the read copy, or null when the
+    // conversation is not cached or is read.
+    private ConversationInfo? ShowRead(string conversationId)
+    {
+        if (Find(conversationId) is not { Unread: true } cached)
+        {
+            return null;
+        }
+
+        ConversationInfo read = cached with { Unread = false };
+        Upsert(read);
         ConversationChanged?.Invoke(this, read);
+        return read;
     }
 
     /// <summary>
