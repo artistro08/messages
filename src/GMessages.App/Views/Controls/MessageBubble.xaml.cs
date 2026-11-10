@@ -237,20 +237,6 @@ public sealed partial class MessageBubble : UserControl
     private bool _photoFailed;
     private bool _photoUnavailable;
 
-    // The state of the note over a photo or a video. The UI tests read the name of the state. None shows as an empty
-    // state.
-    private enum MediaNote
-    {
-        None,
-        Pending,
-        Downloading,
-        Playing,
-        Failed,
-        Unavailable,
-    }
-
-    private static string StateOf(MediaNote note) => note == MediaNote.None ? string.Empty : note.ToString();
-
     // The first field tells whether the full image is a moving GIF: an Image clipped on its composition visual. Else
     // the image is a still photo in a brush. The second field is the visual of the GIF image. The bubble takes it once
     // while the image is in the live tree.
@@ -1735,4 +1721,10 @@ public sealed partial class MessageBubble : UserControl
     /// Runs Reply from the bubble menu, which asks the chat to start a reply to this bubble.
     /// </summary>
     public void Reply() => ReplyRequested?.Invoke(this, EventArgs.Empty);
+
+    // Gives the name of a note state for the UI tests. None shows as an empty state.
+    private static string StateOf(MediaNote note) => note == MediaNote.None ? string.Empty : note.ToString();
+
+    // The state of the note over a photo or a video. The UI tests read the name of the state.
+    private enum MediaNote { None, Pending, Downloading, Playing, Failed, Unavailable }
 }
