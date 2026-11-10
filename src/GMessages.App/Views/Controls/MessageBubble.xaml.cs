@@ -84,8 +84,7 @@ namespace GMessages.App.Views.Controls;
 /// <para>
 /// A photo <c>Bubble.Photo.{id}</c> fills the bubble from edge to edge, with its caption under it. Its name is its
 /// caption or "Photo". Its size comes from the dimensions of the photo before anything loads, so the chat never jumps.
-/// Its thumbnail shows first, decoded tiny and stretched, so it looks blurred. A Composition blur needs Win2D, which
-/// this app does not carry. Then the full image fades in over it.
+/// Its thumbnail shows first, blurred by <see cref="Media.BlurredImage"/>. Then the full image fades in over it.
 /// </para>
 /// <para>
 /// A thumbnail-only photo asks the phone for the full size, which arrives as an edit of the message. While the phone
@@ -172,8 +171,6 @@ public sealed partial class MessageBubble : UserControl
     // The hover strip has 3 buttons of 32 px with 4 px on each side. Its slot in MessageBubble.xaml binds StripWidth.
     private const double HoverStripWidth = 104;
 
-    // For the blurred look, the thumbnail of a photo decodes this wide, then stretches to the size of the photo.
-    private const int BlurDecodeWidth = 24;
 
     // The thumbnail of the file card is a 40 px square in logical pixels. Logical pixels already include the display
     // scale.

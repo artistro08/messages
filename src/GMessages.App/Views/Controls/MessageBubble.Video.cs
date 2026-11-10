@@ -77,11 +77,24 @@ public sealed partial class MessageBubble
         int frameWidth = (int)Math.Ceiling(Video is { Width: > 0 } box ? box.Width : MaxBubbleWidth);
         try
         {
-            // The preview picture in the message shows at once. The real frame replaces it when it loads.
-            if (part.HasInlinePreview && await Avatar.ToImageAsync(part.InlineData, frameWidth) is { } preview && ReferenceEquals(part, _videoPart))
+            // The preview picture in the message shows blurred at once. The real frame replaces it when it loads.
+            if (part.HasInlinePreview && await BlurredImage.MakeAsync(part.InlineData) is { } blurred
+                && await Avatar.ToImageAsync(blurred, BlurredImage.LongSide) is { } preview && ReferenceEquals(part, _videoPart))
             {
                 VideoThumb.Background = new ImageBrush { ImageSource = preview, Stretch = Stretch.UniformToFill };
                 _videoFrameImage      = preview;
+            }
+
+            // A video that only has its preview waits for the phone. The note says so before any click.
+            if (part is { MediaId.Length: 0 } && part.HasInlinePreview)
+            {
+                if (ReferenceEquals(part, _videoPart))
+                {
+                    ShowVideoNote(ChatCopy.VideoPending, "Pending");
+                }
+
+                TestHooks.ShowState(VideoPlay, "NoFrame");
+                return;
             }
 
             byte[] bytes      = await VideoStill.GetAsync(media, part);
@@ -255,8 +268,11 @@ public sealed partial class MessageBubble
     // tests.
     private void ShowVideoNote(string? text, string state)
     {
+        bool busy                = text is not null && state is "Downloading" or "Pending";
         VideoNote.Text           = text ?? string.Empty;
         VideoNoteBack.Visibility = text is null ? Visibility.Collapsed : Visibility.Visible;
+        VideoNoteRing.IsActive   = busy;
+        VideoNoteRing.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
         TestHooks.ShowState(VideoFrame, state);
     }
 

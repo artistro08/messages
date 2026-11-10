@@ -1,4 +1,5 @@
 using System.Numerics;
+using GMessages.App.Media;
 using GMessages.Presentation.Main;
 using GMessages.Presentation.Messaging;
 using Windows.UI.Composition;
@@ -156,12 +157,13 @@ public sealed partial class MessageBubble
 
         try
         {
-            // The blurred look is the thumbnail, decoded tiny and stretched. With no thumbnail, the photo itself takes
-            // its place.
+            // The blurred look is the thumbnail, blurred and stretched. With no thumbnail, the photo itself takes its
+            // place.
             if (PhotoBlur.Background is null)
             {
                 byte[] small     = await media.GetAsync(part, thumbnail: true, CancellationToken.None);
-                ImageSource blur = await Avatar.ToImageAsync(small, BlurDecodeWidth) ?? throw new InvalidDataException();
+                byte[] blurred   = await BlurredImage.MakeAsync(small) ?? throw new InvalidDataException();
+                ImageSource blur = await Avatar.ToImageAsync(blurred, BlurredImage.LongSide) ?? throw new InvalidDataException();
                 if (load != _photoLoad)
                 {
                     return;

@@ -317,7 +317,7 @@
                         </local:LinkCardButton>
 
                         <!-- The photo fills the bubble from edge to edge, rounded to its corners. The thumbnail shows
-                             first, decoded tiny and stretched, so it looks blurred. Then the full image fades in over
+                             first, strongly blurred. Then the full image fades in over
                              it. The code sets the size from the dimensions of the photo before anything loads, so
                              nothing moves when it arrives. A click opens it in the photo viewer of the window, or tries
                              again after a failure. Its name is its caption, else "Photo". -->
@@ -469,7 +469,8 @@
                                 </Grid>
                             </Button>
 
-                            <!-- The note shows the download or the failure on a small plate at the bottom. -->
+                            <!-- The note shows the download, the wait for the phone or the failure on a small plate at
+                                 the bottom. The ring turns during the download and the wait. -->
                             <Border
                                 x:Name="VideoNoteBack"
                                 Margin="12"
@@ -480,11 +481,24 @@
                                 CornerRadius="4"
                                 IsHitTestVisible="False"
                                 Visibility="Collapsed">
-                                <TextBlock
-                                    x:Name="VideoNote"
-                                    Style="{StaticResource CaptionTextBlockStyle}"
-                                    TextAlignment="Center"
-                                    TextWrapping="Wrap" />
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <muxc:ProgressRing
+                                        x:Name="VideoNoteRing"
+                                        Width="14"
+                                        Height="14"
+                                        MinWidth="14"
+                                        MinHeight="14"
+                                        VerticalAlignment="Center"
+                                        AutomationProperties.AccessibilityView="Raw"
+                                        IsActive="False"
+                                        Visibility="Collapsed" />
+                                    <TextBlock
+                                        x:Name="VideoNote"
+                                        VerticalAlignment="Center"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        TextAlignment="Center"
+                                        TextWrapping="Wrap" />
+                                </StackPanel>
                             </Border>
                         </Grid>
 
