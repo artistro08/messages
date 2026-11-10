@@ -605,4 +605,21 @@ public sealed class MediaStoreTests
         Assert.AreEqual(1, made);
         Assert.IsFalse(Directory.Exists(Path.Combine(rig.Folder, "Frames")), "A frame not made from a downloaded video was kept.");
     }
+
+    /// <summary>
+    /// A received video with only its small preview picture shows the preview as its frame. The video itself is
+    /// pending, so playback does not use the preview as the video.
+    /// </summary>
+    [TestMethod]
+    public async Task Frame_InlinePreviewOfVideo_IsFrameNotVideo()
+    {
+        using var rig = new Rig();
+        var part      = Part(inline: [1, 2]) with { Kind = MessageKind.Video, Mime = "video/mp4", Size = 233_684_274 };
+        Task<byte[]> Extract(byte[] video, string mime) => throw new AssertFailedException("The preview went to the video decoder.");
+
+        Assert.IsTrue(part.HasInlinePreview);
+        CollectionAssert.AreEqual(new byte[] { 1, 2 }, await rig.Store.GetFrameAsync(part, Extract, Ct));
+        Assert.ThrowsExactly<MediaPendingException>(() => { _ = rig.Store.GetAsync(part, thumbnail: false, Ct); });
+        Assert.IsFalse((part with { Size = 2 }).HasInlinePreview, "A sent video with all its bytes inline is not a preview.");
+    }
 }

@@ -69,6 +69,12 @@ public sealed record ChatMessage(
     public MediaPart? Media { get; init; }
 
     /// <summary>
+    /// Gets the read line of the phone for my read message, such as "Read by Ann, Bob", or empty.
+    /// </summary>
+    /// <remarks>The phone writes the line in its own language. In a group chat it names who read the message.</remarks>
+    public string ReadBy { get; init; } = string.Empty;
+
+    /// <summary>
     /// Makes a message of mine that is on its way to the phone. It has no ID yet, and its status is sending.
     /// </summary>
     /// <param name="tmpId">The temporary ID that the send carries.</param>
@@ -139,6 +145,7 @@ public sealed record ChatMessage(
             IsRcs            = m.Type is not (1 or 2 or 3),
             EncryptionChange = ChatFormat.EncryptionOf(status),
             Media            = media,
+            ReadBy           = status == MessageStatusType.OutgoingDisplayed ? m.MessageStatus?.StatusText ?? string.Empty : string.Empty,
         };
     }
 

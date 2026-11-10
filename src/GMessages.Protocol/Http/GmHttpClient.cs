@@ -52,8 +52,10 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
     /// <summary>The timeout of the long-poll client. Go sets it with <c>WithGlobalTimeout(30 * time.Minute)</c>.</summary>
     public static readonly TimeSpan LongPollTimeout = TimeSpan.FromMinutes(30);
 
-    /// <summary>The largest media response body that the client reads. It is the 100 MiB LibGM file limit plus 4 MiB for the encryption overhead.</summary>
-    public const long MaxMediaBodyBytes = (100L + 4L) * 1024 * 1024;
+    /// <summary>The largest media response body that the client reads. It is 1 GiB plus 4 MiB for the encryption overhead.</summary>
+    /// <remarks>Phones send videos larger than the 100 MiB LibGM upload limit. A 128 MB video failed at the old limit.</remarks>
+    // ponytail: the whole body is in memory, 2 times during the decryption. Stream to a temp file if videos over 1 GiB come.
+    public const long MaxMediaBodyBytes = (1024L + 4L) * 1024 * 1024;
 
     /// <summary>The largest API response body that the client reads. 16 MiB is far more than any real page of conversations or messages.</summary>
     public const long MaxApiBodyBytes = 16L * 1024 * 1024;

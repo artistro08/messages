@@ -181,6 +181,9 @@ public static class ChatCopy
     public const string OpenInDefaultApp = "Open in default app";
     public const string VideoPlayFailed  = "Couldn't play this video.";
 
+    // The controller wrote this copy on 2026-11-09, after the photo note. The owner can edit it.
+    public const string VideoPending = "Waiting for the video from your phone…";
+
     // The owner named Open with on 2026-11-01. The ellipsis matches Save as, because a dialog follows.
     public const string OpenWith = "Open with…";
 
