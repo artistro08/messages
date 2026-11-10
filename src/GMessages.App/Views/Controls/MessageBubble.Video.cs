@@ -70,9 +70,16 @@ public sealed partial class MessageBubble
     private async void LoadVideoFrame(MediaPart part)
     {
         TestHooks.ShowState(VideoPlay, "Pending");
-        if (part.IsPending)
+
+        // A video with no file waits for the phone before anything loads, so a preview that does not decode still
+        // waits: the play button hides, and the note says so before any click.
+        if (part.IsPending || part.IsWaitingForFile)
         {
             ShowVideoWait(part);
+        }
+
+        if (part.IsPending)
+        {
             return;
         }
 
@@ -94,17 +101,11 @@ public sealed partial class MessageBubble
                 previewShown          = true;
             }
 
-            // The preview stays the frame when the video has no file yet or is too big to download for a frame. A video
-            // with no file waits for the phone: the play button hides, and the note says so before any click.
+            // The preview stays the frame when the video has no file yet or is too big to download for a frame.
             if (part.FrameIsPreview)
             {
                 if (ReferenceEquals(part, _videoPart))
                 {
-                    if (part.IsWaitingForFile)
-                    {
-                        ShowVideoWait(part);
-                    }
-
                     TestHooks.ShowState(VideoPlay, previewShown ? "Frame" : "NoFrame");
                 }
 

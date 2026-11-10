@@ -43,6 +43,23 @@ public sealed class MediaPartTests
     }
 
     /// <summary>
+    /// A part that waits for its file is not available 5 minutes after its send, but never sooner than 1 minute after
+    /// this device first saw it. A part with its file never counts as not available.
+    /// </summary>
+    [TestMethod]
+    public void UnavailableAt_SendOrFirstSeen()
+    {
+        var sent    = new DateTimeOffset(2026, 11, 9, 12, 0, 0, TimeSpan.Zero);
+        var waiting = Part(inline: new byte[828], size: 261_205);
+
+        Assert.AreEqual(sent + MediaPart.GiveUpAfter, waiting.UnavailableAt(sent, sent));
+        Assert.AreEqual(sent.AddHours(2) + MediaPart.SeenGrace, waiting.UnavailableAt(sent, sent.AddHours(2)), "A message that synced late gets the grace.");
+        Assert.AreEqual(sent + MediaPart.GiveUpAfter, Part().UnavailableAt(sent, sent), "A pending part waits too.");
+        Assert.IsNull(Part("m-1").UnavailableAt(sent, sent), "A part with its file is available.");
+        Assert.IsNull(Part(inline: new byte[10], size: 10).UnavailableAt(sent, sent), "Sent bytes are available.");
+    }
+
+    /// <summary>
     /// Only small inline data is the preview of a photo. A real photo inline, as in an MMS, shows even when its size
     /// says more.
     /// </summary>

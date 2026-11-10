@@ -98,6 +98,9 @@ public sealed partial class MediaStore : IDisposable
     // The IDs of the messages whose full-size image the store asked for.
     private readonly HashSet<string> _fullSizeAsked = [];
 
+    // When this device first saw each message that waits for its file. See FirstSeen.
+    private readonly Dictionary<string, DateTimeOffset> _firstSeen = [];
+
     // Clear increments the generation. The store does not cache a download that started before the clear.
     private int _generation;
 
@@ -527,6 +530,26 @@ public sealed partial class MediaStore : IDisposable
     }
 
     /// <summary>
+    /// Gives when this device first saw a message, for <see cref="MediaPart.UnavailableAt"/>. The first call for an ID
+    /// keeps <paramref name="now"/>. The store forgets the times at <see cref="Clear"/> and when the app quits.
+    /// </summary>
+    /// <param name="messageId">The message ID. An empty ID gives <paramref name="now"/> and keeps nothing.</param>
+    /// <param name="now">The time now.</param>
+    /// <returns>The first time.</returns>
+    public DateTimeOffset FirstSeen(string messageId, DateTimeOffset now)
+    {
+        if (string.IsNullOrEmpty(messageId))
+        {
+            return now;
+        }
+
+        lock (_lock)
+        {
+            return _firstSeen.TryAdd(messageId, now) ? now : _firstSeen[messageId];
+        }
+    }
+
+    /// <summary>
     /// Releases the token source and the frame gate. It does not empty the temp folder: <see cref="Clear"/> does that.
     /// </summary>
     public void Dispose()
@@ -576,6 +599,7 @@ public sealed partial class MediaStore : IDisposable
             _filesInFlight.Clear();
             _framesInFlight.Clear();
             _fullSizeAsked.Clear();
+            _firstSeen.Clear();
         }
 
         if (!Directory.Exists(_tempFolder))

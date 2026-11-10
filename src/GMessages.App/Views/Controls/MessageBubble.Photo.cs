@@ -82,30 +82,6 @@ public sealed partial class MessageBubble
         _ = LoadPhotoAsync(part, load, again: false);
     }
 
-    // Runs show when a part that the phone never sent counts as not available here: at once when MediaGiveUpAfter has
-    // passed since the message was sent, else when that time comes, if the part still shows. A part with a file, a
-    // thumbnail or its own sent bytes never runs it. The method returns at once in each case.
-    private async void WhenUnavailable(MediaPart part, Func<MediaPart?> shown, Action show)
-    {
-        if (!part.IsPending && !part.IsWaitingForFile)
-        {
-            return;
-        }
-
-        TimeSpan giveUp = TestHooks.ShortWait("media-give-up") ?? MediaGiveUpAfter;
-        TimeSpan left   = (Bubble?.SentAt ?? DateTimeOffset.MinValue) + giveUp - DateTimeOffset.Now;
-        if (left > TimeSpan.Zero)
-        {
-            await Task.Delay(left);
-            if (!ReferenceEquals(shown(), part))
-            {
-                return;
-            }
-        }
-
-        show();
-    }
-
     // Returns true when 2 parts hold the same media, so that nothing loads again. A status or reaction change makes a
     // new part with the same media. Inline bytes compare by reference, so 2 pending parts with 1 name still differ.
     private static bool SameMedia(MediaPart? a, MediaPart? b) =>
@@ -203,16 +179,12 @@ public sealed partial class MessageBubble
             // loads the photo again. When it does not come, the photo offers to try again.
             if (part.NeedsFullSize)
             {
-                // A photo with only a preview says that it waits, as a waiting video does. When the phone never sends
-                // it, it says that it is not available, and asks nothing.
+                // A photo with only a preview says that it waits, as a waiting video does. It still asks for its full
+                // size. When the phone never sends it, it says that it is not available.
                 if (part.IsWaitingForFile)
                 {
                     ShowPhotoNote(ChatCopy.PhotoPending, "Pending");
                     WhenUnavailable(part, () => _photoPart, ShowPhotoUnavailable);
-                    if (_photoUnavailable)
-                    {
-                        return;
-                    }
                 }
 
                 await bubble.RequestFullSizeAsync(media, again);
@@ -286,7 +258,8 @@ public sealed partial class MessageBubble
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            if (load != _photoLoad)
+            // A photo that is not available stopped its own wait for the full size. That is no failure.
+            if (load != _photoLoad || _photoUnavailable)
             {
                 return;
             }

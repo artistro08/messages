@@ -646,6 +646,23 @@ public sealed class MediaStoreTests
     }
 
     /// <summary>
+    /// The store keeps the first time that it saw each message, until a clear.
+    /// </summary>
+    [TestMethod]
+    public void FirstSeen_KeepsFirstUntilClear()
+    {
+        using var rig = new Rig();
+        var first     = new DateTimeOffset(2026, 11, 9, 12, 0, 0, TimeSpan.Zero);
+
+        Assert.AreEqual(first, rig.Store.FirstSeen("m-1", first));
+        Assert.AreEqual(first, rig.Store.FirstSeen("m-1", first.AddMinutes(3)));
+        Assert.AreEqual(first.AddMinutes(3), rig.Store.FirstSeen(string.Empty, first.AddMinutes(3)), "An empty ID keeps nothing.");
+
+        rig.Store.Clear();
+        Assert.AreEqual(first.AddMinutes(9), rig.Store.FirstSeen("m-1", first.AddMinutes(9)));
+    }
+
+    /// <summary>
     /// A photo that has only its small preview asks the phone for its full size, as a thumbnail-only photo does.
     /// </summary>
     [TestMethod]
