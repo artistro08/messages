@@ -162,7 +162,7 @@ public sealed partial class MediaStore : IDisposable
         (string id, byte[] key) = Source(part, thumbnail);
         if (id.Length == 0)
         {
-            // The preview picture of a video is not the video. The phone sends the media ID later.
+            // The preview picture of a photo or video is not its file. The phone sends the media ID later.
             if (!thumbnail && part.HasInlinePreview)
             {
                 throw new MediaPendingException();
@@ -274,7 +274,7 @@ public sealed partial class MediaStore : IDisposable
     /// <param name="ct">Cancels the wait. It does not cancel a download that another caller shares.</param>
     /// <returns>The full path of the file. Open it to read only, and do not move or delete it.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="part"/> is null.</exception>
-    /// <exception cref="MediaPendingException">The part has no file yet, or only the preview picture of a video.</exception>
+    /// <exception cref="MediaPendingException">The part has no file yet, or only the preview picture of a photo or video.</exception>
     /// <exception cref="MessagingUnavailableException">The phone is not connected.</exception>
     /// <exception cref="TimeoutException">The download took longer than <see cref="DownloadTimeout"/>.</exception>
     /// <exception cref="OperationCanceledException">
@@ -472,12 +472,13 @@ public sealed partial class MediaStore : IDisposable
     }
 
     /// <summary>
-    /// Asks the phone for the full-size image of a message that has only a thumbnail, once per message.
+    /// Asks the phone for the full-size image of a message that has only a thumbnail or a small preview picture, once
+    /// per message.
     /// </summary>
     /// <remarks>
     /// The phone answers with the message again, with its full media ID, which replaces the media part of the bubble.
-    /// The method asks nothing for a message that has its full file, has no thumbnail, or was asked for before. The
-    /// store forgets a failed request, so the person can try again.
+    /// The method asks nothing for a message that has its full file, has neither a thumbnail nor a preview, or was
+    /// asked for before. The store forgets a failed request, so the person can try again.
     /// </remarks>
     /// <param name="m">The message.</param>
     /// <param name="again">True to ask again when the photo never came and the person retries.</param>
@@ -488,7 +489,8 @@ public sealed partial class MediaStore : IDisposable
     {
         ArgumentNullException.ThrowIfNull(m);
 
-        if (m.Media is not { MediaId.Length: 0, ThumbnailId.Length: > 0 } media || m.Id.Length == 0)
+        // The request is for an image, so a video waits for its file instead.
+        if (m.Media is not { NeedsFullSize: true } media || m.Id.Length == 0)
         {
             return;
         }

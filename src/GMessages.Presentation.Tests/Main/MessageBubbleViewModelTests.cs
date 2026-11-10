@@ -300,6 +300,27 @@ public sealed class MessageBubbleViewModelTests
         Assert.AreEqual(string.Empty, new MessageBubbleViewModel(mine with { FromMe = false }, Group()).ReadBy);
     }
 
+    /// <summary>
+    /// The echo of a sent photo that carries only a small preview keeps the sent bytes, so the photo stays sharp and its
+    /// menu works. The echo with the file then replaces it.
+    /// </summary>
+    [TestMethod]
+    public void Update_PreviewEcho_KeepsSentBytes()
+    {
+        byte[] bytes   = new byte[100_000];
+        var sentPart   = new MediaPart(string.Empty, [], string.Empty, [], bytes, "a.jpg", bytes.Length, 400, 300, MessageKind.Photo, "image/jpeg");
+        ChatMessage m  = Message() with { Kind = MessageKind.Photo, Media = sentPart };
+        var bubble     = new MessageBubbleViewModel(m);
+
+        bubble.Update(m with { Media = sentPart with { InlineData = new byte[828], ActionMessageId = "a-1" } });
+        Assert.AreSame(bytes, bubble.Media!.InlineData);
+        Assert.AreEqual("a-1", bubble.Media.ActionMessageId);
+
+        MediaPart file = sentPart with { MediaId = "m-1", InlineData = [] };
+        bubble.Update(m with { Media = file });
+        Assert.AreEqual("m-1", bubble.Media!.MediaId);
+    }
+
     [TestMethod]
     public void IsGroupChat_FalseOneOnOneOrUnknown()
     {

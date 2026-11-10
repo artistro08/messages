@@ -1234,14 +1234,16 @@ public sealed partial class ChatPane : UserControl
         view.KeepShown(true);
 
         // Open on a photo or a video uses the viewer of the app. On a voice message or a file, Open launches an app,
-        // so it shows only for a type that is safe to launch.
-        bool canOpen = bubble.HasPhoto || bubble.HasVideo || bubble.CanOpenMedia;
+        // so it shows only for a type that is safe to launch. A photo or video that waits for its file has no file
+        // actions yet.
+        bool hasFile = bubble.HasMediaFile && !bubble.IsMediaWaiting;
+        bool canOpen = !bubble.IsMediaWaiting && (bubble.HasPhoto || bubble.HasVideo || bubble.CanOpenMedia);
 
         BubbleMenuCopy.Visibility     = bubble.HasCopyText ? Visibility.Visible : Visibility.Collapsed;
         BubbleMenuOpen.Visibility     = canOpen ? Visibility.Visible : Visibility.Collapsed;
-        BubbleMenuOpenWith.Visibility = bubble.HasMediaFile ? Visibility.Visible : Visibility.Collapsed;
-        BubbleMenuSaveAs.Visibility   = bubble.HasMediaFile ? Visibility.Visible : Visibility.Collapsed;
-        BubbleMenuDownload.Visibility = bubble.HasMediaFile ? Visibility.Visible : Visibility.Collapsed;
+        BubbleMenuOpenWith.Visibility = hasFile ? Visibility.Visible : Visibility.Collapsed;
+        BubbleMenuSaveAs.Visibility   = hasFile ? Visibility.Visible : Visibility.Collapsed;
+        BubbleMenuDownload.Visibility = hasFile ? Visibility.Visible : Visibility.Collapsed;
         BubbleMenuDelete.Visibility   = bubble.CanAct ? Visibility.Visible : Visibility.Collapsed;
         ShowMenuAt(BubbleMenu, anchor, at);
     }

@@ -626,6 +626,45 @@ public sealed class MediaStoreTests
     }
 
     /// <summary>
+    /// A photo whose inline data is shorter than its size, such as the 60 x 55 px echo of a sent photo, has only its
+    /// preview. The preview is its thumbnail, and the full photo is pending. A photo with all its bytes inline is not
+    /// a preview.
+    /// </summary>
+    [TestMethod]
+    public async Task Photo_InlinePreview_IsThumbnailNotPhoto()
+    {
+        using var rig  = new Rig();
+        byte[] preview = new byte[828];
+        var part       = Part(inline: preview) with { Size = 261_205 };
+
+        Assert.IsTrue(part.IsWaitingForFile);
+        CollectionAssert.AreEqual(preview, await rig.Store.GetAsync(part, thumbnail: true, Ct));
+        Assert.ThrowsExactly<MediaPendingException>(() => { _ = rig.Store.GetAsync(part, thumbnail: false, Ct); });
+        Assert.IsFalse((part with { Size = preview.Length }).HasInlinePreview, "A sent photo with all its bytes inline is not a preview.");
+        Assert.IsFalse((part with { Size = preview.Length * 2 }).HasInlinePreview, "A photo whose size differs a little from its bytes shows its bytes.");
+        Assert.IsFalse((part with { Size = 0 }).HasInlinePreview, "A photo of unknown size shows its inline data.");
+    }
+
+    /// <summary>
+    /// A photo that has only its small preview asks the phone for its full size, as a thumbnail-only photo does.
+    /// </summary>
+    [TestMethod]
+    public async Task FullSize_RequestedForPreviewOnlyPhoto()
+    {
+        using var rig   = new Rig();
+        MediaPart part  = Part(inline: new byte[828]) with { Size = 261_205, ActionMessageId = "a-1" };
+
+        await rig.Store.RequestFullSizeAsync(Message("m-1", part));
+
+        Assert.HasCount(1, rig.Client.FullSizeCalls);
+        Assert.AreEqual(("m-1", "a-1"), rig.Client.FullSizeCalls[0]);
+
+        // The request is for an image, so a preview-only video asks nothing.
+        await rig.Store.RequestFullSizeAsync(Message("m-2", part with { Kind = MessageKind.Video, InlineData = [0xFF, 0xD8, 0xFF, 0xE0] }));
+        Assert.HasCount(1, rig.Client.FullSizeCalls);
+    }
+
+    /// <summary>
     /// A video over <see cref="MediaPart.MaxFrameVideoBytes"/> with a preview picture shows the preview as its frame. The
     /// store does not download the video for it.
     /// </summary>
