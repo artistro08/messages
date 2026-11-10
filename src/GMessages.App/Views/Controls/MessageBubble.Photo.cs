@@ -87,17 +87,17 @@ public sealed partial class MessageBubble
             : a.MediaId == b.MediaId && a.ThumbnailId == b.ThumbnailId && a.Name == b.Name
               && (ReferenceEquals(a.InlineData, b.InlineData) || (a.InlineData.Length == 0 && b.InlineData.Length == 0));
 
-    // Returns true for the echo of an attachment sent from here. The shown part held the bytes. The echo has the media
-    // ID of the upload or only a thumbnail. The bytes go in the cache under that ID, so nothing downloads again. With
-    // only a thumbnail, the bytes keep showing.
+    // Returns true for the echo of an attachment sent from here, so the sent bytes keep showing. See
+    // MediaPart.KeepsShowingOver. An echo with the media ID of the upload gets the bytes in the cache under that ID, so
+    // nothing downloads again. The caller keeps its own part unless the echo has a media ID.
     private static bool KeepSentMedia(MediaPart? shown, MediaPart? echo)
     {
-        if (shown is not { InlineData.Length: > 0 } local || echo is not { InlineData.Length: 0 } || echo is { MediaId.Length: 0, ThumbnailId.Length: 0 })
+        if (shown is null || echo is null || !shown.KeepsShowingOver(echo))
         {
             return false;
         }
 
-        (Application.Current as App)?.Media?.Seed(echo.MediaId, local.InlineData);
+        (Application.Current as App)?.Media?.Seed(echo.MediaId, shown.InlineData);
         return true;
     }
 
@@ -172,10 +172,16 @@ public sealed partial class MessageBubble
                 TestHooks.ShowState(Photo, "Blurred");
             }
 
-            // Only the thumbnail came, so the bubble asks for the full size. When it does not come, the photo offers to
-            // try again.
-            if (part is { MediaId.Length: 0, ThumbnailId.Length: > 0 })
+            // Only the thumbnail or a small preview came, so the bubble asks for the full size. The echo with the file
+            // loads the photo again. When it does not come, the photo offers to try again.
+            if (part.NeedsFullSize)
             {
+                // A photo with only a preview says that it waits, as a waiting video does.
+                if (part.IsWaitingForFile)
+                {
+                    ShowPhotoNote(ChatCopy.PhotoPending, "Pending");
+                }
+
                 await bubble.RequestFullSizeAsync(media, again);
                 if (load != _photoLoad)
                 {
@@ -392,7 +398,11 @@ public sealed partial class MessageBubble
             return;
         }
 
-        ShowInViewer(part, photo);
+        // A photo that has only its preview has nothing sharp to show in the viewer yet.
+        if (!part.IsWaitingForFile)
+        {
+            ShowInViewer(part, photo);
+        }
     }
 
     // Shows the photo over the whole window with the name of the photo in the bubble. Focus returns to the part that it
