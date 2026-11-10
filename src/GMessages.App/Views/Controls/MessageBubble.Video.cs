@@ -57,8 +57,9 @@ public sealed partial class MessageBubble
         }
 
         FindName(nameof(Video));
-        VideoThumb.Background = null;
-        VideoPlay.Visibility  = Visibility.Visible;
+        VideoThumb.Background       = null;
+        VideoPlay.Visibility        = Visibility.Visible;
+        VideoFrame.IsHitTestVisible = true;
         ShowVideoNote(null, string.Empty);
         SizePhoto();
         LoadVideoFrame(part);
@@ -69,7 +70,13 @@ public sealed partial class MessageBubble
     private async void LoadVideoFrame(MediaPart part)
     {
         TestHooks.ShowState(VideoPlay, "Pending");
-        if (part.IsPending || (Application.Current as App)?.Media is not { } media)
+        if (part.IsPending)
+        {
+            ShowVideoWait(part);
+            return;
+        }
+
+        if ((Application.Current as App)?.Media is not { } media)
         {
             return;
         }
@@ -95,7 +102,6 @@ public sealed partial class MessageBubble
                 {
                     if (part.IsWaitingForFile)
                     {
-                        VideoPlay.Visibility = Visibility.Collapsed;
                         ShowVideoWait(part);
                     }
 
@@ -124,24 +130,15 @@ public sealed partial class MessageBubble
         }
     }
 
-    // A video that waits for its file says so with the ring. When VideoGiveUpAfter has passed since it was sent, it says
-    // that it is not available here, because the phone never sends it. A newer video switches when that time comes. The
-    // echo with the file loads the video again before that, and another message stops the wait.
-    private async void ShowVideoWait(MediaPart part)
+    // A video that waits for its file says so with the ring, with no play button and no press look. When the phone never
+    // sends it, it says that it is not available, in the middle. The echo with the file loads the video again before
+    // that.
+    private void ShowVideoWait(MediaPart part)
     {
-        TimeSpan giveUp = TestHooks.ShortWait("video-give-up") ?? VideoGiveUpAfter;
-        TimeSpan left   = (Bubble?.SentAt ?? DateTimeOffset.MinValue) + giveUp - DateTimeOffset.Now;
-        if (left > TimeSpan.Zero)
-        {
-            ShowVideoNote(ChatCopy.VideoPending, "Pending");
-            await Task.Delay(left);
-            if (!ReferenceEquals(part, _videoPart))
-            {
-                return;
-            }
-        }
-
-        ShowVideoNote(ChatCopy.VideoUnavailable, "Unavailable");
+        VideoPlay.Visibility        = Visibility.Collapsed;
+        VideoFrame.IsHitTestVisible = false;
+        ShowVideoNote(ChatCopy.VideoPending, "Pending");
+        WhenUnavailable(part, () => _videoPart, () => ShowVideoNote(ChatCopy.VideoUnavailable, "Unavailable"));
     }
 
     // Play stops any other video, then gets this video from memory or a download and plays it here with sound.
@@ -298,11 +295,13 @@ public sealed partial class MessageBubble
     // tests.
     private void ShowVideoNote(string? text, string state)
     {
-        bool busy                = state is "Downloading" or "Pending";
-        VideoNote.Text           = text ?? string.Empty;
-        VideoNoteBack.Visibility = text is null ? Visibility.Collapsed : Visibility.Visible;
-        VideoNoteRing.IsActive   = busy;
-        VideoNoteRing.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
+        // A video that is not available says so in the middle. The other notes sit at the bottom.
+        bool busy                       = state is "Downloading" or "Pending";
+        VideoNote.Text                  = text ?? string.Empty;
+        VideoNoteBack.Visibility        = text is null ? Visibility.Collapsed : Visibility.Visible;
+        VideoNoteBack.VerticalAlignment = state == "Unavailable" ? VerticalAlignment.Center : VerticalAlignment.Bottom;
+        VideoNoteRing.IsActive          = busy;
+        VideoNoteRing.Visibility        = busy ? Visibility.Visible : Visibility.Collapsed;
         TestHooks.ShowState(VideoFrame, state);
     }
 

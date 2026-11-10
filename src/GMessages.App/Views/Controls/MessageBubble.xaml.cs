@@ -183,10 +183,10 @@ public sealed partial class MessageBubble : UserControl
     // A thumbnail-only photo waits this long for the full size from the phone. Then it offers to try again.
     private static readonly TimeSpan FullSizeWait = TimeSpan.FromSeconds(30);
 
-    // A video that still has no file this long after it was sent never comes here, so the bubble says it is not
-    // available. The phone sent a 128 MB video in seconds; a 223 MB one never came.
+    // A photo, video, file or voice message that still has no file this long after it was sent never comes here, so the
+    // bubble says it is not available. The phone sent a 128 MB video in seconds; a 223 MB one never came.
     // ponytail: a time guess, the phone gives no "never" signal. Change it if a slow phone sends later.
-    private static readonly TimeSpan VideoGiveUpAfter = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan MediaGiveUpAfter = TimeSpan.FromMinutes(5);
 
     // The entrance of a new bubble is a fade over the normal control animation time of WinUI.
     private static readonly TimeSpan EntranceTime = TimeSpan.FromMilliseconds(250);
@@ -233,6 +233,7 @@ public sealed partial class MessageBubble : UserControl
     private MessageBubbleViewModel? _photoBubble;
     private int _photoLoad;
     private bool _photoFailed;
+    private bool _photoUnavailable;
 
     // The first field tells whether the full image is a moving GIF: an Image clipped on its composition visual. Else
     // the image is a still photo in a brush. The second field is the visual of the GIF image. The bubble takes it once
@@ -252,6 +253,7 @@ public sealed partial class MessageBubble : UserControl
     private MessageBubbleViewModel? _fileBubble;
     private bool _fileOpening;
     private bool _fileFailed;
+    private bool _fileUnavailable;
 
     // The voice message on show, its bubble and its player key, which the echo keeps. The load number goes up when
     // another message shows, so a late load or player update stops. Then come the load number whose audio fetch
