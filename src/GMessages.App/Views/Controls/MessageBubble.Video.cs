@@ -96,7 +96,7 @@ public sealed partial class MessageBubble
                     if (part.IsWaitingForFile)
                     {
                         VideoPlay.Visibility = Visibility.Collapsed;
-                        ShowVideoNote(ChatCopy.VideoPending, "Pending");
+                        ShowVideoWait(part);
                     }
 
                     TestHooks.ShowState(VideoPlay, previewShown ? "Frame" : "NoFrame");
@@ -122,6 +122,26 @@ public sealed partial class MessageBubble
                 TestHooks.ShowState(VideoPlay, "NoFrame");
             }
         }
+    }
+
+    // A video that waits for its file says so with the ring. When VideoGiveUpAfter has passed since it was sent, it says
+    // that it is not available here, because the phone never sends it. A newer video switches when that time comes. The
+    // echo with the file loads the video again before that, and another message stops the wait.
+    private async void ShowVideoWait(MediaPart part)
+    {
+        TimeSpan giveUp = TestHooks.ShortWait("video-give-up") ?? VideoGiveUpAfter;
+        TimeSpan left   = (Bubble?.SentAt ?? DateTimeOffset.MinValue) + giveUp - DateTimeOffset.Now;
+        if (left > TimeSpan.Zero)
+        {
+            ShowVideoNote(ChatCopy.VideoPending, "Pending");
+            await Task.Delay(left);
+            if (!ReferenceEquals(part, _videoPart))
+            {
+                return;
+            }
+        }
+
+        ShowVideoNote(ChatCopy.VideoUnavailable, "Unavailable");
     }
 
     // Play stops any other video, then gets this video from memory or a download and plays it here with sound.

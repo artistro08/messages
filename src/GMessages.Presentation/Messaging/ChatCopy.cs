@@ -184,6 +184,10 @@ public static class ChatCopy
     // The controller wrote this copy on 2026-11-09, after the photo note. The owner can edit it.
     public const string VideoPending = "Waiting for the video from your phone…";
 
+    // The controller wrote this copy on 2026-11-09 for a video that the phone never sends here, such as a very large
+    // one. The owner can edit it.
+    public const string VideoUnavailable = "This video isn't available here. Open it on your phone.";
+
     // The owner named Open with on 2026-11-01. The ellipsis matches Save as, because a dialog follows.
     public const string OpenWith = "Open with…";
 
