@@ -106,6 +106,43 @@ public sealed record MediaPart(
     public bool IsWaitingForFile => HasInlinePreview && MediaId.Length == 0 && ThumbnailId.Length == 0;
 
     /// <summary>
+    /// How long after its send a part that the phone has not sent counts as not available here. The phone sent a 128 MB
+    /// video in seconds; a 223 MB one never came.
+    /// </summary>
+    /// <remarks>ponytail: a time guess, the phone gives no "never" signal. Change it if a slow phone sends later.</remarks>
+    public static readonly TimeSpan GiveUpAfter = TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    /// How long after this device first sees the part it can still come, at least. A message that synced late, while
+    /// the app was closed, gets this time for its file, and a photo gets time to ask for its full size.
+    /// </summary>
+    public static readonly TimeSpan SeenGrace = TimeSpan.FromMinutes(1);
+
+    /// <summary>
+    /// Gives when the part counts as not available here, because the phone never sends its file, or null when it is
+    /// not waiting for a file.
+    /// </summary>
+    /// <remarks>
+    /// Only a pending part and a part with only its preview wait. The time is <see cref="GiveUpAfter"/> after the send,
+    /// but never before <see cref="SeenGrace"/> after this device first saw the part. The echo with the file makes a new
+    /// part, which does not wait.
+    /// </remarks>
+    /// <param name="sentAt">When the message was sent.</param>
+    /// <param name="firstSeen">When this device first saw the message.</param>
+    /// <returns>The time, or null.</returns>
+    public DateTimeOffset? UnavailableAt(DateTimeOffset sentAt, DateTimeOffset firstSeen)
+    {
+        if (!IsPending && !IsWaitingForFile)
+        {
+            return null;
+        }
+
+        DateTimeOffset bySend = sentAt + GiveUpAfter;
+        DateTimeOffset bySeen = firstSeen + SeenGrace;
+        return bySend > bySeen ? bySend : bySeen;
+    }
+
+    /// <summary>
     /// Gets whether the photo needs its full size from the phone: it has only a thumbnail or only a small preview.
     /// </summary>
     public bool NeedsFullSize => Kind == MessageKind.Photo && MediaId.Length == 0 && (ThumbnailId.Length > 0 || IsWaitingForFile);
