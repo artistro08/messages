@@ -278,6 +278,27 @@ public sealed class MessageBubbleViewModelTests
         Assert.AreEqual(Like + Laugh + " 3", bubble.ReactionsText);
     }
 
+    /// <summary>
+    /// My read message in a group shows who read it under the newest bubble and under a clicked bubble. A one-on-one
+    /// chat and a received message show no line.
+    /// </summary>
+    [TestMethod]
+    public void ReadBy_GroupOnly_NewestOrClicked()
+    {
+        ChatMessage mine = Message() with { ParticipantId = "me1", FromMe = true, Status = MessageStatusType.OutgoingDisplayed, IsRcs = true, ReadBy = "Read by Bo, Cy" };
+        var bubble       = new MessageBubbleViewModel(mine, Group());
+
+        Assert.AreEqual("Read by Bo, Cy", bubble.ReadBy);
+        Assert.IsFalse(bubble.ShowsReadBy, "An older bubble shows the line only after a click.");
+        bubble.ToggleTime();
+        Assert.IsTrue(bubble.ShowsReadBy);
+        bubble.SetStatus(isNewest: true, ChatCopy.Read, showsLock: false);
+        Assert.IsTrue(bubble.ShowsReadBy);
+
+        Assert.AreEqual(string.Empty, new MessageBubbleViewModel(mine, Conversation()).ReadBy);
+        Assert.AreEqual(string.Empty, new MessageBubbleViewModel(mine with { FromMe = false }, Group()).ReadBy);
+    }
+
     [TestMethod]
     public void IsGroupChat_FalseOneOnOneOrUnknown()
     {

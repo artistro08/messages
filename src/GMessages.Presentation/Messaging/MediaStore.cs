@@ -157,7 +157,8 @@ public sealed partial class MediaStore : IDisposable
         (string id, byte[] key) = Source(part, thumbnail);
         if (id.Length == 0)
         {
-            return Task.FromResult(part.InlineData);
+            // The preview picture of a video is not the video. The phone sends the media ID later.
+            return !thumbnail && part.HasInlinePreview ? throw new MediaPendingException() : Task.FromResult(part.InlineData);
         }
 
         lock (_lock)
@@ -215,6 +216,12 @@ public sealed partial class MediaStore : IDisposable
         if (part.ThumbnailId.Length > 0)
         {
             return GetAsync(part, thumbnail: true, ct);
+        }
+
+        // A received video with no media ID yet shows its preview picture.
+        if (part.MediaId.Length == 0 && part.HasInlinePreview)
+        {
+            return Task.FromResult(part.InlineData);
         }
 
         // This device sent the video, and it is not yet on the server. The store does not keep this frame.

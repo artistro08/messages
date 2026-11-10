@@ -201,20 +201,23 @@ public class GmClientMediaTests
     }
 
     /// <summary>
-    /// A streamed download with no declared length fails when it crosses the cap.
+    /// A streamed body with no declared length fails when it crosses the cap. A small cap keeps the test fast; the
+    /// download uses the same method with <see cref="GmHttpClient.MaxMediaBodyBytes"/>.
     /// </summary>
     [TestMethod]
-    public async Task Download_StreamedOverCap_Throws()
+    public async Task ReadCapped_StreamedOverCap_Throws()
     {
-        await using Rig rig = CreateRig((_, _) =>
-        {
-            HttpResponseMessage res = FakeHttpHandler.Response(HttpStatusCode.OK);
-            res.Content             = new StreamContent(new ZeroStream(GmHttpClient.MaxMediaBodyBytes + 1));
-            return res;
-        });
+        const long Cap    = 4 * 81920;
+        using var content = new StreamContent(new ZeroStream(Cap + 1));
 
-        await Assert.ThrowsExactlyAsync<InvalidDataException>(() => rig.Client.DownloadMediaAsync("media-1", MediaCrypto.GenerateKey(), CancellationToken.None));
+        await Assert.ThrowsExactlyAsync<InvalidDataException>(() => GmHttpClient.ReadCappedAsync(content, Cap, CancellationToken.None));
     }
+
+    /// <summary>
+    /// The cap lets in the large videos that phones send. A 128 MB video failed at the old 104 MiB cap.
+    /// </summary>
+    [TestMethod]
+    public void Cap_AllowsLargeVideos() => Assert.IsGreaterThan(250L * 1024 * 1024, GmHttpClient.MaxMediaBodyBytes);
 
     /// <summary>
     /// The client reads a body with a declared length into one array of exactly that size. It never reads past that length.

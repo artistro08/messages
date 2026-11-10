@@ -77,6 +77,13 @@ public sealed partial class MessageBubble
         int frameWidth = (int)Math.Ceiling(Video is { Width: > 0 } box ? box.Width : MaxBubbleWidth);
         try
         {
+            // The preview picture in the message shows at once. The real frame replaces it when it loads.
+            if (part.HasInlinePreview && await Avatar.ToImageAsync(part.InlineData, frameWidth) is { } preview && ReferenceEquals(part, _videoPart))
+            {
+                VideoThumb.Background = new ImageBrush { ImageSource = preview, Stretch = Stretch.UniformToFill };
+                _videoFrameImage      = preview;
+            }
+
             byte[] bytes      = await VideoStill.GetAsync(media, part);
             ImageSource image = await Avatar.ToImageAsync(bytes, frameWidth) ?? throw new InvalidDataException();
             if (ReferenceEquals(part, _videoPart))
@@ -155,7 +162,7 @@ public sealed partial class MessageBubble
 
             AppLog.MediaFailed(App.ShellLog, "video", Bubble?.Id ?? string.Empty, ex.GetType().Name);
             ReleaseVideo();
-            ShowVideoNote(ChatCopy.VideoPlayFailed, "Failed");
+            ShowVideoNote(ex is MediaPendingException ? ChatCopy.VideoPending : ChatCopy.VideoPlayFailed, ex is MediaPendingException ? "Pending" : "Failed");
         }
     }
 

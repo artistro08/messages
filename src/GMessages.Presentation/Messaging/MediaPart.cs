@@ -45,6 +45,15 @@ public sealed record MediaPart(
     public bool IsPending => MediaId.Length == 0 && ThumbnailId.Length == 0 && InlineData.Length == 0;
 
     /// <summary>
+    /// Gets whether <see cref="InlineData"/> is only a small preview picture of a video, not the video.
+    /// </summary>
+    /// <remarks>
+    /// A received video can carry a small JPEG in the message. A video that this device sent carries all its bytes, so
+    /// its inline data is as long as <see cref="Size"/>.
+    /// </remarks>
+    public bool HasInlinePreview => Kind == MessageKind.Video && InlineData.Length > 0 && InlineData.LongLength < Size;
+
+    /// <summary>
     /// Gets the ID of the message part that holds the media, or empty. A request for the full-size image names it.
     /// </summary>
     public string ActionMessageId { get; init; } = string.Empty;

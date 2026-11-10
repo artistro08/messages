@@ -1002,6 +1002,18 @@
                             Glyph="&#xE72E;"
                             ToolTipService.ToolTip="{x:Bind local:MessageBubble.EncryptedText}" />
                     </StackPanel>
+
+                    <!-- In a group chat, the line ReadBy.{id} of the phone names who read my message. It shows under
+                         the caption row of the newest bubble and under the time of a clicked bubble. -->
+                    <TextBlock
+                        x:Name="ReadByLine"
+                        x:Load="{x:Bind Bubble.ShowsReadBy, Mode=OneWay, FallbackValue=False}"
+                        AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('ReadBy.', Bubble.PartKey), Mode=OneWay}"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Style="{StaticResource CaptionTextBlockStyle}"
+                        Text="{x:Bind Bubble.ReadBy, Mode=OneWay, FallbackValue=''}"
+                        TextAlignment="Right"
+                        TextWrapping="Wrap" />
                 </StackPanel>
             </Grid>
         </StackPanel>

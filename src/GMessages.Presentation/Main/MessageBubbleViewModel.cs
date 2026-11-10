@@ -56,6 +56,8 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         (nameof(ShowsLock), b => b.ShowsLock),
         (nameof(ShowsSmsLabel), b => b.ShowsSmsLabel),
         (nameof(ShowsCaptionDot), b => b.ShowsCaptionDot),
+        (nameof(ReadBy), b => b.ReadBy),
+        (nameof(ShowsReadBy), b => b.ShowsReadBy),
         (nameof(ReactionsText), b => b.ReactionsText),
         (nameof(HasReactions), b => b.HasReactions),
         (nameof(MyReaction), b => b.MyReaction),
@@ -307,6 +309,17 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     /// lock follows it.
     /// </summary>
     public bool ShowsCaptionDot => StatusIcon != MessageStatusIcon.None || ShowsSmsLabel || ShowsLock;
+
+    /// <summary>
+    /// Gets the line of the phone that names who read my message in a group chat, such as "Read by Ann, Bob", or empty.
+    /// </summary>
+    public string ReadBy => IsGroupChat && FromMe ? _message?.ReadBy ?? string.Empty : string.Empty;
+
+    /// <summary>
+    /// Gets whether <see cref="ReadBy"/> shows under the bubble: under the caption row of the newest bubble, or under
+    /// the time of a clicked bubble.
+    /// </summary>
+    public bool ShowsReadBy => ReadBy.Length > 0 && !IsFailed && (ShowsStatusRow || IsTimeShown);
 
     /// <summary>Gets the reaction chip text, such as "👍😂 3", or empty.</summary>
     public string ReactionsText { get; private set; } = string.Empty;
