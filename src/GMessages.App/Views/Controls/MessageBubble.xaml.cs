@@ -183,6 +183,11 @@ public sealed partial class MessageBubble : UserControl
     // A thumbnail-only photo waits this long for the full size from the phone. Then it offers to try again.
     private static readonly TimeSpan FullSizeWait = TimeSpan.FromSeconds(30);
 
+    // A video that still has no file this long after it was sent never comes here, so the bubble says it is not
+    // available. The phone sent a 128 MB video in seconds; a 223 MB one never came.
+    // ponytail: a time guess, the phone gives no "never" signal. Change it if a slow phone sends later.
+    private static readonly TimeSpan VideoGiveUpAfter = TimeSpan.FromMinutes(5);
+
     // The entrance of a new bubble is a fade over the normal control animation time of WinUI.
     private static readonly TimeSpan EntranceTime = TimeSpan.FromMilliseconds(250);
 
