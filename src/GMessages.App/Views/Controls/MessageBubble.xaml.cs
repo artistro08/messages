@@ -88,9 +88,9 @@ namespace GMessages.App.Views.Controls;
 /// </para>
 /// <para>
 /// A thumbnail-only photo asks the phone for the full size, which arrives as an edit of the message. While the phone
-/// has not sent the photo, it reads "Waiting for the photo from your phone…". A failure or a full size that never comes
-/// reads "Couldn't load this photo.", and a click tries again. Else a click shows the photo in the photo viewer of the
-/// window. See <see cref="PhotoViewer"/>.
+/// has not sent the photo, it reads "Waiting for photo". A failure or a full size that never comes reads "Couldn't
+/// load this photo.", and a click tries again. Else a click shows the photo in the photo viewer of the window. See
+/// <see cref="PhotoViewer"/>.
 /// </para>
 /// <para>
 /// Open <c>Bubble.Open</c> in the menu also shows the photo in the viewer. Open with <c>Bubble.OpenWith</c> is on the

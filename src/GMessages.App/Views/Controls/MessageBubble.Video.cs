@@ -296,11 +296,13 @@ public sealed partial class MessageBubble
     // tests.
     private void ShowVideoNote(string? text, string state)
     {
-        // A video that is not available says so in the middle. The other notes sit at the bottom.
+        // A video with no play button, such as a wait for the phone or a video that is not available, shows the note in
+        // the middle. Else the note sits at the bottom, below the play button.
         bool busy                       = state is "Downloading" or "Pending";
+        bool centered                   = VideoPlay.Visibility == Visibility.Collapsed;
         VideoNote.Text                  = text ?? string.Empty;
         VideoNoteBack.Visibility        = text is null ? Visibility.Collapsed : Visibility.Visible;
-        VideoNoteBack.VerticalAlignment = state == "Unavailable" ? VerticalAlignment.Center : VerticalAlignment.Bottom;
+        VideoNoteBack.VerticalAlignment = centered ? VerticalAlignment.Center : VerticalAlignment.Bottom;
         VideoNoteRing.IsActive          = busy;
         VideoNoteRing.Visibility        = busy ? Visibility.Visible : Visibility.Collapsed;
         TestHooks.ShowState(VideoFrame, state);

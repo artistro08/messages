@@ -395,11 +395,14 @@ public sealed partial class MessageBubble
         ShowPhotoNote(ChatCopy.PhotoUnavailable, "Unavailable");
     }
 
-    // Shows the note over the photo for a wait or a failure, or no note.
+    // Shows the note over the photo for a wait or a failure, or no note. The ring turns during the wait.
     private void ShowPhotoNote(string? text, string state)
     {
+        bool busy                = state == "Pending";
         PhotoNote.Text           = text ?? string.Empty;
         PhotoNoteBack.Visibility = text is null ? Visibility.Collapsed : Visibility.Visible;
+        PhotoNoteRing.IsActive   = busy;
+        PhotoNoteRing.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
         TestHooks.ShowState(Photo, state);
     }
 
