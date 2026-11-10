@@ -22,6 +22,7 @@ internal static unsafe partial class WindowInterop
     public const uint WM_GETMINMAXINFO    = 0x0024;
     public const uint WM_WINDOWPOSCHANGED = 0x0047;
     public const uint WM_SETICON          = 0x0080;
+    public const uint WM_KEYDOWN          = 0x0100;
     public const uint WM_NCCALCSIZE       = 0x0083;
     public const uint WM_NCHITTEST        = 0x0084;
     public const uint WM_NCMOUSEMOVE      = 0x00A0;
@@ -37,6 +38,10 @@ internal static unsafe partial class WindowInterop
     public const uint WM_EXITSIZEMOVE     = 0x0232;
     public const uint WM_NCMOUSELEAVE     = 0x02A2;
     public const uint WM_DPICHANGED       = 0x02E0;
+
+    public const int  VK_ESCAPE    = 0x1B;
+    public const uint GA_ROOT      = 2;
+    public const uint GA_ROOTOWNER = 3;
 
     public const int HTCAPTION     = 2;
     public const int HTMINBUTTON   = 8;
@@ -225,6 +230,9 @@ internal static unsafe partial class WindowInterop
 
     [LibraryImport("user32.dll")]
     public static partial int GetMessageW(MSG* msg, nint hwnd, uint min, uint max);
+
+    [LibraryImport("user32.dll")]
+    public static partial nint GetAncestor(nint hwnd, uint flags);
 
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]

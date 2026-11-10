@@ -9,6 +9,7 @@ using GMessages.Presentation.Settings;
 using GMessages.Presentation.Shortcuts;
 using GMessages.App.Windowing;
 using Windows.System;
+using Windows.UI.Input;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Automation;
 using Windows.UI.Xaml.Automation.Peers;
@@ -102,6 +103,19 @@ public sealed partial class MainWindow : UserControl
         _window.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"));
         RestoreWindowBounds();
         _window.BoundsChanged += (_, _) => OnBoundsChanged();
+
+        // The back button of the mouse goes back, also over a button that takes the press.
+        RootGrid.AddHandler(PointerPressedEvent, new PointerEventHandler(OnRootPointerPressed), handledEventsToo: true);
+
+        // Escape closes the viewer also when the video player holds the keyboard focus of Windows.
+        _window.EscapePressed += (_, e) =>
+        {
+            if (PhotoViewer.IsOpen)
+            {
+                PhotoViewer.Close(animate: true);
+                e.Handled = true;
+            }
+        };
 
         ProfileArchived.Text    = ChatCopy.Archived;
         ProfileSpamBlocked.Text = ChatCopy.SpamAndBlocked;
@@ -757,6 +771,15 @@ public sealed partial class MainWindow : UserControl
     // AOT build can give back the child of a popup as a base type.
     private void OnRootPreviewKeyDown(object sender, KeyRoutedEventArgs e)
     {
+        // Alt + Left and the Back key of the keyboard go back, as in a browser. They also work in Settings.
+        bool backKey = e.Key == VirtualKey.GoBack
+            || (e.Key == VirtualKey.Left && UiHelpers.IsDown(VirtualKey.Menu) && !UiHelpers.IsDown(VirtualKey.Control) && !UiHelpers.IsDown(VirtualKey.Shift));
+        if (backKey)
+        {
+            e.Handled = GoBack();
+            return;
+        }
+
         // The photo viewer takes Escape, so the chat stays open. No shortcut runs under the viewer.
         if (PhotoViewer.IsOpen)
         {
@@ -769,9 +792,7 @@ public sealed partial class MainWindow : UserControl
             return;
         }
 
-        if (_chats is not { } chats || _settingsPage is not null
-            || VisualTreeHelper.GetOpenPopupsForXamlRoot(RootGrid.XamlRoot).Any(p => p.Child is null
-                || FrameworkElementAutomationPeer.CreatePeerForElement(p.Child)?.GetAutomationControlType() != AutomationControlType.ToolTip))
+        if (_chats is not { } chats || _settingsPage is not null || IsPopupOpen())
         {
             return;
         }
@@ -783,6 +804,45 @@ public sealed partial class MainWindow : UserControl
         {
             e.Handled = Run(chats, command);
         }
+    }
+
+    // A dialog or a menu is open. An open tooltip does not count.
+    private bool IsPopupOpen() =>
+        VisualTreeHelper.GetOpenPopupsForXamlRoot(RootGrid.XamlRoot).Any(p => p.Child is null
+            || FrameworkElementAutomationPeer.CreatePeerForElement(p.Child)?.GetAutomationControlType() != AutomationControlType.ToolTip);
+
+    // The back button of the mouse goes back, as in a browser.
+    private void OnRootPointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        if (e.GetCurrentPoint(RootGrid).Properties.PointerUpdateKind == PointerUpdateKind.XButton1Pressed && GoBack())
+        {
+            e.Handled = true;
+        }
+    }
+
+    // Goes back 1 step: the viewer closes, else the Back button of the title bar runs. Nothing happens while a dialog
+    // or a menu is open, so it closes first. Nothing happens when the title bar shows no Back button. True when it went
+    // back.
+    private bool GoBack()
+    {
+        if (IsPopupOpen())
+        {
+            return false;
+        }
+
+        if (PhotoViewer.IsOpen)
+        {
+            PhotoViewer.Close(animate: true);
+            return true;
+        }
+
+        if (!AppTitleBar.IsBackButtonVisible)
+        {
+            return false;
+        }
+
+        OnTitleBarBackRequested(this, EventArgs.Empty);
+        return true;
     }
 
     // The window runs Settings and Help. The chats run the other shortcuts.

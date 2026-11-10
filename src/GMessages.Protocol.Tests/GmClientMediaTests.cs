@@ -201,19 +201,46 @@ public class GmClientMediaTests
     }
 
     /// <summary>
-    /// A streamed download with no declared length fails when it crosses the cap.
+    /// A streamed body with no declared length fails when it crosses the cap. A small cap keeps the test fast; the
+    /// download uses the same method with <see cref="GmHttpClient.MaxMediaBodyBytes"/>.
     /// </summary>
     [TestMethod]
-    public async Task Download_StreamedOverCap_Throws()
+    public async Task ReadCapped_StreamedOverCap_Throws()
     {
-        await using Rig rig = CreateRig((_, _) =>
-        {
-            HttpResponseMessage res = FakeHttpHandler.Response(HttpStatusCode.OK);
-            res.Content             = new StreamContent(new ZeroStream(GmHttpClient.MaxMediaBodyBytes + 1));
-            return res;
-        });
+        const long Cap    = 4 * 81920;
+        using var content = new StreamContent(new ZeroStream(Cap + 1));
 
-        await Assert.ThrowsExactlyAsync<InvalidDataException>(() => rig.Client.DownloadMediaAsync("media-1", MediaCrypto.GenerateKey(), CancellationToken.None));
+        await Assert.ThrowsExactlyAsync<InvalidDataException>(() => GmHttpClient.ReadCappedAsync(content, Cap, CancellationToken.None));
+    }
+
+    /// <summary>
+    /// A download to a file streams the body through the decryption. The file holds the plain bytes, and the result is
+    /// its length. A refused download throws with its status.
+    /// </summary>
+    [TestMethod]
+    public async Task DownloadToFile_DecryptsBodyToFile()
+    {
+        byte[] key   = MediaCrypto.GenerateKey();
+        byte[] plain = new byte[100000];
+        Random.Shared.NextBytes(plain);
+        byte[] encrypted = MediaCrypto.Encrypt(plain, key);
+        string path      = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        await using Rig rig = CreateRig((_, _) => FakeHttpHandler.Response(HttpStatusCode.OK, "application/octet-stream", encrypted));
+
+        try
+        {
+            Assert.AreEqual(plain.LongLength, await rig.Client.DownloadMediaToFileAsync("media-9", key, path, CancellationToken.None));
+            CollectionAssert.AreEqual(plain, await File.ReadAllBytesAsync(path));
+            Assert.AreEqual("media-9", DownloadAttachmentRequest.Parser.ParseFrom(Convert.FromBase64String(rig.Handler.Requests[0].Headers["x-goog-download-metadata"])).Info.AttachmentID);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+
+        await using Rig refusing = CreateRig((_, _) => FakeHttpHandler.Response(HttpStatusCode.NotFound, "text/plain", "gone"u8.ToArray()));
+        GmRequestException refused = await Assert.ThrowsExactlyAsync<GmRequestException>(() => refusing.Client.DownloadMediaToFileAsync("media-1", key, path, CancellationToken.None));
+        Assert.AreEqual(404, refused.StatusCode);
     }
 
     /// <summary>

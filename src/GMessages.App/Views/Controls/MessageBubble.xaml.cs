@@ -84,8 +84,7 @@ namespace GMessages.App.Views.Controls;
 /// <para>
 /// A photo <c>Bubble.Photo.{id}</c> fills the bubble from edge to edge, with its caption under it. Its name is its
 /// caption or "Photo". Its size comes from the dimensions of the photo before anything loads, so the chat never jumps.
-/// Its thumbnail shows first, decoded tiny and stretched, so it looks blurred. A Composition blur needs Win2D, which
-/// this app does not carry. Then the full image fades in over it.
+/// Its thumbnail shows first, blurred by <see cref="Media.BlurredImage"/>. Then the full image fades in over it.
 /// </para>
 /// <para>
 /// A thumbnail-only photo asks the phone for the full size, which arrives as an edit of the message. While the phone
@@ -172,8 +171,6 @@ public sealed partial class MessageBubble : UserControl
     // The hover strip has 3 buttons of 32 px with 4 px on each side. Its slot in MessageBubble.xaml binds StripWidth.
     private const double HoverStripWidth = 104;
 
-    // For the blurred look, the thumbnail of a photo decodes this wide, then stretches to the size of the photo.
-    private const int BlurDecodeWidth = 24;
 
     // The thumbnail of the file card is a 40 px square in logical pixels. Logical pixels already include the display
     // scale.
@@ -185,6 +182,13 @@ public sealed partial class MessageBubble : UserControl
 
     // A thumbnail-only photo waits this long for the full size from the phone. Then it offers to try again.
     private static readonly TimeSpan FullSizeWait = TimeSpan.FromSeconds(30);
+
+    // A wait for "not available" stops at this length. A send time far in the future, from a wrong phone clock, then
+    // cannot crash Task.Delay, which refuses more than about 24 days.
+    private static readonly TimeSpan MaxUnavailableWait = TimeSpan.FromDays(1);
+
+    // Each new wait for "not available" ends the one before. A bubble shows 1 media part at a time.
+    private int _unavailableWatch;
 
     // The entrance of a new bubble is a fade over the normal control animation time of WinUI.
     private static readonly TimeSpan EntranceTime = TimeSpan.FromMilliseconds(250);
@@ -231,6 +235,7 @@ public sealed partial class MessageBubble : UserControl
     private MessageBubbleViewModel? _photoBubble;
     private int _photoLoad;
     private bool _photoFailed;
+    private bool _photoUnavailable;
 
     // The first field tells whether the full image is a moving GIF: an Image clipped on its composition visual. Else
     // the image is a still photo in a brush. The second field is the visual of the GIF image. The bubble takes it once
@@ -250,6 +255,7 @@ public sealed partial class MessageBubble : UserControl
     private MessageBubbleViewModel? _fileBubble;
     private bool _fileOpening;
     private bool _fileFailed;
+    private bool _fileUnavailable;
 
     // The voice message on show, its bubble and its player key, which the echo keeps. The load number goes up when
     // another message shows, so a late load or player update stops. Then come the load number whose audio fetch
@@ -1223,6 +1229,36 @@ public sealed partial class MessageBubble : UserControl
     // =========================================================================
     // MEDIA
     // =========================================================================
+
+    // Runs show when the part counts as not available here. See MediaPart.UnavailableAt. It runs at once when that time
+    // has passed, else when it comes, if the part still shows and no newer wait started. A part that does not wait for a
+    // file never runs it. The wait in a test run is the media-give-up hook, from now. The method returns at once.
+    private async void WhenUnavailable(MediaPart part, Func<MediaPart?> shown, Action show)
+    {
+        int watch = ++_unavailableWatch;
+        if (Bubble is not { } bubble || (Application.Current as App)?.Media is not { } media)
+        {
+            return;
+        }
+
+        DateTimeOffset now = DateTimeOffset.Now;
+        if (part.UnavailableAt(bubble.SentAt, media.FirstSeen(bubble.Id, now)) is not { } at)
+        {
+            return;
+        }
+
+        TimeSpan left = TestHooks.ShortWait("media-give-up") ?? at - now;
+        if (left > TimeSpan.Zero)
+        {
+            await Task.Delay(left < MaxUnavailableWait ? left : MaxUnavailableWait);
+            if (watch != _unavailableWatch || !ReferenceEquals(shown(), part))
+            {
+                return;
+            }
+        }
+
+        show();
+    }
 
     /// <summary>
     /// Shows the media of the message and loads only what changed. That is the preview card image, the photo, the file

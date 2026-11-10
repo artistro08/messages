@@ -56,6 +56,8 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         (nameof(ShowsLock), b => b.ShowsLock),
         (nameof(ShowsSmsLabel), b => b.ShowsSmsLabel),
         (nameof(ShowsCaptionDot), b => b.ShowsCaptionDot),
+        (nameof(ReadBy), b => b.ReadBy),
+        (nameof(ShowsReadBy), b => b.ShowsReadBy),
         (nameof(ReactionsText), b => b.ReactionsText),
         (nameof(HasReactions), b => b.HasReactions),
         (nameof(MyReaction), b => b.MyReaction),
@@ -82,6 +84,7 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         (nameof(HasVoice), b => b.HasVoice),
         (nameof(HasMediaFile), b => b.HasMediaFile),
         (nameof(CanOpenMedia), b => b.CanOpenMedia),
+        (nameof(IsMediaWaiting), b => b.IsMediaWaiting),
         (nameof(HasCopyText), b => b.HasCopyText),
         (nameof(IsLocalMedia), b => b.IsLocalMedia),
         (nameof(IsUploading), b => b.IsUploading),
@@ -308,6 +311,18 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     /// </summary>
     public bool ShowsCaptionDot => StatusIcon != MessageStatusIcon.None || ShowsSmsLabel || ShowsLock;
 
+    /// <summary>
+    /// Gets the line of the phone that names who read my message in a group chat, such as "Read by Ann, Bob", or empty.
+    /// A bare "Read" is empty, because the caption row already says it.
+    /// </summary>
+    public string ReadBy => IsGroupChat && FromMe && _message.ReadBy != ChatCopy.Read ? _message.ReadBy : string.Empty;
+
+    /// <summary>
+    /// Gets whether <see cref="ReadBy"/> shows under the bubble: under the caption row of the newest bubble, or under
+    /// the time of a clicked bubble.
+    /// </summary>
+    public bool ShowsReadBy => ReadBy.Length > 0 && !IsFailed && (ShowsStatusRow || IsTimeShown);
+
     /// <summary>Gets the reaction chip text, such as "👍😂 3", or empty.</summary>
     public string ReactionsText { get; private set; } = string.Empty;
 
@@ -416,6 +431,12 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     /// A program, script or installer never opens, so its menu has only Save as. See <see cref="MediaStore.CanOpen"/>.
     /// </remarks>
     public bool CanOpenMedia => HasMediaFile && Media is { } media && MediaStore.CanOpen(media.Name, media.Mime);
+
+    /// <summary>
+    /// Gets whether the photo or video has only its small preview and waits for its file. Its menu then has no Open,
+    /// Open with, Save as or Download.
+    /// </summary>
+    public bool IsMediaWaiting => Media is { IsWaitingForFile: true };
 
     /// <summary>
     /// Gets whether the bubble menu has Copy. A photo, video or file sent with no caption has no Copy, because its
@@ -843,7 +864,7 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         Preview       = Preview?.Url == LinkUrl ? Preview : null;
         _message      = m;
         Kind          = m.Kind;
-        Media         = KeepSize(m.Media, Media);
+        Media         = KeepSent(m.Media, Media) ?? KeepSize(m.Media, Media);
         HasPhoto      = m.Media is not null && m.Kind == MessageKind.Photo;
         HasVideo      = m.Media is not null && m.Kind == MessageKind.Video;
         HasFileCard   = m.Media is not null && m.Kind == MessageKind.File;
@@ -854,6 +875,15 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         // A photo, card or voice message shows only its caption under it, not the kind label.
         BodyText      = HasMediaFile && m.Text.Length == 0 ? string.Empty : BodyOf(Text, DisplayText, _link, Preview);
     }
+
+    // The echo of a photo sent from here can first carry only a small preview. The bubble then keeps the sent bytes, so
+    // the photo stays sharp and its menu works, until the echo with the file comes. The kept part takes the part ID of
+    // the echo. A video does not keep its bytes, which can be 100 MB; it waits for its file a few seconds. Null
+    // otherwise.
+    private static MediaPart? KeepSent(MediaPart? incoming, MediaPart? known) =>
+        incoming is { IsWaitingForFile: true, Kind: MessageKind.Photo } && known is { IsWholeInline: true }
+            ? known with { ActionMessageId = incoming.ActionMessageId }
+            : null;
 
     // An upload carries no dimensions, so its echo keeps the dimensions of the picked photo. Thus the sent photo keeps
     // its shape.

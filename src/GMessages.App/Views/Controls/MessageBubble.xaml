@@ -317,7 +317,7 @@
                         </local:LinkCardButton>
 
                         <!-- The photo fills the bubble from edge to edge, rounded to its corners. The thumbnail shows
-                             first, decoded tiny and stretched, so it looks blurred. Then the full image fades in over
+                             first, strongly blurred. Then the full image fades in over
                              it. The code sets the size from the dimensions of the photo before anything loads, so
                              nothing moves when it arrives. A click opens it in the photo viewer of the window, or tries
                              again after a failure. Its name is its caption, else "Photo". -->
@@ -469,7 +469,8 @@
                                 </Grid>
                             </Button>
 
-                            <!-- The note shows the download or the failure on a small plate at the bottom. -->
+                            <!-- The note shows the download, the wait for the phone or the failure on a small plate at
+                                 the bottom. The ring turns during the download and the wait. -->
                             <Border
                                 x:Name="VideoNoteBack"
                                 Margin="12"
@@ -480,11 +481,24 @@
                                 CornerRadius="4"
                                 IsHitTestVisible="False"
                                 Visibility="Collapsed">
-                                <TextBlock
-                                    x:Name="VideoNote"
-                                    Style="{StaticResource CaptionTextBlockStyle}"
-                                    TextAlignment="Center"
-                                    TextWrapping="Wrap" />
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <muxc:ProgressRing
+                                        x:Name="VideoNoteRing"
+                                        Width="14"
+                                        Height="14"
+                                        MinWidth="14"
+                                        MinHeight="14"
+                                        VerticalAlignment="Center"
+                                        AutomationProperties.AccessibilityView="Raw"
+                                        IsActive="False"
+                                        Visibility="Collapsed" />
+                                    <TextBlock
+                                        x:Name="VideoNote"
+                                        VerticalAlignment="Center"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        TextAlignment="Center"
+                                        TextWrapping="Wrap" />
+                                </StackPanel>
                             </Border>
                         </Grid>
 
@@ -831,7 +845,9 @@
 
                     <!-- The time is hidden until a click on the bubble. It has the lock on an encrypted RCS message.
                          The retry link takes its place when the send failed. -->
-                    <Grid x:Name="Footer">
+                    <!-- The time rows keep to the right when the read line under them is wider. A received bubble has no
+                         read line, so the captions are as wide as the time and nothing moves. -->
+                    <Grid x:Name="Footer" HorizontalAlignment="Right">
                         <StackPanel
                             Orientation="Horizontal"
                             Spacing="4"
@@ -882,6 +898,7 @@
                     <StackPanel
                         x:Name="StatusRow"
                         x:Load="{x:Bind Bubble.ShowsStatusRow, Mode=OneWay, FallbackValue=False}"
+                        HorizontalAlignment="Right"
                         Orientation="Horizontal"
                         Spacing="4">
                         <TextBlock
@@ -1002,6 +1019,18 @@
                             Glyph="&#xE72E;"
                             ToolTipService.ToolTip="{x:Bind local:MessageBubble.EncryptedText}" />
                     </StackPanel>
+
+                    <!-- In a group chat, the line ReadBy.{id} of the phone names who read my message. It shows under
+                         the caption row of the newest bubble and under the time of a clicked bubble. -->
+                    <TextBlock
+                        x:Name="ReadByLine"
+                        x:Load="{x:Bind Bubble.ShowsReadBy, Mode=OneWay, FallbackValue=False}"
+                        AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('ReadBy.', Bubble.PartKey), Mode=OneWay}"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Style="{StaticResource CaptionTextBlockStyle}"
+                        Text="{x:Bind Bubble.ReadBy, Mode=OneWay, FallbackValue=''}"
+                        TextAlignment="Right"
+                        TextWrapping="Wrap" />
                 </StackPanel>
             </Grid>
         </StackPanel>

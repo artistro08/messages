@@ -59,6 +59,29 @@ public class MediaCryptoTests
     }
 
     /// <summary>
+    /// The stream decryption gives the same bytes as <see cref="MediaCrypto.Decrypt"/> at each size, also at the chunk
+    /// limits. A changed byte fails, as a changed last chunk would.
+    /// </summary>
+    [TestMethod]
+    public async Task DecryptAsync_MatchesDecrypt()
+    {
+        byte[] key = MediaCrypto.GenerateKey();
+
+        foreach (int n in new[] { 0, 1, PlainChunk - 1, PlainChunk, PlainChunk + 1, 100000, 3 * PlainChunk })
+        {
+            byte[] encrypted = MediaCrypto.Encrypt(RandomBytes(n), key);
+            using var output = new MemoryStream();
+            await MediaCrypto.DecryptAsync(new MemoryStream(encrypted), output, key, CancellationToken.None);
+
+            CollectionAssert.AreEqual(MediaCrypto.Decrypt(encrypted, key), output.ToArray(), $"size {n}");
+        }
+
+        byte[] changed = MediaCrypto.Encrypt(RandomBytes(PlainChunk + 1), key);
+        changed[^1]   ^= 1;
+        await Assert.ThrowsAsync<CryptographicException>(() => MediaCrypto.DecryptAsync(new MemoryStream(changed), Stream.Null, key, CancellationToken.None));
+    }
+
+    /// <summary>
     /// A file that the test builds by hand in the Go way decrypts. It has 3 chunks and the Go AAD.
     /// </summary>
     [TestMethod]

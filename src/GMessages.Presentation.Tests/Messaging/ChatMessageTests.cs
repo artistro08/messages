@@ -38,6 +38,21 @@ public sealed class ChatMessageTests
         Assert.AreEqual(hidden, ChatFormat.IsHiddenLine(m));
     }
 
+    /// <summary>
+    /// A read message keeps the read line of the phone as it is. Any other status keeps no line.
+    /// </summary>
+    [TestMethod]
+    public void From_ReadBy_OnlyWhenRead()
+    {
+        Message read      = Make(MessageStatusType.OutgoingDisplayed, Text("hi"));
+        Message delivered = Make(MessageStatusType.OutgoingDelivered, Text("hi"));
+        read.MessageStatus.StatusText      = "Read by Ann, Bob";
+        delivered.MessageStatus.StatusText = "Delivered";
+
+        Assert.AreEqual("Read by Ann, Bob", ChatMessage.From(read).ReadBy);
+        Assert.AreEqual(string.Empty, ChatMessage.From(delivered).ReadBy);
+    }
+
     [TestMethod]
     public void From_Text()
     {

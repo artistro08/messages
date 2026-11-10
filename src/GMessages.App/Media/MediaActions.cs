@@ -150,8 +150,9 @@ internal static class MediaActions
                 return;
             }
 
-            byte[] bytes = await media.GetAsync(part, thumbnail: false, CancellationToken.None);
-            await FileIO.WriteBytesAsync(file, bytes);
+            // The copy goes from the kept file, so a big video is never whole in memory.
+            StorageFile source = await StorageFile.GetFileFromPathAsync(await media.GetFileAsync(part, CancellationToken.None));
+            await source.CopyAndReplaceAsync(file);
             if (file.Path.Length > 0)
             {
                 media.MarkFromInternet(file.Path);

@@ -56,6 +56,9 @@ public interface IMessagingClient
     /// <summary>Downloads and decrypts an attachment.</summary>
     Task<byte[]> DownloadMediaAsync(string mediaId, ReadOnlyMemory<byte> key, CancellationToken ct);
 
+    /// <summary>Downloads and decrypts an attachment to a file. The result is its length, or 0 while it is not ready.</summary>
+    Task<long> DownloadMediaToFileAsync(string mediaId, ReadOnlyMemory<byte> key, string path, CancellationToken ct);
+
     /// <summary>Asks the phone for the full-size version of an image that arrived as a thumbnail only.</summary>
     Task GetFullSizeImageAsync(string messageId, string actionMessageId, CancellationToken ct);
 }

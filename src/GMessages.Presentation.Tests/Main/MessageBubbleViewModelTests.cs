@@ -278,6 +278,49 @@ public sealed class MessageBubbleViewModelTests
         Assert.AreEqual(Like + Laugh + " 3", bubble.ReactionsText);
     }
 
+    /// <summary>
+    /// My read message in a group shows who read it under the newest bubble and under a clicked bubble. A one-on-one
+    /// chat and a received message show no line.
+    /// </summary>
+    [TestMethod]
+    public void ReadBy_GroupOnly_NewestOrClicked()
+    {
+        ChatMessage mine = Message() with { ParticipantId = "me1", FromMe = true, Status = MessageStatusType.OutgoingDisplayed, IsRcs = true, ReadBy = "Read by Bo, Cy" };
+        var bubble       = new MessageBubbleViewModel(mine, Group());
+
+        Assert.AreEqual("Read by Bo, Cy", bubble.ReadBy);
+        Assert.IsFalse(bubble.ShowsReadBy, "An older bubble shows the line only after a click.");
+        bubble.ToggleTime();
+        Assert.IsTrue(bubble.ShowsReadBy);
+        bubble.SetStatus(isNewest: true, ChatCopy.Read, showsLock: false);
+        Assert.IsTrue(bubble.ShowsReadBy);
+
+        Assert.AreEqual(string.Empty, new MessageBubbleViewModel(mine, Conversation()).ReadBy);
+        Assert.AreEqual(string.Empty, new MessageBubbleViewModel(mine with { ReadBy = ChatCopy.Read }, Group()).ReadBy, "A bare Read shows once, in the caption row.");
+        Assert.AreEqual(string.Empty, new MessageBubbleViewModel(mine with { FromMe = false }, Group()).ReadBy);
+    }
+
+    /// <summary>
+    /// The echo of a sent photo that carries only a small preview keeps the sent bytes, so the photo stays sharp and its
+    /// menu works. The echo with the file then replaces it.
+    /// </summary>
+    [TestMethod]
+    public void Update_PreviewEcho_KeepsSentBytes()
+    {
+        byte[] bytes   = new byte[100_000];
+        var sentPart   = new MediaPart(string.Empty, [], string.Empty, [], bytes, "a.jpg", bytes.Length, 400, 300, MessageKind.Photo, "image/jpeg");
+        ChatMessage m  = Message() with { Kind = MessageKind.Photo, Media = sentPart };
+        var bubble     = new MessageBubbleViewModel(m);
+
+        bubble.Update(m with { Media = sentPart with { InlineData = new byte[828], ActionMessageId = "a-1" } });
+        Assert.AreSame(bytes, bubble.Media!.InlineData);
+        Assert.AreEqual("a-1", bubble.Media.ActionMessageId);
+
+        MediaPart file = sentPart with { MediaId = "m-1", InlineData = [] };
+        bubble.Update(m with { Media = file });
+        Assert.AreEqual("m-1", bubble.Media!.MediaId);
+    }
+
     [TestMethod]
     public void IsGroupChat_FalseOneOnOneOrUnknown()
     {
