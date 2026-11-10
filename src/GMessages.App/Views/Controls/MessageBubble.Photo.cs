@@ -162,8 +162,7 @@ public sealed partial class MessageBubble
             if (PhotoBlur.Background is null)
             {
                 byte[] small     = await media.GetAsync(part, thumbnail: true, CancellationToken.None);
-                byte[] blurred   = await BlurredImage.MakeAsync(small) ?? throw new InvalidDataException();
-                ImageSource blur = await Avatar.ToImageAsync(blurred, BlurredImage.LongSide) ?? throw new InvalidDataException();
+                ImageSource blur = await BlurredImage.MakeImageAsync(small) ?? throw new InvalidDataException();
                 if (load != _photoLoad)
                 {
                     return;

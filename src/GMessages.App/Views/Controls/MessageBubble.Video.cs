@@ -80,8 +80,7 @@ public sealed partial class MessageBubble
         {
             // The preview picture in the message shows blurred at once. The real frame replaces it when it loads.
             bool previewShown = false;
-            if (part.HasInlinePreview && await BlurredImage.MakeAsync(part.InlineData) is { } blurred
-                && await Avatar.ToImageAsync(blurred, BlurredImage.LongSide) is { } preview && ReferenceEquals(part, _videoPart))
+            if (part.HasInlinePreview && await BlurredImage.MakeImageAsync(part.InlineData) is { } preview && ReferenceEquals(part, _videoPart))
             {
                 VideoThumb.Background = new ImageBrush { ImageSource = preview, Stretch = Stretch.UniformToFill };
                 _videoFrameImage      = preview;
