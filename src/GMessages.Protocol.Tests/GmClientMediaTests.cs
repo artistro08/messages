@@ -214,10 +214,34 @@ public class GmClientMediaTests
     }
 
     /// <summary>
-    /// The cap lets in the large videos that phones send. A 128 MB video failed at the old 104 MiB cap.
+    /// A download to a file streams the body through the decryption. The file holds the plain bytes, and the result is
+    /// its length. A refused download throws with its status.
     /// </summary>
     [TestMethod]
-    public void Cap_AllowsLargeVideos() => Assert.IsGreaterThan(250L * 1024 * 1024, GmHttpClient.MaxMediaBodyBytes);
+    public async Task DownloadToFile_DecryptsBodyToFile()
+    {
+        byte[] key   = MediaCrypto.GenerateKey();
+        byte[] plain = new byte[100000];
+        Random.Shared.NextBytes(plain);
+        byte[] encrypted = MediaCrypto.Encrypt(plain, key);
+        string path      = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        await using Rig rig = CreateRig((_, _) => FakeHttpHandler.Response(HttpStatusCode.OK, "application/octet-stream", encrypted));
+
+        try
+        {
+            Assert.AreEqual(plain.LongLength, await rig.Client.DownloadMediaToFileAsync("media-9", key, path, CancellationToken.None));
+            CollectionAssert.AreEqual(plain, await File.ReadAllBytesAsync(path));
+            Assert.AreEqual("media-9", DownloadAttachmentRequest.Parser.ParseFrom(Convert.FromBase64String(rig.Handler.Requests[0].Headers["x-goog-download-metadata"])).Info.AttachmentID);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+
+        await using Rig refusing = CreateRig((_, _) => FakeHttpHandler.Response(HttpStatusCode.NotFound, "text/plain", "gone"u8.ToArray()));
+        GmRequestException refused = await Assert.ThrowsExactlyAsync<GmRequestException>(() => refusing.Client.DownloadMediaToFileAsync("media-1", key, path, CancellationToken.None));
+        Assert.AreEqual(404, refused.StatusCode);
+    }
 
     /// <summary>
     /// The client reads a body with a declared length into one array of exactly that size. It never reads past that length.

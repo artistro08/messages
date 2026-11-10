@@ -296,13 +296,13 @@ public sealed partial class PhotoViewer : UserControl
                 throw new InvalidOperationException("No media store.");
             }
 
-            byte[] bytes = await media.GetAsync(part, thumbnail: false, CancellationToken.None);
+            string file = await media.GetFileAsync(part, CancellationToken.None);
             if (!ReferenceEquals(part, _part) || _closing)
             {
                 return;
             }
 
-            VideoPlayback video = new(XamlHost.Dispatcher, bytes, part.Mime, start, "PhotoViewer.Video", name);
+            VideoPlayback video = new(XamlHost.Dispatcher, file, part.Mime, start, "PhotoViewer.Video", name);
             _video              = video;
             VideoHost.Children.Add(video.Element);
             video.Player.MediaOpened += (_, _) => XamlHost.Dispatcher.TryEnqueue(() => FitVideo(video));

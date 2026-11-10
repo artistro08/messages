@@ -39,6 +39,10 @@ internal static unsafe partial class WindowInterop
     public const uint WM_NCMOUSELEAVE     = 0x02A2;
     public const uint WM_DPICHANGED       = 0x02E0;
 
+    public const int  VK_ESCAPE    = 0x1B;
+    public const uint GA_ROOT      = 2;
+    public const uint GA_ROOTOWNER = 3;
+
     public const int HTCAPTION     = 2;
     public const int HTMINBUTTON   = 8;
     public const int HTMAXBUTTON   = 9;
@@ -226,9 +230,6 @@ internal static unsafe partial class WindowInterop
 
     [LibraryImport("user32.dll")]
     public static partial int GetMessageW(MSG* msg, nint hwnd, uint min, uint max);
-
-    public const int  VK_ESCAPE    = 0x1B;
-    public const uint GA_ROOTOWNER = 3;
 
     [LibraryImport("user32.dll")]
     public static partial nint GetAncestor(nint hwnd, uint flags);

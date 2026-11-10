@@ -20,6 +20,9 @@ internal static class BlurredImage
     // The radius of each box blur, in pixels of the small picture.
     private const int Radius = 3;
 
+    // The blurred picture of each image, while its bytes live. A bubble that scrolls back into view then blurs nothing.
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<byte[], byte[]> Made = [];
+
     /// <summary>
     /// Makes the blurred picture as PNG bytes.
     /// </summary>
@@ -28,6 +31,11 @@ internal static class BlurredImage
     public static async Task<byte[]?> MakeAsync(byte[] image)
     {
         ArgumentNullException.ThrowIfNull(image);
+
+        if (Made.TryGetValue(image, out byte[]? made))
+        {
+            return made;
+        }
 
         try
         {
@@ -62,7 +70,9 @@ internal static class BlurredImage
             using var copy = new MemoryStream();
             output.Seek(0);
             await output.AsStreamForRead().CopyToAsync(copy);
-            return copy.ToArray();
+            byte[] png = copy.ToArray();
+            Made.AddOrUpdate(image, png);
+            return png;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {

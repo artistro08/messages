@@ -19,14 +19,15 @@ using WinRT;
 namespace GMessages.App.Media;
 
 /// <summary>
-/// Plays 1 video from memory: a <see cref="MediaPlayer"/> over the decrypted bytes, shown in a
+/// Plays 1 video from its file: a <see cref="MediaPlayer"/> over the decrypted file, shown in a
 /// <see cref="MediaPlayerElement"/> with the transport controls of Windows.
 /// </summary>
 /// <remarks>
 /// <para>
-/// The class makes its player in the way that <see cref="VoicePlayer"/> does. The bytes play from memory, never from
-/// disk. They play as media, because a communications stream goes to the default communications device. That device is
-/// often not the speakers. A test run plays muted.
+/// The class makes its player in the way that <see cref="VoicePlayer"/> does. The file is the decrypted file in the
+/// private temp folder, from <see cref="Presentation.Messaging.MediaStore.GetFileAsync"/>. Thus a big video is never
+/// whole in memory. It plays as media, because a communications stream goes to the default communications device. That
+/// device is often not the speakers. A test run plays muted.
 /// </para>
 /// <para>
 /// The command manager stays on. With it off, the play button of the Windows controls never played a paused video.
@@ -35,7 +36,7 @@ namespace GMessages.App.Media;
 /// </para>
 /// <para>
 /// The owner puts <see cref="Element"/> in a panel. Before <see cref="Dispose"/>, the owner must take it out of the
-/// panel. The dispose stops the sound and releases the player and the stream of the bytes. A test run puts the player
+/// panel. The dispose stops the sound and releases the player and the stream of the file. A test run puts the player
 /// state in the item status of the element, such as <c>Playing</c> or <c>Paused</c>. The test run also notes the state
 /// and the audio category in <c>video-player.txt</c>, and a failure in <c>video-failed.txt</c>.
 /// </para>
@@ -83,7 +84,7 @@ internal sealed class VideoPlayback : IDisposable
     /// Makes the player and its element, paused at the start position.
     /// </summary>
     /// <param name="queue">The queue of the UI thread, where state changes show.</param>
-    /// <param name="bytes">The bytes of the video file.</param>
+    /// <param name="path">The full path of the video file. The player reads it and lets others delete it.</param>
     /// <param name="mime">The MIME type of the video.</param>
     /// <param name="start">Where to start.</param>
     /// <param name="automationId">The AutomationId of the element.</param>
@@ -92,13 +93,14 @@ internal sealed class VideoPlayback : IDisposable
     /// True to give the frames to the owner through <see cref="Frames"/>, and the element then does not draw them. The
     /// bubble uses this, because the own picture of the player ignores rounded corners. See <see cref="SizeFrames"/>.
     /// </param>
-    public VideoPlayback(DispatcherQueue queue, byte[] bytes, string mime, TimeSpan start, string automationId, string name, bool drawFrames = false)
+    public VideoPlayback(DispatcherQueue queue, string path, string mime, TimeSpan start, string automationId, string name, bool drawFrames = false)
     {
         ArgumentNullException.ThrowIfNull(queue);
-        ArgumentNullException.ThrowIfNull(bytes);
+        ArgumentNullException.ThrowIfNull(path);
 
+        // A clear at sign-out can delete the file while it plays. The open handle keeps the bytes until the dispose.
         _queue  = queue;
-        _stream = new MemoryStream(bytes, writable: false).AsRandomAccessStream();
+        _stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete).AsRandomAccessStream();
         _source = MediaSource.CreateFromStream(_stream, mime);
         Player  = new MediaPlayer
         {
@@ -208,7 +210,7 @@ internal sealed class VideoPlayback : IDisposable
     public bool IsPlaying => !_disposed && Player.PlaybackSession.PlaybackState is MediaPlaybackState.Playing or MediaPlaybackState.Opening or MediaPlaybackState.Buffering;
 
     /// <summary>
-    /// Stops the video and releases the player and the bytes. Take <see cref="Element"/> out of its panel first.
+    /// Stops the video and releases the player and the file. Take <see cref="Element"/> out of its panel first.
     /// </summary>
     public void Dispose()
     {

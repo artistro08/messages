@@ -312,8 +312,9 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
 
     /// <summary>
     /// Gets the line of the phone that names who read my message in a group chat, such as "Read by Ann, Bob", or empty.
+    /// A bare "Read" is empty, because the caption row already says it.
     /// </summary>
-    public string ReadBy => IsGroupChat && FromMe ? _message?.ReadBy ?? string.Empty : string.Empty;
+    public string ReadBy => IsGroupChat && FromMe && _message.ReadBy != ChatCopy.Read ? _message.ReadBy : string.Empty;
 
     /// <summary>
     /// Gets whether <see cref="ReadBy"/> shows under the bubble: under the caption row of the newest bubble, or under

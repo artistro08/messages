@@ -147,6 +147,77 @@ public static class MediaCrypto
         return output;
     }
 
+    /// <summary>
+    /// Decrypts media from a stream to a stream, 1 chunk at a time, so a big video is never whole in memory.
+    /// </summary>
+    /// <remarks>
+    /// The output is byte-for-byte that of <see cref="Decrypt"/>. The method reads 1 chunk ahead, because only the end of
+    /// the data tells which chunk is the last. Empty input gives empty output. A key that is not 32 bytes copies the
+    /// data unchanged, as <see cref="Decrypt"/> does.
+    /// </remarks>
+    /// <param name="input">The encrypted file.</param>
+    /// <param name="output">Gets the media bytes.</param>
+    /// <param name="key">The 32-byte key from the message's <c>MediaContent</c>.</param>
+    /// <param name="ct">Cancels the read and the write.</param>
+    /// <returns>A task that ends when all the data is decrypted.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="input"/> or <paramref name="output"/> is null.</exception>
+    /// <exception cref="CryptographicException">The header is bad, a chunk is truncated, or a tag does not match.</exception>
+    public static async Task DecryptAsync(Stream input, Stream output, ReadOnlyMemory<byte> key, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        ArgumentNullException.ThrowIfNull(output);
+
+        byte[] header = new byte[HeaderSize];
+        int read      = await input.ReadAtLeastAsync(header, HeaderSize, throwOnEndOfStream: false, ct).ConfigureAwait(false);
+        if (read == 0)
+        {
+            return;
+        }
+
+        if (key.Length != KeySize)
+        {
+            await output.WriteAsync(header.AsMemory(0, read), ct).ConfigureAwait(false);
+            await input.CopyToAsync(output, ct).ConfigureAwait(false);
+            return;
+        }
+
+        if (read < HeaderSize || header[0] != 0)
+        {
+            throw new CryptographicException("Invalid media header signature.");
+        }
+
+        if (header[1] > BitOperations.Log2(MaxRawChunkSize))
+        {
+            throw new CryptographicException("Media chunk size too large.");
+        }
+
+        int rawChunk   = 1 << header[1];
+        byte[] current = new byte[rawChunk];
+        byte[] next    = new byte[rawChunk];
+        byte[] plain   = new byte[rawChunk];
+        byte[] aad     = new byte[5];
+        using var gcm  = new AesGcm(key.Span, TagSize);
+
+        int length = await input.ReadAtLeastAsync(current, rawChunk, throwOnEndOfStream: false, ct).ConfigureAwait(false);
+        for (uint index = 0; length > 0; index++)
+        {
+            // A short chunk is the end of the data. A full chunk is the last one only when no data follows it.
+            int nextLength = length == rawChunk ? await input.ReadAtLeastAsync(next, rawChunk, throwOnEndOfStream: false, ct).ConfigureAwait(false) : 0;
+            if (length < ChunkOverhead)
+            {
+                throw new CryptographicException("Media chunk is truncated.");
+            }
+
+            int plainLength = length - ChunkOverhead;
+            WriteAad(aad, index, nextLength == 0);
+            gcm.Decrypt(current.AsSpan(0, NonceSize), current.AsSpan(NonceSize, plainLength), current.AsSpan(length - TagSize, TagSize), plain.AsSpan(0, plainLength), aad);
+            await output.WriteAsync(plain.AsMemory(0, plainLength), ct).ConfigureAwait(false);
+
+            (current, next) = (next, current);
+            length          = nextLength;
+        }
+    }
+
     // This method ports calculateAAD. The AAD is [isLast, big-endian uint32 index].
     private static void WriteAad(Span<byte> aad, uint index, bool isLast)
     {
