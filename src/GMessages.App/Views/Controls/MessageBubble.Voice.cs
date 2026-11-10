@@ -46,11 +46,20 @@ public sealed partial class MessageBubble
         }
 
         FindName(nameof(Voice));
-        VoiceLength.Text = string.Empty;
+        VoiceLength.Text       = string.Empty;
+        Voice.IsHitTestVisible = true;
         VoiceBars.Show(null);
         VoiceBars.Length = TimeSpan.Zero;
         ShowVoicePlaying(false, 0);
         FetchVoice(fetch);
+
+        // A voice message that the phone never sends says so in place of its length, and takes no click.
+        WhenUnavailable(part, () => _voicePart, () =>
+        {
+            Voice.IsHitTestVisible = false;
+            VoiceLength.Text       = ChatCopy.VoiceUnavailable;
+            TestHooks.ShowState(VoiceLength, "Unavailable");
+        });
     }
 
     // Reads the audio of the shown message for its waveform and length, once for each shown message. The method keeps
