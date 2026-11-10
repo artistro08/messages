@@ -57,7 +57,9 @@ public sealed partial class MessageBubble
         }
 
         FindName(nameof(Video));
-        VideoThumb.Background = null;
+        VideoThumb.Background       = null;
+        VideoPlay.Visibility        = Visibility.Visible;
+        VideoFrame.IsHitTestVisible = true;
         ShowVideoNote(null, string.Empty);
         SizePhoto();
         LoadVideoFrame(part);
@@ -68,7 +70,20 @@ public sealed partial class MessageBubble
     private async void LoadVideoFrame(MediaPart part)
     {
         TestHooks.ShowState(VideoPlay, "Pending");
-        if (part.IsPending || (Application.Current as App)?.Media is not { } media)
+
+        // A video with no file waits for the phone before anything loads, so a preview that does not decode still
+        // waits: the play button hides, and the note says so before any click.
+        if (part.IsPending || part.IsWaitingForFile)
+        {
+            ShowVideoWait(part);
+        }
+
+        if (part.IsPending)
+        {
+            return;
+        }
+
+        if ((Application.Current as App)?.Media is not { } media)
         {
             return;
         }
@@ -77,6 +92,26 @@ public sealed partial class MessageBubble
         int frameWidth = (int)Math.Ceiling(Video is { Width: > 0 } box ? box.Width : MaxBubbleWidth);
         try
         {
+            // The preview picture in the message shows blurred at once. The real frame replaces it when it loads.
+            bool previewShown = false;
+            if (part.HasInlinePreview && await BlurredImage.MakeImageAsync(part.InlineData) is { } preview && ReferenceEquals(part, _videoPart))
+            {
+                VideoThumb.Background = new ImageBrush { ImageSource = preview, Stretch = Stretch.UniformToFill };
+                _videoFrameImage      = preview;
+                previewShown          = true;
+            }
+
+            // The preview stays the frame when the video has no file yet or is too big to download for a frame.
+            if (part.FrameIsPreview)
+            {
+                if (ReferenceEquals(part, _videoPart))
+                {
+                    TestHooks.ShowState(VideoPlay, previewShown ? "Frame" : "NoFrame");
+                }
+
+                return;
+            }
+
             byte[] bytes      = await VideoStill.GetAsync(media, part);
             ImageSource image = await Avatar.ToImageAsync(bytes, frameWidth) ?? throw new InvalidDataException();
             if (ReferenceEquals(part, _videoPart))
@@ -94,6 +129,17 @@ public sealed partial class MessageBubble
                 TestHooks.ShowState(VideoPlay, "NoFrame");
             }
         }
+    }
+
+    // A video that waits for its file says so with the ring, with no play button and no press look. When the phone never
+    // sends it, it says that it is not available, in the middle. The echo with the file loads the video again before
+    // that.
+    private void ShowVideoWait(MediaPart part)
+    {
+        VideoPlay.Visibility        = Visibility.Collapsed;
+        VideoFrame.IsHitTestVisible = false;
+        ShowVideoNote(ChatCopy.VideoPending, "Pending");
+        WhenUnavailable(part, () => _videoPart, () => ShowVideoNote(ChatCopy.VideoUnavailable, "Unavailable"));
     }
 
     // Play stops any other video, then gets this video from memory or a download and plays it here with sound.
@@ -118,14 +164,14 @@ public sealed partial class MessageBubble
         ShowVideoNote(ChatCopy.Downloading, "Downloading");
         try
         {
-            byte[] bytes = await media.GetAsync(part, thumbnail: false, CancellationToken.None);
+            string file = await media.GetFileAsync(part, CancellationToken.None);
             if (load != _videoLoad || !ReferenceEquals(s_playingVideo, this))
             {
                 return;
             }
 
             string id = PartIdOf("Video.Player.", Bubble?.PartKey ?? string.Empty);
-            _video         = new VideoPlayback(XamlHost.Dispatcher, bytes, part.Mime, start, id, Bubble?.VideoName ?? ChatCopy.Video, drawFrames: true);
+            _video         = new VideoPlayback(XamlHost.Dispatcher, file, part.Mime, start, id, Bubble?.VideoName ?? ChatCopy.Video, drawFrames: true);
             _video.Failed += OnVideoFailed;
 
             // The frames fit the box at the display scale and show as its rounded picture under the controls. See
@@ -155,7 +201,8 @@ public sealed partial class MessageBubble
 
             AppLog.MediaFailed(App.ShellLog, "video", Bubble?.Id ?? string.Empty, ex.GetType().Name);
             ReleaseVideo();
-            ShowVideoNote(ChatCopy.VideoPlayFailed, "Failed");
+            bool pending = ex is MediaPendingException;
+            ShowVideoNote(pending ? ChatCopy.VideoPending : ChatCopy.VideoPlayFailed, pending ? "Pending" : "Failed");
         }
     }
 
@@ -179,7 +226,8 @@ public sealed partial class MessageBubble
     // frame in the way that the clicked button had it. Thus a click brings no focus ring.
     private void OpenVideoInViewer(Control from)
     {
-        if (_videoPart is not { IsPending: false } part)
+        // A video that waits for the phone has nothing to show in the viewer.
+        if (_videoPart is not { IsPending: false, IsWaitingForFile: false } part)
         {
             return;
         }
@@ -248,8 +296,13 @@ public sealed partial class MessageBubble
     // tests.
     private void ShowVideoNote(string? text, string state)
     {
-        VideoNote.Text           = text ?? string.Empty;
-        VideoNoteBack.Visibility = text is null ? Visibility.Collapsed : Visibility.Visible;
+        // A video that is not available says so in the middle. The other notes sit at the bottom.
+        bool busy                       = state is "Downloading" or "Pending";
+        VideoNote.Text                  = text ?? string.Empty;
+        VideoNoteBack.Visibility        = text is null ? Visibility.Collapsed : Visibility.Visible;
+        VideoNoteBack.VerticalAlignment = state == "Unavailable" ? VerticalAlignment.Center : VerticalAlignment.Bottom;
+        VideoNoteRing.IsActive          = busy;
+        VideoNoteRing.Visibility        = busy ? Visibility.Visible : Visibility.Collapsed;
         TestHooks.ShowState(VideoFrame, state);
     }
 

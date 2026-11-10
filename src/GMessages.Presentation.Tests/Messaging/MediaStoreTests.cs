@@ -567,9 +567,9 @@ public sealed class MediaStoreTests
         using var rig           = new Rig();
         rig.Client.Media["v-1"] = [1, 2, 3];
         var made                = new List<byte[]>();
-        Task<byte[]> Extract(byte[] video, string mime)
+        Task<byte[]> Extract(string video, string mime)
         {
-            made.Add(video);
+            made.Add(File.ReadAllBytes(video));
             return Task.FromResult<byte[]>([9, 9]);
         }
 
@@ -594,15 +594,127 @@ public sealed class MediaStoreTests
         using var rig             = new Rig();
         rig.Client.Media["thumb"] = [5];
         int made                  = 0;
-        Task<byte[]> Extract(byte[] video, string mime)
+        Task<byte[]> Extract(string video, string mime)
         {
             made++;
-            return Task.FromResult<byte[]>([.. video, 7]);
+            return Task.FromResult<byte[]>([.. File.ReadAllBytes(video), 7]);
         }
 
         CollectionAssert.AreEqual(new byte[] { 5 }, await rig.Store.GetFrameAsync(Part("full", "thumb"), Extract, Ct));
         CollectionAssert.AreEqual(new byte[] { 4, 7 }, await rig.Store.GetFrameAsync(Part(inline: [4]), Extract, Ct));
         Assert.AreEqual(1, made);
         Assert.IsFalse(Directory.Exists(Path.Combine(rig.Folder, "Frames")), "A frame not made from a downloaded video was kept.");
+    }
+
+    /// <summary>
+    /// A received video with only its small preview picture shows the preview as its frame. The video itself is
+    /// pending, so playback does not use the preview as the video.
+    /// </summary>
+    [TestMethod]
+    public async Task Frame_InlinePreviewOfVideo_IsFrameNotVideo()
+    {
+        using var rig  = new Rig();
+        byte[] preview = [0xFF, 0xD8, 0xFF, 0xE0];
+        var part       = Part(inline: preview) with { Kind = MessageKind.Video, Mime = "video/mp4" };
+        Task<byte[]> Extract(string video, string mime) => throw new AssertFailedException("The preview went to the video decoder.");
+
+        Assert.IsTrue(part.IsWaitingForFile);
+        CollectionAssert.AreEqual(preview, await rig.Store.GetFrameAsync(part, Extract, Ct));
+        Assert.ThrowsExactly<MediaPendingException>(() => { _ = rig.Store.GetAsync(part, thumbnail: false, Ct); });
+        Assert.ThrowsExactly<MediaPendingException>(() => { _ = rig.Store.GetFileAsync(part, Ct); });
+        Assert.IsFalse((part with { InlineData = [0, 0, 0, 0x18] }).HasInlinePreview, "A sent video with all its bytes inline is not a preview.");
+    }
+
+    /// <summary>
+    /// A photo whose inline data is shorter than its size, such as the 60 x 55 px echo of a sent photo, has only its
+    /// preview. The preview is its thumbnail, and the full photo is pending. A photo with all its bytes inline is not
+    /// a preview.
+    /// </summary>
+    [TestMethod]
+    public async Task Photo_InlinePreview_IsThumbnailNotPhoto()
+    {
+        using var rig  = new Rig();
+        byte[] preview = new byte[828];
+        var part       = Part(inline: preview) with { Size = 261_205 };
+
+        Assert.IsTrue(part.IsWaitingForFile);
+        CollectionAssert.AreEqual(preview, await rig.Store.GetAsync(part, thumbnail: true, Ct));
+        Assert.ThrowsExactly<MediaPendingException>(() => { _ = rig.Store.GetAsync(part, thumbnail: false, Ct); });
+        Assert.IsFalse((part with { Size = preview.Length }).HasInlinePreview, "A sent photo with all its bytes inline is not a preview.");
+        Assert.IsFalse((part with { Size = preview.Length * 2 }).HasInlinePreview, "A photo whose size differs a little from its bytes shows its bytes.");
+        Assert.IsFalse((part with { Size = 0 }).HasInlinePreview, "A photo of unknown size shows its inline data.");
+    }
+
+    /// <summary>
+    /// The store keeps the first time that it saw each message, until a clear.
+    /// </summary>
+    [TestMethod]
+    public void FirstSeen_KeepsFirstUntilClear()
+    {
+        using var rig = new Rig();
+        var first     = new DateTimeOffset(2026, 11, 9, 12, 0, 0, TimeSpan.Zero);
+
+        Assert.AreEqual(first, rig.Store.FirstSeen("m-1", first));
+        Assert.AreEqual(first, rig.Store.FirstSeen("m-1", first.AddMinutes(3)));
+        Assert.AreEqual(first.AddMinutes(3), rig.Store.FirstSeen(string.Empty, first.AddMinutes(3)), "An empty ID keeps nothing.");
+
+        rig.Store.Clear();
+        Assert.AreEqual(first.AddMinutes(9), rig.Store.FirstSeen("m-1", first.AddMinutes(9)));
+    }
+
+    /// <summary>
+    /// A photo that has only its small preview asks the phone for its full size, as a thumbnail-only photo does.
+    /// </summary>
+    [TestMethod]
+    public async Task FullSize_RequestedForPreviewOnlyPhoto()
+    {
+        using var rig   = new Rig();
+        MediaPart part  = Part(inline: new byte[828]) with { Size = 261_205, ActionMessageId = "a-1" };
+
+        await rig.Store.RequestFullSizeAsync(Message("m-1", part));
+
+        Assert.HasCount(1, rig.Client.FullSizeCalls);
+        Assert.AreEqual(("m-1", "a-1"), rig.Client.FullSizeCalls[0]);
+
+        // The request is for an image, so a preview-only video asks nothing.
+        await rig.Store.RequestFullSizeAsync(Message("m-2", part with { Kind = MessageKind.Video, InlineData = [0xFF, 0xD8, 0xFF, 0xE0] }));
+        Assert.HasCount(1, rig.Client.FullSizeCalls);
+    }
+
+    /// <summary>
+    /// A video over <see cref="MediaPart.MaxFrameVideoBytes"/> with a preview picture shows the preview as its frame. The
+    /// store does not download the video for it.
+    /// </summary>
+    [TestMethod]
+    public async Task Frame_BigVideoWithPreview_DownloadsNothing()
+    {
+        using var rig  = new Rig();
+        byte[] preview = [0x89, 0x50, 0x4E, 0x47];
+        var part       = Part("v-1", inline: preview) with { Kind = MessageKind.Video, Mime = "video/mp4", Size = MediaPart.MaxFrameVideoBytes + 1 };
+        Task<byte[]> Extract(string video, string mime) => throw new AssertFailedException("The big video went to the video decoder.");
+
+        CollectionAssert.AreEqual(preview, await rig.Store.GetFrameAsync(part, Extract, Ct));
+        Assert.IsEmpty(rig.Client.DownloadCalls);
+    }
+
+    /// <summary>
+    /// The full file downloads to the temp folder 1 time. A second request gets the same path and downloads nothing. A
+    /// clear deletes the file.
+    /// </summary>
+    [TestMethod]
+    public async Task GetFile_DownloadsOnce_UntilClear()
+    {
+        using var rig           = new Rig();
+        rig.Client.Media["v-1"] = [1, 2, 3];
+
+        string path = await rig.Store.GetFileAsync(Part("v-1"), Ct);
+
+        Assert.AreEqual(path, await rig.Store.GetFileAsync(Part("v-1"), Ct));
+        CollectionAssert.AreEqual(new byte[] { 1, 2, 3 }, File.ReadAllBytes(path));
+        Assert.HasCount(1, rig.Client.DownloadCalls);
+        Assert.IsFalse(File.Exists(path + ".part"));
+
+        rig.Store.Clear();
+        Assert.IsFalse(File.Exists(path));
     }
 }

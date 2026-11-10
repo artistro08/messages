@@ -1,4 +1,5 @@
 using System.Numerics;
+using GMessages.App.Media;
 using GMessages.Presentation.Main;
 using GMessages.Presentation.Messaging;
 using Windows.UI.Composition;
@@ -56,10 +57,12 @@ public sealed partial class MessageBubble
             return;
         }
 
-        _photoPart   = part;
-        _photoBubble = Bubble;
-        _photoFailed = false;
-        int load     = NextPhotoLoad();
+        _photoPart             = part;
+        _photoBubble           = Bubble;
+        _photoFailed           = false;
+        _photoUnavailable      = false;
+        Photo.IsHitTestVisible = true;
+        int load               = NextPhotoLoad();
 
         // For another message, the bubble releases the old images.
         if (!sameMessage)
@@ -86,17 +89,17 @@ public sealed partial class MessageBubble
             : a.MediaId == b.MediaId && a.ThumbnailId == b.ThumbnailId && a.Name == b.Name
               && (ReferenceEquals(a.InlineData, b.InlineData) || (a.InlineData.Length == 0 && b.InlineData.Length == 0));
 
-    // Returns true for the echo of an attachment sent from here. The shown part held the bytes. The echo has the media
-    // ID of the upload or only a thumbnail. The bytes go in the cache under that ID, so nothing downloads again. With
-    // only a thumbnail, the bytes keep showing.
+    // Returns true for the echo of an attachment sent from here, so the sent bytes keep showing. See
+    // MediaPart.KeepsShowingOver. An echo with the media ID of the upload gets the bytes in the cache under that ID, so
+    // nothing downloads again. The caller keeps its own part unless the echo has a media ID.
     private static bool KeepSentMedia(MediaPart? shown, MediaPart? echo)
     {
-        if (shown is not { InlineData.Length: > 0 } local || echo is not { InlineData.Length: 0 } || echo is { MediaId.Length: 0, ThumbnailId.Length: 0 })
+        if (shown is null || echo is null || !shown.KeepsShowingOver(echo))
         {
             return false;
         }
 
-        (Application.Current as App)?.Media?.Seed(echo.MediaId, local.InlineData);
+        (Application.Current as App)?.Media?.Seed(echo.MediaId, shown.InlineData);
         return true;
     }
 
@@ -146,6 +149,7 @@ public sealed partial class MessageBubble
         if (part.IsPending)
         {
             ShowPhotoNote(ChatCopy.PhotoPending, "Pending");
+            WhenUnavailable(part, () => _photoPart, ShowPhotoUnavailable);
             return;
         }
 
@@ -156,12 +160,12 @@ public sealed partial class MessageBubble
 
         try
         {
-            // The blurred look is the thumbnail, decoded tiny and stretched. With no thumbnail, the photo itself takes
-            // its place.
+            // The blurred look is the thumbnail, blurred and stretched. With no thumbnail, the photo itself takes its
+            // place.
             if (PhotoBlur.Background is null)
             {
                 byte[] small     = await media.GetAsync(part, thumbnail: true, CancellationToken.None);
-                ImageSource blur = await Avatar.ToImageAsync(small, BlurDecodeWidth) ?? throw new InvalidDataException();
+                ImageSource blur = await BlurredImage.MakeImageAsync(small) ?? throw new InvalidDataException();
                 if (load != _photoLoad)
                 {
                     return;
@@ -171,10 +175,18 @@ public sealed partial class MessageBubble
                 TestHooks.ShowState(Photo, "Blurred");
             }
 
-            // Only the thumbnail came, so the bubble asks for the full size. When it does not come, the photo offers to
-            // try again.
-            if (part is { MediaId.Length: 0, ThumbnailId.Length: > 0 })
+            // Only the thumbnail or a small preview came, so the bubble asks for the full size. The echo with the file
+            // loads the photo again. When it does not come, the photo offers to try again.
+            if (part.NeedsFullSize)
             {
+                // A photo with only a preview says that it waits, as a waiting video does. It still asks for its full
+                // size. When the phone never sends it, it says that it is not available.
+                if (part.IsWaitingForFile)
+                {
+                    ShowPhotoNote(ChatCopy.PhotoPending, "Pending");
+                    WhenUnavailable(part, () => _photoPart, ShowPhotoUnavailable);
+                }
+
                 await bubble.RequestFullSizeAsync(media, again);
                 if (load != _photoLoad)
                 {
@@ -246,7 +258,8 @@ public sealed partial class MessageBubble
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            if (load != _photoLoad)
+            // A photo that is not available stopped its own wait for the full size. That is no failure.
+            if (load != _photoLoad || _photoUnavailable)
             {
                 return;
             }
@@ -362,8 +375,24 @@ public sealed partial class MessageBubble
 
     private void ShowPhotoFailed()
     {
+        // A photo that is not available stays so. A retry cannot bring it.
+        if (_photoUnavailable)
+        {
+            return;
+        }
+
         _photoFailed = true;
         ShowPhotoNote(ChatCopy.PhotoLoadFailed, "Failed");
+    }
+
+    // The phone never sends the photo, so it says so and takes no click. Its wait for the full size stops.
+    private void ShowPhotoUnavailable()
+    {
+        _photoUnavailable      = true;
+        _photoFailed           = false;
+        Photo.IsHitTestVisible = false;
+        _cancelPhotoWait?.Invoke();
+        ShowPhotoNote(ChatCopy.PhotoUnavailable, "Unavailable");
     }
 
     // Shows the note over the photo for a wait or a failure, or no note.
@@ -391,7 +420,11 @@ public sealed partial class MessageBubble
             return;
         }
 
-        ShowInViewer(part, photo);
+        // A photo that has only its preview has nothing sharp to show in the viewer yet.
+        if (!part.IsWaitingForFile)
+        {
+            ShowInViewer(part, photo);
+        }
     }
 
     // Shows the photo over the whole window with the name of the photo in the bubble. Focus returns to the part that it

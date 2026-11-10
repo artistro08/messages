@@ -133,6 +133,58 @@ public sealed partial class GmClient
     }
 
     /// <summary>
+    /// Downloads and decrypts an attachment straight to a file, so a big video is never whole in memory.
+    /// </summary>
+    /// <remarks>
+    /// The request is that of <see cref="DownloadMediaAsync"/>. The body streams through
+    /// <see cref="MediaCrypto.DecryptAsync"/> into <paramref name="path"/>, up to
+    /// <see cref="GmHttpClient.MaxMediaStreamBytes"/>. The method replaces any file at the path. On a failure, the
+    /// file can be partly written; the caller deletes it.
+    /// </remarks>
+    /// <param name="mediaId">The media ID.</param>
+    /// <param name="key">The 32-byte decryption key.</param>
+    /// <param name="path">The full path of the file to write.</param>
+    /// <param name="ct">Cancels the download.</param>
+    /// <returns>The length of the decrypted file. It is 0 while the upload of the sender is not complete.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="mediaId"/> or <paramref name="path"/> is null.</exception>
+    /// <exception cref="ArgumentException"><paramref name="key"/> is not 32 bytes.</exception>
+    /// <exception cref="GmRequestException">The server refused the download.</exception>
+    /// <exception cref="InvalidDataException">The download is over <see cref="GmHttpClient.MaxMediaStreamBytes"/>.</exception>
+    /// <exception cref="System.Security.Cryptography.CryptographicException">The file does not decrypt with the key.</exception>
+    /// <exception cref="HttpRequestException">The request failed before any response arrived.</exception>
+    /// <exception cref="IOException">The file could not be written.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="ct"/> was canceled.</exception>
+    public async Task<long> DownloadMediaToFileAsync(string mediaId, ReadOnlyMemory<byte> key, string path, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(mediaId);
+        ArgumentNullException.ThrowIfNull(path);
+        if (key.Length != MediaCrypto.KeySize)
+        {
+            throw new ArgumentException($"Unsupported AES key length (got={key.Length} expected={MediaCrypto.KeySize}).", nameof(key));
+        }
+
+        var metadata = new DownloadAttachmentRequest
+        {
+            Info     = new AttachmentInfo { AttachmentID = mediaId, Encrypted = true },
+            AuthData = MediaAuth(),
+        };
+        string metadataHeader = Convert.ToBase64String(metadata.ToByteArray());
+
+        long length = 0;
+        await _http.StreamMediaAsync(_endpoints.UploadMedia, DownloadHeaders(metadataHeader), async (body, token) =>
+        {
+            var file = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true);
+            await using (file.ConfigureAwait(false))
+            {
+                await MediaCrypto.DecryptAsync(body, file, key, token).ConfigureAwait(false);
+                length = file.Length;
+            }
+        }, ct).ConfigureAwait(false);
+
+        return length;
+    }
+
+    /// <summary>
     /// Asks the phone for the full-size version of an image that arrived as a thumbnail only.
     /// </summary>
     /// <remarks>

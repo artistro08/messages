@@ -29,10 +29,11 @@ public sealed partial class MessageBubble
             return;
         }
 
-        _filePart    = part;
-        _fileBubble  = Bubble;
-        _fileOpening = false;
-        _fileFailed  = false;
+        _filePart        = part;
+        _fileBubble      = Bubble;
+        _fileOpening     = false;
+        _fileFailed      = false;
+        _fileUnavailable = false;
 
         // With no file, x:Load unloads the card.
         if (part is null)
@@ -41,8 +42,17 @@ public sealed partial class MessageBubble
         }
 
         FindName(nameof(FileCard));
-        FileThumb.Background = null;
+        FileThumb.Background      = null;
+        FileCard.IsHitTestVisible = true;
         ShowFileDetail();
+
+        // A file that the phone never sends says so in place of its size, and takes no click.
+        WhenUnavailable(part, () => _filePart, () =>
+        {
+            _fileUnavailable          = true;
+            FileCard.IsHitTestVisible = false;
+            ShowFileDetail();
+        });
         if (part is not { ThumbnailId.Length: > 0 } || (Application.Current as App)?.Media is not { } media)
         {
             return;
@@ -66,11 +76,12 @@ public sealed partial class MessageBubble
 
     private void ShowFileDetail()
     {
-        (FileDetail.Text, string state) = (_fileOpening, _fileFailed) switch
+        (FileDetail.Text, string state) = (_fileUnavailable, _fileOpening, _fileFailed) switch
         {
-            (true, _) => (ChatCopy.Downloading, "Downloading"),
-            (_, true) => (ChatCopy.FileOpenFailed, "Failed"),
-            _         => (SizeText(_filePart?.Size ?? 0), "Ready"),
+            (true, _, _) => (ChatCopy.FileUnavailable, "Unavailable"),
+            (_, true, _) => (ChatCopy.Downloading, "Downloading"),
+            (_, _, true) => (ChatCopy.FileOpenFailed, "Failed"),
+            _            => (SizeText(_filePart?.Size ?? 0), "Ready"),
         };
         TestHooks.ShowState(FileCard, state);
     }

@@ -34,7 +34,7 @@ public sealed partial class MessageBubble
                 _ = MediaActions.OpenAsync(XamlRoot, voice, Bubble.Id);
             }
         }
-        else if (Bubble?.Media is { IsPending: false } part && Photo is not null)
+        else if (Bubble?.Media is { IsPending: false, IsWaitingForFile: false } part && Photo is not null)
         {
             ShowInViewer(part, Photo);
         }
@@ -45,7 +45,7 @@ public sealed partial class MessageBubble
     /// </summary>
     public void OpenWith()
     {
-        if (Bubble?.Media is { IsPending: false } part)
+        if (Bubble?.Media is { IsPending: false, IsWaitingForFile: false } part)
         {
             _ = MediaActions.OpenWithAsync(part, Bubble.Id);
         }
@@ -56,7 +56,7 @@ public sealed partial class MessageBubble
     /// </summary>
     public void SaveAs()
     {
-        if (Bubble?.Media is { IsPending: false } part)
+        if (Bubble?.Media is { IsPending: false, IsWaitingForFile: false } part)
         {
             _ = MediaActions.SaveAsAsync(XamlRoot, part, Bubble.Id);
         }
@@ -67,7 +67,7 @@ public sealed partial class MessageBubble
     /// </summary>
     public void Download()
     {
-        if (Bubble?.Media is { IsPending: false } part)
+        if (Bubble?.Media is { IsPending: false, IsWaitingForFile: false } part)
         {
             _ = MediaActions.DownloadAsync(part, Bubble.Id);
         }

@@ -52,8 +52,14 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
     /// <summary>The timeout of the long-poll client. Go sets it with <c>WithGlobalTimeout(30 * time.Minute)</c>.</summary>
     public static readonly TimeSpan LongPollTimeout = TimeSpan.FromMinutes(30);
 
-    /// <summary>The largest media response body that the client reads. It is the 100 MiB LibGM file limit plus 4 MiB for the encryption overhead.</summary>
+    /// <summary>The largest media response body that the client reads into memory. It is the 100 MiB LibGM file limit plus 4 MiB for the encryption overhead.</summary>
     public const long MaxMediaBodyBytes = (100L + 4L) * 1024 * 1024;
+
+    /// <summary>
+    /// The largest media response body that the client streams to a file. It is 4 GiB. Phones send videos larger than
+    /// the 100 MiB LibGM upload limit. The limit keeps a bad answer from filling the disk.
+    /// </summary>
+    public const long MaxMediaStreamBytes = 4L * 1024 * 1024 * 1024;
 
     /// <summary>The largest API response body that the client reads. 16 MiB is far more than any real page of conversations or messages.</summary>
     public const long MaxApiBodyBytes = 16L * 1024 * 1024;
@@ -244,9 +250,94 @@ public sealed partial class GmHttpClient(HttpClient http, HttpClient longPollHtt
         return new GmMediaResponse(status, responseHeaders, body);
     }
 
+    /// <summary>
+    /// Sends a media GET and gives its body to <paramref name="read"/> as a stream, for a file too big for memory.
+    /// </summary>
+    /// <remarks>
+    /// The status must be 2xx, as for <see cref="SendMediaAsync"/>. The stream fails with
+    /// <see cref="InvalidDataException"/> when the body grows past <see cref="MaxMediaStreamBytes"/>. A declared
+    /// length over it fails before the read. The request uses the long-poll client with its 30 minute timeout.
+    /// </remarks>
+    /// <param name="url">The target URL.</param>
+    /// <param name="headers">Every header to send.</param>
+    /// <param name="read">Reads the body. The stream closes when it returns.</param>
+    /// <param name="ct">Cancels the request and the read.</param>
+    /// <returns>A task that ends when <paramref name="read"/> ends.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="url"/>, <paramref name="headers"/> or <paramref name="read"/> is null.</exception>
+    /// <exception cref="GmRequestException">The status was not 2xx.</exception>
+    /// <exception cref="InvalidDataException">The body is larger than <see cref="MaxMediaStreamBytes"/>.</exception>
+    /// <exception cref="HttpRequestException">The request failed before any response arrived.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="ct"/> was canceled.</exception>
+    public async Task StreamMediaAsync(Uri url, IEnumerable<KeyValuePair<string, string>> headers, Func<Stream, CancellationToken, Task> read, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(url);
+        ArgumentNullException.ThrowIfNull(headers);
+        ArgumentNullException.ThrowIfNull(read);
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        foreach ((string name, string value) in headers)
+        {
+            request.Headers.TryAddWithoutValidation(name, value);
+        }
+
+        using HttpResponseMessage res = await longPollHttp.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+        int status                    = (int)res.StatusCode;
+        if (status is < 200 or >= 300)
+        {
+            throw new GmRequestException(status, null, await ReadCappedAsync(res.Content, MaxMediaBodyBytes, ct).ConfigureAwait(false));
+        }
+
+        if (res.Content.Headers.ContentLength > MaxMediaStreamBytes)
+        {
+            throw new InvalidDataException("The response is too large.");
+        }
+
+        Stream body = await res.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+        await using var bodyScope = body.ConfigureAwait(false);
+        await read(new CappedStream(body, MaxMediaStreamBytes), ct).ConfigureAwait(false);
+    }
+
     // =========================================================================
     // HELPERS
     // =========================================================================
+
+    // Reads a body and fails when it grows past a limit. Only async reads count; the media stream uses no other.
+    private sealed class CappedStream(Stream inner, long max) : Stream
+    {
+        private long _read;
+
+        public override bool CanRead => true;
+
+        public override bool CanSeek => false;
+
+        public override bool CanWrite => false;
+
+        public override long Length => throw new NotSupportedException();
+
+        public override long Position { get => _read; set => throw new NotSupportedException(); }
+
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            int count = await inner.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
+            _read    += count;
+            return _read > max ? throw new InvalidDataException("The response is too large.") : count;
+        }
+
+        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
+            ReadAsync(buffer.AsMemory(offset, count), cancellationToken).AsTask();
+
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        public override void Flush()
+        {
+        }
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    }
 
     // The method reads a body up to a limit. A declared length over the limit fails at once. A streamed body fails
     // when it crosses the limit. A declared length goes into 1 array of that size, so a big video is in memory only 1 time.
