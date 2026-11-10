@@ -350,6 +350,13 @@ internal sealed class FakeMessagingClient : IMessagingClient
         return Media.TryGetValue(mediaId, out byte[]? bytes) ? bytes : throw new KeyNotFoundException(mediaId);
     }
 
+    public async Task<long> DownloadMediaToFileAsync(string mediaId, ReadOnlyMemory<byte> key, string path, CancellationToken ct)
+    {
+        byte[] bytes = await DownloadMediaAsync(mediaId, key, ct);
+        await File.WriteAllBytesAsync(path, bytes, ct);
+        return bytes.LongLength;
+    }
+
     public Task GetFullSizeImageAsync(string messageId, string actionMessageId, CancellationToken ct)
     {
         FullSizeCalls.Add((messageId, actionMessageId));

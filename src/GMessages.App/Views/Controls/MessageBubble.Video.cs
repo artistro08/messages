@@ -58,6 +58,7 @@ public sealed partial class MessageBubble
 
         FindName(nameof(Video));
         VideoThumb.Background = null;
+        VideoPlay.Visibility  = Visibility.Visible;
         ShowVideoNote(null, string.Empty);
         SizePhoto();
         LoadVideoFrame(part);
@@ -78,22 +79,30 @@ public sealed partial class MessageBubble
         try
         {
             // The preview picture in the message shows blurred at once. The real frame replaces it when it loads.
+            bool previewShown = false;
             if (part.HasInlinePreview && await BlurredImage.MakeAsync(part.InlineData) is { } blurred
                 && await Avatar.ToImageAsync(blurred, BlurredImage.LongSide) is { } preview && ReferenceEquals(part, _videoPart))
             {
                 VideoThumb.Background = new ImageBrush { ImageSource = preview, Stretch = Stretch.UniformToFill };
                 _videoFrameImage      = preview;
+                previewShown          = true;
             }
 
-            // A video that only has its preview waits for the phone. The note says so before any click.
-            if (part is { MediaId.Length: 0 } && part.HasInlinePreview)
+            // The preview stays the frame when the video has no file yet or is too big to download for a frame. A video
+            // with no file waits for the phone: the play button hides, and the note says so before any click.
+            if (part.FrameIsPreview)
             {
                 if (ReferenceEquals(part, _videoPart))
                 {
-                    ShowVideoNote(ChatCopy.VideoPending, "Pending");
+                    if (part.IsWaitingForFile)
+                    {
+                        VideoPlay.Visibility = Visibility.Collapsed;
+                        ShowVideoNote(ChatCopy.VideoPending, "Pending");
+                    }
+
+                    TestHooks.ShowState(VideoPlay, previewShown ? "Frame" : "NoFrame");
                 }
 
-                TestHooks.ShowState(VideoPlay, "NoFrame");
                 return;
             }
 
@@ -138,14 +147,14 @@ public sealed partial class MessageBubble
         ShowVideoNote(ChatCopy.Downloading, "Downloading");
         try
         {
-            byte[] bytes = await media.GetAsync(part, thumbnail: false, CancellationToken.None);
+            string file = await media.GetFileAsync(part, CancellationToken.None);
             if (load != _videoLoad || !ReferenceEquals(s_playingVideo, this))
             {
                 return;
             }
 
             string id = PartIdOf("Video.Player.", Bubble?.PartKey ?? string.Empty);
-            _video         = new VideoPlayback(XamlHost.Dispatcher, bytes, part.Mime, start, id, Bubble?.VideoName ?? ChatCopy.Video, drawFrames: true);
+            _video         = new VideoPlayback(XamlHost.Dispatcher, file, part.Mime, start, id, Bubble?.VideoName ?? ChatCopy.Video, drawFrames: true);
             _video.Failed += OnVideoFailed;
 
             // The frames fit the box at the display scale and show as its rounded picture under the controls. See
@@ -175,7 +184,8 @@ public sealed partial class MessageBubble
 
             AppLog.MediaFailed(App.ShellLog, "video", Bubble?.Id ?? string.Empty, ex.GetType().Name);
             ReleaseVideo();
-            ShowVideoNote(ex is MediaPendingException ? ChatCopy.VideoPending : ChatCopy.VideoPlayFailed, ex is MediaPendingException ? "Pending" : "Failed");
+            bool pending = ex is MediaPendingException;
+            ShowVideoNote(pending ? ChatCopy.VideoPending : ChatCopy.VideoPlayFailed, pending ? "Pending" : "Failed");
         }
     }
 
@@ -199,7 +209,8 @@ public sealed partial class MessageBubble
     // frame in the way that the clicked button had it. Thus a click brings no focus ring.
     private void OpenVideoInViewer(Control from)
     {
-        if (_videoPart is not { IsPending: false } part)
+        // A video that waits for the phone has nothing to show in the viewer.
+        if (_videoPart is not { IsPending: false, IsWaitingForFile: false } part)
         {
             return;
         }
@@ -268,7 +279,7 @@ public sealed partial class MessageBubble
     // tests.
     private void ShowVideoNote(string? text, string state)
     {
-        bool busy                = text is not null && state is "Downloading" or "Pending";
+        bool busy                = state is "Downloading" or "Pending";
         VideoNote.Text           = text ?? string.Empty;
         VideoNoteBack.Visibility = text is null ? Visibility.Collapsed : Visibility.Visible;
         VideoNoteRing.IsActive   = busy;

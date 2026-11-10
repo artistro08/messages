@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Windows.UI.Core;
@@ -194,7 +195,7 @@ internal unsafe class XamlWindow
     /// <remarks>
     /// The video player can keep the keyboard focus of Windows outside the island. Then Escape never reaches XAML.
     /// </remarks>
-    public event EventHandler<System.ComponentModel.HandledEventArgs>? EscapePressed;
+    public event EventHandler<HandledEventArgs>? EscapePressed;
 
     /// <summary>
     /// Raised when the pointer moves onto or off a caption button, or presses it. The argument holds the hit test codes
@@ -354,8 +355,9 @@ internal unsafe class XamlWindow
         return false;
     }
 
-    // Gives Escape to the window that holds its target. The target can be a child or an owned window, such as the
-    // layer of the video player. True when a handler used the key.
+    // Gives Escape to the window that holds its target. The window of the target itself comes first, then the window
+    // that owns it, such as for the layer of the video player. Thus a second app window keeps its own Escape. True when
+    // a handler used the key.
     private static bool RaiseEscape(MSG* msg)
     {
         if (msg->message != WM_KEYDOWN || msg->wParam != VK_ESCAPE)
@@ -363,20 +365,19 @@ internal unsafe class XamlWindow
             return false;
         }
 
-        nint root = GetAncestor(msg->hwnd, GA_ROOTOWNER);
-        for (int i = 0; i < Open.Count; i++)
+        XamlWindow? target = WindowOf(GetAncestor(msg->hwnd, GA_ROOT)) ?? WindowOf(GetAncestor(msg->hwnd, GA_ROOTOWNER));
+        if (target?.EscapePressed is not { } handler)
         {
-            XamlWindow window = Open[i];
-            if (window.Hwnd == msg->hwnd || window.Hwnd == root)
-            {
-                var args = new System.ComponentModel.HandledEventArgs();
-                window.EscapePressed?.Invoke(window, args);
-                return args.Handled;
-            }
+            return false;
         }
 
-        return false;
+        var args = new HandledEventArgs();
+        handler(target, args);
+        return args.Handled;
     }
+
+    // The open window with this handle, or null.
+    private static XamlWindow? WindowOf(nint hwnd) => ByHandle.GetValueOrDefault(hwnd);
 
     // =========================================================================
     // SHOWING AND PLACING

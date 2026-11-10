@@ -821,16 +821,22 @@ public sealed partial class MainWindow : UserControl
     }
 
     // Goes back 1 step: the viewer closes, else the Back button of the title bar runs. Nothing happens while a dialog
-    // or a menu is open, or when the title bar shows no Back button. True when it went back.
+    // or a menu is open, so it closes first. Nothing happens when the title bar shows no Back button. True when it went
+    // back.
     private bool GoBack()
     {
+        if (IsPopupOpen())
+        {
+            return false;
+        }
+
         if (PhotoViewer.IsOpen)
         {
             PhotoViewer.Close(animate: true);
             return true;
         }
 
-        if (IsPopupOpen() || !AppTitleBar.IsBackButtonVisible)
+        if (!AppTitleBar.IsBackButtonVisible)
         {
             return false;
         }

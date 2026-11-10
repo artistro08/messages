@@ -45,13 +45,31 @@ public sealed record MediaPart(
     public bool IsPending => MediaId.Length == 0 && ThumbnailId.Length == 0 && InlineData.Length == 0;
 
     /// <summary>
+    /// The largest video that the store downloads only to make its still frame. A bigger video with a preview picture
+    /// shows the preview.
+    /// </summary>
+    public const long MaxFrameVideoBytes = 100L * 1024 * 1024;
+
+    /// <summary>
     /// Gets whether <see cref="InlineData"/> is only a small preview picture of a video, not the video.
     /// </summary>
     /// <remarks>
-    /// A received video can carry a small JPEG in the message. A video that this device sent carries all its bytes, so
-    /// its inline data is as long as <see cref="Size"/>.
+    /// A received video can carry a small JPEG or PNG in the message. A video that this device sent carries all its
+    /// bytes inline, and a video file never starts as a JPEG or a PNG does. The size of the message can be 0, so the
+    /// check reads the bytes.
     /// </remarks>
-    public bool HasInlinePreview => Kind == MessageKind.Video && InlineData.Length > 0 && InlineData.LongLength < Size;
+    public bool HasInlinePreview => Kind == MessageKind.Video && InlineData is [0xFF, 0xD8, 0xFF, ..] or [0x89, 0x50, 0x4E, 0x47, ..];
+
+    /// <summary>
+    /// Gets whether the video has only its preview picture: the phone has not sent its file yet.
+    /// </summary>
+    public bool IsWaitingForFile => HasInlinePreview && MediaId.Length == 0 && ThumbnailId.Length == 0;
+
+    /// <summary>
+    /// Gets whether the still frame of the video is its preview picture. The video has no thumbnail, and it has no file
+    /// yet or is over <see cref="MaxFrameVideoBytes"/>, so the store does not download it for the frame.
+    /// </summary>
+    public bool FrameIsPreview => HasInlinePreview && ThumbnailId.Length == 0 && (MediaId.Length == 0 || Size > MaxFrameVideoBytes);
 
     /// <summary>
     /// Gets the ID of the message part that holds the media, or empty. A request for the full-size image names it.

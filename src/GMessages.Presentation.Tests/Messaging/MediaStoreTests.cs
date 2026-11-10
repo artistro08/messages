@@ -567,9 +567,9 @@ public sealed class MediaStoreTests
         using var rig           = new Rig();
         rig.Client.Media["v-1"] = [1, 2, 3];
         var made                = new List<byte[]>();
-        Task<byte[]> Extract(byte[] video, string mime)
+        Task<byte[]> Extract(string video, string mime)
         {
-            made.Add(video);
+            made.Add(File.ReadAllBytes(video));
             return Task.FromResult<byte[]>([9, 9]);
         }
 
@@ -594,10 +594,10 @@ public sealed class MediaStoreTests
         using var rig             = new Rig();
         rig.Client.Media["thumb"] = [5];
         int made                  = 0;
-        Task<byte[]> Extract(byte[] video, string mime)
+        Task<byte[]> Extract(string video, string mime)
         {
             made++;
-            return Task.FromResult<byte[]>([.. video, 7]);
+            return Task.FromResult<byte[]>([.. File.ReadAllBytes(video), 7]);
         }
 
         CollectionAssert.AreEqual(new byte[] { 5 }, await rig.Store.GetFrameAsync(Part("full", "thumb"), Extract, Ct));
@@ -613,13 +613,52 @@ public sealed class MediaStoreTests
     [TestMethod]
     public async Task Frame_InlinePreviewOfVideo_IsFrameNotVideo()
     {
-        using var rig = new Rig();
-        var part      = Part(inline: [1, 2]) with { Kind = MessageKind.Video, Mime = "video/mp4", Size = 233_684_274 };
-        Task<byte[]> Extract(byte[] video, string mime) => throw new AssertFailedException("The preview went to the video decoder.");
+        using var rig  = new Rig();
+        byte[] preview = [0xFF, 0xD8, 0xFF, 0xE0];
+        var part       = Part(inline: preview) with { Kind = MessageKind.Video, Mime = "video/mp4" };
+        Task<byte[]> Extract(string video, string mime) => throw new AssertFailedException("The preview went to the video decoder.");
 
-        Assert.IsTrue(part.HasInlinePreview);
-        CollectionAssert.AreEqual(new byte[] { 1, 2 }, await rig.Store.GetFrameAsync(part, Extract, Ct));
+        Assert.IsTrue(part.IsWaitingForFile);
+        CollectionAssert.AreEqual(preview, await rig.Store.GetFrameAsync(part, Extract, Ct));
         Assert.ThrowsExactly<MediaPendingException>(() => { _ = rig.Store.GetAsync(part, thumbnail: false, Ct); });
-        Assert.IsFalse((part with { Size = 2 }).HasInlinePreview, "A sent video with all its bytes inline is not a preview.");
+        Assert.ThrowsExactly<MediaPendingException>(() => { _ = rig.Store.GetFileAsync(part, Ct); });
+        Assert.IsFalse((part with { InlineData = [0, 0, 0, 0x18] }).HasInlinePreview, "A sent video with all its bytes inline is not a preview.");
+    }
+
+    /// <summary>
+    /// A video over <see cref="MediaPart.MaxFrameVideoBytes"/> with a preview picture shows the preview as its frame. The
+    /// store does not download the video for it.
+    /// </summary>
+    [TestMethod]
+    public async Task Frame_BigVideoWithPreview_DownloadsNothing()
+    {
+        using var rig  = new Rig();
+        byte[] preview = [0x89, 0x50, 0x4E, 0x47];
+        var part       = Part("v-1", inline: preview) with { Kind = MessageKind.Video, Mime = "video/mp4", Size = MediaPart.MaxFrameVideoBytes + 1 };
+        Task<byte[]> Extract(string video, string mime) => throw new AssertFailedException("The big video went to the video decoder.");
+
+        CollectionAssert.AreEqual(preview, await rig.Store.GetFrameAsync(part, Extract, Ct));
+        Assert.IsEmpty(rig.Client.DownloadCalls);
+    }
+
+    /// <summary>
+    /// The full file downloads to the temp folder 1 time. A second request gets the same path and downloads nothing. A
+    /// clear deletes the file.
+    /// </summary>
+    [TestMethod]
+    public async Task GetFile_DownloadsOnce_UntilClear()
+    {
+        using var rig           = new Rig();
+        rig.Client.Media["v-1"] = [1, 2, 3];
+
+        string path = await rig.Store.GetFileAsync(Part("v-1"), Ct);
+
+        Assert.AreEqual(path, await rig.Store.GetFileAsync(Part("v-1"), Ct));
+        CollectionAssert.AreEqual(new byte[] { 1, 2, 3 }, File.ReadAllBytes(path));
+        Assert.HasCount(1, rig.Client.DownloadCalls);
+        Assert.IsFalse(File.Exists(path + ".part"));
+
+        rig.Store.Clear();
+        Assert.IsFalse(File.Exists(path));
     }
 }

@@ -296,6 +296,7 @@ public sealed class MessageBubbleViewModelTests
         Assert.IsTrue(bubble.ShowsReadBy);
 
         Assert.AreEqual(string.Empty, new MessageBubbleViewModel(mine, Conversation()).ReadBy);
+        Assert.AreEqual(string.Empty, new MessageBubbleViewModel(mine with { ReadBy = ChatCopy.Read }, Group()).ReadBy, "A bare Read shows once, in the caption row.");
         Assert.AreEqual(string.Empty, new MessageBubbleViewModel(mine with { FromMe = false }, Group()).ReadBy);
     }
 

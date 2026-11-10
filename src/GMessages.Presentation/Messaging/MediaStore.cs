@@ -19,7 +19,8 @@ namespace GMessages.Presentation.Messaging;
 /// </para>
 /// <para>
 /// Decrypted bytes stay in memory up to 64 MB in all, and the least recently used go first. The store gives back a
-/// bigger file but does not keep it. Two requests for the same media ID share 1 download.
+/// bigger file but does not keep it. Two requests for the same media ID share 1 download. A video, a save and an open
+/// use <see cref="GetFileAsync"/> instead: the file streams to the temp folder, so a big video is never whole in memory.
 /// <see cref="RequestFullSizeAsync"/> asks the phone for the full-size image once per message. The phone then sends the
 /// message again with the full media ID.
 /// </para>
@@ -82,6 +83,10 @@ public sealed partial class MediaStore : IDisposable
     private long _cachedBytes;
 
     private readonly Dictionary<string, Task<byte[]>> _inFlight = [];
+
+    // The files that a download or a write makes, by their path. See GetFileAsync.
+    private const string FilesFolder = "Files";
+    private readonly Dictionary<string, Task<string>> _filesInFlight = [];
 
     private readonly Dictionary<string, Task<byte[]>> _framesInFlight = [];
 
@@ -158,7 +163,12 @@ public sealed partial class MediaStore : IDisposable
         if (id.Length == 0)
         {
             // The preview picture of a video is not the video. The phone sends the media ID later.
-            return !thumbnail && part.HasInlinePreview ? throw new MediaPendingException() : Task.FromResult(part.InlineData);
+            if (!thumbnail && part.HasInlinePreview)
+            {
+                throw new MediaPendingException();
+            }
+
+            return Task.FromResult(part.InlineData);
         }
 
         lock (_lock)
@@ -202,13 +212,13 @@ public sealed partial class MediaStore : IDisposable
     /// </para>
     /// </remarks>
     /// <param name="part">The media part of the video.</param>
-    /// <param name="extract">Makes a still image as PNG or JPEG bytes from the bytes and mime type of a video.</param>
+    /// <param name="extract">Makes a still image as PNG or JPEG bytes from the path and mime type of a video file.</param>
     /// <param name="ct">Cancels the wait. It does not cancel work that another caller shares.</param>
     /// <returns>The image bytes of the frame.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="part"/> or <paramref name="extract"/> is null.</exception>
     /// <exception cref="MediaPendingException">The part has no media ID, thumbnail or inline data yet.</exception>
     /// <exception cref="MessagingUnavailableException">The phone is not connected.</exception>
-    public Task<byte[]> GetFrameAsync(MediaPart part, Func<byte[], string, Task<byte[]>> extract, CancellationToken ct)
+    public Task<byte[]> GetFrameAsync(MediaPart part, Func<string, string, Task<byte[]>> extract, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(part);
         ArgumentNullException.ThrowIfNull(extract);
@@ -218,8 +228,8 @@ public sealed partial class MediaStore : IDisposable
             return GetAsync(part, thumbnail: true, ct);
         }
 
-        // A received video with no media ID yet shows its preview picture.
-        if (part.MediaId.Length == 0 && part.HasInlinePreview)
+        // A video with no file yet, or too big to download for a frame, shows its preview picture.
+        if (part.FrameIsPreview)
         {
             return Task.FromResult(part.InlineData);
         }
@@ -232,7 +242,7 @@ public sealed partial class MediaStore : IDisposable
                 throw new MediaPendingException();
             }
 
-            return Task.Run(() => extract(part.InlineData, part.Mime), CancellationToken.None).WaitAsync(ct);
+            return MakeInlineFrameAsync(part, extract).WaitAsync(ct);
         }
 
         lock (_lock)
@@ -246,6 +256,62 @@ public sealed partial class MediaStore : IDisposable
             }
 
             return making.WaitAsync(ct);
+        }
+    }
+
+    /// <summary>
+    /// Gets the decrypted full file of a part as a file in the temp folder. A video plays from it, so it is never whole
+    /// in memory.
+    /// </summary>
+    /// <remarks>
+    /// The file is <c>{temp}\Files\{hash}{ext}</c>, named by a hash of the media ID. Thus a second request reads the same
+    /// file and downloads nothing. The download streams to the disk, up to
+    /// <see cref="Protocol.Http.GmHttpClient.MaxMediaStreamBytes"/>. Bytes that the store already has in memory, or the
+    /// inline data of a video that this device sent, go to the file with no download. Two requests for the same file
+    /// share the work. A failed or cleared download leaves no file. <see cref="Clear"/> deletes the files.
+    /// </remarks>
+    /// <param name="part">The media part.</param>
+    /// <param name="ct">Cancels the wait. It does not cancel a download that another caller shares.</param>
+    /// <returns>The full path of the file. Open it to read only, and do not move or delete it.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="part"/> is null.</exception>
+    /// <exception cref="MediaPendingException">The part has no file yet, or only the preview picture of a video.</exception>
+    /// <exception cref="MessagingUnavailableException">The phone is not connected.</exception>
+    /// <exception cref="TimeoutException">The download took longer than <see cref="DownloadTimeout"/>.</exception>
+    /// <exception cref="OperationCanceledException">
+    /// <paramref name="ct"/> was canceled, or <see cref="Clear"/> stopped the download.
+    /// </exception>
+    public Task<string> GetFileAsync(MediaPart part, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(part);
+
+        if (part.IsPending || part.IsWaitingForFile)
+        {
+            throw new MediaPendingException();
+        }
+
+        (string id, byte[] key) = Source(part, thumbnail: false);
+        byte[] name             = id.Length > 0 ? Encoding.UTF8.GetBytes(id) : part.InlineData;
+        string path             = Path.Combine(_tempFolder, FilesFolder, Convert.ToHexString(SHA256.HashData(name))[..32] + ExtensionOf(part.Mime));
+        if (File.Exists(path))
+        {
+            return Task.FromResult(path);
+        }
+
+        lock (_lock)
+        {
+            if (!_filesInFlight.TryGetValue(path, out Task<string>? writing))
+            {
+                // Bytes already in hand need no client. The work runs on another thread, so it cannot leave
+                // _filesInFlight before this method adds it.
+                byte[]? known           = id.Length == 0 ? part.InlineData : _cache.GetValueOrDefault(id);
+                IMessagingClient? client = known is null ? _client() ?? throw new MessagingUnavailableException() : null;
+                int generation          = _generation;
+                CancellationToken clear = _generationCancel.Token;
+                writing                 = Task.Run(() => WriteFileAsync(client, id, key, known, path, generation, clear), CancellationToken.None);
+                _filesInFlight[path]    = writing;
+            }
+
+            return writing.WaitAsync(ct);
         }
     }
 
@@ -301,7 +367,7 @@ public sealed partial class MediaStore : IDisposable
             generation = _generation;
         }
 
-        byte[] bytes  = await GetAsync(part, thumbnail: false, ct).ConfigureAwait(false);
+        string source = await GetFileAsync(part, ct).ConfigureAwait(false);
         string folder = Path.Combine(_tempFolder, Guid.NewGuid().ToString("N"));
         string path   = Path.Combine(folder, SanitizeName(part.Name, part.Mime));
 
@@ -314,7 +380,7 @@ public sealed partial class MediaStore : IDisposable
         }
 
         Directory.CreateDirectory(folder);
-        await File.WriteAllBytesAsync(path, bytes, ct).ConfigureAwait(false);
+        File.Copy(source, path);
         MarkFromInternet(path);
         return path;
     }
@@ -343,7 +409,7 @@ public sealed partial class MediaStore : IDisposable
         ArgumentNullException.ThrowIfNull(part);
         ArgumentNullException.ThrowIfNull(folder);
 
-        byte[] bytes     = await GetAsync(part, thumbnail: false, ct).ConfigureAwait(false);
+        string source    = await GetFileAsync(part, ct).ConfigureAwait(false);
         string name      = SanitizeName(part.Name, part.Mime);
         string stem      = Path.GetFileNameWithoutExtension(name);
         string extension = Path.GetExtension(name);
@@ -370,7 +436,11 @@ public sealed partial class MediaStore : IDisposable
 
             await using (stream.ConfigureAwait(false))
             {
-                await stream.WriteAsync(bytes, ct).ConfigureAwait(false);
+                var input = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
+                await using (input.ConfigureAwait(false))
+                {
+                    await input.CopyToAsync(stream, ct).ConfigureAwait(false);
+                }
             }
 
             MarkFromInternet(path);
@@ -501,6 +571,7 @@ public sealed partial class MediaStore : IDisposable
             _cache.Clear();
             _cachedBytes = 0;
             _inFlight.Clear();
+            _filesInFlight.Clear();
             _framesInFlight.Clear();
             _fullSizeAsked.Clear();
         }
@@ -695,9 +766,101 @@ public sealed partial class MediaStore : IDisposable
         }
     }
 
+    // Writes 1 file for all callers that wait on it: known bytes, else a download that streams to the disk. The file
+    // gets its name only when it is complete, and only if no clear ran. A stalled download fails after DownloadTimeout.
+    private async Task<string> WriteFileAsync(IMessagingClient? client, string id, byte[] key, byte[]? known, string path, int generation, CancellationToken clear)
+    {
+        string partial  = path + ".part";
+        using var limit = CancellationTokenSource.CreateLinkedTokenSource(clear);
+        try
+        {
+            limit.CancelAfter(DownloadTimeout());
+
+            // The folder comes under the lock, so a clear never leaves an empty folder behind.
+            lock (_lock)
+            {
+                if (generation != _generation)
+                {
+                    throw new OperationCanceledException("The media was cleared before it downloaded.");
+                }
+
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            }
+
+            if (known is not null)
+            {
+                await File.WriteAllBytesAsync(partial, known, limit.Token).ConfigureAwait(false);
+            }
+            else
+            {
+                try
+                {
+                    // Google answers with no bytes until the upload of the sender is complete. The store asks again.
+                    while (await client!.DownloadMediaToFileAsync(id, key, partial, limit.Token).ConfigureAwait(false) == 0)
+                    {
+                        await Task.Delay(NotReadyRetry, limit.Token).ConfigureAwait(false);
+                    }
+                }
+                catch (OperationCanceledException) when (!clear.IsCancellationRequested)
+                {
+                    throw new TimeoutException("The media download took too long.");
+                }
+            }
+
+            lock (_lock)
+            {
+                if (generation != _generation)
+                {
+                    throw new OperationCanceledException("The media was cleared while it downloaded.");
+                }
+
+                File.Move(partial, path, overwrite: true);
+            }
+
+            return path;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            try
+            {
+                File.Delete(partial);
+            }
+            catch (Exception deleteEx) when (deleteEx is IOException or UnauthorizedAccessException)
+            {
+                // The next clear deletes it.
+            }
+
+            // A clear at sign-out stops a download on purpose. The check keeps that stop out of the log.
+            if (!clear.IsCancellationRequested)
+            {
+                LogDownloadFailed(id, ex.GetType().Name);
+            }
+
+            throw;
+        }
+        finally
+        {
+            lock (_lock)
+            {
+                if (generation == _generation)
+                {
+                    _filesInFlight.Remove(path);
+                }
+            }
+        }
+    }
+
+    // Makes the frame of a video that this device sent from its inline bytes, through a file. The store does not keep
+    // the frame.
+    private async Task<byte[]> MakeInlineFrameAsync(MediaPart part, Func<string, string, Task<byte[]>> extract)
+    {
+        string video = await GetFileAsync(part, CancellationToken.None).ConfigureAwait(false);
+        return await Task.Run(() => extract(video, part.Mime), CancellationToken.None).ConfigureAwait(false);
+    }
+
     // Gets the frame of a video from its file, else makes it from the video, 1 at a time. The store keeps the frame
     // unless a clear ran in the meantime. The write happens under the lock, so a clear never leaves a frame file.
-    private async Task<byte[]> MakeFrameAsync(MediaPart part, Func<byte[], string, Task<byte[]>> extract, int generation)
+    private async Task<byte[]> MakeFrameAsync(MediaPart part, Func<string, string, Task<byte[]>> extract, int generation)
     {
         string path = Path.Combine(_tempFolder, "Frames", Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(part.MediaId)))[..32] + ".frame");
         try
@@ -710,7 +873,7 @@ public sealed partial class MediaStore : IDisposable
             await _frameTurn.WaitAsync().ConfigureAwait(false);
             try
             {
-                byte[] video = await GetAsync(part, thumbnail: false, CancellationToken.None).ConfigureAwait(false);
+                string video = await GetFileAsync(part, CancellationToken.None).ConfigureAwait(false);
                 byte[] frame = await extract(video, part.Mime).ConfigureAwait(false);
                 lock (_lock)
                 {
