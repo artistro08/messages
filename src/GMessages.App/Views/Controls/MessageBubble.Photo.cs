@@ -77,7 +77,7 @@ public sealed partial class MessageBubble
             ClipPhotoFull();
         }
 
-        ShowPhotoNote(null, string.Empty);
+        ShowPhotoNote(null, MediaNote.None);
         SizePhoto();
         _ = LoadPhotoAsync(part, load, again: false);
     }
@@ -148,7 +148,7 @@ public sealed partial class MessageBubble
     {
         if (part.IsPending)
         {
-            ShowPhotoNote(ChatCopy.PhotoPending, "Pending");
+            ShowPhotoNote(ChatCopy.PhotoPending, MediaNote.Pending);
             WhenUnavailable(part, () => _photoPart, ShowPhotoUnavailable);
             return;
         }
@@ -183,7 +183,7 @@ public sealed partial class MessageBubble
                 // size. When the phone never sends it, it says that it is not available.
                 if (part.IsWaitingForFile)
                 {
-                    ShowPhotoNote(ChatCopy.PhotoPending, "Pending");
+                    ShowPhotoNote(ChatCopy.PhotoPending, MediaNote.Pending);
                     WhenUnavailable(part, () => _photoPart, ShowPhotoUnavailable);
                 }
 
@@ -382,7 +382,7 @@ public sealed partial class MessageBubble
         }
 
         _photoFailed = true;
-        ShowPhotoNote(ChatCopy.PhotoLoadFailed, "Failed");
+        ShowPhotoNote(ChatCopy.PhotoLoadFailed, MediaNote.Failed);
     }
 
     // The phone never sends the photo, so it says so and takes no click. Its wait for the full size stops.
@@ -392,18 +392,18 @@ public sealed partial class MessageBubble
         _photoFailed           = false;
         Photo.IsHitTestVisible = false;
         _cancelPhotoWait?.Invoke();
-        ShowPhotoNote(ChatCopy.PhotoUnavailable, "Unavailable");
+        ShowPhotoNote(ChatCopy.PhotoUnavailable, MediaNote.Unavailable);
     }
 
     // Shows the note over the photo for a wait or a failure, or no note. The ring turns during the wait.
-    private void ShowPhotoNote(string? text, string state)
+    private void ShowPhotoNote(string? text, MediaNote note)
     {
-        bool busy                = state == "Pending";
+        bool busy                = note == MediaNote.Pending;
         PhotoNote.Text           = text ?? string.Empty;
         PhotoNoteBack.Visibility = text is null ? Visibility.Collapsed : Visibility.Visible;
         PhotoNoteRing.IsActive   = busy;
         PhotoNoteRing.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
-        TestHooks.ShowState(Photo, state);
+        TestHooks.ShowState(Photo, StateOf(note));
     }
 
     // After a failure, a click tries again and asks the phone again for a missing full size. While the photo waits for
@@ -418,7 +418,7 @@ public sealed partial class MessageBubble
         if (_photoFailed)
         {
             _photoFailed = false;
-            ShowPhotoNote(null, string.Empty);
+            ShowPhotoNote(null, MediaNote.None);
             _ = LoadPhotoAsync(part, NextPhotoLoad(), again: true);
             return;
         }

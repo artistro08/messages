@@ -60,7 +60,7 @@ public sealed partial class MessageBubble
         VideoThumb.Background       = null;
         VideoPlay.Visibility        = Visibility.Visible;
         VideoFrame.IsHitTestVisible = true;
-        ShowVideoNote(null, string.Empty);
+        ShowVideoNote(null, MediaNote.None);
         SizePhoto();
         LoadVideoFrame(part);
     }
@@ -138,8 +138,8 @@ public sealed partial class MessageBubble
     {
         VideoPlay.Visibility        = Visibility.Collapsed;
         VideoFrame.IsHitTestVisible = false;
-        ShowVideoNote(ChatCopy.VideoPending, "Pending");
-        WhenUnavailable(part, () => _videoPart, () => ShowVideoNote(ChatCopy.VideoUnavailable, "Unavailable"));
+        ShowVideoNote(ChatCopy.VideoPending, MediaNote.Pending);
+        WhenUnavailable(part, () => _videoPart, () => ShowVideoNote(ChatCopy.VideoUnavailable, MediaNote.Unavailable));
     }
 
     // Play stops any other video, then gets this video from memory or a download and plays it here with sound.
@@ -161,7 +161,7 @@ public sealed partial class MessageBubble
 
         s_playingVideo = this;
         int load       = ++_videoLoad;
-        ShowVideoNote(ChatCopy.Downloading, "Downloading");
+        ShowVideoNote(ChatCopy.Downloading, MediaNote.Downloading);
         try
         {
             string file = await media.GetFileAsync(part, CancellationToken.None);
@@ -185,7 +185,7 @@ public sealed partial class MessageBubble
             ClipVideoPicture();
             VideoPlay.Visibility   = Visibility.Collapsed;
             VideoExpand.Visibility = Visibility.Visible;
-            ShowVideoNote(null, "Playing");
+            ShowVideoNote(null, MediaNote.Playing);
             EffectiveViewportChanged += OnVideoViewportChanged;
             if (play)
             {
@@ -202,7 +202,7 @@ public sealed partial class MessageBubble
             AppLog.MediaFailed(App.ShellLog, "video", Bubble?.Id ?? string.Empty, ex.GetType().Name);
             ReleaseVideo();
             bool pending = ex is MediaPendingException;
-            ShowVideoNote(pending ? ChatCopy.VideoPending : ChatCopy.VideoPlayFailed, pending ? "Pending" : "Failed");
+            ShowVideoNote(pending ? ChatCopy.VideoPending : ChatCopy.VideoPlayFailed, pending ? MediaNote.Pending : MediaNote.Failed);
         }
     }
 
@@ -211,7 +211,7 @@ public sealed partial class MessageBubble
     {
         AppLog.MediaFailed(App.ShellLog, "video", Bubble?.Id ?? string.Empty, "MediaFailed");
         ReleaseVideo();
-        ShowVideoNote(ChatCopy.VideoPlayFailed, "Failed");
+        ShowVideoNote(ChatCopy.VideoPlayFailed, MediaNote.Failed);
     }
 
     // A click on the frame opens the viewer at the start.
@@ -246,7 +246,7 @@ public sealed partial class MessageBubble
         };
 
         ReleaseVideo();
-        ShowVideoNote(null, string.Empty);
+        ShowVideoNote(null, MediaNote.None);
         (Application.Current as App)?.MainWindow?.ShowVideo(part, Bubble?.Id ?? string.Empty, Bubble?.VideoName ?? ChatCopy.Video, VideoFrame, how, start, play, _videoFrameImage, handBack);
     }
 
@@ -294,18 +294,18 @@ public sealed partial class MessageBubble
 
     // Shows a note over the frame, such as Downloading or the failure, or no note. The state goes on the frame for the
     // tests.
-    private void ShowVideoNote(string? text, string state)
+    private void ShowVideoNote(string? text, MediaNote note)
     {
         // A video with no play button, such as a wait for the phone or a video that is not available, shows the note in
         // the middle. Else the note sits at the bottom, below the play button.
-        bool busy                       = state is "Downloading" or "Pending";
+        bool busy                       = note is MediaNote.Downloading or MediaNote.Pending;
         bool centered                   = VideoPlay.Visibility == Visibility.Collapsed;
         VideoNote.Text                  = text ?? string.Empty;
         VideoNoteBack.Visibility        = text is null ? Visibility.Collapsed : Visibility.Visible;
         VideoNoteBack.VerticalAlignment = centered ? VerticalAlignment.Center : VerticalAlignment.Bottom;
         VideoNoteRing.IsActive          = busy;
         VideoNoteRing.Visibility        = busy ? Visibility.Visible : Visibility.Collapsed;
-        TestHooks.ShowState(VideoFrame, state);
+        TestHooks.ShowState(VideoFrame, StateOf(note));
     }
 
     // Rounds the picture of the video to the corners of the bubble. The corners of a Border do not clip an Image. The
