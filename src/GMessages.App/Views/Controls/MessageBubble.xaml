@@ -355,8 +355,9 @@
                                     </Canvas>
                                 </Border>
 
-                                <!-- The note shows the wait for the phone or the failure on a small plate over the
-                                     photo. After a failure, a click tries again. -->
+                                <!-- The note shows the wait for the phone or the failure on a small plate in the middle
+                                     of the photo. The ring turns during the wait, as on a video. After a failure, a
+                                     click tries again. -->
                                 <Border
                                     x:Name="PhotoNoteBack"
                                     Margin="12"
@@ -366,11 +367,24 @@
                                     Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}"
                                     CornerRadius="4"
                                     Visibility="Collapsed">
-                                    <TextBlock
-                                        x:Name="PhotoNote"
-                                        Style="{StaticResource CaptionTextBlockStyle}"
-                                        TextAlignment="Center"
-                                        TextWrapping="Wrap" />
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <muxc:ProgressRing
+                                            x:Name="PhotoNoteRing"
+                                            Width="14"
+                                            Height="14"
+                                            MinWidth="14"
+                                            MinHeight="14"
+                                            VerticalAlignment="Center"
+                                            AutomationProperties.AccessibilityView="Raw"
+                                            IsActive="False"
+                                            Visibility="Collapsed" />
+                                        <TextBlock
+                                            x:Name="PhotoNote"
+                                            VerticalAlignment="Center"
+                                            Style="{StaticResource CaptionTextBlockStyle}"
+                                            TextAlignment="Center"
+                                            TextWrapping="Wrap" />
+                                    </StackPanel>
                                 </Border>
                             </Grid>
                         </Button>
@@ -469,8 +483,9 @@
                                 </Grid>
                             </Button>
 
-                            <!-- The note shows the download, the wait for the phone or the failure on a small plate at
-                                 the bottom. The ring turns during the download and the wait. -->
+                            <!-- The note shows the download, the wait for the phone or the failure on a small plate. It
+                                 is in the middle when there is no play button, else at the bottom. The ring turns
+                                 during the download and the wait. -->
                             <Border
                                 x:Name="VideoNoteBack"
                                 Margin="12"
