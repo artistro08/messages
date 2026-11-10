@@ -167,7 +167,8 @@ public static class ChatCopy
     public const string Downloading     = "Downloading…";
     public const string PhotoLoadFailed = "Couldn't load this photo.";
     public const string FileOpenFailed  = "Couldn't open this file.";
-    public const string PhotoPending    = "Waiting for the photo from your phone…";
+    // The owner wrote "Waiting for photo" on 2026-11-10. It must stay verbatim.
+    public const string PhotoPending    = "Waiting for photo";
 
     // The controller wrote the copy of the photo viewer and the download in Plan 7. The owner approves it at the gate.
     public const string Download         = "Download";
@@ -181,8 +182,8 @@ public static class ChatCopy
     public const string OpenInDefaultApp = "Open in default app";
     public const string VideoPlayFailed  = "Couldn't play this video.";
 
-    // The controller wrote this copy on 2026-11-09, after the photo note. The owner can edit it.
-    public const string VideoPending = "Waiting for the video from your phone…";
+    // The owner wrote "Waiting for video" on 2026-11-10. It must stay verbatim.
+    public const string VideoPending = "Waiting for video";
 
     // The owner wrote "Video not available." on 2026-11-09, for media that the phone never sends here, such as a very
     // large video. The controller wrote the other 3 in the same form. The owner can edit them.

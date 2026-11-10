@@ -355,8 +355,9 @@
                                     </Canvas>
                                 </Border>
 
-                                <!-- The note shows the wait for the phone or the failure on a small plate over the
-                                     photo. After a failure, a click tries again. -->
+                                <!-- The note shows the wait for the phone or the failure on a small plate in the middle
+                                     of the photo. The ring turns during the wait, as on a video. After a failure, a
+                                     click tries again. -->
                                 <Border
                                     x:Name="PhotoNoteBack"
                                     Margin="12"
@@ -366,11 +367,32 @@
                                     Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}"
                                     CornerRadius="4"
                                     Visibility="Collapsed">
-                                    <TextBlock
-                                        x:Name="PhotoNote"
-                                        Style="{StaticResource CaptionTextBlockStyle}"
-                                        TextAlignment="Center"
-                                        TextWrapping="Wrap" />
+                                    <!-- A Grid, not a horizontal StackPanel, so the text wraps on a narrow photo. -->
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <!-- The gap is the margin of the ring. Thus a hidden ring leaves no gap. -->
+                                        <muxc:ProgressRing
+                                            x:Name="PhotoNoteRing"
+                                            Width="14"
+                                            Height="14"
+                                            MinWidth="14"
+                                            MinHeight="14"
+                                            Margin="0,0,6,0"
+                                            VerticalAlignment="Center"
+                                            AutomationProperties.AccessibilityView="Raw"
+                                            IsActive="False"
+                                            Visibility="Collapsed" />
+                                        <TextBlock
+                                            x:Name="PhotoNote"
+                                            Grid.Column="1"
+                                            VerticalAlignment="Center"
+                                            Style="{StaticResource CaptionTextBlockStyle}"
+                                            TextAlignment="Center"
+                                            TextWrapping="Wrap" />
+                                    </Grid>
                                 </Border>
                             </Grid>
                         </Button>
@@ -469,8 +491,9 @@
                                 </Grid>
                             </Button>
 
-                            <!-- The note shows the download, the wait for the phone or the failure on a small plate at
-                                 the bottom. The ring turns during the download and the wait. -->
+                            <!-- The note shows the download, the wait for the phone or the failure on a small plate. It
+                                 is in the middle when there is no play button, else at the bottom. The ring turns
+                                 during the download and the wait. -->
                             <Border
                                 x:Name="VideoNoteBack"
                                 Margin="12"
@@ -481,24 +504,32 @@
                                 CornerRadius="4"
                                 IsHitTestVisible="False"
                                 Visibility="Collapsed">
-                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                <!-- A Grid, not a horizontal StackPanel, so the text wraps on a narrow video. -->
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <!-- The gap is the margin of the ring. Thus a hidden ring leaves no gap. -->
                                     <muxc:ProgressRing
                                         x:Name="VideoNoteRing"
                                         Width="14"
                                         Height="14"
                                         MinWidth="14"
                                         MinHeight="14"
+                                        Margin="0,0,6,0"
                                         VerticalAlignment="Center"
                                         AutomationProperties.AccessibilityView="Raw"
                                         IsActive="False"
                                         Visibility="Collapsed" />
                                     <TextBlock
                                         x:Name="VideoNote"
+                                        Grid.Column="1"
                                         VerticalAlignment="Center"
                                         Style="{StaticResource CaptionTextBlockStyle}"
                                         TextAlignment="Center"
                                         TextWrapping="Wrap" />
-                                </StackPanel>
+                                </Grid>
                             </Border>
                         </Grid>
 
