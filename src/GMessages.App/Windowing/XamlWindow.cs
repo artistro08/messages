@@ -188,6 +188,15 @@ internal unsafe class XamlWindow
     public event EventHandler? BoundsChanged;
 
     /// <summary>
+    /// Raised when Escape goes down in the window or in a window that it holds, before XAML gets the key. A handler
+    /// sets Handled to true when it used the key, and then XAML does not get it.
+    /// </summary>
+    /// <remarks>
+    /// The video player can keep the keyboard focus of Windows outside the island. Then Escape never reaches XAML.
+    /// </remarks>
+    public event EventHandler<System.ComponentModel.HandledEventArgs>? EscapePressed;
+
+    /// <summary>
     /// Raised when the pointer moves onto or off a caption button, or presses it. The argument holds the hit test codes
     /// of the hovered and the pressed button: <see cref="WindowInterop.HTMINBUTTON"/>,
     /// <see cref="WindowInterop.HTMAXBUTTON"/>, <see cref="WindowInterop.HTCLOSE"/> or 0.
@@ -313,7 +322,7 @@ internal unsafe class XamlWindow
         MSG msg;
         while (GetMessageW(&msg, 0, 0, 0) > 0)
         {
-            if (PreTranslate(&msg))
+            if (PreTranslate(&msg) || RaiseEscape(&msg))
             {
                 continue;
             }
@@ -339,6 +348,30 @@ internal unsafe class XamlWindow
             if (handled != 0)
             {
                 return true;
+            }
+        }
+
+        return false;
+    }
+
+    // Gives Escape to the window that holds its target. The target can be a child or an owned window, such as the
+    // layer of the video player. True when a handler used the key.
+    private static bool RaiseEscape(MSG* msg)
+    {
+        if (msg->message != WM_KEYDOWN || msg->wParam != VK_ESCAPE)
+        {
+            return false;
+        }
+
+        nint root = GetAncestor(msg->hwnd, GA_ROOTOWNER);
+        for (int i = 0; i < Open.Count; i++)
+        {
+            XamlWindow window = Open[i];
+            if (window.Hwnd == msg->hwnd || window.Hwnd == root)
+            {
+                var args = new System.ComponentModel.HandledEventArgs();
+                window.EscapePressed?.Invoke(window, args);
+                return args.Handled;
             }
         }
 

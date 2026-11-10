@@ -103,6 +103,16 @@ public sealed partial class MainWindow : UserControl
         RestoreWindowBounds();
         _window.BoundsChanged += (_, _) => OnBoundsChanged();
 
+        // Escape closes the viewer also when the video player holds the keyboard focus of Windows.
+        _window.EscapePressed += (_, e) =>
+        {
+            if (PhotoViewer.IsOpen)
+            {
+                PhotoViewer.Close(animate: true);
+                e.Handled = true;
+            }
+        };
+
         ProfileArchived.Text    = ChatCopy.Archived;
         ProfileSpamBlocked.Text = ChatCopy.SpamAndBlocked;
 
