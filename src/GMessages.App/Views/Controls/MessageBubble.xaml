@@ -831,7 +831,9 @@
 
                     <!-- The time is hidden until a click on the bubble. It has the lock on an encrypted RCS message.
                          The retry link takes its place when the send failed. -->
-                    <Grid x:Name="Footer">
+                    <!-- The time rows keep to the right when the read line under them is wider. A received bubble has no
+                         read line, so the captions are as wide as the time and nothing moves. -->
+                    <Grid x:Name="Footer" HorizontalAlignment="Right">
                         <StackPanel
                             Orientation="Horizontal"
                             Spacing="4"
@@ -882,6 +884,7 @@
                     <StackPanel
                         x:Name="StatusRow"
                         x:Load="{x:Bind Bubble.ShowsStatusRow, Mode=OneWay, FallbackValue=False}"
+                        HorizontalAlignment="Right"
                         Orientation="Horizontal"
                         Spacing="4">
                         <TextBlock
