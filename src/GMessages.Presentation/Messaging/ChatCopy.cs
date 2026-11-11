@@ -45,8 +45,8 @@ public static class ChatCopy
     public const string MoveToTrashTitle = "Move to trash?";
     public const string MoveToTrashText  = "It moves to trash on your phone too.";
 
-    // The controller wrote the note of a toast that its one-time code is on the clipboard. The owner approves it.
-    public const string CodeCopied = "Code copied";
+    // The owner wrote the note of a toast that its one-time code is on the clipboard, on 2026-11-11. It must stay verbatim.
+    public const string CodeCopied = "OTP copied to clipboard";
 
     // The controller wrote the copy of the delete action of a message and its dialog. The owner approves it.
     public const string Delete             = "Delete";
