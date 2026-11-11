@@ -19,8 +19,8 @@ public sealed record NotificationContent(string Tag, string Group, string Title,
     private const int MaxBodyLength = 100;
 
     /// <summary>
-    /// Gets whether the app copied the one-time code of the message to the clipboard. The toast then says "Code
-    /// copied" under the text.
+    /// Gets whether the app copied the one-time code of the message to the clipboard. The toast then says "OTP
+    /// copied to clipboard" under the text.
     /// </summary>
     public bool CodeCopied { get; init; }
 
