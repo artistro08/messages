@@ -117,7 +117,7 @@
                 <VisualState x:Name="PreviewAloneRcs">
                     <VisualState.Setters>
                         <Setter Target="PreviewCard.Background" Value="{ThemeResource RcsBubbleBrush}" />
-                        <Setter Target="PreviewCard.BorderBrush" Value="{ThemeResource RcsBubbleBorderBrush}" />
+                        <Setter Target="PreviewCard.BorderThickness" Value="0" />
                     </VisualState.Setters>
                 </VisualState>
                 <VisualState x:Name="PreviewAloneSms">
@@ -666,12 +666,13 @@
                             <Canvas x:Name="LinkBlockers" />
                         </Grid>
 
-                        <!-- The preview is a share card. The share image of the page runs across its top, 240 px
-                             wide in its own shape, with nothing cut off. A very tall image stops at 320 px high and
-                             narrows to keep its shape. Under it come the page title in 2 lines at most and its site in
-                             caption style. A page with no image shows no image. A card alone in its bubble is the
-                             bubble, with its corners and the colors of its side. See PreviewSide. A click, Enter or Space opens the link in the default browser. The card is named by
-                             its title and the host of the link. A right-click, the Application key or Shift + F10 opens
+                        <!-- The preview is a share card across the whole bubble. The share image of the page runs
+                             across its top in its own shape, with nothing cut off. SizePreviewImage sets its height. A
+                             card alone starts 240 px wide. Under the image come the page title and its site in caption
+                             style. The title wraps only past the width of the bubble, in 2 lines at most. A page with no
+                             image shows no image. A card alone in its bubble is the bubble, with smaller corners and the
+                             colors of its side. See PreviewSide. A click, Enter or Space opens the link in the default
+                             browser. The card is named by its title and the host of the link. A right-click, the Application key or Shift + F10 opens
                              its own menu with Copy link. That menu is PreviewMenu of the chat pane, which finds the
                              card by its name. The look of the card is on PreviewCard. SubtleButtonStyle gives the
                              button no hover or press fill. Thus the card never flashes another color under the pointer,
@@ -688,20 +689,19 @@
                             AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Preview.', Bubble.PartKey), Mode=OneWay}"
                             AutomationProperties.Name="{x:Bind Bubble.PreviewName, Mode=OneWay, FallbackValue=''}"
                             Click="OnPreviewClick"
-                            CornerRadius="{x:Bind local:MessageBubble.PreviewCorners(Bubble.PreviewFillsBubble, Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup), Mode=OneWay}"
+                            CornerRadius="{x:Bind local:MessageBubble.PreviewCorners(Bubble.PreviewFillsBubble), Mode=OneWay}"
                             Loaded="OnPartLoaded"
                             Style="{StaticResource SubtleButtonStyle}">
                             <Border
                                 x:Name="PreviewCard"
+                                SizeChanged="OnPreviewCardSizeChanged"
                                 Background="{ThemeResource ControlFillColorDefaultBrush}"
                                 BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
                                 BorderThickness="1"
-                                CornerRadius="{x:Bind local:MessageBubble.PreviewCorners(Bubble.PreviewFillsBubble, Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup), Mode=OneWay}">
-                                <StackPanel MaxWidth="240">
+                                CornerRadius="{x:Bind local:MessageBubble.PreviewCorners(Bubble.PreviewFillsBubble), Mode=OneWay}">
+                                <StackPanel>
                                     <Image
                                         x:Name="PreviewImage"
-                                        MaxWidth="240"
-                                        MaxHeight="320"
                                         Stretch="Uniform"
                                         Visibility="Collapsed" />
                                     <StackPanel Padding="10,6,10,8" Spacing="2">
