@@ -45,10 +45,10 @@ public sealed class LinkPreviewerTests
     [DataRow("a https://x.com/a_(b)).", "https://x.com/a_(b)")]
     [DataRow("a https://x.com/a[1]],", "https://x.com/a[1]")]
     public void FirstLink_TrimsPunctuation(string text, string expected) =>
-        Assert.AreEqual(new Uri(expected), LinkPreviewer.FirstLink(text));
+        Assert.AreEqual(new Uri(expected), LinkPreviewer.FirstTextLink(text)?.Url);
 
     [TestMethod]
-    public void FirstLink_NoLink_Null() => Assert.IsNull(LinkPreviewer.FirstLink("no link here, ftp://x.com"));
+    public void FirstLink_NoLink_Null() => Assert.IsNull(LinkPreviewer.FirstTextLink("no link here, ftp://x.com"));
 
     // =========================================================================
     // LINKS IN TEXT
@@ -252,6 +252,25 @@ public sealed class LinkPreviewerTests
         (_, _, Uri? image) = LinkPreviewer.ParseHead("<title>T</title><meta property=\"og:image\" content=\"http://10.0.0.1/x.png\">", Page)!.Value;
 
         Assert.IsNull(image);
+    }
+
+    [TestMethod]
+    [DataRow("twitter:image")]
+    [DataRow("twitter:image:src")]
+    [DataRow("og:image:secure_url")]
+    public void ParseHead_NoOgImage_UsesOtherImageTag(string key)
+    {
+        (_, _, Uri? image) = LinkPreviewer.ParseHead($"<title>T</title><meta name=\"{key}\" content=\"/card.png\">", Page)!.Value;
+
+        Assert.AreEqual(new Uri(Page, "/card.png"), image);
+    }
+
+    [TestMethod]
+    public void ParseHead_OgImage_WinsOverOtherImageTag()
+    {
+        (_, _, Uri? image) = LinkPreviewer.ParseHead("<title>T</title><meta name=\"twitter:image\" content=\"/t.png\"><meta property=\"og:image\" content=\"/og.png\">", Page)!.Value;
+
+        Assert.AreEqual(new Uri(Page, "/og.png"), image);
     }
 
     [TestMethod]

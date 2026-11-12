@@ -144,9 +144,14 @@ public sealed partial class MessageBubble : UserControl
     // middle 4 px in from the edge.
     private const double PillCornerReach = 8;
 
-    // The image width of the preview card and its gap below the text, in effective pixels.
-    private const int PreviewImageWidth = 240;
-    private const double PreviewGap     = 8;
+    // The preview card in effective pixels: the width of its image on a card alone, the widest the image decodes, the
+    // tallest the image shows, its gap below the text, and its corners under text and alone.
+    private const double PreviewImageWidth  = 240;
+    private const int PreviewDecodeWidth    = (int)MaxBubbleWidth;
+    private const double PreviewImageHeight = 320;
+    private const double PreviewGap         = 8;
+    private const double PreviewCorner      = 8;
+    private const double PreviewAloneCorner = 12;
 
     // The list of who reacted scrolls past this height. The emoji of each row sits this far from the name.
     private const double ReactorsMaxHeight = 320;
@@ -677,8 +682,9 @@ public sealed partial class MessageBubble : UserControl
     /// </summary>
     /// <param name="hasPhoto">True when the bubble shows a photo.</param>
     /// <param name="emojiOnly">True when the message is only emoji.</param>
+    /// <param name="previewAlone">True when the preview card is all that the bubble shows.</param>
     /// <returns>The padding.</returns>
-    public static Thickness BackPadding(bool hasPhoto, bool emojiOnly) => hasPhoto || emojiOnly ? default : TextPadding;
+    public static Thickness BackPadding(bool hasPhoto, bool emojiOnly, bool previewAlone) => hasPhoto || emojiOnly || previewAlone ? default : TextPadding;
 
     /// <summary>
     /// Gives the margin of the text. Under a photo, the caption keeps the usual inset of the bubble. Else the padding
@@ -698,9 +704,20 @@ public sealed partial class MessageBubble : UserControl
     /// <param name="emojiOnly">
     /// True when the message is only emoji. They show big with no bubble around them, as issue #11 asked.
     /// </param>
-    /// <returns>Collapsed for a photo alone or for emoji alone.</returns>
-    public static Visibility FillShown(bool hasPhoto, bool hasCaption, bool hasQuote, bool emojiOnly) =>
-        emojiOnly || (hasPhoto && !hasCaption && !hasQuote) ? Visibility.Collapsed : Visibility.Visible;
+    /// <param name="previewAlone">
+    /// True when the preview card is all that the bubble shows. The card then takes the colors of the bubble itself.
+    /// </param>
+    /// <returns>Collapsed for a photo alone, a preview card alone or emoji alone.</returns>
+    public static Visibility FillShown(bool hasPhoto, bool hasCaption, bool hasQuote, bool emojiOnly, bool previewAlone) =>
+        emojiOnly || previewAlone || (hasPhoto && !hasCaption && !hasQuote) ? Visibility.Collapsed : Visibility.Visible;
+
+    /// <summary>
+    /// Rounds the preview card. A card alone in its bubble is the bubble, with the same corners all around, smaller
+    /// than the corners of a text bubble, as the owner asked. A card under text keeps smaller corners inside the bubble.
+    /// </summary>
+    /// <param name="previewAlone">True when the preview card is all that the bubble shows.</param>
+    /// <returns>The corners.</returns>
+    public static CornerRadius PreviewCorners(bool previewAlone) => new(previewAlone ? PreviewAloneCorner : PreviewCorner);
 
     /// <summary>
     /// Rounds a photo to the exact corners of its bubble, because the photo covers the edge of the bubble. The bottom
@@ -806,9 +823,20 @@ public sealed partial class MessageBubble : UserControl
         GoToPartState(QuoteButton, sms ? "QuoteOnAccent" : "QuotePlain", "QuotePlain", refresh);
         GoToPartState(FileCard, sms ? "FileOnAccent" : "FilePlain", "FilePlain", refresh);
         GoToPartState(Voice, sms ? "VoiceOnAccent" : "VoicePlain", "VoicePlain", refresh);
-        GoToPartState(Preview, sms ? "PreviewOnAccent" : "PreviewPlain", "PreviewPlain", refresh);
+        GoToPartState(Preview, PreviewState(), "PreviewPlain", refresh);
         GoToPartState(PillHost, Bubble?.HasMyReaction == true ? "Mine" : "NotMine", "NotMine", refresh);
     }
+
+    // A card alone in its bubble takes the colors of its side: the card color when received, the RCS shade when sent
+    // over RCS, and the accent when sent over SMS. A card under text sits on the fill of the bubble instead.
+    private string PreviewState() => Bubble switch
+    {
+        { PreviewFillsBubble: true, FromMe: false } => "PreviewAloneReceived",
+        { PreviewFillsBubble: true, IsRcs: true }   => "PreviewAloneRcs",
+        { PreviewFillsBubble: true }                => "PreviewAloneSms",
+        { FromMe: true, IsRcs: false }              => "PreviewOnAccent",
+        _                                           => "PreviewPlain",
+    };
 
     private void GoToPartState(FrameworkElement? part, string state, string plain, bool refresh)
     {
@@ -974,7 +1002,8 @@ public sealed partial class MessageBubble : UserControl
             // that place.
             case nameof(MessageBubbleViewModel.FromMe) or nameof(MessageBubbleViewModel.IsRcs)
                 or nameof(MessageBubbleViewModel.IsEmojiOnly) or nameof(MessageBubbleViewModel.HasMyReaction) or nameof(MessageBubbleViewModel.HasReactions)
-                or nameof(MessageBubbleViewModel.IsFirstInGroup) or nameof(MessageBubbleViewModel.IsLastInGroup):
+                or nameof(MessageBubbleViewModel.IsFirstInGroup) or nameof(MessageBubbleViewModel.IsLastInGroup)
+                or nameof(MessageBubbleViewModel.PreviewFillsBubble):
                 ShowStates();
                 ClipPhotoFull();
                 ClipVideoPicture();
@@ -1216,7 +1245,7 @@ public sealed partial class MessageBubble : UserControl
         }
 
         // A recycled container can show another message after the decode.
-        ImageSource? image = await Avatar.ToImageAsync(bytes, PreviewImageWidth);
+        ImageSource? image = await Avatar.ToImageAsync(bytes, PreviewDecodeWidth);
         if (image is null || !ReferenceEquals(preview, _previewShown))
         {
             return;
@@ -1224,6 +1253,35 @@ public sealed partial class MessageBubble : UserControl
 
         PreviewImage.Source     = image;
         PreviewImage.Visibility = Visibility.Visible;
+
+        // A new image starts at the width of a card alone. A recycled row can keep the width of its card, and then no
+        // size change follows. Thus the card lays out once here, and the image takes the width that the card gets.
+        SizePreviewImage(PreviewImageWidth);
+        PreviewCard.UpdateLayout();
+        SizePreviewImage(InnerWidth(PreviewCard.ActualWidth));
+    }
+
+    // The image runs across the whole card in its own shape. It sets only its height from the width of the card, so the
+    // text and the bubble decide the width. A very tall image stops at its tallest and narrows to keep its shape.
+    private void OnPreviewCardSizeChanged(object sender, SizeChangedEventArgs e) => SizePreviewImage(InnerWidth(e.NewSize.Width));
+
+    // The width inside the border of the card.
+    private double InnerWidth(double cardWidth) => cardWidth - PreviewCard.BorderThickness.Left - PreviewCard.BorderThickness.Right;
+
+    private void SizePreviewImage(double width)
+    {
+        if (PreviewImage?.Source is not BitmapImage { PixelWidth: > 0, PixelHeight: > 0 } bitmap || width <= 0)
+        {
+            return;
+        }
+
+        double height = Math.Min(PreviewImageHeight, width * bitmap.PixelHeight / bitmap.PixelWidth);
+
+        // Layout rounding must not make the card and the image chase each other by a fraction of a pixel.
+        if (double.IsNaN(PreviewImage.Height) || Math.Abs(PreviewImage.Height - height) > 0.5)
+        {
+            PreviewImage.Height = height;
+        }
     }
 
     // =========================================================================
