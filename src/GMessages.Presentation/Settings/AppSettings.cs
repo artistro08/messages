@@ -25,6 +25,7 @@ public sealed class AppSettings : INotifyPropertyChanged
     private const string MicrophoneIdKey             = "MicrophoneId";
     private const string ShowReceivedLinkPreviewsKey = "ShowReceivedLinkPreviews";
     private const string ShowPinnedGridKey           = "ShowPinnedGrid";
+    private const string ShowPinnedCardsKey          = "ShowPinnedCards";
     private const string ShowTrayIconKey             = "ShowTrayIcon";
     private const string RunInBackgroundKey          = "RunInBackground";
     private const string CopyCodesKey                = "CopyCodes";
@@ -94,6 +95,17 @@ public sealed class AppSettings : INotifyPropertyChanged
     {
         get => GetBool(ShowPinnedGridKey, false);
         set => Set(ShowPinnedGridKey, value.ToString(CultureInfo.InvariantCulture));
+    }
+
+    /// <summary>
+    /// Gets or sets whether an unread tile of the pinned grid shows a message card, as Google Messages does. The card
+    /// shows the newest message, its time and the unread count. Otherwise the tile shows a small pill on the picture.
+    /// The default is true.
+    /// </summary>
+    public bool ShowPinnedCards
+    {
+        get => GetBool(ShowPinnedCardsKey, true);
+        set => Set(ShowPinnedCardsKey, value.ToString(CultureInfo.InvariantCulture));
     }
 
     /// <summary>

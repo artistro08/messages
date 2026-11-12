@@ -154,11 +154,44 @@
                                             <SolidColorBrush x:Key="GridViewItemSelectedPressedBorderBrush" Color="Transparent" />
                                             <SolidColorBrush x:Key="GridViewItemSelectedInnerBorderBrush" Color="Transparent" />
                                             <SolidColorBrush x:Key="GridViewItemBackgroundSelected" Color="{ThemeResource SubtleFillColorSecondary}" />
-                                            <SolidColorBrush x:Key="GridViewItemBackgroundSelectedPointerOver" Color="{ThemeResource SubtleFillColorTertiary}" />
+                                            <!-- The owner chose no hover fill on the tiles. The card or the picture
+                                                 shows the hover instead. See ShowTileHover. -->
+                                            <SolidColorBrush x:Key="GridViewItemBackgroundPointerOver" Color="Transparent" />
+                                            <SolidColorBrush x:Key="GridViewItemRevealBackgroundPointerOver" Color="Transparent" />
+                                            <SolidColorBrush x:Key="GridViewItemRevealBackgroundSelectedPointerOver" Color="{ThemeResource SubtleFillColorSecondary}" />
+                                            <SolidColorBrush x:Key="GridViewItemRevealBorderBrush" Color="Transparent" />
+                                            <SolidColorBrush x:Key="GridViewItemPointerOverBorderBrush" Color="Transparent" />
+                                            <!-- The name keeps its color on hover, press and select. -->
+                                            <SolidColorBrush x:Key="GridViewItemForegroundPointerOver" Color="{ThemeResource TextFillColorPrimary}" />
+                                            <SolidColorBrush x:Key="GridViewItemForegroundPressed" Color="{ThemeResource TextFillColorPrimary}" />
+                                            <SolidColorBrush x:Key="GridViewItemForegroundSelected" Color="{ThemeResource TextFillColorPrimary}" />
+                                            <SolidColorBrush x:Key="GridViewItemForegroundSelectedPointerOver" Color="{ThemeResource TextFillColorPrimary}" />
+                                            <SolidColorBrush x:Key="GridViewItemForegroundSelectedPressed" Color="{ThemeResource TextFillColorPrimary}" />
+                                            <SolidColorBrush x:Key="GridViewItemBackgroundSelectedPointerOver" Color="{ThemeResource SubtleFillColorSecondary}" />
                                             <SolidColorBrush x:Key="GridViewItemBackgroundSelectedPressed" Color="{ThemeResource SubtleFillColorSecondary}" />
                                         </ResourceDictionary>
                                         <ResourceDictionary x:Key="HighContrast" />
                                     </ResourceDictionary.ThemeDictionaries>
+
+                                    <!-- The accent pill of the tiles: the unread badge and the count of the card. -->
+                                    <Style x:Key="PinnedPillStyle" TargetType="Border">
+                                        <Setter Property="MinWidth" Value="20" />
+                                        <Setter Property="Height" Value="20" />
+                                        <Setter Property="Padding" Value="6,0" />
+                                        <Setter Property="Background" Value="{ThemeResource AccentFillColorDefaultBrush}" />
+                                        <Setter Property="BorderBrush" Value="{ThemeResource SolidBackgroundFillColorBaseBrush}" />
+                                        <Setter Property="BorderThickness" Value="1" />
+                                        <Setter Property="CornerRadius" Value="10" />
+                                    </Style>
+                                    <Style
+                                        x:Key="PinnedPillTextStyle"
+                                        BasedOn="{StaticResource CaptionTextBlockStyle}"
+                                        TargetType="TextBlock">
+                                        <Setter Property="HorizontalAlignment" Value="Center" />
+                                        <Setter Property="VerticalAlignment" Value="Center" />
+                                        <Setter Property="Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                                        <Setter Property="MaxLines" Value="1" />
+                                    </Style>
                                 </ResourceDictionary>
                             </GridView.Resources>
 
@@ -186,55 +219,168 @@
                             </GridView.ItemContainerStyle>
 
                             <!-- A tile shows the picture with the unread badge, the name below and the selection pill
-                                 at the bottom. The picture draws at 52 px, and its photo decodes to match. The name
-                                 is bold while unread. -->
+                                 at the bottom. The picture draws at 52 px. The name is bold while unread. With cards
+                                 on, an unread tile shows the square message card in place of the picture, as Google
+                                 Messages does. Every picture then fills the same square, so the tiles stay even. The
+                                 photo decodes at 128 px for the large picture. See TileArt, TilePhoto and
+                                 OnPinnedArtSizeChanged. -->
                             <GridView.ItemTemplate>
                                 <DataTemplate x:DataType="main:ConversationRowViewModel">
                                     <!-- A tile always has a tooltip, because it shows no snippet and trims its
                                          name. -->
-                                    <Grid ToolTipService.ToolTip="{x:Bind HoverText, Mode=OneWay}">
-                                        <StackPanel Padding="4,8" Spacing="6">
-                                            <Grid HorizontalAlignment="Center">
-                                                <Viewbox Width="52" Height="52">
-                                                    <controls:Avatar
-                                                        PhotoSize="52"
-                                                        Color="{x:Bind AvatarColor, Mode=OneWay}"
-                                                        Initial="{x:Bind Initial, Mode=OneWay}"
-                                                        PhotoId="{x:Bind PhotoId, Mode=OneWay}"
-                                                        SecondColor="{x:Bind SecondColor, Mode=OneWay}"
-                                                        SecondInitial="{x:Bind SecondInitial, Mode=OneWay}"
-                                                        SecondPhotoId="{x:Bind SecondPhotoId, Mode=OneWay}" />
-                                                </Viewbox>
+                                    <Grid
+                                        PointerCanceled="OnPinnedTilePointerExited"
+                                        PointerCaptureLost="OnPinnedTilePointerExited"
+                                        PointerEntered="OnPinnedTilePointerEntered"
+                                        PointerExited="OnPinnedTilePointerExited"
+                                        ToolTipService.ToolTip="{x:Bind HoverText, Mode=OneWay}">
+                                        <!-- The 10 px at the bottom keeps the name clear of the selection pill. -->
+                                        <Grid Padding="4,4,4,10" RowSpacing="4">
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                            </Grid.RowDefinitions>
 
-                                                <!-- The unread badge is the system accent pill at the top right of
-                                                     the picture. It shows the short newest message or the unread
-                                                     count. See ChatFormat.UnreadBadge. It hangs past the edge of the
-                                                     picture and grows to the left for 1 or 2 words. -->
-                                                <Border
-                                                    MinWidth="20"
-                                                    MaxWidth="88"
-                                                    Height="20"
-                                                    Margin="0,-4,-8,0"
-                                                    Padding="6,0"
-                                                    HorizontalAlignment="Right"
-                                                    VerticalAlignment="Top"
-                                                    Background="{ThemeResource AccentFillColorDefaultBrush}"
-                                                    BorderBrush="{ThemeResource SolidBackgroundFillColorBaseBrush}"
-                                                    BorderThickness="1"
-                                                    CornerRadius="10"
-                                                    Visibility="{x:Bind local:UiHelpers.ShownIfText(UnreadBadge), Mode=OneWay}">
-                                                    <TextBlock
-                                                        HorizontalAlignment="Center"
-                                                        VerticalAlignment="Center"
-                                                        AutomationProperties.AutomationId="{x:Bind controls:ConversationRow.PartId('Pinned.Badge.', Id), Mode=OneWay}"
-                                                        Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
-                                                        MaxLines="1"
-                                                        Style="{StaticResource CaptionTextBlockStyle}"
-                                                        Text="{x:Bind UnreadBadge, Mode=OneWay}"
-                                                        TextTrimming="CharacterEllipsis" />
-                                                </Border>
+                                            <!-- The art area holds the picture or the card. With cards on, the code
+                                                 makes it square. See OnPinnedArtSizeChanged. A new message pops the
+                                                 card. See OnCardMessageArrived. -->
+                                            <Grid x:Name="PinnedArt" SizeChanged="OnPinnedArtSizeChanged">
+                                                <Grid
+                                                    Margin="{x:Bind local:ChatsView.PictureMargin(CardsOn), Mode=OneWay}"
+                                                    HorizontalAlignment="Center"
+                                                    VerticalAlignment="Center"
+                                                    Visibility="{x:Bind local:UiHelpers.Not(ShowsCard), Mode=OneWay}">
+                                                    <Viewbox
+                                                        Width="{x:Bind local:ChatsView.TileArt(CardsOn), Mode=OneWay}"
+                                                        Height="{x:Bind local:ChatsView.TileArt(CardsOn), Mode=OneWay}">
+                                                        <Grid>
+                                                            <controls:Avatar
+                                                                PhotoSize="{x:Bind local:ChatsView.TilePhoto(CardsOn), Mode=OneWay}"
+                                                                Color="{x:Bind AvatarColor, Mode=OneWay}"
+                                                                Initial="{x:Bind Initial, Mode=OneWay}"
+                                                                PhotoId="{x:Bind PhotoId, Mode=OneWay}"
+                                                                SecondColor="{x:Bind SecondColor, Mode=OneWay}"
+                                                                SecondInitial="{x:Bind SecondInitial, Mode=OneWay}"
+                                                                SecondPhotoId="{x:Bind SecondPhotoId, Mode=OneWay}" />
+
+                                                            <!-- The shine is a white light from the top left. It
+                                                                 fades in over 50 ms while the pointer is on the tile,
+                                                                 as the owner chose. -->
+                                                            <Ellipse
+                                                                x:Name="PictureShine"
+                                                                IsHitTestVisible="False"
+                                                                Opacity="0">
+                                                                <Ellipse.Fill>
+                                                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                                                        <GradientStop Offset="0" Color="#59FFFFFF" />
+                                                                        <GradientStop Offset="0.55" Color="#14FFFFFF" />
+                                                                        <GradientStop Offset="1" Color="#00FFFFFF" />
+                                                                    </LinearGradientBrush>
+                                                                </Ellipse.Fill>
+                                                                <Ellipse.OpacityTransition>
+                                                                    <ScalarTransition Duration="0:0:0.05" />
+                                                                </Ellipse.OpacityTransition>
+                                                            </Ellipse>
+                                                        </Grid>
+                                                    </Viewbox>
+
+                                                    <!-- The unread badge is the system accent pill at the top right
+                                                         of the picture. It shows the short newest message or the
+                                                         unread count. See ChatFormat.UnreadBadge. It hangs past the
+                                                         edge of the picture and grows to the left for 1 or 2 words. -->
+                                                    <Border
+                                                        MaxWidth="88"
+                                                        Margin="0,-4,-8,0"
+                                                        HorizontalAlignment="Right"
+                                                        VerticalAlignment="Top"
+                                                        Style="{StaticResource PinnedPillStyle}"
+                                                        Visibility="{x:Bind local:UiHelpers.ShownIfText(UnreadBadge), Mode=OneWay}">
+                                                        <TextBlock
+                                                            AutomationProperties.AutomationId="{x:Bind controls:ConversationRow.PartId('Pinned.Badge.', Id), Mode=OneWay}"
+                                                            Style="{StaticResource PinnedPillTextStyle}"
+                                                            Text="{x:Bind UnreadBadge, Mode=OneWay}"
+                                                            TextTrimming="CharacterEllipsis" />
+                                                    </Border>
+                                                </Grid>
+
+                                                <!-- The message card: a small picture and the time at the top, the
+                                                     newest message in bold below, and the unread count at the bottom
+                                                     right. The card has the fill and stroke of a Windows card, and
+                                                     CardHover lightens it while the pointer is on the tile. The count
+                                                     is the accent pill of the tiles. It hangs 4 px past the corner of
+                                                     the card, into the margin, so the tile does not cut it. -->
+                                                <Grid x:Name="PinnedCard" Visibility="{x:Bind ShowsCard, Mode=OneWay}">
+                                                    <Border
+                                                        Margin="4,0,4,4"
+                                                        Padding="10,8"
+                                                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                        BorderThickness="1"
+                                                        CornerRadius="16">
+                                                        <Grid RowSpacing="2">
+                                                            <Grid.RowDefinitions>
+                                                                <RowDefinition Height="Auto" />
+                                                                <RowDefinition Height="*" />
+                                                            </Grid.RowDefinitions>
+                                                            <Viewbox
+                                                                Width="20"
+                                                                Height="20"
+                                                                HorizontalAlignment="Left">
+                                                                <!-- The size of the large picture, so both pictures share
+                                                                     1 decoded photo. -->
+                                                                <controls:Avatar
+                                                                    PhotoSize="128"
+                                                                    Color="{x:Bind AvatarColor, Mode=OneWay}"
+                                                                    Initial="{x:Bind Initial, Mode=OneWay}"
+                                                                    PhotoId="{x:Bind PhotoId, Mode=OneWay}"
+                                                                    SecondColor="{x:Bind SecondColor, Mode=OneWay}"
+                                                                    SecondInitial="{x:Bind SecondInitial, Mode=OneWay}"
+                                                                    SecondPhotoId="{x:Bind SecondPhotoId, Mode=OneWay}" />
+                                                            </Viewbox>
+                                                            <TextBlock
+                                                                HorizontalAlignment="Right"
+                                                                VerticalAlignment="Center"
+                                                                FontSize="11"
+                                                                FontWeight="SemiBold"
+                                                                MaxLines="1"
+                                                                Style="{StaticResource CaptionTextBlockStyle}"
+                                                                Text="{x:Bind CardTime, Mode=OneWay}" />
+                                                            <TextBlock
+                                                                Grid.Row="1"
+                                                                AutomationProperties.AutomationId="{x:Bind controls:ConversationRow.PartId('Pinned.Card.', Id), Mode=OneWay}"
+                                                                FontFamily="{ThemeResource ContentControlThemeFontFamily}"
+                                                                MaxLines="4"
+                                                                Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                                Text="{x:Bind CardText, Mode=OneWay}"
+                                                                TextTrimming="CharacterEllipsis"
+                                                                TextWrapping="Wrap" />
+                                                        </Grid>
+                                                    </Border>
+                                                    <Border
+                                                        x:Name="CardHover"
+                                                        Margin="4,0,4,4"
+                                                        Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                                        CornerRadius="16"
+                                                        IsHitTestVisible="False"
+                                                        Opacity="0">
+                                                        <Border.OpacityTransition>
+                                                            <ScalarTransition Duration="0:0:0.05" />
+                                                        </Border.OpacityTransition>
+                                                    </Border>
+                                                    <Border
+                                                        HorizontalAlignment="Right"
+                                                        VerticalAlignment="Bottom"
+                                                        Style="{StaticResource PinnedPillStyle}">
+                                                        <TextBlock
+                                                            AutomationProperties.AutomationId="{x:Bind controls:ConversationRow.PartId('Pinned.Count.', Id), Mode=OneWay}"
+                                                            Style="{StaticResource PinnedPillTextStyle}"
+                                                            Text="{x:Bind UnreadCount, Mode=OneWay}" />
+                                                    </Border>
+                                                </Grid>
                                             </Grid>
+
                                             <TextBlock
+                                                Grid.Row="1"
                                                 HorizontalAlignment="Center"
                                                 FontFamily="{ThemeResource ContentControlThemeFontFamily}"
                                                 FontWeight="{x:Bind controls:ColorConverters.Weight(IsUnread), Mode=OneWay}"
@@ -242,7 +388,7 @@
                                                 Style="{StaticResource CaptionTextBlockStyle}"
                                                 Text="{x:Bind Name, Mode=OneWay}"
                                                 TextTrimming="CharacterEllipsis" />
-                                        </StackPanel>
+                                        </Grid>
 
                                         <!-- The selection pill is the accent pill of the rows, laid flat at the bottom
                                              of the tile. Its scale is 0 until the user picks the tile. The code then

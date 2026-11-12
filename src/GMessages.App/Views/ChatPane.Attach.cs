@@ -238,7 +238,7 @@ public sealed partial class ChatPane
             if (view.Contains(StandardDataFormats.StorageItems))
             {
                 IReadOnlyList<IStorageItem> items = await view.GetStorageItemsAsync();
-                await AttachFilesAsync(chat, [.. items.Where(i => i.IsOfType(StorageItemTypes.File)).Select(i => i.As<StorageFile>())]);
+                await AttachFilesAsync(chat, (StorageFile[])[.. items.Where(i => i.IsOfType(StorageItemTypes.File)).Select(i => i.As<StorageFile>())]);
             }
             else if ((await PastedPictureAsync(view) ?? await PastedWebGifAsync(view, chat.Previews)) is { } picture)
             {
