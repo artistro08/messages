@@ -135,6 +135,24 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged, IDisposa
     }
 
     /// <summary>
+    /// Gets or sets whether an unread pinned tile shows a message card instead of a pill. The default is on.
+    /// </summary>
+    public bool ShowPinnedCards
+    {
+        get => _settings.ShowPinnedCards;
+        set
+        {
+            if (value == _settings.ShowPinnedCards)
+            {
+                return;
+            }
+
+            _settings.ShowPinnedCards = value;
+            Raise();
+        }
+    }
+
+    /// <summary>
     /// Gets or sets whether the app shows its icon in the system tray. The default is on.
     /// </summary>
     public bool ShowTrayIcon

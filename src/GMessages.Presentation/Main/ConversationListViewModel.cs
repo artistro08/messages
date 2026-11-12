@@ -25,6 +25,9 @@ namespace GMessages.Presentation.Main;
 /// </remarks>
 public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposable
 {
+    // While the pinned grid shows cards, this clock makes the "4 min" times of the cards current each minute.
+    private static readonly TimeSpan CardClockTick = TimeSpan.FromMinutes(1);
+
     private readonly ChatStore _store;
     private readonly ConversationFolder _folder;
     private readonly TimeProvider _time;
@@ -49,6 +52,8 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
     private bool _reloadPending;
 
     private bool _pinnedApart;
+    private bool _pinnedCards;
+    private ITimer? _cardClock;
 
     /// <summary>
     /// Creates an empty list and starts to listen to the store.
@@ -92,6 +97,12 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
     public event EventHandler<bool>? RowsChanging;
 
     /// <summary>
+    /// Occurs when a live new message comes to a pinned tile that shows a card. The view pops the card.
+    /// </summary>
+    /// <remarks>The event comes after the row moves, so the view finds the tile at its new place.</remarks>
+    public event EventHandler<ConversationRowViewModel>? CardMessageArrived;
+
+    /// <summary>
     /// Gets the rows, pinned first and then newest first. With <see cref="PinnedApart"/> on, the pinned rows are in
     /// <see cref="Pinned"/> instead.
     /// </summary>
@@ -123,6 +134,59 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
             {
                 Place(row, live: false);
             }
+
+            SetCardClock();
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets whether an unread pinned tile shows a message card instead of a pill. See
+    /// <see cref="ConversationRowViewModel.ShowsCard"/>.
+    /// </summary>
+    /// <remarks>
+    /// A change updates the pinned tiles at once. A row gets the value when it moves into <see cref="Pinned"/>. Call it
+    /// on the UI thread.
+    /// </remarks>
+    public bool PinnedCards
+    {
+        get => _pinnedCards;
+        set
+        {
+            if (_pinnedCards == value)
+            {
+                return;
+            }
+
+            _pinnedCards = value;
+            foreach (ConversationRowViewModel row in Pinned)
+            {
+                row.ShowCards(value);
+            }
+
+            SetCardClock();
+        }
+    }
+
+    // The clock runs only while the grid shows cards.
+    private void SetCardClock()
+    {
+        bool run = _pinnedApart && _pinnedCards;
+        if (run == (_cardClock is not null))
+        {
+            return;
+        }
+
+        _cardClock?.Dispose();
+        _cardClock = run ? _time.CreateTimer(_ => _post(RefreshCardTimes), null, CardClockTick, CardClockTick) : null;
+    }
+
+    // The cards show "4 min", so their times change each minute.
+    private void RefreshCardTimes()
+    {
+        DateTimeOffset now = _time.GetLocalNow();
+        foreach (ConversationRowViewModel row in Pinned)
+        {
+            row.RefreshCardTime(now);
         }
     }
 
@@ -316,6 +380,7 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
         _store.ConversationChanged -= OnConversationChanged;
         _store.Resynced            -= OnResynced;
         _store.DraftChanged        -= OnDraftChanged;
+        _cardClock?.Dispose();
     }
 
     // =========================================================================
@@ -360,14 +425,22 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
         {
             var row                                           = new ConversationRowViewModel(c, now, _store.LiveUnreadTexts(c.Id), draft);
             ObservableCollection<ConversationRowViewModel> to = ListFor(row);
+            row.ShowCards(_pinnedCards);
 
             RowsChanging?.Invoke(this, live);
             to.Insert(TargetIndex(to, row, null), row);
             return;
         }
 
+        DateTimeOffset before = existing.LastMessageTime;
         existing.Update(c, now, _store.LiveUnreadTexts(c.Id), draft);
         Place(existing, live);
+
+        // The time of the newest message tells a new message. The same text again is a new message too.
+        if (live && existing.ShowsCard && existing.LastMessageTime > before && Pinned.Contains(existing))
+        {
+            CardMessageArrived?.Invoke(this, existing);
+        }
     }
 
     // The row shows the draft, or the newest message again, and does not move.
@@ -400,6 +473,7 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
             return;
         }
 
+        row.ShowCards(_pinnedCards);
         RowsChanging?.Invoke(this, live);
         from.RemoveAt(index);
         to.Insert(TargetIndex(to, row, null), row);

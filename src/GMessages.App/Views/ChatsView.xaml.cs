@@ -90,6 +90,10 @@ public sealed partial class ChatsView : UserControl
     // ControlFastAnimationDuration of Windows.
     private static readonly TimeSpan PillGrowTime = TimeSpan.FromMilliseconds(167);
 
+    // A card with a new message shrinks to this scale and grows back, all in CardPopTime.
+    private const float CardPopScale              = 0.92f;
+    private static readonly TimeSpan CardPopTime  = TimeSpan.FromMilliseconds(150);
+
     private readonly SettingsViewModel _settings;
     private readonly ScrollHider _startChatHider = new(StartChatNudge);
 
@@ -139,7 +143,13 @@ public sealed partial class ChatsView : UserControl
         EmptyStateText.Text = ChatCopy.StartAConversation;
 
         ViewModel.Inbox.PinnedApart = settings.ShowPinnedGrid;
-        _settings.PropertyChanged  += OnSettingsChanged;
+        ViewModel.Inbox.PinnedCards         = settings.ShowPinnedCards;
+        ViewModel.Inbox.CardMessageArrived += OnCardMessageArrived;
+        _settings.PropertyChanged          += OnSettingsChanged;
+
+        // A tile that the grid reuses for another chat drops the hover of the old chat.
+        PinnedGrid.ContainerContentChanging += (_, args) => ShowTileHover(args.ItemContainer, 0);
+
         ViewModel.PropertyChanged  += OnViewModelChanged;
         ConversationList.AddHandler(KeyDownEvent, new KeyEventHandler(OnListKeyDown), handledEventsToo: true);
         ConversationList.PreviewKeyDown     += OnListPreviewKeyDown;
@@ -182,8 +192,9 @@ public sealed partial class ChatsView : UserControl
             _shownList.PropertyChanged          -= OnListPropertyChanged;
         }
 
-        _settings.PropertyChanged -= OnSettingsChanged;
-        ViewModel.PropertyChanged -= OnViewModelChanged;
+        ViewModel.Inbox.CardMessageArrived -= OnCardMessageArrived;
+        _settings.PropertyChanged          -= OnSettingsChanged;
+        ViewModel.PropertyChanged          -= OnViewModelChanged;
         Bindings.StopTracking();
         ViewModel.Dispose();
     }
@@ -279,9 +290,17 @@ public sealed partial class ChatsView : UserControl
         }
     }
 
-    // A flip of "Show pinned chats as a grid" in Settings moves the pinned rows at once.
+    // A flip of "Show pinned chats as a grid" in Settings moves the pinned rows at once. A flip of the cards changes
+    // the tiles at once.
     private void OnSettingsChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(SettingsViewModel.ShowPinnedCards))
+        {
+            ViewModel.Inbox.PinnedCards = _settings.ShowPinnedCards;
+            FitPinnedArts();
+            return;
+        }
+
         if (e.PropertyName != nameof(SettingsViewModel.ShowPinnedGrid))
         {
             return;
@@ -648,6 +667,114 @@ public sealed partial class ChatsView : UserControl
         Thickness padding = ConversationList.Padding;
         Thickness margin  = PinnedGrid.Margin;
         PinnedGrid.Width  = Math.Max(0, e.NewSize.Width - padding.Left - padding.Right - margin.Left - margin.Right);
+    }
+
+    /// <summary>
+    /// Gives the size of the picture of a pinned tile. With cards on, the size is NaN, so the picture fills the width
+    /// of the tile, as the square card does.
+    /// </summary>
+    /// <param name="cards">Whether the tiles show message cards.</param>
+    /// <returns>NaN with cards on, else 52 px.</returns>
+    public static double TileArt(bool cards) => cards ? double.NaN : 52;
+
+    /// <summary>
+    /// Gives the margin of the picture of a pinned tile. With cards on, the picture is a little smaller than the card,
+    /// so the unread card stands out.
+    /// </summary>
+    /// <param name="cards">Whether the tiles show message cards.</param>
+    /// <returns>The margin.</returns>
+    public static Thickness PictureMargin(bool cards) => cards ? new Thickness(12) : new Thickness(4, 0, 4, 4);
+
+    /// <summary>
+    /// Gives the decode size of the photo of a pinned tile, so the photo is as sharp as the picture is large.
+    /// </summary>
+    /// <param name="cards">Whether the tiles show message cards.</param>
+    /// <returns>128 px with cards on, else 52 px.</returns>
+    public static int TilePhoto(bool cards) => cards ? 128 : 52;
+
+    // With cards on, the art area is square, less the 4 px under the card that holds the count pill. Then the card is
+    // square. With cards off, the area is as tall as the picture.
+    private void OnPinnedArtSizeChanged(object sender, SizeChangedEventArgs e) => FitPinnedArt(sender.As<FrameworkElement>(), e.NewSize.Width);
+
+    private void FitPinnedArt(FrameworkElement art, double width) =>
+        art.Height = ViewModel.Inbox.PinnedCards ? Math.Max(0, width - 4) : double.NaN;
+
+    // A flip of the cards changes no width, so no size change comes. The view fits each tile here instead.
+    private void FitPinnedArts()
+    {
+        if (PinnedGrid.ItemsPanelRoot is not { } panel)
+        {
+            return;
+        }
+
+        foreach (UIElement tile in panel.Children)
+        {
+            if (UiHelpers.FindPart<FrameworkElement>(tile, "PinnedArt") is { } art)
+            {
+                FitPinnedArt(art, art.ActualWidth);
+            }
+        }
+    }
+
+    // A new message on a card pops the card: it shrinks a little and grows back. The tile can move to the front for the
+    // message, so the pop waits until the layout puts the tile at its new place. The animations of Windows can turn it
+    // off.
+    private void OnCardMessageArrived(object? sender, ConversationRowViewModel row) =>
+        XamlHost.Dispatcher.TryEnqueue(DispatcherQueuePriority.Low, () =>
+        {
+            if (PinnedGrid.ContainerFromItem(row) is { } tile
+                && UiHelpers.FindPart<FrameworkElement>(tile, "PinnedArt") is { } art
+                && UiHelpers.FindPart<FrameworkElement>(art, "PinnedCard") is { } card)
+            {
+                PopCard(art, card);
+            }
+        });
+
+    // The pop runs on the composition visual of the card, so it starts on the next frame. Windows can refuse the visual
+    // with E_ACCESSDENIED. The card then shows with no pop, as in FadeIn.
+    private static void PopCard(FrameworkElement art, FrameworkElement card)
+    {
+        if (!Ui.AnimationsEnabled || card.Visibility != Visibility.Visible || art.ActualWidth == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            Visual visual                = ElementCompositionPreview.GetElementVisual(card);
+            Compositor compositor        = visual.Compositor;
+            Vector3KeyFrameAnimation pop = compositor.CreateVector3KeyFrameAnimation();
+            visual.CenterPoint           = new Vector3((float)art.ActualWidth / 2, (float)art.ActualHeight / 2, 0);
+            pop.InsertKeyFrame(0, Vector3.One);
+            pop.InsertKeyFrame(0.4f, new Vector3(CardPopScale, CardPopScale, 1));
+            pop.InsertKeyFrame(1, Vector3.One);
+            pop.Duration = CardPopTime;
+            visual.StartAnimation(nameof(Visual.Scale), pop);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            AppLog.MediaFailed(App.ShellLog, "card pop", string.Empty, ex.GetType().Name);
+        }
+    }
+
+    // The tiles have no hover fill. The card takes the hover fill of a row, or the picture shines. Both fade over 50 ms,
+    // as the owner chose.
+    private void OnPinnedTilePointerEntered(object sender, PointerRoutedEventArgs e) => ShowTileHover(sender, 1);
+
+    private void OnPinnedTilePointerExited(object sender, PointerRoutedEventArgs e) => ShowTileHover(sender, 0);
+
+    private static void ShowTileHover(object sender, double opacity)
+    {
+        DependencyObject tile = sender.As<DependencyObject>();
+        if (UiHelpers.FindPart<UIElement>(tile, "CardHover") is { } hover)
+        {
+            hover.Opacity = opacity;
+        }
+
+        if (UiHelpers.FindPart<UIElement>(tile, "PictureShine") is { } shine)
+        {
+            shine.Opacity = opacity;
+        }
     }
 
     // Splits the width of the grid into even columns: 3, or more when each column can be wider than PinnedTileWidth.

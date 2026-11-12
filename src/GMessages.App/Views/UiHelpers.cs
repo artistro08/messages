@@ -32,6 +32,13 @@ internal static class UiHelpers
     public static Visibility ShownIfText(string? text) => string.IsNullOrEmpty(text) ? Visibility.Collapsed : Visibility.Visible;
 
     /// <summary>
+    /// Shows an element when the flag is off.
+    /// </summary>
+    /// <param name="value">The flag.</param>
+    /// <returns>Collapsed when true, else Visible.</returns>
+    public static Visibility Not(bool value) => value ? Visibility.Collapsed : Visibility.Visible;
+
+    /// <summary>
     /// Puts text on the clipboard, on the UI thread.
     /// </summary>
     /// <remarks>

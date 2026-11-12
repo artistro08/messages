@@ -56,7 +56,7 @@ public sealed partial class Avatar : UserControl
 
     /// <summary>Identifies the <see cref="PhotoSize"/> property.</summary>
     public static readonly DependencyProperty PhotoSizeProperty =
-        DependencyProperty.Register(nameof(PhotoSize), typeof(int), typeof(Avatar), new PropertyMetadata(PhotoDecodeWidth));
+        DependencyProperty.Register(nameof(PhotoSize), typeof(int), typeof(Avatar), new PropertyMetadata(PhotoDecodeWidth, OnPhotoSizeChanged));
 
     // The avatar decodes photos at the 40 px size of the circle in logical pixels. Logical pixels include the display
     // scale.
@@ -129,8 +129,8 @@ public sealed partial class Avatar : UserControl
     /// Gets or sets the decode width of photos in effective pixels. The default is 40, the size of the avatar.
     /// </summary>
     /// <remarks>
-    /// A <c>Viewbox</c> that draws the avatar larger needs a larger value, so that its photo stays sharp. Set this
-    /// property before the photo IDs. The avatar keeps the decoded photos for each size. Thus all avatars of the same
+    /// A <c>Viewbox</c> that draws the avatar larger needs a larger value, so that its photo stays sharp. A change
+    /// decodes the photos again at the new size. The avatar keeps the decoded photos for each size. Thus all avatars of the same
     /// size share them.
     /// </remarks>
     public int PhotoSize
@@ -292,6 +292,13 @@ public sealed partial class Avatar : UserControl
 
     private static void OnPhotoIdChanged(DependencyObject d, DependencyPropertyChangedEventArgs e) =>
         _ = ((Avatar)d).LoadPhotoAsync(front: e.Property == PhotoIdProperty);
+
+    private static void OnPhotoSizeChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        var avatar = (Avatar)d;
+        _          = avatar.LoadPhotoAsync(front: true);
+        _          = avatar.LoadPhotoAsync(front: false);
+    }
 
     // Shows a decoded photo at once. Otherwise the method clears the photo of the circle and decodes the new photo. It
     // shows the new photo only when the ID did not change during the load.

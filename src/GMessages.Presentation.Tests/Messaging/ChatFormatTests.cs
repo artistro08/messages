@@ -81,6 +81,18 @@ public sealed class ChatFormatTests
     }
 
     [TestMethod]
+    [DataRow("2026-10-29T17:59:30-04:00", "Now")]
+    [DataRow("2026-10-29T17:56:00-04:00", "4 min")]
+    [DataRow("2026-10-29T17:00:01-04:00", "59 min")]
+    [DataRow("2026-10-29T17:00:00-04:00", "1 hr")]
+    [DataRow("2026-10-29T15:30:00-04:00", "2 hrs")]
+    [DataRow("2026-10-28T18:00:00-04:00", "1 day")]
+    [DataRow("2026-10-23T18:00:01-04:00", "5 days")]
+    [DataRow("2026-10-22T18:00:00-04:00", "Oct 22")]
+    public void AgoTime_MatchesGoogleCards(string time, string expected) =>
+        Assert.AreEqual(expected, string.Join(' ', ChatFormat.AgoTime(DateTimeOffset.Parse(time, CultureInfo.InvariantCulture), DateTimeOffset.Parse("2026-10-29T18:00:00-04:00", CultureInfo.InvariantCulture), EnUs).Split()));
+
+    [TestMethod]
     [DataRow("2026-10-29T15:04:00-04:00", "2026-10-29T18:00:00-04:00", "3:04 PM")]   // today: time
     [DataRow("2026-10-27T15:04:00-04:00", "2026-10-29T18:00:00-04:00", "Tue")]       // within 7 days: weekday
     [DataRow("2026-03-02T15:04:00-05:00", "2026-10-29T18:00:00-04:00", "Mar 2")]     // same year: month day

@@ -9,6 +9,10 @@ namespace GMessages.Presentation.Messaging;
 /// </summary>
 public static class ChatFormat
 {
+    private static readonly CompositeFormat MinutesAgoFormat = CompositeFormat.Parse(ChatCopy.TimeMinutesAgo);
+    private static readonly CompositeFormat HoursAgoFormat   = CompositeFormat.Parse(ChatCopy.TimeHoursAgo);
+    private static readonly CompositeFormat DaysAgoFormat    = CompositeFormat.Parse(ChatCopy.TimeDaysAgo);
+
     // The emoji that show in text style by default, as inclusive ranges. They have Emoji=Yes without
     // Emoji_Presentation in emoji-data.txt of Unicode 16.0. The table leaves out the keycap bases on purpose: the
     // digits, # and *. It also leaves out (c), (r) and TM. People usually mean these characters as text.
@@ -315,6 +319,44 @@ public static class ChatFormat
     /// <param name="now">The current time.</param>
     /// <returns>The text to show.</returns>
     public static string ListTime(DateTimeOffset time, DateTimeOffset now) => ListTime(time, now, CultureInfo.CurrentCulture);
+
+    /// <summary>
+    /// Gives the time of a pinned message card: "Now" within 1 minute, then "4 min", "2 hrs" and "3 days".
+    /// A time 7 days old or more is the list time from
+    /// <see cref="ListTime(DateTimeOffset, DateTimeOffset, CultureInfo)"/>.
+    /// </summary>
+    /// <param name="time">When the message arrived.</param>
+    /// <param name="now">The current time.</param>
+    /// <param name="culture">The culture to format with.</param>
+    /// <returns>The text to show.</returns>
+    public static string AgoTime(DateTimeOffset time, DateTimeOffset now, CultureInfo culture)
+    {
+        TimeSpan age = now - time;
+
+        if (age < TimeSpan.FromMinutes(1))
+        {
+            return ChatCopy.TimeNow;
+        }
+
+        if (age < TimeSpan.FromHours(1))
+        {
+            return string.Format(culture, MinutesAgoFormat, (int)age.TotalMinutes);
+        }
+
+        if (age < TimeSpan.FromDays(1))
+        {
+            int hours = (int)age.TotalHours;
+            return hours == 1 ? ChatCopy.TimeHourAgo : string.Format(culture, HoursAgoFormat, hours);
+        }
+
+        if (age < TimeSpan.FromDays(7))
+        {
+            int days = (int)age.TotalDays;
+            return days == 1 ? ChatCopy.TimeDayAgo : string.Format(culture, DaysAgoFormat, days);
+        }
+
+        return ListTime(time, now, culture);
+    }
 
     /// <summary>
     /// Gives the list time. It is the time for today, or the weekday within the last 7 days. Else it is the month and

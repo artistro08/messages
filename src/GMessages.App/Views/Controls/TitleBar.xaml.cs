@@ -187,7 +187,7 @@ public sealed partial class TitleBar : UserControl
 
         double scale = root.RasterizationScale;
         var holes    = new List<RECT>();
-        foreach (FrameworkElement element in _passthroughOverride ?? [BackButton, PaneToggleButton, .. _passthrough])
+        foreach (FrameworkElement element in _passthroughOverride ?? (FrameworkElement[])[BackButton, PaneToggleButton, .. _passthrough])
         {
             if (element.Visibility == Visibility.Visible && element.ActualWidth > 0 && ToClient(element, scale) is { } hole)
             {

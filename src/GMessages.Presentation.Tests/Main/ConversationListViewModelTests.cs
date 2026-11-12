@@ -82,6 +82,25 @@ public sealed class ConversationListViewModelTests
     }
 
     [TestMethod]
+    public void Row_ShowCards_SwapsPillForCardOnlyWhileUnread()
+    {
+        ConversationInfo read   = ConversationInfo.From(MainRig.Conv("a", "Ann")) with { Snippet = "Ok thanks" };
+        var unread              = new ConversationRowViewModel(read with { Unread = true }, MainRig.Now);
+        var seen                = new ConversationRowViewModel(read, MainRig.Now);
+        string pill             = unread.UnreadBadge;
+
+        unread.ShowCards(true);
+        seen.ShowCards(true);
+
+        Assert.AreEqual("Ok thanks", pill);
+        Assert.AreEqual(string.Empty, unread.UnreadBadge);
+        Assert.IsTrue(unread.ShowsCard);
+        Assert.AreEqual("Ok thanks", unread.CardText);
+        Assert.AreEqual("1", unread.UnreadCount);
+        Assert.IsFalse(seen.ShowsCard);
+    }
+
+    [TestMethod]
     public void Row_IsMuted_FollowsConversation()
     {
         ConversationInfo c = ConversationInfo.From(MainRig.Conv("a", "Ann"));
@@ -263,6 +282,29 @@ public sealed class ConversationListViewModelTests
         // Unread again with nothing counted, because it came while the app was closed. The row shows the short message.
         await rig.Live(unread);
         Assert.AreEqual("ok", list.Pinned[0].UnreadBadge);
+    }
+
+    [TestMethod]
+    public async Task LiveMessage_OnCard_RaisesCardMessageArrived_EvenForSameText()
+    {
+        using var rig = new MainRig();
+        rig.Page(MainRig.Conv("a", "Ann", minutesAgo: 5, pinned: true));
+        using var list   = NewList(rig);
+        list.PinnedApart = true;
+        list.PinnedCards = true;
+        await list.LoadAsync();
+        int pops = 0;
+        list.CardMessageArrived += (_, _) => pops++;
+
+        Conversation first  = MainRig.Conv("a", "Ann", minutesAgo: 2, pinned: true, snippet: "ok");
+        Conversation second = MainRig.Conv("a", "Ann", minutesAgo: 1, pinned: true, snippet: "ok");
+        first.Unread        = true;
+        second.Unread       = true;
+        await rig.Live(first);
+        await rig.Live(second);
+        await rig.Live(second);
+
+        Assert.AreEqual(2, pops);
     }
 
     // A live message in a conversation, sent the given minutes before MainRig.Now or at a given time.
