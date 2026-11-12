@@ -143,8 +143,13 @@ public sealed partial class ChatsView : UserControl
         EmptyStateText.Text = ChatCopy.StartAConversation;
 
         ViewModel.Inbox.PinnedApart = settings.ShowPinnedGrid;
-        ViewModel.Inbox.PinnedCards = settings.ShowPinnedCards;
-        _settings.PropertyChanged  += OnSettingsChanged;
+        ViewModel.Inbox.PinnedCards         = settings.ShowPinnedCards;
+        ViewModel.Inbox.CardMessageArrived += OnCardMessageArrived;
+        _settings.PropertyChanged          += OnSettingsChanged;
+
+        // A tile that the grid reuses for another chat drops the hover of the old chat.
+        PinnedGrid.ContainerContentChanging += (_, args) => ShowTileHover(args.ItemContainer, 0);
+
         ViewModel.PropertyChanged  += OnViewModelChanged;
         ConversationList.AddHandler(KeyDownEvent, new KeyEventHandler(OnListKeyDown), handledEventsToo: true);
         ConversationList.PreviewKeyDown     += OnListPreviewKeyDown;
@@ -187,8 +192,9 @@ public sealed partial class ChatsView : UserControl
             _shownList.PropertyChanged          -= OnListPropertyChanged;
         }
 
-        _settings.PropertyChanged -= OnSettingsChanged;
-        ViewModel.PropertyChanged -= OnViewModelChanged;
+        ViewModel.Inbox.CardMessageArrived -= OnCardMessageArrived;
+        _settings.PropertyChanged          -= OnSettingsChanged;
+        ViewModel.PropertyChanged          -= OnViewModelChanged;
         Bindings.StopTracking();
         ViewModel.Dispose();
     }
@@ -679,6 +685,13 @@ public sealed partial class ChatsView : UserControl
     /// <returns>The margin.</returns>
     public static Thickness PictureMargin(bool cards) => cards ? new Thickness(12) : new Thickness(4, 0, 4, 4);
 
+    /// <summary>
+    /// Gives the decode size of the photo of a pinned tile, so the photo is as sharp as the picture is large.
+    /// </summary>
+    /// <param name="cards">Whether the tiles show message cards.</param>
+    /// <returns>128 px with cards on, else 52 px.</returns>
+    public static int TilePhoto(bool cards) => cards ? 128 : 52;
+
     // With cards on, the art area is square, less the 4 px under the card that holds the count pill. Then the card is
     // square. With cards off, the area is as tall as the picture.
     private void OnPinnedArtSizeChanged(object sender, SizeChangedEventArgs e) => FitPinnedArt(sender.As<FrameworkElement>(), e.NewSize.Width);
@@ -703,20 +716,19 @@ public sealed partial class ChatsView : UserControl
         }
     }
 
-    // A new message on a card pops the card: it shrinks a little and grows back. The text of the card changes for a
-    // new message, and also as the card first shows. The animations of Windows can turn it off.
-    private void OnPinnedArtLoaded(object sender, RoutedEventArgs e)
-    {
-        FrameworkElement art = sender.As<FrameworkElement>();
-        if (art.Tag is not null
-            || UiHelpers.FindPart<FrameworkElement>(art, "PinnedCard") is not { } card
-            || UiHelpers.FindPart<TextBlock>(art, "CardMessage") is not { } text)
+    // A new message on a card pops the card: it shrinks a little and grows back. The tile can move to the front for the
+    // message, so the pop waits until the layout puts the tile at its new place. The animations of Windows can turn it
+    // off.
+    private void OnCardMessageArrived(object? sender, ConversationRowViewModel row) =>
+        XamlHost.Dispatcher.TryEnqueue(DispatcherQueuePriority.Low, () =>
         {
-            return;
-        }
-
-        art.Tag = text.RegisterPropertyChangedCallback(TextBlock.TextProperty, (_, _) => PopCard(art, card));
-    }
+            if (PinnedGrid.ContainerFromItem(row) is { } tile
+                && UiHelpers.FindPart<FrameworkElement>(tile, "PinnedArt") is { } art
+                && UiHelpers.FindPart<FrameworkElement>(art, "PinnedCard") is { } card)
+            {
+                PopCard(art, card);
+            }
+        });
 
     // The pop runs on the composition visual of the card, so it starts on the next frame. Windows can refuse the visual
     // with E_ACCESSDENIED. The card then shows with no pop, as in FadeIn.
