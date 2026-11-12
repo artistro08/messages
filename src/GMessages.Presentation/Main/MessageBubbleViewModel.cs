@@ -75,6 +75,7 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         (nameof(LinkUrl), b => b.LinkUrl),
         (nameof(Preview), b => b.Preview),
         (nameof(HasPreview), b => b.HasPreview),
+        (nameof(PreviewFillsBubble), b => b.PreviewFillsBubble),
         (nameof(PreviewName), b => b.PreviewName),
         (nameof(Media), b => b.Media),
         (nameof(HasPhoto), b => b.HasPhoto),
@@ -383,6 +384,12 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
 
     /// <summary>Gets whether the preview card shows.</summary>
     public bool HasPreview => Preview is not null;
+
+    /// <summary>
+    /// Gets whether the preview card is all that the bubble shows: no text, quote, photo or video. The card is then the
+    /// bubble, in the colors of its side, with no bubble fill around it.
+    /// </summary>
+    public bool PreviewFillsBubble => HasPreview && !HasBodyText && !HasQuote && !FillsBubble;
 
     /// <summary>
     /// Gets the accessible name of the preview card: the page title, then the host of the link. It is empty with no

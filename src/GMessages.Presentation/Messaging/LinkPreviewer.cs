@@ -24,7 +24,8 @@ namespace GMessages.Presentation.Messaging;
 /// </para>
 /// <para>
 /// A page must be <c>text/html</c> within <see cref="MaxPageBytes"/>. An image must be <c>image/*</c> within
-/// <see cref="MaxImageBytes"/>. Each must answer within <see cref="RequestTimeout"/>. <see cref="ShrinkAsync"/>
+/// <see cref="MaxImageBytes"/>. A page must answer within <see cref="RequestTimeout"/>, and an image within
+/// <see cref="PictureTimeout"/>. <see cref="ShrinkAsync"/>
 /// scales down an image wider than <see cref="MaxImageWidth"/>. The results, failures included, stay in memory for the
 /// last 50 links. The list holds fewer links when their images pass 4 MB. The previewer never writes them to disk. The
 /// log holds only the error type of a failure, never the link, title or description.
@@ -35,8 +36,20 @@ public sealed partial class LinkPreviewer : IDisposable
     /// <summary>The largest page that the previewer reads, in bytes. A bigger page gives no preview.</summary>
     public const int MaxPageBytes = 262_144;
 
-    /// <summary>The largest image that the previewer reads, in bytes. A bigger one gives a card without it.</summary>
-    public const int MaxImageBytes = 1_048_576;
+    /// <summary>
+    /// The largest image that the previewer reads, in bytes. A bigger one gives a card without it. A share image is
+    /// often a PNG of more than 1 MB. The previewer shrinks it before it keeps it.
+    /// </summary>
+    public const int MaxImageBytes = 5 * 1_048_576;
+
+    // The tags that a page without og:image can name its share image in.
+    private static readonly HashSet<string> ImageKeys = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "og:image:url",
+        "og:image:secure_url",
+        "twitter:image",
+        "twitter:image:src",
+    };
 
     private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(5);
 
@@ -141,23 +154,14 @@ public sealed partial class LinkPreviewer : IDisposable
     };
 
     /// <summary>
-    /// Finds the first web link in a message, without the punctuation of a sentence around it.
+    /// Finds the first web link in a message, without the punctuation of a sentence around it, with its place in the
+    /// text.
     /// </summary>
     /// <remarks>
     /// The link is the first run of non-spaces that starts with <c>http://</c> or <c>https://</c>. The method removes
     /// <c>.,;:!?)]}'"</c> from its end. A closing bracket stays when the link opened it. Thus
-    /// <c>https://en.wikipedia.org/wiki/Foo_(bar)</c> keeps its <c>)</c>.
-    /// </remarks>
-    /// <param name="text">The message text.</param>
-    /// <returns>The link, or null when there is none.</returns>
-    public static Uri? FirstLink(string text) => FirstTextLink(text)?.Url;
-
-    /// <summary>
-    /// Finds the first web link in a message as <see cref="FirstLink"/> does, with its place in the text.
-    /// </summary>
-    /// <remarks>
-    /// The text of the link, at <see cref="TextLink.Start"/> for <see cref="TextLink.Length"/>, is the address exactly
-    /// as sent.
+    /// <c>https://en.wikipedia.org/wiki/Foo_(bar)</c> keeps its <c>)</c>. The text of the link, at
+    /// <see cref="TextLink.Start"/> for <see cref="TextLink.Length"/>, is the address exactly as sent.
     /// </remarks>
     /// <param name="text">The message text.</param>
     /// <returns>The link and its place, or null when there is none.</returns>
@@ -184,7 +188,7 @@ public sealed partial class LinkPreviewer : IDisposable
     /// <para>
     /// A link starts with <c>http://</c>, <c>https://</c> or <c>www.</c> at the start of a word. It runs to the next
     /// space or emoji, VS16 and zero-width joiners included. The method removes the same punctuation from its end as
-    /// <see cref="FirstLink"/>. A bare <c>www.</c> host opens over <c>https</c>.
+    /// <see cref="FirstTextLink"/>. A bare <c>www.</c> host opens over <c>https</c>.
     /// </para>
     /// <para>
     /// The method gives only <c>http</c> and <c>https</c> addresses with no user name. Thus a <c>file:</c>,
@@ -349,8 +353,8 @@ public sealed partial class LinkPreviewer : IDisposable
     /// The title is <c>og:title</c>, else <c>&lt;title&gt;</c>. The site is always the real host of the page without
     /// <c>www.</c>, never the claim of the page. Thus a card cannot pose as another site. The attributes can come in
     /// any order and with any quotes. The method removes tags, decodes entities, removes direction-control characters
-    /// and collapses spaces in the title. It then cuts the title to 300 characters. The image is <c>og:image</c>
-    /// resolved against <paramref name="page"/>, and the method keeps it only when <see cref="IsAllowed"/> allows it.
+    /// and collapses spaces in the title. It then cuts the title to 300 characters. The image is <c>og:image</c>, else
+    /// <c>og:image:url</c>, <c>og:image:secure_url</c>, <c>twitter:image</c> or <c>twitter:image:src</c>, resolved against <paramref name="page"/>, and the method keeps it only when <see cref="IsAllowed"/> allows it.
     /// </remarks>
     /// <param name="html">The page.</param>
     /// <param name="page">The address of the page after redirects, for relative image links and the host.</param>
@@ -365,9 +369,10 @@ public sealed partial class LinkPreviewer : IDisposable
         int end     = html.IndexOf("</head>", StringComparison.OrdinalIgnoreCase);
         string head = end >= 0 ? html[..end] : html;
 
-        // The first Open Graph tag of each kind wins.
+        // The first tag of each kind wins. The image is og:image, else the first image tag that a page uses in its place.
         string? ogTitle = null;
         string? ogImage = null;
+        string? altImage = null;
         foreach (Match tag in MetaTag().Matches(head))
         {
             string? key     = null;
@@ -399,7 +404,13 @@ public sealed partial class LinkPreviewer : IDisposable
             {
                 ogImage ??= content;
             }
+            else if (ImageKeys.Contains(key))
+            {
+                altImage ??= content;
+            }
         }
+
+        ogImage ??= altImage;
 
         string title = PlainText(ogTitle);
         if (title.Length == 0 && TitleTag().Match(head) is { Success: true } titleTag)
@@ -532,7 +543,8 @@ public sealed partial class LinkPreviewer : IDisposable
                 return null;
             }
 
-            byte[]? image = head.Image is { } imageUrl ? (await GetBodyAsync(imageUrl, "image/*", MaxImageBytes, RequestTimeout).ConfigureAwait(false))?.Body : null;
+            // A share image is bigger than a page, so it gets the longer time of a picture.
+            byte[]? image = head.Image is { } imageUrl ? (await GetBodyAsync(imageUrl, "image/*", MaxImageBytes, PictureTimeout).ConfigureAwait(false))?.Body : null;
             return new LinkPreview(url, head.Title, head.Site, image is null ? null : await ShrinkAsync(image).ConfigureAwait(false));
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
