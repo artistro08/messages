@@ -144,11 +144,14 @@ public sealed partial class MessageBubble : UserControl
     // middle 4 px in from the edge.
     private const double PillCornerReach = 8;
 
-    // The width of the image of the preview card, its gap below the text and its corners under text, in effective
-    // pixels.
-    private const int PreviewImageWidth = 240;
-    private const double PreviewGap     = 8;
-    private const double PreviewCorner  = 8;
+    // The preview card in effective pixels: the width of its image on a card alone, the widest the image decodes, the
+    // tallest the image shows, its gap below the text, and its corners under text and alone.
+    private const double PreviewImageWidth  = 240;
+    private const int PreviewDecodeWidth    = (int)MaxBubbleWidth;
+    private const double PreviewImageHeight = 320;
+    private const double PreviewGap         = 8;
+    private const double PreviewCorner      = 8;
+    private const double PreviewAloneCorner = 12;
 
     // The list of who reacted scrolls past this height. The emoji of each row sits this far from the name.
     private const double ReactorsMaxHeight = 320;
@@ -709,16 +712,12 @@ public sealed partial class MessageBubble : UserControl
         emojiOnly || previewAlone || (hasPhoto && !hasCaption && !hasQuote) ? Visibility.Collapsed : Visibility.Visible;
 
     /// <summary>
-    /// Rounds the preview card. A card alone in its bubble is the bubble, so it takes the corners of the bubble. A card
-    /// under text keeps its own small corners inside the bubble.
+    /// Rounds the preview card. A card alone in its bubble is the bubble, with the same corners all around, smaller
+    /// than the corners of a text bubble, as the owner asked. A card under text keeps smaller corners inside the bubble.
     /// </summary>
     /// <param name="previewAlone">True when the preview card is all that the bubble shows.</param>
-    /// <param name="fromMe">True for a sent bubble.</param>
-    /// <param name="isFirst">True for the first bubble of its group.</param>
-    /// <param name="isLast">True for the last bubble of its group.</param>
     /// <returns>The corners.</returns>
-    public static CornerRadius PreviewCorners(bool previewAlone, bool fromMe, bool isFirst, bool isLast) =>
-        previewAlone ? CornersOf(fromMe, isFirst, isLast) : new CornerRadius(PreviewCorner);
+    public static CornerRadius PreviewCorners(bool previewAlone) => new(previewAlone ? PreviewAloneCorner : PreviewCorner);
 
     /// <summary>
     /// Rounds a photo to the exact corners of its bubble, because the photo covers the edge of the bubble. The bottom
@@ -1246,7 +1245,7 @@ public sealed partial class MessageBubble : UserControl
         }
 
         // A recycled container can show another message after the decode.
-        ImageSource? image = await Avatar.ToImageAsync(bytes, PreviewImageWidth);
+        ImageSource? image = await Avatar.ToImageAsync(bytes, PreviewDecodeWidth);
         if (image is null || !ReferenceEquals(preview, _previewShown))
         {
             return;
@@ -1254,6 +1253,29 @@ public sealed partial class MessageBubble : UserControl
 
         PreviewImage.Source     = image;
         PreviewImage.Visibility = Visibility.Visible;
+        SizePreviewImage(PreviewImageWidth);
+    }
+
+    // The image runs across the whole card in its own shape. It sets only its height from the width of the card, so the
+    // text and the bubble decide the width. A new image starts at the width of a card alone. A very tall image stops at
+    // its tallest and narrows to keep its shape.
+    private void OnPreviewCardSizeChanged(object sender, SizeChangedEventArgs e) =>
+        SizePreviewImage(e.NewSize.Width - PreviewCard.BorderThickness.Left - PreviewCard.BorderThickness.Right);
+
+    private void SizePreviewImage(double width)
+    {
+        if (PreviewImage?.Source is not BitmapImage { PixelWidth: > 0, PixelHeight: > 0 } bitmap || width <= 0)
+        {
+            return;
+        }
+
+        double height = Math.Min(PreviewImageHeight, width * bitmap.PixelHeight / bitmap.PixelWidth);
+
+        // Layout rounding must not make the card and the image chase each other by a fraction of a pixel.
+        if (double.IsNaN(PreviewImage.Height) || Math.Abs(PreviewImage.Height - height) > 0.5)
+        {
+            PreviewImage.Height = height;
+        }
     }
 
     // =========================================================================
