@@ -144,6 +144,18 @@ public static class ChatCopy
     public const string ShowPinnedGrid            = "Show pinned chats as a grid";
     public const string ShowPinnedGridDescription = "Pinned chats show as large pictures at the top of your inbox. Pin a chat on your phone.";
 
+    // The controller wrote the settings card of the pinned message cards. The owner approves it.
+    public const string ShowPinnedCards            = "Show new messages on pinned chats";
+    public const string ShowPinnedCardsDescription = "An unread pinned chat shows its newest message in a card. Turn this off to show a small badge instead.";
+
+    // The time of a pinned message card, as Google Messages writes it.
+    public const string TimeNow        = "Now";
+    public const string TimeMinutesAgo = "{0} min";
+    public const string TimeHourAgo    = "1 hr";
+    public const string TimeHoursAgo   = "{0} hrs";
+    public const string TimeDayAgo     = "1 day";
+    public const string TimeDaysAgo    = "{0} days";
+
     // The controller wrote the settings card of the microphone. The owner approves it.
     public const string Microphone            = "Microphone";
     public const string MicrophoneDescription = "Which microphone records voice messages.";

@@ -25,6 +25,10 @@ public sealed class ConversationRowViewModel : INotifyPropertyChanged
     // MarkPaged keeps its Environment.TickCount64 value here for TakeFadeIn. The value 0 means no mark.
     private long _pagedAt;
 
+    // ShowCards sets these. The pill text stays here, so a flip back to the pill needs no new data.
+    private bool _cards;
+    private string _badge = string.Empty;
+
     /// <summary>
     /// Creates the row from a conversation.
     /// </summary>
@@ -81,9 +85,30 @@ public sealed class ConversationRowViewModel : INotifyPropertyChanged
 
     /// <summary>
     /// Gets the unread badge of the pinned tile from <see cref="ChatFormat.UnreadBadge"/>, or empty while the
-    /// conversation is read.
+    /// conversation is read or the tile shows cards.
     /// </summary>
-    public string UnreadBadge { get; private set; } = string.Empty;
+    public string UnreadBadge => _cards ? string.Empty : _badge;
+
+    /// <summary>Gets whether the pinned tile shows the message card instead of the picture.</summary>
+    public bool ShowsCard => _cards && IsUnread;
+
+    /// <summary>Gets whether the pinned tile shows its large picture. It is the opposite of <see cref="ShowsCard"/>.</summary>
+    public bool ShowsPicture => !ShowsCard;
+
+    /// <summary>Gets whether the tiles show cards, so the tile is tall enough for 1.</summary>
+    public bool CardsOn => _cards;
+
+    /// <summary>
+    /// Gets the text of the card: the newest message from <see cref="ChatFormat.Snippet"/>. A draft does not replace
+    /// it.
+    /// </summary>
+    public string CardText { get; private set; } = string.Empty;
+
+    /// <summary>Gets the time of the card from <see cref="ChatFormat.AgoTime"/>, such as "4 min".</summary>
+    public string CardTime { get; private set; } = string.Empty;
+
+    /// <summary>Gets the number of unread messages for the card. It is at least 1.</summary>
+    public string UnreadCount { get; private set; } = string.Empty;
 
     /// <summary>Gets whether the conversation is pinned.</summary>
     public bool IsPinned { get; private set; }
@@ -146,6 +171,37 @@ public sealed class ConversationRowViewModel : INotifyPropertyChanged
         return fade;
     }
 
+    /// <summary>
+    /// Sets whether the pinned tile shows a message card while unread, or the pill on the picture.
+    /// </summary>
+    /// <param name="cards">True for the card.</param>
+    internal void ShowCards(bool cards)
+    {
+        if (_cards == cards)
+        {
+            return;
+        }
+
+        _cards = cards;
+        PropertyChanged?.Invoke(this, AllChanged);
+    }
+
+    /// <summary>
+    /// Makes <see cref="CardTime"/> current. A card shows "4 min", so the text goes old as time passes.
+    /// </summary>
+    /// <param name="now">The current time.</param>
+    internal void RefreshCardTime(DateTimeOffset now)
+    {
+        string time = ChatFormat.AgoTime(LastMessageTime, now, CultureInfo.CurrentCulture);
+        if (time == CardTime)
+        {
+            return;
+        }
+
+        CardTime = time;
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CardTime)));
+    }
+
     /// <summary>Marks the row as added by a page, for <see cref="TakeFadeIn"/>.</summary>
     internal void MarkPaged() => _pagedAt = Environment.TickCount64;
 
@@ -166,13 +222,16 @@ public sealed class ConversationRowViewModel : INotifyPropertyChanged
         Snippet         = IsDraft ? ChatFormat.WithColorEmoji(ChatCopy.DraftPrefix + draft) : ChatFormat.Snippet(c);
         Time            = ChatFormat.ListTime(c.LastMessageTime, now, CultureInfo.CurrentCulture);
         IsUnread        = c.Unread;
-        UnreadBadge     = ChatFormat.UnreadBadge(c.Unread, unreadTexts.Count, c.Snippet);
+        _badge          = ChatFormat.UnreadBadge(c.Unread, unreadTexts.Count, c.Snippet);
+        CardText        = ChatFormat.Snippet(c);
+        UnreadCount     = Math.Max(1, unreadTexts.Count).ToString(CultureInfo.CurrentCulture);
         HasUnreadList   = c.Unread && unreadTexts.Count > 1;
         string body     = HasUnreadList ? string.Join('\n', unreadTexts.TakeLast(MaxHoverLines).Select(ChatFormat.WithColorEmoji)) : Snippet;
         HoverText       = body.Length > 0 ? Name + "\n" + body : Name;
         IsPinned        = c.Pinned;
         IsMuted         = c.IsMuted;
         LastMessageTime = c.LastMessageTime;
+        CardTime        = ChatFormat.AgoTime(c.LastMessageTime, now, CultureInfo.CurrentCulture);
 
         // By ruling R12, a group stacks 2 people in the avatar, as the chat header does.
         AvatarParts avatar = AvatarParts.Of(c);

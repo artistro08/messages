@@ -267,7 +267,8 @@ public sealed class MainWindowTests : UiTest
 
     /// <summary>
     /// The pinned grid is off by default. Turning it on in Settings moves pinned Team from the rows to a tile above
-    /// them. The tile opens its chat. Turning it off puts Team back at the top of the rows.
+    /// them. An unread tile shows the message card. With the cards off, it shows the pill. The tile opens its chat.
+    /// Turning the grid off puts Team back at the top of the rows.
     /// </summary>
     [TestMethod]
     public async Task PinnedGrid_Switch_MovesPinnedChatIntoTiles()
@@ -276,40 +277,48 @@ public sealed class MainWindowTests : UiTest
         WaitForRows(InboxRows);
         Assert.IsNull(App.TryFind("Main.PinnedGrid"), "The pinned grid showed with the setting off.");
 
-        SetPinnedGrid(ToggleState.On);
+        SetSwitch("Settings.PinnedGrid", ToggleState.On);
         WaitForRows(["Row.c-ann"]);
-        AutomationElement tile = App.Find("Main.PinnedGrid").FindFirstDescendant(cf => cf.ByAutomationId("Row.c-team"))
-            ?? throw new AssertFailedException("Team has no tile in the pinned grid.");
 
-        // The unread badge shows a short message as text. After a second message, it shows the count.
+        // The card shows the newest message and the unread count.
         Server.Phone.PushIncoming("c-team", "Dinner?");
-        App.WaitForText("Pinned.Badge.c-team", "Dinner?");
+        App.WaitForText("Pinned.Card.c-team", "Dinner?");
+        App.WaitForText("Pinned.Count.c-team", "1");
         Server.Phone.PushIncoming("c-team", "See you at seven");
+        App.WaitForText("Pinned.Card.c-team", "See you at seven");
+        App.WaitForText("Pinned.Count.c-team", "2");
+        Assert.IsNull(App.TryFind("Pinned.Badge.c-team"), "The pill showed with the cards on.");
+
+        // With the cards off, the pill shows the count.
+        SetSwitch("Settings.PinnedCards", ToggleState.Off);
         App.WaitForText("Pinned.Badge.c-team", "2");
+        WaitForGone("Pinned.Card.c-team");
 
         // A tile opens its chat. The chat is then read, so the badge goes.
+        AutomationElement tile = App.Find("Main.PinnedGrid").FindFirstDescendant(cf => cf.ByAutomationId("Row.c-team"))
+            ?? throw new AssertFailedException("Team has no tile in the pinned grid.");
         tile.Patterns.SelectionItem.Pattern.Select();
         App.WaitForText("Chat.Header", "Team");
         WaitForGone("Pinned.Badge.c-team");
 
-        SetPinnedGrid(ToggleState.Off);
+        SetSwitch("Settings.PinnedGrid", ToggleState.Off);
         WaitForRows(InboxRows);
         WaitForGone("Main.PinnedGrid");
     }
 
-    // Sets the pinned grid switch in Settings through the profile menu and goes back to the chats.
-    private void SetPinnedGrid(ToggleState wanted)
+    // Sets a switch in Settings through the profile menu and goes back to the chats.
+    private void SetSwitch(string id, ToggleState wanted)
     {
         InvokeProfileItem("Main.Profile.Settings");
         WaitForSettings();
-        ToggleButton toggle = App.Find("Settings.PinnedGrid").AsToggleButton();
+        ToggleButton toggle = App.Find(id).AsToggleButton();
         if (toggle.ToggleState != wanted)
         {
             toggle.Toggle();
         }
 
-        Wait.Until(() => App.Find("Settings.PinnedGrid").AsToggleButton().ToggleState == wanted, AppDriver.DefaultTimeout,
-            () => $"The pinned grid switch isn't {wanted}.");
+        Wait.Until(() => App.Find(id).AsToggleButton().ToggleState == wanted, AppDriver.DefaultTimeout,
+            () => $"The switch {id} isn't {wanted}.");
         App.Find("Settings.Back").Patterns.Invoke.Pattern.Invoke();
         WaitForGone("Settings.Back");
     }

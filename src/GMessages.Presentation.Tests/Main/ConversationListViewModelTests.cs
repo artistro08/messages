@@ -82,6 +82,26 @@ public sealed class ConversationListViewModelTests
     }
 
     [TestMethod]
+    public void Row_ShowCards_SwapsPillForCardOnlyWhileUnread()
+    {
+        ConversationInfo read   = ConversationInfo.From(MainRig.Conv("a", "Ann")) with { Snippet = "Ok thanks" };
+        var unread              = new ConversationRowViewModel(read with { Unread = true }, MainRig.Now);
+        var seen                = new ConversationRowViewModel(read, MainRig.Now);
+        string pill             = unread.UnreadBadge;
+
+        unread.ShowCards(true);
+        seen.ShowCards(true);
+
+        Assert.AreEqual("Ok thanks", pill);
+        Assert.AreEqual(string.Empty, unread.UnreadBadge);
+        Assert.IsTrue(unread.ShowsCard);
+        Assert.IsFalse(unread.ShowsPicture);
+        Assert.AreEqual("Ok thanks", unread.CardText);
+        Assert.AreEqual("1", unread.UnreadCount);
+        Assert.IsFalse(seen.ShowsCard);
+    }
+
+    [TestMethod]
     public void Row_IsMuted_FollowsConversation()
     {
         ConversationInfo c = ConversationInfo.From(MainRig.Conv("a", "Ann"));
