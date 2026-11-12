@@ -523,13 +523,6 @@ public sealed partial class ChatPane : UserControl
         hasAttachments || isPreview ? Visibility.Visible : Visibility.Collapsed;
 
     /// <summary>
-    /// Shows an element when the flag is off.
-    /// </summary>
-    /// <param name="value">The flag.</param>
-    /// <returns>Collapsed when true, else Visible.</returns>
-    public static Visibility Not(bool value) => value ? Visibility.Collapsed : Visibility.Visible;
-
-    /// <summary>
     /// Gets the padding of the compose area. The top padding is 0 while chips sit over the message box, so the box
     /// meets them.
     /// </summary>

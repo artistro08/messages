@@ -622,7 +622,7 @@
                                             VerticalAlignment="Center"
                                             Orientation="Horizontal"
                                             Spacing="8"
-                                            Visibility="{x:Bind local:ChatPane.Not(ShowsPicture)}">
+                                            Visibility="{x:Bind local:UiHelpers.Not(ShowsPicture)}">
                                             <FontIcon FontSize="20" Glyph="{x:Bind local:ChatPane.ChipGlyph(Kind)}" />
                                             <TextBlock
                                                 MaxWidth="160"

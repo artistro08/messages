@@ -13,7 +13,8 @@ namespace GMessages.Presentation.Main;
 /// </remarks>
 public sealed class ConversationRowViewModel : INotifyPropertyChanged
 {
-    private static readonly PropertyChangedEventArgs AllChanged = new(string.Empty);
+    private static readonly PropertyChangedEventArgs AllChanged      = new(string.Empty);
+    private static readonly PropertyChangedEventArgs CardTimeChanged = new(nameof(CardTime));
 
     // The tooltip lists this number of the newest unread messages at most.
     private const int MaxHoverLines = 10;
@@ -91,9 +92,6 @@ public sealed class ConversationRowViewModel : INotifyPropertyChanged
 
     /// <summary>Gets whether the pinned tile shows the message card instead of the picture.</summary>
     public bool ShowsCard => _cards && IsUnread;
-
-    /// <summary>Gets whether the pinned tile shows its large picture. It is the opposite of <see cref="ShowsCard"/>.</summary>
-    public bool ShowsPicture => !ShowsCard;
 
     /// <summary>Gets whether the tiles show cards, so the tile is tall enough for 1.</summary>
     public bool CardsOn => _cards;
@@ -199,7 +197,7 @@ public sealed class ConversationRowViewModel : INotifyPropertyChanged
         }
 
         CardTime = time;
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CardTime)));
+        PropertyChanged?.Invoke(this, CardTimeChanged);
     }
 
     /// <summary>Marks the row as added by a page, for <see cref="TakeFadeIn"/>.</summary>
