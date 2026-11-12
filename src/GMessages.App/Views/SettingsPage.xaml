@@ -123,6 +123,30 @@
                     </Grid>
                 </Border>
 
+                <!-- This switch shows an unread pinned chat as a message card, as Google Messages does. Off shows the
+                     small pill. It is on by default, and it works only with the grid on. -->
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <Grid ColumnSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <FontIcon Glyph="&#xE8BD;" Style="{StaticResource CardIconStyle}" />
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock x:Name="PinnedCardsHeader" TextWrapping="Wrap" />
+                            <TextBlock x:Name="PinnedCardsDescription" Style="{StaticResource CardDescriptionStyle}" />
+                        </StackPanel>
+                        <ToggleSwitch
+                            x:Name="PinnedCardsSwitch"
+                            Grid.Column="2"
+                            AutomationProperties.AutomationId="Settings.PinnedCards"
+                            IsEnabled="{x:Bind ViewModel.ShowPinnedGrid, Mode=OneWay}"
+                            IsOn="{x:Bind ViewModel.ShowPinnedCards, Mode=TwoWay}"
+                            Style="{StaticResource CardToggleSwitchStyle}" />
+                    </Grid>
+                </Border>
+
                 <TextBlock Style="{StaticResource GroupHeaderStyle}" Text="Startup" />
                 <Border Style="{StaticResource SettingsCardStyle}">
                     <Grid ColumnSpacing="16">

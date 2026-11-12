@@ -1614,7 +1614,7 @@ public sealed partial class ChatPane : UserControl
             rows.Add(new EmojiRow(name, []));
             for (int i = 0; i < emoji.Count; i += EmojiPickerColumns)
             {
-                rows.Add(new EmojiRow(null, [.. emoji.Skip(i).Take(EmojiPickerColumns)]));
+                rows.Add(new EmojiRow(null, ((string Emoji, string Words)[])[.. emoji.Skip(i).Take(EmojiPickerColumns)]));
             }
         }
 

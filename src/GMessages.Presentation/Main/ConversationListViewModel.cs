@@ -49,6 +49,11 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
     private bool _reloadPending;
 
     private bool _pinnedApart;
+    private bool _pinnedCards;
+
+    // While the cards are on, this clock makes the "4 min" times of the cards current each minute.
+    private static readonly TimeSpan CardClockTick = TimeSpan.FromMinutes(1);
+    private ITimer? _cardClock;
 
     /// <summary>
     /// Creates an empty list and starts to listen to the store.
@@ -123,6 +128,42 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
             {
                 Place(row, live: false);
             }
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets whether an unread pinned tile shows a message card instead of a pill. See
+    /// <see cref="ConversationRowViewModel.ShowsCard"/>.
+    /// </summary>
+    /// <remarks>A change updates every row at once. Call it on the UI thread.</remarks>
+    public bool PinnedCards
+    {
+        get => _pinnedCards;
+        set
+        {
+            if (_pinnedCards == value)
+            {
+                return;
+            }
+
+            _pinnedCards = value;
+            foreach (ConversationRowViewModel row in Pinned.Concat(Rows))
+            {
+                row.ShowCards(value);
+            }
+
+            _cardClock?.Dispose();
+            _cardClock = value ? _time.CreateTimer(_ => _post(RefreshCardTimes), null, CardClockTick, CardClockTick) : null;
+        }
+    }
+
+    // The cards show "4 min", so their times change each minute.
+    private void RefreshCardTimes()
+    {
+        DateTimeOffset now = _time.GetLocalNow();
+        foreach (ConversationRowViewModel row in Pinned)
+        {
+            row.RefreshCardTime(now);
         }
     }
 
@@ -316,6 +357,7 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
         _store.ConversationChanged -= OnConversationChanged;
         _store.Resynced            -= OnResynced;
         _store.DraftChanged        -= OnDraftChanged;
+        _cardClock?.Dispose();
     }
 
     // =========================================================================
@@ -360,6 +402,7 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
         {
             var row                                           = new ConversationRowViewModel(c, now, _store.LiveUnreadTexts(c.Id), draft);
             ObservableCollection<ConversationRowViewModel> to = ListFor(row);
+            row.ShowCards(_pinnedCards);
 
             RowsChanging?.Invoke(this, live);
             to.Insert(TargetIndex(to, row, null), row);

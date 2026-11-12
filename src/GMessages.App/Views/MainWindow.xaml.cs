@@ -362,7 +362,7 @@ public sealed partial class MainWindow : UserControl
 
         PhotoViewer.FitToolbar(0);
         PhotoViewer.UpdateLayout();
-        AppTitleBar.SetPassthroughOverride([PhotoViewer.Toolbar]);
+        AppTitleBar.SetPassthroughOverride((FrameworkElement[])[PhotoViewer.Toolbar]);
     }
 
     // =========================================================================
