@@ -1253,14 +1253,20 @@ public sealed partial class MessageBubble : UserControl
 
         PreviewImage.Source     = image;
         PreviewImage.Visibility = Visibility.Visible;
+
+        // A new image starts at the width of a card alone. A recycled row can keep the width of its card, and then no
+        // size change follows. Thus the card lays out once here, and the image takes the width that the card gets.
         SizePreviewImage(PreviewImageWidth);
+        PreviewCard.UpdateLayout();
+        SizePreviewImage(InnerWidth(PreviewCard.ActualWidth));
     }
 
     // The image runs across the whole card in its own shape. It sets only its height from the width of the card, so the
-    // text and the bubble decide the width. A new image starts at the width of a card alone. A very tall image stops at
-    // its tallest and narrows to keep its shape.
-    private void OnPreviewCardSizeChanged(object sender, SizeChangedEventArgs e) =>
-        SizePreviewImage(e.NewSize.Width - PreviewCard.BorderThickness.Left - PreviewCard.BorderThickness.Right);
+    // text and the bubble decide the width. A very tall image stops at its tallest and narrows to keep its shape.
+    private void OnPreviewCardSizeChanged(object sender, SizeChangedEventArgs e) => SizePreviewImage(InnerWidth(e.NewSize.Width));
+
+    // The width inside the border of the card.
+    private double InnerWidth(double cardWidth) => cardWidth - PreviewCard.BorderThickness.Left - PreviewCard.BorderThickness.Right;
 
     private void SizePreviewImage(double width)
     {

@@ -354,7 +354,8 @@ public sealed partial class LinkPreviewer : IDisposable
     /// <c>www.</c>, never the claim of the page. Thus a card cannot pose as another site. The attributes can come in
     /// any order and with any quotes. The method removes tags, decodes entities, removes direction-control characters
     /// and collapses spaces in the title. It then cuts the title to 300 characters. The image is <c>og:image</c>, else
-    /// <c>og:image:url</c>, <c>og:image:secure_url</c>, <c>twitter:image</c> or <c>twitter:image:src</c>, resolved against <paramref name="page"/>, and the method keeps it only when <see cref="IsAllowed"/> allows it.
+    /// <c>og:image:url</c>, <c>og:image:secure_url</c>, <c>twitter:image</c> or <c>twitter:image:src</c>, resolved
+    /// against <paramref name="page"/>, and the method keeps it only when <see cref="IsAllowed"/> allows it.
     /// </remarks>
     /// <param name="html">The page.</param>
     /// <param name="page">The address of the page after redirects, for relative image links and the host.</param>
