@@ -41,6 +41,7 @@ public static class ShortcutMap
         ("Ctrl + Enter", "Reply to message"),
         ("Ctrl + ?", "Open keyboard shortcut help"),
         ("Ctrl + Shift + z", "Undo archive"),
+        ("Ctrl + 1 to 9", "Open conversation by its place in the list"),
     ];
 
     /// <summary>
@@ -51,7 +52,8 @@ public static class ShortcutMap
     /// Ctrl + Enter depend on <paramref name="focusInTextBox"/>. The method ignores them while the user types. The
     /// conversation shortcuts Ctrl + d, Ctrl + Alt + h and Ctrl + Shift + o also work while the user types. In the
     /// app, Ctrl + Shift + z undoes an archive, as the owner chose. While the user types, the method leaves the keys to
-    /// the text box. Ctrl + ? is Ctrl + Shift + /. Ctrl + / also opens the help and has no help row of its own.
+    /// the text box. Ctrl + 1 to Ctrl + 9 open a conversation by its place in the list, from the number row or the
+    /// number pad, also while the user types. Ctrl + ? is Ctrl + Shift + /. Ctrl + / also opens the help and has no help row of its own.
     /// Ctrl + Alt + h is not a shortcut while Right Alt is down. Windows reports AltGr as Left Ctrl + Right Alt, and
     /// AltGr + h types a character on some layouts.
     /// </remarks>
@@ -86,6 +88,17 @@ public static class ShortcutMap
 
         if (ctrl && !shift)
         {
+            // Ctrl + 1 to Ctrl + 9 map in order to OpenConversation1 to OpenConversation9
+            if (key is >= VirtualKey.Number1 and <= VirtualKey.Number9)
+            {
+                return ShortcutCommand.OpenConversation1 + (key - VirtualKey.Number1);
+            }
+
+            if (key is >= VirtualKey.NumberPad1 and <= VirtualKey.NumberPad9)
+            {
+                return ShortcutCommand.OpenConversation1 + (key - VirtualKey.NumberPad1);
+            }
+
             return key switch
             {
                 VirtualKey.Enter when !focusInTextBox => ShortcutCommand.ReplyToMessage,
