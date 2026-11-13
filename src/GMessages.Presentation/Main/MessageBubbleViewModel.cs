@@ -89,7 +89,6 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         (nameof(HasCopyText), b => b.HasCopyText),
         (nameof(IsLocalMedia), b => b.IsLocalMedia),
         (nameof(IsUploading), b => b.IsUploading),
-        (nameof(UploadPercent), b => b.UploadPercent),
         (nameof(NotSentText), b => b.NotSentText),
         (nameof(FileName), b => b.FileName),
         (nameof(Kind), b => b.Kind),
@@ -473,11 +472,8 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     /// </remarks>
     public bool IsLocalMedia => FromMe && Media is { MediaId.Length: 0, ThumbnailId.Length: 0, InlineData.Length: > 0 };
 
-    /// <summary>Gets whether the upload bar shows: a file of mine that still sends from here.</summary>
+    /// <summary>Gets whether the upload spinner shows: a file of mine that still sends from here.</summary>
     public bool IsUploading => IsSending && IsLocalMedia;
-
-    /// <summary>Gets the uploaded part of the attachment in whole percent, from 0 to 100.</summary>
-    public double UploadPercent { get; private set; }
 
     /// <summary>
     /// Gets the text of the retry link after a failed send. A photo or a file has its own text, and a text message has
@@ -796,7 +792,6 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         TmpId             = tmpId;
         IsFailed          = false;
         IsSending         = true;
-        UploadPercent     = 0;
         RaiseChanges(before);
     }
 
@@ -832,19 +827,6 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
                 PropertyChanged?.Invoke(this, WatchedArgs[i]);
             }
         }
-    }
-
-    // The property raises only when the whole percent changes, so a big file does not flood the view.
-    internal void SetUploadShare(double share)
-    {
-        double percent = Math.Floor(Math.Clamp(share, 0, 1) * 100);
-        if (percent == UploadPercent)
-        {
-            return;
-        }
-
-        UploadPercent = percent;
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(UploadPercent)));
     }
 
     private void Fill(ChatMessage m)

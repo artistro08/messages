@@ -424,7 +424,6 @@ public sealed class ChatViewModelTests
         CollectionAssert.AreEqual(new byte[] { 1 }, chat.Messages[0].Media!.InlineData);
         Assert.IsTrue(chat.Messages[1].HasFileCard);
         Assert.AreEqual("both", chat.Messages[1].Text);
-        Assert.AreEqual(100, chat.Messages[0].UploadPercent);
 
         Assert.HasCount(2, rig.Client.Sent);
         Assert.AreEqual("a.png", rig.Client.Sent[0].MessagePayload.MessageInfo.Single().MediaContent.MediaName);

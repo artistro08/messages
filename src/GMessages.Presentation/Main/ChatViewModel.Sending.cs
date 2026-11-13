@@ -332,8 +332,7 @@ public sealed partial class ChatViewModel
                 // The upload runs 1 time. A retry sends the same upload again.
                 if (outgoing.Uploaded is null)
                 {
-                    var progress      = new PostedProgress(share => _post(() => bubble.SetUploadShare(share)));
-                    outgoing.Uploaded = await _store.UploadAttachmentAsync(outgoing.Bytes, outgoing.Name, outgoing.Mime, progress, CancellationToken.None);
+                    outgoing.Uploaded = await _store.UploadAttachmentAsync(outgoing.Bytes, outgoing.Name, outgoing.Mime, progress: null, CancellationToken.None);
                     outgoing.Bytes    = [];
                 }
 

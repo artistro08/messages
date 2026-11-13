@@ -312,7 +312,7 @@ public sealed partial class MessageBubble : UserControl
         InitializeComponent();
 
         // x:Load does not make the parts that a message does not use. Such parts are the quote, photo, video, file
-        // card, voice, upload bar, preview card, pill, retry footer and caption row. Thus their own wiring sits on them
+        // card, voice, upload spinner, preview card, pill, retry footer and caption row. Thus their own wiring sits on them
         // in the XAML and comes with them.
         Back.AddHandler(TappedEvent, new TappedEventHandler(OnBackTapped), handledEventsToo: true);
         Row.Tapped += OnRowTapped;
@@ -869,16 +869,10 @@ public sealed partial class MessageBubble : UserControl
         return false;
     }
 
-    // The full image of the photo gets its clip after layout, and the clip follows its size.
+    // The full image of the photo gets its size and clip after layout, and both follow the size of the photo box.
     private void OnPhotoFullLoaded(object sender, RoutedEventArgs e) => ClipPhotoFull(mayTake: true);
 
-    private void OnPhotoFullSizeChanged(object sender, SizeChangedEventArgs e) => ClipPhotoFull();
-
-    private void OnPhotoFullCanvasSizeChanged(object sender, SizeChangedEventArgs e)
-    {
-        PhotoFullImage.Width  = e.NewSize.Width;
-        PhotoFullImage.Height = e.NewSize.Height;
-    }
+    private void OnPhotoFullCanvasSizeChanged(object sender, SizeChangedEventArgs e) => ClipPhotoFull();
 
     // The picture of a playing video keeps the corners of the bubble.
     private void OnVideoPictureSizeChanged(object sender, SizeChangedEventArgs e) => ClipVideoPicture();
