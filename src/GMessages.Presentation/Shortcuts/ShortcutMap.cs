@@ -53,7 +53,8 @@ public static class ShortcutMap
     /// conversation shortcuts Ctrl + d, Ctrl + Alt + h and Ctrl + Shift + o also work while the user types. In the
     /// app, Ctrl + Shift + z undoes an archive, as the owner chose. While the user types, the method leaves the keys to
     /// the text box. Ctrl + 1 to Ctrl + 9 open a conversation by its place in the list, from the number row or the
-    /// number pad, also while the user types. Ctrl + ? is Ctrl + Shift + /. Ctrl + / also opens the help and has no help row of its own.
+    /// number pad, also while the user types.
+    /// Ctrl + ? is Ctrl + Shift + /. Ctrl + / also opens the help and has no help row of its own.
     /// Ctrl + Alt + h is not a shortcut while Right Alt is down. Windows reports AltGr as Left Ctrl + Right Alt, and
     /// AltGr + h types a character on some layouts.
     /// </remarks>
@@ -88,15 +89,15 @@ public static class ShortcutMap
 
         if (ctrl && !shift)
         {
-            // Ctrl + 1 to Ctrl + 9 map in order to OpenConversation1 to OpenConversation9
-            if (key is >= VirtualKey.Number1 and <= VirtualKey.Number9)
+            int? place = key switch
             {
-                return ShortcutCommand.OpenConversation1 + (key - VirtualKey.Number1);
-            }
-
-            if (key is >= VirtualKey.NumberPad1 and <= VirtualKey.NumberPad9)
+                >= VirtualKey.Number1 and <= VirtualKey.Number9       => key - VirtualKey.Number1,
+                >= VirtualKey.NumberPad1 and <= VirtualKey.NumberPad9 => key - VirtualKey.NumberPad1,
+                _                                                     => null,
+            };
+            if (place is { } p)
             {
-                return ShortcutCommand.OpenConversation1 + (key - VirtualKey.NumberPad1);
+                return ShortcutCommand.OpenConversation1 + p;
             }
 
             return key switch

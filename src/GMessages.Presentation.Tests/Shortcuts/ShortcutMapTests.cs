@@ -108,6 +108,19 @@ public sealed class ShortcutMapTests
         Assert.IsNull(ShortcutMap.Resolve(key, true, false, true, false, false), "Ctrl + Alt + number is not a shortcut.");
     }
 
+    // ShortcutMap and ChatsView do math on these members, so they must stay in order with no member between them.
+    [TestMethod]
+    public void OpenConversationCommands_AreInOrder()
+    {
+        for (int i = 0; i < 9; i++)
+        {
+            ShortcutCommand expected = ShortcutCommand.OpenConversation1 + i;
+            Assert.AreEqual($"OpenConversation{i + 1}", expected.ToString());
+            Assert.AreEqual(expected, ShortcutMap.Resolve(VirtualKey.Number1 + i, true, false, false, false, false));
+            Assert.AreEqual(expected, ShortcutMap.Resolve(VirtualKey.NumberPad1 + i, true, false, false, false, false));
+        }
+    }
+
     [TestMethod]
     public void CtrlZero_IsNull() => Assert.IsNull(ShortcutMap.Resolve(VirtualKey.Number0, true, false, false, false, false));
 
