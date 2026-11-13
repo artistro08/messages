@@ -739,12 +739,27 @@ public sealed partial class MessageBubble : UserControl
     }
 
     /// <summary>
-    /// Gives the weight of the sender line in the quote. It is semibold beside the thumbnail of quoted media, else the
-    /// weight of the caption style.
+    /// Stretches the quote over the top of the bubble. Its negative margins cancel the padding of the back, so its frame
+    /// meets the edges of the bubble. The text of the reply then keeps the usual gap under it. A photo or a video has
+    /// no back padding, so its quote needs no stretch.
     /// </summary>
-    /// <param name="hasMedia">True when the quote shows the thumbnail or the icon of the quoted media.</param>
-    /// <returns>The weight.</returns>
-    public static Windows.UI.Text.FontWeight QuoteSenderWeight(bool hasMedia) => hasMedia ? FontWeights.SemiBold : FontWeights.Normal;
+    /// <param name="hasPhoto">True when the bubble shows a photo or a video, which fills it with no padding.</param>
+    /// <returns>The margin of the quote.</returns>
+    public static Thickness QuoteMargin(bool hasPhoto) =>
+        hasPhoto ? default : new(-TextPadding.Left, -TextPadding.Top, -TextPadding.Right, TextPadding.Top);
+
+    /// <summary>
+    /// Rounds the frame of the quote to the top corners of its bubble. The bottom is square, because the text of the
+    /// reply follows on the color of the bubble.
+    /// </summary>
+    /// <param name="fromMe">True for a sent bubble.</param>
+    /// <param name="isFirst">True for the first bubble of its group.</param>
+    /// <returns>The corners.</returns>
+    public static CornerRadius QuoteCorners(bool fromMe, bool isFirst)
+    {
+        CornerRadius outer = CornersOf(fromMe, isFirst, isLast: true);
+        return new CornerRadius(outer.TopLeft, outer.TopRight, 0, 0);
+    }
 
     /// <summary>
     /// Sets a media label such as "Image", "Video" or "GIF" in italic. A file name or text stays upright.
@@ -758,7 +773,7 @@ public sealed partial class MessageBubble : UserControl
     /// </summary>
     /// <param name="kind">The kind of the message.</param>
     /// <returns>The Segoe Fluent Icons glyph.</returns>
-    public static string FileGlyph(MessageKind kind) => kind == MessageKind.Video ? "\uE714" : "\uE8A5";
+    public static string FileGlyph(MessageKind kind) => kind == MessageKind.Video ? "\uE8B2" :"\uE8A5";
 
     /// <summary>
     /// Writes a file size as Explorer does, such as "1.20 MB" or "940 bytes", with the formatter of Windows.
@@ -820,7 +835,6 @@ public sealed partial class MessageBubble : UserControl
     private void ShowPartStates(bool refresh)
     {
         bool sms = Bubble is { FromMe: true, IsRcs: false };
-        GoToPartState(QuoteButton, sms ? "QuoteOnAccent" : "QuotePlain", "QuotePlain", refresh);
         GoToPartState(FileCard, sms ? "FileOnAccent" : "FilePlain", "FilePlain", refresh);
         GoToPartState(Voice, sms ? "VoiceOnAccent" : "VoicePlain", "VoicePlain", refresh);
         GoToPartState(Preview, PreviewState(), "PreviewPlain", refresh);

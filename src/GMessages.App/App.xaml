@@ -69,10 +69,11 @@
                  keeps the regular text color. Sent SMS and MMS take the full accent. The border of the bubble matches
                  the fill. In high contrast the fill is the window color, so the border takes the text color to keep
                  the edge.
-                 A reply quote takes a tint of its bubble, with an accent bar. On the card color and on the RCS shade,
-                 the tint is a faint accent. On the full accent of SMS, the tint is a faint text-on-accent color, with
-                 a bar of that color. In high contrast the quote takes the color of its bubble and a highlight bar.
-                 That color is the window color, or the highlight on SMS.
+                 A reply quote in a bubble sits on a neutral frame across the top of the bubble, with a card inside
+                 it, as Google Messages on the phone shows it. The card is darker than the frame in Dark and lighter in
+                 Light, on every side. In high contrast the frame takes the window color and the card the button face.
+                 The bar of the reply line over the composer keeps the accent. A preview card on a sent SMS bubble
+                 takes a faint text-on-accent tint, or the highlight in high contrast.
                  The edge of a reaction pill is clear in Light and Dark. In high contrast the edge takes the text
                  color, so the pill keeps an edge. The fill of a reaction pill of the user is a soft accent tint, with
                  no ring.
@@ -83,7 +84,8 @@
                 <ResourceDictionary x:Key="Light">
                     <SolidColorBrush x:Key="RcsBubbleBrush" Color="{ThemeResource SystemAccentColorLight2}" />
                     <SolidColorBrush x:Key="RcsBubbleBorderBrush" Color="{ThemeResource SystemAccentColorLight2}" />
-                    <SolidColorBrush x:Key="QuoteFillBrush" Opacity="0.14" Color="{ThemeResource SystemAccentColorDark1}" />
+                    <SolidColorBrush x:Key="QuoteFrameBrush" Color="{ThemeResource SolidBackgroundFillColorSecondary}" />
+                    <SolidColorBrush x:Key="QuoteCardBrush" Color="{ThemeResource SolidBackgroundFillColorQuarternary}" />
                     <SolidColorBrush x:Key="QuoteBarBrush" Color="{ThemeResource SystemAccentColorDark1}" />
                     <SolidColorBrush x:Key="QuoteOnAccentFillBrush" Opacity="0.18" Color="{ThemeResource TextOnAccentFillColorPrimary}" />
                     <SolidColorBrush x:Key="ReactionPillBorderBrush" Color="Transparent" />
@@ -92,7 +94,8 @@
                 <ResourceDictionary x:Key="Dark">
                     <SolidColorBrush x:Key="RcsBubbleBrush" Color="{ThemeResource SystemAccentColorDark1}" />
                     <SolidColorBrush x:Key="RcsBubbleBorderBrush" Color="{ThemeResource SystemAccentColorDark1}" />
-                    <SolidColorBrush x:Key="QuoteFillBrush" Opacity="0.18" Color="{ThemeResource SystemAccentColorLight2}" />
+                    <SolidColorBrush x:Key="QuoteFrameBrush" Color="{ThemeResource SolidBackgroundFillColorQuarternary}" />
+                    <SolidColorBrush x:Key="QuoteCardBrush" Color="{ThemeResource SolidBackgroundFillColorBase}" />
                     <SolidColorBrush x:Key="QuoteBarBrush" Color="{ThemeResource SystemAccentColorLight2}" />
                     <SolidColorBrush x:Key="QuoteOnAccentFillBrush" Opacity="0.18" Color="{ThemeResource TextOnAccentFillColorPrimary}" />
                     <SolidColorBrush x:Key="ReactionPillBorderBrush" Color="Transparent" />
@@ -101,7 +104,8 @@
                 <ResourceDictionary x:Key="HighContrast">
                     <SolidColorBrush x:Key="RcsBubbleBrush" Color="{ThemeResource SystemColorWindowColor}" />
                     <SolidColorBrush x:Key="RcsBubbleBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
-                    <SolidColorBrush x:Key="QuoteFillBrush" Color="{ThemeResource SystemColorWindowColor}" />
+                    <SolidColorBrush x:Key="QuoteFrameBrush" Color="{ThemeResource SystemColorWindowColor}" />
+                    <SolidColorBrush x:Key="QuoteCardBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
                     <SolidColorBrush x:Key="QuoteBarBrush" Color="{ThemeResource SystemColorHighlightColor}" />
                     <SolidColorBrush x:Key="QuoteOnAccentFillBrush" Color="{ThemeResource SystemColorHighlightColor}" />
                     <SolidColorBrush x:Key="ReactionPillBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
@@ -193,7 +197,7 @@
                 </Setter>
             </Style>
 
-            <!-- Every button that is only an icon or a picture uses this style. It is the Fluent subtle button with no
+            <!-- Every button that is only an icon uses this style. It is the Fluent subtle button with no
                  padding, so the icon centers in the set size of the button. Its hover and press backgrounds are clear,
                  as the comment on the subtle button brushes tells. A press shrinks the icon, and a release springs it
                  back (IconPress). The style is here, so it exists before a page or control that uses it loads. -->
@@ -203,6 +207,16 @@
                 TargetType="Button">
                 <Setter Property="Padding" Value="0" />
                 <Setter Property="controls:IconPress.IsEnabled" Value="True" />
+            </Style>
+
+            <!-- A card that shows content, such as a photo, a video, a file or the quote of a reply, uses this style. It
+                 is the icon button style with no press animation, because a whole card that shrinks and springs back
+                 bounced too much, as the owner said. -->
+            <Style
+                x:Key="CardButtonStyle"
+                BasedOn="{StaticResource SubtleButtonStyle}"
+                TargetType="Button">
+                <Setter Property="Padding" Value="0" />
             </Style>
 
             <!-- The thin edge of the flyout that lists who reacted matches the edge of a menu, so its compact rows

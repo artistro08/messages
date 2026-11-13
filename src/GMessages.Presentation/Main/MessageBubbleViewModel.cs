@@ -42,6 +42,8 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         (nameof(AvatarPhotoId), b => b.AvatarPhotoId),
         (nameof(SentAt), b => b.SentAt),
         (nameof(Time), b => b.Time),
+        (nameof(Stamp), b => b.Stamp),
+        (nameof(HasStamp), b => b.HasStamp),
         (nameof(IsTimeShown), b => b.IsTimeShown),
         (nameof(IsNewest), b => b.IsNewest),
         (nameof(IsCaptionHidden), b => b.IsCaptionHidden),
@@ -234,6 +236,16 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
 
     /// <summary>Gets the time of day the message was sent.</summary>
     public string Time { get; private set; } = string.Empty;
+
+    /// <summary>
+    /// Gets the time stamp that shows centered over the bubble, such as "Thursday · 7:08 PM", else empty. The chat sets
+    /// it on the first bubble of the chat and on a bubble that follows a long gap. See
+    /// <see cref="ChatFormat.StampTime"/>.
+    /// </summary>
+    public string Stamp { get; private set; } = string.Empty;
+
+    /// <summary>Gets whether <see cref="Stamp"/> shows.</summary>
+    public bool HasStamp => Stamp.Length > 0;
 
     /// <summary>
     /// Gets whether the time shows under the bubble. It stays hidden until a click on the bubble. See
@@ -720,14 +732,14 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     }
 
     // Sets the place of the bubble in its group. In a group chat, the name shows over the first bubble and the avatar
-    // beside the last.
-    internal void SetGroup(bool first, bool last, bool avatarLane, string? senderName, uint senderColor, string avatarInitial, string avatarPhotoId)
+    // beside the last. The stamp shows centered over the bubble when it is not empty.
+    internal void SetGroup(bool first, bool last, bool avatarLane, string? senderName, uint senderColor, string avatarInitial, string avatarPhotoId, string stamp = "")
     {
         bool showsAvatar = avatarLane && last;
         string initial   = showsAvatar ? avatarInitial : string.Empty;
         string photoId   = showsAvatar ? avatarPhotoId : string.Empty;
         if (IsFirstInGroup == first && IsLastInGroup == last && HasAvatarLane == avatarLane && SenderName == senderName && SenderColor == senderColor
-            && AvatarInitial == initial && AvatarPhotoId == photoId)
+            && AvatarInitial == initial && AvatarPhotoId == photoId && Stamp == stamp)
         {
             return;
         }
@@ -741,6 +753,7 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         SenderColor       = senderColor;
         AvatarInitial     = initial;
         AvatarPhotoId     = photoId;
+        Stamp             = stamp;
         RaiseChanges(before);
     }
 

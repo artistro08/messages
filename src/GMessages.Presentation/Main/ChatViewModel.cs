@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
 using GMessages.Presentation.Messaging;
 using GMessages.Protocol;
 using GMessages.Protocol.Proto;
@@ -39,6 +40,10 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
 
     /// <summary>2 bubbles from the same sender stay in 1 group when this time or less separates them.</summary>
     public static readonly TimeSpan GroupGap = TimeSpan.FromMinutes(3);
+
+    /// <summary>A time stamp shows centered over a bubble when this time or more separates it from the bubble before.</summary>
+    // ponytail: fixed 1 hour gap, the gap of Google Messages is not documented. Tune it here if it shows too often.
+    public static readonly TimeSpan StampGap = TimeSpan.FromHours(1);
 
     /// <summary>The chips together can hold this number of bytes at most: 200 MiB.</summary>
     public const long MaxTotalAttachmentBytes = 200L * 1024 * 1024;
@@ -756,11 +761,13 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
 
     // Groups the bubbles as Google Messages does: the same sender, me or 1 person, each a few minutes after the last.
     // In a group chat, a received group shows the name of its sender over its first bubble. It shows the avatar of its
-    // sender beside its last bubble. Only the bubbles from 1 index to another change, clamped to the list.
+    // sender beside its last bubble. The first bubble and a bubble after a long gap show a time stamp over them, as
+    // Google Messages does. Only the bubbles from 1 index to another change, clamped to the list.
     private void RefreshGroups(ConversationInfo? c, int from, int to)
     {
-        bool isGroup  = c is { IsGroup: true };
-        int end       = Math.Min(to, Messages.Count - 1);
+        bool isGroup       = c is { IsGroup: true };
+        int end            = Math.Min(to, Messages.Count - 1);
+        DateTimeOffset now = _time.GetLocalNow();
 
         for (int i = Math.Max(0, from); i <= end; i++)
         {
@@ -770,10 +777,12 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
             ParticipantInfo? sender  = c?.FindParticipant(b.ParticipantId);
             string name              = ChatFormat.SenderName(sender);
             bool lane                = isGroup && !b.FromMe;
+            bool stamped             = !b.IsSystemLine && (i == 0 || b.SentAt - Messages[i - 1].SentAt >= StampGap);
+            string stamp             = stamped ? ChatFormat.StampTime(b.SentAt, now, CultureInfo.CurrentCulture) : string.Empty;
 
             // The name takes the color of the letter circle of the sender. The conversation tells which reaction is
             // mine.
-            b.SetGroup(first, last, lane, lane && first && name.Length > 0 ? name : null, AvatarParts.ColorOf(sender), ChatFormat.Initial(name), b.ParticipantId);
+            b.SetGroup(first, last, lane, lane && first && name.Length > 0 ? name : null, AvatarParts.ColorOf(sender), ChatFormat.Initial(name), b.ParticipantId, stamp);
             b.SetConversation(c);
         }
 
