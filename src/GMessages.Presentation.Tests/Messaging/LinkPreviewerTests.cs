@@ -205,6 +205,34 @@ public sealed class LinkPreviewerTests
     }
 
     [TestMethod]
+    public void ParseOEmbed_ReadsYouTubeTitleAndThumbnail()
+    {
+        byte[] json = Encoding.UTF8.GetBytes("""{"title":"Big Buck Bunny","provider_name":"YouTube","thumbnail_url":"https://i.ytimg.com/vi/aqz-KE-bpKQ/hqdefault.jpg"}""");
+
+        (string title, string site, Uri? image) = LinkPreviewer.ParseOEmbed(json)!.Value;
+
+        Assert.AreEqual("Big Buck Bunny", title);
+        Assert.AreEqual("youtube.com", site);
+        Assert.AreEqual(new Uri("https://i.ytimg.com/vi/aqz-KE-bpKQ/hqdefault.jpg"), image);
+    }
+
+    [TestMethod]
+    [DataRow("""{"thumbnail_url":"https://i.ytimg.com/a.jpg"}""")]
+    [DataRow("""{"title":"","thumbnail_url":"https://i.ytimg.com/a.jpg"}""")]
+    [DataRow("not json")]
+    [DataRow("[]")]
+    public void ParseOEmbed_NoTitle_GivesNull(string json) =>
+        Assert.IsNull(LinkPreviewer.ParseOEmbed(Encoding.UTF8.GetBytes(json)));
+
+    [TestMethod]
+    public void ParseOEmbed_ThumbnailNotAllowed_DropsImage()
+    {
+        (_, _, Uri? image) = LinkPreviewer.ParseOEmbed(Encoding.UTF8.GetBytes("""{"title":"A","thumbnail_url":"http://127.0.0.1/a.jpg"}"""))!.Value;
+
+        Assert.IsNull(image);
+    }
+
+    [TestMethod]
     public void ParseHead_FallsBackToTitleAndHost()
     {
         (string title, string site, Uri? image) = LinkPreviewer.ParseHead("<html><head><title>\n  Plain   Title </title></head></html>", Page)!.Value;

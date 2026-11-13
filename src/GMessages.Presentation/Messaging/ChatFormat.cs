@@ -397,6 +397,38 @@ public static class ChatFormat
     }
 
     /// <summary>
+    /// Gives the time stamp that shows centered between messages, as Google Messages writes it. It is the time for
+    /// today, "Yesterday · 7:08 PM", the weekday within the last 7 days ("Thursday · 7:08 PM"), the month and day for
+    /// this year ("Mar 2 · 7:08 PM"), else the month, day and year.
+    /// </summary>
+    /// <remarks>
+    /// The method converts <paramref name="time"/> to the offset of <paramref name="now"/> before it compares the days.
+    /// </remarks>
+    /// <param name="time">When the message was sent.</param>
+    /// <param name="now">The current time.</param>
+    /// <param name="culture">The culture to format with.</param>
+    /// <returns>The text to show.</returns>
+    public static string StampTime(DateTimeOffset time, DateTimeOffset now, CultureInfo culture)
+    {
+        ArgumentNullException.ThrowIfNull(culture);
+
+        DateTime local = time.ToOffset(now.Offset).DateTime;
+        int daysAgo    = (now.Date - local.Date).Days;
+        string clock   = local.ToString("t", culture);
+
+        string day = daysAgo switch
+        {
+            <= 0                       => string.Empty,
+            1                          => ChatCopy.StampYesterday,
+            < 7                        => local.ToString("dddd", culture),
+            _ when local.Year == now.Year => local.ToString("MMM d", culture),
+            _                          => local.ToString("MMM d, yyyy", culture),
+        };
+
+        return day.Length == 0 ? clock : day + " · " + clock;
+    }
+
+    /// <summary>
     /// Gives the first visible character of a name, for avatars.
     /// </summary>
     /// <remarks>

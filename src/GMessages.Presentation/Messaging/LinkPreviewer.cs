@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using GMessages.Protocol.Http;
 using Microsoft.Extensions.Logging;
@@ -68,6 +69,19 @@ public sealed partial class LinkPreviewer : IDisposable
     private const int CacheImageBytes = 4 * 1024 * 1024;
 
     private const int MaxRedirects = 3;
+
+    // The largest oEmbed answer that the previewer reads, in bytes. YouTube answers with about 1 KB.
+    private const int MaxOEmbedBytes = 65_536;
+
+    // The hosts of YouTube. A link to them asks the oEmbed of YouTube for its card, not the page.
+    private static readonly HashSet<string> YouTubeHosts = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "youtube.com",
+        "www.youtube.com",
+        "m.youtube.com",
+        "music.youtube.com",
+        "youtu.be",
+    };
 
     private const int MaxFetches = 4;
 
@@ -439,6 +453,48 @@ public sealed partial class LinkPreviewer : IDisposable
         return (title, site, image);
     }
 
+    /// <summary>
+    /// Reads the parts of a YouTube card from the oEmbed answer of YouTube.
+    /// </summary>
+    /// <remarks>
+    /// The title is <c>title</c>, cleaned and cut as <see cref="ParseHead"/> cleans a title. The site is always
+    /// <c>youtube.com</c>. The image is <c>thumbnail_url</c>, kept only when <see cref="IsAllowed"/> allows it.
+    /// </remarks>
+    /// <param name="json">The answer of the oEmbed endpoint.</param>
+    /// <param name="allowLoopback">True only in UI test runs.</param>
+    /// <returns>The parts, or null when the answer is not JSON or has no title.</returns>
+    internal static (string Title, string Site, Uri? Image)? ParseOEmbed(byte[] json, bool allowLoopback = false)
+    {
+        ArgumentNullException.ThrowIfNull(json);
+
+        try
+        {
+            using JsonDocument document = JsonDocument.Parse(json);
+            JsonElement root            = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+            {
+                return null;
+            }
+
+            string title = root.TryGetProperty("title", out JsonElement t) && t.ValueKind == JsonValueKind.String ? PlainText(t.GetString()) : string.Empty;
+            if (title.Length == 0)
+            {
+                return null;
+            }
+
+            Uri? image = root.TryGetProperty("thumbnail_url", out JsonElement i) && i.ValueKind == JsonValueKind.String
+                && Uri.TryCreate(i.GetString(), UriKind.Absolute, out Uri? thumb) && IsAllowed(thumb, allowLoopback)
+                    ? thumb
+                    : null;
+
+            return (title, "youtube.com", image);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
     // =========================================================================
     // FETCHING
     // =========================================================================
@@ -533,14 +589,8 @@ public sealed partial class LinkPreviewer : IDisposable
             await _fetchSlots.WaitAsync(_closing.Token).ConfigureAwait(false);
             slot = true;
 
-            if (await GetBodyAsync(url, "text/html", MaxPageBytes, RequestTimeout).ConfigureAwait(false) is not { } page)
+            if (await GetHeadAsync(url).ConfigureAwait(false) is not { } head)
             {
-                return null;
-            }
-
-            if (ParseHead(Decode(page.Body, page.CharSet), page.Final, _allowLoopback) is not { } head)
-            {
-                LogSkipped("no title");
                 return null;
             }
 
@@ -560,6 +610,41 @@ public sealed partial class LinkPreviewer : IDisposable
                 _fetchSlots.Release();
             }
         }
+    }
+
+    // Gives the parts of the card. A page of YouTube runs past MaxPageBytes before its tags, so a YouTube link, Shorts
+    // included, asks the oEmbed of YouTube instead. Its small JSON answer holds the title and the thumbnail.
+    private async Task<(string Title, string Site, Uri? Image)?> GetHeadAsync(Uri url)
+    {
+        if (YouTubeHosts.Contains(url.IdnHost))
+        {
+            var api = new Uri("https://www.youtube.com/oembed?format=json&url=" + Uri.EscapeDataString(url.AbsoluteUri));
+            if (await GetBodyAsync(api, "application/json", MaxOEmbedBytes, RequestTimeout).ConfigureAwait(false) is not { } answer)
+            {
+                return null;
+            }
+
+            (string Title, string Site, Uri? Image)? card = ParseOEmbed(answer.Body, _allowLoopback);
+            if (card is null)
+            {
+                LogSkipped("no title");
+            }
+
+            return card;
+        }
+
+        if (await GetBodyAsync(url, "text/html", MaxPageBytes, RequestTimeout).ConfigureAwait(false) is not { } page)
+        {
+            return null;
+        }
+
+        (string Title, string Site, Uri? Image)? head = ParseHead(Decode(page.Body, page.CharSet), page.Final, _allowLoopback);
+        if (head is null)
+        {
+            LogSkipped("no title");
+        }
+
+        return head;
     }
 
     /// <summary>
