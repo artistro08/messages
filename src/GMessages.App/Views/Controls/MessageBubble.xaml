@@ -368,11 +368,10 @@
                                     x:Name="PhotoFull"
                                     CornerRadius="{x:Bind local:MessageBubble.PhotoCorners(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup, Bubble.HasBodyText), Mode=OneWay}"
                                     Opacity="0">
-                                    <Canvas SizeChanged="OnPhotoFullCanvasSizeChanged">
+                                    <Canvas x:Name="PhotoFullCanvas" SizeChanged="OnPhotoFullCanvasSizeChanged">
                                         <Image
                                             x:Name="PhotoFullImage"
                                             Loaded="OnPhotoFullLoaded"
-                                            SizeChanged="OnPhotoFullSizeChanged"
                                             Stretch="UniformToFill" />
                                     </Canvas>
                                 </Border>
@@ -636,15 +635,6 @@
                                 Style="{StaticResource CaptionTextBlockStyle}" />
                         </Grid>
 
-                        <!-- The upload bar shows how much of my photo or file is up while it sends from here. -->
-                        <muxc:ProgressBar
-                            x:Name="UploadBar"
-                            Margin="10,6"
-                            x:Load="{x:Bind Bubble.IsUploading, Mode=OneWay, FallbackValue=False}"
-                            AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Upload.', Bubble.PartKey), Mode=OneWay}"
-                            Maximum="100"
-                            Value="{x:Bind Bubble.UploadPercent, Mode=OneWay, FallbackValue=0}" />
-
                         <!-- While the preview card shows, the text omits the link of the card. See
                              Bubble.BodyText. A message that was only the link shows the card alone. The BigEmoji state
                              shows emoji alone big. -->
@@ -726,6 +716,31 @@
                         </local:LinkCardButton>
                     </StackPanel>
                 </Border>
+
+                <!-- Upload Spinner: a turning ring on a small round plate sits over the bottom right of my photo, GIF,
+                     video or file while it sends from here. A photo or video fills the bubble, so the ring sits on
+                     the picture itself. It takes no clicks. -->
+                <Border
+                    x:Name="UploadRing"
+                    Grid.Column="1"
+                    Width="28"
+                    Height="28"
+                    Margin="8"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Bottom"
+                    x:Load="{x:Bind Bubble.IsUploading, Mode=OneWay, FallbackValue=False}"
+                    Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}"
+                    CornerRadius="14"
+                    IsHitTestVisible="False">
+                    <muxc:ProgressRing
+                        Width="16"
+                        Height="16"
+                        MinWidth="16"
+                        MinHeight="16"
+                        AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Upload.', Bubble.PartKey), Mode=OneWay}"
+                        IsActive="True" />
+                </Border>
+                <!-- /Upload Spinner -->
 
                 <!-- The focus ring hugs the back 3 px out and follows its corners, also on photos, cards and grouped
                      bubbles. It is a 2 px ring in the accent color, with a 1 px gap inside it. The owner found the

@@ -217,7 +217,7 @@ public sealed class FakeGoogleServer : IAsyncDisposable
     }
 
     /// <summary>
-    /// Gets or sets how long the finalize of an upload waits before it answers, so a test can see the upload bar.
+    /// Gets or sets how long the finalize of an upload waits before it answers, so a test can see the upload spinner.
     /// </summary>
     public TimeSpan UploadDelay { get; set; }
 
