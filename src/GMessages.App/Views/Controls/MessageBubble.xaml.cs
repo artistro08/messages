@@ -721,19 +721,20 @@ public sealed partial class MessageBubble : UserControl
 
     /// <summary>
     /// Rounds a photo to the exact corners of its bubble, because the photo covers the edge of the bubble. The bottom
-    /// is square when a caption follows.
+    /// is square when a caption follows. The top is square under the quote of a reply, whose frame has a square bottom.
     /// </summary>
     /// <param name="fromMe">True for a sent bubble.</param>
     /// <param name="isFirst">True for the first bubble of its group.</param>
     /// <param name="isLast">True for the last bubble of its group.</param>
     /// <param name="hasCaption">True when a caption shows under the photo.</param>
+    /// <param name="hasQuote">True when the quote of a reply shows over the photo.</param>
     /// <returns>The corners.</returns>
-    public static CornerRadius PhotoCorners(bool fromMe, bool isFirst, bool isLast, bool hasCaption)
+    public static CornerRadius PhotoCorners(bool fromMe, bool isFirst, bool isLast, bool hasCaption, bool hasQuote)
     {
         CornerRadius outer = CornersOf(fromMe, isFirst, isLast);
         return new CornerRadius(
-            outer.TopLeft,
-            outer.TopRight,
+            hasQuote ? 0 : outer.TopLeft,
+            hasQuote ? 0 : outer.TopRight,
             hasCaption ? 0 : outer.BottomRight,
             hasCaption ? 0 : outer.BottomLeft);
     }
@@ -1041,9 +1042,10 @@ public sealed partial class MessageBubble : UserControl
                 ShowReactionChange();
                 break;
 
-            // The corners of the photo follow the caption, and the clip of a GIF follows them. The case above handles a
-            // change of the group.
+            // The corners of the photo follow the caption and the quote, and the clip of a GIF follows them. The case
+            // above handles a change of the group.
             case nameof(MessageBubbleViewModel.HasBodyText):
+            case nameof(MessageBubbleViewModel.HasQuote):
                 ClipPhotoFull();
                 break;
         }

@@ -761,8 +761,12 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
 
     // Groups the bubbles as Google Messages does: the same sender, me or 1 person, each a few minutes after the last.
     // In a group chat, a received group shows the name of its sender over its first bubble. It shows the avatar of its
-    // sender beside its last bubble. The first bubble and a bubble after a long gap show a time stamp over them, as
-    // Google Messages does. Only the bubbles from 1 index to another change, clamped to the list.
+    // sender beside its last bubble. A bubble after a long gap shows a time stamp over it, as Google Messages does. So
+    // does the first bubble of the chat, but only once no older page is left, so the stamp does not show and then
+    // vanish while older pages load. A system line gets no stamp and does not count as the bubble before. Only the
+    // bubbles from 1 index to another change, clamped to the list.
+    // ponytail: "Yesterday" and the weekday are worked out at refresh, so they stay as they were past midnight until
+    // the next full refresh.
     private void RefreshGroups(ConversationInfo? c, int from, int to)
     {
         bool isGroup       = c is { IsGroup: true };
@@ -771,19 +775,34 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
 
         for (int i = Math.Max(0, from); i <= end; i++)
         {
-            MessageBubbleViewModel b = Messages[i];
-            bool first               = i == 0 || !SameGroup(Messages[i - 1], b);
-            bool last                = i == Messages.Count - 1 || !SameGroup(b, Messages[i + 1]);
-            ParticipantInfo? sender  = c?.FindParticipant(b.ParticipantId);
-            string name              = ChatFormat.SenderName(sender);
-            bool lane                = isGroup && !b.FromMe;
-            bool stamped             = !b.IsSystemLine && (i == 0 || b.SentAt - Messages[i - 1].SentAt >= StampGap);
-            string stamp             = stamped ? ChatFormat.StampTime(b.SentAt, now, CultureInfo.CurrentCulture) : string.Empty;
+            MessageBubbleViewModel b       = Messages[i];
+            bool first                     = i == 0 || !SameGroup(Messages[i - 1], b);
+            bool last                      = i == Messages.Count - 1 || !SameGroup(b, Messages[i + 1]);
+            ParticipantInfo? sender        = c?.FindParticipant(b.ParticipantId);
+            string name                    = ChatFormat.SenderName(sender);
+            bool lane                      = isGroup && !b.FromMe;
+            MessageBubbleViewModel? before = PreviousReal(i);
+            bool stamped                   = !b.IsSystemLine && (before is null ? _older is null : b.SentAt - before.SentAt >= StampGap);
+            string stamp                   = stamped ? ChatFormat.StampTime(TimeZoneInfo.ConvertTime(b.SentAt, _time.LocalTimeZone), now, CultureInfo.CurrentCulture) : string.Empty;
 
             // The name takes the color of the letter circle of the sender. The conversation tells which reaction is
             // mine.
             b.SetGroup(first, last, lane, lane && first && name.Length > 0 ? name : null, AvatarParts.ColorOf(sender), ChatFormat.Initial(name), b.ParticipantId, stamp);
             b.SetConversation(c);
+        }
+
+        // The nearest bubble above that is not a system line, or null at the top of the list.
+        MessageBubbleViewModel? PreviousReal(int at)
+        {
+            for (int j = at - 1; j >= 0; j--)
+            {
+                if (!Messages[j].IsSystemLine)
+                {
+                    return Messages[j];
+                }
+            }
+
+            return null;
         }
 
         // A system line, such as a group rename, breaks a group.

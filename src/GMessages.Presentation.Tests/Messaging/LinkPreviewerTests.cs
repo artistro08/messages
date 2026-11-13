@@ -225,6 +225,14 @@ public sealed class LinkPreviewerTests
         Assert.IsNull(LinkPreviewer.ParseOEmbed(Encoding.UTF8.GetBytes(json)));
 
     [TestMethod]
+    public void ParseOEmbed_KeepsTitleAsWritten()
+    {
+        (string title, _, _) = LinkPreviewer.ParseOEmbed(Encoding.UTF8.GetBytes("""{"title":"Learn <div> &amp; <span>  fast"}"""))!.Value;
+
+        Assert.AreEqual("Learn <div> &amp; <span> fast", title);
+    }
+
+    [TestMethod]
     public void ParseOEmbed_ThumbnailNotAllowed_DropsImage()
     {
         (_, _, Uri? image) = LinkPreviewer.ParseOEmbed(Encoding.UTF8.GetBytes("""{"title":"A","thumbnail_url":"http://127.0.0.1/a.jpg"}"""))!.Value;
