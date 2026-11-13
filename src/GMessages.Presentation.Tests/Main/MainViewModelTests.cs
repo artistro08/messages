@@ -104,6 +104,22 @@ public sealed class MainViewModelTests
     }
 
     [TestMethod]
+    public async Task OpenConversationAt_OpensByPlace_IgnoresPastEnd()
+    {
+        using var rig = new MainRig();
+        using MainViewModel vm = await NewMainAsync(rig);
+
+        Assert.IsTrue(vm.OpenConversationAt(2));
+        Assert.AreEqual("c", vm.SelectedConversationId);
+
+        Assert.IsTrue(vm.OpenConversationAt(0));
+        Assert.AreEqual("a", vm.SelectedConversationId);
+
+        Assert.IsFalse(vm.OpenConversationAt(3));
+        Assert.AreEqual("a", vm.SelectedConversationId);
+    }
+
+    [TestMethod]
     public async Task SpamView_SwitchesCurrentList_BackReturns()
     {
         using var rig = new MainRig();

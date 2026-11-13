@@ -1135,6 +1135,10 @@ public sealed partial class ChatsView : UserControl
                 ViewModel.PreviousConversation();
                 return true;
 
+            // Ctrl + 1 to Ctrl + 9 open the conversation at that place in the list. A short list lets the key go on.
+            case >= ShortcutCommand.OpenConversation1 and <= ShortcutCommand.OpenConversation9:
+                return ViewModel.OpenConversationAt(command - ShortcutCommand.OpenConversation1);
+
             // The menu items of the open chat: Details, Move to trash and Archive. Move to trash asks first.
             case ShortcutCommand.ShowDetails:
                 return RunOnOpenChat(ConversationMenuItem.Details);
