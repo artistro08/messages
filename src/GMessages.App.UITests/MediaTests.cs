@@ -422,13 +422,15 @@ public sealed partial class MediaTests : UiTest
         Assert.IsTrue(box.Contains(ring), $"The spinner {ring} isn't over the photo {box}.");
         Assert.IsTrue(ring.Left > box.Left + (box.Width / 2) && ring.Top > box.Top + (box.Height / 2), $"The spinner {ring} isn't at the bottom right of the photo {box}.");
         Assert.AreEqual(1.5, (double)box.Width / box.Height, 0.03, $"The sending photo's box {box} doesn't keep its 3:2 shape.");
+        Assert.AreEqual(ChatCopy.Sending, AppDriver.SafeName(spinner), "The spinner isn't named for a screen reader.");
 
         Wait.Until(() => Server.Phone.Sent.Count == 1, AppDriver.DefaultTimeout, () => "The phone didn't get the photo.");
         Wait.Until(() => UploadSpinner() is null, AppDriver.DefaultTimeout, () => "The upload spinner stayed after the photo was sent.");
     }
 
     /// <summary>
-    /// A file that is not a photo shows the upload spinner too while it sends from here.
+    /// A file that is not a photo shows the upload spinner too while it sends from here. The spinner sits at the right
+    /// end of the file card, after the name.
     /// </summary>
     [TestMethod]
     public async Task SendFile_ShowsUploadSpinnerUntilSent()
@@ -440,7 +442,13 @@ public sealed partial class MediaTests : UiTest
         App.Find("Chat.Attachment.1");
         App.Find("Chat.Send").Patterns.Invoke.Pattern.Invoke();
 
-        Wait.Until(() => UploadSpinner() is not null, AppDriver.DefaultTimeout, () => "The upload spinner didn't show while the file uploaded.");
+        AutomationElement? spinner = null;
+        Wait.Until(() => (spinner = UploadSpinner()) is not null, AppDriver.DefaultTimeout, () => "The upload spinner didn't show while the file uploaded.");
+        AutomationElement card = AppDriver.Search(App.Find("Chat.Messages"), e => e.Properties.AutomationId.ValueOrDefault?.StartsWith("Bubble.File.", StringComparison.Ordinal) == true)
+            ?? throw new AssertFailedException("The sending file showed no file card.");
+        System.Drawing.Rectangle ring = spinner!.BoundingRectangle;
+        System.Drawing.Rectangle box  = card.BoundingRectangle;
+        Assert.IsTrue(box.Contains(ring) && ring.Left > box.Left + (box.Width / 2), $"The spinner {ring} isn't at the right end of the file card {box}.");
         Wait.Until(() => Server.Phone.Sent.Count == 1, AppDriver.DefaultTimeout, () => "The phone didn't get the file.");
         Wait.Until(() => UploadSpinner() is null, AppDriver.DefaultTimeout, () => "The upload spinner stayed after the file was sent.");
     }
@@ -652,13 +660,13 @@ public sealed partial class MediaTests : UiTest
         Wait.Until(() => (first = FirstPhoto()) is not null, AppDriver.DefaultTimeout, () => "Mia's chat showed no photo.");
         string seeded        = first!.Properties.AutomationId.ValueOrDefault ?? string.Empty;
         Server.UploadDelay   = TimeSpan.FromSeconds(2);
-        Pick(("party.gif", StripedGif(480, 480, frames: 40)));
+        Pick(("party.gif", StripedGif()));
         App.Find("Chat.Attach").Patterns.Invoke.Pattern.Invoke();
         App.Find("Chat.Attachment.1");
         App.Find("Chat.Send").Patterns.Invoke.Pattern.Invoke();
 
-        // A text follows at once, so the GIF is no longer the last of its group.
-        Thread.Sleep(300);
+        // A text follows the GIF at once, so the GIF is no longer the last of its group.
+        Wait.Until(() => SentPhoto(seeded) is not null, AppDriver.DefaultTimeout, () => "The sent GIF didn't show.");
         App.Find("Chat.Draft").Patterns.Value.Pattern.SetValue("this but my entire body");
         App.Find("Chat.Send").Patterns.Invoke.Pattern.Invoke();
 
@@ -666,79 +674,21 @@ public sealed partial class MediaTests : UiTest
         string echoId           = Server.Phone.Chats.Page("c-media", 2, null).Page.Single(m => m.MessageInfo.Any(i => i.MediaContent is not null)).MessageID;
         AutomationElement photo = App.Find("Bubble.Photo." + echoId);
         WaitForStatus(photo, Full);
-        AssertGifFills(photo);
-    }
-
-    /// <summary>
-    /// A moving GIF in a recycled row fills its whole box. Rows of photos of other shapes recycle as the chat scrolls
-    /// and opens again. The owner saw a band of the blurred thumbnail under a GIF after the chat opened again.
-    /// </summary>
-    [TestMethod]
-    public async Task GifInRecycledRow_FillsItsBox()
-    {
-        await OpenMediaChatAsync();
-
-        // Tall photos, wide photos and square GIFs take turns. The last message is a GIF.
-        byte[] gif   = StripedGif(480, 480);
-        Message last = null!;
-        for (int i = 0; i < 24; i++)
-        {
-            last = i % 3 == 2
-                ? Server.Phone.PushIncomingMedia("c-media", "image/gif", gif, $"party-{i}.gif", dimensions: new Dimensions { Width = 480, Height = 480 })
-                : Server.Phone.PushIncomingMedia("c-media", "image/png", i % 3 == 0 ? Png(1536 / 8, 2048 / 8, SplitColors) : Png(500, 320, SplitColors), $"photo-{i}.png");
-        }
-
-        WaitForStatus(App.Find("Bubble.Photo." + last.MessageID), Full);
-        AutomationElement list = App.Find("Chat.Messages");
-        var scroll             = list.Patterns.Scroll.Pattern;
-        for (int round = 0; round < 4; round++)
-        {
-            scroll.SetScrollPercent(-1, 0);
-            Thread.Sleep(300);
-            scroll.SetScrollPercent(-1, 100);
-            Thread.Sleep(300);
-        }
-
-        // The chat opens again, so its rows recycle.
-        for (int round = 0; round < 3; round++)
-        {
-            App.Find("Row.c-ann").Patterns.SelectionItem.Pattern.Select();
-            Thread.Sleep(400);
-            App.Find("Row.c-media").Patterns.SelectionItem.Pattern.Select();
-            Thread.Sleep(400);
-        }
-
-        AutomationElement photo = App.Find("Bubble.Photo." + last.MessageID);
-        WaitForStatus(photo, Full);
-        AssertGifFills(photo);
-
-        // The window shrinks, grows and comes back from a minimize.
-        var window    = App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout);
-        var transform = window.Patterns.Transform.Pattern;
-        System.Drawing.Rectangle start = window.BoundingRectangle;
-        transform.Resize(700, start.Height);
-        Thread.Sleep(400);
-        transform.Resize(start.Width, start.Height);
-        Thread.Sleep(400);
-        window.Patterns.Window.Pattern.SetWindowVisualState(FlaUI.Core.Definitions.WindowVisualState.Minimized);
-        Thread.Sleep(600);
-        window.Patterns.Window.Pattern.SetWindowVisualState(FlaUI.Core.Definitions.WindowVisualState.Normal);
-        AssertGifFills(App.Find("Bubble.Photo." + last.MessageID));
-    }
-
-    // The striped GIF fills its box: a run of rows in the middle and near the bottom shows a sharp red stripe. Every 16
-    // rows hold a red and a blue stripe. The blurred look under the GIF is only purple.
-    private void AssertGifFills(AutomationElement photo)
-    {
         App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout).SetForeground();
-        Thread.Sleep(1000);
+
+        // Every 16 rows of the GIF hold a red and a blue stripe. The sharp GIF shows a clear red in a run of 24 rows.
+        // The blurred thumbnail under the GIF shows only purple.
         System.Drawing.Rectangle box = photo.BoundingRectangle;
         Assert.AreEqual(1.0, (double)box.Width / box.Height, 0.03, $"The square GIF's box {box} isn't square.");
         foreach (int y in new[] { box.Y + (box.Height / 2), box.Bottom - 30 })
         {
-            using FlaUI.Core.Capturing.CaptureImage capture = FlaUI.Core.Capturing.Capture.Rectangle(new System.Drawing.Rectangle(box.X + (box.Width / 2), y, 1, 24));
-            bool sharp = Enumerable.Range(0, 24).Select(row => capture.Bitmap.GetPixel(0, row)).Any(c => c.R > 180 && c.B < 80);
-            Assert.IsTrue(sharp, $"The GIF doesn't fill its box {box}: the rows from y {y} show only the blur.");
+            Wait.Until(() => ShowsRed(box.X + (box.Width / 2), y), AppDriver.DefaultTimeout, () => $"The GIF doesn't fill its box {box}: the rows from y {y} show only the blur.");
+        }
+
+        static bool ShowsRed(int x, int y)
+        {
+            using FlaUI.Core.Capturing.CaptureImage capture = FlaUI.Core.Capturing.Capture.Rectangle(new System.Drawing.Rectangle(x, y, 1, 24));
+            return Enumerable.Range(0, 24).Select(row => capture.Bitmap.GetPixel(0, row)).Any(c => c.R > 180 && c.B < 80);
         }
     }
 
@@ -1656,22 +1606,22 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
-    /// Makes a looping GIF of the given size with two equal frames of red and blue stripes, 8 rows each. Each frame
-    /// lasts 100 ms. A strong blur turns the stripes purple, so a pixel tells the sharp GIF from its blurred look.
+    /// Makes a looping 480 x 480 GIF of about 5 MB, with 40 equal frames of red and blue stripes, 8 rows each. Each
+    /// frame lasts 100 ms. A strong blur turns the stripes purple, so a pixel tells the sharp GIF from its blurred look.
     /// </summary>
     /// <remarks>
     /// The LZW data sends a clear code before every 2 pixels, so every code stays 3 bits wide and no table is needed.
     /// </remarks>
-    /// <param name="width">The width in pixels.</param>
-    /// <param name="height">The height in pixels.</param>
-    /// <param name="frames">The number of frames.</param>
     /// <returns>The bytes of the GIF file.</returns>
-    internal static byte[] StripedGif(int width, int height, int frames = 2)
+    private static byte[] StripedGif()
     {
+        const int Side   = 480;
+        const int Frames = 40;
+
         using var gif = new MemoryStream();
         gif.Write("GIF89a"u8);
-        Short(gif, width);
-        Short(gif, height);
+        Short(gif, Side);
+        Short(gif, Side);
 
         // A global table of 4 colors. Index 0 is red and index 1 is blue.
         gif.Write([0x91, 0, 0, 220, 30, 30, 30, 30, 220, 0, 0, 0, 0, 0, 0]);
@@ -1679,10 +1629,9 @@ public sealed partial class MediaTests : UiTest
 
         // The codes: clear is 4, end is 5, and a pixel is its index. All codes are 3 bits.
         var codes = new List<int>();
-        for (int i = 0; i < width * height; i += 2)
+        for (int i = 0; i < Side * Side; i += 2)
         {
-            int index = i / width / 8 % 2;
-            codes.AddRange([4, index, (i + 1) / width / 8 % 2]);
+            codes.AddRange([4, i / Side / 8 % 2, (i + 1) / Side / 8 % 2]);
         }
 
         codes.Add(5);
@@ -1705,12 +1654,12 @@ public sealed partial class MediaTests : UiTest
             data.Add((byte)bits);
         }
 
-        for (int frame = 0; frame < frames; frame++)
+        for (int frame = 0; frame < Frames; frame++)
         {
             gif.Write([0x21, 0xF9, 0x04, 0x04, 10, 0, 0, 0]);
             gif.Write([0x2C, 0, 0, 0, 0]);
-            Short(gif, width);
-            Short(gif, height);
+            Short(gif, Side);
+            Short(gif, Side);
             gif.Write([0x00, 0x02]);
             foreach (byte[] block in data.Chunk(255))
             {

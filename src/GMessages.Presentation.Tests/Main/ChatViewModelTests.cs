@@ -424,6 +424,8 @@ public sealed class ChatViewModelTests
         CollectionAssert.AreEqual(new byte[] { 1 }, chat.Messages[0].Media!.InlineData);
         Assert.IsTrue(chat.Messages[1].HasFileCard);
         Assert.AreEqual("both", chat.Messages[1].Text);
+        Assert.IsTrue(chat.Messages[0].IsUploading);
+        Assert.IsTrue(chat.Messages[1].IsUploading);
 
         Assert.HasCount(2, rig.Client.Sent);
         Assert.AreEqual("a.png", rig.Client.Sent[0].MessagePayload.MessageInfo.Single().MediaContent.MediaName);
@@ -441,6 +443,7 @@ public sealed class ChatViewModelTests
         Assert.AreEqual("media-1", chat.Messages[0].Media!.MediaId);
         Assert.AreEqual((40, 30), (chat.Messages[0].Media!.Width, chat.Messages[0].Media!.Height));
         Assert.IsFalse(chat.Messages[0].IsLocalMedia);
+        Assert.IsFalse(chat.Messages[0].IsUploading);
     }
 
     /// <summary>
