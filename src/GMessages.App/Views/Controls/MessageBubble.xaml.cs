@@ -312,8 +312,8 @@ public sealed partial class MessageBubble : UserControl
         InitializeComponent();
 
         // x:Load does not make the parts that a message does not use. Such parts are the quote, photo, video, file
-        // card, voice, upload spinner, preview card, pill, retry footer and caption row. Thus their own wiring sits on them
-        // in the XAML and comes with them.
+        // card, voice, upload spinners, preview card, pill, retry footer and caption row. Thus their own wiring sits on
+        // them in the XAML and comes with them.
         Back.AddHandler(TappedEvent, new TappedEventHandler(OnBackTapped), handledEventsToo: true);
         Row.Tapped += OnRowTapped;
 

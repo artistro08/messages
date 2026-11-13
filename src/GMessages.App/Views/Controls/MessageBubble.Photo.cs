@@ -269,34 +269,33 @@ public sealed partial class MessageBubble
         }
     }
 
-    // Sizes the Image of a GIF to the photo box and clips it to the rounded corners of the photo. The corners of its Border do not clip an Image. A
-    // still photo is a brush and needs no clip. Thus the method removes a clip that a GIF of this container left.
+    // Sizes the Image of a GIF to the photo box and clips it to the rounded corners of the photo. The corners of its
+    // Border do not clip an Image. A still photo is a brush and needs no clip. Thus the method removes a clip that a
+    // GIF of this container left.
     // The clip goes on the Image, never on PhotoFull. PhotoFull fades in through OpacityTransition, a XAML implicit
     // transition. Windows refuses the Composition visual of an element that uses one, with E_ACCESSDENIED.
     // ManyPhotos_FastScroll_NoCrash reproduced it: every failure was the PhotoFull of a faded-in GIF, loaded and laid
     // out. In 0.6.2 that throw escaped SizeChanged and x:Bind callbacks into XAML and crashed the app with 0xc000027b.
     // The method takes the visual once for a GIF, on Loaded or when the GIF arrives. Changes of size and corners only
-    // reshape the clip.
-    // The Image and its clip both take the size of the Canvas, which is the photo box, in one step. The clip followed
-    // the laid-out size of the Image before. That size lags a change of the box until the next layout. A sent GIF then
-    // kept a clip of an older, shorter box, and a band of the blurred thumbnail showed under it.
+    // reshape the clip. The Image and its clip take the size of the Canvas, which is the photo box. The laid-out size
+    // of the Image can be older than the box.
     private void ClipPhotoFull(bool mayTake = false)
     {
-        if (PhotoFullImage is null || Bubble is not { } bubble)
+        if (PhotoFullImage is null)
         {
             return;
         }
 
-        // The Image fills the box. An Image with UniformToFill on its own asks for all the width of the row.
+        // An Image with UniformToFill and no size asks for all the width of the row.
         double width  = PhotoFullCanvas.ActualWidth;
         double height = PhotoFullCanvas.ActualHeight;
-        if (width > 0 && height > 0)
+        if (_photoAnimated && width > 0 && height > 0)
         {
             PhotoFullImage.Width  = width;
             PhotoFullImage.Height = height;
         }
 
-        if (_photoFullVisual is null && (!mayTake || !_photoAnimated || !PhotoFullImage.IsLoaded))
+        if (Bubble is not { } bubble || (_photoFullVisual is null && (!mayTake || !_photoAnimated || !PhotoFullImage.IsLoaded)))
         {
             return;
         }

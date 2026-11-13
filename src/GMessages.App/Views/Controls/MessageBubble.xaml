@@ -415,6 +415,14 @@
                                             TextWrapping="Wrap" />
                                     </Grid>
                                 </Border>
+
+                                <local:UploadSpinner
+                                    x:Name="PhotoUpload"
+                                    Margin="8"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Bottom"
+                                    x:Load="{x:Bind Bubble.IsUploading, Mode=OneWay, FallbackValue=False}"
+                                    AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Upload.', Bubble.PartKey), Mode=OneWay}" />
                             </Grid>
                         </Button>
 
@@ -552,6 +560,14 @@
                                         TextWrapping="Wrap" />
                                 </Grid>
                             </Border>
+
+                            <local:UploadSpinner
+                                x:Name="VideoUpload"
+                                Margin="8"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Bottom"
+                                x:Load="{x:Bind Bubble.IsUploading, Mode=OneWay, FallbackValue=False}"
+                                AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Upload.', Bubble.PartKey), Mode=OneWay}" />
                         </Grid>
 
                         <!-- The file card shows a video or a file with its thumbnail, else the icon of its type. It
@@ -569,10 +585,12 @@
                             Click="OnFileClick"
                             Loaded="OnPartLoaded"
                             Style="{StaticResource IconButtonStyle}">
-                            <Grid ColumnSpacing="10">
+                            <!-- Margins, not ColumnSpacing, keep the gaps. Thus the unloaded spinner leaves no gap. -->
+                            <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <Grid
                                     Width="40"
@@ -582,7 +600,10 @@
                                     <FontIcon FontSize="20" Glyph="{x:Bind local:MessageBubble.FileGlyph(Bubble.Kind), Mode=OneWay, FallbackValue=''}" />
                                     <Border x:Name="FileThumb" CornerRadius="6" />
                                 </Grid>
-                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <StackPanel
+                                    Grid.Column="1"
+                                    Margin="10,0,0,0"
+                                    VerticalAlignment="Center">
                                     <TextBlock
                                         MaxLines="1"
                                         Style="{StaticResource BodyStrongTextBlockStyle}"
@@ -593,6 +614,13 @@
                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                         Style="{StaticResource CaptionTextBlockStyle}" />
                                 </StackPanel>
+                                <local:UploadSpinner
+                                    x:Name="FileUpload"
+                                    Grid.Column="2"
+                                    Margin="10,0,0,0"
+                                    VerticalAlignment="Center"
+                                    x:Load="{x:Bind Bubble.IsUploading, Mode=OneWay, FallbackValue=False}"
+                                    AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Upload.', Bubble.PartKey), Mode=OneWay}" />
                             </Grid>
                         </Button>
 
@@ -626,13 +654,22 @@
                                 AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Voice.Wave.', Bubble.PartKey), Mode=OneWay}"
                                 BarBrush="{ThemeResource TextFillColorPrimaryBrush}"
                                 SeekRequested="OnVoiceSeekRequested" />
-                            <TextBlock
-                                x:Name="VoiceLength"
+                            <StackPanel
                                 Grid.Column="2"
-                                VerticalAlignment="Center"
-                                AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Bubble.Voice.', Bubble.PartKey), Mode=OneWay}"
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Style="{StaticResource CaptionTextBlockStyle}" />
+                                Orientation="Horizontal"
+                                Spacing="8">
+                                <TextBlock
+                                    x:Name="VoiceLength"
+                                    VerticalAlignment="Center"
+                                    AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Bubble.Voice.', Bubble.PartKey), Mode=OneWay}"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Style="{StaticResource CaptionTextBlockStyle}" />
+                                <local:UploadSpinner
+                                    x:Name="VoiceUpload"
+                                    VerticalAlignment="Center"
+                                    x:Load="{x:Bind Bubble.IsUploading, Mode=OneWay, FallbackValue=False}"
+                                    AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Upload.', Bubble.PartKey), Mode=OneWay}" />
+                            </StackPanel>
                         </Grid>
 
                         <!-- While the preview card shows, the text omits the link of the card. See
@@ -716,31 +753,6 @@
                         </local:LinkCardButton>
                     </StackPanel>
                 </Border>
-
-                <!-- Upload Spinner: a turning ring on a small round plate sits over the bottom right of my photo, GIF,
-                     video or file while it sends from here. A photo or video fills the bubble, so the ring sits on
-                     the picture itself. It takes no clicks. -->
-                <Border
-                    x:Name="UploadRing"
-                    Grid.Column="1"
-                    Width="28"
-                    Height="28"
-                    Margin="8"
-                    HorizontalAlignment="Right"
-                    VerticalAlignment="Bottom"
-                    x:Load="{x:Bind Bubble.IsUploading, Mode=OneWay, FallbackValue=False}"
-                    Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}"
-                    CornerRadius="14"
-                    IsHitTestVisible="False">
-                    <muxc:ProgressRing
-                        Width="16"
-                        Height="16"
-                        MinWidth="16"
-                        MinHeight="16"
-                        AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Upload.', Bubble.PartKey), Mode=OneWay}"
-                        IsActive="True" />
-                </Border>
-                <!-- /Upload Spinner -->
 
                 <!-- The focus ring hugs the back 3 px out and follows its corners, also on photos, cards and grouped
                      bubbles. It is a 2 px ring in the accent color, with a 1 px gap inside it. The owner found the

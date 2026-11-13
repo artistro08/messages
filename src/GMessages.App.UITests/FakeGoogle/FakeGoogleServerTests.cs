@@ -701,7 +701,7 @@ public sealed class FakeGoogleServerTests
         byte[] plain = new byte[70000];
         Random.Shared.NextBytes(plain);
 
-        MediaContent uploaded = await rig.Client.UploadMediaAsync(plain, "file.bin", "application/octet-stream", null, CancellationToken.None).WaitAsync(HangGuard);
+        MediaContent uploaded = await rig.Client.UploadMediaAsync(plain, "file.bin", "application/octet-stream", CancellationToken.None).WaitAsync(HangGuard);
         byte[] downloaded     = await rig.Client.DownloadMediaAsync(uploaded.MediaID, uploaded.DecryptionKey.Memory, CancellationToken.None).WaitAsync(HangGuard);
         CollectionAssert.AreEqual(plain, downloaded);
 
