@@ -457,7 +457,8 @@ public sealed partial class LinkPreviewer : IDisposable
     /// Reads the parts of a YouTube card from the oEmbed answer of YouTube.
     /// </summary>
     /// <remarks>
-    /// The title is <c>title</c>, cleaned and cut as <see cref="ParseHead"/> cleans a title. The site is always
+    /// The title is <c>title</c>. It is plain text, not HTML, so the method keeps its tags and entities as written. It
+    /// only removes direction-control characters, collapses spaces and cuts it to 300 characters. The site is always
     /// <c>youtube.com</c>. The image is <c>thumbnail_url</c>, kept only when <see cref="IsAllowed"/> allows it.
     /// </remarks>
     /// <param name="json">The answer of the oEmbed endpoint.</param>
@@ -476,7 +477,7 @@ public sealed partial class LinkPreviewer : IDisposable
                 return null;
             }
 
-            string title = root.TryGetProperty("title", out JsonElement t) && t.ValueKind == JsonValueKind.String ? PlainText(t.GetString()) : string.Empty;
+            string title = root.TryGetProperty("title", out JsonElement t) && t.ValueKind == JsonValueKind.String ? CleanText(t.GetString()) : string.Empty;
             if (title.Length == 0)
             {
                 return null;
@@ -613,24 +614,18 @@ public sealed partial class LinkPreviewer : IDisposable
     }
 
     // Gives the parts of the card. A page of YouTube runs past MaxPageBytes before its tags, so a YouTube link, Shorts
-    // included, asks the oEmbed of YouTube instead. Its small JSON answer holds the title and the thumbnail.
+    // included, asks the oEmbed of YouTube first. Its small JSON answer holds the title and the thumbnail. A link that
+    // oEmbed does not know, such as a channel, falls back to the page.
     private async Task<(string Title, string Site, Uri? Image)?> GetHeadAsync(Uri url)
     {
         if (YouTubeHosts.Contains(url.IdnHost))
         {
             var api = new Uri("https://www.youtube.com/oembed?format=json&url=" + Uri.EscapeDataString(url.AbsoluteUri));
-            if (await GetBodyAsync(api, "application/json", MaxOEmbedBytes, RequestTimeout).ConfigureAwait(false) is not { } answer)
+            if (await GetBodyAsync(api, "application/json", MaxOEmbedBytes, RequestTimeout).ConfigureAwait(false) is { } answer
+                && ParseOEmbed(answer.Body, _allowLoopback) is { } card)
             {
-                return null;
+                return card;
             }
-
-            (string Title, string Site, Uri? Image)? card = ParseOEmbed(answer.Body, _allowLoopback);
-            if (card is null)
-            {
-                LogSkipped("no title");
-            }
-
-            return card;
         }
 
         if (await GetBodyAsync(url, "text/html", MaxPageBytes, RequestTimeout).ConfigureAwait(false) is not { } page)
@@ -883,6 +878,10 @@ public sealed partial class LinkPreviewer : IDisposable
     // collapses spaces and cuts the text to length.
     private static string PlainText(string? html) =>
         html is null ? string.Empty : Cap(Spaces().Replace(BidiControls().Replace(WebUtility.HtmlDecode(AnyTag().Replace(html, " ")), string.Empty), " ").Trim());
+
+    // Cleans plain text, such as an oEmbed title, as PlainText cleans HTML, without the decode and the tag removal.
+    private static string CleanText(string? text) =>
+        text is null ? string.Empty : Cap(Spaces().Replace(BidiControls().Replace(text, string.Empty), " ").Trim());
 
     // Cuts the text to MaxTextLength characters, and never splits the surrogate pair of an emoji.
     private static string Cap(string text)

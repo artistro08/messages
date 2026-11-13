@@ -353,10 +353,10 @@
                             x:Load="{x:Bind Bubble.HasPhoto, Mode=OneWay, FallbackValue=False}"
                             AutomationProperties.Name="{x:Bind Bubble.PhotoName, Mode=OneWay, FallbackValue=''}"
                             Click="OnPhotoClick"
-                            CornerRadius="{x:Bind local:MessageBubble.PhotoCorners(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup, Bubble.HasBodyText), Mode=OneWay}"
+                            CornerRadius="{x:Bind local:MessageBubble.PhotoCorners(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup, Bubble.HasBodyText, Bubble.HasQuote), Mode=OneWay}"
                             Style="{StaticResource CardButtonStyle}">
                             <Grid>
-                                <Border x:Name="PhotoBlur" CornerRadius="{x:Bind local:MessageBubble.PhotoCorners(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup, Bubble.HasBodyText), Mode=OneWay}" />
+                                <Border x:Name="PhotoBlur" CornerRadius="{x:Bind local:MessageBubble.PhotoCorners(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup, Bubble.HasBodyText, Bubble.HasQuote), Mode=OneWay}" />
                                 <!-- A still photo is the ImageBrush of this layer, and the corners of the layer clip
                                      it. A GIF is the Image. A brush shows only the first frame of a GIF, and an Image
                                      plays it. The code clips the Image to the corners of the photo. The Image is on a
@@ -365,7 +365,7 @@
                                      width and cut the GIF. -->
                                 <Border
                                     x:Name="PhotoFull"
-                                    CornerRadius="{x:Bind local:MessageBubble.PhotoCorners(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup, Bubble.HasBodyText), Mode=OneWay}"
+                                    CornerRadius="{x:Bind local:MessageBubble.PhotoCorners(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup, Bubble.HasBodyText, Bubble.HasQuote), Mode=OneWay}"
                                     Opacity="0">
                                     <Canvas SizeChanged="OnPhotoFullCanvasSizeChanged">
                                         <Image
@@ -430,7 +430,7 @@
                             x:Name="Video"
                             x:Load="{x:Bind Bubble.HasVideo, Mode=OneWay, FallbackValue=False}"
                             Background="{ThemeResource SolidBackgroundFillColorTertiaryBrush}"
-                            CornerRadius="{x:Bind local:MessageBubble.PhotoCorners(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup, Bubble.HasBodyText), Mode=OneWay}">
+                            CornerRadius="{x:Bind local:MessageBubble.PhotoCorners(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup, Bubble.HasBodyText, Bubble.HasQuote), Mode=OneWay}">
                             <local:LinkCardButton
                                 x:Name="VideoFrame"
                                 Padding="0"
@@ -442,11 +442,11 @@
                                 AutomationProperties.Name="{x:Bind Bubble.VideoName, Mode=OneWay, FallbackValue=''}"
                                 BorderThickness="0"
                                 Click="OnVideoFrameClick"
-                                CornerRadius="{x:Bind local:MessageBubble.PhotoCorners(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup, Bubble.HasBodyText), Mode=OneWay}"
+                                CornerRadius="{x:Bind local:MessageBubble.PhotoCorners(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup, Bubble.HasBodyText, Bubble.HasQuote), Mode=OneWay}"
                                 Style="{StaticResource CardButtonStyle}">
                                 <Border
                                     x:Name="VideoThumb"
-                                    CornerRadius="{x:Bind local:MessageBubble.PhotoCorners(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup, Bubble.HasBodyText), Mode=OneWay}" />
+                                    CornerRadius="{x:Bind local:MessageBubble.PhotoCorners(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup, Bubble.HasBodyText, Bubble.HasQuote), Mode=OneWay}" />
                             </local:LinkCardButton>
 
                             <!-- The play button sits on a round plate over the middle of the frame. It has no border.
@@ -480,7 +480,7 @@
                                  code adds and removes them. -->
                             <Grid
                                 x:Name="VideoHost"
-                                CornerRadius="{x:Bind local:MessageBubble.PhotoCorners(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup, Bubble.HasBodyText), Mode=OneWay}">
+                                CornerRadius="{x:Bind local:MessageBubble.PhotoCorners(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup, Bubble.HasBodyText, Bubble.HasQuote), Mode=OneWay}">
                                 <Image
                                     x:Name="VideoPicture"
                                     SizeChanged="OnVideoPictureSizeChanged"
