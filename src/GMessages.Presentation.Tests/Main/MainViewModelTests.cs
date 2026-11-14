@@ -104,6 +104,42 @@ public sealed class MainViewModelTests
     }
 
     [TestMethod]
+    public async Task TryOpenConversationAt_OpensByPlace_IgnoresOutOfRange()
+    {
+        using var rig = new MainRig();
+        using MainViewModel vm = await NewMainAsync(rig);
+
+        Assert.IsTrue(vm.TryOpenConversationAt(2));
+        Assert.AreEqual("c", vm.SelectedConversationId);
+
+        Assert.IsTrue(vm.TryOpenConversationAt(0));
+        Assert.AreEqual("a", vm.SelectedConversationId);
+
+        Assert.IsTrue(vm.TryOpenConversationAt(0), "The open conversation counts as a hit.");
+        Assert.AreEqual("a", vm.SelectedConversationId);
+
+        Assert.IsFalse(vm.TryOpenConversationAt(3));
+        Assert.IsFalse(vm.TryOpenConversationAt(-1));
+        Assert.AreEqual("a", vm.SelectedConversationId);
+    }
+
+    [TestMethod]
+    public async Task TryOpenConversationAt_CountsPinnedGridFirst()
+    {
+        using var rig = new MainRig();
+        rig.Page(MainRig.Conv("a", "Ann", 1), MainRig.Conv("p", "Pin", 5, pinned: true));
+        using var vm = new MainViewModel(rig.Controller, rig.Store, TimeProvider.System, a => a());
+        vm.Inbox.PinnedApart = true;
+        await vm.Inbox.LoadAsync();
+
+        Assert.IsTrue(vm.TryOpenConversationAt(0));
+        Assert.AreEqual("p", vm.SelectedConversationId);
+
+        Assert.IsTrue(vm.TryOpenConversationAt(1));
+        Assert.AreEqual("a", vm.SelectedConversationId);
+    }
+
+    [TestMethod]
     public async Task SpamView_SwitchesCurrentList_BackReturns()
     {
         using var rig = new MainRig();

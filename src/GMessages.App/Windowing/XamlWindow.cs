@@ -189,13 +189,14 @@ internal unsafe class XamlWindow
     public event EventHandler? BoundsChanged;
 
     /// <summary>
-    /// Raised when Escape goes down in the window or in a window that it holds, before XAML gets the key. A handler
+    /// Raised when a key goes down in the window or in a window that it holds, before XAML gets the key. A handler
     /// sets Handled to true when it used the key, and then XAML does not get it.
     /// </summary>
     /// <remarks>
-    /// The video player can keep the keyboard focus of Windows outside the island. Then Escape never reaches XAML.
+    /// XAML gets no key while no element has the focus. The video player can also keep the keyboard focus of Windows
+    /// outside the island. In both cases, this event is the only place that sees the key.
     /// </remarks>
-    public event EventHandler<HandledEventArgs>? EscapePressed;
+    public event EventHandler<KeyPressedEventArgs>? KeyPressed;
 
     /// <summary>
     /// Raised when the pointer moves onto or off a caption button, or presses it. The argument holds the hit test codes
@@ -316,14 +317,16 @@ internal unsafe class XamlWindow
     // =========================================================================
 
     /// <summary>
-    /// Pumps the messages of every window until <see cref="ExitMessageLoop"/>. Each message goes to the islands first.
+    /// Pumps the messages of every window until <see cref="ExitMessageLoop"/>. A key goes to <see cref="KeyPressed"/>
+    /// first, then each message goes to the islands. An island with the focus out of its tree takes the arrow keys
+    /// itself, so the window must see them first.
     /// </summary>
     public static void RunMessageLoop()
     {
         MSG msg;
         while (GetMessageW(&msg, 0, 0, 0) > 0)
         {
-            if (PreTranslate(&msg) || RaiseEscape(&msg))
+            if (RaiseKey(&msg) || PreTranslate(&msg))
             {
                 continue;
             }
@@ -355,23 +358,24 @@ internal unsafe class XamlWindow
         return false;
     }
 
-    // Gives Escape to the window that holds its target. The window of the target itself comes first, then the window
-    // that owns it, such as for the layer of the video player. Thus a second app window keeps its own Escape. True when
-    // a handler used the key.
-    private static bool RaiseEscape(MSG* msg)
+    // Gives a key to the window of its target. Thus a second app window keeps its own keys. A key for a window that
+    // the app window owns, such as the layer of the video player, goes to the app window. Alt chords come as
+    // WM_SYSKEYDOWN. True when a handler used the key.
+    private static bool RaiseKey(MSG* msg)
     {
-        if (msg->message != WM_KEYDOWN || msg->wParam != VK_ESCAPE)
+        if (msg->message is not (WM_KEYDOWN or WM_SYSKEYDOWN))
         {
             return false;
         }
 
-        XamlWindow? target = WindowOf(GetAncestor(msg->hwnd, GA_ROOT)) ?? WindowOf(GetAncestor(msg->hwnd, GA_ROOTOWNER));
-        if (target?.EscapePressed is not { } handler)
+        XamlWindow? own    = WindowOf(GetAncestor(msg->hwnd, GA_ROOT));
+        XamlWindow? target = own ?? WindowOf(GetAncestor(msg->hwnd, GA_ROOTOWNER));
+        if (target?.KeyPressed is not { } handler)
         {
             return false;
         }
 
-        var args = new HandledEventArgs();
+        var args = new KeyPressedEventArgs((Windows.System.VirtualKey)(int)msg->wParam, isOwnedWindow: own is null);
         handler(target, args);
         return args.Handled;
     }

@@ -23,6 +23,7 @@ internal static unsafe partial class WindowInterop
     public const uint WM_WINDOWPOSCHANGED = 0x0047;
     public const uint WM_SETICON          = 0x0080;
     public const uint WM_KEYDOWN          = 0x0100;
+    public const uint WM_SYSKEYDOWN       = 0x0104;
     public const uint WM_NCCALCSIZE       = 0x0083;
     public const uint WM_NCHITTEST        = 0x0084;
     public const uint WM_NCMOUSEMOVE      = 0x00A0;

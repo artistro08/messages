@@ -17,6 +17,7 @@ using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Input;
 using Windows.UI.Xaml.Media;
 using Windows.UI.Xaml.Media.Imaging;
+using WinRT;
 
 namespace GMessages.App.Views;
 
@@ -107,15 +108,8 @@ public sealed partial class MainWindow : UserControl
         // The back button of the mouse goes back, also over a button that takes the press.
         RootGrid.AddHandler(PointerPressedEvent, new PointerEventHandler(OnRootPointerPressed), handledEventsToo: true);
 
-        // Escape closes the viewer also when the video player holds the keyboard focus of Windows.
-        _window.EscapePressed += (_, e) =>
-        {
-            if (PhotoViewer.IsOpen)
-            {
-                PhotoViewer.Close(animate: true);
-                e.Handled = true;
-            }
-        };
+        _window.KeyPressed            += OnWindowKeyPressed;
+        AppTitleBar.Back.GettingFocus += OnBackGettingFocus;
 
         ProfileArchived.Text    = ChatCopy.Archived;
         ProfileSpamBlocked.Text = ChatCopy.SpamAndBlocked;
@@ -544,6 +538,19 @@ public sealed partial class MainWindow : UserControl
         ToolTipService.SetToolTip(AppTitleBar.PaneToggle, ChatCopy.ShowOrHideConversations);
     }
 
+    // A narrow window that opens a chat hides the list. Windows then puts the focus with its ring on the first button,
+    // Back, until the message box takes it 1 dispatcher turn later. The owner saw the ring flash. Back gives such a
+    // focus to the box at once. Tab, the arrow keys, a click and a call of Focus move with a direction or another
+    // focus state, so Back keeps those.
+    private void OnBackGettingFocus(UIElement sender, GettingFocusEventArgs args)
+    {
+        if (args.Direction == FocusNavigationDirection.None && args.FocusState == FocusState.Keyboard && _settingsPage is null
+            && ViewModel?.ShowChatPane == true && _chats?.OpenChatDraft is { } draft)
+        {
+            args.TrySetNewFocusedElement(draft);
+        }
+    }
+
     // ☰ shows after pairing in a wide window, where Back does not show.
     private bool ShowsMenu(bool showBack) => _chats is not null && !showBack && ViewModel?.IsNarrow != true;
 
@@ -767,46 +774,137 @@ public sealed partial class MainWindow : UserControl
     // Every key press in the window comes here first. The method handles a key only when a shortcut ran. Thus other
     // keys reach the controls. A shortcut with nothing to do also reaches them, such as "r" with no chat open.
     // Shortcuts run only for the chats, not for pairing or Settings. They do not run while a dialog or a menu is open.
-    // An open tooltip does not count. The method tells it apart by its automation type, not a type test. The Native
-    // AOT build can give back the child of a popup as a base type.
-    private void OnRootPreviewKeyDown(object sender, KeyRoutedEventArgs e)
+    private void OnRootPreviewKeyDown(object sender, KeyRoutedEventArgs e) => e.Handled = HandleKey(e.Key);
+
+    // XAML gets no key while no element has the focus, such as when the window opens. The window then handles the key
+    // here. A click on a blank part of the window can put the focus on an element out of the window tree, such as the
+    // scroll layer that holds RootGrid. Its keys never reach OnRootPreviewKeyDown, so the window handles them too, if
+    // no menu or dialog is open. The video player can hold the keyboard focus of Windows in a window that the app window
+    // owns, so Escape closes the viewer here too. In other cases, the key goes on to OnRootPreviewKeyDown, so no key
+    // runs 2 times.
+    private void OnWindowKeyPressed(object? sender, KeyPressedEventArgs e)
+    {
+        object? focused   = RootGrid.XamlRoot is { } root ? FocusManager.GetFocusedElement(root) : null;
+        bool viewerEscape = e.Key == VirtualKey.Escape && PhotoViewer.IsOpen;
+        bool lostFocus    = focused is null || (!IsInWindowTree(focused) && !IsPopupOpen());
+        bool noXamlKey    = !e.IsOwnedWindow && RootGrid.XamlRoot is not null && lostFocus;
+        if (viewerEscape || noXamlKey)
+        {
+            e.Handled = HandleKey(e.Key);
+        }
+    }
+
+    // True when the element is in the tree of the window. An element in a popup or an element that left the tree is not.
+    private bool IsInWindowTree(object focused)
+    {
+        for (DependencyObject? at = focused.As<DependencyObject>(); at is not null; at = VisualTreeHelper.GetParent(at))
+        {
+            if (ReferenceEquals(at, RootGrid))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // True when the key ran a shortcut or went back.
+    private bool HandleKey(VirtualKey key)
     {
         // Alt + Left and the Back key of the keyboard go back, as in a browser. They also work in Settings.
-        bool backKey = e.Key == VirtualKey.GoBack
-            || (e.Key == VirtualKey.Left && UiHelpers.IsDown(VirtualKey.Menu) && !UiHelpers.IsDown(VirtualKey.Control) && !UiHelpers.IsDown(VirtualKey.Shift));
+        bool backKey = key == VirtualKey.GoBack
+            || (key == VirtualKey.Left && UiHelpers.IsDown(VirtualKey.Menu) && !UiHelpers.IsDown(VirtualKey.Control) && !UiHelpers.IsDown(VirtualKey.Shift));
         if (backKey)
         {
-            e.Handled = GoBack();
-            return;
+            return GoBack();
         }
 
-        // The photo viewer takes Escape, so the chat stays open. No shortcut runs under the viewer.
+        // The photo viewer takes Escape, so the chat stays open. No shortcut runs under the viewer. Alt + Esc stays with
+        // Windows, which sends the window back.
         if (PhotoViewer.IsOpen)
         {
-            if (e.Key == VirtualKey.Escape)
+            if (key != VirtualKey.Escape || UiHelpers.IsDown(VirtualKey.Menu))
             {
-                PhotoViewer.Close(animate: true);
-                e.Handled = true;
+                return false;
             }
 
-            return;
+            PhotoViewer.Close(animate: true);
+            return true;
         }
 
-        if (_chats is not { } chats || _settingsPage is not null || IsPopupOpen())
+        if (_chats is not { } chats || _settingsPage is not null)
         {
-            return;
+            return false;
         }
 
         // The method matches the box by name, not by type. The Native AOT build can give back the box as a base type.
         // These names are the only text boxes of the app, and a new text box must go here.
         bool focusInTextBox = FocusManager.GetFocusedElement(RootGrid.XamlRoot) is FrameworkElement { Name: "DraftBox" or "QueryBox" };
-        if (ShortcutMap.Resolve(e.Key, UiHelpers.IsDown(VirtualKey.Control), UiHelpers.IsDown(VirtualKey.Shift), UiHelpers.IsDown(VirtualKey.Menu), focusInTextBox, UiHelpers.IsDown(VirtualKey.RightMenu)) is { } command)
+        if (ArrowGoesToList(key))
         {
-            e.Handled = Run(chats, command);
+            return !IsPopupOpen() && chats.FocusListWithArrow();
         }
+
+        if (ShortcutMap.Resolve(key, UiHelpers.IsDown(VirtualKey.Control), UiHelpers.IsDown(VirtualKey.Shift), UiHelpers.IsDown(VirtualKey.Menu), focusInTextBox, UiHelpers.IsDown(VirtualKey.RightMenu)) is not { } command)
+        {
+            return false;
+        }
+
+        // The log shows a Ctrl shortcut that a popup stopped, so a popup that stays open by mistake can be found.
+        // Escape is not in the log, because it closes a dialog or a menu in normal use.
+        if (IsPopupOpen())
+        {
+            if (UiHelpers.IsDown(VirtualKey.Control))
+            {
+                AppLog.ShortcutStopped(App.ShellLog, command);
+            }
+
+            return false;
+        }
+
+        return Run(chats, command);
     }
 
-    // A dialog or a menu is open. An open tooltip does not count.
+    // An arrow key with no modifier puts the focus on the conversation list when the focus is at a place with no use for
+    // the arrow keys: no element, an element out of the window tree after a click on a blank part, or a button. A text
+    // box, a list and a scroll area keep their arrow keys. The method tells a button apart by its automation type, not
+    // a type test, as IsPopupOpen does.
+    private bool ArrowGoesToList(VirtualKey key)
+    {
+        bool modifier = UiHelpers.IsDown(VirtualKey.Control) || UiHelpers.IsDown(VirtualKey.Shift) || UiHelpers.IsDown(VirtualKey.Menu);
+        if (key is not (VirtualKey.Up or VirtualKey.Down or VirtualKey.Left or VirtualKey.Right) || modifier)
+        {
+            return false;
+        }
+
+        object? focused = FocusManager.GetFocusedElement(RootGrid.XamlRoot);
+        if (focused is null || !IsInWindowTree(focused))
+        {
+            return true;
+        }
+
+        if (ControlType(focused) is not (AutomationControlType.Button or AutomationControlType.SplitButton or AutomationControlType.Hyperlink))
+        {
+            return false;
+        }
+
+        // A button in a row, a tile or a bubble, such as ⋮, keeps the arrow keys of its list.
+        for (DependencyObject? at = VisualTreeHelper.GetParent(focused.As<DependencyObject>()); at is not null; at = VisualTreeHelper.GetParent(at))
+        {
+            if (ControlType(at) is AutomationControlType.ListItem or AutomationControlType.DataItem)
+            {
+                return false;
+            }
+        }
+
+        return true;
+
+        static AutomationControlType? ControlType(object element) =>
+            element is UIElement shown ? FrameworkElementAutomationPeer.CreatePeerForElement(shown)?.GetAutomationControlType() : null;
+    }
+
+    // A dialog or a menu is open. An open tooltip does not count. The method tells it apart by its automation type,
+    // not a type test. The Native AOT build can give back the child of a popup as a base type.
     private bool IsPopupOpen() =>
         VisualTreeHelper.GetOpenPopupsForXamlRoot(RootGrid.XamlRoot).Any(p => p.Child is null
             || FrameworkElementAutomationPeer.CreatePeerForElement(p.Child)?.GetAutomationControlType() != AutomationControlType.ToolTip);

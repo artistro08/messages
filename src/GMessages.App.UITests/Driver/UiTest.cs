@@ -151,6 +151,51 @@ public abstract class UiTest
     }
 
     /// <summary>
+    /// Reads one screen pixel after the brush transitions of the control have had time to end.
+    /// </summary>
+    /// <param name="spot">The pixel, in screen pixels.</param>
+    /// <returns>The color of the pixel.</returns>
+    protected System.Drawing.Color SettledPixel(System.Drawing.Rectangle spot)
+    {
+        App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout).SetForeground();
+        Thread.Sleep(500);
+        using FlaUI.Core.Capturing.CaptureImage capture = FlaUI.Core.Capturing.Capture.Rectangle(spot);
+        return capture.Bitmap.GetPixel(0, 0);
+    }
+
+    /// <summary>
+    /// Presses a key or a key combination, but only while the app has the keyboard focus. The test fails when another
+    /// app took the focus, so the key never goes to that app.
+    /// </summary>
+    /// <param name="keys">The key, or the keys to hold together.</param>
+    protected void Press(params FlaUI.Core.WindowsAPI.VirtualKeyShort[] keys)
+    {
+        Wait.Until(AppHasFocus, TimeSpan.FromSeconds(3), () => "Another app has the keyboard focus. The test pressed no key.");
+        FlaUI.Core.Input.Keyboard.TypeSimultaneously(keys);
+
+        bool AppHasFocus()
+        {
+            try
+            {
+                return App.Automation.FocusedElement()?.Properties.ProcessId.ValueOrDefault == App.Process.Id;
+            }
+            catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or FlaUI.Core.Exceptions.ElementNotAvailableException)
+            {
+                // The focus moved during the read. The wait reads again.
+                return false;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Tells whether 2 screen pixels have the same color, within 2 levels for each channel.
+    /// </summary>
+    /// <param name="a">The first color.</param>
+    /// <param name="b">The second color.</param>
+    /// <returns>True when the colors match.</returns>
+    protected static bool Near(System.Drawing.Color a, System.Drawing.Color b) => Math.Abs(a.R - b.R) <= 2 && Math.Abs(a.G - b.G) <= 2 && Math.Abs(a.B - b.B) <= 2;
+
+    /// <summary>
     /// Closes the main window with its close button and waits until it is gone.
     /// </summary>
     protected void CloseMainWindow()

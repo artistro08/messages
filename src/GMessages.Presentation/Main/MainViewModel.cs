@@ -339,6 +339,24 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// <remarks>With no conversation open, the call opens the first conversation.</remarks>
     public void PreviousConversation() => MoveSelection(-1);
 
+    /// <summary>Opens the conversation at a place in the current list, as Ctrl + 1 to Ctrl + 9 do.</summary>
+    /// <param name="index">The 0-based place in the list, in screen order.</param>
+    /// <returns>True when a conversation is at that place.</returns>
+    public bool TryOpenConversationAt(int index)
+    {
+        if (CurrentList.InScreenOrder.ElementAtOrDefault(index) is not { } row)
+        {
+            return false;
+        }
+
+        if (row.Id != SelectedConversationId)
+        {
+            Select(row.Id);
+        }
+
+        return true;
+    }
+
     /// <summary>Shows Start chat in place of the open conversation, and loads the contacts the first time.</summary>
     public void OpenStartChat()
     {
@@ -432,10 +450,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
-    // The pinned grid comes first, as on the screen. Pinned is empty when the grid does not show.
     private void MoveSelection(int step)
     {
-        List<ConversationRowViewModel> rows = [.. CurrentList.Pinned, .. CurrentList.Rows];
+        List<ConversationRowViewModel> rows = [.. CurrentList.InScreenOrder];
         if (rows.Count == 0)
         {
             return;

@@ -94,6 +94,37 @@ public sealed class ShortcutMapTests
     }
 
     [TestMethod]
+    [DataRow(VirtualKey.Number1, ShortcutCommand.OpenConversation1)]
+    [DataRow(VirtualKey.Number5, ShortcutCommand.OpenConversation5)]
+    [DataRow(VirtualKey.Number9, ShortcutCommand.OpenConversation9)]
+    [DataRow(VirtualKey.NumberPad1, ShortcutCommand.OpenConversation1)]
+    [DataRow(VirtualKey.NumberPad9, ShortcutCommand.OpenConversation9)]
+    public void CtrlNumber_OpensConversationByPlace_AlsoWhileTyping(VirtualKey key, ShortcutCommand expected)
+    {
+        Assert.AreEqual(expected, ShortcutMap.Resolve(key, true, false, false, false, false));
+        Assert.AreEqual(expected, ShortcutMap.Resolve(key, true, false, false, true, false));
+        Assert.IsNull(ShortcutMap.Resolve(key, false, false, false, false, false), "A bare number is not a shortcut.");
+        Assert.IsNull(ShortcutMap.Resolve(key, true, true, false, false, false), "Ctrl + Shift + number is not a shortcut.");
+        Assert.IsNull(ShortcutMap.Resolve(key, true, false, true, false, false), "Ctrl + Alt + number is not a shortcut.");
+    }
+
+    // ShortcutMap and ChatsView do math on these members, so they must stay in order with no member between them.
+    [TestMethod]
+    public void OpenConversationCommands_AreInOrder()
+    {
+        for (int i = 0; i < 9; i++)
+        {
+            ShortcutCommand expected = ShortcutCommand.OpenConversation1 + i;
+            Assert.AreEqual($"OpenConversation{i + 1}", expected.ToString());
+            Assert.AreEqual(expected, ShortcutMap.Resolve(VirtualKey.Number1 + i, true, false, false, false, false));
+            Assert.AreEqual(expected, ShortcutMap.Resolve(VirtualKey.NumberPad1 + i, true, false, false, false, false));
+        }
+    }
+
+    [TestMethod]
+    public void CtrlZero_IsNull() => Assert.IsNull(ShortcutMap.Resolve(VirtualKey.Number0, true, false, false, false, false));
+
+    [TestMethod]
     public void HelpRows_AreVerbatimSpecText()
     {
         (string, string)[] expected =
@@ -117,9 +148,10 @@ public sealed class ShortcutMapTests
             ("Ctrl + Enter", "Reply to message"),
             ("Ctrl + ?", "Open keyboard shortcut help"),
             ("Ctrl + Shift + z", "Undo archive"),
+            ("Ctrl + 1 to 9", "Open conversation by its place in the list"),
         ];
 
-        Assert.HasCount(19, expected);
+        Assert.HasCount(20, expected);
         CollectionAssert.AreEqual(expected, ShortcutMap.HelpRows.ToArray());
     }
 }
