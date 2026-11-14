@@ -185,6 +185,9 @@ public static class ChatCopy
     // The owner wrote "Waiting for photo" on 2026-11-10. It must stay verbatim.
     public const string PhotoPending    = "Waiting for photo";
 
+    // The controller wrote the screen reader name of the upload spinner. The owner approves it.
+    public const string Sending = "Sending";
+
     // The controller wrote the copy of the photo viewer and the download in Plan 7. The owner approves it at the gate.
     public const string Download         = "Download";
     public const string SavedToDownloads = "Saved to Downloads";

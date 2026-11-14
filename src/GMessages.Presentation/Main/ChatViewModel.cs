@@ -511,22 +511,6 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
         public MediaContent? Uploaded { get; set; }
     }
 
-    // The report goes to the UI thread through the post of the chat, not to the thread of the upload. It goes only
-    // when the whole percent moves, so a big upload does not flood the UI thread.
-    private sealed class PostedProgress(Action<double> report) : IProgress<double>
-    {
-        private int _percent = -1;
-
-        public void Report(double value)
-        {
-            int percent = (int)(Math.Clamp(value, 0, 1) * 100);
-            if (Interlocked.Exchange(ref _percent, percent) != percent)
-            {
-                report(value);
-            }
-        }
-    }
-
     // The ID matches first. Then the temporary ID matches a bubble sent from here.
     private MessageBubbleViewModel? FindBubble(ChatMessage m) =>
         ById(m.Id) ?? (m.TmpId.Length > 0 && _byTmpId.TryGetValue(m.TmpId, out MessageBubbleViewModel? b) && b.TmpId == m.TmpId ? b : null);

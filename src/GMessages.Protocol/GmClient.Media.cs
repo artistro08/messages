@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Net;
 using System.Text;
 using GMessages.Protocol.Crypto;
 using GMessages.Protocol.Http;
@@ -23,9 +22,6 @@ namespace GMessages.Protocol;
 /// </remarks>
 public sealed partial class GmClient
 {
-    // The upload body goes in slices, so the progress moves while a big file goes out.
-    private const int UploadSliceSize = 64 * 1024;
-
     /// <summary>
     /// Encrypts and uploads an attachment for a message.
     /// </summary>
@@ -40,7 +36,6 @@ public sealed partial class GmClient
     /// <param name="plain">The bytes of the file.</param>
     /// <param name="fileName">The file name that the other side sees.</param>
     /// <param name="mime">The mime type, such as <c>image/jpeg</c>.</param>
-    /// <param name="progress">Gets the part of the encrypted file sent, from 0 to 1. Can be null.</param>
     /// <param name="ct">Cancels the upload.</param>
     /// <returns>The media content: format, media ID, name, plain size, decryption key and mime type.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="fileName"/> or <paramref name="mime"/> is null.</exception>
@@ -49,7 +44,7 @@ public sealed partial class GmClient
     /// <exception cref="GmRequestException">The start or the finalize did not answer HTTP 200.</exception>
     /// <exception cref="HttpRequestException">The request failed before any response arrived.</exception>
     /// <exception cref="OperationCanceledException"><paramref name="ct"/> was canceled.</exception>
-    public async Task<MediaContent> UploadMediaAsync(ReadOnlyMemory<byte> plain, string fileName, string mime, IProgress<double>? progress, CancellationToken ct)
+    public async Task<MediaContent> UploadMediaAsync(ReadOnlyMemory<byte> plain, string fileName, string mime, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(fileName);
         ArgumentNullException.ThrowIfNull(mime);
@@ -57,7 +52,6 @@ public sealed partial class GmClient
         byte[] key       = MediaCrypto.GenerateKey();
         byte[] encrypted = MediaCrypto.Encrypt(plain.Span, key);
         string size      = encrypted.Length.ToString(CultureInfo.InvariantCulture);
-        progress?.Report(0);
 
         var startRequest  = new StartMediaUploadRequest { AttachmentType = 1, AuthData = MediaAuth(), Mobile = _auth.Mobile };
         var startBody     = new ByteArrayContent(Encoding.ASCII.GetBytes(Convert.ToBase64String(startRequest.ToByteArray())));
@@ -73,7 +67,7 @@ public sealed partial class GmClient
             throw new InvalidDataException("The upload start answer has no chunk granularity.");
         }
 
-        var fileBody              = new ProgressContent(encrypted, progress);
+        var fileBody              = new ByteArrayContent(encrypted);
         GmMediaResponse finalized = await _http.SendMediaAsync(HttpMethod.Post, uploadUri, UploadHeaders(size, "upload, finalize", "0", mime, ""), fileBody, requireOk: true, ct).ConfigureAwait(false);
         UploadMediaResponse uploaded = UploadMediaResponse.Parser.ParseFrom(DecodeUploadAnswer(finalized.Body));
         if (uploaded.Media is not { MediaID.Length: > 0 } media)
@@ -283,26 +277,4 @@ public sealed partial class GmClient
     private static bool IsStandardBase64(byte[] data) =>
         data.Length % 4 == 0 && data.All(c => c is (>= (byte)'A' and <= (byte)'Z') or (>= (byte)'a' and <= (byte)'z') or (>= (byte)'0' and <= (byte)'9') or (byte)'+' or (byte)'/' or (byte)'=');
 
-    private sealed class ProgressContent(byte[] bytes, IProgress<double>? progress) : HttpContent
-    {
-        protected override async Task SerializeToStreamAsync(Stream stream, TransportContext? context) =>
-            await SerializeToStreamAsync(stream, context, CancellationToken.None).ConfigureAwait(false);
-
-        protected override async Task SerializeToStreamAsync(Stream stream, TransportContext? context, CancellationToken cancellationToken)
-        {
-            for (int sent = 0; sent < bytes.Length;)
-            {
-                int length = Math.Min(UploadSliceSize, bytes.Length - sent);
-                await stream.WriteAsync(bytes.AsMemory(sent, length), cancellationToken).ConfigureAwait(false);
-                sent += length;
-                progress?.Report((double)sent / bytes.Length);
-            }
-        }
-
-        protected override bool TryComputeLength(out long length)
-        {
-            length = bytes.Length;
-            return true;
-        }
-    }
 }
