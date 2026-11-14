@@ -424,7 +424,8 @@ public sealed class ChatViewModelTests
         CollectionAssert.AreEqual(new byte[] { 1 }, chat.Messages[0].Media!.InlineData);
         Assert.IsTrue(chat.Messages[1].HasFileCard);
         Assert.AreEqual("both", chat.Messages[1].Text);
-        Assert.AreEqual(100, chat.Messages[0].UploadPercent);
+        Assert.IsTrue(chat.Messages[0].IsUploading);
+        Assert.IsTrue(chat.Messages[1].IsUploading);
 
         Assert.HasCount(2, rig.Client.Sent);
         Assert.AreEqual("a.png", rig.Client.Sent[0].MessagePayload.MessageInfo.Single().MediaContent.MediaName);
@@ -442,6 +443,7 @@ public sealed class ChatViewModelTests
         Assert.AreEqual("media-1", chat.Messages[0].Media!.MediaId);
         Assert.AreEqual((40, 30), (chat.Messages[0].Media!.Width, chat.Messages[0].Media!.Height));
         Assert.IsFalse(chat.Messages[0].IsLocalMedia);
+        Assert.IsFalse(chat.Messages[0].IsUploading);
     }
 
     /// <summary>
@@ -1390,13 +1392,16 @@ public sealed class ChatViewModelTests
 
         chat.StartReply(chat.Messages[0]);
         Assert.IsTrue(chat.IsReplying);
-        chat.Draft = "answer";
+        string chipSender = chat.ReplyingToSender;
+        chat.Draft        = "answer";
         await chat.SendAsync();
 
         Assert.AreEqual("m1", rig.Client.Sent.Single().Reply?.MessageID);
 
         MessageBubbleViewModel sent = chat.Messages[^1];
         Assert.IsTrue(sent.HasQuote);
+        Assert.AreEqual(sent.QuoteSender, chipSender, "the reply chip names the sender as the quote in the chat does");
+        Assert.AreEqual(string.Empty, chat.ReplyingToSender);
         Assert.AreEqual("one", sent.QuoteText);
         Assert.AreEqual("Ann", sent.QuoteSender);
     }
@@ -1478,7 +1483,6 @@ public sealed class ChatViewModelTests
         Assert.AreEqual(ChatCopy.QuoteImage, quoting.QuoteText);
         Assert.AreEqual("Ann", quoting.QuoteSender);
         Assert.IsTrue(quoting.HasQuoteMedia);
-        Assert.IsTrue(quoting.QuoteIsLabel);
         Assert.AreEqual("thumb-1", quoting.QuoteMedia!.ThumbnailId);
         Assert.AreEqual(ChatCopy.QuoteImage, chat.Messages[0].ReplyChipText);
     }

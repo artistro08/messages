@@ -42,6 +42,8 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         (nameof(AvatarPhotoId), b => b.AvatarPhotoId),
         (nameof(SentAt), b => b.SentAt),
         (nameof(Time), b => b.Time),
+        (nameof(Stamp), b => b.Stamp),
+        (nameof(HasStamp), b => b.HasStamp),
         (nameof(IsTimeShown), b => b.IsTimeShown),
         (nameof(IsNewest), b => b.IsNewest),
         (nameof(IsCaptionHidden), b => b.IsCaptionHidden),
@@ -69,8 +71,6 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         (nameof(HasQuote), b => b.HasQuote),
         (nameof(QuoteMedia), b => b.QuoteMedia),
         (nameof(HasQuoteMedia), b => b.HasQuoteMedia),
-        (nameof(QuoteIsLabel), b => b.QuoteIsLabel),
-        (nameof(MediaLabelIsLabel), b => b.MediaLabelIsLabel),
         (nameof(ReplyChipText), b => b.ReplyChipText),
         (nameof(LinkUrl), b => b.LinkUrl),
         (nameof(Preview), b => b.Preview),
@@ -89,7 +89,6 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         (nameof(HasCopyText), b => b.HasCopyText),
         (nameof(IsLocalMedia), b => b.IsLocalMedia),
         (nameof(IsUploading), b => b.IsUploading),
-        (nameof(UploadPercent), b => b.UploadPercent),
         (nameof(NotSentText), b => b.NotSentText),
         (nameof(FileName), b => b.FileName),
         (nameof(Kind), b => b.Kind),
@@ -236,6 +235,16 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     public string Time { get; private set; } = string.Empty;
 
     /// <summary>
+    /// Gets the time stamp that shows centered over the bubble, such as "Thursday · 7:08 PM", else empty. The chat sets
+    /// it on the first bubble of the chat and on a bubble that follows a long gap. See
+    /// <see cref="ChatFormat.StampTime"/>.
+    /// </summary>
+    public string Stamp { get; private set; } = string.Empty;
+
+    /// <summary>Gets whether <see cref="Stamp"/> shows.</summary>
+    public bool HasStamp => Stamp.Length > 0;
+
+    /// <summary>
     /// Gets whether the time shows under the bubble. It stays hidden until a click on the bubble. See
     /// <see cref="ToggleTime"/>.
     /// </summary>
@@ -365,14 +374,6 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     /// <summary>Gets whether the quote shows the thumbnail or the icon of the quoted media.</summary>
     public bool HasQuoteMedia => QuoteMedia is not null;
 
-    /// <summary>
-    /// Gets whether the text of the quote is a label in italic, such as "Image", "Video" or "GIF", not a file name.
-    /// </summary>
-    public bool QuoteIsLabel => QuoteMedia is not null && IsLabel(QuoteMedia);
-
-    /// <summary>Gets whether the media label of this message is a label in italic, not a file name.</summary>
-    public bool MediaLabelIsLabel => Media is { } media && IsLabel(media);
-
     /// <summary>Gets the text of the reply chip: the media label for a photo, video or file, else the text.</summary>
     public string ReplyChipText => Media is { } media ? ChatFormat.MediaLabel(media) : DisplayText;
 
@@ -473,11 +474,8 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     /// </remarks>
     public bool IsLocalMedia => FromMe && Media is { MediaId.Length: 0, ThumbnailId.Length: 0, InlineData.Length: > 0 };
 
-    /// <summary>Gets whether the upload bar shows: a file of mine that still sends from here.</summary>
+    /// <summary>Gets whether the upload spinner shows: a file of mine that still sends from here.</summary>
     public bool IsUploading => IsSending && IsLocalMedia;
-
-    /// <summary>Gets the uploaded part of the attachment in whole percent, from 0 to 100.</summary>
-    public double UploadPercent { get; private set; }
 
     /// <summary>
     /// Gets the text of the retry link after a failed send. A photo or a file has its own text, and a text message has
@@ -502,8 +500,14 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     /// <summary>Gets the accessible name of the video frame and the viewer: the caption, else "Video".</summary>
     public string VideoName => HasBodyText ? Text : ChatCopy.Video;
 
-    // The chat asks 1 time for each link, so the bubble keeps the link that got a preview request.
+    // The chat asks 1 time for each link, so the bubble keeps the link that got a preview request. The card of the
+    // phone can come later in an update, so the bubble also keeps whether the request had that card.
     internal Uri? PreviewAskedFor { get; set; }
+
+    internal bool PreviewAskedWithPhone { get; set; }
+
+    // The card that the phone fetched for the link, or null.
+    internal LinkPreviewData? PhonePreview => _message.PhonePreview;
 
     // The status line of the chat reads the delivery status from the phone.
     internal MessageStatusType Status { get; private set; }
@@ -720,14 +724,14 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     }
 
     // Sets the place of the bubble in its group. In a group chat, the name shows over the first bubble and the avatar
-    // beside the last.
-    internal void SetGroup(bool first, bool last, bool avatarLane, string? senderName, uint senderColor, string avatarInitial, string avatarPhotoId)
+    // beside the last. The stamp shows centered over the bubble when it is not empty.
+    internal void SetGroup(bool first, bool last, bool avatarLane, string? senderName, uint senderColor, string avatarInitial, string avatarPhotoId, string stamp = "")
     {
         bool showsAvatar = avatarLane && last;
         string initial   = showsAvatar ? avatarInitial : string.Empty;
         string photoId   = showsAvatar ? avatarPhotoId : string.Empty;
         if (IsFirstInGroup == first && IsLastInGroup == last && HasAvatarLane == avatarLane && SenderName == senderName && SenderColor == senderColor
-            && AvatarInitial == initial && AvatarPhotoId == photoId)
+            && AvatarInitial == initial && AvatarPhotoId == photoId && Stamp == stamp)
         {
             return;
         }
@@ -741,11 +745,10 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         SenderColor       = senderColor;
         AvatarInitial     = initial;
         AvatarPhotoId     = photoId;
+        Stamp             = stamp;
         RaiseChanges(before);
     }
 
-    // A label shows in italic. The file name from the sender is not a label.
-    private static bool IsLabel(MediaPart media) => media is not { Kind: MessageKind.File, Name.Length: > 0 };
 
     // The quote shows text-style emoji in color, as the bubble does. Quoted media shows its label in place of the text,
     // with its thumbnail. The same media again changes nothing, also when an update brings it as a new part.
@@ -796,7 +799,6 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         TmpId             = tmpId;
         IsFailed          = false;
         IsSending         = true;
-        UploadPercent     = 0;
         RaiseChanges(before);
     }
 
@@ -832,19 +834,6 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
                 PropertyChanged?.Invoke(this, WatchedArgs[i]);
             }
         }
-    }
-
-    // The property raises only when the whole percent changes, so a big file does not flood the view.
-    internal void SetUploadShare(double share)
-    {
-        double percent = Math.Floor(Math.Clamp(share, 0, 1) * 100);
-        if (percent == UploadPercent)
-        {
-            return;
-        }
-
-        UploadPercent = percent;
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(UploadPercent)));
     }
 
     private void Fill(ChatMessage m)

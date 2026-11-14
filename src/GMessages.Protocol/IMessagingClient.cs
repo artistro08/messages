@@ -51,7 +51,7 @@ public interface IMessagingClient
     Task<GetThumbnailResponse> GetContactThumbnailAsync(IReadOnlyList<string> contactIds, CancellationToken ct);
 
     /// <summary>Encrypts and uploads an attachment. The result goes in a sent message.</summary>
-    Task<MediaContent> UploadMediaAsync(ReadOnlyMemory<byte> plain, string fileName, string mime, IProgress<double>? progress, CancellationToken ct);
+    Task<MediaContent> UploadMediaAsync(ReadOnlyMemory<byte> plain, string fileName, string mime, CancellationToken ct);
 
     /// <summary>Downloads and decrypts an attachment.</summary>
     Task<byte[]> DownloadMediaAsync(string mediaId, ReadOnlyMemory<byte> key, CancellationToken ct);

@@ -427,20 +427,19 @@ public sealed class MessageBubbleViewModelTests
     }
 
     [TestMethod]
-    [DataRow(MessageKind.Photo, "image/jpeg", "beach.jpg", ChatCopy.QuoteImage, true)]
-    [DataRow(MessageKind.Photo, "image/gif", "party.gif", ChatCopy.QuoteGif, true)]
-    [DataRow(MessageKind.Video, "video/mp4", "clip.mp4", ChatCopy.QuoteVideo, true)]
-    [DataRow(MessageKind.File, "application/pdf", "notes.pdf", "notes.pdf", false)]
-    [DataRow(MessageKind.File, "application/pdf", "", ChatCopy.File, true)]
-    [DataRow(MessageKind.Audio, "audio/mp4", "Voice message.m4a", ChatCopy.VoiceMessage, true)]
-    public void MediaLabel_NamesQuotedMedia(MessageKind kind, string mime, string name, string label, bool isLabel)
+    [DataRow(MessageKind.Photo, "image/jpeg", "beach.jpg", ChatCopy.QuoteImage)]
+    [DataRow(MessageKind.Photo, "image/gif", "party.gif", ChatCopy.QuoteGif)]
+    [DataRow(MessageKind.Video, "video/mp4", "clip.mp4", ChatCopy.QuoteVideo)]
+    [DataRow(MessageKind.File, "application/pdf", "notes.pdf", "notes.pdf")]
+    [DataRow(MessageKind.File, "application/pdf", "", ChatCopy.File)]
+    [DataRow(MessageKind.Audio, "audio/mp4", "Voice message.m4a", ChatCopy.VoiceMessage)]
+    public void MediaLabel_NamesQuotedMedia(MessageKind kind, string mime, string name, string label)
     {
         var media  = new MediaPart("media-1", [], "thumb-1", [], [], name, 10, 40, 30, kind, mime);
         var bubble = new MessageBubbleViewModel(MediaMessage(kind) with { Text = string.Empty, Media = media });
 
         Assert.AreEqual(label, ChatFormat.MediaLabel(media));
         Assert.AreEqual(label, bubble.ReplyChipText);
-        Assert.AreEqual(isLabel, bubble.MediaLabelIsLabel);
     }
 
     [TestMethod]
