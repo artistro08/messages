@@ -269,17 +269,33 @@ public sealed partial class MessageBubble
         }
     }
 
-    // Clips the Image of a GIF to the rounded corners of the photo. The corners of its Border do not clip an Image. A
-    // still photo is a brush and needs no clip. Thus the method removes a clip that a GIF of this container left.
+    // Sizes the Image of a GIF to the photo box and clips it to the rounded corners of the photo. The corners of its
+    // Border do not clip an Image. A still photo is a brush and needs no clip. Thus the method removes a clip that a
+    // GIF of this container left.
     // The clip goes on the Image, never on PhotoFull. PhotoFull fades in through OpacityTransition, a XAML implicit
     // transition. Windows refuses the Composition visual of an element that uses one, with E_ACCESSDENIED.
     // ManyPhotos_FastScroll_NoCrash reproduced it: every failure was the PhotoFull of a faded-in GIF, loaded and laid
     // out. In 0.6.2 that throw escaped SizeChanged and x:Bind callbacks into XAML and crashed the app with 0xc000027b.
     // The method takes the visual once for a GIF, on Loaded or when the GIF arrives. Changes of size and corners only
-    // reshape the clip.
+    // reshape the clip. The Image and its clip take the size of the Canvas, which is the photo box. The laid-out size
+    // of the Image can be older than the box.
     private void ClipPhotoFull(bool mayTake = false)
     {
-        if (PhotoFullImage is null || Bubble is not { } bubble || (_photoFullVisual is null && (!mayTake || !_photoAnimated || !PhotoFullImage.IsLoaded)))
+        if (PhotoFullImage is null)
+        {
+            return;
+        }
+
+        // An Image with UniformToFill and no size asks for all the width of the row.
+        double width  = PhotoFullCanvas.ActualWidth;
+        double height = PhotoFullCanvas.ActualHeight;
+        if (_photoAnimated && width > 0 && height > 0)
+        {
+            PhotoFullImage.Width  = width;
+            PhotoFullImage.Height = height;
+        }
+
+        if (Bubble is not { } bubble || (_photoFullVisual is null && (!mayTake || !_photoAnimated || !PhotoFullImage.IsLoaded)))
         {
             return;
         }
@@ -290,9 +306,9 @@ public sealed partial class MessageBubble
             Visual visual      = _photoFullVisual;
 
             // The corners come from the bubble itself, not from the bound corners. The bound corners can still show the
-            // state before a change. An image that is not laid out yet gets its clip later from SizeChanged.
+            // state before a change. A box that is not laid out yet gets its clip later from SizeChanged.
             CornerRadius r = PhotoCorners(bubble.FromMe, bubble.IsFirstInGroup, bubble.IsLastInGroup, bubble.HasBodyText, bubble.HasQuote);
-            if (!_photoAnimated || !ClipRounded(visual, PhotoFullImage, r))
+            if (!_photoAnimated || !ClipRounded(visual, PhotoFullCanvas, r))
             {
                 visual.Clip = null;
             }
