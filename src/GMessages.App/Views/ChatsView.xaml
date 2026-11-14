@@ -103,11 +103,34 @@
                         <TransitionCollection />
                     </ListView.ItemContainerTransitions>
 
+                    <!-- A row or tile with keyboard focus shows a fill, not the focus ring of Windows. The owner
+                         found the ring ugly. The row and the tile draw the fill themselves. See ShowFocusFill. High
+                         contrast keeps the ring of Windows and has no fill. The tiles of the grid in the header use
+                         these values too. -->
+                    <ListView.Resources>
+                        <ResourceDictionary>
+                            <ResourceDictionary.ThemeDictionaries>
+                                <ResourceDictionary x:Key="Default">
+                                    <SolidColorBrush x:Key="TileFocusFillBrush" Color="{ThemeResource SubtleFillColorSecondary}" />
+                                    <Thickness x:Key="ItemFocusOuterThickness">0</Thickness>
+                                    <Thickness x:Key="ItemFocusInnerThickness">0</Thickness>
+                                </ResourceDictionary>
+                                <ResourceDictionary x:Key="HighContrast">
+                                    <SolidColorBrush x:Key="TileFocusFillBrush" Color="Transparent" />
+                                    <Thickness x:Key="ItemFocusOuterThickness">2</Thickness>
+                                    <Thickness x:Key="ItemFocusInnerThickness">1</Thickness>
+                                </ResourceDictionary>
+                            </ResourceDictionary.ThemeDictionaries>
+                        </ResourceDictionary>
+                    </ListView.Resources>
+
                     <ListView.ItemContainerStyle>
                         <Style BasedOn="{StaticResource DefaultListViewItemStyle}" TargetType="ListViewItem">
                             <Setter Property="AllowFocusOnInteraction" Value="False" />
                             <!-- Every row spans the list, so the time of each row ends at the same right edge. -->
                             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                            <Setter Property="FocusVisualPrimaryThickness" Value="{ThemeResource ItemFocusOuterThickness}" />
+                            <Setter Property="FocusVisualSecondaryThickness" Value="{ThemeResource ItemFocusInnerThickness}" />
                         </Style>
                     </ListView.ItemContainerStyle>
                     <ListView.ItemTemplate>
@@ -124,7 +147,8 @@
                          The code collapses the grid while there are none. The grid has no scroller of its own, because
                          a nested scroller kept the scrollbar of the list on screen. The grid is as tall as its tiles,
                          and the list scrolls it. Its sides, with the 3 px margins of the tiles, align with the rows.
-                         The code splits its width into even columns, 3 or more. -->
+                         The code splits its width into even columns, 3 or more. The arrow keys move the focus between
+                         the tiles but open nothing. Enter opens the focused tile. -->
                     <ListView.Header>
                         <GridView
                             x:Name="PinnedGrid"
@@ -133,6 +157,7 @@
                             ContextRequested="OnPinnedGridContextRequested"
                             SelectionChanged="OnPinnedSelectionChanged"
                             SelectionMode="Single"
+                            SingleSelectionFollowsFocus="False"
                             SizeChanged="OnPinnedGridSizeChanged"
                             Visibility="Collapsed">
                             <GridView.Template>
@@ -215,6 +240,8 @@
                                          do not touch. -->
                                     <Setter Property="Margin" Value="3" />
                                     <Setter Property="MinWidth" Value="0" />
+                                    <Setter Property="FocusVisualPrimaryThickness" Value="{ThemeResource ItemFocusOuterThickness}" />
+                                    <Setter Property="FocusVisualSecondaryThickness" Value="{ThemeResource ItemFocusInnerThickness}" />
                                 </Style>
                             </GridView.ItemContainerStyle>
 
@@ -234,6 +261,14 @@
                                         PointerEntered="OnPinnedTilePointerEntered"
                                         PointerExited="OnPinnedTilePointerExited"
                                         ToolTipService.ToolTip="{x:Bind HoverText, Mode=OneWay}">
+                                        <!-- The fill of a tile with keyboard focus. See ShowFocusFill. -->
+                                        <Border
+                                            x:Name="FocusFill"
+                                            Background="{ThemeResource TileFocusFillBrush}"
+                                            CornerRadius="{ThemeResource ControlCornerRadius}"
+                                            IsHitTestVisible="False"
+                                            Opacity="0" />
+
                                         <!-- The 10 px at the bottom keeps the name clear of the selection pill. -->
                                         <Grid Padding="4,4,4,10" RowSpacing="4">
                                             <Grid.RowDefinitions>

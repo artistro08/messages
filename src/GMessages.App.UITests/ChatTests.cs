@@ -705,8 +705,6 @@ public sealed class ChatTests : UiTest
         Keyboard.Type("Hi");
         Wait.Until(() => draft.Patterns.Value.Pattern.Value.ValueOrDefault == "Hi", AppDriver.DefaultTimeout,
             () => "Typing in the message box after the hover and focus changes didn't show the text.");
-
-        static bool Near(System.Drawing.Color a, System.Drawing.Color b) => Math.Abs(a.R - b.R) <= 2 && Math.Abs(a.G - b.G) <= 2 && Math.Abs(a.B - b.B) <= 2;
     }
 
     /// <summary>
@@ -1147,15 +1145,6 @@ public sealed class ChatTests : UiTest
     }
 
     private static double Luma(System.Drawing.Color pixel) => (0.299 * pixel.R) + (0.587 * pixel.G) + (0.114 * pixel.B);
-
-    // Reads one screen pixel after the brush transitions of the control have had time to end.
-    private System.Drawing.Color SettledPixel(System.Drawing.Rectangle spot)
-    {
-        App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout).SetForeground();
-        Thread.Sleep(500);
-        using FlaUI.Core.Capturing.CaptureImage capture = FlaUI.Core.Capturing.Capture.Rectangle(spot);
-        return capture.Bitmap.GetPixel(0, 0);
-    }
 
     // Scrolls up until the loading ring shows. Then it checks every 50 ms that the bubble stays in place.
     // The limit is 4 px from its settled place, until the ring has been gone for 1 s. The page lands above.

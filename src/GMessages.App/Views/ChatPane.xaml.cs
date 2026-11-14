@@ -396,6 +396,11 @@ public sealed partial class ChatPane : UserControl
     public bool FocusDraft() => DraftBox.Focus(FocusState.Keyboard);
 
     /// <summary>
+    /// Gets the message box, for a focus move that must land on it.
+    /// </summary>
+    internal UIElement Draft => DraftBox;
+
+    /// <summary>
     /// Moves focus to the message bubbles for the Ctrl + j shortcut.
     /// </summary>
     /// <returns>True when the list took focus. False while no chat shows.</returns>
@@ -1014,6 +1019,15 @@ public sealed partial class ChatPane : UserControl
     // the Native AOT build the row arrives as a ContentControl, not a ListViewItem. See UiHelpers.FindScroller.
     private void OnMessageListKeyDown(object sender, KeyRoutedEventArgs e)
     {
+        // Down on the newest bubble goes back to the message box.
+        bool onNewest = e.OriginalSource is DependencyObject source && MessageList.Items.Count > 0
+            && MessageList.IndexFromContainer(source) == MessageList.Items.Count - 1;
+        if (e.Key == VirtualKey.Down && onNewest && FocusDraft())
+        {
+            e.Handled = true;
+            return;
+        }
+
         if (e.Key is not (VirtualKey.Enter or VirtualKey.Space) || e.OriginalSource is not ContentControl { Content: MessageBubbleViewModel bubble })
         {
             return;
@@ -1054,6 +1068,14 @@ public sealed partial class ChatPane : UserControl
             return;
         }
 
+        // Up on the first line of the box goes to the newest bubble. Down on that bubble comes back. See
+        // OnMessageListKeyDown.
+        if (e.Key == VirtualKey.Up && !UiHelpers.IsDown(VirtualKey.Shift) && !UiHelpers.IsDown(VirtualKey.Control) && CaretOnFirstLine())
+        {
+            e.Handled = FocusNewestBubble();
+            return;
+        }
+
         if (e.Key != VirtualKey.Enter || UiHelpers.IsDown(VirtualKey.Shift) || Chat is null)
         {
             return;
@@ -1061,6 +1083,44 @@ public sealed partial class ChatPane : UserControl
 
         e.Handled = true;
         _ = Chat.SendAsync();
+    }
+
+    // True when the cursor of the box is on its first line, with no selection. A long line wraps, so the method
+    // compares the top of the cursor with the top of the first character. The cursor sits at the front of the
+    // character after it. At the end of the text, it sits at the back of the last character.
+    private bool CaretOnFirstLine()
+    {
+        string text = DraftBox.Text;
+        int caret   = DraftBox.SelectionStart;
+        if (DraftBox.SelectionLength > 0 || text.AsSpan(0, caret).ContainsAny('\r', '\n'))
+        {
+            return false;
+        }
+
+        if (caret == 0)
+        {
+            return true;
+        }
+
+        double first = DraftBox.GetRectFromCharacterIndex(0, trailingEdge: false).Top;
+        double at    = caret < text.Length
+            ? DraftBox.GetRectFromCharacterIndex(caret, trailingEdge: false).Top
+            : DraftBox.GetRectFromCharacterIndex(caret - 1, trailingEdge: true).Top;
+        return at - first < 1;
+    }
+
+    // Puts the keyboard focus on the newest bubble, at the bottom of the list.
+    private bool FocusNewestBubble()
+    {
+        int last = MessageList.Items.Count - 1;
+        if (last < 0)
+        {
+            return false;
+        }
+
+        MessageList.ScrollIntoView(MessageList.Items[last]);
+        MessageList.UpdateLayout();
+        return MessageList.ContainerFromIndex(last) is Control row && row.Focus(FocusState.Keyboard);
     }
 
     private void OnRetryRequested(object? sender, EventArgs e)

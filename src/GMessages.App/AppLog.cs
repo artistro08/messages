@@ -1,5 +1,7 @@
 using GMessages.Presentation.Connection;
+using GMessages.Presentation.Shortcuts;
 using Microsoft.Extensions.Logging;
+using Windows.System;
 
 namespace GMessages.App;
 
@@ -83,6 +85,21 @@ internal static partial class AppLog
 
     [LoggerMessage(EventId = 937, Level = LogLevel.Information, Message = "Row faded in ({ConversationId})")]
     public static partial void RowFadedIn(ILogger logger, string conversationId);
+
+    [LoggerMessage(EventId = 938, Level = LogLevel.Information, Message = "Shortcut {Command} stopped by an open popup")]
+    public static partial void ShortcutStopped(ILogger logger, ShortcutCommand command);
+
+    [LoggerMessage(EventId = 939, Level = LogLevel.Information, Message = "Key {Key} at the window: target {WindowClass} (owned: {IsOwned}), focus {Focus}, shortcut ran: {Ran}")]
+    public static partial void KeyAtWindow(ILogger logger, VirtualKey key, string windowClass, bool isOwned, string focus, bool ran);
+
+    [LoggerMessage(EventId = 940, Level = LogLevel.Information, Message = "Key {Key} at XAML: focus {Focus}, shortcut ran: {Ran}")]
+    public static partial void KeyAtXaml(ILogger logger, VirtualKey key, string focus, bool ran);
+
+    [LoggerMessage(EventId = 941, Level = LogLevel.Information, Message = "Key {Key} done: focus {Focus}, open chat {ChatOpen}")]
+    public static partial void KeyDone(ILogger logger, VirtualKey key, string focus, bool chatOpen);
+
+    [LoggerMessage(EventId = 942, Level = LogLevel.Information, Message = "Back getting focus: direction {Direction}, state {State}, from {From}, given to the box: {Given}")]
+    public static partial void BackGettingFocus(ILogger logger, string direction, string state, string from, bool given);
 
     [LoggerMessage(EventId = 925, Level = LogLevel.Information, Message = "Taskbar badge set to {Count}")]
     public static partial void BadgeSet(ILogger logger, int count);
