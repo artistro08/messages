@@ -26,6 +26,16 @@
                     <FontIcon Glyph="&#xE8C8;" />
                 </MenuFlyoutItem.Icon>
             </MenuFlyoutItem>
+            <!-- Copy link copies the first link in the text of a text message itself, never a link in its quote. -->
+            <MenuFlyoutItem
+                x:Name="BubbleMenuCopyLink"
+                AutomationProperties.AutomationId="Bubble.CopyLink"
+                Click="OnCopyLinkClick"
+                Text="{x:Bind controls:MessageBubble.CopyLinkText}">
+                <MenuFlyoutItem.Icon>
+                    <FontIcon Glyph="&#xE71B;" />
+                </MenuFlyoutItem.Icon>
+            </MenuFlyoutItem>
             <MenuFlyoutItem
                 x:Name="BubbleMenuOpen"
                 AutomationProperties.AutomationId="Bubble.Open"
@@ -96,7 +106,7 @@
         <MenuFlyout x:Name="PreviewMenu">
             <MenuFlyoutItem
                 AutomationProperties.AutomationId="Preview.CopyLink"
-                Click="OnPreviewMenuCopyLinkClick"
+                Click="OnCopyLinkClick"
                 Text="{x:Bind controls:MessageBubble.CopyLinkText}">
                 <MenuFlyoutItem.Icon>
                     <FontIcon Glyph="&#xE71B;" />
@@ -462,60 +472,65 @@
                 Visibility="{x:Bind Chat.HasAttachError, Mode=OneWay, FallbackValue=Collapsed}" />
 
             <!-- The reply chip joins the top of the message box as 1 control. It has the same width and left edge.
-                 It is rounded only on top, while the box squares its top corners. The chip shows an accent bar, the
-                 quoted text and a button that drops the reply. For a photo, video or file, the quote shows its
-                 thumbnail or icon. It also shows "Image", "Video" or "GIF" in italic, or the file name. -->
+                 It is rounded only on top, while the box squares its top corners. It looks like the quote in a
+                 bubble: a neutral frame around a darker card that holds the thumbnail or icon of quoted media, the
+                 sender and up to 2 lines of the quoted text. Media shows "Image", "Video" or "GIF", or the file
+                 name. A round button in the top right corner of the card drops the reply, as on an attachment chip.
+                 See QuoteButton in MessageBubble.xaml. -->
             <Grid
                 Margin="12,8,12,0"
-                Padding="8,6,4,6"
-                Background="{ThemeResource SolidBackgroundFillColorTertiaryBrush}"
+                Padding="6"
+                Background="{ThemeResource QuoteFrameBrush}"
                 BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
                 BorderThickness="1,1,1,0"
-                ColumnSpacing="8"
-                CornerRadius="4,4,0,0"
+                CornerRadius="8,8,0,0"
                 Visibility="{x:Bind Chat.IsReplying, Mode=OneWay, FallbackValue=Collapsed}">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <Border
-                    Width="3"
-                    Background="{ThemeResource QuoteBarBrush}"
-                    CornerRadius="1.5" />
-                <Grid Grid.Column="1">
+                <Grid Padding="10,10,36,10" Style="{StaticResource QuoteCardStyle}">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
                     <controls:MediaThumb
-                        Margin="0,0,8,0"
+                        Margin="0,0,12,0"
                         VerticalAlignment="Center"
                         AutomationProperties.AutomationId="Chat.ReplyingToThumb"
                         Media="{x:Bind Chat.ReplyingTo.Media, Mode=OneWay}"
                         Visibility="{x:Bind Chat.ReplyingTo.HasMediaFile, Mode=OneWay, FallbackValue=Collapsed}" />
-                    <TextBlock
-                        Grid.Column="1"
-                        VerticalAlignment="Center"
-                        AutomationProperties.AutomationId="Chat.ReplyingTo"
-                        FontStyle="{x:Bind controls:MessageBubble.LabelStyle(Chat.ReplyingTo.MediaLabelIsLabel), Mode=OneWay}"
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        MaxLines="2"
-                        Text="{x:Bind Chat.ReplyingTo.ReplyChipText, Mode=OneWay, FallbackValue=''}"
-                        TextTrimming="CharacterEllipsis"
-                        TextWrapping="Wrap" />
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock
+                            AutomationProperties.AutomationId="Chat.ReplyingToSender"
+                            Style="{StaticResource QuoteSenderTextStyle}"
+                            Text="{x:Bind Chat.ReplyingToSender, Mode=OneWay, FallbackValue=''}"
+                            Visibility="{x:Bind local:UiHelpers.ShownIfText(Chat.ReplyingToSender), Mode=OneWay, FallbackValue=Collapsed}" />
+                        <TextBlock
+                            AutomationProperties.AutomationId="Chat.ReplyingTo"
+                            Style="{StaticResource QuoteBodyTextStyle}"
+                            Text="{x:Bind Chat.ReplyingTo.ReplyChipText, Mode=OneWay, FallbackValue=''}" />
+                    </StackPanel>
                 </Grid>
                 <Button
-                    Grid.Column="2"
-                    Width="32"
-                    Height="32"
-                    VerticalAlignment="Center"
                     AutomationProperties.AutomationId="Chat.CancelReply"
                     AutomationProperties.Name="{x:Bind local:ChatPane.CancelReplyText}"
                     Click="OnCancelReplyClick"
-                    Style="{StaticResource IconButtonStyle}"
+                    Style="{StaticResource ChipRemoveButtonStyle}"
                     ToolTipService.ToolTip="{x:Bind local:ChatPane.CancelReplyText}">
-                    <FontIcon FontSize="12" Glyph="&#xE711;" />
+
+                    <!-- The round fill stays on hover and press, as on the remove button of an attachment chip. -->
+                    <Button.Resources>
+                        <ResourceDictionary>
+                            <ResourceDictionary.ThemeDictionaries>
+                                <ResourceDictionary x:Key="Light">
+                                    <StaticResource x:Key="SubtleButtonBackgroundPointerOver" ResourceKey="AcrylicInAppFillColorDefaultBrush" />
+                                    <StaticResource x:Key="SubtleButtonBackgroundPressed" ResourceKey="AcrylicInAppFillColorDefaultBrush" />
+                                </ResourceDictionary>
+                                <ResourceDictionary x:Key="Dark">
+                                    <StaticResource x:Key="SubtleButtonBackgroundPointerOver" ResourceKey="AcrylicInAppFillColorDefaultBrush" />
+                                    <StaticResource x:Key="SubtleButtonBackgroundPressed" ResourceKey="AcrylicInAppFillColorDefaultBrush" />
+                                </ResourceDictionary>
+                            </ResourceDictionary.ThemeDictionaries>
+                        </ResourceDictionary>
+                    </Button.Resources>
+                    <FontIcon FontSize="10" Glyph="&#xE711;" />
                 </Button>
             </Grid>
 
@@ -577,19 +592,27 @@
                                     Text="{x:Bind Chat.Voice.LengthText, Mode=OneWay, FallbackValue=''}" />
                             </StackPanel>
                             <Button
-                                Width="24"
-                                Height="24"
-                                Margin="0,4,4,0"
-                                Padding="0"
-                                HorizontalAlignment="Right"
-                                VerticalAlignment="Top"
                                 AutomationProperties.AutomationId="Chat.VoiceRemove"
                                 AutomationProperties.Name="{x:Bind local:ChatPane.RemoveAttachmentText}"
-                                Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}"
                                 Click="OnPreviewRemoveClick"
-                                CornerRadius="12"
-                                Style="{StaticResource IconButtonStyle}"
+                                Style="{StaticResource ChipRemoveButtonStyle}"
                                 ToolTipService.ToolTip="{x:Bind local:ChatPane.RemoveAttachmentText}">
+
+                                <!-- The round fill stays on hover and press, as on the other remove buttons. -->
+                                <Button.Resources>
+                                    <ResourceDictionary>
+                                        <ResourceDictionary.ThemeDictionaries>
+                                            <ResourceDictionary x:Key="Light">
+                                                <StaticResource x:Key="SubtleButtonBackgroundPointerOver" ResourceKey="AcrylicInAppFillColorDefaultBrush" />
+                                                <StaticResource x:Key="SubtleButtonBackgroundPressed" ResourceKey="AcrylicInAppFillColorDefaultBrush" />
+                                            </ResourceDictionary>
+                                            <ResourceDictionary x:Key="Dark">
+                                                <StaticResource x:Key="SubtleButtonBackgroundPointerOver" ResourceKey="AcrylicInAppFillColorDefaultBrush" />
+                                                <StaticResource x:Key="SubtleButtonBackgroundPressed" ResourceKey="AcrylicInAppFillColorDefaultBrush" />
+                                            </ResourceDictionary>
+                                        </ResourceDictionary.ThemeDictionaries>
+                                    </ResourceDictionary>
+                                </Button.Resources>
                                 <FontIcon FontSize="10" Glyph="&#xE711;" />
                             </Button>
                         </Grid>
@@ -623,7 +646,7 @@
                                             Orientation="Horizontal"
                                             Spacing="8"
                                             Visibility="{x:Bind local:UiHelpers.Not(ShowsPicture)}">
-                                            <FontIcon FontSize="20" Glyph="{x:Bind local:ChatPane.ChipGlyph(Kind)}" />
+                                            <FontIcon FontSize="20" Glyph="{x:Bind controls:MessageBubble.FileGlyph(Kind)}" />
                                             <TextBlock
                                                 MaxWidth="160"
                                                 VerticalAlignment="Center"
@@ -632,18 +655,10 @@
                                                 TextTrimming="CharacterEllipsis" />
                                         </StackPanel>
                                         <Button
-                                            Width="24"
-                                            Height="24"
-                                            Margin="0,4,4,0"
-                                            Padding="0"
-                                            HorizontalAlignment="Right"
-                                            VerticalAlignment="Top"
                                             AutomationProperties.AutomationId="{x:Bind local:ChatPane.ChipIdOf('Chat.RemoveAttachment.', Id)}"
                                             AutomationProperties.Name="{x:Bind local:ChatPane.RemoveAttachmentText}"
-                                            Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}"
                                             Click="OnRemoveAttachmentClick"
-                                            CornerRadius="12"
-                                            Style="{StaticResource IconButtonStyle}"
+                                            Style="{StaticResource ChipRemoveButtonStyle}"
                                             ToolTipService.ToolTip="{x:Bind local:ChatPane.RemoveAttachmentText}">
 
                                             <!-- The round fill stays on hover and press, though the icon style
