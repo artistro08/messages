@@ -156,6 +156,9 @@ public static class ChatCopy
     public const string TimeDayAgo     = "1 day";
     public const string TimeDaysAgo    = "{0} days";
 
+    // The day of a time stamp between messages, as Google Messages writes it, such as "Yesterday · 7:08 PM".
+    public const string StampYesterday = "Yesterday";
+
     // The controller wrote the settings card of the microphone. The owner approves it.
     public const string Microphone            = "Microphone";
     public const string MicrophoneDescription = "Which microphone records voice messages.";

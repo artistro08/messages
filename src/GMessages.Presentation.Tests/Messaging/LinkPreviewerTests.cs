@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using GMessages.Presentation.Messaging;
 using GMessages.Protocol.Http;
+using GMessages.Protocol.Proto;
 using GMessages.Protocol.Tests.Fakes;
 using Windows.Graphics.Imaging;
 
@@ -197,7 +198,7 @@ public sealed class LinkPreviewerTests
             </head>
             """;
 
-        (string title, string site, Uri? image) = LinkPreviewer.ParseHead(Html, Page)!.Value;
+        (string title, string site, Uri? image, _) = LinkPreviewer.ParseHead(Html, Page)!.Value;
 
         Assert.AreEqual("Og Title", title);
         Assert.AreEqual("example.com", site, "the site is the real host, never og:site_name");
@@ -205,9 +206,45 @@ public sealed class LinkPreviewerTests
     }
 
     [TestMethod]
+    public void ParseOEmbed_ReadsYouTubeTitleAndThumbnail()
+    {
+        byte[] json = Encoding.UTF8.GetBytes("""{"title":"Big Buck Bunny","provider_name":"YouTube","thumbnail_url":"https://i.ytimg.com/vi/aqz-KE-bpKQ/hqdefault.jpg"}""");
+
+        (string title, string site, Uri? image, _) = LinkPreviewer.ParseOEmbed(json)!.Value;
+
+        Assert.AreEqual("Big Buck Bunny", title);
+        Assert.AreEqual("youtube.com", site);
+        Assert.AreEqual(new Uri("https://i.ytimg.com/vi/aqz-KE-bpKQ/hqdefault.jpg"), image);
+    }
+
+    [TestMethod]
+    [DataRow("""{"thumbnail_url":"https://i.ytimg.com/a.jpg"}""")]
+    [DataRow("""{"title":"","thumbnail_url":"https://i.ytimg.com/a.jpg"}""")]
+    [DataRow("not json")]
+    [DataRow("[]")]
+    public void ParseOEmbed_NoTitle_GivesNull(string json) =>
+        Assert.IsNull(LinkPreviewer.ParseOEmbed(Encoding.UTF8.GetBytes(json)));
+
+    [TestMethod]
+    public void ParseOEmbed_KeepsTitleAsWritten()
+    {
+        (string title, _, _, _) = LinkPreviewer.ParseOEmbed(Encoding.UTF8.GetBytes("""{"title":"Learn <div> &amp; <span>  fast"}"""))!.Value;
+
+        Assert.AreEqual("Learn <div> &amp; <span> fast", title);
+    }
+
+    [TestMethod]
+    public void ParseOEmbed_ThumbnailNotAllowed_DropsImage()
+    {
+        (_, _, Uri? image, _) = LinkPreviewer.ParseOEmbed(Encoding.UTF8.GetBytes("""{"title":"A","thumbnail_url":"http://127.0.0.1/a.jpg"}"""))!.Value;
+
+        Assert.IsNull(image);
+    }
+
+    [TestMethod]
     public void ParseHead_FallsBackToTitleAndHost()
     {
-        (string title, string site, Uri? image) = LinkPreviewer.ParseHead("<html><head><title>\n  Plain   Title </title></head></html>", Page)!.Value;
+        (string title, string site, Uri? image, _) = LinkPreviewer.ParseHead("<html><head><title>\n  Plain   Title </title></head></html>", Page)!.Value;
 
         Assert.AreEqual("Plain Title", title);
         Assert.AreEqual("example.com", site);
@@ -221,7 +258,7 @@ public sealed class LinkPreviewerTests
     [TestMethod]
     public void ParseHead_NonAsciiHost_ShowsPunycode()
     {
-        (_, string site, _) = LinkPreviewer.ParseHead("<title>Sign in</title>", new Uri("https://www.gооgle.com/"))!.Value;
+        (_, string site, _, _) = LinkPreviewer.ParseHead("<title>Sign in</title>", new Uri("https://www.gооgle.com/"))!.Value;
 
         Assert.AreEqual("xn--ggle-55da.com", site);
     }
@@ -229,7 +266,7 @@ public sealed class LinkPreviewerTests
     [TestMethod]
     public void ParseHead_DecodesEntities_NoMarkup()
     {
-        (string title, _, _) = LinkPreviewer.ParseHead("<title>Tom &amp; <b>Jerry</b> &#8211; &quot;Hi&quot;</title>", Page)!.Value;
+        (string title, _, _, _) = LinkPreviewer.ParseHead("<title>Tom &amp; <b>Jerry</b> &#8211; &quot;Hi&quot;</title>", Page)!.Value;
 
         Assert.AreEqual("Tom & Jerry \u2013 \"Hi\"", title);
     }
@@ -238,7 +275,7 @@ public sealed class LinkPreviewerTests
     public void ParseHead_StripsBidiControls_CapsLength()
     {
         string longTitle     = new('a', 500);
-        (string title, _, _) = LinkPreviewer.ParseHead($"<title>Pay\u202Egnp.exe {longTitle}</title>", Page)!.Value;
+        (string title, _, _, _) = LinkPreviewer.ParseHead($"<title>Pay\u202Egnp.exe {longTitle}</title>", Page)!.Value;
 
         Assert.IsFalse(title.Contains('\u202E', StringComparison.Ordinal), title);
         StringAssert.StartsWith(title, "Paygnp.exe aaa");
@@ -249,7 +286,7 @@ public sealed class LinkPreviewerTests
     [TestMethod]
     public void ParseHead_UnsafeImage_Dropped()
     {
-        (_, _, Uri? image) = LinkPreviewer.ParseHead("<title>T</title><meta property=\"og:image\" content=\"http://10.0.0.1/x.png\">", Page)!.Value;
+        (_, _, Uri? image, _) = LinkPreviewer.ParseHead("<title>T</title><meta property=\"og:image\" content=\"http://10.0.0.1/x.png\">", Page)!.Value;
 
         Assert.IsNull(image);
     }
@@ -260,7 +297,7 @@ public sealed class LinkPreviewerTests
     [DataRow("og:image:secure_url")]
     public void ParseHead_NoOgImage_UsesOtherImageTag(string key)
     {
-        (_, _, Uri? image) = LinkPreviewer.ParseHead($"<title>T</title><meta name=\"{key}\" content=\"/card.png\">", Page)!.Value;
+        (_, _, Uri? image, _) = LinkPreviewer.ParseHead($"<title>T</title><meta name=\"{key}\" content=\"/card.png\">", Page)!.Value;
 
         Assert.AreEqual(new Uri(Page, "/card.png"), image);
     }
@@ -268,9 +305,20 @@ public sealed class LinkPreviewerTests
     [TestMethod]
     public void ParseHead_OgImage_WinsOverOtherImageTag()
     {
-        (_, _, Uri? image) = LinkPreviewer.ParseHead("<title>T</title><meta name=\"twitter:image\" content=\"/t.png\"><meta property=\"og:image\" content=\"/og.png\">", Page)!.Value;
+        (_, _, Uri? image, _) = LinkPreviewer.ParseHead("<title>T</title><meta name=\"twitter:image\" content=\"/t.png\"><meta property=\"og:image\" content=\"/og.png\">", Page)!.Value;
 
         Assert.AreEqual(new Uri(Page, "/og.png"), image);
+    }
+
+    [TestMethod]
+    [DataRow("<title>T</title><meta name=\"description\" content=\"Plain\"><meta property=\"og:description\" content=\"Og &amp; more\">", "Og & more")]
+    [DataRow("<title>T</title><meta name=\"twitter:description\" content=\"From  twitter\">", "From twitter")]
+    [DataRow("<title>T</title>", "")]
+    public void ParseHead_Description_OgFirstThenOthers(string html, string expected)
+    {
+        (_, _, _, string description) = LinkPreviewer.ParseHead(html, Page)!.Value;
+
+        Assert.AreEqual(expected, description);
     }
 
     [TestMethod]
@@ -307,6 +355,65 @@ public sealed class LinkPreviewerTests
     // The decoder gives the size and the format of the image.
     private static async Task<BitmapDecoder> DecodeAsync(byte[] bytes) =>
         await BitmapDecoder.CreateAsync(new MemoryStream(bytes, writable: false).AsRandomAccessStream());
+
+    /// <summary>
+    /// The card of the phone gives the text, and only its image is fetched, never the page. The site is still the real
+    /// host of the link.
+    /// </summary>
+    [TestMethod]
+    public async Task Get_PhoneCard_UsesItsText_FetchesOnlyImage()
+    {
+        byte[] png              = await MakePngAsync(40, 20, 255);
+        FakeHttpHandler handler = ImagePage(png);
+        using var previewer     = new LinkPreviewer(handler, false, new CollectingLogger(), TestProxy.Direct);
+        var phone               = new LinkPreviewData { Title = "Neil  Ashton", Description = "#badumtss", ImageURL = "https://cdn.example.com/p.png", Domain = "evil.example" };
+
+        LinkPreview? preview = await previewer.GetAsync(Page, CancellationToken.None, phone);
+
+        Assert.IsNotNull(preview);
+        Assert.AreEqual("Neil Ashton", preview.Title);
+        Assert.AreEqual("#badumtss", preview.Description);
+        Assert.AreEqual("example.com", preview.Site, "the site is the real host, never the domain of the card");
+        CollectionAssert.AreEqual(png, preview.Image);
+        Assert.HasCount(1, handler.Requests);
+        Assert.EndsWith(".png", handler.Requests[0].Url);
+    }
+
+    /// <summary>
+    /// The card of the phone replaces the card of the page when it comes later, even when the page gave a card, such as
+    /// the login wall of Instagram. A later plain request then gets the card of the phone too.
+    /// </summary>
+    [TestMethod]
+    [DataRow("<html><head></head></html>")]
+    [DataRow("<html><head><title>Instagram</title></head></html>")]
+    public async Task Get_PhoneCardLater_ReplacesPageCard(string page)
+    {
+        var handler         = new FakeHttpHandler { Respond = (_, _) => HtmlResponse(page) };
+        using var previewer = new LinkPreviewer(handler, false, new CollectingLogger(), TestProxy.Direct);
+
+        await previewer.GetAsync(Page, CancellationToken.None);
+        LinkPreview? preview = await previewer.GetAsync(Page, CancellationToken.None, new LinkPreviewData { Title = "Later" });
+        LinkPreview? again   = await previewer.GetAsync(Page, CancellationToken.None);
+
+        Assert.AreEqual("Later", preview?.Title);
+        Assert.AreEqual("Later", again?.Title);
+    }
+
+    /// <summary>
+    /// The card of the phone belongs to a link with the same host and path. The scheme, www and the query do not count.
+    /// </summary>
+    [TestMethod]
+    [DataRow("https://www.instagram.com/p/Dfb9/?igsh=x", "https://www.instagram.com/p/Dfb9/?igsh=x", true)]
+    [DataRow("https://www.instagram.com/p/Dfb9/?igsh=x", "instagram.com/p/Dfb9", true)]
+    [DataRow("https://www.instagram.com/p/Dfb9/", "//www.instagram.com/p/Dfb9/", true)]
+    [DataRow("https://www.instagram.com/p/Dfb9/", "https://www.instagram.com/p/Other/", false)]
+    [DataRow("https://www.instagram.com/p/Dfb9/", "https://evil.example/p/Dfb9/", false)]
+    [DataRow("https://www.instagram.com/p/Dfb9/", "", false)]
+    [DataRow("https://www.instagram.com/p/Dfb9?u=https://x.example", "instagram.com/p/Dfb9?u=https://x.example", true)]
+    [DataRow("https://www.youtube.com/watch?v=AAA", "https://www.youtube.com/watch?v=BBB", false)]
+    [DataRow("https://www.youtube.com/watch?v=AAA", "https://www.youtube.com/watch?v=AAA", true)]
+    public void SameLink_MatchesHostAndPath(string link, string phoneUrl, bool same) =>
+        Assert.AreEqual(same, LinkPreviewer.SameLink(new Uri(link), phoneUrl));
 
     [TestMethod]
     public async Task Get_Html_GivesPreview_WithImage()

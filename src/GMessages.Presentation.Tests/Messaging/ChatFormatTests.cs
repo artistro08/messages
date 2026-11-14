@@ -102,6 +102,15 @@ public sealed class ChatFormatTests
         Assert.AreEqual(expected, ChatFormat.ListTime(DateTimeOffset.Parse(time, CultureInfo.InvariantCulture), DateTimeOffset.Parse(now, CultureInfo.InvariantCulture), EnUs).Replace(' ', ' '));
 
     [TestMethod]
+    [DataRow("2026-10-29T07:45:00-04:00", "7:45 AM")]                    // today: time
+    [DataRow("2026-10-28T19:08:00-04:00", "Yesterday · 7:08 PM")]        // yesterday
+    [DataRow("2026-10-23T19:08:00-04:00", "Friday · 7:08 PM")]           // within 7 days: weekday
+    [DataRow("2026-03-02T19:08:00-04:00", "Mar 2 · 7:08 PM")]            // same year: month day
+    [DataRow("2025-03-02T19:08:00-04:00", "Mar 2, 2025 · 7:08 PM")]      // older: with the year
+    public void StampTime_MatchesGoogleStyle(string time, string expected) =>
+        Assert.AreEqual(expected, ChatFormat.StampTime(DateTimeOffset.Parse(time, CultureInfo.InvariantCulture), DateTimeOffset.Parse("2026-10-29T18:00:00-04:00", CultureInfo.InvariantCulture), EnUs).Replace(' ', ' '));
+
+    [TestMethod]
     [DataRow("  ann", "A")]
     [DataRow("", "")]
     [DataRow("59538", "")]

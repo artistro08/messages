@@ -307,7 +307,7 @@ public sealed partial class MessageBubble
 
             // The corners come from the bubble itself, not from the bound corners. The bound corners can still show the
             // state before a change. A box that is not laid out yet gets its clip later from SizeChanged.
-            CornerRadius r = PhotoCorners(bubble.FromMe, bubble.IsFirstInGroup, bubble.IsLastInGroup, bubble.HasBodyText);
+            CornerRadius r = PhotoCorners(bubble.FromMe, bubble.IsFirstInGroup, bubble.IsLastInGroup, bubble.HasBodyText, bubble.HasQuote);
             if (!_photoAnimated || !ClipRounded(visual, PhotoFullCanvas, r))
             {
                 visual.Clip = null;
