@@ -375,7 +375,7 @@ internal unsafe class XamlWindow
             return false;
         }
 
-        var args = new KeyPressedEventArgs((Windows.System.VirtualKey)(int)msg->wParam, msg->hwnd, isOwnedWindow: own is null);
+        var args = new KeyPressedEventArgs((Windows.System.VirtualKey)(int)msg->wParam, isOwnedWindow: own is null);
         handler(target, args);
         return args.Handled;
     }

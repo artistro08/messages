@@ -544,14 +544,11 @@ public sealed partial class MainWindow : UserControl
     // focus state, so Back keeps those.
     private void OnBackGettingFocus(UIElement sender, GettingFocusEventArgs args)
     {
-        bool given = args.Direction == FocusNavigationDirection.None && args.FocusState == FocusState.Keyboard && _settingsPage is null
-            && ViewModel?.ShowChatPane == true && _chats?.OpenChatDraft is { } draft && args.TrySetNewFocusedElement(draft);
-
-        // TODO: Diagnostic for the ring flash on Back. Remove with the key trace.
-        string direction = args.Direction.ToString();
-        string state     = args.FocusState.ToString();
-        string from      = DescribeFocus(args.OldFocusedElement);
-        AppLog.BackGettingFocus(App.ShellLog, direction, state, from, given);
+        if (args.Direction == FocusNavigationDirection.None && args.FocusState == FocusState.Keyboard && _settingsPage is null
+            && ViewModel?.ShowChatPane == true && _chats?.OpenChatDraft is { } draft)
+        {
+            args.TrySetNewFocusedElement(draft);
+        }
     }
 
     // ☰ shows after pairing in a wide window, where Back does not show.
@@ -777,27 +774,7 @@ public sealed partial class MainWindow : UserControl
     // Every key press in the window comes here first. The method handles a key only when a shortcut ran. Thus other
     // keys reach the controls. A shortcut with nothing to do also reaches them, such as "r" with no chat open.
     // Shortcuts run only for the chats, not for pairing or Settings. They do not run while a dialog or a menu is open.
-    private void OnRootPreviewKeyDown(object sender, KeyRoutedEventArgs e)
-    {
-        object? before = IsTraced(e.Key) && RootGrid.XamlRoot is { } root ? FocusManager.GetFocusedElement(root) : null;
-        e.Handled      = HandleKey(e.Key);
-        if (IsTraced(e.Key))
-        {
-            string focus = DescribeFocus(before);
-            AppLog.KeyAtXaml(App.ShellLog, e.Key, focus, e.Handled);
-            TraceKeyDone(e.Key);
-        }
-    }
-
-    // Logs where the focus is after the key and the work it started. The focus moves of the list wait 1 dispatcher
-    // turn, so the log waits for a low-priority turn.
-    private void TraceKeyDone(VirtualKey key) =>
-        _dispatcher.TryEnqueue(DispatcherQueuePriority.Low, () =>
-        {
-            object? focused = RootGrid.XamlRoot is { } root ? FocusManager.GetFocusedElement(root) : null;
-            string focus    = DescribeFocus(focused);
-            AppLog.KeyDone(App.ShellLog, key, focus, ViewModel?.IsChatOpen == true);
-        });
+    private void OnRootPreviewKeyDown(object sender, KeyRoutedEventArgs e) => e.Handled = HandleKey(e.Key);
 
     // XAML gets no key while no element has the focus, such as when the window opens. The window then handles the key
     // here. A click on a blank part of the window can put the focus on an element out of the window tree, such as the
@@ -815,39 +792,6 @@ public sealed partial class MainWindow : UserControl
         {
             e.Handled = HandleKey(e.Key);
         }
-
-        if (IsTraced(e.Key))
-        {
-            string target = WindowInterop.ClassName(e.TargetWindow);
-            string focus  = DescribeFocus(focused);
-            AppLog.KeyAtWindow(App.ShellLog, e.Key, target, e.IsOwnedWindow, focus, e.Handled);
-        }
-    }
-
-    // TODO: This diagnostic is for the owner report that Escape and the Ctrl shortcuts stop after the arrow keys open a
-    // chat in a narrow window. No test or probe showed the fault. The log tells where each of these keys went: the
-    // window that got it, the element with the focus, and whether a shortcut ran. Remove the 2 log lines when the
-    // cause is known. The log never holds a typed character, only Escape, the arrow keys and Ctrl + 1 to 9.
-    private static bool IsTraced(VirtualKey key) =>
-        key is VirtualKey.Escape or VirtualKey.Up or VirtualKey.Down or VirtualKey.Left or VirtualKey.Right
-        || (key is >= VirtualKey.Number1 and <= VirtualKey.Number9 && UiHelpers.IsDown(VirtualKey.Control));
-
-    // The name or the type of the element with the focus, and whether it is in the tree of the window. An element in a
-    // popup or an element that left the tree is not, and the key of such an element never reaches OnRootPreviewKeyDown.
-    private string DescribeFocus(object? focused)
-    {
-        if (focused is null)
-        {
-            return "none";
-        }
-
-        bool inTree           = IsInWindowTree(focused);
-        DependencyObject item = focused.As<DependencyObject>();
-        string id             = AutomationProperties.GetAutomationId(item);
-        string name           = id.Length > 0 ? id : focused is FrameworkElement { Name.Length: > 0 } element ? element.Name : focused.GetType().Name;
-        string state          = focused is Control control ? control.FocusState.ToString() : "-";
-        bool shown            = focused is UIElement { Visibility: Visibility.Visible } shownElement && shownElement.ActualSize.X > 0;
-        return $"{name} ({state}, shown: {shown}), in the window tree: {inTree}";
     }
 
     // True when the element is in the tree of the window. An element in a popup or an element that left the tree is not.
