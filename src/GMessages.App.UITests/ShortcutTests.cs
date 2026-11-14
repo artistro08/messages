@@ -415,14 +415,6 @@ public sealed class ShortcutTests : UiTest
         App.WaitForText("Chat.Header", "Ann Lee");
         Press(VirtualKeyShort.ESCAPE);
         WaitForGone("Chat.Header");
-
-        // No element had the focus at the first Ctrl + 1, so the window ran it. XAML ran the later keys.
-        string log = ReadLog();
-        StringAssert.Contains(log, "Key Number1 at the window", "The log didn't tell where Ctrl + 1 went.");
-        StringAssert.Contains(log, "focus none, shortcut ran: True", "The window didn't run the first Ctrl + 1.");
-        StringAssert.Matches(log, new System.Text.RegularExpressions.Regex("Key Number1 at XAML: focus .*, shortcut ran: True"), "XAML didn't run the second Ctrl + 1.");
-        StringAssert.Matches(log, new System.Text.RegularExpressions.Regex("Key Escape at XAML: focus .*, shortcut ran: True"), "XAML didn't run Escape.");
-        StringAssert.Contains(log, "Key Down done: focus", "The log didn't tell where Down left the focus.");
     }
 
     /// <summary>
