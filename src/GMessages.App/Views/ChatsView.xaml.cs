@@ -153,6 +153,8 @@ public sealed partial class ChatsView : UserControl
         ViewModel.PropertyChanged  += OnViewModelChanged;
         ConversationList.AddHandler(KeyDownEvent, new KeyEventHandler(OnListKeyDown), handledEventsToo: true);
         ConversationList.PreviewKeyDown     += OnListPreviewKeyDown;
+        ConversationList.GotFocus           += OnItemFocusChanged;
+        ConversationList.LostFocus          += OnItemFocusChanged;
         PinnedGrid.ContainerContentChanging += OnPinnedContentChanging;
         ChatView.MenuRequested              += OnChatMenuRequested;
         ChatView.MuteRequested              += (_, _) => RunOnOpenChat(ViewModel.Chat?.IsMuted == true ? ConversationMenuItem.Unmute : ConversationMenuItem.Mute);
@@ -169,6 +171,11 @@ public sealed partial class ChatsView : UserControl
     /// Stops the playback or recording of the open chat. The window calls this method when it hides.
     /// </summary>
     internal void StopMedia() => ChatView.StopMedia();
+
+    /// <summary>
+    /// Gets the message box of the open chat, or null while no chat is open.
+    /// </summary>
+    internal UIElement? OpenChatDraft => ViewModel.IsChatOpen ? ChatView.Draft : null;
 
     /// <summary>
     /// Stops the bindings and disposes the view model. The window calls this method when it drops the view.
@@ -502,6 +509,10 @@ public sealed partial class ChatsView : UserControl
         {
             SkipPaneAnimation(isNarrow);
             ViewModel.IsNarrow = isNarrow;
+
+            // A chat in a narrow window covers the list. Thus the arrow keys there only move the focus, and Enter
+            // opens the chat. See OnListKeyDown.
+            ConversationList.SingleSelectionFollowsFocus = !isNarrow;
         }
     }
 
@@ -789,9 +800,10 @@ public sealed partial class ChatsView : UserControl
             return;
         }
 
-        int columns                         = Math.Max(3, (int)(width / PinnedTileWidth));
-        panel.As<ItemsWrapGrid>().ItemWidth = Math.Floor(width / columns);
+        panel.As<ItemsWrapGrid>().ItemWidth = Math.Floor(width / PinnedColumns(width));
     }
+
+    private static int PinnedColumns(double width) => Math.Max(3, (int)(width / PinnedTileWidth));
 
     // Names each tile for UI Automation as a row, Row.{id}. A conversation is a tile or a row, never both. The rows of
     // the list hook its scroller and ask for the next page. When every row of the page is pinned, there are no rows.
@@ -804,6 +816,7 @@ public sealed partial class ChatsView : UserControl
         }
 
         AutomationProperties.SetAutomationId(args.ItemContainer, "Row." + tile.Id);
+        ShowFocusFill(args.ItemContainer);
         if (FindPill(args.ItemContainer) is { } pill)
         {
             ShowPill(pill, IsOpen(tile), animate: false);
@@ -829,11 +842,16 @@ public sealed partial class ChatsView : UserControl
         }
 
         // The arrow keys open each chat but keep the focus on the list. A click, a shortcut, a toast, Start chat or a
-        // screen reader Select moves the focus to the message box.
+        // screen reader Select moves the focus to the message box. A narrow window hides the list behind the chat.
+        // The focus then went to Back, which showed the focus ring of Windows. Thus the message box takes it there
+        // too.
         if (_selectingWithKeys)
         {
             _selectingWithKeys = false;
-            ChatView.KeepFocusOnNextOpen();
+            if (!ViewModel.IsNarrow)
+            {
+                ChatView.KeepFocusOnNextOpen();
+            }
         }
 
         ViewModel.Select(row.Id);
@@ -859,22 +877,111 @@ public sealed partial class ChatsView : UserControl
     // The handler also gets the key when the list handled it.
     private void OnListKeyDown(object sender, KeyRoutedEventArgs e)
     {
-        if (e.Key != VirtualKey.Enter || !ViewModel.IsChatOpen || !IsBrowsingWithKeys())
+        if (e.Key is VirtualKey.Down or VirtualKey.Up or VirtualKey.GamepadDPadDown or VirtualKey.GamepadDPadUp)
+        {
+            MoveBetweenGridAndRows(e);
+            return;
+        }
+
+        if (e.Key != VirtualKey.Enter || !IsBrowsingWithKeys())
         {
             return;
         }
 
-        e.Handled = ChatView.FocusDraft();
+        // In a narrow window the arrow keys open nothing. Enter opens the row or tile with the focus.
+        if (ViewModel.IsNarrow && FocusedItem() is { } item && item.Id != ViewModel.SelectedConversationId)
+        {
+            ViewModel.Select(item.Id);
+            e.Handled = true;
+            return;
+        }
+
+        e.Handled = ViewModel.IsChatOpen && ChatView.FocusDraft();
+    }
+
+    // The grid and the rows are 2 lists, and Windows does not move the focus between them. Down on a tile with no tile
+    // below goes to the first row and opens it, as Down on a row does. Up on the first row goes to the first tile of
+    // the bottom row of the grid. The key comes here after the grid or the list handled it. The focus is then still on
+    // the item that got the key. The method matches the items by index, never by reference. See UiHelpers.FindPart.
+    private void MoveBetweenGridAndRows(KeyRoutedEventArgs e)
+    {
+        int tiles = PinnedGrid.Items.Count;
+        if (e.OriginalSource is null || XamlRoot is not { } root || FocusManager.GetFocusedElement(root) is not { } focused
+            || PinnedGrid.Visibility != Visibility.Visible || tiles == 0 || ConversationList.Items.Count == 0)
+        {
+            return;
+        }
+
+        DependencyObject from = e.OriginalSource.As<DependencyObject>();
+        DependencyObject now  = focused.As<DependencyObject>();
+        int tile              = PinnedGrid.IndexFromContainer(from);
+        bool down             = e.Key is VirtualKey.Down or VirtualKey.GamepadDPadDown;
+        if (down && tile >= 0 && PinnedGrid.IndexFromContainer(now) == tile)
+        {
+            if (ConversationList.ContainerFromIndex(0) is { } first && first.As<Control>().Focus(FocusState.Keyboard))
+            {
+                e.Handled = true;
+                if (!ViewModel.IsNarrow)
+                {
+                    ConversationList.SelectedIndex = 0;
+                }
+            }
+        }
+        else if (!down && ConversationList.IndexFromContainer(from) == 0 && ConversationList.IndexFromContainer(now) == 0)
+        {
+            int columns = PinnedColumns(PinnedGrid.ActualWidth);
+            if (PinnedGrid.ContainerFromIndex((tiles - 1) / columns * columns) is { } below && below.As<Control>().Focus(FocusState.Keyboard))
+            {
+                e.Handled = true;
+            }
+        }
+    }
+
+    // A row or a tile of the grid in the list header gained or lost focus. An element inside one does not count.
+    private void OnItemFocusChanged(object sender, RoutedEventArgs e)
+    {
+        if (e.OriginalSource is null)
+        {
+            return;
+        }
+
+        DependencyObject element = e.OriginalSource.As<DependencyObject>();
+        if (ConversationList.IndexFromContainer(element) >= 0 || PinnedGrid.IndexFromContainer(element) >= 0)
+        {
+            ShowFocusFill(element);
+        }
+    }
+
+    // A row or tile with keyboard focus shows its fill, where Windows shows its focus ring. The owner found the ring
+    // ugly. In high contrast, the ring of Windows shows and the fill has no color. A reused row or tile comes here
+    // too, so it does not keep the fill of its last chat.
+    private static void ShowFocusFill(DependencyObject item)
+    {
+        if (UiHelpers.FindPart<UIElement>(item, "FocusFill") is { } fill)
+        {
+            fill.Opacity = item.As<Control>().FocusState == FocusState.Keyboard ? 1 : 0;
+        }
     }
 
     // True when a row of the list has keyboard focus from the arrow keys or Tab. Pointer or programmatic focus does not
     // count. The view matches the row by its index and reads it through a WinRT cast, not a type test. See
     // UiHelpers.FindPart.
-    private bool IsBrowsingWithKeys() =>
-        XamlRoot is { } root && FocusManager.GetFocusedElement(root) is { } focused
-        && (ConversationList.IndexFromContainer(focused.As<DependencyObject>()) >= 0
-            || PinnedGrid.IndexFromContainer(focused.As<DependencyObject>()) >= 0)
-        && focused.As<Control>().FocusState == FocusState.Keyboard;
+    private bool IsBrowsingWithKeys() => FocusedItem() is not null;
+
+    // The row or tile with keyboard focus from the arrow keys or Tab. Null when the focus is elsewhere.
+    private ConversationRowViewModel? FocusedItem()
+    {
+        if (XamlRoot is not { } root || FocusManager.GetFocusedElement(root) is not { } focused)
+        {
+            return null;
+        }
+
+        DependencyObject element = focused.As<DependencyObject>();
+        object? item             = ConversationList.IndexFromContainer(element) >= 0 ? ConversationList.ItemFromContainer(element)
+            : PinnedGrid.IndexFromContainer(element) >= 0 ? PinnedGrid.ItemFromContainer(element)
+            : null;
+        return item is not null && focused.As<Control>().FocusState == FocusState.Keyboard ? item as ConversationRowViewModel : null;
+    }
 
     // Names each row Row.{id} for UI Automation. When the last row is realized and the list is at its bottom, the next
     // page loads. Thus a short list that cannot scroll fills. The list realizes rows up to 2 screens below the view.
@@ -888,6 +995,7 @@ public sealed partial class ChatsView : UserControl
         }
 
         AutomationProperties.SetAutomationId(args.ItemContainer, "Row." + row.Id);
+        ShowFocusFill(args.ItemContainer);
         WatchListScroller();
 
         if (row.TakeFadeIn() && Ui.AnimationsEnabled && args.ItemContainer.ContentTemplateRoot is { } content)
@@ -1009,9 +1117,20 @@ public sealed partial class ChatsView : UserControl
         {
             if ((wasOpen && !ViewModel.IsChatOpen) || FocusIsOnRemovedRow(root, c.Id))
             {
-                ConversationList.Focus(FocusState.Programmatic);
+                FocusItem(c.Id, FocusState.Programmatic);
             }
         });
+    }
+
+    // Puts the focus on the tile or row of a conversation. When the list shows neither, the list takes the focus and
+    // gives it to its first tile or row.
+    private bool FocusItem(string? conversationId, FocusState state)
+    {
+        ConversationListViewModel list = ViewModel.CurrentList;
+        DependencyObject? item         = list.Pinned.FirstOrDefault(r => r.Id == conversationId) is { } tile ? PinnedGrid.ContainerFromItem(tile)
+            : list.Rows.FirstOrDefault(r => r.Id == conversationId) is { } row ? ConversationList.ContainerFromItem(row)
+            : null;
+        return (item is not null && item.As<Control>().Focus(state)) || ConversationList.Focus(state);
     }
 
     // True when focus sits on the row of a conversation that left the list, or on its ⋮. The search goes up by the
@@ -1082,6 +1201,23 @@ public sealed partial class ChatsView : UserControl
     // =========================================================================
 
     /// <summary>
+    /// Puts the keyboard focus on the tile or row of the open conversation, or on the first one. An arrow key from a
+    /// place with no use for it comes here. The focus stays on the list, as after an arrow key in the list.
+    /// </summary>
+    /// <returns>False when the list is hidden, such as behind a chat in a narrow window.</returns>
+    public bool FocusListWithArrow()
+    {
+        if (ViewModel.IsNarrow && ViewModel.IsChatOpen)
+        {
+            return false;
+        }
+
+        _selectingWithKeys = true;
+        XamlHost.Dispatcher.TryEnqueue(DispatcherQueuePriority.Low, () => _selectingWithKeys = false);
+        return FocusItem(ViewModel.SelectedConversationId, FocusState.Keyboard);
+    }
+
+    /// <summary>
     /// Runs a shortcut of the chats. The window runs Settings and Help itself.
     /// </summary>
     /// <param name="command">The shortcut.</param>
@@ -1123,8 +1259,9 @@ public sealed partial class ChatsView : UserControl
 
             // The message box goes with the chat, so focus goes back to the list and is not lost.
             case ShortcutCommand.ExitConversation:
+                string? left = ViewModel.SelectedConversationId;
                 ViewModel.ExitConversation();
-                XamlHost.Dispatcher.TryEnqueue(() => ConversationList.Focus(FocusState.Programmatic));
+                XamlHost.Dispatcher.TryEnqueue(() => FocusItem(left, FocusState.Programmatic));
                 return true;
 
             case ShortcutCommand.NextConversation:

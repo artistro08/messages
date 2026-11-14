@@ -23,6 +23,7 @@ internal static unsafe partial class WindowInterop
     public const uint WM_WINDOWPOSCHANGED = 0x0047;
     public const uint WM_SETICON          = 0x0080;
     public const uint WM_KEYDOWN          = 0x0100;
+    public const uint WM_SYSKEYDOWN       = 0x0104;
     public const uint WM_NCCALCSIZE       = 0x0083;
     public const uint WM_NCHITTEST        = 0x0084;
     public const uint WM_NCMOUSEMOVE      = 0x00A0;
@@ -233,6 +234,20 @@ internal static unsafe partial class WindowInterop
 
     [LibraryImport("user32.dll")]
     public static partial nint GetAncestor(nint hwnd, uint flags);
+
+    [LibraryImport("user32.dll")]
+    private static partial int GetClassNameW(nint hwnd, char* name, int max);
+
+    /// <summary>
+    /// Reads the class name of a window.
+    /// </summary>
+    /// <param name="hwnd">The window handle.</param>
+    /// <returns>The class name, or an empty string when the window is gone.</returns>
+    public static string ClassName(nint hwnd)
+    {
+        char* name = stackalloc char[256];
+        return new string(name, 0, GetClassNameW(hwnd, name, 256));
+    }
 
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
