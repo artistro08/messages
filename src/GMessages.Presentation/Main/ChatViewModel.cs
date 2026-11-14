@@ -310,8 +310,15 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
             _replyingTo = value;
             Raise(nameof(ReplyingTo));
             Raise(nameof(IsReplying));
+            Raise(nameof(ReplyingToSender));
         }
     }
+
+    /// <summary>
+    /// Gets the name of the sender of the bubble being replied to, as the quote in the chat names it, or empty.
+    /// </summary>
+    public string ReplyingToSender => _replyingTo is null ? string.Empty
+        : ChatFormat.SenderName(_store.Find(ConversationId)?.FindParticipant(_replyingTo.ParticipantId));
 
     /// <summary>Gets whether the user writes a reply. The reply chip then shows.</summary>
     public bool IsReplying => _replyingTo is not null;
@@ -723,7 +730,7 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
 
     // Asks 1 time for each link for the preview card of each bubble, only in an inbox chat. Spam, blocked, archived and
     // unknown chats get no preview, so the chat never fetches the link of a stranger. A link in a received message
-    // waits for the setting.
+    // waits for the setting. The card of the phone can come in a later update. The chat then asks again with it.
     private void RefreshPreviews(ConversationInfo? c)
     {
         if (_previews is null || c is not { IsMainView: true })
@@ -734,25 +741,32 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
         bool received = _showReceivedPreviews?.Invoke() ?? true;
         foreach (MessageBubbleViewModel b in Messages)
         {
-            if ((b.FromMe || received) && b.LinkUrl is { } url && b.PreviewAskedFor != url)
+            if ((b.FromMe || received) && b.LinkUrl is { } url)
             {
-                b.PreviewAskedFor = url;
-                _ = LoadPreviewAsync(_previews, b, url);
+                // The card of the phone counts only for the same link, so a card never shows under another link.
+                LinkPreviewData? phone = b.PhonePreview is { } p && LinkPreviewer.SameLink(url, p.Url) ? p : null;
+                if (b.PreviewAskedFor != url || (phone is not null && !b.PreviewAskedWithPhone))
+                {
+                    b.PreviewAskedFor       = url;
+                    b.PreviewAskedWithPhone = phone is not null;
+                    _ = LoadPreviewAsync(_previews, b, url, phone);
+                }
             }
         }
     }
 
     // GetAsync never throws. The post sets the card on the UI thread when the bubble still shows that link.
-    private async Task LoadPreviewAsync(LinkPreviewer previews, MessageBubbleViewModel bubble, Uri url)
+    private async Task LoadPreviewAsync(LinkPreviewer previews, MessageBubbleViewModel bubble, Uri url, LinkPreviewData? phone)
     {
-        if (await previews.GetAsync(url, CancellationToken.None) is not { } preview)
+        if (await previews.GetAsync(url, CancellationToken.None, phone) is not { } preview)
         {
             return;
         }
 
         _post(() =>
         {
-            if (!_disposed && bubble.LinkUrl == url)
+            // A page fetch that ends after the card of the phone came is stale, so it never covers that card.
+            if (!_disposed && bubble.LinkUrl == url && bubble.PreviewAskedWithPhone == (phone is not null))
             {
                 bubble.SetPreview(preview);
             }
@@ -815,6 +829,12 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
     // its quote is empty.
     private void RefreshQuotes(ConversationInfo? c)
     {
+        // The reply chip names its sender as the quotes do, so it follows the same names.
+        if (_replyingTo is not null)
+        {
+            Raise(nameof(ReplyingToSender));
+        }
+
         foreach (MessageBubbleViewModel b in Messages.Where(b => b.HasQuote))
         {
             if (ById(b.ReplyToId) is { } shown)

@@ -750,6 +750,29 @@ public sealed partial class MessageBubble : UserControl
         hasPhoto ? default : new(-TextPadding.Left, -TextPadding.Top, -TextPadding.Right, TextPadding.Top);
 
     /// <summary>
+    /// Rounds the fill of the bubble. Under a quote the top is square, because the fill starts where the quote ends.
+    /// See <see cref="OnQuoteSizeChanged"/>.
+    /// </summary>
+    /// <param name="fromMe">True for a sent bubble.</param>
+    /// <param name="isFirst">True for the first bubble of its group.</param>
+    /// <param name="isLast">True for the last bubble of its group.</param>
+    /// <param name="hasQuote">True when the bubble starts with a quote.</param>
+    /// <returns>The corners.</returns>
+    public static CornerRadius FillCorners(bool fromMe, bool isFirst, bool isLast, bool hasQuote)
+    {
+        CornerRadius r = CornersOf(fromMe, isFirst, isLast);
+        return hasQuote ? new CornerRadius(0, 0, r.BottomRight, r.BottomLeft) : r;
+    }
+
+    /// <summary>
+    /// Gives the fill of the bubble its 1 px edge. Under a quote the top edge is gone, so no line runs between the quote
+    /// and the reply. The SMS states still set no edge at all.
+    /// </summary>
+    /// <param name="hasQuote">True when the bubble starts with a quote.</param>
+    /// <returns>The edge widths.</returns>
+    public static Thickness FillStroke(bool hasQuote) => hasQuote ? new(1, 0, 1, 1) : new(1);
+
+    /// <summary>
     /// Rounds the frame of the quote to the top corners of its bubble. The bottom is square, because the text of the
     /// reply follows on the color of the bubble.
     /// </summary>
@@ -763,18 +786,17 @@ public sealed partial class MessageBubble : UserControl
     }
 
     /// <summary>
-    /// Sets a media label such as "Image", "Video" or "GIF" in italic. A file name or text stays upright.
-    /// </summary>
-    /// <param name="isLabel">True for a label.</param>
-    /// <returns>The style.</returns>
-    public static Windows.UI.Text.FontStyle LabelStyle(bool isLabel) => isLabel ? Windows.UI.Text.FontStyle.Italic : Windows.UI.Text.FontStyle.Normal;
-
-    /// <summary>
-    /// Gives the icon of the file card: the video icon for a video, or the document icon for any other file.
+    /// Gives the icon of media with no picture, on the file card, the thumbnail of quoted media and the attachment chip:
+    /// the video icon for a video, the microphone for a voice message or audio, or the document icon for any other file.
     /// </summary>
     /// <param name="kind">The kind of the message.</param>
     /// <returns>The Segoe Fluent Icons glyph.</returns>
-    public static string FileGlyph(MessageKind kind) => kind == MessageKind.Video ? "\uE8B2" :"\uE8A5";
+    public static string FileGlyph(MessageKind kind) => kind switch
+    {
+        MessageKind.Video => "\uE8B2",
+        MessageKind.Audio => "\uE720",
+        _                 => "\uE8A5",
+    };
 
     /// <summary>
     /// Writes a file size as Explorer does, such as "1.20 MB" or "940 bytes", with the formatter of Windows.
@@ -829,6 +851,18 @@ public sealed partial class MessageBubble : UserControl
     // group.
     private void OnPartLoaded(object sender, RoutedEventArgs e) => ShowPartStates(refresh: true);
 
+    // The fill starts under the quote, at its height. The top of the quote is the top of the back in both layouts.
+    private void OnQuoteSizeChanged(object sender, SizeChangedEventArgs e) => BackFill.Margin = new(0, e.NewSize.Height, 0, 0);
+
+    // A bubble with no quote fills from the top again, as a recycled row that showed a quote before.
+    private void UnquoteFill()
+    {
+        if (Bubble?.HasQuote != true)
+        {
+            BackFill.Margin = default;
+        }
+    }
+
     // Sets the own states of the parts: the on-accent brushes on the parts of a sent SMS bubble, and the fill of my
     // reaction on the pill. The method sets states only on a loaded part, because the setter of a state would load its
     // part. With refresh, the method goes to a state again through the plain state. That is for a new part whose group
@@ -842,15 +876,13 @@ public sealed partial class MessageBubble : UserControl
         GoToPartState(PillHost, Bubble?.HasMyReaction == true ? "Mine" : "NotMine", "NotMine", refresh);
     }
 
-    // A card alone in its bubble takes the colors of its side: the card color when received, the RCS shade when sent
-    // over RCS, and the accent when sent over SMS. A card under text sits on the fill of the bubble instead.
+    // A card alone in its bubble is a neutral link card on every side, as on the web, so it never looks like a chat
+    // bubble. A card under text sits on the fill of the bubble instead.
     private string PreviewState() => Bubble switch
     {
-        { PreviewFillsBubble: true, FromMe: false } => "PreviewAloneReceived",
-        { PreviewFillsBubble: true, IsRcs: true }   => "PreviewAloneRcs",
-        { PreviewFillsBubble: true }                => "PreviewAloneSms",
-        { FromMe: true, IsRcs: false }              => "PreviewOnAccent",
-        _                                           => "PreviewPlain",
+        { PreviewFillsBubble: true }   => "PreviewAlone",
+        { FromMe: true, IsRcs: false } => "PreviewOnAccent",
+        _                              => "PreviewPlain",
     };
 
     private void GoToPartState(FrameworkElement? part, string state, string plain, bool refresh)
@@ -960,6 +992,7 @@ public sealed partial class MessageBubble : UserControl
         // passes over fetches no audio.
         view.ShowText();
         view.ShowStates();
+        view.UnquoteFill();
         view.LoadMedia(fetchVoice: false);
 
         // The reactions of another message show as they are, with no pop. A recycled row stops a pop that is half
@@ -1047,6 +1080,7 @@ public sealed partial class MessageBubble : UserControl
             case nameof(MessageBubbleViewModel.HasBodyText):
             case nameof(MessageBubbleViewModel.HasQuote):
                 ClipPhotoFull();
+                UnquoteFill();
                 break;
         }
     }
@@ -1683,7 +1717,8 @@ public sealed partial class MessageBubble : UserControl
     }
 
     /// <summary>
-    /// Runs Copy link from the preview card menu. It copies the whole address as sent, which the text no longer shows.
+    /// Runs Copy link from the bubble menu or the preview card menu. It copies the first link in the text of the message,
+    /// the link of its preview card, as sent in full, which the text no longer shows. A link in its quote never counts.
     /// </summary>
     public void CopyLink()
     {

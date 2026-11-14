@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using GMessages.Protocol.Http;
+using GMessages.Protocol.Proto;
 using Microsoft.Extensions.Logging;
 using Windows.Graphics.Imaging;
 using Windows.Storage.Streams;
@@ -50,6 +51,13 @@ public sealed partial class LinkPreviewer : IDisposable
         "og:image:secure_url",
         "twitter:image",
         "twitter:image:src",
+    };
+
+    // The tags that a page without og:description can give its summary in.
+    private static readonly HashSet<string> DescriptionKeys = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "twitter:description",
+        "description",
     };
 
     private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(5);
@@ -108,6 +116,9 @@ public sealed partial class LinkPreviewer : IDisposable
     // The fetch of each link, running or done, null results included. The order is least recently used first.
     private readonly Lock _cacheLock = new();
     private readonly OrderedDictionary<Uri, Task<LinkPreview?>> _cache = [];
+
+    // The links in the cache whose card came from the phone. Guarded by _cacheLock.
+    private readonly HashSet<Uri> _fromPhone = [];
 
     /// <summary>
     /// Creates the previewer.
@@ -367,7 +378,8 @@ public sealed partial class LinkPreviewer : IDisposable
     /// The title is <c>og:title</c>, else <c>&lt;title&gt;</c>. The site is always the real host of the page without
     /// <c>www.</c>, never the claim of the page. Thus a card cannot pose as another site. The attributes can come in
     /// any order and with any quotes. The method removes tags, decodes entities, removes direction-control characters
-    /// and collapses spaces in the title. It then cuts the title to 300 characters. The image is <c>og:image</c>, else
+    /// and collapses spaces in the title. It then cuts the title to 300 characters. The description is
+    /// <c>og:description</c>, else <c>twitter:description</c> or <c>description</c>, cleaned as the title. The image is <c>og:image</c>, else
     /// <c>og:image:url</c>, <c>og:image:secure_url</c>, <c>twitter:image</c> or <c>twitter:image:src</c>, resolved
     /// against <paramref name="page"/>, and the method keeps it only when <see cref="IsAllowed"/> allows it.
     /// </remarks>
@@ -375,7 +387,7 @@ public sealed partial class LinkPreviewer : IDisposable
     /// <param name="page">The address of the page after redirects, for relative image links and the host.</param>
     /// <param name="allowLoopback">True only in UI test runs.</param>
     /// <returns>The parts, or null when the page has no title.</returns>
-    internal static (string Title, string Site, Uri? Image)? ParseHead(string html, Uri page, bool allowLoopback = false)
+    internal static (string Title, string Site, Uri? Image, string Description)? ParseHead(string html, Uri page, bool allowLoopback = false)
     {
         ArgumentNullException.ThrowIfNull(html);
         ArgumentNullException.ThrowIfNull(page);
@@ -384,10 +396,13 @@ public sealed partial class LinkPreviewer : IDisposable
         int end     = html.IndexOf("</head>", StringComparison.OrdinalIgnoreCase);
         string head = end >= 0 ? html[..end] : html;
 
-        // The first tag of each kind wins. The image is og:image, else the first image tag that a page uses in its place.
-        string? ogTitle = null;
-        string? ogImage = null;
-        string? altImage = null;
+        // The first tag of each kind wins. The image and the description are their og tags, else the first tag that a
+        // page uses in their place.
+        string? ogTitle        = null;
+        string? ogImage        = null;
+        string? ogDescription  = null;
+        string? altImage       = null;
+        string? altDescription = null;
         foreach (Match tag in MetaTag().Matches(head))
         {
             string? key     = null;
@@ -419,9 +434,17 @@ public sealed partial class LinkPreviewer : IDisposable
             {
                 ogImage ??= content;
             }
+            else if (key.Equals("og:description", StringComparison.OrdinalIgnoreCase))
+            {
+                ogDescription ??= content;
+            }
             else if (ImageKeys.Contains(key))
             {
                 altImage ??= content;
+            }
+            else if (DescriptionKeys.Contains(key))
+            {
+                altDescription ??= content;
             }
         }
 
@@ -438,10 +461,7 @@ public sealed partial class LinkPreviewer : IDisposable
             return null;
         }
 
-        // The site is the real host without www. A non-ASCII host shows as punycode, so a look-alike cannot pass as the
-        // real host.
-        string host = page.IdnHost;
-        string site = Cap(host.StartsWith("www.", StringComparison.OrdinalIgnoreCase) ? host[4..] : host);
+        string site = SiteOf(page);
 
         // The image link resolves against the page, and the same rules as a link apply to it.
         Uri? image = ogImage is not null
@@ -450,7 +470,7 @@ public sealed partial class LinkPreviewer : IDisposable
                 ? resolved
                 : null;
 
-        return (title, site, image);
+        return (title, site, image, PlainText(ogDescription ?? altDescription));
     }
 
     /// <summary>
@@ -459,12 +479,13 @@ public sealed partial class LinkPreviewer : IDisposable
     /// <remarks>
     /// The title is <c>title</c>. It is plain text, not HTML, so the method keeps its tags and entities as written. It
     /// only removes direction-control characters, collapses spaces and cuts it to 300 characters. The site is always
-    /// <c>youtube.com</c>. The image is <c>thumbnail_url</c>, kept only when <see cref="IsAllowed"/> allows it.
+    /// <c>youtube.com</c>. The image is <c>thumbnail_url</c>, kept only when <see cref="IsAllowed"/> allows it. oEmbed
+    /// gives no description, so the description is empty.
     /// </remarks>
     /// <param name="json">The answer of the oEmbed endpoint.</param>
     /// <param name="allowLoopback">True only in UI test runs.</param>
     /// <returns>The parts, or null when the answer is not JSON or has no title.</returns>
-    internal static (string Title, string Site, Uri? Image)? ParseOEmbed(byte[] json, bool allowLoopback = false)
+    internal static (string Title, string Site, Uri? Image, string Description)? ParseOEmbed(byte[] json, bool allowLoopback = false)
     {
         ArgumentNullException.ThrowIfNull(json);
 
@@ -488,7 +509,7 @@ public sealed partial class LinkPreviewer : IDisposable
                     ? thumb
                     : null;
 
-            return (title, "youtube.com", image);
+            return (title, "youtube.com", image, string.Empty);
         }
         catch (JsonException)
         {
@@ -506,18 +527,27 @@ public sealed partial class LinkPreviewer : IDisposable
     /// <remarks>
     /// The previewer never requests a link that <see cref="IsAllowed"/> refuses. The results of the last 50 links, null
     /// included, stay in memory. A second call for a link whose fetch still runs shares that fetch. The method never
-    /// throws: any failure, or a canceled <paramref name="ct"/>, gives null.
+    /// throws: any failure, or a canceled <paramref name="ct"/>, gives null. With the card of the phone, the previewer
+    /// takes its text and fetches only its image, not the page, because a site such as Instagram hides its card from a
+    /// plain fetch. That card also replaces a cached card from the page for the link.
     /// </remarks>
     /// <param name="url">The link.</param>
     /// <param name="ct">Stops the wait. The fetch itself continues for the cache.</param>
+    /// <param name="phone">The card that the phone fetched for the link, or null.</param>
     /// <returns>The preview, or null when there is none.</returns>
-    public async Task<LinkPreview?> GetAsync(Uri url, CancellationToken ct)
+    public async Task<LinkPreview?> GetAsync(Uri url, CancellationToken ct, LinkPreviewData? phone = null)
     {
         ArgumentNullException.ThrowIfNull(url);
 
         if (!IsAllowed(url, _allowLoopback))
         {
             return null;
+        }
+
+        // A card of the phone with no text is no card, so it never takes the place of a later card with text.
+        if (PhoneHead(url, phone, _allowLoopback) is null)
+        {
+            phone = null;
         }
 
         // The most recently used link goes last. The oldest links drop off the front past 50 links or 4 MB of images,
@@ -527,10 +557,19 @@ public sealed partial class LinkPreviewer : IDisposable
         // The fetch starts on the pool, because the proxy lookup of Windows can block for seconds.
         lock (_cacheLock)
         {
-            fetch = _cache.Remove(url, out Task<LinkPreview?>? cached) ? cached : Task.Run(() => FetchAsync(url));
+            // A card from the phone replaces a card from the page, done or still running, because the page of a site
+            // such as Instagram gives only a login wall.
+            bool reuse = _cache.Remove(url, out Task<LinkPreview?>? cached) && (phone is null || _fromPhone.Contains(url));
+            fetch      = reuse ? cached! : Task.Run(() => FetchAsync(url, phone));
+            if (!reuse && phone is not null)
+            {
+                _fromPhone.Add(url);
+            }
+
             _cache.Add(url, fetch);
             while (_cache.Count > 1 && (_cache.Count > CacheSize || CachedImageBytes() > CacheImageBytes))
             {
+                _fromPhone.Remove(_cache.GetAt(0).Key);
                 _cache.RemoveAt(0);
             }
         }
@@ -582,7 +621,8 @@ public sealed partial class LinkPreviewer : IDisposable
     }
 
     // Fetches the page, then its image. A page without a title gives nothing. A missing image only drops the image.
-    private async Task<LinkPreview?> FetchAsync(Uri url)
+    // With the card of the phone, only its image is fetched.
+    private async Task<LinkPreview?> FetchAsync(Uri url, LinkPreviewData? phone)
     {
         bool slot = false;
         try
@@ -590,14 +630,14 @@ public sealed partial class LinkPreviewer : IDisposable
             await _fetchSlots.WaitAsync(_closing.Token).ConfigureAwait(false);
             slot = true;
 
-            if (await GetHeadAsync(url).ConfigureAwait(false) is not { } head)
+            if ((PhoneHead(url, phone, _allowLoopback) ?? await GetHeadAsync(url).ConfigureAwait(false)) is not { } head)
             {
                 return null;
             }
 
             // A share image is bigger than a page, so it gets the longer time of a picture.
             byte[]? image = head.Image is { } imageUrl ? (await GetBodyAsync(imageUrl, "image/*", MaxImageBytes, PictureTimeout).ConfigureAwait(false))?.Body : null;
-            return new LinkPreview(url, head.Title, head.Site, image is null ? null : await ShrinkAsync(image).ConfigureAwait(false));
+            return new LinkPreview(url, head.Title, head.Site, image is null ? null : await ShrinkAsync(image).ConfigureAwait(false), head.Description);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -613,10 +653,25 @@ public sealed partial class LinkPreviewer : IDisposable
         }
     }
 
+    // Gives the parts of the card from the card of the phone, or null when it has no text. The title and the description
+    // are plain text. The site is still the real host of the link, and the image must pass IsAllowed.
+    private static (string Title, string Site, Uri? Image, string Description)? PhoneHead(Uri url, LinkPreviewData? phone, bool allowLoopback)
+    {
+        string title       = CleanText(phone?.Title);
+        string description = CleanText(phone?.Description);
+        if (title.Length == 0 && description.Length == 0)
+        {
+            return null;
+        }
+
+        Uri? image = Uri.TryCreate(url, phone!.ImageURL, out Uri? i) && IsAllowed(i, allowLoopback) ? i : null;
+        return (title, SiteOf(url), image, description);
+    }
+
     // Gives the parts of the card. A page of YouTube runs past MaxPageBytes before its tags, so a YouTube link, Shorts
     // included, asks the oEmbed of YouTube first. Its small JSON answer holds the title and the thumbnail. A link that
     // oEmbed does not know, such as a channel, falls back to the page.
-    private async Task<(string Title, string Site, Uri? Image)?> GetHeadAsync(Uri url)
+    private async Task<(string Title, string Site, Uri? Image, string Description)?> GetHeadAsync(Uri url)
     {
         if (YouTubeHosts.Contains(url.IdnHost))
         {
@@ -633,7 +688,7 @@ public sealed partial class LinkPreviewer : IDisposable
             return null;
         }
 
-        (string Title, string Site, Uri? Image)? head = ParseHead(Decode(page.Body, page.CharSet), page.Final, _allowLoopback);
+        (string Title, string Site, Uri? Image, string Description)? head = ParseHead(Decode(page.Body, page.CharSet), page.Final, _allowLoopback);
         if (head is null)
         {
             LogSkipped("no title");
@@ -873,6 +928,39 @@ public sealed partial class LinkPreviewer : IDisposable
 
     // The log holds the error type only, because the message of an exception can hold the link.
     private void LogError(Exception ex) => LogFailed(ex.GetType().Name);
+
+    // The site is the real host without www. A non-ASCII host shows as punycode, so a look-alike cannot pass as the real
+    // host.
+    private static string SiteOf(Uri page) => Cap(BareHost(page));
+
+    /// <summary>
+    /// Tells whether the card of the phone belongs to the link of the bubble: the same host without <c>www.</c> and the
+    /// same path. The phone can drop the scheme or the query, so they count only when the card has them. A query must
+    /// match, because it picks the page on a site such as YouTube.
+    /// </summary>
+    /// <param name="link">The link of the bubble.</param>
+    /// <param name="phoneUrl">The link of the card of the phone.</param>
+    /// <returns>True when both name the same page.</returns>
+    internal static bool SameLink(Uri link, string? phoneUrl)
+    {
+        ArgumentNullException.ThrowIfNull(link);
+
+        if (string.IsNullOrWhiteSpace(phoneUrl))
+        {
+            return false;
+        }
+
+        string trimmed    = phoneUrl.Trim();
+        bool hasScheme    = trimmed.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || trimmed.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
+        string withScheme = hasScheme ? trimmed : "https://" + trimmed.TrimStart('/');
+        return Uri.TryCreate(withScheme, UriKind.Absolute, out Uri? other)
+            && string.Equals(BareHost(link), BareHost(other), StringComparison.OrdinalIgnoreCase)
+            && string.Equals(link.AbsolutePath.TrimEnd('/'), other.AbsolutePath.TrimEnd('/'), StringComparison.Ordinal)
+            && (other.Query.Length == 0 || string.Equals(link.Query, other.Query, StringComparison.Ordinal));
+    }
+
+    private static string BareHost(Uri uri) =>
+        uri.IdnHost.StartsWith("www.", StringComparison.OrdinalIgnoreCase) ? uri.IdnHost[4..] : uri.IdnHost;
 
     // Removes tags, decodes entities and removes direction controls, which can make text read backward. It then
     // collapses spaces and cuts the text to length.
