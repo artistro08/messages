@@ -1390,13 +1390,16 @@ public sealed class ChatViewModelTests
 
         chat.StartReply(chat.Messages[0]);
         Assert.IsTrue(chat.IsReplying);
-        chat.Draft = "answer";
+        string chipSender = chat.ReplyingToSender;
+        chat.Draft        = "answer";
         await chat.SendAsync();
 
         Assert.AreEqual("m1", rig.Client.Sent.Single().Reply?.MessageID);
 
         MessageBubbleViewModel sent = chat.Messages[^1];
         Assert.IsTrue(sent.HasQuote);
+        Assert.AreEqual(sent.QuoteSender, chipSender, "the reply chip names the sender as the quote in the chat does");
+        Assert.AreEqual(string.Empty, chat.ReplyingToSender);
         Assert.AreEqual("one", sent.QuoteText);
         Assert.AreEqual("Ann", sent.QuoteSender);
     }
@@ -1478,7 +1481,6 @@ public sealed class ChatViewModelTests
         Assert.AreEqual(ChatCopy.QuoteImage, quoting.QuoteText);
         Assert.AreEqual("Ann", quoting.QuoteSender);
         Assert.IsTrue(quoting.HasQuoteMedia);
-        Assert.IsTrue(quoting.QuoteIsLabel);
         Assert.AreEqual("thumb-1", quoting.QuoteMedia!.ThumbnailId);
         Assert.AreEqual(ChatCopy.QuoteImage, chat.Messages[0].ReplyChipText);
     }

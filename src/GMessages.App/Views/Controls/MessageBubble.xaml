@@ -87,8 +87,9 @@
                     </VisualState.Setters>
                 </VisualState>
             </VisualStateGroup>
-            <!-- A preview card under text sits on the fill of its bubble. A card alone is the bubble, so it takes the
-                 colors of the bubble of its side: received, sent RCS or sent SMS. -->
+            <!-- A preview card under text sits on the fill of its bubble. A card alone is a neutral link card on every
+                 side, with the card color and edge, as on Google Messages for web. Thus a link never looks like a
+                 plain chat bubble. -->
             <VisualStateGroup x:Name="PreviewSide">
                 <VisualState x:Name="PreviewPlain" />
                 <VisualState x:Name="PreviewOnAccent">
@@ -96,27 +97,14 @@
                         <Setter Target="PreviewCard.Background" Value="{ThemeResource QuoteOnAccentFillBrush}" />
                         <Setter Target="PreviewCard.BorderThickness" Value="0" />
                         <Setter Target="PreviewTitle.Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                        <Setter Target="PreviewDescription.Foreground" Value="{ThemeResource TextOnAccentFillColorSecondaryBrush}" />
                         <Setter Target="PreviewSite.Foreground" Value="{ThemeResource TextOnAccentFillColorSecondaryBrush}" />
                     </VisualState.Setters>
                 </VisualState>
-                <VisualState x:Name="PreviewAloneReceived">
+                <VisualState x:Name="PreviewAlone">
                     <VisualState.Setters>
                         <Setter Target="PreviewCard.Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
                         <Setter Target="PreviewCard.BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
-                    </VisualState.Setters>
-                </VisualState>
-                <VisualState x:Name="PreviewAloneRcs">
-                    <VisualState.Setters>
-                        <Setter Target="PreviewCard.Background" Value="{ThemeResource RcsBubbleBrush}" />
-                        <Setter Target="PreviewCard.BorderThickness" Value="0" />
-                    </VisualState.Setters>
-                </VisualState>
-                <VisualState x:Name="PreviewAloneSms">
-                    <VisualState.Setters>
-                        <Setter Target="PreviewCard.Background" Value="{ThemeResource AccentFillColorDefaultBrush}" />
-                        <Setter Target="PreviewCard.BorderThickness" Value="0" />
-                        <Setter Target="PreviewTitle.Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
-                        <Setter Target="PreviewSite.Foreground" Value="{ThemeResource TextOnAccentFillColorSecondaryBrush}" />
                     </VisualState.Setters>
                 </VisualState>
             </VisualStateGroup>
@@ -256,14 +244,16 @@
 
                 <!-- The fill gives the bubble its color and edge behind its content. A photo or video with nothing else
                      in its bubble hides the fill. Its own edge is then the edge of the bubble, with no fill or stroke
-                     around it. A preview card alone and emoji alone also hide the fill. -->
+                     around it. A preview card alone and emoji alone also hide the fill. A quote is the top of its
+                     bubble, so the fill starts under it with a square top. Nothing paints under the rounded corners of
+                     the quote frame, which would show as a thin ring. OnQuoteSizeChanged sets that top. -->
                 <Border
                     x:Name="BackFill"
                     Grid.Column="1"
                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                    BorderThickness="1"
-                    CornerRadius="{x:Bind local:MessageBubble.CornersOf(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup), Mode=OneWay}"
+                    BorderThickness="{x:Bind local:MessageBubble.FillStroke(Bubble.HasQuote), Mode=OneWay}"
+                    CornerRadius="{x:Bind local:MessageBubble.FillCorners(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup, Bubble.HasQuote), Mode=OneWay}"
                     Visibility="{x:Bind local:MessageBubble.FillShown(Bubble.FillsBubble, Bubble.HasBodyText, Bubble.HasQuote, Bubble.IsEmojiOnly, Bubble.PreviewFillsBubble), Mode=OneWay, FallbackValue=Collapsed}" />
 
                 <!-- A click on the back shows or hides the time. -->
@@ -294,6 +284,7 @@
                             AutomationProperties.Name="{x:Bind local:MessageBubble.QuoteJumpText}"
                             x:Load="{x:Bind Bubble.HasQuote, Mode=OneWay, FallbackValue=False}"
                             Click="OnQuoteClick"
+                            SizeChanged="OnQuoteSizeChanged"
                             CornerRadius="{x:Bind local:MessageBubble.QuoteCorners(Bubble.FromMe, Bubble.IsFirstInGroup), Mode=OneWay}"
                             Style="{StaticResource CardButtonStyle}">
                             <Border
@@ -303,35 +294,26 @@
                                 CornerRadius="{x:Bind local:MessageBubble.QuoteCorners(Bubble.FromMe, Bubble.IsFirstInGroup), Mode=OneWay}">
 
                                 <!-- Quoted media shows its thumbnail or a file icon left of the 2 lines. -->
-                                <Grid
-                                    Padding="10"
-                                    Background="{ThemeResource QuoteCardBrush}"
-                                    ColumnSpacing="12"
-                                    CornerRadius="10">
+                                <Grid Style="{StaticResource QuoteCardStyle}">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
                                     <local:MediaThumb
+                                        Margin="0,0,12,0"
                                         VerticalAlignment="Center"
                                         AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('QuoteThumb.', Bubble.PartKey), Mode=OneWay}"
                                         Media="{x:Bind Bubble.QuoteMedia, Mode=OneWay}"
                                         Visibility="{x:Bind Bubble.HasQuoteMedia, Mode=OneWay, FallbackValue=Collapsed}" />
                                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                         <TextBlock
-                                            FontFamily="{ThemeResource ContentControlThemeFontFamily}"
-                                            Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                                            MaxLines="1"
+                                            Style="{StaticResource QuoteSenderTextStyle}"
                                             Text="{x:Bind Bubble.QuoteSender, Mode=OneWay, FallbackValue=''}"
-                                            TextTrimming="CharacterEllipsis"
                                             Visibility="{x:Bind views:UiHelpers.ShownIfText(Bubble.QuoteSender), Mode=OneWay, FallbackValue=Collapsed}" />
                                         <TextBlock
                                             AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Quote.', Bubble.PartKey), Mode=OneWay}"
-                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                            MaxLines="2"
-                                            Text="{x:Bind Bubble.QuoteText, Mode=OneWay, FallbackValue=''}"
-                                            TextTrimming="CharacterEllipsis"
-                                            TextWrapping="Wrap" />
+                                            Style="{StaticResource QuoteBodyTextStyle}"
+                                            Text="{x:Bind Bubble.QuoteText, Mode=OneWay, FallbackValue=''}" />
                                     </StackPanel>
                                 </Grid>
                             </Border>
@@ -681,9 +663,10 @@
                         <!-- The preview is a share card across the whole bubble. The share image of the page runs
                              across its top in its own shape, with nothing cut off. SizePreviewImage sets its height. A
                              card alone starts 240 px wide. Under the image come the page title and its site in caption
-                             style. The title wraps only past the width of the bubble, in 2 lines at most. A page with no
-                             image shows no image. A card alone in its bubble is the bubble, with smaller corners and the
-                             colors of its side. See PreviewSide. A click, Enter or Space opens the link in the default
+                             style. The title wraps only past the width of the bubble, in 2 lines at most. The summary of
+                             the page follows in 2 lines at most, when it has one. The card never shows the link itself.
+                             A page with no image shows no image. A card alone in its bubble is the bubble, with smaller
+                             corners and the neutral colors of a link card on every side. See PreviewSide. A click, Enter or Space opens the link in the default
                              browser. The card is named by its title and the host of the link. A right-click, the Application key or Shift + F10 opens
                              its own menu with Copy link. That menu is PreviewMenu of the chat pane, which finds the
                              card by its name. The look of the card is on PreviewCard. SubtleButtonStyle gives the
@@ -716,7 +699,7 @@
                                         x:Name="PreviewImage"
                                         Stretch="Uniform"
                                         Visibility="Collapsed" />
-                                    <StackPanel Padding="10,6,10,8" Spacing="2">
+                                    <StackPanel Padding="12,8,12,10" Spacing="4">
                                         <TextBlock
                                             x:Name="PreviewTitle"
                                             FontFamily="{ThemeResource ContentControlThemeFontFamily}"
@@ -724,7 +707,16 @@
                                             Style="{StaticResource BodyStrongTextBlockStyle}"
                                             Text="{x:Bind Bubble.Preview.Title, Mode=OneWay, FallbackValue=''}"
                                             TextTrimming="CharacterEllipsis"
-                                            TextWrapping="Wrap" />
+                                            TextWrapping="Wrap"
+                                            Visibility="{x:Bind views:UiHelpers.ShownIfText(Bubble.Preview.Title), Mode=OneWay, FallbackValue=Collapsed}" />
+                                        <TextBlock
+                                            x:Name="PreviewDescription"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            MaxLines="2"
+                                            Text="{x:Bind Bubble.Preview.Description, Mode=OneWay, FallbackValue=''}"
+                                            TextTrimming="CharacterEllipsis"
+                                            TextWrapping="Wrap"
+                                            Visibility="{x:Bind views:UiHelpers.ShownIfText(Bubble.Preview.Description), Mode=OneWay, FallbackValue=Collapsed}" />
                                         <TextBlock
                                             x:Name="PreviewSite"
                                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"

@@ -1,5 +1,6 @@
 <!-- The 40 px rounded square shows the media of a quoted message. A photo or a video shows its thumbnail, cropped to
-     fill, and a GIF shows still. A neutral fill shows until the thumbnail arrives. Other media shows a file icon. -->
+     fill, and a GIF shows still. A neutral fill shows until the thumbnail arrives. Other media shows its icon from
+     MessageBubble.FileGlyph, such as the microphone for a voice message. -->
 <UserControl
     x:Class="GMessages.App.Views.Controls.MediaThumb"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"

@@ -71,8 +71,6 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         (nameof(HasQuote), b => b.HasQuote),
         (nameof(QuoteMedia), b => b.QuoteMedia),
         (nameof(HasQuoteMedia), b => b.HasQuoteMedia),
-        (nameof(QuoteIsLabel), b => b.QuoteIsLabel),
-        (nameof(MediaLabelIsLabel), b => b.MediaLabelIsLabel),
         (nameof(ReplyChipText), b => b.ReplyChipText),
         (nameof(LinkUrl), b => b.LinkUrl),
         (nameof(Preview), b => b.Preview),
@@ -377,14 +375,6 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     /// <summary>Gets whether the quote shows the thumbnail or the icon of the quoted media.</summary>
     public bool HasQuoteMedia => QuoteMedia is not null;
 
-    /// <summary>
-    /// Gets whether the text of the quote is a label in italic, such as "Image", "Video" or "GIF", not a file name.
-    /// </summary>
-    public bool QuoteIsLabel => QuoteMedia is not null && IsLabel(QuoteMedia);
-
-    /// <summary>Gets whether the media label of this message is a label in italic, not a file name.</summary>
-    public bool MediaLabelIsLabel => Media is { } media && IsLabel(media);
-
     /// <summary>Gets the text of the reply chip: the media label for a photo, video or file, else the text.</summary>
     public string ReplyChipText => Media is { } media ? ChatFormat.MediaLabel(media) : DisplayText;
 
@@ -514,8 +504,14 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
     /// <summary>Gets the accessible name of the video frame and the viewer: the caption, else "Video".</summary>
     public string VideoName => HasBodyText ? Text : ChatCopy.Video;
 
-    // The chat asks 1 time for each link, so the bubble keeps the link that got a preview request.
+    // The chat asks 1 time for each link, so the bubble keeps the link that got a preview request. The card of the
+    // phone can come later in an update, so the bubble also keeps whether the request had that card.
     internal Uri? PreviewAskedFor { get; set; }
+
+    internal bool PreviewAskedWithPhone { get; set; }
+
+    // The card that the phone fetched for the link, or null.
+    internal LinkPreviewData? PhonePreview => _message.PhonePreview;
 
     // The status line of the chat reads the delivery status from the phone.
     internal MessageStatusType Status { get; private set; }
@@ -757,8 +753,6 @@ public sealed class MessageBubbleViewModel : INotifyPropertyChanged
         RaiseChanges(before);
     }
 
-    // A label shows in italic. The file name from the sender is not a label.
-    private static bool IsLabel(MediaPart media) => media is not { Kind: MessageKind.File, Name.Length: > 0 };
 
     // The quote shows text-style emoji in color, as the bubble does. Quoted media shows its label in place of the text,
     // with its thumbnail. The same media again changes nothing, also when an update brings it as a new part.
