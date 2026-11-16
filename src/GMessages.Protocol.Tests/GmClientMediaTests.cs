@@ -84,9 +84,8 @@ public class GmClientMediaTests
         var answer    = new UploadMediaResponse { Media = new UploadedMedia { MediaID = "media-1", MediaNumber = 7 } };
         byte[] base64 = Encoding.ASCII.GetBytes(Convert.ToBase64String(answer.ToByteArray()));
         await using Rig rig = CreateRig((i, _) => i == 0 ? StartAnswer() : FakeHttpHandler.Response(HttpStatusCode.OK, "text/plain", base64));
-        var progress = new List<double>();
 
-        MediaContent media = await rig.Client.UploadMediaAsync(plain, "photo.png", "image/png", new SyncProgress(progress.Add), CancellationToken.None);
+        MediaContent media = await rig.Client.UploadMediaAsync(plain, "photo.png", "image/png", CancellationToken.None);
 
         RecordedRequest start = rig.Handler.Requests[0];
         RecordedRequest final = rig.Handler.Requests[1];
@@ -122,7 +121,6 @@ public class GmClientMediaTests
         Assert.AreEqual(plain.Length, media.Size);
         Assert.AreEqual("image/png", media.MimeType);
         CollectionAssert.AreEqual(plain, MediaCrypto.Decrypt(final.Body, media.DecryptionKey.Span));
-        Assert.AreEqual(1.0, progress[^1]);
     }
 
     /// <summary>
@@ -134,7 +132,7 @@ public class GmClientMediaTests
         var answer = new UploadMediaResponse { Media = new UploadedMedia { MediaID = "media-raw!" } };
         await using Rig rig = CreateRig((i, _) => i == 0 ? StartAnswer() : FakeHttpHandler.Response(HttpStatusCode.OK, "application/x-protobuf", answer.ToByteArray()));
 
-        MediaContent media = await rig.Client.UploadMediaAsync(new byte[10], "f.bin", "application/x-unknown", null, CancellationToken.None);
+        MediaContent media = await rig.Client.UploadMediaAsync(new byte[10], "f.bin", "application/x-unknown", CancellationToken.None);
 
         Assert.AreEqual("media-raw!", media.MediaID);
         Assert.AreEqual(MediaFormats.AppUnspecified, media.Format);
@@ -148,7 +146,7 @@ public class GmClientMediaTests
     {
         await using Rig rig = CreateRig((_, _) => StartAnswer(withGranularity: false));
 
-        await Assert.ThrowsExactlyAsync<InvalidDataException>(() => rig.Client.UploadMediaAsync(new byte[10], "f.png", "image/png", null, CancellationToken.None));
+        await Assert.ThrowsExactlyAsync<InvalidDataException>(() => rig.Client.UploadMediaAsync(new byte[10], "f.png", "image/png", CancellationToken.None));
         Assert.HasCount(1, rig.Handler.Requests);
     }
 
@@ -168,7 +166,7 @@ public class GmClientMediaTests
             return res;
         });
 
-        GmRequestException refused = await Assert.ThrowsExactlyAsync<GmRequestException>(() => rig.Client.UploadMediaAsync(new byte[10], "f.png", "image/png", null, CancellationToken.None));
+        GmRequestException refused = await Assert.ThrowsExactlyAsync<GmRequestException>(() => rig.Client.UploadMediaAsync(new byte[10], "f.png", "image/png", CancellationToken.None));
         Assert.AreEqual(status, refused.StatusCode);
         Assert.HasCount(1, rig.Handler.Requests);
     }
@@ -181,7 +179,7 @@ public class GmClientMediaTests
     {
         await using Rig rig = CreateRig((i, _) => i == 0 ? StartAnswer() : FakeHttpHandler.Response(HttpStatusCode.OK, "text/plain", "A==="u8.ToArray()));
 
-        await Assert.ThrowsExactlyAsync<InvalidDataException>(() => rig.Client.UploadMediaAsync(new byte[10], "f.png", "image/png", null, CancellationToken.None));
+        await Assert.ThrowsExactlyAsync<InvalidDataException>(() => rig.Client.UploadMediaAsync(new byte[10], "f.png", "image/png", CancellationToken.None));
     }
 
     /// <summary>
@@ -343,12 +341,6 @@ public class GmClientMediaTests
         Assert.AreEqual("text/plain", MediaFormatsMap.ToMime(MediaFormats.AppTxt));
         Assert.AreEqual("text/calendar", MediaFormatsMap.ToMime(MediaFormats.CalApplicationIcs));
         Assert.IsNull(MediaFormatsMap.ToMime(MediaFormats.ImageUnspecified));
-    }
-
-    // Progress<T> posts to the thread pool. This class records each value at once and in order.
-    private sealed class SyncProgress(Action<double> report) : IProgress<double>
-    {
-        public void Report(double value) => report(value);
     }
 
     // A stream that cannot seek and holds the byte 7. It ends after "sent" bytes and fails any read after "declared" bytes.

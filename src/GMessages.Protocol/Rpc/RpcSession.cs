@@ -565,6 +565,7 @@ public sealed partial class RpcSession(GmHttpClient http, AuthData auth, GmEndpo
             if (parser is not null)
             {
                 decryptedMessage = Parse(parser, decryptedData, "decrypted data event");
+                FillMissingIds(decryptedMessage);
             }
         }
         else if (message.EncryptedData2.Length > 0)
@@ -575,6 +576,75 @@ public sealed partial class RpcSession(GmHttpClient http, AuthData auth, GmEndpo
 
         return new IncomingRpc { Raw = raw, Message = message, DecryptedData = decryptedData, DecryptedMessage = decryptedMessage };
     }
+
+    // C#-only. Since November 2026 the phone leaves out the plain ID fields of a conversation and of a message. The
+    // IDs still come in the nested ID fields, which hold the same numbers. Each conversation, message and typing notice
+    // that the app receives passes here, in answers and in live updates. Thus every caller sees the IDs in the plain
+    // fields, as before. The decrypted bytes stay as the phone sent them.
+    private static void FillMissingIds(IMessage decoded)
+    {
+        switch (decoded)
+        {
+            case ListConversationsResponse response:
+                foreach (Conversation conversation in response.Conversations)
+                {
+                    FillMissingIds(conversation);
+                }
+
+                break;
+
+            case GetConversationResponse { Conversation: { } conversation }:
+                FillMissingIds(conversation);
+                break;
+
+            case GetOrCreateConversationResponse { Conversation: { } conversation }:
+                FillMissingIds(conversation);
+                break;
+
+            case ListMessagesResponse response:
+                foreach (Message message in response.Messages)
+                {
+                    FillMissingIds(message);
+                }
+
+                break;
+
+            case UpdateEvents { ConversationEvent: { } conversations }:
+                foreach (Conversation conversation in conversations.Data)
+                {
+                    FillMissingIds(conversation);
+                }
+
+                break;
+
+            case UpdateEvents { MessageEvent: { } messages }:
+                foreach (Message message in messages.Data)
+                {
+                    FillMissingIds(message);
+                }
+
+                break;
+
+            case UpdateEvents { TypingEvent.Data: { } typing }:
+                typing.ConversationID = FirstId(typing.ConversationID, typing.SomeKindOfGroupID?.ConversationID);
+                break;
+        }
+    }
+
+    private static void FillMissingIds(Conversation conversation)
+    {
+        conversation.ConversationID  = FirstId(conversation.ConversationID, conversation.SomeKindOfGroupID?.ConversationID);
+        conversation.LatestMessageID = FirstId(conversation.LatestMessageID, conversation.LatestMessageAnotherID?.MessageID);
+    }
+
+    private static void FillMissingIds(Message message)
+    {
+        message.MessageID      = FirstId(message.MessageID, message.AnotherMessageID?.MessageID);
+        message.ConversationID = FirstId(message.ConversationID, message.SomeKindOfGroupID?.ConversationID);
+    }
+
+    // The plain ID wins when the phone sent it. Thus a phone that still sends the plain fields works as before.
+    private static string FirstId(string id, string? fallback) => id.Length > 0 ? id : fallback ?? string.Empty;
 
     private byte[] Decrypt(ByteString data, string what)
     {
