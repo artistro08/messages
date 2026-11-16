@@ -11,10 +11,15 @@
          UseUwp brings the projections and the system XAML compiler (Visual Studio's "WinUI application development"
          workload with "Universal Windows Platform tools") -->
     <UseUwp>true</UseUwp>
+    <!-- The MSIX tooling still builds resources.pri, which system XAML needs; the app itself is never an MSIX -->
     <EnableMsixTooling>true</EnableMsixTooling>
-    <!-- Desktop only: don't add the Windows.Universal device family to the manifest -->
-    <EnableAppxWindowsUniversalTargetDeviceFamilyItem>false</EnableAppxWindowsUniversalTargetDeviceFamilyItem>
-    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <!-- No package: the MSI installs a plain exe. It uses the installed Windows App SDK runtime (the bootstrapper
+         starts it), since notification registration without a package needs the runtime's Singleton package, which
+         a self-contained app can't use. The MSI installs that runtime (installer/Install-Prerequisites.ps1) -->
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
+    <!-- System XAML in an unpackaged exe reads its compiled pages from resources.pri beside it, by that name only -->
+    <ProjectPriFileName>resources.pri</ProjectPriFileName>
     <SelfContained>true</SelfContained>
     <PublishAot>true</PublishAot>
     <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
@@ -26,15 +31,9 @@
     <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
   </PropertyGroup>
 
-  <!-- Debug: unpackaged, with the test hooks compiled in. It uses the installed Windows App SDK runtime (the
-       bootstrapper starts it), since unpackaged notification registration needs the runtime's Singleton package,
-       which a self-contained app can't use. Release stays self-contained. -->
+  <!-- Debug: the test hooks compiled in -->
   <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
-    <WindowsPackageType>None</WindowsPackageType>
-    <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
     <DefineConstants>$(DefineConstants);EnableTestHooks</DefineConstants>
-    <!-- System XAML in an unpackaged exe reads its compiled pages from resources.pri beside it, by that name only -->
-    <ProjectPriFileName>resources.pri</ProjectPriFileName>
   </PropertyGroup>
 
   <!-- Release guard: the test hooks must never ship -->
@@ -88,8 +87,8 @@
     <MicrosoftWindowsSDKBuildToolsMSIXPackageVersion>1.7.251221100</MicrosoftWindowsSDKBuildToolsMSIXPackageVersion>
   </PropertyGroup>
 
-  <!-- WinUI 2.8 Controls; the runtime comes from the Microsoft.UI.Xaml.2.8 framework package (a manifest dependency
-       when packaged, a dynamic dependency when not, see XamlHost) -->
+  <!-- WinUI 2.8 Controls; the runtime comes from the Microsoft.UI.Xaml.2.8 framework package (a dynamic dependency,
+       see XamlHost) -->
   <ItemGroup>
     <PackageReference Include="Microsoft.UI.Xaml" />
   </ItemGroup>
@@ -98,35 +97,9 @@
     <ProjectReference Include="..\GMessages.Presentation\GMessages.Presentation.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <ProjectCapability Include="Msix" />
-  </ItemGroup>
-
-  <!-- MSIX Manifest: packaged builds read the generated copy in obj, not the Package.appxmanifest template.
-       An item, so IntermediateOutputPath is already final when it's evaluated. -->
-  <ItemGroup Condition="'$(WindowsPackageType)' != 'None'">
-    <AppxManifest Include="$(IntermediateOutputPath)Package.generated.appxmanifest" />
-  </ItemGroup>
-
-  <!-- Generate The MSIX Manifest: fills every $AppDisplayName$ in the template from the AppDisplayName property.
-       Runs on every build (packaged or not) before the MSIX tooling reads the manifest, and only rewrites the
-       file when the result changes. -->
-  <Target Name="GenerateAppxManifest" BeforeTargets="_CheckForInvalidConfigurationAndPlatform;_ValidatePresenceOfAppxManifestItems">
-    <PropertyGroup>
-      <GeneratedAppxManifest>$(IntermediateOutputPath)Package.generated.appxmanifest</GeneratedAppxManifest>
-      <_AppxManifestTemplate>$([System.IO.File]::ReadAllText('$(MSBuildProjectDirectory)\Package.appxmanifest'))</_AppxManifestTemplate>
-      <_AppxManifestText>$(_AppxManifestTemplate.Replace('$AppDisplayName$', '$(AppDisplayName)'))</_AppxManifestText>
-    </PropertyGroup>
-    <MakeDir Directories="$(IntermediateOutputPath)" />
-    <WriteLinesToFile File="$(GeneratedAppxManifest)" Lines="$([MSBuild]::Escape($(_AppxManifestText)))" Overwrite="true" WriteOnlyWhenDifferent="true" />
-    <ItemGroup>
-      <FileWrites Include="$(GeneratedAppxManifest)" />
-    </ItemGroup>
-  </Target>
-
-  <!-- Sign The Exe: signs the Native AOT exe itself (not just the package), so Windows keeps the tray icon's
-       placement across updates. Signs it in obj right after the native link, since the publish folder and the
-       package both copy it from there. Runs only when scripts/Build-Package.ps1 passes the certificate. -->
+  <!-- Sign The Exe: signs the Native AOT exe, so Windows keeps the tray icon's placement across updates. Signs it in
+       obj right after the native link, since the publish folder copies it from there. Runs only when
+       scripts/Build-Installer.ps1 passes the certificate. -->
   <Target Name="SignAppExecutable" AfterTargets="LinkNative" Condition="'$(AppExeSigningThumbprint)' != '' And '$(AppExeSignTool)' != '' And Exists('$(NativeBinary)')">
     <PropertyGroup>
       <AppExeTimestampArguments Condition="'$(AppExeTimestampUrl)' != ''">/tr $(AppExeTimestampUrl) /td SHA256</AppExeTimestampArguments>

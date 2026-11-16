@@ -43,9 +43,6 @@ internal static class NativeMethods
     // ShowWindow restores a minimized window to its last size and place with this command.
     public const int SW_RESTORE = 9;
 
-    // GetCurrentPackageFullName returns this error when the process has no package identity.
-    public const int APPMODEL_ERROR_NO_PACKAGE = 15700;
-
     // SendInput sends keyboard input and key-up events. The Windows key and the period open the emoji panel. The app
     // releases Ctrl and Shift first.
     public const uint INPUT_KEYBOARD  = 1;
@@ -233,9 +230,6 @@ internal static class NativeMethods
 
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
     public static extern IntPtr GetModuleHandleW(string? moduleName);
-
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
-    public static extern int GetCurrentPackageFullName(ref int packageFullNameLength, char[]? packageFullName);
 
     [DllImport("kernel32.dll")]
     public static extern IntPtr GetCurrentProcess();

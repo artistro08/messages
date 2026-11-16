@@ -1157,6 +1157,164 @@ public sealed class RcsTests : UiTest
     }
 
     /// <summary>
+    /// A tall share image, shaped as a phone video, shows whole: 320 px tall, with nothing cut off. The card narrows to
+    /// the width of the image, so no gaps show at its sides, and its text wraps to it. The card is a bubble of its own
+    /// under the text, apart from it, on the outer side of the row, on a received and on a sent message. The site icon
+    /// shows before the site while the site has one. A link fetched after the site lost its icon shows no icon. A very
+    /// thin image keeps the card 120 px wide. The test saves a
+    /// screenshot of each as <c>preview-tall-received.png</c> and <c>preview-tall-sent.png</c> next to the test assembly.
+    /// </summary>
+    [TestMethod]
+    public async Task PreviewCard_TallImage_FillsTheCardUnderItsOwnBubble()
+    {
+        Server.PreviewImage = MediaTests.Png(180, 320, (_, _, _) => (220, 40, 40));
+        Server.Favicon      = MediaTests.Png(32, 32, (_, _, _) => (40, 90, 230));
+        string url          = $"http://127.0.0.1:{Server.BaseUrl.Port}/preview-image-page";
+        await OpenChatAsync("Row.c-ann");
+
+        // The window is tall enough for the text and the whole card at once. It sits at the left edge of the screen, in
+        // front, so other windows on the desktop stay off the screenshots.
+        Window window                = App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout);
+        System.Drawing.Rectangle box = window.BoundingRectangle;
+        window.Patterns.Transform.Pattern.Move(0, 0);
+        window.SetForeground();
+        window.Patterns.Transform.Pattern.Resize(box.Width, 1000);
+
+        // Received
+        Message link = Server.Phone.PushIncoming("c-ann", "this is a longer line of text " + url);
+        CheckTallCard(link.MessageID, "preview-tall-received.png");
+        double tallWidth = App.Find("Preview." + link.MessageID).BoundingRectangle.Width;
+
+        // Sent
+        App.Find("Chat.Draft").Focus();
+        Keyboard.Type("mine too " + url);
+        Keyboard.Type(VirtualKeyShort.RETURN);
+        Wait.Until(() => Server.Phone.Sent.Count == 1, AppDriver.DefaultTimeout, () => "The phone never got the message.");
+        CheckTallCard(Newest("c-ann").MessageID, "preview-tall-sent.png");
+
+        // A site with no icon shows only its name.
+        Server.Favicon = [];
+        // Links to one site share its icon, so this page names an icon of its own, which the server does not have.
+        Message bare   = Server.Phone.PushIncoming("c-ann", $"no icon here http://127.0.0.1:{Server.BaseUrl.Port}/preview-image-page-missing-icon");
+        CheckTallCard(bare.MessageID, "preview-tall-no-icon.png", hasIcon: false);
+
+        // A very thin image keeps the card 120 px wide, not as thin as the image. The first card, 180 px wide inside its
+        // 1 px edges, gives the scale.
+        Server.PreviewImage = MediaTests.Png(40, 800, (_, _, _) => (220, 40, 40));
+        Message thin        = Server.Phone.PushIncoming("c-ann", "thin " + url + "?thin");
+        App.WaitForText("Preview." + thin.MessageID, FakeGoogleServer.PreviewImagePageTitle + ", 127.0.0.1");
+        Wait.Until(() => App.Find("Preview." + thin.MessageID).BoundingRectangle.Height > 200, TimeSpan.FromSeconds(10), () => "The thin image never showed on the card.");
+        double thinWidth = App.Find("Preview." + thin.MessageID).BoundingRectangle.Width;
+        double expected  = tallWidth * 122 / 182;
+        Assert.IsTrue(Math.Abs(thinWidth - expected) <= 4, $"The thin card is {thinWidth} px wide; at this scale 120 px is {expected:0} px.");
+    }
+
+    // Waits for the image of the card, saves a screenshot of the text and the card, and checks that the image fills the
+    // card, stops at 320 px, and that the card sits under the text bubble.
+    private void CheckTallCard(string id, string fileName, bool hasIcon = true)
+    {
+        App.WaitForText("Preview." + id, FakeGoogleServer.PreviewImagePageTitle + ", 127.0.0.1");
+
+        // The image loads after the card, and the card grows to take it.
+        Wait.Until(() => App.Find("Preview." + id).BoundingRectangle.Height > 200, TimeSpan.FromSeconds(10), () => "The share image never showed on the card.");
+        Thread.Sleep(500);
+
+        System.Drawing.Rectangle card = App.Find("Preview." + id).BoundingRectangle;
+        System.Drawing.Rectangle text = App.Find("Bubble." + id).BoundingRectangle;
+        System.Drawing.Rectangle shot = System.Drawing.Rectangle.FromLTRB(Math.Min(card.Left, text.Left) - 20, text.Top - 20, Math.Max(card.Right, text.Right) + 20, card.Bottom + 20);
+        using FlaUI.Core.Capturing.CaptureImage capture = FlaUI.Core.Capturing.Capture.Rectangle(shot);
+        string path = Path.Combine(AppContext.BaseDirectory, fileName);
+        capture.Bitmap.Save(path, System.Drawing.Imaging.ImageFormat.Png);
+        TestContext.WriteLine("Screenshot: " + path);
+
+        // A pixel is the image when it is clearly red.
+        bool IsImage(int x, int y)
+        {
+            System.Drawing.Color c = capture.Bitmap.GetPixel(x - shot.Left, y - shot.Top);
+            return c.R > 150 && c.G < 90 && c.B < 90;
+        }
+
+        // Inside its 1 px edge, the image reaches both sides of the card.
+        int row = card.Top + 40;
+        Assert.IsTrue(IsImage(card.Left + 3, row), "The image doesn't reach the left side of the card.");
+        Assert.IsTrue(IsImage(card.Right - 4, row), "The image doesn't reach the right side of the card.");
+
+        // The whole image shows: its shown height and width keep the 180 x 320 shape of the image.
+        int tall = 0;
+        int wide = 0;
+        for (int y = card.Top; y < card.Bottom; y++)
+        {
+            tall += IsImage(card.Left + (card.Width / 2), y) ? 1 : 0;
+        }
+
+        for (int x = card.Left; x < card.Right; x++)
+        {
+            wide += IsImage(x, row) ? 1 : 0;
+        }
+
+        double shape = tall / (double)Math.Max(1, wide);
+        Assert.IsTrue(Math.Abs(shape - (320.0 / 180)) < 0.05, $"The image shows {wide} x {tall} px; the whole image is 180 x 320, so part of it is cut off or stretched.");
+
+        // The blue site icon shows in the site row at the bottom of the card, or nowhere when the site has none.
+        bool IsIcon(int x, int y)
+        {
+            System.Drawing.Color c = capture.Bitmap.GetPixel(x - shot.Left, y - shot.Top);
+            return c.B > 180 && c.R < 90 && c.G < 130;
+        }
+
+        bool iconShown = false;
+        for (int y = card.Bottom - 40; y < card.Bottom && !iconShown; y++)
+        {
+            for (int x = card.Left; x < card.Left + 60 && !iconShown; x++)
+            {
+                iconShown = IsIcon(x, y);
+            }
+        }
+
+        Assert.AreEqual(hasIcon, iconShown, hasIcon ? "The site icon doesn't show before the site." : "A site with no icon showed one.");
+
+        // The icon centers on the letters of the site name beside it.
+        if (hasIcon)
+        {
+            int iconTop = int.MaxValue, iconBottom = 0, iconRight = 0;
+            for (int y = card.Bottom - 40; y < card.Bottom; y++)
+            {
+                for (int x = card.Left; x < card.Left + 60; x++)
+                {
+                    if (IsIcon(x, y))
+                    {
+                        iconTop    = Math.Min(iconTop, y);
+                        iconBottom = Math.Max(iconBottom, y);
+                        iconRight  = Math.Max(iconRight, x);
+                    }
+                }
+            }
+
+            int textTop = int.MaxValue, textBottom = 0;
+            for (int y = iconTop - 6; y <= iconBottom + 6; y++)
+            {
+                for (int x = iconRight + 3; x < card.Right - 6; x++)
+                {
+                    System.Drawing.Color c = capture.Bitmap.GetPixel(x - shot.Left, y - shot.Top);
+                    if ((c.R + c.G + c.B) / 3 > 120 && Math.Abs(c.R - c.B) < 30)
+                    {
+                        textTop    = Math.Min(textTop, y);
+                        textBottom = Math.Max(textBottom, y);
+                    }
+                }
+            }
+
+            // The site here is 127.0.0.1, all tall digits. The icon sits 1 px lower than their middle, at the middle of
+            // the short letters of a lowercase site name.
+            double off = ((iconTop + iconBottom) / 2.0) - ((textTop + textBottom) / 2.0);
+            Assert.IsTrue(off is >= 0.5 and <= 2.5, $"The icon (rows {iconTop}-{iconBottom}) sits {off:0.0} px below the middle of the site name (rows {textTop}-{textBottom}); it should sit about 1 px below.");
+        }
+
+        // The card starts under the text bubble, not inside it, and lines up with it on the outer side.
+        Assert.IsTrue(card.Top >= text.Bottom, $"The card {card} overlaps the text {text}.");
+    }
+
+    /// <summary>
     /// A bubble with no reactions has no pill. The 👍 of Ann brings a pill in on the bottom edge of the bubble. On
     /// another bubble, my own 👍 brings a pill in. Taking it back removes the pill. A new reaction brings it back.
     /// </summary>

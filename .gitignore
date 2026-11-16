@@ -22,3 +22,6 @@ GMessages.cer
 
 # Golden Vector Upstream Checkout
 tools/golden/.upstream/
+
+# Installer Builds (scripts/Build-Installer.ps1)
+artifacts/
