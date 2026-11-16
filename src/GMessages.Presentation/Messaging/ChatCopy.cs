@@ -156,6 +156,9 @@ public static class ChatCopy
     public const string TimeDayAgo     = "1 day";
     public const string TimeDaysAgo    = "{0} days";
 
+    // The day of a time stamp between messages, as Google Messages writes it, such as "Yesterday · 7:08 PM".
+    public const string StampYesterday = "Yesterday";
+
     // The controller wrote the settings card of the microphone. The owner approves it.
     public const string Microphone            = "Microphone";
     public const string MicrophoneDescription = "Which microphone records voice messages.";
@@ -181,6 +184,9 @@ public static class ChatCopy
     public const string FileOpenFailed  = "Couldn't open this file.";
     // The owner wrote "Waiting for photo" on 2026-11-10. It must stay verbatim.
     public const string PhotoPending    = "Waiting for photo";
+
+    // The controller wrote the screen reader name of the upload spinner. The owner approves it.
+    public const string Sending = "Sending";
 
     // The controller wrote the copy of the photo viewer and the download in Plan 7. The owner approves it at the gate.
     public const string Download         = "Download";

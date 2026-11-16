@@ -502,18 +502,6 @@ public sealed partial class ChatPane : UserControl
     }
 
     /// <summary>
-    /// Gets the icon of a chip without a picture: the icon of a video, an audio file or a document.
-    /// </summary>
-    /// <param name="kind">The kind that the attachment sends as.</param>
-    /// <returns>The Segoe Fluent Icons glyph.</returns>
-    public static string ChipGlyph(MessageKind kind) => kind switch
-    {
-        MessageKind.Video => "",
-        MessageKind.Audio => "",
-        _                 => "",
-    };
-
-    /// <summary>
     /// Shows the chip strip while a recording waits in the preview chip or an attachment waits.
     /// </summary>
     /// <param name="hasAttachments">True while attachments wait.</param>
@@ -1233,6 +1221,7 @@ public sealed partial class ChatPane : UserControl
         bool canOpen = !bubble.IsMediaWaiting && (bubble.HasPhoto || bubble.HasVideo || bubble.CanOpenMedia);
 
         BubbleMenuCopy.Visibility     = bubble.HasCopyText ? Visibility.Visible : Visibility.Collapsed;
+        BubbleMenuCopyLink.Visibility = bubble.LinkUrl is not null ? Visibility.Visible : Visibility.Collapsed;
         BubbleMenuOpen.Visibility     = canOpen ? Visibility.Visible : Visibility.Collapsed;
         BubbleMenuOpenWith.Visibility = hasFile ? Visibility.Visible : Visibility.Collapsed;
         BubbleMenuSaveAs.Visibility   = hasFile ? Visibility.Visible : Visibility.Collapsed;
@@ -1320,7 +1309,7 @@ public sealed partial class ChatPane : UserControl
         }
     }
 
-    private void OnPreviewMenuCopyLinkClick(object sender, RoutedEventArgs e) => _menuView?.CopyLink();
+    private void OnCopyLinkClick(object sender, RoutedEventArgs e) => _menuView?.CopyLink();
 
     // The menu opens below the ⋮ of the header.
     private void OnMoreClick(object sender, RoutedEventArgs e) => MenuRequested?.Invoke(this, (MoreButton, null));
