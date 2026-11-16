@@ -429,6 +429,75 @@
                     </Grid>
                 </Button>
 
+                <!-- Updates: new versions come from the GitHub releases of the app (Updater). -->
+                <TextBlock Style="{StaticResource GroupHeaderStyle}" Text="Updates" />
+
+                <!-- This card shows the update state, with Check for updates, or Install while an update waits. -->
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <Grid ColumnSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <FontIcon Glyph="&#xE895;" Style="{StaticResource CardIconStyle}" />
+                        <TextBlock
+                            Grid.Column="1"
+                            VerticalAlignment="Center"
+                            AutomationProperties.AutomationId="Settings.UpdateStatus"
+                            Text="{x:Bind ViewModel.Updates.StatusText, Mode=OneWay}"
+                            TextWrapping="Wrap" />
+                        <StackPanel
+                            Grid.Column="2"
+                            VerticalAlignment="Center"
+                            Orientation="Horizontal"
+                            Spacing="8">
+                            <muxc:ProgressRing
+                                Width="16"
+                                Height="16"
+                                IsActive="{x:Bind ViewModel.Updates.IsBusy, Mode=OneWay}"
+                                Visibility="{x:Bind ViewModel.Updates.IsBusy, Mode=OneWay}" />
+                            <Button
+                                AutomationProperties.AutomationId="Settings.CheckForUpdates"
+                                Click="OnCheckForUpdatesClick"
+                                Content="Check for updates"
+                                IsEnabled="{x:Bind ViewModel.Updates.CanCheck, Mode=OneWay}"
+                                Visibility="{x:Bind ViewModel.Updates.ShowsCheck, Mode=OneWay}" />
+                            <Button
+                                AutomationProperties.AutomationId="Settings.InstallUpdate"
+                                Click="OnInstallUpdateClick"
+                                Content="Install and restart"
+                                Style="{StaticResource AccentButtonStyle}"
+                                Visibility="{x:Bind ViewModel.Updates.IsAvailable, Mode=OneWay}" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- This card turns on automatic updates. -->
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <Grid ColumnSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <FontIcon Glyph="&#xE896;" Style="{StaticResource CardIconStyle}" />
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock Text="Install updates automatically" TextWrapping="Wrap" />
+                            <TextBlock
+                                Style="{StaticResource CardDescriptionStyle}"
+                                Text="New versions install while the window is closed. Windows asks for admin permission each time."
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+                        <ToggleSwitch
+                            Grid.Column="2"
+                            AutomationProperties.AutomationId="Settings.AutoInstallUpdates"
+                            AutomationProperties.Name="Install updates automatically"
+                            IsOn="{x:Bind ViewModel.AutoInstallUpdates, Mode=TwoWay}"
+                            Style="{StaticResource CardToggleSwitchStyle}" />
+                    </Grid>
+                </Border>
+
                 <!-- About comes from the About page of Magic Buds. -->
                 <TextBlock Style="{StaticResource GroupHeaderStyle}" Text="About" />
 

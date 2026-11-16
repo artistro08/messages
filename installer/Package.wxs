@@ -1,0 +1,85 @@
+<!--
+    Messages MSI. Installs for everyone into Program Files, so it asks for admin permission (UAC) on every install
+    and update. An update is a major upgrade: the old version is removed, then the new one is installed.
+    https://wixtoolset.org/docs/schema/wxs/majorupgrade/
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+
+    <Package
+        Name="$(var.AppName)"
+        Manufacturer="artistro08"
+        Version="$(var.Version)"
+        UpgradeCode="{BAAEE3BB-0039-4FE3-AE86-A1444CABB0A7}"
+        Scope="perMachine">
+
+        <!-- Upgrades -->
+        <MajorUpgrade DowngradeErrorMessage="A newer version of $(var.AppName) is already installed." />
+        <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+        <!-- Apps & Features Entry -->
+        <Icon Id="AppIcon.ico" SourceFile="$(var.PublishDir)Assets\AppIcon.ico" />
+        <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />
+        <Property Id="ARPURLINFOABOUT" Value="https://github.com/artistro08/messages" />
+        <Property Id="ARPNOMODIFY" Value="1" />
+
+        <!-- Install Folder: Program Files\Messages (the ARM64 MSI uses the native Program Files too) -->
+        <StandardDirectory Id="ProgramFiles6432Folder">
+            <Directory Id="INSTALLFOLDER" Name="$(var.AppName)">
+                <Directory Id="PREREQUISITESFOLDER" Name="Prerequisites" />
+            </Directory>
+        </StandardDirectory>
+
+        <!-- Start Menu Shortcut -->
+        <StandardDirectory Id="ProgramMenuFolder">
+            <Component Id="StartMenuShortcut">
+                <Shortcut
+                    Id="AppShortcut"
+                    Name="$(var.AppName)"
+                    Target="[INSTALLFOLDER]$(var.AppName).exe"
+                    WorkingDirectory="INSTALLFOLDER"
+                    Icon="AppIcon.ico" />
+                <RegistryValue Root="HKCU" Key="Software\artistro08\$(var.AppName)" Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />
+            </Component>
+        </StandardDirectory>
+
+        <!-- Prerequisites Script -->
+        <DirectoryRef Id="PREREQUISITESFOLDER">
+            <Component Id="PrerequisitesScript">
+                <File Id="InstallPrerequisitesPs1" Source="Install-Prerequisites.ps1" />
+            </Component>
+        </DirectoryRef>
+
+        <!-- Everything -->
+        <Feature Id="Main">
+            <Files Include="$(var.PublishDir)**" Directory="INSTALLFOLDER">
+                <Exclude Files="$(var.PublishDir)**\*.pdb" />
+            </Files>
+            <Files Include="$(var.PrerequisitesDir)**" Directory="PREREQUISITESFOLDER" />
+            <ComponentRef Id="PrerequisitesScript" />
+            <ComponentRef Id="StartMenuShortcut" />
+        </Feature>
+
+        <!-- Quit The Running App: before Windows Installer checks for files in use. Its quit argument waits for the
+             running copy to exit. Fails harmlessly on a first install, where there's no exe yet -->
+        <SetProperty Id="WixQuietExecCmdLine" Value="&quot;[INSTALLFOLDER]$(var.AppName).exe&quot; --quit" Before="QuitApp" Sequence="execute" />
+        <CustomAction Id="QuitApp" BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)" DllEntry="WixQuietExec" Execute="immediate" Return="ignore" />
+
+        <!-- Windows Packages The App Needs: the Windows App SDK runtime and WinUI 2.8 (Install-Prerequisites.ps1).
+             Impersonated, so they install for the person running the setup, not for the SYSTEM account -->
+        <SetProperty Id="InstallPrerequisites" Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -ExecutionPolicy Bypass -File &quot;[PREREQUISITESFOLDER]Install-Prerequisites.ps1&quot;" Before="InstallPrerequisites" Sequence="execute" />
+        <CustomAction Id="InstallPrerequisites" BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)" DllEntry="WixQuietExec" Execute="deferred" Impersonate="yes" Return="check" />
+
+        <!-- Start With Windows: a full uninstall removes the app's Run value, which the app (not the MSI) writes -->
+        <SetProperty Id="RemoveStartupEntry" Value="&quot;[System64Folder]reg.exe&quot; delete HKCU\Software\Microsoft\Windows\CurrentVersion\Run /v $(var.AppName) /f" Before="RemoveStartupEntry" Sequence="execute" />
+        <CustomAction Id="RemoveStartupEntry" BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)" DllEntry="WixQuietExec" Execute="deferred" Impersonate="yes" Return="ignore" />
+
+        <!-- No Launch After Install: from an elevated install the app would start as admin, where drag and drop and
+             notifications break. The updater starts the new version itself (App.Updates.cs) -->
+
+        <InstallExecuteSequence>
+            <Custom Action="QuitApp" Before="InstallValidate" Condition="Installed OR WIX_UPGRADE_DETECTED" />
+            <Custom Action="InstallPrerequisites" After="InstallFiles" Condition="NOT (REMOVE~=&quot;ALL&quot;)" />
+            <Custom Action="RemoveStartupEntry" After="RemoveFiles" Condition="REMOVE~=&quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE" />
+        </InstallExecuteSequence>
+    </Package>
+</Wix>

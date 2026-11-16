@@ -1,10 +1,10 @@
 <#
-    Creates the self-signed certificate that signs the GMessages MSIX and trusts it on this PC.
+    Creates the self-signed certificate that signs the Messages exe and MSI, and trusts it on this PC.
 
-    Outputs the certificate thumbprint (Build-Package.ps1 reads it from the store) and GMessages.cer
+    Outputs the certificate thumbprint (Build-Installer.ps1 reads it from the store) and GMessages.cer
     in the repo root. Only needed on a PC without the signing certificate: reuses one that already
-    exists. Run once, from an elevated PowerShell: trusting a certificate for sideloading means
-    adding it to Local Machine > Trusted People.
+    exists. Run once, from an elevated PowerShell: trusting the certificate means adding it to
+    Local Machine > Trusted People.
 
     Depends on the PKI module that ships with Windows:
     https://learn.microsoft.com/powershell/module/pki/new-selfsignedcertificate
@@ -14,7 +14,6 @@
 
 [CmdletBinding()]
 param(
-    # Must match Publisher in src/GMessages.App/Package.appxmanifest
     [string] $Subject = 'CN=BF59F607-536B-4252-888F-7B3ED9D56F96'
 )
 

@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using GMessages.Presentation.Connection;
 using GMessages.Presentation.Messaging;
+using GMessages.Presentation.Updates;
 using Microsoft.Extensions.Logging;
 
 namespace GMessages.Presentation.Settings;
@@ -30,6 +31,7 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged, IDisposa
     private readonly ConnectionController _controller;
     private readonly Action<string> _openFolder;
     private readonly ILogger _logger;
+    private readonly Action _installUpdate;
 
     private bool _startWithWindows;
     private string? _startupMessage;
@@ -45,6 +47,8 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged, IDisposa
     /// <param name="openFolder">Opens a folder in Explorer.</param>
     /// <param name="logsFolder">The rolling log folder (<see cref="AppPaths.LogsFolder"/>).</param>
     /// <param name="logger">Logs the failures of the startup service.</param>
+    /// <param name="updates">The update check of the app, which outlives the window.</param>
+    /// <param name="installUpdate">Downloads and installs the available update, then quits the app.</param>
     /// <exception cref="ArgumentNullException">An argument is null.</exception>
     public SettingsViewModel(
         AppSettings settings,
@@ -52,7 +56,9 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged, IDisposa
         ConnectionController controller,
         Action<string> openFolder,
         string logsFolder,
-        ILogger logger)
+        ILogger logger,
+        Updater updates,
+        Action installUpdate)
     {
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(startup);
@@ -60,13 +66,17 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged, IDisposa
         ArgumentNullException.ThrowIfNull(openFolder);
         ArgumentNullException.ThrowIfNull(logsFolder);
         ArgumentNullException.ThrowIfNull(logger);
+        ArgumentNullException.ThrowIfNull(updates);
+        ArgumentNullException.ThrowIfNull(installUpdate);
 
-        _settings   = settings;
-        _startup    = startup;
-        _controller = controller;
-        _openFolder = openFolder;
-        _logger     = logger;
-        LogsFolder  = logsFolder;
+        _settings      = settings;
+        _startup       = startup;
+        _controller    = controller;
+        _openFolder    = openFolder;
+        _logger        = logger;
+        _installUpdate = installUpdate;
+        LogsFolder     = logsFolder;
+        Updates        = updates;
 
         // Unpair follows the connection state. The state can change while Settings is open, as at the end of a pairing.
         _controller.StateChanged += OnStateChanged;
@@ -447,6 +457,43 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged, IDisposa
             Raise(nameof(StartWithWindows));
         }
     }
+
+    // =========================================================================
+    // UPDATES
+    // =========================================================================
+
+    /// <summary>
+    /// Gets the update check of the app. Settings shows its state.
+    /// </summary>
+    public Updater Updates { get; }
+
+    /// <summary>
+    /// Gets or sets whether the app installs a new release on its own while its window is closed.
+    /// </summary>
+    public bool AutoInstallUpdates
+    {
+        get => _settings.AutoInstallUpdates;
+        set
+        {
+            if (value == _settings.AutoInstallUpdates)
+            {
+                return;
+            }
+
+            _settings.AutoInstallUpdates = value;
+            Raise();
+        }
+    }
+
+    /// <summary>
+    /// Asks GitHub for a newer release now.
+    /// </summary>
+    public void CheckForUpdates() => _ = Updates.CheckAsync();
+
+    /// <summary>
+    /// Downloads and installs the available update. The app quits as the installer starts.
+    /// </summary>
+    public void InstallUpdate() => _installUpdate();
 
     // =========================================================================
     // UNPAIR AND LOGS
