@@ -633,14 +633,13 @@ public sealed partial class ChatStore : IDisposable
     /// <param name="bytes">The bytes of the file.</param>
     /// <param name="fileName">The file name that the other side sees.</param>
     /// <param name="mime">The mime type, such as <c>image/jpeg</c>.</param>
-    /// <param name="progress">Receives the done part of the upload, from 0 to 1, or null.</param>
     /// <returns>The uploaded media part.</returns>
     /// <exception cref="ArgumentNullException">
     /// <paramref name="fileName"/> or <paramref name="mime"/> is null.
     /// </exception>
     /// <exception cref="AttachmentTooBigException">The file is over <see cref="MaxAttachmentBytes"/>.</exception>
     /// <exception cref="MessagingUnavailableException">The app is not connected to the phone.</exception>
-    public Task<MediaContent> UploadAttachmentAsync(ReadOnlyMemory<byte> bytes, string fileName, string mime, IProgress<double>? progress, CancellationToken ct)
+    public Task<MediaContent> UploadAttachmentAsync(ReadOnlyMemory<byte> bytes, string fileName, string mime, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(fileName);
         ArgumentNullException.ThrowIfNull(mime);
@@ -650,7 +649,7 @@ public sealed partial class ChatStore : IDisposable
             throw new AttachmentTooBigException();
         }
 
-        return RequireClient().UploadMediaAsync(bytes, fileName, mime, progress, ct);
+        return RequireClient().UploadMediaAsync(bytes, fileName, mime, ct);
     }
 
     /// <summary>

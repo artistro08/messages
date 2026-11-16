@@ -1133,9 +1133,8 @@ public sealed class ChatStoreTests
     {
         using var rig = new Rig();
         await rig.Store.HandleEventAsync(new ConversationUpdated(Conv("c1")));
-        double reported = -1;
 
-        ChatMessage sent = await SendMediaAsync(rig, [1, 2, 3], "cat.png", "image/png", "look", new InlineProgress(p => reported = p));
+        ChatMessage sent = await SendMediaAsync(rig, [1, 2, 3], "cat.png", "image/png", "look");
 
         SendMessageRequest req = rig.Client.Sent.Single();
         Assert.AreEqual("tmp-1", req.TmpID);
@@ -1145,7 +1144,6 @@ public sealed class ChatStoreTests
         Assert.AreEqual("cat.png", req.MessagePayload.MessageInfo[0].MediaContent.MediaName);
         Assert.AreEqual("look", req.MessagePayload.MessageInfo[1].MessageContent.Content);
         CollectionAssert.AreEqual(new byte[] { 1, 2, 3 }, rig.Client.Media["media-1"]);
-        Assert.AreEqual(1, reported);
         Assert.AreEqual(MessageKind.Photo, sent.Kind);
         Assert.AreEqual("media-1", sent.Media?.MediaId);
         Assert.AreEqual("look", sent.Text);
@@ -1208,16 +1206,10 @@ public sealed class ChatStoreTests
     }
 
     // This method uploads the file, then sends it in chat c1 with the temporary ID tmp-1, as the chat view does.
-    private static async Task<ChatMessage> SendMediaAsync(Rig rig, byte[] bytes, string fileName, string mime, string? caption, IProgress<double>? progress = null)
+    private static async Task<ChatMessage> SendMediaAsync(Rig rig, byte[] bytes, string fileName, string mime, string? caption)
     {
-        MediaContent media = await rig.Store.UploadAttachmentAsync(bytes, fileName, mime, progress, Ct);
+        MediaContent media = await rig.Store.UploadAttachmentAsync(bytes, fileName, mime, Ct);
         return await rig.Store.SendUploadedMediaAsync("c1", media, caption, "tmp-1", null, Ct);
-    }
-
-    // This progress reports at the time of the call. Progress<T> posts the report to a context instead.
-    private sealed class InlineProgress(Action<double> report) : IProgress<double>
-    {
-        public void Report(double value) => report(value);
     }
 
     [TestMethod]

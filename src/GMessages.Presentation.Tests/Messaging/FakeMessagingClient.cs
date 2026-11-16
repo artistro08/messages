@@ -313,7 +313,7 @@ internal sealed class FakeMessagingClient : IMessagingClient
 
     public List<(string MessageId, string ActionMessageId)> FullSizeCalls { get; } = [];
 
-    public Task<MediaContent> UploadMediaAsync(ReadOnlyMemory<byte> plain, string fileName, string mime, IProgress<double>? progress, CancellationToken ct)
+    public Task<MediaContent> UploadMediaAsync(ReadOnlyMemory<byte> plain, string fileName, string mime, CancellationToken ct)
     {
         if (UploadThrows is { } ex)
         {
@@ -322,7 +322,6 @@ internal sealed class FakeMessagingClient : IMessagingClient
 
         string id = "media-" + (Media.Count + 1);
         Media[id] = plain.ToArray();
-        progress?.Report(1);
         return Task.FromResult(new MediaContent { MediaID = id, MediaName = fileName, MimeType = mime, Size = plain.Length, Format = GMessages.Protocol.MediaFormatsMap.FromMime(mime) });
     }
 
