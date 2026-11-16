@@ -144,14 +144,19 @@ public sealed partial class MessageBubble : UserControl
     // middle 4 px in from the edge.
     private const double PillCornerReach = 8;
 
-    // The preview card in effective pixels: the width of its image on a card alone, the widest the image decodes, the
-    // tallest the image shows, its gap below the text, and its corners under text and alone.
+    // The preview card in effective pixels: the narrowest its image shows, the widest the image decodes, the tallest
+    // the image shows, and its corners alone.
     private const double PreviewImageWidth  = 240;
     private const int PreviewDecodeWidth    = (int)MaxBubbleWidth;
     private const double PreviewImageHeight = 320;
-    private const double PreviewGap         = 8;
-    private const double PreviewCorner      = 8;
     private const double PreviewAloneCorner = 12;
+
+    // The narrowest card. A very thin image shows whole in the middle of it, with space at its sides, so the title and
+    // the site stay readable.
+    private const double PreviewMinWidth = 120;
+
+    // The site icon shows 16 px wide. It decodes at twice that, so it stays sharp at high scale.
+    private const int PreviewIconDecodeWidth = 32;
 
     // The list of who reacted scrolls past this height. The emoji of each row sits this far from the name.
     private const double ReactorsMaxHeight = 320;
@@ -320,13 +325,8 @@ public sealed partial class MessageBubble : UserControl
         // A video that plays stops when the bubble leaves the tree.
         Unloaded += (_, _) => ReleaseVideo();
 
-        // The row under the bubble is at least as wide as the back, inside its margins. Thus the pill sits on the
-        // corner of the back.
-        Back.SizeChanged += (_, _) =>
-        {
-            Under.MinWidth = Math.Max(0, Back.ActualWidth - Under.Margin.Left - Under.Margin.Right);
-            LayPill();
-        };
+        // The row under the bubble is at least as wide as the back and the preview card. See FitUnder.
+        Back.SizeChanged += (_, _) => FitUnder();
         Under.SizeChanged    += (_, _) => LayPill();
         Captions.SizeChanged += (_, _) => LayPill();
 
@@ -669,12 +669,12 @@ public sealed partial class MessageBubble : UserControl
     }
 
     /// <summary>
-    /// Spaces the preview card from the text above it. A message that was only the link has no text. The card then
-    /// starts at the top of the bubble.
+    /// Spaces the preview card from the bubble above it, as bubbles of a group are spaced. A message that was only the
+    /// link has nothing above the card. The card then starts at the top of the row.
     /// </summary>
-    /// <param name="hasText">True when the bubble shows text.</param>
+    /// <param name="previewAlone">True when the preview card is all that the bubble shows.</param>
     /// <returns>The margin of the card.</returns>
-    public static Thickness PreviewMargin(bool hasText) => new(0, hasText ? PreviewGap : 0, 0, 0);
+    public static Thickness PreviewMargin(bool previewAlone) => new(0, previewAlone ? 0 : 2 * InGroupGap, 0, 0);
 
     /// <summary>
     /// Gives the padding of the back. A photo fills the bubble from edge to edge and gets none. Emoji alone have no
@@ -704,20 +704,33 @@ public sealed partial class MessageBubble : UserControl
     /// <param name="emojiOnly">
     /// True when the message is only emoji. They show big with no bubble around them, as issue #11 asked.
     /// </param>
-    /// <param name="previewAlone">
-    /// True when the preview card is all that the bubble shows. The card then takes the colors of the bubble itself.
-    /// </param>
+    /// <param name="previewAlone">True when the preview card is all that the bubble shows.</param>
     /// <returns>Collapsed for a photo alone, a preview card alone or emoji alone.</returns>
     public static Visibility FillShown(bool hasPhoto, bool hasCaption, bool hasQuote, bool emojiOnly, bool previewAlone) =>
         emojiOnly || previewAlone || (hasPhoto && !hasCaption && !hasQuote) ? Visibility.Collapsed : Visibility.Visible;
 
     /// <summary>
-    /// Rounds the preview card. A card alone in its bubble is the bubble, with the same corners all around, smaller
-    /// than the corners of a text bubble, as the owner asked. A card under text keeps smaller corners inside the bubble.
+    /// Rounds the preview card. A card alone has the same corners all around, smaller than the corners of a text
+    /// bubble, as the owner asked. A card under text is the next bubble of a group, so its top corner on the side of the
+    /// sender is small. See <see cref="CornersOf"/>.
     /// </summary>
     /// <param name="previewAlone">True when the preview card is all that the bubble shows.</param>
+    /// <param name="fromMe">True for a sent bubble.</param>
+    /// <param name="isLast">True for the last bubble of its group.</param>
     /// <returns>The corners.</returns>
-    public static CornerRadius PreviewCorners(bool previewAlone) => new(previewAlone ? PreviewAloneCorner : PreviewCorner);
+    public static CornerRadius PreviewCorners(bool previewAlone, bool fromMe, bool isLast) =>
+        previewAlone ? new(PreviewAloneCorner) : CornersOf(fromMe, false, isLast);
+
+    /// <summary>
+    /// Rounds the text bubble. A preview card under it is the next bubble of a group, so its bottom corner on the side
+    /// of the sender is small. See <see cref="CornersOf"/>.
+    /// </summary>
+    /// <param name="fromMe">True for a sent bubble.</param>
+    /// <param name="isFirst">True for the first bubble of its group.</param>
+    /// <param name="isLast">True for the last bubble of its group.</param>
+    /// <param name="hasPreview">True when a preview card shows under the text.</param>
+    /// <returns>The corners.</returns>
+    public static CornerRadius TextCorners(bool fromMe, bool isFirst, bool isLast, bool hasPreview) => CornersOf(fromMe, isFirst, isLast && !hasPreview);
 
     /// <summary>
     /// Rounds a photo to the exact corners of its bubble, because the photo covers the edge of the bubble. The bottom
@@ -751,16 +764,17 @@ public sealed partial class MessageBubble : UserControl
 
     /// <summary>
     /// Rounds the fill of the bubble. Under a quote the top is square, because the fill starts where the quote ends.
-    /// See <see cref="OnQuoteSizeChanged"/>.
+    /// See <see cref="OnQuoteSizeChanged"/>. Over a preview card the bottom joins the card. See <see cref="TextCorners"/>.
     /// </summary>
     /// <param name="fromMe">True for a sent bubble.</param>
     /// <param name="isFirst">True for the first bubble of its group.</param>
     /// <param name="isLast">True for the last bubble of its group.</param>
     /// <param name="hasQuote">True when the bubble starts with a quote.</param>
+    /// <param name="hasPreview">True when a preview card shows under the text.</param>
     /// <returns>The corners.</returns>
-    public static CornerRadius FillCorners(bool fromMe, bool isFirst, bool isLast, bool hasQuote)
+    public static CornerRadius FillCorners(bool fromMe, bool isFirst, bool isLast, bool hasQuote, bool hasPreview)
     {
-        CornerRadius r = CornersOf(fromMe, isFirst, isLast);
+        CornerRadius r = TextCorners(fromMe, isFirst, isLast, hasPreview);
         return hasQuote ? new CornerRadius(0, 0, r.BottomRight, r.BottomLeft) : r;
     }
 
@@ -838,6 +852,9 @@ public sealed partial class MessageBubble : UserControl
             // The photo fills the bubble from edge to edge, beside the avatar lane.
             _photoMaxWidth = cap - LaneWidth(Bubble?.HasAvatarLane == true);
             SizePhoto();
+
+            // The card follows the cap of the bubble.
+            FitPreviewToImage();
         }
 
         return base.MeasureOverride(availableSize);
@@ -872,18 +889,8 @@ public sealed partial class MessageBubble : UserControl
         bool sms = Bubble is { FromMe: true, IsRcs: false };
         GoToPartState(FileCard, sms ? "FileOnAccent" : "FilePlain", "FilePlain", refresh);
         GoToPartState(Voice, sms ? "VoiceOnAccent" : "VoicePlain", "VoicePlain", refresh);
-        GoToPartState(Preview, PreviewState(), "PreviewPlain", refresh);
         GoToPartState(PillHost, Bubble?.HasMyReaction == true ? "Mine" : "NotMine", "NotMine", refresh);
     }
-
-    // A card alone in its bubble is a neutral link card on every side, as on the web, so it never looks like a chat
-    // bubble. A card under text sits on the fill of the bubble instead.
-    private string PreviewState() => Bubble switch
-    {
-        { PreviewFillsBubble: true }   => "PreviewAlone",
-        { FromMe: true, IsRcs: false } => "PreviewOnAccent",
-        _                              => "PreviewPlain",
-    };
 
     private void GoToPartState(FrameworkElement? part, string state, string plain, bool refresh)
     {
@@ -1268,7 +1275,14 @@ public sealed partial class MessageBubble : UserControl
     // no preview, the card unloads with its image.
     private async void ShowPreviewImage()
     {
+        // A recycled row that showed a card fits the row under it to a message with no card. Its back may keep its size,
+        // so no size change would fit it.
         LinkPreview? preview = Bubble?.Preview;
+        if (preview is null)
+        {
+            FitUnder();
+        }
+
         if (ReferenceEquals(preview, _previewShown))
         {
             return;
@@ -1281,8 +1295,10 @@ public sealed partial class MessageBubble : UserControl
         }
 
         FindName(nameof(Preview));
-        PreviewImage.Source     = null;
+        PreviewImage.Background = null;
         PreviewImage.Visibility = Visibility.Collapsed;
+        FitPreviewToImage();
+        ShowPreviewIcon(preview);
         if (preview.Image is not { } bytes)
         {
             return;
@@ -1295,26 +1311,89 @@ public sealed partial class MessageBubble : UserControl
             return;
         }
 
-        PreviewImage.Source     = image;
+        // The brush shows the whole image. A brush asks for no width, so the image never widens the card past its least
+        // width. FitPreviewToImage keeps the card no wider than the whole image at its tallest.
+        PreviewImage.Background = new ImageBrush { ImageSource = image, Stretch = Stretch.Uniform };
         PreviewImage.Visibility = Visibility.Visible;
+        FitPreviewToImage();
 
-        // A new image starts at the width of a card alone. A recycled row can keep the width of its card, and then no
-        // size change follows. Thus the card lays out once here, and the image takes the width that the card gets.
-        SizePreviewImage(PreviewImageWidth);
+        // A recycled row can keep the width of its card, and then no size change follows. Thus the card lays out once
+        // here, and the image takes the width that the card gets.
         PreviewCard.UpdateLayout();
         SizePreviewImage(InnerWidth(PreviewCard.ActualWidth));
     }
 
-    // The image runs across the whole card in its own shape. It sets only its height from the width of the card, so the
-    // text and the bubble decide the width. A very tall image stops at its tallest and narrows to keep its shape.
-    private void OnPreviewCardSizeChanged(object sender, SizeChangedEventArgs e) => SizePreviewImage(InnerWidth(e.NewSize.Width));
+    // Decodes the site icon of the card. A site with no icon, or an icon that Windows cannot read, shows only its name.
+    private async void ShowPreviewIcon(LinkPreview preview)
+    {
+        PreviewIcon.Source     = null;
+        PreviewIcon.Visibility = Visibility.Collapsed;
+        if (preview.Icon is not { } bytes)
+        {
+            return;
+        }
+
+        // A recycled container can show another message after the decode.
+        ImageSource? icon = await Avatar.ToImageAsync(bytes, PreviewIconDecodeWidth);
+        if (icon is null || !ReferenceEquals(preview, _previewShown))
+        {
+            return;
+        }
+
+        PreviewIcon.Source     = icon;
+        PreviewIcon.Visibility = Visibility.Visible;
+    }
+
+    // Fits the card to its image, so the whole image always shows. The image is at most 320 px tall, so a tall image
+    // narrows the card to its width at that height, and the title and the summary wrap to it. The card is never
+    // narrower than 120 px, so a very thin image shows whole with space at its sides. The image is at least 240 px wide
+    // when its shape allows, and never wider than the bubble. The card sits on the outer side of its row,
+    // so a narrow card lines up with the text bubble above it. A card with no image follows its text.
+    private void FitPreviewToImage()
+    {
+        if (Preview is null || PreviewImage is null)
+        {
+            return;
+        }
+
+        Preview.HorizontalAlignment = Bubble?.FromMe == true ? HorizontalAlignment.Right : HorizontalAlignment.Left;
+        if ((PreviewImage.Background as ImageBrush)?.ImageSource is not BitmapImage { PixelWidth: > 0, PixelHeight: > 0 } bitmap)
+        {
+            Preview.MaxWidth      = double.PositiveInfinity;
+            PreviewImage.MinWidth = 0;
+            return;
+        }
+
+        double widest         = Math.Max(PreviewMinWidth, PreviewImageHeight * bitmap.PixelWidth / bitmap.PixelHeight);
+        Preview.MaxWidth      = widest + PreviewCard.BorderThickness.Left + PreviewCard.BorderThickness.Right;
+        PreviewImage.MinWidth = Math.Min(Math.Min(PreviewImageWidth, _photoMaxWidth), widest);
+    }
+
+    // The image runs across the whole card. It sets only its height from the width of the card, so the text, the
+    // bubble and the least width of the image decide the width. The card is never wider than the image at its tallest.
+    // See FitPreviewToImage.
+    private void OnPreviewCardSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        SizePreviewImage(InnerWidth(e.NewSize.Width));
+        FitUnder();
+    }
+
+    // The row under the bubble is at least as wide as the back and the preview card, inside its margins. Thus the pill
+    // sits on the corner of the bubble.
+    private void FitUnder()
+    {
+        double card    = Bubble?.HasPreview == true ? Preview?.ActualWidth ?? 0 : 0;
+        double width   = Math.Max(Back.ActualWidth, card);
+        Under.MinWidth = Math.Max(0, width - Under.Margin.Left - Under.Margin.Right);
+        LayPill();
+    }
 
     // The width inside the border of the card.
     private double InnerWidth(double cardWidth) => cardWidth - PreviewCard.BorderThickness.Left - PreviewCard.BorderThickness.Right;
 
     private void SizePreviewImage(double width)
     {
-        if (PreviewImage?.Source is not BitmapImage { PixelWidth: > 0, PixelHeight: > 0 } bitmap || width <= 0)
+        if ((PreviewImage?.Background as ImageBrush)?.ImageSource is not BitmapImage { PixelWidth: > 0, PixelHeight: > 0 } bitmap || width <= 0)
         {
             return;
         }
@@ -1436,8 +1515,9 @@ public sealed partial class MessageBubble : UserControl
         _previewShown = null;
         if (PreviewImage is not null)
         {
-            PreviewImage.Source     = null;
+            PreviewImage.Background = null;
             PreviewImage.Visibility = Visibility.Collapsed;
+            FitPreviewToImage();
         }
     }
 

@@ -116,6 +116,37 @@ public sealed class FakeGoogleServer : IAsyncDisposable
         </html>
         """;
 
+    /// <summary>The <c>og:title</c> of the page at <c>/preview-image-page</c>, whose share image is <see cref="PreviewImage"/>.</summary>
+    public const string PreviewImagePageTitle = "Fake Image Page";
+
+    /// <summary>
+    /// Gets or sets the PNG at <c>/preview-image.png</c>, the share image of <c>/preview-image-page</c>. Until a test sets
+    /// it, the page has no image to load.
+    /// </summary>
+    public byte[] PreviewImage { get; set; } = [];
+
+    /// <summary>
+    /// Gets or sets the site icon at <c>/favicon.ico</c>, which a link preview card shows before the site. Until a test
+    /// sets it, the server has no icon and answers 404.
+    /// </summary>
+    public byte[] Favicon { get; set; } = [];
+
+    private const string PreviewImagePage = $"""
+        <!doctype html>
+        <html>
+            <head>
+                <meta property="og:title" content="{PreviewImagePageTitle}">
+                <meta property="og:site_name" content="Fake Site">
+                <meta property="og:image" content="/preview-image.png">
+            </head>
+            <body>
+                <p>
+                    Preview
+                </p>
+            </body>
+        </html>
+        """;
+
     private readonly HttpListener _listener;
     private readonly CancellationTokenSource _stop = new();
     private readonly Task _acceptLoop;
@@ -358,6 +389,23 @@ public sealed class FakeGoogleServer : IAsyncDisposable
 
                 case "/preview-page" when request.HttpMethod == "GET":
                     await RespondAsync(context.Response, 200, "text/html; charset=utf-8", Encoding.UTF8.GetBytes(PreviewPage));
+                    break;
+
+                case "/preview-image-page" when request.HttpMethod == "GET":
+                    await RespondAsync(context.Response, 200, "text/html; charset=utf-8", Encoding.UTF8.GetBytes(PreviewImagePage));
+                    break;
+
+                // The same page, naming an icon that the server does not have.
+                case "/preview-image-page-missing-icon" when request.HttpMethod == "GET":
+                    await RespondAsync(context.Response, 200, "text/html; charset=utf-8", Encoding.UTF8.GetBytes(PreviewImagePage.Replace("</head>", "<link rel=\"icon\" href=\"/missing-icon.png\"></head>", StringComparison.Ordinal)));
+                    break;
+
+                case "/favicon.ico" when request.HttpMethod == "GET" && Favicon.Length > 0:
+                    await RespondAsync(context.Response, 200, "image/png", Favicon);
+                    break;
+
+                case "/preview-image.png" when request.HttpMethod == "GET":
+                    await RespondAsync(context.Response, 200, "image/png", PreviewImage);
                     break;
 
                 case "/web-gif.gif" when request.HttpMethod == "GET":

@@ -241,8 +241,10 @@ public sealed partial class App : Application, IDisposable
             OnShowMainWindowRequested("launch");
         }
 
-        _ = StartConnectionAsync();
+        // The updater comes first. With no saved session, the start-up ends at once and makes the main window, whose
+        // settings read the updater.
         StartUpdates(dispatcher);
+        _ = StartConnectionAsync();
 
         // After a resume or a network change, the app reconnects at once. It does not wait for the long poll to retry.
         _networkDebounce                         = dispatcher.CreateTimer();
