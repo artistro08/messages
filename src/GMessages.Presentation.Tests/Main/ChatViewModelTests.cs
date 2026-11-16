@@ -1782,9 +1782,10 @@ public sealed class ChatViewModelTests
             await Task.Delay(20);
         }
 
+        // The page is fetched once. The site icon requests come after it.
         Assert.IsTrue(bubble.HasPreview);
         Assert.AreEqual("Page Title", bubble.Preview!.Title);
-        Assert.AreEqual(1, handler.Requests.Count);
+        Assert.AreEqual(1, PageRequests(handler));
         Assert.AreEqual("https://www.example.com/a", handler.Requests[0].Url);
     }
 
@@ -1832,7 +1833,7 @@ public sealed class ChatViewModelTests
             await Task.Delay(20);
         }
 
-        Assert.AreEqual(1, handler.Requests.Count);
+        Assert.AreEqual(1, PageRequests(handler));
     }
 
     /// <summary>
@@ -1858,8 +1859,12 @@ public sealed class ChatViewModelTests
         }
 
         Assert.IsTrue(chat.Messages.Single().FromMe);
-        Assert.AreEqual(1, handler.Requests.Count);
+        Assert.AreEqual(1, PageRequests(handler));
     }
+
+    // The requests of a link preview other than its site icon: the page and its image.
+    private static int PageRequests(FakeHttpHandler handler) =>
+        handler.Requests.Count(r => !r.Url.EndsWith("/favicon.ico", StringComparison.Ordinal));
 
     /// <summary>
     /// The app never fetches the links of a spam chat or a blocked chat.
