@@ -89,19 +89,6 @@
                     </VisualState.Setters>
                 </VisualState>
             </VisualStateGroup>
-            <!-- The preview card is a bubble of its own, under the text or alone. It is a neutral link card on every
-                 side, with the card color and edge, as on Google Messages for web. Thus a link never looks like a
-                 plain chat bubble. PreviewPlain is only the start state. -->
-            <VisualStateGroup x:Name="PreviewSide">
-                <VisualState x:Name="PreviewPlain" />
-                <VisualState x:Name="PreviewAlone">
-                    <VisualState.Setters>
-                        <Setter Target="PreviewCard.Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
-                        <Setter Target="PreviewCard.BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
-                    </VisualState.Setters>
-                </VisualState>
-            </VisualStateGroup>
-
             <!-- My reaction gives the pill a soft accent fill and no ring. The brush is ReactionPillMineBrush in
                  App.xaml. The fill is under the button, so the hover of the button only tints it. ShowPartStates goes
                  to this group only while the pill is loaded. -->
@@ -697,7 +684,7 @@
                          the page follows in 2 lines at most, when it has one. The card never shows the link itself.
                          A page with no image shows no image. A card alone has even corners, smaller than those of a
                          text bubble. Under text, it takes the corners of the next bubble of a group. It has the neutral
-                         colors of a link card on every side. See PreviewSide. A click, Enter or Space opens the link in the default
+                         colors of a link card on every side. It never looks like a plain chat bubble. A click, Enter or Space opens the link in the default
                          browser. The card is named by its title and the host of the link. A right-click, the Application key or Shift + F10 opens
                          its own menu with Copy link. That menu is PreviewMenu of the chat pane, which finds the
                          card by its name. The look of the card is on PreviewCard. SubtleButtonStyle gives the
@@ -721,8 +708,8 @@
                         <Border
                             x:Name="PreviewCard"
                             SizeChanged="OnPreviewCardSizeChanged"
-                            Background="{ThemeResource ControlFillColorDefaultBrush}"
-                            BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                             BorderThickness="1"
                             CornerRadius="{x:Bind local:MessageBubble.PreviewCorners(Bubble.PreviewFillsBubble, Bubble.FromMe, Bubble.IsLastInGroup), Mode=OneWay, FallbackValue=12}">
                             <StackPanel>

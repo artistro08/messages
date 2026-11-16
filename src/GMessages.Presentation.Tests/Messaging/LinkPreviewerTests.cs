@@ -375,10 +375,10 @@ public sealed class LinkPreviewerTests
         Assert.AreEqual("#badumtss", preview.Description);
         Assert.AreEqual("example.com", preview.Site, "the site is the real host, never the domain of the card");
         CollectionAssert.AreEqual(png, preview.Image);
-        Assert.HasCount(3, handler.Requests, "the image, then the icon of the site and of its parent domain");
-        Assert.EndsWith(".png", handler.Requests[0].Url);
-        Assert.EndsWith("/favicon.ico", handler.Requests[1].Url);
-        Assert.EndsWith("/favicon.ico", handler.Requests[2].Url);
+        // The image and the icons of the site and of its parent domain load side by side, in no fixed order.
+        Assert.HasCount(3, handler.Requests);
+        Assert.AreEqual(1, handler.Requests.Count(r => r.Url == "https://cdn.example.com/p.png"));
+        Assert.AreEqual(2, handler.Requests.Count(r => r.Url.EndsWith("/favicon.ico", StringComparison.Ordinal)));
     }
 
     /// <summary>
@@ -623,7 +623,8 @@ public sealed class LinkPreviewerTests
 
     /// <summary>
     /// The page names its icon with rel icon or shortcut icon, else apple-touch-icon. An SVG icon does not count. A
-    /// relative link resolves against the page, and a local address never counts.
+    /// relative link resolves against the page, and a local address never counts. A link that does not count, such as
+    /// a data: icon, gives way to the next one.
     /// </summary>
     [TestMethod]
     public void ParseIcon_PicksTheBitmapIcon()
@@ -633,11 +634,13 @@ public sealed class LinkPreviewerTests
         Assert.AreEqual(new Uri(Page, "/i.png"), LinkPreviewer.ParseIcon("<link rel=\"apple-touch-icon\" href=\"/t.png\"><link rel=\"icon\" type=\"image/svg+xml\" href=\"/i\"><link rel=\"icon\" href=\"/i.png\">", Page));
         Assert.IsNull(LinkPreviewer.ParseIcon("<link rel=\"stylesheet\" href=\"/s.css\">", Page));
         Assert.IsNull(LinkPreviewer.ParseIcon("<link rel=\"icon\" href=\"http://10.0.0.1/i.png\">", Page));
+        Assert.AreEqual(new Uri(Page, "/icon-32.png"), LinkPreviewer.ParseIcon("<link rel=\"icon\" href=\"data:image/png;base64,AAAA\"><link rel=\"icon\" href=\"/icon-32.png\">", Page));
     }
 
     /// <summary>
     /// After the icon that the page names, the icon is tried on the site, then on each parent domain, as
-    /// support.google.com uses the icon of google.com. A public suffix such as co.uk and an IP address get no parents.
+    /// support.google.com uses the icon of google.com. A short real domain such as cnn.com counts. A country suffix
+    /// such as co.uk or com.au, a shared host such as github.io and an IP address are never tried.
     /// </summary>
     [TestMethod]
     public void IconCandidates_SiteThenParentDomains()
@@ -648,6 +651,10 @@ public sealed class LinkPreviewerTests
             "https://support.google.com/i.png | https://support.google.com/favicon.ico | https://google.com/favicon.ico",
             Of(new Uri("https://support.google.com/i.png"), "https://support.google.com/a/b?c=1"));
         Assert.AreEqual("https://news.bbc.co.uk/favicon.ico | https://bbc.co.uk/favicon.ico", Of(null, "https://news.bbc.co.uk/"));
+        Assert.AreEqual("https://support.cnn.com/favicon.ico | https://cnn.com/favicon.ico", Of(null, "https://support.cnn.com/"));
+        Assert.AreEqual("https://www.abc.net.au/favicon.ico | https://abc.net.au/favicon.ico", Of(null, "https://www.abc.net.au/"));
+        Assert.AreEqual("https://someone.github.io/favicon.ico", Of(null, "https://someone.github.io/"));
+        Assert.AreEqual("https://a.someone.blogspot.com/favicon.ico | https://someone.blogspot.com/favicon.ico", Of(null, "https://a.someone.blogspot.com/"));
         Assert.AreEqual("https://example.com/favicon.ico", Of(new Uri("https://example.com/favicon.ico"), "https://example.com/"));
         Assert.AreEqual("http://127.0.0.1:8080/favicon.ico", Of(null, "http://127.0.0.1:8080/page"));
     }
@@ -673,6 +680,28 @@ public sealed class LinkPreviewerTests
 
         Assert.IsNotNull(preview);
         CollectionAssert.AreEqual(icon, preview.Icon);
+    }
+
+    /// <summary>
+    /// Links to the same site share one icon download.
+    /// </summary>
+    [TestMethod]
+    public async Task Get_TwoLinksSameSite_FetchIconOnce()
+    {
+        byte[] icon = [5, 5, 5];
+        var handler = new FakeHttpHandler
+        {
+            Respond = (_, r) => r.Url.EndsWith("/favicon.ico", StringComparison.Ordinal)
+                ? FakeHttpHandler.Response(HttpStatusCode.OK, "image/x-icon", icon)
+                : HtmlResponse(Html),
+        };
+        using var previewer = new LinkPreviewer(handler, false, new CollectingLogger(), TestProxy.Direct);
+
+        LinkPreview? first  = await previewer.GetAsync(new Uri("https://www.example.com/a"), CancellationToken.None);
+        LinkPreview? second = await previewer.GetAsync(new Uri("https://www.example.com/b"), CancellationToken.None);
+
+        Assert.AreSame(first!.Icon, second!.Icon);
+        Assert.AreEqual(1, handler.Requests.Count(r => r.Url.EndsWith("/favicon.ico", StringComparison.Ordinal)));
     }
 
     /// <summary>
