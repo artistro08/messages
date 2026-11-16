@@ -29,6 +29,7 @@ public sealed class AppSettings : INotifyPropertyChanged
     private const string ShowTrayIconKey             = "ShowTrayIcon";
     private const string RunInBackgroundKey          = "RunInBackground";
     private const string CopyCodesKey                = "CopyCodes";
+    private const string AutoInstallUpdatesKey       = "AutoInstallUpdates";
 
     private const int DefaultSnoozeMinutes = 15;
 
@@ -139,6 +140,17 @@ public sealed class AppSettings : INotifyPropertyChanged
     {
         get => GetBool(CopyCodesKey, false);
         set => Set(CopyCodesKey, value.ToString(CultureInfo.InvariantCulture));
+    }
+
+    /// <summary>
+    /// Gets or sets whether the app starts the install of a new release on its own while its window is closed (Windows
+    /// still asks for admin permission). Otherwise it only offers the update in Settings and the tray menu. The
+    /// default is false.
+    /// </summary>
+    public bool AutoInstallUpdates
+    {
+        get => GetBool(AutoInstallUpdatesKey, false);
+        set => Set(AutoInstallUpdatesKey, value.ToString(CultureInfo.InvariantCulture));
     }
 
     /// <summary>

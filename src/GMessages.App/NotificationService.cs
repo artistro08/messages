@@ -42,11 +42,8 @@ namespace GMessages.App;
 /// <seealso href="https://learn.microsoft.com/windows/apps/develop/notifications/app-notifications/app-notifications-quickstart"/>
 internal sealed class NotificationService(ChatStore store, AppSettings settings, AvatarCache avatars, Func<MainViewModel?> mainView, DispatcherQueue dispatcher, ILogger logger) : IDisposable
 {
-    // The icon of the quick reply button. Packaged, Windows picks the Send.scale-*.png that fits the display scale.
-    // Unpackaged, as in Debug, only a file path works, so the app uses the 100% file.
-    private static readonly string SendIconUri = AppIdentity.IsPackaged
-        ? "ms-appx:///Assets/Send.png"
-        : new Uri(Path.Combine(AppContext.BaseDirectory, "Assets", "Send.scale-100.png")).AbsoluteUri;
+    // The icon of the quick reply button. Without a package only a file path works, so the app uses the 100% file.
+    private static readonly string SendIconUri = new Uri(Path.Combine(AppContext.BaseDirectory, "Assets", "Send.scale-100.png")).AbsoluteUri;
 
     // The number of recent toasts that the person can still snooze. The app keeps their payloads in memory.
     private const int SnoozableToasts = 20;

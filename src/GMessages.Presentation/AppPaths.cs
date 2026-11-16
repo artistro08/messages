@@ -31,8 +31,7 @@ public sealed class AppPaths
     public string SessionFile => Path.Combine(DataFolder, "session.bin");
 
     /// <summary>
-    /// Gets the path of the settings file for an unpackaged install. A packaged install uses the settings store of the
-    /// package.
+    /// Gets the path of the settings file.
     /// </summary>
     public string SettingsFile => Path.Combine(DataFolder, "settings.json");
 
@@ -55,27 +54,25 @@ public sealed class AppPaths
     /// Picks the data folder.
     /// </summary>
     /// <remarks>
-    /// A <paramref name="testDataDir"/> value comes first. Otherwise a packaged app uses
-    /// <paramref name="packagedLocalFolder"/>, which is the LocalState folder of the package. The App gives that folder
-    /// from <c>ApplicationData.Current.LocalFolder</c>, so this project needs no WinRT. Any other run uses
-    /// <c>%LOCALAPPDATA%\{AppInfo.DisplayName}</c>.
+    /// A <paramref name="testDataDir"/> value comes first. Any other run uses
+    /// <c>%LOCALAPPDATA%\{AppInfo.DisplayName}</c>, with <c>.Debug</c> after it for a Debug build, so a dev build
+    /// never shares the pairing of the installed app.
     /// </remarks>
-    /// <param name="packagedLocalFolder">The local folder of the package for a packaged run, else null.</param>
     /// <param name="testDataDir">The <c>--test-data-dir</c> value, else null.</param>
     /// <returns>The paths under the chosen folder.</returns>
-    public static AppPaths Resolve(string? packagedLocalFolder, string? testDataDir)
+    public static AppPaths Resolve(string? testDataDir)
     {
         if (!string.IsNullOrEmpty(testDataDir))
         {
             return new AppPaths(testDataDir);
         }
 
-        if (!string.IsNullOrEmpty(packagedLocalFolder))
-        {
-            return new AppPaths(packagedLocalFolder);
-        }
-
         string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+#if DEBUG
+        return new AppPaths(Path.Combine(local, AppInfo.DisplayName + ".Debug"));
+#else
         return new AppPaths(Path.Combine(local, AppInfo.DisplayName));
+#endif
     }
+
 }

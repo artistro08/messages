@@ -27,6 +27,12 @@ I'm literally sick and tired of web apps. They are bloated. they take up memory.
 - Native, Uses WinUI 2.8 With Smooth Window Resizing.
 - Looks beautiful. 
 
+## Install
+
+Download the `.msi` for your PC from the [latest release](https://github.com/artistro08/messages/releases/latest) (`x64` for most PCs, `arm64` for Snapdragon) and open it. It installs into Program Files, so Windows asks for admin permission.
+
+Messages checks for new versions on its own. Install them from **Settings > Updates** or the tray menu, or turn on **Install updates automatically**.
+
 ## Building
 
 ### Prerequisites
@@ -45,25 +51,31 @@ msbuild src/GMessages.App -restore -p:Configuration=Debug -p:Platform=x64
 .\src\GMessages.App\bin\x64\Debug\net10.0-windows10.0.26100.0\win-x64\Messages.exe
 ```
 
-> A debug build keeps its data in `%LOCALAPPDATA%\Messages`, apart from the installed app, so you'll pair it separately.
+> A debug build keeps its data in `%LOCALAPPDATA%\Messages.Debug`, apart from the installed app, so you'll pair it separately.
 
 ### Build The Installer
 
-Releases are signed MSIX packages for x64 and ARM64. The first time, create the signing certificate and trust it on your PC from an elevated PowerShell:
+Releases are signed MSI installers for x64 and ARM64. The first time, create the signing certificate on your PC from an elevated PowerShell:
 
 ```powershell
 .\scripts\New-DevCertificate.ps1
 ```
 
-Then build the packages:
+Then build the installers:
 
 ```powershell
-.\scripts\Build-Package.ps1
+.\scripts\Build-Installer.ps1
 ```
 
-They land in `src\GMessages.App\AppPackages`. Open the `.msix` for your PC to install it.
+They land in `artifacts` as `Messages-<version>-x64.msi` and `-arm64.msi`. Open the one for your PC to install it.
 
-> The certificate's subject has to match `Publisher` in `src/GMessages.App/Package.appxmanifest`. If you're building your own copy, change both to your own and pass it with `-Subject` and `-CertificateSubject`.
+> If you're building your own copy, make your own certificate and pass its subject with `-Subject` and `-CertificateSubject`.
+
+### Release A Version
+
+Bump `Version` in `src/Directory.Build.props` (three parts, like `1.0.1`) and merge to `main`. The Release workflow builds both MSIs and publishes them as a GitHub release, and installed copies of the app pick it up from there.
+
+> Keep the version to three parts. Windows Installer ignores a fourth, so an update that only changed the fourth part would never install.
 
 ### Run The Tests
 

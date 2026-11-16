@@ -6,7 +6,7 @@ public sealed class AppPathsTests
     [TestMethod]
     public void TestDataDirWinsOverEverything()
     {
-        var paths = AppPaths.Resolve(@"C:\Packaged\LocalState", @"C:\Test\Data");
+        var paths = AppPaths.Resolve(@"C:\Test\Data");
 
         Assert.AreEqual(@"C:\Test\Data", paths.DataFolder);
         Assert.AreEqual(Path.Combine(@"C:\Test\Data", "session.bin"), paths.SessionFile);
@@ -15,20 +15,17 @@ public sealed class AppPathsTests
     }
 
     [TestMethod]
-    public void PackagedUsesTheLocalFolder()
-    {
-        var paths = AppPaths.Resolve(@"C:\Packaged\LocalState", null);
-
-        Assert.AreEqual(@"C:\Packaged\LocalState", paths.DataFolder);
-    }
-
-    [TestMethod]
     public void UnpackagedUsesLocalAppDataWithTheDisplayName()
     {
-        var paths = AppPaths.Resolve(null, null);
+        var paths = AppPaths.Resolve(null);
 
+#if DEBUG
+        var expected = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), AppInfo.DisplayName + ".Debug");
+#else
         var expected = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), AppInfo.DisplayName);
+#endif
         Assert.AreEqual(expected, paths.DataFolder);
         Assert.IsFalse(paths.DataFolder.EndsWith("GMessages.Dev", StringComparison.OrdinalIgnoreCase));
     }
+
 }

@@ -26,7 +26,7 @@ namespace GMessages.Presentation.Messaging;
 /// </para>
 /// <para>
 /// <b>Privacy.</b> The store decrypts media only on this device. Media stays only in memory or in the temp folder. In
-/// the app, the temp folder is <c>ApplicationData.Current.TemporaryFolder\Media</c>. <see cref="Clear"/> empties both.
+/// the app, the temp folder is <c>Temp\Media</c> in the data folder. <see cref="Clear"/> empties both.
 /// The app calls it at start, at quit, and at sign-out or unpair through <see cref="ChatStore.Reset"/>. The log never
 /// holds bytes, keys, file names or mime types. It holds only counts and error type names. Any thread can call the
 /// store.
