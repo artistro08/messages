@@ -1,0 +1,27 @@
+<!--
+    MSI installer for Messages. Built by scripts/Build-Installer.ps1 from an unpackaged publish of
+    GMessages.App. WiX Toolset: https://wixtoolset.org/docs/intro/
+-->
+<Project Sdk="WixToolset.Sdk/5.0.2">
+
+  <PropertyGroup>
+    <OutputName>Messages</OutputName>
+
+    <!-- Passed By Build-Installer.ps1 -->
+    <AppName Condition="'$(AppName)' == ''">Messages</AppName>
+    <ProductVersion Condition="'$(ProductVersion)' == ''">1.0.0</ProductVersion>
+    <PublishDir Condition="'$(PublishDir)' == ''">..\artifacts\publish\$(Platform)\</PublishDir>
+    <PrerequisitesDir Condition="'$(PrerequisitesDir)' == ''">..\artifacts\prerequisites\$(Platform)\</PrerequisitesDir>
+
+    <DefineConstants>AppName=$(AppName);Version=$(ProductVersion);PublishDir=$(PublishDir);PrerequisitesDir=$(PrerequisitesDir)</DefineConstants>
+
+    <!-- ICE03 flags Windows App SDK DLLs that list several languages in their version info; that's metadata only -->
+    <SuppressIces>ICE03</SuppressIces>
+  </PropertyGroup>
+
+  <!-- WixQuietExec: runs the prerequisite and quit commands without a console window -->
+  <ItemGroup>
+    <PackageReference Include="WixToolset.Util.wixext" Version="5.0.2" />
+  </ItemGroup>
+
+</Project>

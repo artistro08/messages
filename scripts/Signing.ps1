@@ -1,8 +1,8 @@
 <#
-    Shared signing setup, dot-sourced by Build-Package.ps1: finds the code signing certificate and
-    SignTool, and names the timestamp server.
+    Shared signing setup, dot-sourced by Build-Installer.ps1: finds the code signing certificate and
+    SignTool, names the timestamp server, and signs files.
 
-    Every signature is timestamped, so packages stay valid after the certificate expires. SignTool
+    Every signature is timestamped, so files stay valid after the certificate expires. SignTool
     comes from the Windows SDK build tools NuGet package
     (https://www.nuget.org/packages/Microsoft.Windows.SDK.BuildTools).
 #>
@@ -10,8 +10,7 @@
 # RFC 3161 Timestamp Server
 $TimestampUrl = 'http://timestamp.digicert.com'
 
-# Default Certificate Subject: the owner's existing signing certificate (shared with Magic Buds). Must match
-# Publisher in src/GMessages.App/Package.appxmanifest.
+# Default Certificate Subject: the owner's existing signing certificate (shared with Magic Buds)
 $DefaultSigningSubject = 'CN=BF59F607-536B-4252-888F-7B3ED9D56F96'
 
 # The code signing certificate: the one pinned in GMESSAGES_SIGNING_THUMBPRINT, or the only valid code signing
@@ -48,4 +47,12 @@ function Get-SignTool {
         throw 'SignTool not found. Restore the solution once so the Windows SDK build tools package is downloaded.'
     }
     return $signtool
+}
+
+# Signs A File (the exe or the MSI) with a timestamp
+function Invoke-Sign([string] $Path, $Certificate, $SignTool) {
+    & $SignTool.FullName sign /q /fd SHA256 /sha1 $Certificate.Thumbprint /tr $TimestampUrl /td SHA256 $Path
+    if ($LASTEXITCODE -ne 0) {
+        throw "Signing $Path failed ($LASTEXITCODE)."
+    }
 }

@@ -18,7 +18,7 @@ public sealed partial class App
             return TestTrayGuid;
         }
 #endif
-        return AppIdentity.IsPackaged ? PackagedTrayGuid : ClassicTrayGuid;
+        return ClassicTrayGuid;
     }
 
     // The app makes the menu window on the first right-click, because most sessions never open the menu.
@@ -36,6 +36,8 @@ public sealed partial class App
             _trayMenu.OpenRequested     += (_, _) => OnShowMainWindowRequested("menu");
             _trayMenu.SettingsRequested += (_, _) => ShowSettings();
             _trayMenu.QuitRequested     += (_, _) => Quit();
+            _trayMenu.UpdateRequested   += (_, _) => _ = InstallUpdateAsync(silent: false);
+            _trayMenu.ShowUpdate(_updater?.IsAvailable == true ? _updater.AvailableVersion : null);
 
             // The app keeps the menu window and hides it between uses. A close of the window also closes its XAML
             // island, and XAML then draws nothing in the next window. The memory trims after each hide.

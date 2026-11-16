@@ -9,8 +9,8 @@ namespace GMessages.App;
 /// </summary>
 internal static partial class AppLog
 {
-    [LoggerMessage(EventId = 901, Level = LogLevel.Information, Message = "{Name} {Version} started (packaged: {Packaged}, test run: {TestRun})")]
-    public static partial void Started(ILogger logger, string name, string version, bool packaged, bool testRun);
+    [LoggerMessage(EventId = 901, Level = LogLevel.Information, Message = "{Name} {Version} started (test run: {TestRun})")]
+    public static partial void Started(ILogger logger, string name, string version, bool testRun);
 
     [LoggerMessage(EventId = 902, Level = LogLevel.Information, Message = "Quit")]
     public static partial void Quit(ILogger logger);

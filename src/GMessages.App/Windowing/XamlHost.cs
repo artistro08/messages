@@ -9,10 +9,9 @@ namespace GMessages.App.Windowing;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Application.Start of WinUI 3 did all of this. XAML Islands leave it to the app. Packaged, the dependency in the
-/// manifest puts WinUI 2.8 in the package graph of the app (the Microsoft.UI.Xaml.2.8 framework package). Unpackaged,
-/// as in Debug and the UI tests, a dynamic dependency adds it to the process. That needs the framework package on the
-/// PC. Most Windows 11 PCs have it, and an install of the MSIX brings it. The dependency goes ahead of the Windows App
+/// Application.Start of WinUI 3 did all of this. XAML Islands leave it to the app. A dynamic dependency adds WinUI 2.8
+/// (the Microsoft.UI.Xaml.2.8 framework package) to the process. That needs the framework package on the PC. Most
+/// Windows 11 PCs have it, and the MSI installs it (installer/Install-Prerequisites.ps1). The dependency goes ahead of the Windows App
 /// SDK runtime that the bootstrapper added. Otherwise the WinUI 3 Microsoft.UI.Xaml.dll of that runtime loads in its
 /// place, and XAML fails to start.
 /// </para>
@@ -58,13 +57,10 @@ internal static unsafe class XamlHost
     /// </summary>
     public static void Start()
     {
-        // An unpackaged run gets WinUI 2.8 from a dynamic dependency.
-        if (!AppIdentity.IsPackaged)
-        {
-            var options = new CreatePackageDependencyOptions { LifetimeArtifactKind = PackageDependencyLifetimeArtifactKind.Process };
-            PackageDependency dependency = PackageDependency.Create(WinUIFramework, WinUIMinVersion, options);
-            WinUIContext = dependency.Add(new AddPackageDependencyOptions { Rank = -1 });
-        }
+        // WinUI 2.8 comes from a dynamic dependency.
+        var options                  = new CreatePackageDependencyOptions { LifetimeArtifactKind = PackageDependencyLifetimeArtifactKind.Process };
+        PackageDependency dependency = PackageDependency.Create(WinUIFramework, WinUIMinVersion, options);
+        WinUIContext                 = dependency.Add(new AddPackageDependencyOptions { Rank = -1 });
 
         var queueOptions = new DispatcherQueueOptions { dwSize = sizeof(DispatcherQueueOptions), threadType = ThreadCurrent, apartmentType = ComSta };
         nint controller;
