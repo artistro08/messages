@@ -39,7 +39,8 @@ public sealed partial class ChatViewModel
             return;
         }
 
-        string text                         = string.IsNullOrWhiteSpace(Draft) ? string.Empty : Draft;
+        // The Windows text box ends each line with \r. Android shows a line break only for \n, so a plain SMS lost them.
+        string text                         = string.IsNullOrWhiteSpace(Draft) ? string.Empty : Draft.ReplaceLineEndings("\n");
         List<PendingAttachment> attachments = [.. Attachments];
         bool isRcs                          = _store.Find(ConversationId)?.IsRcs == true;
         string? replyTo                     = ReplyingTo is { IsRcs: true, Id.Length: > 0 } quoted ? quoted.Id : null;
