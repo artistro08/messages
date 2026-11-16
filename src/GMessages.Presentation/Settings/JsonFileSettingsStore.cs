@@ -3,8 +3,7 @@ using System.Text.Json;
 namespace GMessages.Presentation.Settings;
 
 /// <summary>
-/// Keeps the settings in a JSON file. The unpackaged install uses this store, because that install has no package
-/// identity.
+/// Keeps the settings in a JSON file in the data folder.
 /// </summary>
 /// <remarks>
 /// Ported from Magic Buds. The store writes the full file on every change, through a temporary file. Thus a crash

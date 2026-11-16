@@ -8,13 +8,15 @@ namespace GMessages.App;
 /// Shows the number of unread chats on the taskbar button of the app (see <c>UnreadBadge</c>).
 /// </summary>
 /// <remarks>
-/// Windows 11 shows the badge of a packaged app on its taskbar button whenever the button is visible. The unpackaged
-/// Debug app has no package identity, so it shows no badge. The app logs a failure and drops it. The log of a badge
-/// holds only the count.
+/// Windows 11 shows the badge of a packaged app on its taskbar button whenever the button is visible. The MSI install
+/// has no package identity, so Windows may refuse the badge. The first failure goes to the log and turns the badge
+/// off for the rest of the run, so it doesn't log on every change. The log of a badge holds only the count.
 /// </remarks>
 /// <seealso href="https://learn.microsoft.com/windows/apps/design/shell/tiles-and-notifications/badges"/>
 internal static class TaskbarBadge
 {
+    private static bool _failed;
+
     /// <summary>
     /// Shows a count on the badge, or clears it for 0.
     /// </summary>
@@ -22,7 +24,7 @@ internal static class TaskbarBadge
     /// <param name="logger">The app log.</param>
     public static void Show(int count, ILogger logger)
     {
-        if (!AppIdentity.IsPackaged)
+        if (_failed)
         {
             return;
         }
@@ -46,6 +48,7 @@ internal static class TaskbarBadge
         catch (Exception ex)
         {
             // A missing badge is better than a failed event handler. The log holds the failure.
+            _failed = true;
             AppLog.BadgeFailed(logger, ex.GetType().Name, ex.HResult);
         }
     }
