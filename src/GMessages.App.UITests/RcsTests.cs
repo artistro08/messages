@@ -1160,7 +1160,8 @@ public sealed class RcsTests : UiTest
     /// A tall share image, shaped as a phone video, shows whole: 320 px tall, with nothing cut off. The card narrows to
     /// the width of the image, so no gaps show at its sides, and its text wraps to it. The card is a bubble of its own
     /// under the text, apart from it, on the outer side of the row, on a received and on a sent message. The site icon
-    /// shows before the site while the site has one. A link fetched after the site lost its icon shows no icon. The test saves a
+    /// shows before the site while the site has one. A link fetched after the site lost its icon shows no icon. A very
+    /// thin image keeps the card 120 px wide. The test saves a
     /// screenshot of each as <c>preview-tall-received.png</c> and <c>preview-tall-sent.png</c> next to the test assembly.
     /// </summary>
     [TestMethod]
@@ -1171,15 +1172,18 @@ public sealed class RcsTests : UiTest
         string url          = $"http://127.0.0.1:{Server.BaseUrl.Port}/preview-image-page";
         await OpenChatAsync("Row.c-ann");
 
-        // The window is tall enough for the text and the whole card at once.
+        // The window is tall enough for the text and the whole card at once. It sits at the left edge of the screen, in
+        // front, so other windows on the desktop stay off the screenshots.
         Window window                = App.WaitForWindow(AppInfo.WindowTitle, AppDriver.DefaultTimeout);
         System.Drawing.Rectangle box = window.BoundingRectangle;
-        window.Patterns.Transform.Pattern.Move(box.Left, 0);
+        window.Patterns.Transform.Pattern.Move(0, 0);
+        window.SetForeground();
         window.Patterns.Transform.Pattern.Resize(box.Width, 1000);
 
         // Received
         Message link = Server.Phone.PushIncoming("c-ann", "this is a longer line of text " + url);
         CheckTallCard(link.MessageID, "preview-tall-received.png");
+        double tallWidth = App.Find("Preview." + link.MessageID).BoundingRectangle.Width;
 
         // Sent
         App.Find("Chat.Draft").Focus();
@@ -1190,8 +1194,19 @@ public sealed class RcsTests : UiTest
 
         // A site with no icon shows only its name.
         Server.Favicon = [];
-        Message bare   = Server.Phone.PushIncoming("c-ann", "no icon here " + url + "?bare");
+        // Links to one site share its icon, so this page names an icon of its own, which the server does not have.
+        Message bare   = Server.Phone.PushIncoming("c-ann", $"no icon here http://127.0.0.1:{Server.BaseUrl.Port}/preview-image-page-missing-icon");
         CheckTallCard(bare.MessageID, "preview-tall-no-icon.png", hasIcon: false);
+
+        // A very thin image keeps the card 120 px wide, not as thin as the image. The first card, 180 px wide inside its
+        // 1 px edges, gives the scale.
+        Server.PreviewImage = MediaTests.Png(40, 800, (_, _, _) => (220, 40, 40));
+        Message thin        = Server.Phone.PushIncoming("c-ann", "thin " + url + "?thin");
+        App.WaitForText("Preview." + thin.MessageID, FakeGoogleServer.PreviewImagePageTitle + ", 127.0.0.1");
+        Wait.Until(() => App.Find("Preview." + thin.MessageID).BoundingRectangle.Height > 200, TimeSpan.FromSeconds(10), () => "The thin image never showed on the card.");
+        double thinWidth = App.Find("Preview." + thin.MessageID).BoundingRectangle.Width;
+        double expected  = tallWidth * 122 / 182;
+        Assert.IsTrue(Math.Abs(thinWidth - expected) <= 4, $"The thin card is {thinWidth} px wide; at this scale 120 px is {expected:0} px.");
     }
 
     // Waits for the image of the card, saves a screenshot of the text and the card, and checks that the image fills the

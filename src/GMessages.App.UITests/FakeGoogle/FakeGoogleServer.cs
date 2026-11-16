@@ -395,6 +395,11 @@ public sealed class FakeGoogleServer : IAsyncDisposable
                     await RespondAsync(context.Response, 200, "text/html; charset=utf-8", Encoding.UTF8.GetBytes(PreviewImagePage));
                     break;
 
+                // The same page, naming an icon that the server does not have.
+                case "/preview-image-page-missing-icon" when request.HttpMethod == "GET":
+                    await RespondAsync(context.Response, 200, "text/html; charset=utf-8", Encoding.UTF8.GetBytes(PreviewImagePage.Replace("</head>", "<link rel=\"icon\" href=\"/missing-icon.png\"></head>", StringComparison.Ordinal)));
+                    break;
+
                 case "/favicon.ico" when request.HttpMethod == "GET" && Favicon.Length > 0:
                     await RespondAsync(context.Response, 200, "image/png", Favicon);
                     break;

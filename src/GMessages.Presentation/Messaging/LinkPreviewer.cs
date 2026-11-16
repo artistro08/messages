@@ -47,6 +47,23 @@ public sealed partial class LinkPreviewer : IDisposable
     // The largest site icon that the previewer reads, in bytes. A bigger one gives a card without it.
     private const int MaxIconBytes = 256 * 1024;
 
+    // Each place of a site icon gets this long. A slow icon must not hold the card.
+    private static readonly TimeSpan IconTimeout = TimeSpan.FromSeconds(2);
+
+    // The second labels of country suffixes such as co.uk, com.au and ac.jp. A parent domain made of one of these and a
+    // 2-letter country is a public suffix, not a site.
+    private static readonly HashSet<string> CountrySecondLabels = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "ac", "co", "com", "edu", "gov", "ne", "net", "or", "org",
+    };
+
+    // Hosts whose subdomains are the sites of different people. A site there never takes the icon of the host.
+    private static readonly HashSet<string> SharedHosts = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "azurewebsites.net", "blogspot.com", "firebaseapp.com", "github.io", "gitlab.io", "herokuapp.com",
+        "netlify.app", "pages.dev", "tumblr.com", "vercel.app", "web.app", "wordpress.com",
+    };
+
     // The tags that a page without og:image can name its share image in.
     private static readonly HashSet<string> ImageKeys = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -122,6 +139,9 @@ public sealed partial class LinkPreviewer : IDisposable
 
     // The links in the cache whose card came from the phone. Guarded by _cacheLock.
     private readonly HashSet<Uri> _fromPhone = [];
+
+    // The icon fetch of each site, running or done, so links to the same site share one icon. Guarded by _cacheLock.
+    private readonly Dictionary<string, Task<byte[]?>> _icons = [];
 
     /// <summary>
     /// Creates the previewer.
@@ -482,8 +502,8 @@ public sealed partial class LinkPreviewer : IDisposable
     /// <remarks>
     /// The icon is the first <c>&lt;link&gt;</c> whose <c>rel</c> holds <c>icon</c>, such as <c>icon</c> or
     /// <c>shortcut icon</c>, else the first <c>apple-touch-icon</c>. An SVG icon does not count, because the card shows
-    /// only bitmaps. The link resolves against <paramref name="page"/>, and the method keeps it only when
-    /// <see cref="IsAllowed"/> allows it.
+    /// only bitmaps. Each link resolves against <paramref name="page"/>, and counts only when <see cref="IsAllowed"/>
+    /// allows it. A link that does not count gives way to the next one.
     /// </remarks>
     /// <param name="html">The page.</param>
     /// <param name="page">The address of the page after redirects, for a relative icon link.</param>
@@ -497,8 +517,8 @@ public sealed partial class LinkPreviewer : IDisposable
         int end     = html.IndexOf("</head>", StringComparison.OrdinalIgnoreCase);
         string head = end >= 0 ? html[..end] : html;
 
-        string? icon  = null;
-        string? touch = null;
+        Uri? icon  = null;
+        Uri? touch = null;
         foreach (Match tag in LinkTag().Matches(head))
         {
             string? rel  = null;
@@ -530,22 +550,24 @@ public sealed partial class LinkPreviewer : IDisposable
                 continue;
             }
 
+            // A link that does not resolve or is not allowed, such as a data: icon, gives way to the next one.
+            if (!Uri.TryCreate(page, WebUtility.HtmlDecode(href).Trim(), out Uri? resolved) || !IsAllowed(resolved, allowLoopback))
+            {
+                continue;
+            }
+
             string[] rels = rel.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             if (rels.Contains("icon", StringComparer.OrdinalIgnoreCase))
             {
-                icon ??= href;
+                icon ??= resolved;
             }
             else if (rels.Any(r => r.StartsWith("apple-touch-icon", StringComparison.OrdinalIgnoreCase)))
             {
-                touch ??= href;
+                touch ??= resolved;
             }
         }
 
-        return (icon ?? touch) is { } link
-            && Uri.TryCreate(page, WebUtility.HtmlDecode(link).Trim(), out Uri? resolved)
-            && IsAllowed(resolved, allowLoopback)
-                ? resolved
-                : null;
+        return icon ?? touch;
     }
 
     /// <summary>
@@ -554,8 +576,9 @@ public sealed partial class LinkPreviewer : IDisposable
     /// <remarks>
     /// The icon that the page names comes first. Then comes <c>/favicon.ico</c> of the site, then of each parent
     /// domain, because a subdomain such as <c>support.google.com</c> often has no icon of its own and uses the icon of
-    /// <c>google.com</c>. The list stops at 2 labels, and skips a last pair of short labels such as <c>co.uk</c>, which
-    /// is a public suffix and not a site. An IP address has no parents.
+    /// <c>google.com</c>. The list stops at 2 labels. It stops before a country suffix such as <c>co.uk</c>, which is not
+    /// a site, and before a shared host such as <c>github.io</c>, whose icon is not the icon of the sites on it. An IP
+    /// address has no parents.
     /// </remarks>
     /// <param name="declared">The icon that the page names, or null.</param>
     /// <param name="site">The address of the site after redirects.</param>
@@ -574,12 +597,14 @@ public sealed partial class LinkPreviewer : IDisposable
         for (int i = 0; i < Math.Max(1, labels.Length - 1); i++)
         {
             string[] rest = labels[i..];
-            if (i > 0 && rest.Length == 2 && rest[0].Length <= 3 && rest[1].Length <= 3)
+            string host   = string.Join('.', rest);
+            bool suffix   = rest.Length == 2 && rest[1].Length == 2 && CountrySecondLabels.Contains(rest[0]);
+            if (i > 0 && (suffix || SharedHosts.Contains(host)))
             {
                 break;
             }
 
-            var icon = new UriBuilder(site) { Host = string.Join('.', rest), Path = "/favicon.ico", Query = string.Empty, Fragment = string.Empty }.Uri;
+            var icon = new UriBuilder(site) { Host = host, Path = "/favicon.ico", Query = string.Empty, Fragment = string.Empty }.Uri;
             if (!tries.Contains(icon))
             {
                 tries.Add(icon);
@@ -736,8 +761,8 @@ public sealed partial class LinkPreviewer : IDisposable
         _http.Dispose();
     }
 
-    // Fetches the page, then its image. A page without a title gives nothing. A missing image only drops the image.
-    // With the card of the phone, only its image is fetched.
+    // Fetches the page, then its image and its site icon. A page without a title gives nothing. A missing image or icon
+    // only drops it. With the card of the phone, only its image and its icon are fetched.
     private async Task<LinkPreview?> FetchAsync(Uri url, LinkPreviewData? phone)
     {
         bool slot = false;
@@ -747,9 +772,9 @@ public sealed partial class LinkPreviewer : IDisposable
             slot = true;
 
             // The card of the phone has no page, so its icon is /favicon.ico of the link.
-            (string Title, string Site, Uri? Image, string Description)? head = PhoneHead(url, phone, _allowLoopback);
-            Uri? declaredIcon = null;
-            Uri site          = url;
+            (string Title, string Site, Uri? Image, string Description)? head         = PhoneHead(url, phone, _allowLoopback);
+            Uri?                                                         declaredIcon = null;
+            Uri                                                          site         = url;
             if (head is null)
             {
                 (head, declaredIcon, site) = await GetHeadAsync(url).ConfigureAwait(false);
@@ -760,9 +785,11 @@ public sealed partial class LinkPreviewer : IDisposable
                 return null;
             }
 
-            // A share image is bigger than a page, so it gets the longer time of a picture.
-            byte[]? image = card.Image is { } imageUrl ? (await GetBodyAsync(imageUrl, "image/*", MaxImageBytes, PictureTimeout).ConfigureAwait(false))?.Body : null;
-            byte[]? icon  = await GetIconAsync(declaredIcon, site).ConfigureAwait(false);
+            // The icon loads while the image does. A share image is bigger than a page, so it gets the longer time of a
+            // picture.
+            Task<byte[]?> iconFetch = GetIconAsync(declaredIcon, site);
+            byte[]? image           = card.Image is { } imageUrl ? (await GetBodyAsync(imageUrl, "image/*", MaxImageBytes, PictureTimeout).ConfigureAwait(false))?.Body : null;
+            byte[]? icon            = await iconFetch.ConfigureAwait(false);
             return new LinkPreview(url, card.Title, card.Site, image is null ? null : await ShrinkAsync(image).ConfigureAwait(false), card.Description, icon);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -825,14 +852,37 @@ public sealed partial class LinkPreviewer : IDisposable
         return (head, ParseIcon(html, page.Final, _allowLoopback), page.Final);
     }
 
+    // Gives the site icon. Links to the same site share one fetch, so the icon downloads and stays in memory once. A
+    // failed fetch is tried again by the next link. The cache drops all icons at CacheSize sites.
+    private Task<byte[]?> GetIconAsync(Uri? declared, Uri site)
+    {
+        string key = declared?.AbsoluteUri ?? site.GetLeftPart(UriPartial.Authority);
+        lock (_cacheLock)
+        {
+            if (_icons.TryGetValue(key, out Task<byte[]?>? known) && !known.IsFaulted && !known.IsCanceled)
+            {
+                return known;
+            }
+
+            if (_icons.Count >= CacheSize)
+            {
+                _icons.Clear();
+            }
+
+            Task<byte[]?> fetch = FetchIconAsync(declared, site);
+            _icons[key]         = fetch;
+            return fetch;
+        }
+    }
+
     // Fetches the site icon from the first of IconCandidates that answers with bytes. A site with none, or an answer
     // that is not an image, gives no icon.
-    private async Task<byte[]?> GetIconAsync(Uri? declared, Uri site)
+    private async Task<byte[]?> FetchIconAsync(Uri? declared, Uri site)
     {
         foreach (Uri icon in IconCandidates(declared, site))
         {
             if (IsAllowed(icon, _allowLoopback)
-                && (await GetBodyAsync(icon, "image/*", MaxIconBytes, RequestTimeout).ConfigureAwait(false))?.Body is { Length: > 0 } bytes)
+                && (await GetBodyAsync(icon, "image/*", MaxIconBytes, IconTimeout).ConfigureAwait(false))?.Body is { Length: > 0 } bytes)
             {
                 return bytes;
             }
@@ -906,16 +956,16 @@ public sealed partial class LinkPreviewer : IDisposable
         }
     }
 
-    // The bytes of the images and the icons of the cached previews. A fetch that still runs counts as none. The caller holds the
-    // cache lock.
+    // The bytes of the images of the cached previews. A fetch that still runs counts as none. Icons are shared by site
+    // and capped by _icons, so they do not count. The caller holds the cache lock.
     private long CachedImageBytes()
     {
         long total = 0;
         foreach (Task<LinkPreview?> fetch in _cache.Values)
         {
-            if (fetch.IsCompletedSuccessfully && fetch.Result is { } preview)
+            if (fetch.IsCompletedSuccessfully && fetch.Result?.Image is { } image)
             {
-                total += (preview.Image?.Length ?? 0) + (preview.Icon?.Length ?? 0);
+                total += image.Length;
             }
         }
 
