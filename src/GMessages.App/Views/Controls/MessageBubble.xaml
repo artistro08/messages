@@ -30,6 +30,7 @@
                     <VisualState.Setters>
                         <Setter Target="Root.HorizontalAlignment" Value="Right" />
                         <Setter Target="BackRow.HorizontalAlignment" Value="Right" />
+                        <Setter Target="TextBubble.HorizontalAlignment" Value="Right" />
                         <Setter Target="BackFill.Background" Value="{ThemeResource RcsBubbleBrush}" />
                         <Setter Target="BackFill.BorderBrush" Value="{ThemeResource RcsBubbleBorderBrush}" />
                         <Setter Target="Body.Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
@@ -42,6 +43,7 @@
                     <VisualState.Setters>
                         <Setter Target="Root.HorizontalAlignment" Value="Right" />
                         <Setter Target="BackRow.HorizontalAlignment" Value="Right" />
+                        <Setter Target="TextBubble.HorizontalAlignment" Value="Right" />
                         <Setter Target="BackFill.Background" Value="{ThemeResource AccentFillColorDefaultBrush}" />
                         <Setter Target="BackFill.BorderThickness" Value="0" />
                         <Setter Target="Body.Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
@@ -87,20 +89,11 @@
                     </VisualState.Setters>
                 </VisualState>
             </VisualStateGroup>
-            <!-- A preview card under text sits on the fill of its bubble. A card alone is a neutral link card on every
+            <!-- The preview card is a bubble of its own, under the text or alone. It is a neutral link card on every
                  side, with the card color and edge, as on Google Messages for web. Thus a link never looks like a
-                 plain chat bubble. -->
+                 plain chat bubble. PreviewPlain is only the start state. -->
             <VisualStateGroup x:Name="PreviewSide">
                 <VisualState x:Name="PreviewPlain" />
-                <VisualState x:Name="PreviewOnAccent">
-                    <VisualState.Setters>
-                        <Setter Target="PreviewCard.Background" Value="{ThemeResource QuoteOnAccentFillBrush}" />
-                        <Setter Target="PreviewCard.BorderThickness" Value="0" />
-                        <Setter Target="PreviewTitle.Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
-                        <Setter Target="PreviewDescription.Foreground" Value="{ThemeResource TextOnAccentFillColorSecondaryBrush}" />
-                        <Setter Target="PreviewSite.Foreground" Value="{ThemeResource TextOnAccentFillColorSecondaryBrush}" />
-                    </VisualState.Setters>
-                </VisualState>
                 <VisualState x:Name="PreviewAlone">
                     <VisualState.Setters>
                         <Setter Target="PreviewCard.Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
@@ -242,522 +235,557 @@
                     </Viewbox>
                 </Grid>
 
-                <!-- The fill gives the bubble its color and edge behind its content. A photo or video with nothing else
-                     in its bubble hides the fill. Its own edge is then the edge of the bubble, with no fill or stroke
-                     around it. A preview card alone and emoji alone also hide the fill. A quote is the top of its
-                     bubble, so the fill starts under it with a square top. Nothing paints under the rounded corners of
-                     the quote frame, which would show as a thin ring. OnQuoteSizeChanged sets that top. -->
-                <Border
-                    x:Name="BackFill"
-                    Grid.Column="1"
-                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                    BorderThickness="{x:Bind local:MessageBubble.FillStroke(Bubble.HasQuote), Mode=OneWay}"
-                    CornerRadius="{x:Bind local:MessageBubble.FillCorners(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup, Bubble.HasQuote), Mode=OneWay}"
-                    Visibility="{x:Bind local:MessageBubble.FillShown(Bubble.FillsBubble, Bubble.HasBodyText, Bubble.HasQuote, Bubble.IsEmojiOnly, Bubble.PreviewFillsBubble), Mode=OneWay, FallbackValue=Collapsed}" />
+                <!-- The text bubble sits over the preview card, as 2 bubbles of a group. The text bubble is as wide as
+                     its content on the outer side of the row. Thus a wider card under it never stretches it. The fill
+                     stretches across the text bubble, because a Border with no child has no width of its own. -->
+                <StackPanel Grid.Column="1">
+                    <Grid x:Name="TextBubble" HorizontalAlignment="Left">
+                        <!-- The fill gives the bubble its color and edge behind its content. A photo or video with nothing else
+                             in its bubble hides the fill. Its own edge is then the edge of the bubble, with no fill or stroke
+                             around it. A preview card alone and emoji alone also hide the fill. A quote is the top of its
+                             bubble, so the fill starts under it with a square top. Nothing paints under the rounded corners of
+                             the quote frame, which would show as a thin ring. OnQuoteSizeChanged sets that top. -->
+                        <Border
+                            x:Name="BackFill"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="{x:Bind local:MessageBubble.FillStroke(Bubble.HasQuote), Mode=OneWay}"
+                            CornerRadius="{x:Bind local:MessageBubble.FillCorners(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup, Bubble.HasQuote, Bubble.HasPreview), Mode=OneWay}"
+                            Visibility="{x:Bind local:MessageBubble.FillShown(Bubble.FillsBubble, Bubble.HasBodyText, Bubble.HasQuote, Bubble.IsEmojiOnly, Bubble.PreviewFillsBubble), Mode=OneWay, FallbackValue=Collapsed}" />
 
-                <!-- A click on the back shows or hides the time. -->
-                <Border
-                    x:Name="Back"
-                    Grid.Column="1"
-                    Padding="{x:Bind local:MessageBubble.BackPadding(Bubble.FillsBubble, Bubble.IsEmojiOnly, Bubble.PreviewFillsBubble), Mode=OneWay}"
-                    Background="Transparent"
-                    CornerRadius="{x:Bind local:MessageBubble.CornersOf(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup), Mode=OneWay}">
-                    <StackPanel>
+                        <!-- A click on the back shows or hides the time. -->
+                        <Border
+                            x:Name="Back"
+                            Padding="{x:Bind local:MessageBubble.BackPadding(Bubble.FillsBubble, Bubble.IsEmojiOnly, Bubble.PreviewFillsBubble), Mode=OneWay}"
+                            Background="Transparent"
+                            CornerRadius="{x:Bind local:MessageBubble.TextCorners(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup, Bubble.HasPreview), Mode=OneWay}">
+                            <StackPanel>
 
-                        <!-- The quote shows the message that this message answers, as Google Messages on the
-                             phone shows it. It spans the top of the bubble on a neutral frame, with the edges of the
-                             bubble, and the text of the reply sits under it on the color of the bubble. Inside the
-                             frame, a darker card holds the thumbnail of quoted media, the sender and up to 2 lines of
-                             the quoted text. The frame and the card are neutral on every side, so their text keeps the
-                             plain brushes. A click, Enter or Space jumps to the quoted message. The chat finds it,
-                             pages older messages when needed, and pulses it. The hand shows over the quote, as over a
-                             link. CardButtonStyle gives no hover or press fill and no press bounce, so the quote keeps
-                             its own colors. -->
-                        <local:LinkCardButton
-                            x:Name="QuoteButton"
-                            Margin="{x:Bind local:MessageBubble.QuoteMargin(Bubble.FillsBubble), Mode=OneWay}"
-                            Padding="0"
-                            HorizontalAlignment="Stretch"
-                            HorizontalContentAlignment="Stretch"
-                            AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('QuoteJump.', Bubble.PartKey), Mode=OneWay}"
-                            AutomationProperties.Name="{x:Bind local:MessageBubble.QuoteJumpText}"
-                            x:Load="{x:Bind Bubble.HasQuote, Mode=OneWay, FallbackValue=False}"
-                            Click="OnQuoteClick"
-                            SizeChanged="OnQuoteSizeChanged"
-                            CornerRadius="{x:Bind local:MessageBubble.QuoteCorners(Bubble.FromMe, Bubble.IsFirstInGroup), Mode=OneWay}"
-                            Style="{StaticResource CardButtonStyle}">
-                            <Border
-                                x:Name="Quote"
-                                Padding="6"
-                                Background="{ThemeResource QuoteFrameBrush}"
-                                CornerRadius="{x:Bind local:MessageBubble.QuoteCorners(Bubble.FromMe, Bubble.IsFirstInGroup), Mode=OneWay}">
+                                <!-- The quote shows the message that this message answers, as Google Messages on the
+                                     phone shows it. It spans the top of the bubble on a neutral frame, with the edges of the
+                                     bubble, and the text of the reply sits under it on the color of the bubble. Inside the
+                                     frame, a darker card holds the thumbnail of quoted media, the sender and up to 2 lines of
+                                     the quoted text. The frame and the card are neutral on every side, so their text keeps the
+                                     plain brushes. A click, Enter or Space jumps to the quoted message. The chat finds it,
+                                     pages older messages when needed, and pulses it. The hand shows over the quote, as over a
+                                     link. CardButtonStyle gives no hover or press fill and no press bounce, so the quote keeps
+                                     its own colors. -->
+                                <local:LinkCardButton
+                                    x:Name="QuoteButton"
+                                    Margin="{x:Bind local:MessageBubble.QuoteMargin(Bubble.FillsBubble), Mode=OneWay}"
+                                    Padding="0"
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Stretch"
+                                    AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('QuoteJump.', Bubble.PartKey), Mode=OneWay}"
+                                    AutomationProperties.Name="{x:Bind local:MessageBubble.QuoteJumpText}"
+                                    x:Load="{x:Bind Bubble.HasQuote, Mode=OneWay, FallbackValue=False}"
+                                    Click="OnQuoteClick"
+                                    SizeChanged="OnQuoteSizeChanged"
+                                    CornerRadius="{x:Bind local:MessageBubble.QuoteCorners(Bubble.FromMe, Bubble.IsFirstInGroup), Mode=OneWay}"
+                                    Style="{StaticResource CardButtonStyle}">
+                                    <Border
+                                        x:Name="Quote"
+                                        Padding="6"
+                                        Background="{ThemeResource QuoteFrameBrush}"
+                                        CornerRadius="{x:Bind local:MessageBubble.QuoteCorners(Bubble.FromMe, Bubble.IsFirstInGroup), Mode=OneWay}">
 
-                                <!-- Quoted media shows its thumbnail or a file icon left of the 2 lines. -->
-                                <Grid Style="{StaticResource QuoteCardStyle}">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-                                    <local:MediaThumb
-                                        Margin="0,0,12,0"
-                                        VerticalAlignment="Center"
-                                        AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('QuoteThumb.', Bubble.PartKey), Mode=OneWay}"
-                                        Media="{x:Bind Bubble.QuoteMedia, Mode=OneWay}"
-                                        Visibility="{x:Bind Bubble.HasQuoteMedia, Mode=OneWay, FallbackValue=Collapsed}" />
-                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                        <TextBlock
-                                            Style="{StaticResource QuoteSenderTextStyle}"
-                                            Text="{x:Bind Bubble.QuoteSender, Mode=OneWay, FallbackValue=''}"
-                                            Visibility="{x:Bind views:UiHelpers.ShownIfText(Bubble.QuoteSender), Mode=OneWay, FallbackValue=Collapsed}" />
-                                        <TextBlock
-                                            AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Quote.', Bubble.PartKey), Mode=OneWay}"
-                                            Style="{StaticResource QuoteBodyTextStyle}"
-                                            Text="{x:Bind Bubble.QuoteText, Mode=OneWay, FallbackValue=''}" />
-                                    </StackPanel>
-                                </Grid>
-                            </Border>
-                        </local:LinkCardButton>
+                                        <!-- Quoted media shows its thumbnail or a file icon left of the 2 lines. -->
+                                        <Grid Style="{StaticResource QuoteCardStyle}">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <local:MediaThumb
+                                                Margin="0,0,12,0"
+                                                VerticalAlignment="Center"
+                                                AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('QuoteThumb.', Bubble.PartKey), Mode=OneWay}"
+                                                Media="{x:Bind Bubble.QuoteMedia, Mode=OneWay}"
+                                                Visibility="{x:Bind Bubble.HasQuoteMedia, Mode=OneWay, FallbackValue=Collapsed}" />
+                                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                <TextBlock
+                                                    Style="{StaticResource QuoteSenderTextStyle}"
+                                                    Text="{x:Bind Bubble.QuoteSender, Mode=OneWay, FallbackValue=''}"
+                                                    Visibility="{x:Bind views:UiHelpers.ShownIfText(Bubble.QuoteSender), Mode=OneWay, FallbackValue=Collapsed}" />
+                                                <TextBlock
+                                                    AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Quote.', Bubble.PartKey), Mode=OneWay}"
+                                                    Style="{StaticResource QuoteBodyTextStyle}"
+                                                    Text="{x:Bind Bubble.QuoteText, Mode=OneWay, FallbackValue=''}" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </local:LinkCardButton>
 
-                        <!-- The photo fills the bubble from edge to edge, rounded to its corners. The thumbnail shows
-                             first, strongly blurred. Then the full image fades in over
-                             it. The code sets the size from the dimensions of the photo before anything loads, so
-                             nothing moves when it arrives. A click opens it in the photo viewer of the window, or tries
-                             again after a failure. Its name is its caption, else "Photo". -->
-                        <Button
-                            x:Name="Photo"
-                            Padding="0"
-                            HorizontalAlignment="Stretch"
-                            BorderThickness="0"
-                            HorizontalContentAlignment="Stretch"
-                            VerticalContentAlignment="Stretch"
-                            AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Bubble.Photo.', Bubble.PartKey), Mode=OneWay}"
-                            x:Load="{x:Bind Bubble.HasPhoto, Mode=OneWay, FallbackValue=False}"
-                            AutomationProperties.Name="{x:Bind Bubble.PhotoName, Mode=OneWay, FallbackValue=''}"
-                            Click="OnPhotoClick"
-                            CornerRadius="{x:Bind local:MessageBubble.PhotoCorners(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup, Bubble.HasBodyText, Bubble.HasQuote), Mode=OneWay}"
-                            Style="{StaticResource CardButtonStyle}">
-                            <Grid>
-                                <Border x:Name="PhotoBlur" CornerRadius="{x:Bind local:MessageBubble.PhotoCorners(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup, Bubble.HasBodyText, Bubble.HasQuote), Mode=OneWay}" />
-                                <!-- A still photo is the ImageBrush of this layer, and the corners of the layer clip
-                                     it. A GIF is the Image. A brush shows only the first frame of a GIF, and an Image
-                                     plays it. The code clips the Image to the corners of the photo. The Image is on a
-                                     Canvas, and the code gives it the size of the Canvas. An Image with UniformToFill
-                                     asks for all the width of the row. A GIF with no caption then made its bubble full
-                                     width and cut the GIF. -->
-                                <Border
-                                    x:Name="PhotoFull"
+                                <!-- The photo fills the bubble from edge to edge, rounded to its corners. The thumbnail shows
+                                     first, strongly blurred. Then the full image fades in over
+                                     it. The code sets the size from the dimensions of the photo before anything loads, so
+                                     nothing moves when it arrives. A click opens it in the photo viewer of the window, or tries
+                                     again after a failure. Its name is its caption, else "Photo". -->
+                                <Button
+                                    x:Name="Photo"
+                                    Padding="0"
+                                    HorizontalAlignment="Stretch"
+                                    BorderThickness="0"
+                                    HorizontalContentAlignment="Stretch"
+                                    VerticalContentAlignment="Stretch"
+                                    AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Bubble.Photo.', Bubble.PartKey), Mode=OneWay}"
+                                    x:Load="{x:Bind Bubble.HasPhoto, Mode=OneWay, FallbackValue=False}"
+                                    AutomationProperties.Name="{x:Bind Bubble.PhotoName, Mode=OneWay, FallbackValue=''}"
+                                    Click="OnPhotoClick"
                                     CornerRadius="{x:Bind local:MessageBubble.PhotoCorners(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup, Bubble.HasBodyText, Bubble.HasQuote), Mode=OneWay}"
-                                    Opacity="0">
-                                    <Canvas x:Name="PhotoFullCanvas" SizeChanged="OnPhotoFullCanvasSizeChanged">
-                                        <Image
-                                            x:Name="PhotoFullImage"
-                                            Loaded="OnPhotoFullLoaded"
-                                            Stretch="UniformToFill" />
-                                    </Canvas>
-                                </Border>
+                                    Style="{StaticResource CardButtonStyle}">
+                                    <Grid>
+                                        <Border x:Name="PhotoBlur" CornerRadius="{x:Bind local:MessageBubble.PhotoCorners(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup, Bubble.HasBodyText, Bubble.HasQuote), Mode=OneWay}" />
+                                        <!-- A still photo is the ImageBrush of this layer, and the corners of the layer clip
+                                             it. A GIF is the Image. A brush shows only the first frame of a GIF, and an Image
+                                             plays it. The code clips the Image to the corners of the photo. The Image is on a
+                                             Canvas, and the code gives it the size of the Canvas. An Image with UniformToFill
+                                             asks for all the width of the row. A GIF with no caption then made its bubble full
+                                             width and cut the GIF. -->
+                                        <Border
+                                            x:Name="PhotoFull"
+                                            CornerRadius="{x:Bind local:MessageBubble.PhotoCorners(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup, Bubble.HasBodyText, Bubble.HasQuote), Mode=OneWay}"
+                                            Opacity="0">
+                                            <Canvas x:Name="PhotoFullCanvas" SizeChanged="OnPhotoFullCanvasSizeChanged">
+                                                <Image
+                                                    x:Name="PhotoFullImage"
+                                                    Loaded="OnPhotoFullLoaded"
+                                                    Stretch="UniformToFill" />
+                                            </Canvas>
+                                        </Border>
 
-                                <!-- The note shows the wait for the phone or the failure on a small plate in the middle
-                                     of the photo. The ring turns during the wait, as on a video. After a failure, a
-                                     click tries again. -->
-                                <Border
-                                    x:Name="PhotoNoteBack"
-                                    Margin="12"
-                                    Padding="8,4"
-                                    HorizontalAlignment="Center"
-                                    VerticalAlignment="Center"
-                                    Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}"
-                                    CornerRadius="4"
-                                    Visibility="Collapsed">
-                                    <!-- A Grid, not a horizontal StackPanel, so the text wraps on a narrow photo. -->
+                                        <!-- The note shows the wait for the phone or the failure on a small plate in the middle
+                                             of the photo. The ring turns during the wait, as on a video. After a failure, a
+                                             click tries again. -->
+                                        <Border
+                                            x:Name="PhotoNoteBack"
+                                            Margin="12"
+                                            Padding="8,4"
+                                            HorizontalAlignment="Center"
+                                            VerticalAlignment="Center"
+                                            Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}"
+                                            CornerRadius="4"
+                                            Visibility="Collapsed">
+                                            <!-- A Grid, not a horizontal StackPanel, so the text wraps on a narrow photo. -->
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <!-- The gap is the margin of the ring. Thus a hidden ring leaves no gap. -->
+                                                <muxc:ProgressRing
+                                                    x:Name="PhotoNoteRing"
+                                                    Width="14"
+                                                    Height="14"
+                                                    MinWidth="14"
+                                                    MinHeight="14"
+                                                    Margin="0,0,6,0"
+                                                    VerticalAlignment="Center"
+                                                    AutomationProperties.AccessibilityView="Raw"
+                                                    IsActive="False"
+                                                    Visibility="Collapsed" />
+                                                <TextBlock
+                                                    x:Name="PhotoNote"
+                                                    Grid.Column="1"
+                                                    VerticalAlignment="Center"
+                                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                                    TextAlignment="Center"
+                                                    TextWrapping="Wrap" />
+                                            </Grid>
+                                        </Border>
+
+                                        <local:UploadSpinner
+                                            x:Name="PhotoUpload"
+                                            Margin="8"
+                                            HorizontalAlignment="Right"
+                                            VerticalAlignment="Bottom"
+                                            x:Load="{x:Bind Bubble.IsUploading, Mode=OneWay, FallbackValue=False}"
+                                            AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Upload.', Bubble.PartKey), Mode=OneWay}" />
+                                    </Grid>
+                                </Button>
+
+                                <!-- The video fills the bubble from edge to edge as a photo does. The code sets its size from
+                                     its dimensions, and it has the corners of the bubble. Its still frame is the thumbnail from
+                                     the phone, else a frame that the app makes from the video. A plain fill shows until the
+                                     frame loads, with a play button over it. A click on the frame opens the viewer of the
+                                     window. The play button plays the video here with sound and compact controls: play or
+                                     pause, seek and volume. The code makes the player in VideoHost. The expand button then
+                                     opens the viewer at the same position. The frame is named by the caption, else "Video".
+                                     LinkCardButton shows the hand cursor over it. -->
+                                <Grid
+                                    x:Name="Video"
+                                    x:Load="{x:Bind Bubble.HasVideo, Mode=OneWay, FallbackValue=False}"
+                                    Background="{ThemeResource SolidBackgroundFillColorTertiaryBrush}"
+                                    CornerRadius="{x:Bind local:MessageBubble.PhotoCorners(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup, Bubble.HasBodyText, Bubble.HasQuote), Mode=OneWay}">
+                                    <local:LinkCardButton
+                                        x:Name="VideoFrame"
+                                        Padding="0"
+                                        HorizontalAlignment="Stretch"
+                                        VerticalAlignment="Stretch"
+                                        HorizontalContentAlignment="Stretch"
+                                        VerticalContentAlignment="Stretch"
+                                        AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Bubble.Video.', Bubble.PartKey), Mode=OneWay}"
+                                        AutomationProperties.Name="{x:Bind Bubble.VideoName, Mode=OneWay, FallbackValue=''}"
+                                        BorderThickness="0"
+                                        Click="OnVideoFrameClick"
+                                        CornerRadius="{x:Bind local:MessageBubble.PhotoCorners(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup, Bubble.HasBodyText, Bubble.HasQuote), Mode=OneWay}"
+                                        Style="{StaticResource CardButtonStyle}">
+                                        <Border
+                                            x:Name="VideoThumb"
+                                            CornerRadius="{x:Bind local:MessageBubble.PhotoCorners(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup, Bubble.HasBodyText, Bubble.HasQuote), Mode=OneWay}" />
+                                    </local:LinkCardButton>
+
+                                    <!-- The play button sits on a round plate over the middle of the frame. It has no border.
+                                         The 1 px border of the button would shrink its content to 46 px. That would cut the
+                                         right and the bottom of the 48 px plate. -->
+                                    <Button
+                                        x:Name="VideoPlay"
+                                        Width="48"
+                                        Height="48"
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        BorderThickness="0"
+                                        AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Video.Play.', Bubble.PartKey), Mode=OneWay}"
+                                        AutomationProperties.Name="{x:Bind local:MessageBubble.PlayVideoText}"
+                                        Click="OnVideoPlayClick"
+                                        Style="{StaticResource IconButtonStyle}"
+                                        ToolTipService.ToolTip="{x:Bind local:MessageBubble.PlayVideoText}">
+                                        <Grid>
+                                            <Ellipse
+                                                Width="48"
+                                                Height="48"
+                                                Fill="{ThemeResource AcrylicInAppFillColorDefaultBrush}" />
+                                            <FontIcon FontSize="20" Glyph="&#xE768;" />
+                                        </Grid>
+                                    </Button>
+
+                                    <!-- The frames of the playing video draw here as the picture of a box with the corners of
+                                         the bubble. The own picture of the player draws on its own layer, above everything that
+                                         the chat draws. No clip applies to that layer. Thus in the installed app of the owner,
+                                         the video played square. The compact controls of the player sit over the picture. The
+                                         code adds and removes them. -->
+                                    <Grid
+                                        x:Name="VideoHost"
+                                        CornerRadius="{x:Bind local:MessageBubble.PhotoCorners(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup, Bubble.HasBodyText, Bubble.HasQuote), Mode=OneWay}">
+                                        <Image
+                                            x:Name="VideoPicture"
+                                            SizeChanged="OnVideoPictureSizeChanged"
+                                            Stretch="Uniform" />
+                                    </Grid>
+
+                                    <!-- While the video plays, the expand button opens it in the viewer at the same
+                                         position. -->
+                                    <Button
+                                        x:Name="VideoExpand"
+                                        Width="32"
+                                        Height="32"
+                                        Margin="6"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Top"
+                                        BorderThickness="0"
+                                        AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Video.Expand.', Bubble.PartKey), Mode=OneWay}"
+                                        AutomationProperties.Name="{x:Bind local:MessageBubble.OpenVideoText}"
+                                        Click="OnVideoExpandClick"
+                                        Style="{StaticResource IconButtonStyle}"
+                                        ToolTipService.ToolTip="{x:Bind local:MessageBubble.OpenVideoText}"
+                                        Visibility="Collapsed">
+                                        <Grid>
+                                            <Ellipse
+                                                Width="32"
+                                                Height="32"
+                                                Fill="{ThemeResource AcrylicInAppFillColorDefaultBrush}" />
+                                            <FontIcon FontSize="14" Glyph="&#xE740;" />
+                                        </Grid>
+                                    </Button>
+
+                                    <!-- The note shows the download, the wait for the phone or the failure on a small plate. It
+                                         is in the middle when there is no play button, else at the bottom. The ring turns
+                                         during the download and the wait. -->
+                                    <Border
+                                        x:Name="VideoNoteBack"
+                                        Margin="12"
+                                        Padding="8,4"
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Bottom"
+                                        Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}"
+                                        CornerRadius="4"
+                                        IsHitTestVisible="False"
+                                        Visibility="Collapsed">
+                                        <!-- A Grid, not a horizontal StackPanel, so the text wraps on a narrow video. -->
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <!-- The gap is the margin of the ring. Thus a hidden ring leaves no gap. -->
+                                            <muxc:ProgressRing
+                                                x:Name="VideoNoteRing"
+                                                Width="14"
+                                                Height="14"
+                                                MinWidth="14"
+                                                MinHeight="14"
+                                                Margin="0,0,6,0"
+                                                VerticalAlignment="Center"
+                                                AutomationProperties.AccessibilityView="Raw"
+                                                IsActive="False"
+                                                Visibility="Collapsed" />
+                                            <TextBlock
+                                                x:Name="VideoNote"
+                                                Grid.Column="1"
+                                                VerticalAlignment="Center"
+                                                Style="{StaticResource CaptionTextBlockStyle}"
+                                                TextAlignment="Center"
+                                                TextWrapping="Wrap" />
+                                        </Grid>
+                                    </Border>
+
+                                    <local:UploadSpinner
+                                        x:Name="VideoUpload"
+                                        Margin="8"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Bottom"
+                                        x:Load="{x:Bind Bubble.IsUploading, Mode=OneWay, FallbackValue=False}"
+                                        AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Upload.', Bubble.PartKey), Mode=OneWay}" />
+                                </Grid>
+
+                                <!-- The file card shows a video or a file as the web app of Google Messages shows it: the
+                                     icon of its type in an accent circle, the name and the size as Explorer writes it, and a
+                                     download icon at the right end. A thumbnail of the file covers the circle when it has one.
+                                     While the file opens, "Downloading…" or the failure takes the place of the size. A click,
+                                     Enter or Space downloads the file and opens it in its default app. The card is named by
+                                     the file name. -->
+                                <Button
+                                    x:Name="FileCard"
+                                    Padding="0"
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Stretch"
+                                    AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Bubble.File.', Bubble.PartKey), Mode=OneWay}"
+                                    x:Load="{x:Bind Bubble.HasFileCard, Mode=OneWay, FallbackValue=False}"
+                                    AutomationProperties.Name="{x:Bind Bubble.FileName, Mode=OneWay, FallbackValue=''}"
+                                    Click="OnFileClick"
+                                    Loaded="OnPartLoaded"
+                                    Style="{StaticResource CardButtonStyle}">
+                                    <!-- Margins, not ColumnSpacing, keep the gaps. Thus the unloaded spinner leaves no gap. -->
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
-                                        <!-- The gap is the margin of the ring. Thus a hidden ring leaves no gap. -->
-                                        <muxc:ProgressRing
-                                            x:Name="PhotoNoteRing"
-                                            Width="14"
-                                            Height="14"
-                                            MinWidth="14"
-                                            MinHeight="14"
-                                            Margin="0,0,6,0"
-                                            VerticalAlignment="Center"
-                                            AutomationProperties.AccessibilityView="Raw"
-                                            IsActive="False"
-                                            Visibility="Collapsed" />
-                                        <TextBlock
-                                            x:Name="PhotoNote"
+                                        <Grid
+                                            x:Name="FileCircle"
+                                            Width="40"
+                                            Height="40"
+                                            Background="{ThemeResource AccentFillColorDefaultBrush}"
+                                            CornerRadius="20">
+                                            <FontIcon
+                                                x:Name="FileIcon"
+                                                FontSize="18"
+                                                Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
+                                                Glyph="{x:Bind local:MessageBubble.FileGlyph(Bubble.Kind), Mode=OneWay, FallbackValue=''}" />
+                                            <Border x:Name="FileThumb" CornerRadius="20" />
+                                        </Grid>
+                                        <StackPanel
                                             Grid.Column="1"
+                                            Margin="14,0,0,0"
+                                            VerticalAlignment="Center">
+                                            <TextBlock
+                                                MaxLines="1"
+                                                Text="{x:Bind Bubble.FileName, Mode=OneWay, FallbackValue=''}"
+                                                TextTrimming="CharacterEllipsis" />
+                                            <TextBlock
+                                                x:Name="FileDetail"
+                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                Style="{StaticResource CaptionTextBlockStyle}" />
+                                        </StackPanel>
+                                        <!-- The upload spinner shows while the file sends. The download icon takes its place after. -->
+                                        <FontIcon
+                                            Grid.Column="2"
+                                            Margin="8,0,2,0"
                                             VerticalAlignment="Center"
-                                            Style="{StaticResource CaptionTextBlockStyle}"
-                                            TextAlignment="Center"
-                                            TextWrapping="Wrap" />
+                                            FontSize="18"
+                                            Glyph="&#xE896;"
+                                            Visibility="{x:Bind views:UiHelpers.Not(Bubble.IsUploading), Mode=OneWay, FallbackValue=Visible}" />
+                                        <local:UploadSpinner
+                                            x:Name="FileUpload"
+                                            Grid.Column="2"
+                                            Margin="10,0,0,0"
+                                            VerticalAlignment="Center"
+                                            x:Load="{x:Bind Bubble.IsUploading, Mode=OneWay, FallbackValue=False}"
+                                            AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Upload.', Bubble.PartKey), Mode=OneWay}" />
                                     </Grid>
-                                </Border>
+                                </Button>
 
-                                <local:UploadSpinner
-                                    x:Name="PhotoUpload"
-                                    Margin="8"
-                                    HorizontalAlignment="Right"
-                                    VerticalAlignment="Bottom"
-                                    x:Load="{x:Bind Bubble.IsUploading, Mode=OneWay, FallbackValue=False}"
-                                    AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Upload.', Bubble.PartKey), Mode=OneWay}" />
-                            </Grid>
-                        </Button>
-
-                        <!-- The video fills the bubble from edge to edge as a photo does. The code sets its size from
-                             its dimensions, and it has the corners of the bubble. Its still frame is the thumbnail from
-                             the phone, else a frame that the app makes from the video. A plain fill shows until the
-                             frame loads, with a play button over it. A click on the frame opens the viewer of the
-                             window. The play button plays the video here with sound and compact controls: play or
-                             pause, seek and volume. The code makes the player in VideoHost. The expand button then
-                             opens the viewer at the same position. The frame is named by the caption, else "Video".
-                             LinkCardButton shows the hand cursor over it. -->
-                        <Grid
-                            x:Name="Video"
-                            x:Load="{x:Bind Bubble.HasVideo, Mode=OneWay, FallbackValue=False}"
-                            Background="{ThemeResource SolidBackgroundFillColorTertiaryBrush}"
-                            CornerRadius="{x:Bind local:MessageBubble.PhotoCorners(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup, Bubble.HasBodyText, Bubble.HasQuote), Mode=OneWay}">
-                            <local:LinkCardButton
-                                x:Name="VideoFrame"
-                                Padding="0"
-                                HorizontalAlignment="Stretch"
-                                VerticalAlignment="Stretch"
-                                HorizontalContentAlignment="Stretch"
-                                VerticalContentAlignment="Stretch"
-                                AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Bubble.Video.', Bubble.PartKey), Mode=OneWay}"
-                                AutomationProperties.Name="{x:Bind Bubble.VideoName, Mode=OneWay, FallbackValue=''}"
-                                BorderThickness="0"
-                                Click="OnVideoFrameClick"
-                                CornerRadius="{x:Bind local:MessageBubble.PhotoCorners(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup, Bubble.HasBodyText, Bubble.HasQuote), Mode=OneWay}"
-                                Style="{StaticResource CardButtonStyle}">
-                                <Border
-                                    x:Name="VideoThumb"
-                                    CornerRadius="{x:Bind local:MessageBubble.PhotoCorners(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup, Bubble.HasBodyText, Bubble.HasQuote), Mode=OneWay}" />
-                            </local:LinkCardButton>
-
-                            <!-- The play button sits on a round plate over the middle of the frame. It has no border.
-                                 The 1 px border of the button would shrink its content to 46 px. That would cut the
-                                 right and the bottom of the 48 px plate. -->
-                            <Button
-                                x:Name="VideoPlay"
-                                Width="48"
-                                Height="48"
-                                HorizontalAlignment="Center"
-                                VerticalAlignment="Center"
-                                BorderThickness="0"
-                                AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Video.Play.', Bubble.PartKey), Mode=OneWay}"
-                                AutomationProperties.Name="{x:Bind local:MessageBubble.PlayVideoText}"
-                                Click="OnVideoPlayClick"
-                                Style="{StaticResource IconButtonStyle}"
-                                ToolTipService.ToolTip="{x:Bind local:MessageBubble.PlayVideoText}">
-                                <Grid>
-                                    <Ellipse
-                                        Width="48"
-                                        Height="48"
-                                        Fill="{ThemeResource AcrylicInAppFillColorDefaultBrush}" />
-                                    <FontIcon FontSize="20" Glyph="&#xE768;" />
-                                </Grid>
-                            </Button>
-
-                            <!-- The frames of the playing video draw here as the picture of a box with the corners of
-                                 the bubble. The own picture of the player draws on its own layer, above everything that
-                                 the chat draws. No clip applies to that layer. Thus in the installed app of the owner,
-                                 the video played square. The compact controls of the player sit over the picture. The
-                                 code adds and removes them. -->
-                            <Grid
-                                x:Name="VideoHost"
-                                CornerRadius="{x:Bind local:MessageBubble.PhotoCorners(Bubble.FromMe, Bubble.IsFirstInGroup, Bubble.IsLastInGroup, Bubble.HasBodyText, Bubble.HasQuote), Mode=OneWay}">
-                                <Image
-                                    x:Name="VideoPicture"
-                                    SizeChanged="OnVideoPictureSizeChanged"
-                                    Stretch="Uniform" />
-                            </Grid>
-
-                            <!-- While the video plays, the expand button opens it in the viewer at the same
-                                 position. -->
-                            <Button
-                                x:Name="VideoExpand"
-                                Width="32"
-                                Height="32"
-                                Margin="6"
-                                HorizontalAlignment="Right"
-                                VerticalAlignment="Top"
-                                BorderThickness="0"
-                                AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Video.Expand.', Bubble.PartKey), Mode=OneWay}"
-                                AutomationProperties.Name="{x:Bind local:MessageBubble.OpenVideoText}"
-                                Click="OnVideoExpandClick"
-                                Style="{StaticResource IconButtonStyle}"
-                                ToolTipService.ToolTip="{x:Bind local:MessageBubble.OpenVideoText}"
-                                Visibility="Collapsed">
-                                <Grid>
-                                    <Ellipse
-                                        Width="32"
-                                        Height="32"
-                                        Fill="{ThemeResource AcrylicInAppFillColorDefaultBrush}" />
-                                    <FontIcon FontSize="14" Glyph="&#xE740;" />
-                                </Grid>
-                            </Button>
-
-                            <!-- The note shows the download, the wait for the phone or the failure on a small plate. It
-                                 is in the middle when there is no play button, else at the bottom. The ring turns
-                                 during the download and the wait. -->
-                            <Border
-                                x:Name="VideoNoteBack"
-                                Margin="12"
-                                Padding="8,4"
-                                HorizontalAlignment="Center"
-                                VerticalAlignment="Bottom"
-                                Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}"
-                                CornerRadius="4"
-                                IsHitTestVisible="False"
-                                Visibility="Collapsed">
-                                <!-- A Grid, not a horizontal StackPanel, so the text wraps on a narrow video. -->
-                                <Grid>
+                                <!-- The voice message shows play or pause, the waveform and the length. The waveform fills as
+                                     the message plays, and a click on it seeks. The length comes from the audio after the
+                                     download. The length is named Bubble.Voice.{id}. -->
+                                <Grid
+                                    x:Name="Voice"
+                                    x:Load="{x:Bind Bubble.HasVoice, Mode=OneWay, FallbackValue=False}"
+                                    ColumnSpacing="8"
+                                    Loaded="OnPartLoaded">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <!-- The gap is the margin of the ring. Thus a hidden ring leaves no gap. -->
-                                    <muxc:ProgressRing
-                                        x:Name="VideoNoteRing"
-                                        Width="14"
-                                        Height="14"
-                                        MinWidth="14"
-                                        MinHeight="14"
-                                        Margin="0,0,6,0"
-                                        VerticalAlignment="Center"
-                                        AutomationProperties.AccessibilityView="Raw"
-                                        IsActive="False"
-                                        Visibility="Collapsed" />
-                                    <TextBlock
-                                        x:Name="VideoNote"
+                                    <Button
+                                        x:Name="VoicePlay"
+                                        Width="32"
+                                        Height="32"
+                                        Margin="-6,0,0,0"
+                                        AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Voice.Play.', Bubble.PartKey), Mode=OneWay}"
+                                        Click="OnVoicePlayClick"
+                                        Style="{StaticResource IconButtonStyle}">
+                                        <FontIcon x:Name="VoiceGlyph" FontSize="16" />
+                                    </Button>
+                                    <local:Waveform
+                                        x:Name="VoiceBars"
                                         Grid.Column="1"
                                         VerticalAlignment="Center"
-                                        Style="{StaticResource CaptionTextBlockStyle}"
-                                        TextAlignment="Center"
-                                        TextWrapping="Wrap" />
-                                </Grid>
-                            </Border>
-
-                            <local:UploadSpinner
-                                x:Name="VideoUpload"
-                                Margin="8"
-                                HorizontalAlignment="Right"
-                                VerticalAlignment="Bottom"
-                                x:Load="{x:Bind Bubble.IsUploading, Mode=OneWay, FallbackValue=False}"
-                                AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Upload.', Bubble.PartKey), Mode=OneWay}" />
-                        </Grid>
-
-                        <!-- The file card shows a video or a file as the web app of Google Messages shows it: the
-                             icon of its type in an accent circle, the name and the size as Explorer writes it, and a
-                             download icon at the right end. A thumbnail of the file covers the circle when it has one.
-                             While the file opens, "Downloading…" or the failure takes the place of the size. A click,
-                             Enter or Space downloads the file and opens it in its default app. The card is named by
-                             the file name. -->
-                        <Button
-                            x:Name="FileCard"
-                            Padding="0"
-                            HorizontalAlignment="Stretch"
-                            HorizontalContentAlignment="Stretch"
-                            AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Bubble.File.', Bubble.PartKey), Mode=OneWay}"
-                            x:Load="{x:Bind Bubble.HasFileCard, Mode=OneWay, FallbackValue=False}"
-                            AutomationProperties.Name="{x:Bind Bubble.FileName, Mode=OneWay, FallbackValue=''}"
-                            Click="OnFileClick"
-                            Loaded="OnPartLoaded"
-                            Style="{StaticResource CardButtonStyle}">
-                            <!-- Margins, not ColumnSpacing, keep the gaps. Thus the unloaded spinner leaves no gap. -->
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <Grid
-                                    x:Name="FileCircle"
-                                    Width="40"
-                                    Height="40"
-                                    Background="{ThemeResource AccentFillColorDefaultBrush}"
-                                    CornerRadius="20">
-                                    <FontIcon
-                                        x:Name="FileIcon"
-                                        FontSize="18"
-                                        Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
-                                        Glyph="{x:Bind local:MessageBubble.FileGlyph(Bubble.Kind), Mode=OneWay, FallbackValue=''}" />
-                                    <Border x:Name="FileThumb" CornerRadius="20" />
-                                </Grid>
-                                <StackPanel
-                                    Grid.Column="1"
-                                    Margin="14,0,0,0"
-                                    VerticalAlignment="Center">
-                                    <TextBlock
-                                        MaxLines="1"
-                                        Text="{x:Bind Bubble.FileName, Mode=OneWay, FallbackValue=''}"
-                                        TextTrimming="CharacterEllipsis" />
-                                    <TextBlock
-                                        x:Name="FileDetail"
-                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                        Style="{StaticResource CaptionTextBlockStyle}" />
-                                </StackPanel>
-                                <!-- The upload spinner shows while the file sends. The download icon takes its place after. -->
-                                <FontIcon
-                                    Grid.Column="2"
-                                    Margin="8,0,2,0"
-                                    VerticalAlignment="Center"
-                                    FontSize="18"
-                                    Glyph="&#xE896;"
-                                    Visibility="{x:Bind views:UiHelpers.Not(Bubble.IsUploading), Mode=OneWay, FallbackValue=Visible}" />
-                                <local:UploadSpinner
-                                    x:Name="FileUpload"
-                                    Grid.Column="2"
-                                    Margin="10,0,0,0"
-                                    VerticalAlignment="Center"
-                                    x:Load="{x:Bind Bubble.IsUploading, Mode=OneWay, FallbackValue=False}"
-                                    AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Upload.', Bubble.PartKey), Mode=OneWay}" />
-                            </Grid>
-                        </Button>
-
-                        <!-- The voice message shows play or pause, the waveform and the length. The waveform fills as
-                             the message plays, and a click on it seeks. The length comes from the audio after the
-                             download. The length is named Bubble.Voice.{id}. -->
-                        <Grid
-                            x:Name="Voice"
-                            x:Load="{x:Bind Bubble.HasVoice, Mode=OneWay, FallbackValue=False}"
-                            ColumnSpacing="8"
-                            Loaded="OnPartLoaded">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <Button
-                                x:Name="VoicePlay"
-                                Width="32"
-                                Height="32"
-                                Margin="-6,0,0,0"
-                                AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Voice.Play.', Bubble.PartKey), Mode=OneWay}"
-                                Click="OnVoicePlayClick"
-                                Style="{StaticResource IconButtonStyle}">
-                                <FontIcon x:Name="VoiceGlyph" FontSize="16" />
-                            </Button>
-                            <local:Waveform
-                                x:Name="VoiceBars"
-                                Grid.Column="1"
-                                VerticalAlignment="Center"
-                                AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Voice.Wave.', Bubble.PartKey), Mode=OneWay}"
-                                BarBrush="{ThemeResource TextFillColorPrimaryBrush}"
-                                SeekRequested="OnVoiceSeekRequested" />
-                            <StackPanel
-                                Grid.Column="2"
-                                Orientation="Horizontal"
-                                Spacing="8">
-                                <TextBlock
-                                    x:Name="VoiceLength"
-                                    VerticalAlignment="Center"
-                                    AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Bubble.Voice.', Bubble.PartKey), Mode=OneWay}"
-                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                    Style="{StaticResource CaptionTextBlockStyle}" />
-                                <local:UploadSpinner
-                                    x:Name="VoiceUpload"
-                                    VerticalAlignment="Center"
-                                    x:Load="{x:Bind Bubble.IsUploading, Mode=OneWay, FallbackValue=False}"
-                                    AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Upload.', Bubble.PartKey), Mode=OneWay}" />
-                            </StackPanel>
-                        </Grid>
-
-                        <!-- While the preview card shows, the text omits the link of the card. See
-                             Bubble.BodyText. A message that was only the link shows the card alone. The BigEmoji state
-                             shows emoji alone big. -->
-                        <Grid
-                            Margin="{x:Bind local:MessageBubble.CaptionMargin(Bubble.FillsBubble), Mode=OneWay}"
-                            Visibility="{x:Bind Bubble.HasBodyText, Mode=OneWay, FallbackValue=Collapsed}">
-                            <TextBlock
-                                x:Name="Body"
-                                AutomationProperties.AutomationId="{x:Bind local:MessageBubble.AutomationIdOf(Bubble.PartKey), Mode=OneWay}"
-                                AutomationProperties.ItemType="{x:Bind Bubble.ItemTypeName, Mode=OneWay, FallbackValue=''}"
-                                IsTextSelectionEnabled="True"
-                                IsColorFontEnabled="True"
-                                SizeChanged="OnBodySizeChanged"
-                                TextWrapping="Wrap" />
-
-                            <!-- Clear strips cover the empty space at the end of each line where a link ends. Thus the
-                                 pointer there is never over the link. The text maps the empty end of a line to its last
-                                 letter. BlockLinkEnds sets the strips. A tap on a strip still reaches the bubble. -->
-                            <Canvas x:Name="LinkBlockers" />
-                        </Grid>
-
-                        <!-- The preview is a share card across the whole bubble. The share image of the page runs
-                             across its top in its own shape, with nothing cut off. SizePreviewImage sets its height. A
-                             card alone starts 240 px wide. Under the image come the page title and its site in caption
-                             style. The title wraps only past the width of the bubble, in 2 lines at most. The summary of
-                             the page follows in 2 lines at most, when it has one. The card never shows the link itself.
-                             A page with no image shows no image. A card alone in its bubble is the bubble, with smaller
-                             corners and the neutral colors of a link card on every side. See PreviewSide. A click, Enter or Space opens the link in the default
-                             browser. The card is named by its title and the host of the link. A right-click, the Application key or Shift + F10 opens
-                             its own menu with Copy link. That menu is PreviewMenu of the chat pane, which finds the
-                             card by its name. The look of the card is on PreviewCard. SubtleButtonStyle gives the
-                             button no hover or press fill. Thus the card never flashes another color under the pointer,
-                             as the owner reported. The card does not shrink on a press, as the owner asked, so it does
-                             not use IconButtonStyle. Through LinkCardButton, the hand cursor shows over it, as over a
-                             link. -->
-                        <local:LinkCardButton
-                            x:Name="Preview"
-                            Margin="{x:Bind local:MessageBubble.PreviewMargin(Bubble.HasBodyText), Mode=OneWay}"
-                            Padding="0"
-                            HorizontalAlignment="Stretch"
-                            HorizontalContentAlignment="Stretch"
-                            x:Load="{x:Bind Bubble.HasPreview, Mode=OneWay, FallbackValue=False}"
-                            AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Preview.', Bubble.PartKey), Mode=OneWay}"
-                            AutomationProperties.Name="{x:Bind Bubble.PreviewName, Mode=OneWay, FallbackValue=''}"
-                            Click="OnPreviewClick"
-                            CornerRadius="{x:Bind local:MessageBubble.PreviewCorners(Bubble.PreviewFillsBubble), Mode=OneWay}"
-                            Loaded="OnPartLoaded"
-                            Style="{StaticResource SubtleButtonStyle}">
-                            <Border
-                                x:Name="PreviewCard"
-                                SizeChanged="OnPreviewCardSizeChanged"
-                                Background="{ThemeResource ControlFillColorDefaultBrush}"
-                                BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
-                                BorderThickness="1"
-                                CornerRadius="{x:Bind local:MessageBubble.PreviewCorners(Bubble.PreviewFillsBubble), Mode=OneWay}">
-                                <StackPanel>
-                                    <Image
-                                        x:Name="PreviewImage"
-                                        Stretch="Uniform"
-                                        Visibility="Collapsed" />
-                                    <StackPanel Padding="12,8,12,10" Spacing="4">
+                                        AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Voice.Wave.', Bubble.PartKey), Mode=OneWay}"
+                                        BarBrush="{ThemeResource TextFillColorPrimaryBrush}"
+                                        SeekRequested="OnVoiceSeekRequested" />
+                                    <StackPanel
+                                        Grid.Column="2"
+                                        Orientation="Horizontal"
+                                        Spacing="8">
                                         <TextBlock
-                                            x:Name="PreviewTitle"
-                                            FontFamily="{ThemeResource ContentControlThemeFontFamily}"
-                                            MaxLines="2"
-                                            Style="{StaticResource BodyStrongTextBlockStyle}"
-                                            Text="{x:Bind Bubble.Preview.Title, Mode=OneWay, FallbackValue=''}"
-                                            TextTrimming="CharacterEllipsis"
-                                            TextWrapping="Wrap"
-                                            Visibility="{x:Bind views:UiHelpers.ShownIfText(Bubble.Preview.Title), Mode=OneWay, FallbackValue=Collapsed}" />
-                                        <TextBlock
-                                            x:Name="PreviewDescription"
+                                            x:Name="VoiceLength"
+                                            VerticalAlignment="Center"
+                                            AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Bubble.Voice.', Bubble.PartKey), Mode=OneWay}"
                                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                            MaxLines="2"
-                                            Text="{x:Bind Bubble.Preview.Description, Mode=OneWay, FallbackValue=''}"
-                                            TextTrimming="CharacterEllipsis"
-                                            TextWrapping="Wrap"
-                                            Visibility="{x:Bind views:UiHelpers.ShownIfText(Bubble.Preview.Description), Mode=OneWay, FallbackValue=Collapsed}" />
+                                            Style="{StaticResource CaptionTextBlockStyle}" />
+                                        <local:UploadSpinner
+                                            x:Name="VoiceUpload"
+                                            VerticalAlignment="Center"
+                                            x:Load="{x:Bind Bubble.IsUploading, Mode=OneWay, FallbackValue=False}"
+                                            AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Upload.', Bubble.PartKey), Mode=OneWay}" />
+                                    </StackPanel>
+                                </Grid>
+
+                                <!-- While the preview card shows, the text omits the link of the card. See
+                                     Bubble.BodyText. A message that was only the link shows the card alone. The BigEmoji state
+                                     shows emoji alone big. -->
+                                <Grid
+                                    Margin="{x:Bind local:MessageBubble.CaptionMargin(Bubble.FillsBubble), Mode=OneWay}"
+                                    Visibility="{x:Bind Bubble.HasBodyText, Mode=OneWay, FallbackValue=Collapsed}">
+                                    <TextBlock
+                                        x:Name="Body"
+                                        AutomationProperties.AutomationId="{x:Bind local:MessageBubble.AutomationIdOf(Bubble.PartKey), Mode=OneWay}"
+                                        AutomationProperties.ItemType="{x:Bind Bubble.ItemTypeName, Mode=OneWay, FallbackValue=''}"
+                                        IsTextSelectionEnabled="True"
+                                        IsColorFontEnabled="True"
+                                        SizeChanged="OnBodySizeChanged"
+                                        TextWrapping="Wrap" />
+
+                                    <!-- Clear strips cover the empty space at the end of each line where a link ends. Thus the
+                                         pointer there is never over the link. The text maps the empty end of a line to its last
+                                         letter. BlockLinkEnds sets the strips. A tap on a strip still reaches the bubble. -->
+                                    <Canvas x:Name="LinkBlockers" />
+                                </Grid>
+
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+
+                    <!-- The preview is a share card in a bubble of its own under the text, 2 px apart, as bubbles of
+                         a group are. The whole share image of the page runs across its whole width, at most 320 px
+                         tall, with nothing cut off and no gaps at its sides. A tall image narrows the card to its own
+                         width, and the text under it wraps to that width, as the owner asked. See FitPreviewToImage.
+                         SizePreviewImage sets its height. Under the image come the page title and its site in caption
+                         style. The title wraps only past the width of the card, in 2 lines at most. The summary of
+                         the page follows in 2 lines at most, when it has one. The card never shows the link itself.
+                         A page with no image shows no image. A card alone has even corners, smaller than those of a
+                         text bubble. Under text, it takes the corners of the next bubble of a group. It has the neutral
+                         colors of a link card on every side. See PreviewSide. A click, Enter or Space opens the link in the default
+                         browser. The card is named by its title and the host of the link. A right-click, the Application key or Shift + F10 opens
+                         its own menu with Copy link. That menu is PreviewMenu of the chat pane, which finds the
+                         card by its name. The look of the card is on PreviewCard. SubtleButtonStyle gives the
+                         button no hover or press fill. Thus the card never flashes another color under the pointer,
+                         as the owner reported. The card does not shrink on a press, as the owner asked, so it does
+                         not use IconButtonStyle. Through LinkCardButton, the hand cursor shows over it, as over a
+                         link. -->
+                    <local:LinkCardButton
+                        x:Name="Preview"
+                        Margin="{x:Bind local:MessageBubble.PreviewMargin(Bubble.PreviewFillsBubble), Mode=OneWay}"
+                        Padding="0"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Stretch"
+                        x:Load="{x:Bind Bubble.HasPreview, Mode=OneWay, FallbackValue=False}"
+                        AutomationProperties.AutomationId="{x:Bind local:MessageBubble.PartIdOf('Preview.', Bubble.PartKey), Mode=OneWay}"
+                        AutomationProperties.Name="{x:Bind Bubble.PreviewName, Mode=OneWay, FallbackValue=''}"
+                        Click="OnPreviewClick"
+                        CornerRadius="{x:Bind local:MessageBubble.PreviewCorners(Bubble.PreviewFillsBubble, Bubble.FromMe, Bubble.IsLastInGroup), Mode=OneWay, FallbackValue=12}"
+                        Loaded="OnPartLoaded"
+                        Style="{StaticResource SubtleButtonStyle}">
+                        <Border
+                            x:Name="PreviewCard"
+                            SizeChanged="OnPreviewCardSizeChanged"
+                            Background="{ThemeResource ControlFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="{x:Bind local:MessageBubble.PreviewCorners(Bubble.PreviewFillsBubble, Bubble.FromMe, Bubble.IsLastInGroup), Mode=OneWay, FallbackValue=12}">
+                            <StackPanel>
+                                <Border x:Name="PreviewImage" Visibility="Collapsed" />
+                                <StackPanel Padding="12,8,12,10" Spacing="4">
+                                    <TextBlock
+                                        x:Name="PreviewTitle"
+                                        FontFamily="{ThemeResource ContentControlThemeFontFamily}"
+                                        MaxLines="2"
+                                        Style="{StaticResource BodyStrongTextBlockStyle}"
+                                        Text="{x:Bind Bubble.Preview.Title, Mode=OneWay, FallbackValue=''}"
+                                        TextTrimming="CharacterEllipsis"
+                                        TextWrapping="Wrap"
+                                        Visibility="{x:Bind views:UiHelpers.ShownIfText(Bubble.Preview.Title), Mode=OneWay, FallbackValue=Collapsed}" />
+                                    <TextBlock
+                                        x:Name="PreviewDescription"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        MaxLines="2"
+                                        Text="{x:Bind Bubble.Preview.Description, Mode=OneWay, FallbackValue=''}"
+                                        TextTrimming="CharacterEllipsis"
+                                        TextWrapping="Wrap"
+                                        Visibility="{x:Bind views:UiHelpers.ShownIfText(Bubble.Preview.Description), Mode=OneWay, FallbackValue=Collapsed}" />
+                                    <!-- The site shows its icon before its name. A site with no icon shows only the
+                                         name, with no gap. ShowPreviewImage loads the icon. The name has tight line
+                                         bounds, from the top of its capitals to its baseline, so the icon centers on
+                                         the letters, not on the space under them. A site name is lowercase, so the eye
+                                         reads its middle at the middle of its short letters, about 1 px lower. The icon
+                                         moves down that far, as the owner asked. The row keeps the height of the
+                                         icon, so a card with no icon is as tall. -->
+                                    <Grid MinHeight="16">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Image
+                                            x:Name="PreviewIcon"
+                                            Width="16"
+                                            Height="16"
+                                            Margin="0,0,6,0"
+                                            VerticalAlignment="Center"
+                                            AutomationProperties.AccessibilityView="Raw"
+                                            Stretch="Uniform"
+                                            Visibility="Collapsed">
+                                            <Image.RenderTransform>
+                                                <TranslateTransform Y="1" />
+                                            </Image.RenderTransform>
+                                        </Image>
                                         <TextBlock
                                             x:Name="PreviewSite"
+                                            Grid.Column="1"
+                                            VerticalAlignment="Center"
                                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                             MaxLines="1"
                                             Style="{StaticResource CaptionTextBlockStyle}"
                                             Text="{x:Bind Bubble.Preview.Site, Mode=OneWay, FallbackValue=''}"
+                                            TextLineBounds="Tight"
                                             TextTrimming="CharacterEllipsis" />
-                                    </StackPanel>
+                                    </Grid>
                                 </StackPanel>
-                            </Border>
-                        </local:LinkCardButton>
-                    </StackPanel>
-                </Border>
+                            </StackPanel>
+                        </Border>
+                    </local:LinkCardButton>
+                </StackPanel>
 
                 <!-- The focus ring hugs the back 3 px out and follows its corners, also on photos, cards and grouped
                      bubbles. It is a 2 px ring in the accent color, with a 1 px gap inside it. The owner found the

@@ -357,8 +357,8 @@ public sealed class LinkPreviewerTests
         await BitmapDecoder.CreateAsync(new MemoryStream(bytes, writable: false).AsRandomAccessStream());
 
     /// <summary>
-    /// The card of the phone gives the text, and only its image is fetched, never the page. The site is still the real
-    /// host of the link.
+    /// The card of the phone gives the text, and only its image and the site icon are fetched, never the page. The site
+    /// is still the real host of the link.
     /// </summary>
     [TestMethod]
     public async Task Get_PhoneCard_UsesItsText_FetchesOnlyImage()
@@ -375,8 +375,10 @@ public sealed class LinkPreviewerTests
         Assert.AreEqual("#badumtss", preview.Description);
         Assert.AreEqual("example.com", preview.Site, "the site is the real host, never the domain of the card");
         CollectionAssert.AreEqual(png, preview.Image);
-        Assert.HasCount(1, handler.Requests);
+        Assert.HasCount(3, handler.Requests, "the image, then the icon of the site and of its parent domain");
         Assert.EndsWith(".png", handler.Requests[0].Url);
+        Assert.EndsWith("/favicon.ico", handler.Requests[1].Url);
+        Assert.EndsWith("/favicon.ico", handler.Requests[2].Url);
     }
 
     /// <summary>
@@ -567,6 +569,132 @@ public sealed class LinkPreviewerTests
         Assert.AreEqual(1, handler.Requests.Count);
     }
 
+    /// <summary>
+    /// The card keeps the site icon from <c>/favicon.ico</c> of the link when the site has one.
+    /// </summary>
+    [TestMethod]
+    public async Task Get_SiteHasIcon_KeepsIt()
+    {
+        byte[] icon = [1, 2, 3, 4];
+        var handler = new FakeHttpHandler
+        {
+            Respond = (_, r) => r.Url.EndsWith("/favicon.ico", StringComparison.Ordinal)
+                ? FakeHttpHandler.Response(HttpStatusCode.OK, "image/x-icon", icon)
+                : HtmlResponse(Html),
+        };
+        using var previewer = new LinkPreviewer(handler, false, new CollectingLogger(), TestProxy.Direct);
+
+        LinkPreview? preview = await previewer.GetAsync(Page, CancellationToken.None);
+
+        Assert.IsNotNull(preview);
+        CollectionAssert.AreEqual(icon, preview.Icon);
+    }
+
+    /// <summary>
+    /// The icon that the page names wins over /favicon.ico. When it is missing, the card falls back to /favicon.ico.
+    /// </summary>
+    [TestMethod]
+    public async Task Get_PageNamesIcon_UsesIt_ElseFavicon()
+    {
+        byte[] named    = [9, 9, 9];
+        byte[] favicon  = [1, 1, 1];
+        string page     = "<html><head><title>T</title><link rel=\"icon\" href=\"/static/site.png\"></head></html>";
+        bool namedFound = true;
+        var handler     = new FakeHttpHandler
+        {
+            Respond = (_, r) => r.Url.EndsWith("/static/site.png", StringComparison.Ordinal)
+                ? (namedFound ? FakeHttpHandler.Response(HttpStatusCode.OK, "image/png", named) : FakeHttpHandler.Response(HttpStatusCode.NotFound, "text/plain", "x"u8.ToArray()))
+                : r.Url.EndsWith("/favicon.ico", StringComparison.Ordinal)
+                    ? FakeHttpHandler.Response(HttpStatusCode.OK, "image/x-icon", favicon)
+                    : HtmlResponse(page),
+        };
+
+        using (var previewer = new LinkPreviewer(handler, false, new CollectingLogger(), TestProxy.Direct))
+        {
+            CollectionAssert.AreEqual(named, (await previewer.GetAsync(Page, CancellationToken.None))!.Icon);
+        }
+
+        namedFound = false;
+        using (var previewer = new LinkPreviewer(handler, false, new CollectingLogger(), TestProxy.Direct))
+        {
+            CollectionAssert.AreEqual(favicon, (await previewer.GetAsync(Page, CancellationToken.None))!.Icon);
+        }
+    }
+
+    /// <summary>
+    /// The page names its icon with rel icon or shortcut icon, else apple-touch-icon. An SVG icon does not count. A
+    /// relative link resolves against the page, and a local address never counts.
+    /// </summary>
+    [TestMethod]
+    public void ParseIcon_PicksTheBitmapIcon()
+    {
+        Assert.AreEqual(new Uri(Page, "/a.png"), LinkPreviewer.ParseIcon("<link rel=\"shortcut icon\" href=\"/a.png\">", Page));
+        Assert.AreEqual(new Uri(Page, "/t.png"), LinkPreviewer.ParseIcon("<link rel=\"apple-touch-icon\" href=\"/t.png\"><link rel=icon href=/i.svg>", Page));
+        Assert.AreEqual(new Uri(Page, "/i.png"), LinkPreviewer.ParseIcon("<link rel=\"apple-touch-icon\" href=\"/t.png\"><link rel=\"icon\" type=\"image/svg+xml\" href=\"/i\"><link rel=\"icon\" href=\"/i.png\">", Page));
+        Assert.IsNull(LinkPreviewer.ParseIcon("<link rel=\"stylesheet\" href=\"/s.css\">", Page));
+        Assert.IsNull(LinkPreviewer.ParseIcon("<link rel=\"icon\" href=\"http://10.0.0.1/i.png\">", Page));
+    }
+
+    /// <summary>
+    /// After the icon that the page names, the icon is tried on the site, then on each parent domain, as
+    /// support.google.com uses the icon of google.com. A public suffix such as co.uk and an IP address get no parents.
+    /// </summary>
+    [TestMethod]
+    public void IconCandidates_SiteThenParentDomains()
+    {
+        static string Of(Uri? declared, string site) => string.Join(" | ", LinkPreviewer.IconCandidates(declared, new Uri(site)).Select(u => u.AbsoluteUri));
+
+        Assert.AreEqual(
+            "https://support.google.com/i.png | https://support.google.com/favicon.ico | https://google.com/favicon.ico",
+            Of(new Uri("https://support.google.com/i.png"), "https://support.google.com/a/b?c=1"));
+        Assert.AreEqual("https://news.bbc.co.uk/favicon.ico | https://bbc.co.uk/favicon.ico", Of(null, "https://news.bbc.co.uk/"));
+        Assert.AreEqual("https://example.com/favicon.ico", Of(new Uri("https://example.com/favicon.ico"), "https://example.com/"));
+        Assert.AreEqual("http://127.0.0.1:8080/favicon.ico", Of(null, "http://127.0.0.1:8080/page"));
+    }
+
+    /// <summary>
+    /// A subdomain with no icon of its own shows the icon of its parent domain.
+    /// </summary>
+    [TestMethod]
+    public async Task Get_SubdomainHasNoIcon_UsesParentDomainIcon()
+    {
+        byte[] icon = [7, 7, 7];
+        var handler = new FakeHttpHandler
+        {
+            Respond = (_, r) => r.Url == "https://example.com/favicon.ico"
+                ? FakeHttpHandler.Response(HttpStatusCode.OK, "image/x-icon", icon)
+                : r.Url.EndsWith("/favicon.ico", StringComparison.Ordinal)
+                    ? FakeHttpHandler.Response(HttpStatusCode.NotFound, "text/plain", "x"u8.ToArray())
+                    : HtmlResponse(Html),
+        };
+        using var previewer = new LinkPreviewer(handler, false, new CollectingLogger(), TestProxy.Direct);
+
+        LinkPreview? preview = await previewer.GetAsync(new Uri("https://support.example.com/article"), CancellationToken.None);
+
+        Assert.IsNotNull(preview);
+        CollectionAssert.AreEqual(icon, preview.Icon);
+    }
+
+    /// <summary>
+    /// A site with no icon gives a card without one.
+    /// </summary>
+    [TestMethod]
+    public async Task Get_SiteHasNoIcon_NoIcon()
+    {
+        var handler = new FakeHttpHandler
+        {
+            Respond = (_, r) => r.Url.EndsWith("/favicon.ico", StringComparison.Ordinal)
+                ? FakeHttpHandler.Response(HttpStatusCode.NotFound, "text/plain", "Not found"u8.ToArray())
+                : HtmlResponse(Html),
+        };
+        using var previewer = new LinkPreviewer(handler, false, new CollectingLogger(), TestProxy.Direct);
+
+        LinkPreview? preview = await previewer.GetAsync(Page, CancellationToken.None);
+
+        Assert.IsNotNull(preview);
+        Assert.IsNull(preview.Icon);
+    }
+
     [TestMethod]
     public async Task Get_SecondCall_Cached()
     {
@@ -576,8 +704,10 @@ public sealed class LinkPreviewerTests
         LinkPreview? first  = await previewer.GetAsync(Page, CancellationToken.None);
         LinkPreview? second = await previewer.GetAsync(Page, CancellationToken.None);
 
+        // The first call fetches the page, then tries the icon of the site and of its parent domain. The second fetches
+        // nothing.
         Assert.AreSame(first, second);
-        Assert.AreEqual(1, handler.Requests.Count);
+        Assert.AreEqual(3, handler.Requests.Count);
     }
 
     [TestMethod]

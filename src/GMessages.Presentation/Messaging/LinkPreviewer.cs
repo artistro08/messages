@@ -44,6 +44,9 @@ public sealed partial class LinkPreviewer : IDisposable
     /// </summary>
     public const int MaxImageBytes = 5 * 1_048_576;
 
+    // The largest site icon that the previewer reads, in bytes. A bigger one gives a card without it.
+    private const int MaxIconBytes = 256 * 1024;
+
     // The tags that a page without og:image can name its share image in.
     private static readonly HashSet<string> ImageKeys = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -474,6 +477,119 @@ public sealed partial class LinkPreviewer : IDisposable
     }
 
     /// <summary>
+    /// Reads the site icon that a page names in its head.
+    /// </summary>
+    /// <remarks>
+    /// The icon is the first <c>&lt;link&gt;</c> whose <c>rel</c> holds <c>icon</c>, such as <c>icon</c> or
+    /// <c>shortcut icon</c>, else the first <c>apple-touch-icon</c>. An SVG icon does not count, because the card shows
+    /// only bitmaps. The link resolves against <paramref name="page"/>, and the method keeps it only when
+    /// <see cref="IsAllowed"/> allows it.
+    /// </remarks>
+    /// <param name="html">The page.</param>
+    /// <param name="page">The address of the page after redirects, for a relative icon link.</param>
+    /// <param name="allowLoopback">True only in UI test runs.</param>
+    /// <returns>The address of the icon, or null when the page names none.</returns>
+    internal static Uri? ParseIcon(string html, Uri page, bool allowLoopback = false)
+    {
+        ArgumentNullException.ThrowIfNull(html);
+        ArgumentNullException.ThrowIfNull(page);
+
+        int end     = html.IndexOf("</head>", StringComparison.OrdinalIgnoreCase);
+        string head = end >= 0 ? html[..end] : html;
+
+        string? icon  = null;
+        string? touch = null;
+        foreach (Match tag in LinkTag().Matches(head))
+        {
+            string? rel  = null;
+            string? href = null;
+            string? type = null;
+            foreach (Match attribute in Attribute().Matches(tag.Value))
+            {
+                string name  = attribute.Groups["name"].Value;
+                string value = attribute.Groups["value"].Value;
+                if (name.Equals("rel", StringComparison.OrdinalIgnoreCase))
+                {
+                    rel = value;
+                }
+                else if (name.Equals("href", StringComparison.OrdinalIgnoreCase))
+                {
+                    href = value;
+                }
+                else if (name.Equals("type", StringComparison.OrdinalIgnoreCase))
+                {
+                    type = value;
+                }
+            }
+
+            // An SVG icon cannot show on the card.
+            if (rel is null || string.IsNullOrWhiteSpace(href)
+                || (type?.Contains("svg", StringComparison.OrdinalIgnoreCase) ?? false)
+                || href.Split('?', '#')[0].EndsWith(".svg", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            string[] rels = rel.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (rels.Contains("icon", StringComparer.OrdinalIgnoreCase))
+            {
+                icon ??= href;
+            }
+            else if (rels.Any(r => r.StartsWith("apple-touch-icon", StringComparison.OrdinalIgnoreCase)))
+            {
+                touch ??= href;
+            }
+        }
+
+        return (icon ?? touch) is { } link
+            && Uri.TryCreate(page, WebUtility.HtmlDecode(link).Trim(), out Uri? resolved)
+            && IsAllowed(resolved, allowLoopback)
+                ? resolved
+                : null;
+    }
+
+    /// <summary>
+    /// Lists the places of the site icon, in the order to try them.
+    /// </summary>
+    /// <remarks>
+    /// The icon that the page names comes first. Then comes <c>/favicon.ico</c> of the site, then of each parent
+    /// domain, because a subdomain such as <c>support.google.com</c> often has no icon of its own and uses the icon of
+    /// <c>google.com</c>. The list stops at 2 labels, and skips a last pair of short labels such as <c>co.uk</c>, which
+    /// is a public suffix and not a site. An IP address has no parents.
+    /// </remarks>
+    /// <param name="declared">The icon that the page names, or null.</param>
+    /// <param name="site">The address of the site after redirects.</param>
+    /// <returns>The places, with no repeats.</returns>
+    internal static IReadOnlyList<Uri> IconCandidates(Uri? declared, Uri site)
+    {
+        ArgumentNullException.ThrowIfNull(site);
+
+        var tries = new List<Uri>();
+        if (declared is not null)
+        {
+            tries.Add(declared);
+        }
+
+        string[] labels = site.HostNameType == UriHostNameType.Dns ? site.IdnHost.Split('.') : [site.IdnHost];
+        for (int i = 0; i < Math.Max(1, labels.Length - 1); i++)
+        {
+            string[] rest = labels[i..];
+            if (i > 0 && rest.Length == 2 && rest[0].Length <= 3 && rest[1].Length <= 3)
+            {
+                break;
+            }
+
+            var icon = new UriBuilder(site) { Host = string.Join('.', rest), Path = "/favicon.ico", Query = string.Empty, Fragment = string.Empty }.Uri;
+            if (!tries.Contains(icon))
+            {
+                tries.Add(icon);
+            }
+        }
+
+        return tries;
+    }
+
+    /// <summary>
     /// Reads the parts of a YouTube card from the oEmbed answer of YouTube.
     /// </summary>
     /// <remarks>
@@ -630,14 +746,24 @@ public sealed partial class LinkPreviewer : IDisposable
             await _fetchSlots.WaitAsync(_closing.Token).ConfigureAwait(false);
             slot = true;
 
-            if ((PhoneHead(url, phone, _allowLoopback) ?? await GetHeadAsync(url).ConfigureAwait(false)) is not { } head)
+            // The card of the phone has no page, so its icon is /favicon.ico of the link.
+            (string Title, string Site, Uri? Image, string Description)? head = PhoneHead(url, phone, _allowLoopback);
+            Uri? declaredIcon = null;
+            Uri site          = url;
+            if (head is null)
+            {
+                (head, declaredIcon, site) = await GetHeadAsync(url).ConfigureAwait(false);
+            }
+
+            if (head is not { } card)
             {
                 return null;
             }
 
             // A share image is bigger than a page, so it gets the longer time of a picture.
-            byte[]? image = head.Image is { } imageUrl ? (await GetBodyAsync(imageUrl, "image/*", MaxImageBytes, PictureTimeout).ConfigureAwait(false))?.Body : null;
-            return new LinkPreview(url, head.Title, head.Site, image is null ? null : await ShrinkAsync(image).ConfigureAwait(false), head.Description);
+            byte[]? image = card.Image is { } imageUrl ? (await GetBodyAsync(imageUrl, "image/*", MaxImageBytes, PictureTimeout).ConfigureAwait(false))?.Body : null;
+            byte[]? icon  = await GetIconAsync(declaredIcon, site).ConfigureAwait(false);
+            return new LinkPreview(url, card.Title, card.Site, image is null ? null : await ShrinkAsync(image).ConfigureAwait(false), card.Description, icon);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -668,10 +794,11 @@ public sealed partial class LinkPreviewer : IDisposable
         return (title, SiteOf(url), image, description);
     }
 
-    // Gives the parts of the card. A page of YouTube runs past MaxPageBytes before its tags, so a YouTube link, Shorts
-    // included, asks the oEmbed of YouTube first. Its small JSON answer holds the title and the thumbnail. A link that
-    // oEmbed does not know, such as a channel, falls back to the page.
-    private async Task<(string Title, string Site, Uri? Image, string Description)?> GetHeadAsync(Uri url)
+    // Gives the parts of the card, the icon that the page names, and the address of the site after redirects. A page of
+    // YouTube runs past MaxPageBytes before its tags, so a YouTube link, Shorts included, asks the oEmbed of YouTube
+    // first. Its small JSON answer holds the title and the thumbnail, and its site is youtube.com. A link that oEmbed
+    // does not know, such as a channel, falls back to the page.
+    private async Task<((string Title, string Site, Uri? Image, string Description)? Head, Uri? Icon, Uri Site)> GetHeadAsync(Uri url)
     {
         if (YouTubeHosts.Contains(url.IdnHost))
         {
@@ -679,22 +806,39 @@ public sealed partial class LinkPreviewer : IDisposable
             if (await GetBodyAsync(api, "application/json", MaxOEmbedBytes, RequestTimeout).ConfigureAwait(false) is { } answer
                 && ParseOEmbed(answer.Body, _allowLoopback) is { } card)
             {
-                return card;
+                return (card, null, new Uri("https://www.youtube.com/"));
             }
         }
 
         if (await GetBodyAsync(url, "text/html", MaxPageBytes, RequestTimeout).ConfigureAwait(false) is not { } page)
         {
-            return null;
+            return (null, null, url);
         }
 
-        (string Title, string Site, Uri? Image, string Description)? head = ParseHead(Decode(page.Body, page.CharSet), page.Final, _allowLoopback);
+        string html = Decode(page.Body, page.CharSet);
+        (string Title, string Site, Uri? Image, string Description)? head = ParseHead(html, page.Final, _allowLoopback);
         if (head is null)
         {
             LogSkipped("no title");
         }
 
-        return head;
+        return (head, ParseIcon(html, page.Final, _allowLoopback), page.Final);
+    }
+
+    // Fetches the site icon from the first of IconCandidates that answers with bytes. A site with none, or an answer
+    // that is not an image, gives no icon.
+    private async Task<byte[]?> GetIconAsync(Uri? declared, Uri site)
+    {
+        foreach (Uri icon in IconCandidates(declared, site))
+        {
+            if (IsAllowed(icon, _allowLoopback)
+                && (await GetBodyAsync(icon, "image/*", MaxIconBytes, RequestTimeout).ConfigureAwait(false))?.Body is { Length: > 0 } bytes)
+            {
+                return bytes;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -762,16 +906,16 @@ public sealed partial class LinkPreviewer : IDisposable
         }
     }
 
-    // The bytes of the images of the cached previews. A fetch that still runs counts as none. The caller holds the
+    // The bytes of the images and the icons of the cached previews. A fetch that still runs counts as none. The caller holds the
     // cache lock.
     private long CachedImageBytes()
     {
         long total = 0;
         foreach (Task<LinkPreview?> fetch in _cache.Values)
         {
-            if (fetch.IsCompletedSuccessfully && fetch.Result?.Image is { } image)
+            if (fetch.IsCompletedSuccessfully && fetch.Result is { } preview)
             {
-                total += image.Length;
+                total += (preview.Image?.Length ?? 0) + (preview.Icon?.Length ?? 0);
             }
         }
 
@@ -1033,6 +1177,9 @@ public sealed partial class LinkPreviewer : IDisposable
 
     [GeneratedRegex(@"<meta\b[^>]*>", RegexOptions.IgnoreCase, HtmlTimeoutMs)]
     private static partial Regex MetaTag();
+
+    [GeneratedRegex(@"<link\b[^>]*>", RegexOptions.IgnoreCase, HtmlTimeoutMs)]
+    private static partial Regex LinkTag();
 
     [GeneratedRegex("""(?<name>[\w:-]+)\s*=\s*(?:"(?<value>[^"]*)"|'(?<value>[^']*)'|(?<value>[^\s"'>]+))""", RegexOptions.None, HtmlTimeoutMs)]
     private static partial Regex Attribute();
