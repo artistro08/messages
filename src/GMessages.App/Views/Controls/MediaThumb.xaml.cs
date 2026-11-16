@@ -66,6 +66,11 @@ public sealed partial class MediaThumb : UserControl
         bool visual             = part is { Kind: MessageKind.Photo or MessageKind.Video };
         view.Picture.Background = null;
         view.Icon.Visibility    = part is not null && !visual ? Visibility.Visible : Visibility.Collapsed;
+        if (part is not null && !visual)
+        {
+            view.Icon.Glyph = MessageBubble.FileGlyph(part.Kind);
+        }
+
         TestHooks.ShowState(view, visual ? "Placeholder" : "Icon");
         if (part is null || !visual || part.IsPending || (Application.Current as App)?.Media is not { } media)
         {

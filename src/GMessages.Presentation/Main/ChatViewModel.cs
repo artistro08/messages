@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
 using GMessages.Presentation.Messaging;
 using GMessages.Protocol;
 using GMessages.Protocol.Proto;
@@ -39,6 +40,10 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
 
     /// <summary>2 bubbles from the same sender stay in 1 group when this time or less separates them.</summary>
     public static readonly TimeSpan GroupGap = TimeSpan.FromMinutes(3);
+
+    /// <summary>A time stamp shows centered over a bubble when this time or more separates it from the bubble before.</summary>
+    // ponytail: fixed 1 hour gap, the gap of Google Messages is not documented. Tune it here if it shows too often.
+    public static readonly TimeSpan StampGap = TimeSpan.FromHours(1);
 
     /// <summary>The chips together can hold this number of bytes at most: 200 MiB.</summary>
     public const long MaxTotalAttachmentBytes = 200L * 1024 * 1024;
@@ -305,8 +310,15 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
             _replyingTo = value;
             Raise(nameof(ReplyingTo));
             Raise(nameof(IsReplying));
+            Raise(nameof(ReplyingToSender));
         }
     }
+
+    /// <summary>
+    /// Gets the name of the sender of the bubble being replied to, as the quote in the chat names it, or empty.
+    /// </summary>
+    public string ReplyingToSender => _replyingTo is null ? string.Empty
+        : ChatFormat.SenderName(_store.Find(ConversationId)?.FindParticipant(_replyingTo.ParticipantId));
 
     /// <summary>Gets whether the user writes a reply. The reply chip then shows.</summary>
     public bool IsReplying => _replyingTo is not null;
@@ -497,22 +509,6 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
         public string Mime { get; } = mime;
 
         public MediaContent? Uploaded { get; set; }
-    }
-
-    // The report goes to the UI thread through the post of the chat, not to the thread of the upload. It goes only
-    // when the whole percent moves, so a big upload does not flood the UI thread.
-    private sealed class PostedProgress(Action<double> report) : IProgress<double>
-    {
-        private int _percent = -1;
-
-        public void Report(double value)
-        {
-            int percent = (int)(Math.Clamp(value, 0, 1) * 100);
-            if (Interlocked.Exchange(ref _percent, percent) != percent)
-            {
-                report(value);
-            }
-        }
     }
 
     // The ID matches first. Then the temporary ID matches a bubble sent from here.
@@ -718,7 +714,7 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
 
     // Asks 1 time for each link for the preview card of each bubble, only in an inbox chat. Spam, blocked, archived and
     // unknown chats get no preview, so the chat never fetches the link of a stranger. A link in a received message
-    // waits for the setting.
+    // waits for the setting. The card of the phone can come in a later update. The chat then asks again with it.
     private void RefreshPreviews(ConversationInfo? c)
     {
         if (_previews is null || c is not { IsMainView: true })
@@ -729,25 +725,32 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
         bool received = _showReceivedPreviews?.Invoke() ?? true;
         foreach (MessageBubbleViewModel b in Messages)
         {
-            if ((b.FromMe || received) && b.LinkUrl is { } url && b.PreviewAskedFor != url)
+            if ((b.FromMe || received) && b.LinkUrl is { } url)
             {
-                b.PreviewAskedFor = url;
-                _ = LoadPreviewAsync(_previews, b, url);
+                // The card of the phone counts only for the same link, so a card never shows under another link.
+                LinkPreviewData? phone = b.PhonePreview is { } p && LinkPreviewer.SameLink(url, p.Url) ? p : null;
+                if (b.PreviewAskedFor != url || (phone is not null && !b.PreviewAskedWithPhone))
+                {
+                    b.PreviewAskedFor       = url;
+                    b.PreviewAskedWithPhone = phone is not null;
+                    _ = LoadPreviewAsync(_previews, b, url, phone);
+                }
             }
         }
     }
 
     // GetAsync never throws. The post sets the card on the UI thread when the bubble still shows that link.
-    private async Task LoadPreviewAsync(LinkPreviewer previews, MessageBubbleViewModel bubble, Uri url)
+    private async Task LoadPreviewAsync(LinkPreviewer previews, MessageBubbleViewModel bubble, Uri url, LinkPreviewData? phone)
     {
-        if (await previews.GetAsync(url, CancellationToken.None) is not { } preview)
+        if (await previews.GetAsync(url, CancellationToken.None, phone) is not { } preview)
         {
             return;
         }
 
         _post(() =>
         {
-            if (!_disposed && bubble.LinkUrl == url)
+            // A page fetch that ends after the card of the phone came is stale, so it never covers that card.
+            if (!_disposed && bubble.LinkUrl == url && bubble.PreviewAskedWithPhone == (phone is not null))
             {
                 bubble.SetPreview(preview);
             }
@@ -756,25 +759,48 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
 
     // Groups the bubbles as Google Messages does: the same sender, me or 1 person, each a few minutes after the last.
     // In a group chat, a received group shows the name of its sender over its first bubble. It shows the avatar of its
-    // sender beside its last bubble. Only the bubbles from 1 index to another change, clamped to the list.
+    // sender beside its last bubble. A bubble after a long gap shows a time stamp over it, as Google Messages does. So
+    // does the first bubble of the chat, but only once no older page is left, so the stamp does not show and then
+    // vanish while older pages load. A system line gets no stamp and does not count as the bubble before. Only the
+    // bubbles from 1 index to another change, clamped to the list.
+    // ponytail: "Yesterday" and the weekday are worked out at refresh, so they stay as they were past midnight until
+    // the next full refresh.
     private void RefreshGroups(ConversationInfo? c, int from, int to)
     {
-        bool isGroup  = c is { IsGroup: true };
-        int end       = Math.Min(to, Messages.Count - 1);
+        bool isGroup       = c is { IsGroup: true };
+        int end            = Math.Min(to, Messages.Count - 1);
+        DateTimeOffset now = _time.GetLocalNow();
 
         for (int i = Math.Max(0, from); i <= end; i++)
         {
-            MessageBubbleViewModel b = Messages[i];
-            bool first               = i == 0 || !SameGroup(Messages[i - 1], b);
-            bool last                = i == Messages.Count - 1 || !SameGroup(b, Messages[i + 1]);
-            ParticipantInfo? sender  = c?.FindParticipant(b.ParticipantId);
-            string name              = ChatFormat.SenderName(sender);
-            bool lane                = isGroup && !b.FromMe;
+            MessageBubbleViewModel b       = Messages[i];
+            bool first                     = i == 0 || !SameGroup(Messages[i - 1], b);
+            bool last                      = i == Messages.Count - 1 || !SameGroup(b, Messages[i + 1]);
+            ParticipantInfo? sender        = c?.FindParticipant(b.ParticipantId);
+            string name                    = ChatFormat.SenderName(sender);
+            bool lane                      = isGroup && !b.FromMe;
+            MessageBubbleViewModel? before = PreviousReal(i);
+            bool stamped                   = !b.IsSystemLine && (before is null ? _older is null : b.SentAt - before.SentAt >= StampGap);
+            string stamp                   = stamped ? ChatFormat.StampTime(TimeZoneInfo.ConvertTime(b.SentAt, _time.LocalTimeZone), now, CultureInfo.CurrentCulture) : string.Empty;
 
             // The name takes the color of the letter circle of the sender. The conversation tells which reaction is
             // mine.
-            b.SetGroup(first, last, lane, lane && first && name.Length > 0 ? name : null, AvatarParts.ColorOf(sender), ChatFormat.Initial(name), b.ParticipantId);
+            b.SetGroup(first, last, lane, lane && first && name.Length > 0 ? name : null, AvatarParts.ColorOf(sender), ChatFormat.Initial(name), b.ParticipantId, stamp);
             b.SetConversation(c);
+        }
+
+        // The nearest bubble above that is not a system line, or null at the top of the list.
+        MessageBubbleViewModel? PreviousReal(int at)
+        {
+            for (int j = at - 1; j >= 0; j--)
+            {
+                if (!Messages[j].IsSystemLine)
+                {
+                    return Messages[j];
+                }
+            }
+
+            return null;
         }
 
         // A system line, such as a group rename, breaks a group.
@@ -787,6 +813,12 @@ public sealed partial class ChatViewModel : INotifyPropertyChanged, IDisposable
     // its quote is empty.
     private void RefreshQuotes(ConversationInfo? c)
     {
+        // The reply chip names its sender as the quotes do, so it follows the same names.
+        if (_replyingTo is not null)
+        {
+            Raise(nameof(ReplyingToSender));
+        }
+
         foreach (MessageBubbleViewModel b in Messages.Where(b => b.HasQuote))
         {
             if (ById(b.ReplyToId) is { } shown)

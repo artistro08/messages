@@ -17,7 +17,7 @@
     <AppDisplayName>Messages</AppDisplayName>
     <!-- App version (AppInfo.Version, the MSI version and the release tag v1.0.0). Three parts only: Windows Installer
          ignores a fourth, so an update that changed only it would never install. Bump the third part for every release -->
-    <Version>1.0.0</Version>
+    <Version>1.0.1</Version>
   </PropertyGroup>
 
   <!-- Display Name: stamped into every assembly, read at runtime by AppInfo.DisplayName -->

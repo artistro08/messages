@@ -22,6 +22,23 @@ public sealed class ChatMessageTests
     private static MessageInfo Media(MediaFormats f) => new() { MediaContent = new MediaContent { Format = f } };
 
     /// <summary>
+    /// The card that the phone fetched for a link comes through. A card with no text is no card.
+    /// </summary>
+    [TestMethod]
+    [DataRow("Neil Ashton | Actor on Instagram", "", true)]
+    [DataRow("", "#badumtss", true)]
+    [DataRow("", "", false)]
+    public void From_PhonePreview_KeptWhenItHasText(string title, string description, bool kept)
+    {
+        Message proto     = Make(MessageStatusType.IncomingComplete, Text("https://www.instagram.com/p/x/"));
+        proto.LinkPreview = new LinkPreviewData { Url = "https://www.instagram.com/p/x/", Title = title, Description = description };
+
+        ChatMessage m = ChatMessage.From(proto);
+
+        Assert.AreEqual(kept, m.PhonePreview is not null);
+    }
+
+    /// <summary>
     /// An undownloaded MMS and a deletion notice are hidden. The same status with content, or a plain message, shows.
     /// </summary>
     [TestMethod]
