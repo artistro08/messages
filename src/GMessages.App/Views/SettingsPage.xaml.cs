@@ -143,4 +143,8 @@ public sealed partial class SettingsPage : UserControl
     private void OnUnpairClick(object sender, RoutedEventArgs e) => UnpairRequested?.Invoke(this, EventArgs.Empty);
 
     private void OnOpenLogsClick(object sender, RoutedEventArgs e) => ViewModel.OpenLogsFolder();
+
+    private void OnCheckForUpdatesClick(object sender, RoutedEventArgs e) => ViewModel.CheckForUpdates();
+
+    private void OnInstallUpdateClick(object sender, RoutedEventArgs e) => ViewModel.InstallUpdate();
 }

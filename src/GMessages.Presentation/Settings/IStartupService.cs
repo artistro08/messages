@@ -4,8 +4,7 @@ namespace GMessages.Presentation.Settings;
 /// Controls the "Start with Windows" switch. Ported from <c>IStartupTaskService</c> of Magic Buds.
 /// </summary>
 /// <remarks>
-/// The App uses the MSIX startup task in a package, and the Run key of the current user without a package. Thus the
-/// interface has 2 real implementations. Under UI test, a marker file replaces the switch.
+/// The App uses the Run key of the current user. Under UI test, a marker file replaces the switch.
 /// </remarks>
 public interface IStartupService
 {
