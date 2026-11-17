@@ -255,6 +255,22 @@ public sealed class ChatViewModelTests
     }
 
     /// <summary>
+    /// The Windows text box ends lines with \r. The sent text uses \n, which Android shows as a line break.
+    /// </summary>
+    [TestMethod]
+    public async Task Send_LineBreaks_GoAsNewlines()
+    {
+        using var rig = new MainRig();
+        using ChatViewModel chat = NewChat(rig);
+        await chat.LoadAsync();
+        chat.Draft = "one\rtwo\r\nthree";
+
+        await chat.SendAsync();
+
+        Assert.AreEqual("one\ntwo\nthree", rig.Client.Sent[0].MessagePayload.MessageInfo[0].MessageContent.Content);
+    }
+
+    /// <summary>
     /// The bubbles of the first page do not animate in. A sent bubble and a live arrival animate in, once.
     /// </summary>
     [TestMethod]

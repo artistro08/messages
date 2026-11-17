@@ -21,6 +21,9 @@ public sealed class UpdaterTests
     [DataRow("v1.0.0", "1.0.0", false)]
     [DataRow("v1.0", "1.0.0", false)]
     [DataRow("v0.9.9", "1.0.0", false)]
+    [DataRow("v1.0.2.1", "1.0.2", true)]
+    [DataRow("v1.0.2", "1.0.2.1", false)]
+    [DataRow("v1.0.3", "1.0.2.1", true)]
     [DataRow("nightly", "1.0.0", false)]
     public void PickInstaller_OnlyForANewerRelease(string tag, string current, bool expected)
     {
