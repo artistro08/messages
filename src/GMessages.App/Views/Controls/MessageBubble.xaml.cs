@@ -211,6 +211,9 @@ public sealed partial class MessageBubble : UserControl
     // Reads the animation setting of Windows live: Settings > Accessibility > Visual effects.
     private static readonly UISettings Ui = new();
 
+    // Reads the high contrast setting of Windows live.
+    private static readonly AccessibilitySettings Contrast = new();
+
     // The first flag is true while the pointer is over the bubble. The second flag is true while the picker or the
     // menu from the strip is open. The strip then stays while the pointer is in that popup.
     private bool _pointerOver;
@@ -235,6 +238,10 @@ public sealed partial class MessageBubble : UserControl
     // because a rebuild drops a selection.
     private string? _shownText;
     private string? _shownKey;
+
+    // The selected part of the shown text. See SelectText.
+    private int _selectStart;
+    private int _selectEnd;
 
     // The links of the text, kept in the color of the text.
     private readonly List<Hyperlink> _links = [];
@@ -1561,6 +1568,11 @@ public sealed partial class MessageBubble : UserControl
 
         _shownText = text;
         _shownKey  = key;
+
+        // A selection does not stay on a row that shows another text.
+        _selectStart = 0;
+        _selectEnd   = 0;
+        Body.TextHighlighters.Clear();
         _links.Clear();
         LinkBlockers.Children.Clear();
 
@@ -1823,9 +1835,17 @@ public sealed partial class MessageBubble : UserControl
     internal UIElement TextView => Body;
 
     /// <summary>
-    /// Gets the selected part of the shown text.
+    /// Gets the part of the shown text that <see cref="SelectText"/> selected.
     /// </summary>
-    internal string SelectedText => Body.SelectedText;
+    internal string SelectedText
+    {
+        get
+        {
+            string text = ShownText;
+            int start   = Math.Min(_selectStart, text.Length);
+            return text[start..Math.Clamp(_selectEnd, start, text.Length)];
+        }
+    }
 
     /// <summary>
     /// Finds the place in the text under a point on <see cref="TextView"/>.
@@ -1886,10 +1906,32 @@ public sealed partial class MessageBubble : UserControl
     /// <summary>
     /// Selects the shown text from start to end. Equal indices clear the selection.
     /// </summary>
+    /// <remarks>
+    /// The bubble draws the highlight itself, because the text shows its own selection only while it has focus. A
+    /// received bubble shows the accent color behind white letters. A sent bubble has an accent fill, so it swaps the
+    /// colors of its text and its fill. High contrast does the same on every bubble.
+    /// </remarks>
     internal void SelectText(int start, int end)
     {
-        TextPointer from = PointerAt(start);
-        Body.Select(from, start == end ? from : PointerAt(end));
+        _selectStart = start;
+        _selectEnd   = Math.Max(start, end);
+
+        // The own selection of the text must not show a second highlight.
+        Body.Select(Body.ContentStart, Body.ContentStart);
+        Body.TextHighlighters.Clear();
+        if (_selectEnd == _selectStart)
+        {
+            return;
+        }
+
+        bool swap     = Bubble?.FromMe == true || Contrast.HighContrast;
+        var highlight = new TextHighlighter
+        {
+            Background = swap ? Body.Foreground : new SolidColorBrush(Ui.GetColorValue(UIColorType.Accent)),
+            Foreground = swap ? BackFill.Background ?? Body.Foreground : new SolidColorBrush(Windows.UI.Colors.White),
+        };
+        highlight.Ranges.Add(new TextRange { StartIndex = _selectStart, Length = _selectEnd - _selectStart });
+        Body.TextHighlighters.Add(highlight);
     }
 
     private Rect CaretRect(int index, LogicalDirection direction) => PointerAt(index).GetCharacterRect(direction);
@@ -1937,7 +1979,8 @@ public sealed partial class MessageBubble : UserControl
     public void Copy()
     {
         string original = Bubble?.Text ?? string.Empty;
-        string text     = Body.SelectedText.Length > 0 ? ChatFormat.OriginalOf(original, Body.SelectedText) : original;
+        string selected = SelectedText.Length > 0 ? SelectedText : Body.SelectedText;
+        string text     = selected.Length > 0 ? ChatFormat.OriginalOf(original, selected) : original;
         if (text.Length == 0)
         {
             return;

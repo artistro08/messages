@@ -24,8 +24,9 @@ namespace GMessages.App.Views;
 /// the bubbles above and below.
 /// </para>
 /// <para>
-/// A single click without a drag stays with the text, so a click on a link still opens it. Ctrl + C and Copy in the
-/// bubble menu copy a selection of more than 1 bubble, 1 message to a line. ChatPane.xaml.cs holds the other members.
+/// A single click without a drag stays with the text, so a click on a link still opens it. Each bubble draws its own
+/// highlight, so the selection shows in every bubble at once and stays through a right-click. Ctrl + C and Copy in the
+/// bubble menu copy the selection, 1 message to a line. ChatPane.xaml.cs holds the other members.
 /// </para>
 /// </remarks>
 public sealed partial class ChatPane
@@ -93,7 +94,7 @@ public sealed partial class ChatPane
         MessageBubble? view = TextViewOf(e.OriginalSource as DependencyObject);
         if (view?.Bubble is not { } bubble)
         {
-            ClearTextSelection(null);
+            ClearTextSelection();
             return;
         }
 
@@ -102,7 +103,7 @@ public sealed partial class ChatPane
         // A new single click drops the old selection. The clear also ends the press, so it comes before the press.
         if (_textUnit == TextUnit.Letter)
         {
-            ClearTextSelection(view);
+            ClearTextSelection();
         }
 
         (int caret, int letter) = view.TextHit(e.GetCurrentPoint(view.TextView).Position);
@@ -256,10 +257,10 @@ public sealed partial class ChatPane
         _textShown = shown;
     }
 
-    // Clears the selection of the pane. The kept bubble keeps the selection of its own click.
-    private void ClearTextSelection(MessageBubble? keep)
+    // Clears the selection of the pane.
+    private void ClearTextSelection()
     {
-        foreach (MessageBubble view in _textShown.Where(view => !ReferenceEquals(view, keep)))
+        foreach (MessageBubble view in _textShown)
         {
             view.SelectText(0, 0);
         }
@@ -272,12 +273,12 @@ public sealed partial class ChatPane
     }
 
     /// <summary>
-    /// Gives the selected text of more than 1 bubble, as sent, 1 message to a line. It gives null for a selection in 1
-    /// bubble, which the text copies itself, and when the bubble is given but not in the selection.
+    /// Gives the selected text, as sent, 1 message to a line. It gives null with no selection, and when the bubble is
+    /// given but not in the selection.
     /// </summary>
     private string? SelectedChatText(MessageBubbleViewModel? within)
     {
-        if (Chat is not { } chat || _fromBubble is not { } from || _toBubble is not { } to || ReferenceEquals(from, to))
+        if (Chat is not { } chat || _fromBubble is not { } from || _toBubble is not { } to)
         {
             return null;
         }
@@ -303,8 +304,13 @@ public sealed partial class ChatPane
             }
         }
 
-        lines.Add(_toText);
-        return string.Join(Environment.NewLine, lines);
+        if (toIndex > fromIndex)
+        {
+            lines.Add(_toText);
+        }
+
+        string text = string.Join(Environment.NewLine, lines);
+        return text.Length > 0 ? text : null;
     }
 
     // Finds the bubble whose text the element is in, or null off the text of a bubble. A link is in the text.

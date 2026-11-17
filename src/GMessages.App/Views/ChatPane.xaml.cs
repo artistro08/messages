@@ -623,7 +623,7 @@ public sealed partial class ChatPane : UserControl
         pane.DropRecorder();
         pane._menuView?.KeepShown(false);
         pane._menuView = null;
-        pane.ClearTextSelection(null);
+        pane.ClearTextSelection();
         BindableList.Show(pane.MessageList, chat?.Messages);
         BindableList.Show(pane.AttachmentList, chat?.Attachments);
         if (chat is not null)
@@ -1004,7 +1004,7 @@ public sealed partial class ChatPane : UserControl
     // the Native AOT build the row arrives as a ContentControl, not a ListViewItem. See UiHelpers.FindScroller.
     private void OnMessageListKeyDown(object sender, KeyRoutedEventArgs e)
     {
-        // Ctrl + C copies a selection across bubbles. The text copies a selection inside itself.
+        // Ctrl + C copies the selection of the pane.
         if (e.Key == VirtualKey.C && UiHelpers.IsDown(VirtualKey.Control) && SelectedChatText(null) is { } selected)
         {
             e.Handled = true;
@@ -1281,7 +1281,7 @@ public sealed partial class ChatPane : UserControl
 
     // The menu items act on the bubble that the menu opened on. The bubble stays set after the menu closes, because the
     // click of an item can come after the close.
-    // On a bubble in a selection across bubbles, Copy copies the whole selection.
+    // On a bubble in the selection, Copy copies the whole selection.
     private void OnBubbleMenuCopyClick(object sender, RoutedEventArgs e)
     {
         if (SelectedChatText(_menuView?.Bubble) is { } selected)
