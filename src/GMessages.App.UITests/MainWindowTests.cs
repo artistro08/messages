@@ -553,6 +553,54 @@ public sealed class MainWindowTests : UiTest
     }
 
     /// <summary>
+    /// A live message for a conversation that is not open lifts its row. A list at its top stays at its top, also with
+    /// the pinned grid above the rows.
+    /// </summary>
+    [TestMethod]
+    public async Task LiveMessage_ListAtTop_DoesNotScroll()
+    {
+        AddOlderChats();
+        await OpenMainAsync();
+        App.Find("Row.c-page-00");
+
+        // The jump came only with the pinned grid above the rows.
+        SetSwitch("Settings.PinnedGrid", ToggleState.On);
+        AutomationElement list = App.Find("Main.ConversationList");
+        AutomationElement grid = App.Find("Main.PinnedGrid");
+
+        // The grid must finish its layout before the test measures it.
+        int gridHeight      = -1;
+        DateTime stillSince = DateTime.UtcNow;
+        Wait.Until(() =>
+        {
+            int now = grid.BoundingRectangle.Height;
+            if (now != gridHeight)
+            {
+                gridHeight = now;
+                stillSince = DateTime.UtcNow;
+            }
+
+            return gridHeight > 0 && DateTime.UtcNow - stillSince >= TimeSpan.FromMilliseconds(500);
+        }, AppDriver.DefaultTimeout, () => $"The pinned grid never kept its height; last {gridHeight} px.");
+
+        Server.Phone.PushIncoming("c-page-10", "yo");
+
+        // A scrolled list cuts the top of the grid, so the height of the grid also tells a scroll. The pause keeps the
+        // samples from loading the UI thread of the app.
+        double scrolled = 0;
+        var watch       = System.Diagnostics.Stopwatch.StartNew();
+        while (watch.Elapsed < TimeSpan.FromSeconds(3))
+        {
+            scrolled = Math.Max(scrolled, list.Patterns.Scroll.Pattern.VerticalScrollPercent.ValueOrDefault);
+            await Task.Delay(20);
+        }
+
+        Assert.AreEqual("Row.c-page-10", list.FindFirstChild(cf => cf.ByControlType(ControlType.ListItem))!.Properties.AutomationId.ValueOrDefault, "The row with the new message isn't the first row.");
+        Assert.AreEqual(0, scrolled, "The list scrolled away from its top.");
+        Assert.AreEqual(gridHeight, App.Find("Main.PinnedGrid").BoundingRectangle.Height, "The list cut the top of the pinned grid.");
+    }
+
+    /// <summary>
     /// The window stops shrinking at its minimum size. The minimum width is 352 px.
     /// The minimum height is 500 px. Both values use the display scale and add the frame.
     /// </summary>

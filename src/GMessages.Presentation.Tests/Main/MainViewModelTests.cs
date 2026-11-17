@@ -418,9 +418,21 @@ public sealed class MainViewModelTests
     public async Task Banner_FollowsStateAndPhoneEvents()
     {
         using var rig = new MainRig();
-        using MainViewModel vm = await NewMainAsync(rig);
+        var time      = new Microsoft.Extensions.Time.Testing.FakeTimeProvider(MainRig.Now);
+        rig.Page(MainRig.Conv("a", "Ann", 1));
+        using var vm = new MainViewModel(rig.Controller, rig.Store, time, a => a());
+        await vm.Inbox.LoadAsync();
+
+        // A short trouble never shows the banner.
+        vm.ApplyState(ConnectionState.Reconnecting);
+        time.Advance(MainViewModel.BannerDelay - TimeSpan.FromSeconds(1));
+        Assert.IsNull(vm.StatusBanner);
+        vm.ApplyState(ConnectionState.Connected);
+        time.Advance(MainViewModel.BannerDelay);
+        Assert.IsNull(vm.StatusBanner);
 
         vm.ApplyState(ConnectionState.Connecting);
+        time.Advance(MainViewModel.BannerDelay);
         Assert.AreEqual(ChatCopy.Connecting, vm.StatusBanner);
         Assert.IsTrue(vm.HasStatusBanner);
 
@@ -429,12 +441,14 @@ public sealed class MainViewModelTests
         Assert.IsFalse(vm.HasStatusBanner);
 
         vm.ApplyEvent(new PhoneNotResponding());
+        time.Advance(MainViewModel.BannerDelay);
         Assert.AreEqual(ChatCopy.WaitingForPhone, vm.StatusBanner);
 
         vm.ApplyEvent(new PhoneRespondingAgain());
         Assert.IsNull(vm.StatusBanner);
 
         vm.ApplyState(ConnectionState.Reconnecting);
+        time.Advance(MainViewModel.BannerDelay);
         Assert.AreEqual(ChatCopy.Connecting, vm.StatusBanner);
 
         // Stale silence does not survive a reconnect.

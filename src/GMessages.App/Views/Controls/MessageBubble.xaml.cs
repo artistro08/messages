@@ -1809,12 +1809,20 @@ public sealed partial class MessageBubble : UserControl
     }
 
     // A tap on the row beside the bubble also toggles the time: on its empty width, the avatar or the time. The bubble
-    // has its own handler above. A button such as the hover strip or the pill handles its own tap.
+    // has its own handler above. A button does not stop the tap, so a tap on a button of the row stops here: react,
+    // reply, the ⋮, the pill, the preview card and the retry link. The empty space around them still toggles the time.
+    // The check names each button, because a type check can fail in the Native AOT build. See UiHelpers.FindScroller.
     private void OnRowTapped(object sender, TappedRoutedEventArgs e)
     {
         for (DependencyObject? at = e.OriginalSource as DependencyObject; at is not null && !ReferenceEquals(at, Row); at = VisualTreeHelper.GetParent(at))
         {
-            if (ReferenceEquals(at, Back))
+            if (ReferenceEquals(at, Back)
+                || ReferenceEquals(at, HoverReact)
+                || ReferenceEquals(at, HoverReply)
+                || ReferenceEquals(at, HoverMore)
+                || ReferenceEquals(at, Pill)
+                || ReferenceEquals(at, Preview)
+                || ReferenceEquals(at, FailedFooter))
             {
                 return;
             }
