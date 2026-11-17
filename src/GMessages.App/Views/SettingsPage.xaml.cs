@@ -25,6 +25,7 @@ public sealed partial class SettingsPage : UserControl
     private const double CardWrapWidth = 476;
 
     private bool _closed;
+    private bool _wrapped;
 
     /// <summary>
     /// Creates the page and reads the Start with Windows state.
@@ -148,6 +149,12 @@ public sealed partial class SettingsPage : UserControl
     private void OnCardsSizeChanged(object sender, SizeChangedEventArgs e)
     {
         bool wrap = e.NewSize.Width < CardWrapWidth;
+        if (wrap == _wrapped)
+        {
+            return;
+        }
+
+        _wrapped = wrap;
         foreach (FrameworkElement control in new FrameworkElement[] { ThemeBox, SnoozeBox, MicrophoneBox, UnpairActions, UpdateActions, RepositoryLink })
         {
             Grid.SetRow(control, wrap ? 1 : 0);
