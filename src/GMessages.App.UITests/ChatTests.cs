@@ -321,7 +321,66 @@ public sealed class ChatTests : UiTest
         System.Drawing.Rectangle text = App.Find("Bubble." + sent).BoundingRectangle;
         System.Drawing.Rectangle word = WordBounds(sent, "Hey");
         System.Drawing.Color fill     = PixelAt(text.Left - 4, text.Top + (text.Height / 2));
-        System.Drawing.Color shade    = PixelAt(word.Left + (word.Width / 2), word.Top + 2);        Assert.IsTrue(shade.R <= fill.R && shade.G <= fill.G && shade.B <= fill.B, $"The highlight {shade} was not a darker shade of the bubble {fill}.");
+        System.Drawing.Color shade    = PixelAt(word.Left + (word.Width / 2), word.Top + 2);
+        Assert.IsTrue(shade.R <= fill.R && shade.G <= fill.G && shade.B <= fill.B, $"The highlight {shade} was not a darker shade of the bubble {fill}.");
+    }
+
+    /// <summary>
+    /// A sent RCS bubble has the same darker shade of the accent color in the dark theme and in the light theme.
+    /// </summary>
+    [TestMethod]
+    public async Task SentRcsBubble_HasTheSameShade_InBothThemes()
+    {
+        await OpenAnnAsync();
+        Thread.Sleep(800);
+        string sent = Bubbles().First(bubble => bubble.Text == "Hey Ann").Id;
+
+        System.Drawing.Color dark  = FillIn(2);
+        System.Drawing.Color light = FillIn(1);
+        int difference             = Math.Abs(dark.R - light.R) + Math.Abs(dark.G - light.G) + Math.Abs(dark.B - light.B);
+        Assert.IsTrue(difference <= 24, $"The sent RCS bubble was {light} in the light theme and {dark} in the dark theme.");
+
+        // Sets the theme in the settings, 1 for Light and 2 for Dark, and gives the fill of the bubble.
+        System.Drawing.Color FillIn(int theme)
+        {
+            InvokeTrayMenu("TrayMenu.Settings");
+            WaitForSettings().Focus();
+            ComboBox box = App.Find("Settings.Theme").AsComboBox();
+            box.Select(theme);
+            box.Collapse();
+            App.Find("Settings.Back").Patterns.Invoke.Pattern.Invoke();
+            WaitForGone("Settings.Back");
+            Thread.Sleep(800);
+            System.Drawing.Rectangle text = App.Find(sent).BoundingRectangle;
+            return PixelAt(text.Left - 4, text.Top + (text.Height / 2));
+        }
+    }
+
+    /// <summary>
+    /// After a drag ends, the text where the drag started selects nothing more. The pointer then moves over that text
+    /// with no button down, and no selection follows it.
+    /// </summary>
+    [TestMethod]
+    public async Task Drag_AfterTheRelease_MovingOverTheTextSelectsNothing()
+    {
+        (string first, string second) = await OpenTwoTextsAsync();
+
+        FlaUI.Core.Input.Mouse.MoveTo(Start(WordBounds(first, "beta")));
+        FlaUI.Core.Input.Mouse.Down(FlaUI.Core.Input.MouseButton.Left);
+        PointerInput.DragTo(Middle(WordBounds(second, "epsilon")));
+        FlaUI.Core.Input.Mouse.Up(FlaUI.Core.Input.MouseButton.Left);
+        AssertHighlighted(first, "beta", true);
+
+        // A click on the other bubble clears the selection.
+        FlaUI.Core.Input.Mouse.Click(Middle(WordBounds(second, "zeta")));
+        AssertHighlighted(first, "beta", false);
+
+        FlaUI.Core.Input.Mouse.MoveTo(Middle(WordBounds(first, "alpha")));
+        PointerInput.DragTo(Middle(WordBounds(first, "gamma")));
+        Thread.Sleep(500);
+        string own = string.Concat(App.Find("Bubble." + first).Patterns.Text.Pattern.GetSelection().Select(range => range.GetText(-1)));
+        Assert.AreEqual(string.Empty, own, "The text selected by itself under a pointer with no button down.");
+        AssertHighlighted(first, "beta", false);
     }
 
     // Opens the chat with Ann and waits for 2 new texts, one above the other. Returns their message IDs.

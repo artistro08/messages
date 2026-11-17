@@ -28,7 +28,8 @@ namespace GMessages.App.Views.Controls;
 /// </summary>
 /// <remarks>
 /// <para>
-/// A sent RCS bubble has a lighter shade of the accent color. A sent SMS bubble has the accent color.
+/// A sent RCS bubble has the darker shade of the accent color, and a sent SMS bubble has the lighter shade, in the
+/// light and the dark theme.
 /// </para>
 /// <para>
 /// The text carries the AutomationId <c>Bubble.{id}</c>. Until the phone echoes a sent message, it carries
@@ -352,11 +353,16 @@ public sealed partial class MessageBubble : UserControl
         // pane, whose bubble menu has Copy.
         Body.ContextFlyout = null;
 
-        // After a double-click, the text selects the word itself and shows its own highlight over the highlight of the
-        // bubble. The bubble removes that selection.
+        // The look of a sent bubble follows the theme. See OnFullAccent. A row can get its message before it is in the
+        // window, where the theme is not yet known.
+        ActualThemeChanged += (_, _) => ShowStates();
+        Loaded             += (_, _) => ShowStates();
+
+        // After a double-click and during a drag of the pane, the text selects by itself and shows its own highlight
+        // over the highlight of the bubble. The bubble removes that selection.
         Body.SelectionChanged += (_, _) =>
         {
-            if (_selectEnd > _selectStart && Body.SelectedText.Length > 0)
+            if ((PaneSelects || _selectEnd > _selectStart) && Body.SelectedText.Length > 0)
             {
                 Body.Select(Body.ContentStart, Body.ContentStart);
             }
@@ -908,15 +914,22 @@ public sealed partial class MessageBubble : UserControl
         }
     }
 
-    // Sets the own states of the parts: the on-accent brushes on the parts of a sent SMS bubble, and the fill of my
-    // reaction on the pill. The method sets states only on a loaded part, because the setter of a state would load its
-    // part. With refresh, the method goes to a state again through the plain state. That is for a new part whose group
-    // already sat in the state. A second go to the same state does nothing.
+    // Sent RCS shows on the darker shade of the accent and sent SMS on the lighter shade, in the light and the dark
+    // theme, as in Google Messages. The full accent of Windows is the darker shade in the light theme and the lighter
+    // shade in the dark theme. Thus the bubble on the full accent is RCS in the light theme and SMS in the dark theme.
+    // The other bubble takes the soft shade of the Sent state. High contrast keeps SMS on the full accent.
+    private bool OnFullAccent =>
+        Bubble is { FromMe: true } sent && sent.IsRcs == (ActualTheme == ElementTheme.Light && !Contrast.HighContrast);
+
+    // Sets the own states of the parts: the on-accent brushes on the parts of a sent bubble on the full accent, and the
+    // fill of my reaction on the pill. The method sets states only on a loaded part, because the setter of a state
+    // would load its part. With refresh, the method goes to a state again through the plain state. That is for a new
+    // part whose group already sat in the state. A second go to the same state does nothing.
     private void ShowPartStates(bool refresh)
     {
-        bool sms = Bubble is { FromMe: true, IsRcs: false };
-        GoToPartState(FileCard, sms ? "FileOnAccent" : "FilePlain", "FilePlain", refresh);
-        GoToPartState(Voice, sms ? "VoiceOnAccent" : "VoicePlain", "VoicePlain", refresh);
+        bool onAccent = OnFullAccent;
+        GoToPartState(FileCard, onAccent ? "FileOnAccent" : "FilePlain", "FilePlain", refresh);
+        GoToPartState(Voice, onAccent ? "VoiceOnAccent" : "VoicePlain", "VoicePlain", refresh);
         GoToPartState(PillHost, Bubble?.HasMyReaction == true ? "Mine" : "NotMine", "NotMine", refresh);
     }
 
@@ -1551,13 +1564,13 @@ public sealed partial class MessageBubble : UserControl
 
     private void ShowStates()
     {
-        // Emoji alone have no accent fill behind them. Thus a sent SMS of emoji takes the plain text color of the Sent
-        // state, not the on-accent color.
+        // Emoji alone have no accent fill behind them. Thus sent emoji take the plain text color of the Sent state, not
+        // the on-accent color.
         string side = Bubble switch
         {
-            { FromMe: false } or null                => "Received",
-            { IsRcs: true } or { IsEmojiOnly: true } => "Sent",
-            _                                        => "SentSms",
+            { FromMe: false } or null => "Received",
+            { IsEmojiOnly: true }     => "Sent",
+            _                         => OnFullAccent ? "SentSms" : "Sent",
         };
 
         VisualStateManager.GoToState(this, side, false);
@@ -1859,6 +1872,15 @@ public sealed partial class MessageBubble : UserControl
             return text[start..Math.Clamp(_selectEnd, start, text.Length)];
         }
     }
+
+    /// <summary>
+    /// Gets or sets whether the chat pane selects with a drag that started on this text.
+    /// </summary>
+    /// <remarks>
+    /// The text keeps the pointer and does its own drag to the release. Without the release, the text selected under the
+    /// pointer with no button down. While the value is true, the bubble removes each selection that the text makes.
+    /// </remarks>
+    internal bool PaneSelects { get; set; }
 
     /// <summary>
     /// Finds the place in the text under a point on <see cref="TextView"/>.

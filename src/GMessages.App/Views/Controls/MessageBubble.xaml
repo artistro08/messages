@@ -17,8 +17,10 @@
         Background="Transparent"
         Margin="{x:Bind local:MessageBubble.GroupMargin(Bubble.IsFirstInGroup, Bubble.IsLastInGroup), Mode=OneWay}">
 
-        <!-- Sent RCS sits on the right on a lighter shade of the accent color. Sent SMS sits on the right on the accent
-             color. Received sits on the left on the card color. The reaction pill takes the bottom corner of the bubble
+        <!-- A sent bubble sits on the right. The Sent state gives it the soft shade of the accent color, and the SentSms
+             state gives it the full accent color. The code picks the state by the theme, so that RCS has the darker
+             shade and SMS the lighter shade in both themes. See OnFullAccent. Received sits on the left on the card
+             color. The reaction pill takes the bottom corner of the bubble
              toward the middle of the chat. That is bottom right on a received bubble and bottom left on a sent bubble,
              as the owner asked. PillHost binds the column and the margin of the pill. The time keeps the outer side of
              the bubble. The groups must stay on the root element of the

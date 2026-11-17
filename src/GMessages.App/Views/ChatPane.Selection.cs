@@ -48,11 +48,11 @@ public sealed partial class ChatPane
     private int _anchorStart;
     private int _anchorEnd;
 
-    // The press is in text and the button is down. The pane holds the pointer after the drag starts.
+    // The press is in text and the button is down. The pane selects after the drag starts.
     private bool _textPressed;
     private bool _textDragging;
     private Point _pressAt;
-    private UIElement? _pressedText;
+    private MessageBubble? _pressedView;
 
     // The clicks so far: 1, 2 or 3. Each click within the double-click time of the last one adds 1.
     private int _clicks;
@@ -109,7 +109,7 @@ public sealed partial class ChatPane
         (int caret, int letter) = view.TextHit(e.GetCurrentPoint(view.TextView).Position);
         (_anchorStart, _anchorEnd) = UnitAround(view.ShownText, caret, letter, _textUnit);
         _anchorBubble = bubble;
-        _pressedText  = view.TextView;
+        _pressedView  = view;
         _textPressed  = true;
         _pressAt      = point.Position;
 
@@ -120,7 +120,7 @@ public sealed partial class ChatPane
         }
 
         view.CancelTextTap();
-        TakePointer(e.Pointer);
+        TakePointer();
         SelectTo(bubble, view, caret, letter);
     }
 
@@ -134,7 +134,7 @@ public sealed partial class ChatPane
         PointerPoint point = e.GetCurrentPoint(MessageList);
         if (!point.Properties.IsLeftButtonPressed)
         {
-            EndTextDrag(e.Pointer);
+            EndTextDrag();
             return;
         }
 
@@ -145,42 +145,55 @@ public sealed partial class ChatPane
                 return;
             }
 
-            TakePointer(e.Pointer);
+            TakePointer();
         }
 
-        if (TextViewNear(point.Position.Y) is { Bubble: { } bubble } view)
+        SelectToPointer(e);
+    }
+
+    // Windows can drop the last moves before the release when the app is busy. The release then gives the end of the
+    // selection.
+    private void OnTextPointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        if (_textPressed && _textDragging)
+        {
+            SelectToPointer(e);
+        }
+
+        EndTextDrag();
+    }
+
+    private void SelectToPointer(PointerRoutedEventArgs e)
+    {
+        if (TextViewNear(e.GetCurrentPoint(MessageList).Position.Y) is { Bubble: { } bubble } view)
         {
             (int caret, int letter) = view.TextHit(e.GetCurrentPoint(view.TextView).Position);
             SelectTo(bubble, view, caret, letter);
         }
     }
 
-    private void OnTextPointerReleased(object sender, PointerRoutedEventArgs e) => EndTextDrag(e.Pointer);
+    // The text lost the pointer with no release, as when a menu opens. The drag ends there.
+    private void OnTextPointerCaptureLost(object sender, PointerRoutedEventArgs e) => EndTextDrag();
 
-    private void OnTextPointerCaptureLost(object sender, PointerRoutedEventArgs e)
+    // The pane starts to select. The text keeps the pointer to the release, so its own drag ends there. The moves and
+    // the release come to the list from the text.
+    private void TakePointer()
     {
-        if (ReferenceEquals(e.OriginalSource, MessageList))
+        _textDragging = true;
+        if (_pressedView is { } view)
         {
-            _textPressed  = false;
-            _textDragging = false;
+            view.PaneSelects = true;
         }
     }
 
-    // The pane takes the pointer from the text. The text then stops its own drag. The list cannot capture the pointer
-    // while the text holds it.
-    private void TakePointer(Pointer pointer)
+    private void EndTextDrag()
     {
-        _pressedText?.ReleasePointerCaptures();
-        _textDragging = MessageList.CapturePointer(pointer);
-    }
-
-    private void EndTextDrag(Pointer pointer)
-    {
-        if (_textDragging)
+        if (_pressedView is { } view)
         {
-            MessageList.ReleasePointerCapture(pointer);
+            view.PaneSelects = false;
         }
 
+        _pressedView  = null;
         _textPressed  = false;
         _textDragging = false;
     }
@@ -269,7 +282,7 @@ public sealed partial class ChatPane
         _fromBubble   = null;
         _toBubble     = null;
         _anchorBubble = null;
-        _textPressed  = false;
+        EndTextDrag();
     }
 
     /// <summary>
