@@ -13,7 +13,7 @@
         Scope="perMachine">
 
         <!-- Upgrades -->
-        <MajorUpgrade DowngradeErrorMessage="A newer version of $(var.AppName) is already installed." />
+        <MajorUpgrade AllowSameVersionUpgrades="yes" DowngradeErrorMessage="A newer version of $(var.AppName) is already installed." />
         <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
 
         <!-- Apps & Features Entry -->

@@ -15,8 +15,9 @@
 
     <DefineConstants>AppName=$(AppName);Version=$(ProductVersion);PublishDir=$(PublishDir);PrerequisitesDir=$(PrerequisitesDir)</DefineConstants>
 
-    <!-- ICE03 flags Windows App SDK DLLs that list several languages in their version info; that's metadata only -->
-    <SuppressIces>ICE03</SuppressIces>
+    <!-- ICE03 flags Windows App SDK DLLs that list several languages in their version info; that's metadata only.
+         ICE61 flags the same-version upgrades that let a build bump (1.0.2.1) replace 1.0.2 -->
+    <SuppressIces>ICE03;ICE61</SuppressIces>
   </PropertyGroup>
 
   <!-- WixQuietExec: runs the prerequisite and quit commands without a console window -->

@@ -582,7 +582,7 @@ public sealed partial class ChatStore : IDisposable
     /// Ported from <c>ConvertMatrixMessage</c> in the Go connector. The request and the payload carry the same
     /// temporary ID. The message goes as the default outgoing participant of the conversation. The SIM is the card of
     /// that participant, from the last settings event. The exceptions for a phone that does not respond and for a
-    /// closed connection go to the caller.
+    /// closed connection go to the caller. The line breaks go as <c>\n</c>, see <see cref="AndroidLineBreaks"/>.
     /// </remarks>
     /// <param name="tmpId">
     /// The temporary ID from <c>GmClient.NewTmpId()</c>. It matches the echo to the pending bubble.
@@ -594,6 +594,7 @@ public sealed partial class ChatStore : IDisposable
     public async Task<ChatMessage> SendTextAsync(string conversationId, string text, string tmpId, string? replyToId, CancellationToken ct)
     {
         IMessagingClient client = RequireClient();
+        text                    = AndroidLineBreaks(text);
 
         int generation                = Generation;
         ConversationInfo conversation = await RequireConversationAsync(client, conversationId, generation, ct).ConfigureAwait(false);
@@ -682,8 +683,8 @@ public sealed partial class ChatStore : IDisposable
 
         int generation                = Generation;
         ConversationInfo conversation = await RequireConversationAsync(client, conversationId, generation, ct).ConfigureAwait(false);
-        string text                   = caption ?? string.Empty;
-        bool captionApart             = conversation.IsRcs && text.Length > 0;
+        string text                   = AndroidLineBreaks(caption ?? string.Empty);
+        bool captionApart            = conversation.IsRcs && text.Length > 0;
 
         SendMessageRequest request = NewSendRequest(conversationId, conversation, tmpId);
         request.MessagePayload.MessageInfo.Add(new MessageInfo { MediaContent = media });
@@ -848,6 +849,10 @@ public sealed partial class ChatStore : IDisposable
 
         return CacheConversation(fetched, generation);
     }
+
+    // The Windows text box ends each line with \r. Android shows a line break only for \n, so a plain SMS lost them.
+    // Only \r\n and \r change, so other characters in the text go as typed.
+    private static string AndroidLineBreaks(string text) => text.Replace("\r\n", "\n").Replace('\r', '\n');
 
     // The SIM card of the default outgoing participant, from the last settings event.
     private SIMPayload? SimOf(ConversationInfo conversation) =>
