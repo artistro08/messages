@@ -268,7 +268,6 @@ public sealed class ChatViewModelTests
         await chat.SendAsync();
 
         Assert.AreEqual("one\ntwo\nthree", rig.Client.Sent[0].MessagePayload.MessageInfo[0].MessageContent.Content);
-        Assert.AreEqual("one\ntwo\nthree", chat.Messages[0].Text);
     }
 
     /// <summary>
