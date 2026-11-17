@@ -39,7 +39,7 @@ public sealed class SettingsViewModelTests
         IStartupService? startup = null,
         ConnectionController? controller = null,
         Action<string>? openFolder = null) =>
-        new(new AppSettings(store), startup ?? new FakeStartupService(), controller ?? IdleController(), openFolder ?? (_ => { }), LogsFolder, NullLogger.Instance);
+        new(new AppSettings(store), startup ?? new FakeStartupService(), controller ?? IdleController(), openFolder ?? (_ => { }), LogsFolder, NullLogger.Instance, new GMessages.Presentation.Updates.Updater(Path.GetTempPath(), "x64", NullLogger.Instance), () => { });
 
     // The controller never starts, so it touches no files and opens no connections.
     private static ConnectionController IdleController() =>

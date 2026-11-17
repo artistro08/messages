@@ -201,6 +201,56 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
+    /// Copy image in the photo menu puts the photo on the clipboard as a picture. A paste into the message box makes
+    /// a photo chip.
+    /// </summary>
+    [TestMethod]
+    public async Task CopyImage_PastesAsPhoto()
+    {
+        await OpenMediaChatAsync();
+        Message message         = Server.Phone.PushIncomingMedia("c-media", "image/png", Png(64, 64, SplitColors), "copy.png");
+        AutomationElement photo = App.Find("Bubble.Photo." + message.MessageID);
+        WaitForStatus(photo, Full);
+
+        CopyImageAndPaste(photo, message.MessageID);
+    }
+
+    /// <summary>
+    /// Copy image on a GIF keeps the animation. The paste sends the GIF byte for byte, not the first frame as a PNG.
+    /// </summary>
+    [TestMethod]
+    public async Task CopyImage_Gif_PastesAsTheGif()
+    {
+        await OpenMediaChatAsync();
+        Message message         = Server.Phone.PushIncomingMedia("c-media", "image/gif", TwoFrameGif, "party.gif");
+        AutomationElement photo = App.Find("Bubble.Photo." + message.MessageID);
+        WaitForStatus(photo, Full);
+
+        CopyImageAndPaste(photo, message.MessageID);
+        App.Find("Chat.Send").Patterns.Invoke.Pattern.Invoke();
+        Wait.Until(() => Server.Phone.Sent.Count == 1, AppDriver.DefaultTimeout, () => $"The phone got {Server.Phone.Sent.Count} sends, not the GIF.");
+        MediaContent media = Server.Phone.Sent[0].MessagePayload.MessageInfo.Single().MediaContent;
+        Assert.AreEqual("image/gif", media.MimeType, "The copied GIF went as another type.");
+        Assert.AreEqual(TwoFrameGif.LongLength, media.Size, "The copied GIF wasn't sent byte for byte.");
+    }
+
+    // Runs Copy image in the menu of the photo, then pastes into the message box. The copy ends after the click, so the
+    // paste waits for the note of the test hook.
+    private void CopyImageAndPaste(AutomationElement photo, string messageId)
+    {
+        OpenMenu(photo);
+        AutomationElement copy = App.Find("Bubble.CopyImage");
+        Assert.AreEqual(ChatCopy.CopyImage, AppDriver.SafeName(copy));
+        copy.Patterns.Invoke.Pattern.Invoke();
+
+        string copied = Path.Combine(App.DataDir, "copy-image.txt");
+        Wait.Until(() => File.Exists(copied) && File.ReadAllText(copied) == messageId, AppDriver.DefaultTimeout, () => "Copy image never finished.");
+        App.Find("Chat.Draft").Focus();
+        Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_V);
+        App.Find("Chat.Attachment.1");
+    }
+
+    /// <summary>
     /// Phones often name a photo without an extension. Save as offers that name with the extension of the mime type,
     /// not a <c>.bin</c> extension.
     /// </summary>

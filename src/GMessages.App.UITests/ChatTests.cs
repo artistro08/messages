@@ -138,6 +138,57 @@ public sealed class ChatTests : UiTest
     }
 
     /// <summary>
+    /// A drag over the text of a bubble does not show its time. A double-click selects a word, shows no time and does
+    /// not move the bubble. A press, a hold and a release with no move shows the time after the double-click time.
+    /// </summary>
+    [TestMethod]
+    public async Task HoldAndRelease_ShowsTheTime_DragAndDoubleClickDoNot()
+    {
+        await OpenAnnAsync();
+        string id  = Bubbles()[^2].Id;
+        string key = id["Bubble.".Length..];
+        WaitForStill(id);
+
+        // A time that does not show has no state to wait for. The test waits 2 double-click times.
+        TimeSpan noTime = PointerInput.DoubleClickTime * 2;
+
+        System.Drawing.Rectangle text = App.Find(id).BoundingRectangle;
+        FlaUI.Core.Input.Mouse.MoveTo(new System.Drawing.Point(text.Left + 3, text.Top + (text.Height / 2)));
+        FlaUI.Core.Input.Mouse.Down(FlaUI.Core.Input.MouseButton.Left);
+        PointerInput.DragTo(new System.Drawing.Point(text.Right - 3, text.Top + (text.Height / 2)));
+        FlaUI.Core.Input.Mouse.Up(FlaUI.Core.Input.MouseButton.Left);
+        AssertHighlighted(key, "Hey", true);
+        Thread.Sleep(noTime);
+        Assert.IsNull(App.TryFind(id + ".Time"), "A drag showed the time.");
+
+        FlaUI.Core.Input.Mouse.MoveTo(Middle(WordBounds(key, "Hey")));
+        FlaUI.Core.Input.Mouse.DoubleClick();
+        AssertHighlighted(key, "Hey", true);
+        AssertHighlighted(key, "Ann", false);
+        Thread.Sleep(noTime);
+        Assert.IsNull(App.TryFind(id + ".Time"), "A double-click showed the time.");
+        System.Drawing.Rectangle after = App.Find(id).BoundingRectangle;
+        Assert.IsTrue(Math.Abs(after.Top - text.Top) <= 1 && Math.Abs(after.Left - text.Left) <= 1, $"The bubble moved from {text} to {after} at a double-click.");
+
+        FlaUI.Core.Input.Mouse.Down(FlaUI.Core.Input.MouseButton.Left);
+        Thread.Sleep(1000);
+        FlaUI.Core.Input.Mouse.Up(FlaUI.Core.Input.MouseButton.Left);
+        App.Find(id + ".Time");
+    }
+
+    // Waits until the bubble stays at 1 place, so that a click lands on it.
+    private void WaitForStill(string id) =>
+        Wait.Until(
+            () =>
+            {
+                System.Drawing.Rectangle at = App.Find(id).BoundingRectangle;
+                Thread.Sleep(300);
+                return at == App.Find(id).BoundingRectangle;
+            },
+            AppDriver.DefaultTimeout,
+            () => $"'{id}' kept moving.");
+
+    /// <summary>
     /// A typed message, with Shift + Enter for a new line, and a press of Enter show the bubble. The phone gets the
     /// text. The echo of the phone turns the same bubble into the sent message, with no second bubble.
     /// </summary>
@@ -217,6 +268,378 @@ public sealed class ChatTests : UiTest
         Assert.AreEqual(settled, bubble.BoundingRectangle, "The bubble kept moving after its entrance.");
         AssertAtNewest("The entrance");
         Assert.AreEqual(1, AnimatedCount(), "More than the one new bubble animated in.");
+    }
+
+    /// <summary>
+    /// A double-click, hold and drag to the right selects word by word in the bubble. The drag then goes on into the
+    /// next bubble. Ctrl + C copies both parts, 1 message to a line.
+    /// </summary>
+    [TestMethod]
+    public async Task DoubleClickDrag_SelectsWholeWords_AcrossBubbles()
+    {
+        (string first, string second) = await OpenTwoTextsAsync();
+
+        // The second press of the double-click stays down on "alpha".
+        FlaUI.Core.Input.Mouse.MoveTo(Middle(WordBounds(first, "alpha")));
+        FlaUI.Core.Input.Mouse.Click();
+        FlaUI.Core.Input.Mouse.Down(FlaUI.Core.Input.MouseButton.Left);
+        AssertHighlighted(first, "alpha", true);
+        AssertHighlighted(first, "beta", false);
+
+        // The pointer stops on the first letter of each word, and the whole word selects.
+        PointerInput.DragTo(Start(WordBounds(first, "beta")));
+        AssertHighlighted(first, "beta", true);
+        AssertHighlighted(first, "gamma", false);
+
+        // Both bubbles show their part at the same time.
+        PointerInput.DragTo(Start(WordBounds(second, "epsilon")));
+        FlaUI.Core.Input.Mouse.Up(FlaUI.Core.Input.MouseButton.Left);
+        AssertHighlighted(first, "gamma", true);
+        AssertHighlighted(second, "epsilon", true);
+        AssertHighlighted(second, "zeta", false);
+
+        Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_C);
+        AssertPastes("alpha beta gamma\ndelta epsilon");
+    }
+
+    /// <summary>
+    /// A plain drag from the middle of 1 bubble into the next selects letter by letter across both, and both show the
+    /// highlight. A right-click on the selection keeps it, and Copy in the bubble menu copies both parts, 1 message to
+    /// a line.
+    /// </summary>
+    [TestMethod]
+    public async Task Drag_AcrossBubbles_RightClickKeepsIt_MenuCopiesIt()
+    {
+        (string first, string second) = await OpenTwoTextsAsync();
+
+        // The press is before "beta", and the release is after "epsilon".
+        System.Drawing.Rectangle to = WordBounds(second, "epsilon");
+        FlaUI.Core.Input.Mouse.MoveTo(Start(WordBounds(first, "beta")));
+        FlaUI.Core.Input.Mouse.Down(FlaUI.Core.Input.MouseButton.Left);
+        PointerInput.DragTo(new System.Drawing.Point(to.Right - 1, to.Top + (to.Height / 2)));
+        FlaUI.Core.Input.Mouse.Up(FlaUI.Core.Input.MouseButton.Left);
+        AssertHighlighted(first, "alpha", false);
+        AssertHighlighted(first, "beta", true);
+        AssertHighlighted(second, "epsilon", true);
+        AssertHighlighted(second, "zeta", false);
+
+        FlaUI.Core.Input.Mouse.RightClick(Middle(WordBounds(second, "delta")));
+        App.Find("Bubble.Copy").Patterns.Invoke.Pattern.Invoke();
+
+        // The menu is closed, so nothing covers the text.
+        AssertHighlighted(first, "beta", true);
+        AssertHighlighted(second, "epsilon", true);
+        AssertPastes("beta gamma\ndelta epsilon");
+    }
+
+    /// <summary>
+    /// A double-click selects 1 word. A right-click on the word keeps the selection and its highlight, and Copy in the
+    /// bubble menu copies the word.
+    /// </summary>
+    [TestMethod]
+    public async Task DoubleClick_RightClickKeepsTheWord_MenuCopiesIt()
+    {
+        (string first, _) = await OpenTwoTextsAsync();
+
+        FlaUI.Core.Input.Mouse.MoveTo(Middle(WordBounds(first, "beta")));
+        FlaUI.Core.Input.Mouse.DoubleClick();
+        AssertHighlighted(first, "beta", true);
+
+        FlaUI.Core.Input.Mouse.RightClick(Middle(WordBounds(first, "beta")));
+        App.Find("Bubble.Copy").Patterns.Invoke.Pattern.Invoke();
+
+        // The menu is closed, so nothing covers the text.
+        AssertHighlighted(first, "beta", true);
+        AssertHighlighted(first, "gamma", false);
+        AssertPastes("beta");
+    }
+
+    /// <summary>
+    /// On a sent bubble, the highlight is a darker shade of the fill of the bubble.
+    /// </summary>
+    [TestMethod]
+    public async Task DoubleClick_SentBubble_HighlightIsDarkerThanTheBubble()
+    {
+        await OpenAnnAsync();
+        string sent = Bubbles().First(bubble => bubble.Text == "Hey Ann").Id["Bubble.".Length..];
+        WaitForStill("Bubble." + sent);
+
+        FlaUI.Core.Input.Mouse.MoveTo(Middle(WordBounds(sent, "Hey")));
+        FlaUI.Core.Input.Mouse.DoubleClick();
+        AssertHighlighted(sent, "Hey", true);
+        AssertHighlighted(sent, "Ann", false);
+
+        System.Drawing.Rectangle text = App.Find("Bubble." + sent).BoundingRectangle;
+        System.Drawing.Rectangle word = WordBounds(sent, "Hey");
+        System.Drawing.Color fill     = PixelAt(text.Left - 4, text.Top + (text.Height / 2));
+        System.Drawing.Color shade    = PixelAt(word.Left + (word.Width / 2), word.Top + 2);
+        Assert.IsTrue(shade.R <= fill.R && shade.G <= fill.G && shade.B <= fill.B, $"The highlight {shade} was not a darker shade of the bubble {fill}.");
+    }
+
+    /// <summary>
+    /// A sent RCS bubble has the same darker shade of the accent color in the dark theme and in the light theme.
+    /// </summary>
+    [TestMethod]
+    public async Task SentRcsBubble_HasTheSameShade_InBothThemes()
+    {
+        await OpenAnnAsync();
+        string sent = Bubbles().First(bubble => bubble.Text == "Hey Ann").Id;
+        WaitForStill(sent);
+
+        System.Drawing.Color dark  = FillIn(2);
+        System.Drawing.Color light = FillIn(1);
+        int difference             = Math.Abs(dark.R - light.R) + Math.Abs(dark.G - light.G) + Math.Abs(dark.B - light.B);
+        Assert.IsTrue(difference <= 24, $"The sent RCS bubble was {light} in the light theme and {dark} in the dark theme.");
+
+        // Sets the theme in the settings, 1 for Light and 2 for Dark, and gives the fill of the bubble.
+        System.Drawing.Color FillIn(int theme)
+        {
+            InvokeTrayMenu("TrayMenu.Settings");
+            WaitForSettings().Focus();
+            ComboBox box = App.Find("Settings.Theme").AsComboBox();
+            box.Select(theme);
+            box.Collapse();
+            App.Find("Settings.Back").Patterns.Invoke.Pattern.Invoke();
+            WaitForGone("Settings.Back");
+            Thread.Sleep(800);
+            System.Drawing.Rectangle text = App.Find(sent).BoundingRectangle;
+            return PixelAt(text.Left - 4, text.Top + (text.Height / 2));
+        }
+    }
+
+    /// <summary>
+    /// After a drag ends, the text where the drag started selects nothing more. The pointer then moves over that text
+    /// with no button down, and no selection follows it.
+    /// </summary>
+    [TestMethod]
+    public async Task Drag_AfterTheRelease_MovingOverTheTextSelectsNothing()
+    {
+        (string first, string second) = await OpenTwoTextsAsync();
+
+        FlaUI.Core.Input.Mouse.MoveTo(Start(WordBounds(first, "beta")));
+        FlaUI.Core.Input.Mouse.Down(FlaUI.Core.Input.MouseButton.Left);
+        PointerInput.DragTo(Middle(WordBounds(second, "epsilon")));
+        FlaUI.Core.Input.Mouse.Up(FlaUI.Core.Input.MouseButton.Left);
+        AssertHighlighted(first, "beta", true);
+
+        // A click on the other bubble clears the selection.
+        FlaUI.Core.Input.Mouse.Click(Middle(WordBounds(second, "zeta")));
+        AssertHighlighted(first, "beta", false);
+
+        FlaUI.Core.Input.Mouse.MoveTo(Middle(WordBounds(first, "alpha")));
+        PointerInput.DragTo(Middle(WordBounds(first, "gamma")));
+        Thread.Sleep(500);
+        string own = string.Concat(App.Find("Bubble." + first).Patterns.Text.Pattern.GetSelection().Select(range => range.GetText(-1)));
+        Assert.AreEqual(string.Empty, own, "The text selected by itself under a pointer with no button down.");
+        AssertHighlighted(first, "beta", false);
+    }
+
+    /// <summary>
+    /// A selection stays through a scroll that takes its rows out of the list. The rows show the highlight when they
+    /// come back, and Copy in the bubble menu copies the selection.
+    /// </summary>
+    [TestMethod]
+    public async Task Selection_ScrolledOutAndBack_CopiesAndShowsAgain()
+    {
+        (string first, string second) = await OpenLongChatAsync();
+
+        System.Drawing.Rectangle to = WordBounds(second, "epsilon");
+        FlaUI.Core.Input.Mouse.MoveTo(Start(WordBounds(first, "beta")));
+        FlaUI.Core.Input.Mouse.Down(FlaUI.Core.Input.MouseButton.Left);
+        PointerInput.DragTo(new System.Drawing.Point(to.Right - 1, to.Top + (to.Height / 2)));
+        FlaUI.Core.Input.Mouse.Up(FlaUI.Core.Input.MouseButton.Left);
+        AssertHighlighted(first, "beta", true);
+
+        ScrollUntil(8, () => App.TryFind("Bubble." + first) is not { IsOffscreen: false }, "The selected bubbles stayed in view.");
+        ScrollUntil(-8, () => App.TryFind("Bubble." + second) is { IsOffscreen: false }, "The selected bubbles didn't come back.");
+        WaitForStill("Bubble." + second);
+        AssertHighlighted(first, "alpha", false);
+        AssertHighlighted(first, "beta", true);
+        AssertHighlighted(second, "epsilon", true);
+        AssertHighlighted(second, "zeta", false);
+
+        FlaUI.Core.Input.Mouse.RightClick(Middle(WordBounds(second, "delta")));
+        App.Find("Bubble.Copy").Patterns.Invoke.Pattern.Invoke();
+        AssertPastes("beta gamma\ndelta epsilon");
+    }
+
+    /// <summary>
+    /// A double-click drag keeps its start when the bubble of the start scrolls out of the list. The drag then ends
+    /// above the start, and Copy in the bubble menu copies from the word under the pointer to the word of the start.
+    /// </summary>
+    [TestMethod]
+    public async Task Drag_StartScrollsOut_ThenGoesAbove_CopiesToTheStart()
+    {
+        (string first, _) = await OpenLongChatAsync();
+
+        FlaUI.Core.Input.Mouse.MoveTo(Middle(WordBounds(first, "beta")));
+        FlaUI.Core.Input.Mouse.Click();
+        FlaUI.Core.Input.Mouse.Down(FlaUI.Core.Input.MouseButton.Left);
+        AssertHighlighted(first, "beta", true);
+        ScrollUntil(8, () => App.TryFind("Bubble." + first) is not { IsOffscreen: false }, "The bubble of the start stayed in view.");
+
+        // The pointer goes to a filler bubble that shows now. Each filler is 1 word, so the drag selects it whole.
+        System.Drawing.Rectangle list = App.Find("Chat.Messages").BoundingRectangle;
+        (string Id, string Text) filler = Bubbles().First(bubble =>
+            bubble.Text.StartsWith("word", StringComparison.Ordinal) && App.TryFind(bubble.Id) is { IsOffscreen: false } shown
+            && shown.BoundingRectangle.Top > list.Top + 80 && shown.BoundingRectangle.Bottom < list.Bottom - 160);
+        PointerInput.DragTo(Middle(App.Find(filler.Id).BoundingRectangle));
+        FlaUI.Core.Input.Mouse.Up(FlaUI.Core.Input.MouseButton.Left);
+        FlaUI.Core.Input.Mouse.Click(FlaUI.Core.Input.MouseButton.Right);
+        App.Find("Bubble.Copy").Patterns.Invoke.Pattern.Invoke();
+
+        int number     = int.Parse(filler.Text["word".Length..], System.Globalization.CultureInfo.InvariantCulture);
+        string fillers = string.Join('\n', Enumerable.Range(number, LongChatFillers - number + 1).Select(n => "word" + n));
+        AssertPastes(fillers + "\nalpha beta");
+    }
+
+    /// <summary>
+    /// A press on the ⋮ of the hover strip keeps the selection, and Copy in its menu copies the selection.
+    /// </summary>
+    [TestMethod]
+    public async Task HoverMore_KeepsTheSelection_MenuCopiesIt()
+    {
+        (string first, _) = await OpenTwoTextsAsync();
+
+        FlaUI.Core.Input.Mouse.MoveTo(Middle(WordBounds(first, "beta")));
+        FlaUI.Core.Input.Mouse.DoubleClick();
+        AssertHighlighted(first, "beta", true);
+
+        App.Find("HoverMore." + first).Click();
+        App.Find("Bubble.Copy").Patterns.Invoke.Pattern.Invoke();
+        AssertHighlighted(first, "beta", true);
+        AssertPastes("beta");
+    }
+
+    /// <summary>
+    /// A click on a bubble and then a click on another bubble, within the double-click time, show the time of both.
+    /// </summary>
+    [TestMethod]
+    public async Task TwoBubbles_ClickedFast_BothShowTheTime()
+    {
+        await OpenAnnAsync();
+        string one = Bubbles()[0].Id;
+        string two = Bubbles()[1].Id;
+        WaitForStill(two);
+
+        // The pointer jumps to the second bubble, so both clicks come within the double-click time.
+        System.Drawing.Point onOne = Middle(App.Find(one).BoundingRectangle);
+        System.Drawing.Point onTwo = Middle(App.Find(two).BoundingRectangle);
+        FlaUI.Core.Input.Mouse.MoveTo(onOne);
+        FlaUI.Core.Input.Mouse.Click();
+        FlaUI.Core.Input.Mouse.Position = onTwo;
+        FlaUI.Core.Input.Mouse.Click();
+
+        App.Find(one + ".Time");
+        App.Find(two + ".Time");
+    }
+
+    // The number of filler messages of the long chat. Each one is "word" and its number.
+    private const int LongChatFillers = 40;
+
+    // Opens the chat with Ann with enough new messages to scroll, and then 2 texts, one above the other. Returns the
+    // message IDs of the 2 texts.
+    private async Task<(string First, string Second)> OpenLongChatAsync()
+    {
+        await OpenAnnAsync();
+        for (int n = 1; n <= LongChatFillers; n++)
+        {
+            Server.Phone.PushIncoming("c-ann", "word" + n);
+        }
+
+        Message first  = Server.Phone.PushIncoming("c-ann", "alpha beta gamma");
+        Message second = Server.Phone.PushIncoming("c-ann", "delta epsilon zeta");
+        Wait.Until(() => App.TryFind("Bubble." + second.MessageID) is { IsOffscreen: false }, AppDriver.DefaultTimeout, () => "The last text didn't show.");
+        WaitForStill("Bubble." + first.MessageID);
+        WaitForStill("Bubble." + second.MessageID);
+        return (first.MessageID, second.MessageID);
+    }
+
+    // Turns the mouse wheel over the list, a few notches at a time, until the condition is true.
+    private static void ScrollUntil(int notches, Func<bool> done, string failure)
+    {
+        Wait.Until(
+            () =>
+            {
+                if (done())
+                {
+                    return true;
+                }
+
+                FlaUI.Core.Input.Mouse.Scroll(notches);
+                Thread.Sleep(200);
+                return false;
+            },
+            AppDriver.DefaultTimeout,
+            () => failure);
+    }
+
+    // Opens the chat with Ann and waits for 2 new texts, one above the other. Returns their message IDs.
+    private async Task<(string First, string Second)> OpenTwoTextsAsync()
+    {
+        await OpenAnnAsync();
+        Message first  = Server.Phone.PushIncoming("c-ann", "alpha beta gamma");
+        Message second = Server.Phone.PushIncoming("c-ann", "delta epsilon zeta");
+        Wait.Until(() => ReadLog().Contains($"Bubble animated in ({second.MessageID})", StringComparison.Ordinal), AppDriver.DefaultTimeout,
+            () => "The second bubble didn't animate in.");
+        WaitForStill("Bubble." + first.MessageID);
+        WaitForStill("Bubble." + second.MessageID);
+        return (first.MessageID, second.MessageID);
+    }
+
+    // Gives the bounds of a word in the text of a bubble, in screen pixels.
+    // The text of a bubble does not support FindText, so the ends of the range move by letters.
+    private System.Drawing.Rectangle WordBounds(string id, string word)
+    {
+        FlaUI.Core.ITextRange range = App.Find("Bubble." + id).Patterns.Text.Pattern.DocumentRange;
+        string text                 = range.GetText(-1);
+        int at                      = text.IndexOf(word, StringComparison.Ordinal);
+        range.MoveEndpointByUnit(FlaUI.Core.Definitions.TextPatternRangeEndpoint.End, FlaUI.Core.Definitions.TextUnit.Character, at + word.Length - text.Length);
+        range.MoveEndpointByUnit(FlaUI.Core.Definitions.TextPatternRangeEndpoint.Start, FlaUI.Core.Definitions.TextUnit.Character, at);
+        return range.GetBoundingRectangles()[0];
+    }
+
+    private static System.Drawing.Point Middle(System.Drawing.Rectangle word) => new(word.Left + (word.Width / 2), word.Top + (word.Height / 2));
+
+    // A point on the first letter of the word.
+    private static System.Drawing.Point Start(System.Drawing.Rectangle word) => new(word.Left + 2, word.Top + (word.Height / 2));
+
+    // The pixel row near the top of a word is above its letters, so it shows the highlight or the plain bubble. The
+    // padding to the left of the text always shows the plain bubble.
+    private void AssertHighlighted(string id, string word, bool highlighted)
+    {
+        System.Drawing.Color back = default;
+        System.Drawing.Color top  = default;
+        Wait.Until(
+            () =>
+            {
+                System.Drawing.Rectangle text = App.Find("Bubble." + id).BoundingRectangle;
+                System.Drawing.Rectangle at   = WordBounds(id, word);
+                back = PixelAt(text.Left - 4, text.Top + (text.Height / 2));
+                top  = PixelAt(at.Left + (at.Width / 2), at.Top + 2);
+
+                // The plain bubble is not exactly 1 color, so a small difference is not a highlight.
+                int difference = Math.Abs(top.R - back.R) + Math.Abs(top.G - back.G) + Math.Abs(top.B - back.B);
+                return (difference > 24) == highlighted;
+            },
+            AppDriver.DefaultTimeout,
+            () => $"'{word}' showed {top} on a bubble of {back}, so it was {(highlighted ? "not " : string.Empty)}highlighted.");
+    }
+
+    private static System.Drawing.Color PixelAt(int x, int y)
+    {
+        using FlaUI.Core.Capturing.CaptureImage capture = FlaUI.Core.Capturing.Capture.Rectangle(new System.Drawing.Rectangle(x, y, 1, 1));
+        return capture.Bitmap.GetPixel(0, 0);
+    }
+
+    // The paste into the message box shows what the copy holds.
+    private void AssertPastes(string text)
+    {
+        App.Find("Chat.Draft").Focus();
+        Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_V);
+        string? last = null;
+        Wait.Until(() => (last = App.Find("Chat.Draft").Patterns.Value.Pattern.Value.ValueOrDefault?.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n')) == text,
+            AppDriver.DefaultTimeout, () => $"The copy pasted '{last}', not '{text}'.");
     }
 
     /// <summary>

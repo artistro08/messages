@@ -18,7 +18,6 @@ using Microsoft.Windows.AppLifecycle;
 using Microsoft.Windows.AppNotifications;
 using Microsoft.Windows.System.Power;
 using Windows.Networking.Connectivity;
-using Windows.Storage;
 using Windows.System;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Hosting;
@@ -39,15 +38,14 @@ public sealed partial class App : Application, IDisposable
     // =========================================================================
 
     // Each GUID is a fixed identity, so Windows keeps the place of the icon on the taskbar across updates. Windows
-    // binds a GUID to a single exe location. Thus the packaged and the unpackaged installs each have a GUID. UI test
-    // runs have a third GUID, so they never change the icon of a real install.
+    // binds a GUID to a single exe location. The old MSIX install had its own GUID (2C8CFFE0-...), never reused. UI
+    // test runs have a second GUID, so they never change the icon of a real install.
     // https://learn.microsoft.com/windows/win32/api/shellapi/ns-shellapi-notifyicondataw#troubleshooting
     //
     // A plain Debug run without --test-data-dir often shows no tray icon. Windows refuses the classic GUID for a
     // build in another folder. To clear the binding, delete the IconStreams and PastIconsStream values under the key
     // HKCU\Software\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\TrayNotify. Then restart Explorer.
     // Or run with --test-data-dir, which uses the test GUID.
-    private static readonly Guid PackagedTrayGuid = new("2C8CFFE0-C9DB-4B2E-AD36-BD27A77E8033");
     private static readonly Guid ClassicTrayGuid  = new("FA25E877-3ACB-4CF3-A958-024545B7CE24");
 #if EnableTestHooks
     private static readonly Guid TestTrayGuid     = new("41E044BE-2303-4240-B4ED-C6A29CD3DE24");
@@ -151,14 +149,10 @@ public sealed partial class App : Application, IDisposable
     /// </summary>
     internal void Launch()
     {
-        var paths = AppPaths.Resolve(AppIdentity.IsPackaged ? ApplicationData.Current.LocalFolder.Path : null, TestHooks.DataDir);
+        var paths = AppPaths.Resolve(TestHooks.DataDir);
         _paths    = paths;
 
-        // A packaged app keeps its settings in the package store. An unpackaged app keeps them in a file.
-        ISettingsStore settingsStore = AppIdentity.IsPackaged
-            ? new LocalSettingsStore()
-            : new JsonFileSettingsStore(paths.SettingsFile);
-        _settings                  = new AppSettings(settingsStore);
+        _settings                  = new AppSettings(new JsonFileSettingsStore(paths.SettingsFile));
         _settings.PropertyChanged += OnSettingChanged;
 
         _startup = SelectStartupService(paths);
@@ -166,7 +160,7 @@ public sealed partial class App : Application, IDisposable
         _logProvider = new RollingFileLoggerProvider(paths.LogsFolder, _settings.LogLevel, TimeProvider.System);
         _logger      = _logProvider.CreateLogger("GMessages.App");
         ShellLog     = _logger;
-        AppLog.Started(_logger, AppInfo.DisplayName, AppInfo.Version, AppIdentity.IsPackaged, Program.IsTestRun);
+        AppLog.Started(_logger, AppInfo.DisplayName, AppInfo.Version, Program.IsTestRun);
         if (TestHooks.Endpoints is { } fake)
         {
             var baseUrl = fake.MessagesBase.ToString();
@@ -186,13 +180,11 @@ public sealed partial class App : Application, IDisposable
         _connection   = new ConnectionController(paths, endpoints, TimeProvider.System, new SingleProviderLoggerFactory(_logProvider), a => dispatcher.TryEnqueue(() => a()));
         _connection.StateChanged += (_, _) => OnConnectionStateChanged();
 
-        // Decrypted files for other apps go to the temp folder of the package. Unpackaged, they go to Temp\Media under
+        // Decrypted files for other apps go to Temp\Media under
         // the data folder. The app deletes the files of the last run now.
         var connection                    = _connection;
         Func<IMessagingClient?> messaging = () => connection.Client;
-        string mediaFolder                = AppIdentity.IsPackaged
-            ? Path.Combine(ApplicationData.Current.TemporaryFolder.Path, "Media")
-            : Path.Combine(paths.DataFolder, "Temp", "Media");
+        string mediaFolder                = Path.Combine(paths.DataFolder, "Temp", "Media");
         _media                            = new MediaStore(messaging, mediaFolder, _logProvider.CreateLogger("GMessages.Media"));
         _media.DownloadTimeout            = static () => TestHooks.ShortWait("download-timeout") ?? MediaStore.DefaultDownloadTimeout;
         _media.Clear();
@@ -244,11 +236,14 @@ public sealed partial class App : Application, IDisposable
         // A launch by the user shows the main window as soon as the start-up ends. A launch by the Windows startup task
         // at sign-in keeps the app in the background. When the run in background setting is off, that launch also
         // shows the window.
-        if (LaunchWindow.ShowsAtLaunch(activation.Kind == ExtendedActivationKind.StartupTask, launched is not null, _settings.RunInBackground))
+        if (LaunchWindow.ShowsAtLaunch(Environment.GetCommandLineArgs().Contains(RegistryStartupService.StartupArgument, StringComparer.OrdinalIgnoreCase), launched is not null, _settings.RunInBackground))
         {
             OnShowMainWindowRequested("launch");
         }
 
+        // The updater comes first. With no saved session, the start-up ends at once and makes the main window, whose
+        // settings read the updater.
+        StartUpdates(dispatcher);
         _ = StartConnectionAsync();
 
         // After a resume or a network change, the app reconnects at once. It does not wait for the long poll to retry.
@@ -482,7 +477,7 @@ public sealed partial class App : Application, IDisposable
 
         if (_mainWindow is null)
         {
-            var settings   = new SettingsViewModel(_settings, _startup, _connection, OpenFolder, _paths.LogsFolder, _logger);
+            var settings   = new SettingsViewModel(_settings, _startup, _connection, OpenFolder, _paths.LogsFolder, _logger, _updater!, () => _ = InstallUpdateAsync(silent: false));
             _mainWindow    = new MainWindow(settings, new AvatarCache(_store, _paths.AvatarsFolder), _settings);
             _linkPreviewer = new LinkPreviewer(TestHooks.AllowLoopbackPreviews, _logger);
             _mainWindow.ApplyTheme(_settings.Theme);
@@ -719,6 +714,7 @@ public sealed partial class App : Application, IDisposable
         using var explorer = Process.Start(new ProcessStartInfo(folder) { UseShellExecute = true });
     }
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1859", Justification = "A Debug test run returns the marker file service.")]
     private static IStartupService SelectStartupService(AppPaths paths)
     {
 #if EnableTestHooks
@@ -727,7 +723,7 @@ public sealed partial class App : Application, IDisposable
             return new MarkerFileStartupService(paths.DataFolder);
         }
 #endif
-        return AppIdentity.IsPackaged ? new StartupTaskService() : new RegistryStartupService(Environment.ProcessPath!);
+        return new RegistryStartupService(Environment.ProcessPath!);
     }
 
     // =========================================================================

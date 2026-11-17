@@ -33,6 +33,8 @@ public sealed partial class App
         _launchNotificationTimeout?.Stop();
         _notifications?.Dispose();
         _badge?.Dispose();
+        _updateTimer?.Stop();
+        _updater?.Dispose();
         _trayIcon?.Dispose();
         _trayMenu?.Close();
         _mainWindow?.Close();

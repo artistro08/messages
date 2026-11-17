@@ -259,6 +259,64 @@ public static class ChatFormat
     }
 
     /// <summary>
+    /// Gives the word that a double-click selects: the run of letters, spaces, emoji or other signs that holds the
+    /// character at the index.
+    /// </summary>
+    /// <remarks>
+    /// The method works on text elements, so a letter keeps its combining marks and an emoji keeps its VS16 and its
+    /// joined parts. An apostrophe in a word is part of the word, as in "don't".
+    /// </remarks>
+    /// <param name="text">The shown text.</param>
+    /// <param name="at">The index of the character under the pointer.</param>
+    /// <returns>The start and the end of the word. An empty text gives (0, 0).</returns>
+    public static (int Start, int End) WordAround(string text, int at)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        if (text.Length == 0)
+        {
+            return (0, 0);
+        }
+
+        // The element that holds the index is the last one that starts at or before it.
+        int[] starts = StringInfo.ParseCombiningCharacters(text);
+        int found    = Array.BinarySearch(starts, Math.Clamp(at, 0, text.Length - 1));
+        int first    = found >= 0 ? found : ~found - 1;
+        int last     = first;
+        int kind     = KindOf(first);
+        while (first > 0 && KindOf(first - 1) == kind)
+        {
+            first--;
+        }
+
+        while (last + 1 < starts.Length && KindOf(last + 1) == kind)
+        {
+            last++;
+        }
+
+        return (starts[first], EndOf(last));
+
+        int EndOf(int element) => element + 1 < starts.Length ? starts[element + 1] : text.Length;
+
+        // 0 is space, 1 is a letter or digit, 2 is an emoji and 3 is any other sign.
+        int KindOf(int element)
+        {
+            string part = text[starts[element]..EndOf(element)];
+            if (string.IsNullOrWhiteSpace(part))
+            {
+                return 0;
+            }
+
+            if (IsEmoji(part))
+            {
+                return 2;
+            }
+
+            Rune.DecodeFromUtf16(part, out Rune rune, out _);
+            return Rune.IsLetterOrDigit(rune) || rune.Value is '_' or '\'' or '’' ? 1 : 3;
+        }
+    }
+
+    /// <summary>
     /// Gives the part of the original text that a selection in the shown text covers. Thus a copy holds none of the
     /// VS16 that <see cref="WithColorEmoji"/> added for display.
     /// </summary>
@@ -394,6 +452,41 @@ public static class ChatFormat
         // The short date gets a year of 2 digits.
         string pattern = culture.DateTimeFormat.ShortDatePattern.Replace("yyyy", "yy", StringComparison.Ordinal);
         return local.ToString(pattern, culture);
+    }
+
+    /// <summary>
+    /// Gives the time stamp that shows centered between messages, as Google Messages writes it. It is the time for
+    /// today, "Yesterday · 7:08 PM", the weekday within the last 7 days ("Thursday · 7:08 PM"), the month and day for
+    /// this year ("Mar 2 · 7:08 PM"), else the month, day and year.
+    /// </summary>
+    /// <remarks>
+    /// The caller gives <paramref name="time"/> in the local offset of its own date, as
+    /// <see cref="TimeZoneInfo.ConvertTime(DateTimeOffset, TimeZoneInfo)"/> gives it. The method does not convert it to
+    /// the offset of <paramref name="now"/>, so a message from before a daylight saving change keeps its own hour, the
+    /// same hour as the time under its bubble.
+    /// </remarks>
+    /// <param name="time">When the message was sent, in local time.</param>
+    /// <param name="now">The current local time.</param>
+    /// <param name="culture">The culture to format with.</param>
+    /// <returns>The text to show.</returns>
+    public static string StampTime(DateTimeOffset time, DateTimeOffset now, CultureInfo culture)
+    {
+        ArgumentNullException.ThrowIfNull(culture);
+
+        DateTime local = time.DateTime;
+        int daysAgo    = (now.Date - local.Date).Days;
+        string clock   = local.ToString("t", culture);
+
+        string day = daysAgo switch
+        {
+            <= 0                          => string.Empty,
+            1                             => ChatCopy.StampYesterday,
+            < 7                           => local.ToString("dddd", culture),
+            _ when local.Year == now.Year => local.ToString("MMM d", culture),
+            _                             => local.ToString("MMM d, yyyy", culture),
+        };
+
+        return day.Length == 0 ? clock : day + " · " + clock;
     }
 
     /// <summary>

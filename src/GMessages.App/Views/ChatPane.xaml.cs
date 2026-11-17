@@ -321,6 +321,7 @@ public sealed partial class ChatPane : UserControl
         };
 
         MessageList.ContainerContentChanging += OnMessageContainerChanging;
+        HookTextSelection();
 
         // The recording bar shows the time and the input level 20 times a second. The live waveform fills the bar.
         RecordBars.FillsWidth = true;
@@ -507,18 +508,6 @@ public sealed partial class ChatPane : UserControl
     }
 
     /// <summary>
-    /// Gets the icon of a chip without a picture: the icon of a video, an audio file or a document.
-    /// </summary>
-    /// <param name="kind">The kind that the attachment sends as.</param>
-    /// <returns>The Segoe Fluent Icons glyph.</returns>
-    public static string ChipGlyph(MessageKind kind) => kind switch
-    {
-        MessageKind.Video => "",
-        MessageKind.Audio => "",
-        _                 => "",
-    };
-
-    /// <summary>
     /// Shows the chip strip while a recording waits in the preview chip or an attachment waits.
     /// </summary>
     /// <param name="hasAttachments">True while attachments wait.</param>
@@ -601,8 +590,9 @@ public sealed partial class ChatPane : UserControl
 
     // A row in the recycle queue goes back below its neighbors, because a focused row rises for its ring. It also
     // releases its media. A row that gets a message loads its media in phase 1, after x:Bind gives it the message. A
-    // row that gets the same message back sees no bubble change, so its released media loads here.
-    private static void OnMessageContainerChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
+    // row that gets the same message back sees no bubble change, so its released media loads here. The row also shows
+    // its part of the text selection there.
+    private void OnMessageContainerChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
     {
         Canvas.SetZIndex(args.ItemContainer, 0);
         if (args.ItemContainer.ContentTemplateRoot is not MessageBubble view)
@@ -619,8 +609,14 @@ public sealed partial class ChatPane : UserControl
         args.RegisterUpdateCallback(1, OnMessageContainerPhase);
     }
 
-    private static void OnMessageContainerPhase(ListViewBase sender, ContainerContentChangingEventArgs args) =>
-        (args.ItemContainer.ContentTemplateRoot as MessageBubble)?.LoadMedia();
+    private void OnMessageContainerPhase(ListViewBase sender, ContainerContentChangingEventArgs args)
+    {
+        if (args.ItemContainer.ContentTemplateRoot is MessageBubble view)
+        {
+            view.LoadMedia();
+            ShowTextSelection(args.ItemIndex, view);
+        }
+    }
 
     // Shows the bubbles of the new chat and follows their changes.
     private static void OnChatChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -639,6 +635,8 @@ public sealed partial class ChatPane : UserControl
         pane.DropRecorder();
         pane._menuView?.KeepShown(false);
         pane._menuView = null;
+        pane.ClearTextSelection();
+        pane.DropTaps();
         BindableList.Show(pane.MessageList, chat?.Messages);
         BindableList.Show(pane.AttachmentList, chat?.Attachments);
         if (chat is not null)
@@ -1019,6 +1017,14 @@ public sealed partial class ChatPane : UserControl
     // the Native AOT build the row arrives as a ContentControl, not a ListViewItem. See UiHelpers.FindScroller.
     private void OnMessageListKeyDown(object sender, KeyRoutedEventArgs e)
     {
+        // Ctrl + C copies the selection of the pane.
+        if (e.Key == VirtualKey.C && UiHelpers.IsDown(VirtualKey.Control) && SelectedChatText(null) is { } selected)
+        {
+            e.Handled = true;
+            UiHelpers.ToClipboard(selected);
+            return;
+        }
+
         // Down on the newest bubble goes back to the message box.
         bool onNewest = e.OriginalSource is DependencyObject source && MessageList.Items.Count > 0
             && MessageList.IndexFromContainer(source) == MessageList.Items.Count - 1;
@@ -1034,6 +1040,7 @@ public sealed partial class ChatPane : UserControl
         }
 
         e.Handled = true;
+        DropTaps(bubble);
         bubble.ToggleTime();
     }
 
@@ -1292,12 +1299,14 @@ public sealed partial class ChatPane : UserControl
         bool hasFile = bubble.HasMediaFile && !bubble.IsMediaWaiting;
         bool canOpen = !bubble.IsMediaWaiting && (bubble.HasPhoto || bubble.HasVideo || bubble.CanOpenMedia);
 
-        BubbleMenuCopy.Visibility     = bubble.HasCopyText ? Visibility.Visible : Visibility.Collapsed;
-        BubbleMenuOpen.Visibility     = canOpen ? Visibility.Visible : Visibility.Collapsed;
-        BubbleMenuOpenWith.Visibility = hasFile ? Visibility.Visible : Visibility.Collapsed;
-        BubbleMenuSaveAs.Visibility   = hasFile ? Visibility.Visible : Visibility.Collapsed;
-        BubbleMenuDownload.Visibility = hasFile ? Visibility.Visible : Visibility.Collapsed;
-        BubbleMenuDelete.Visibility   = bubble.CanAct ? Visibility.Visible : Visibility.Collapsed;
+        BubbleMenuCopy.Visibility      = bubble.HasCopyText ? Visibility.Visible : Visibility.Collapsed;
+        BubbleMenuCopyLink.Visibility  = bubble.LinkUrl is not null ? Visibility.Visible : Visibility.Collapsed;
+        BubbleMenuCopyImage.Visibility = bubble.HasPhoto && !bubble.IsMediaWaiting ?Visibility.Visible : Visibility.Collapsed;
+        BubbleMenuOpen.Visibility      = canOpen ? Visibility.Visible : Visibility.Collapsed;
+        BubbleMenuOpenWith.Visibility  = hasFile ? Visibility.Visible : Visibility.Collapsed;
+        BubbleMenuSaveAs.Visibility    = hasFile ? Visibility.Visible : Visibility.Collapsed;
+        BubbleMenuDownload.Visibility  = hasFile ? Visibility.Visible : Visibility.Collapsed;
+        BubbleMenuDelete.Visibility    = bubble.CanAct ? Visibility.Visible : Visibility.Collapsed;
         ShowMenuAt(BubbleMenu, anchor, at);
     }
 
@@ -1342,7 +1351,17 @@ public sealed partial class ChatPane : UserControl
 
     // The menu items act on the bubble that the menu opened on. The bubble stays set after the menu closes, because the
     // click of an item can come after the close.
-    private void OnBubbleMenuCopyClick(object sender, RoutedEventArgs e) => _menuView?.Copy();
+    // On a bubble in the selection, Copy copies the whole selection.
+    private void OnBubbleMenuCopyClick(object sender, RoutedEventArgs e)
+    {
+        if (SelectedChatText(_menuView?.Bubble) is { } selected)
+        {
+            UiHelpers.ToClipboard(selected);
+            return;
+        }
+
+        _menuView?.Copy();
+    }
 
     // A voice message opens in an app outside, so the player of the chat stops first. Two players never sound at once.
     private void OnBubbleMenuOpenClick(object sender, RoutedEventArgs e)
@@ -1354,6 +1373,8 @@ public sealed partial class ChatPane : UserControl
 
         _menuView?.Open();
     }
+
+    private void OnBubbleMenuCopyImageClick(object sender, RoutedEventArgs e) => _menuView?.CopyImage();
 
     private void OnBubbleMenuOpenWithClick(object sender, RoutedEventArgs e) => _menuView?.OpenWith();
 
@@ -1380,7 +1401,7 @@ public sealed partial class ChatPane : UserControl
         }
     }
 
-    private void OnPreviewMenuCopyLinkClick(object sender, RoutedEventArgs e) => _menuView?.CopyLink();
+    private void OnCopyLinkClick(object sender, RoutedEventArgs e) => _menuView?.CopyLink();
 
     // The menu opens below the ⋮ of the header.
     private void OnMoreClick(object sender, RoutedEventArgs e) => MenuRequested?.Invoke(this, (MoreButton, null));

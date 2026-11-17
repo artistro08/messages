@@ -1,6 +1,8 @@
+using System.Diagnostics;
 using GMessages.App.Windowing;
 using GMessages.Presentation;
 using Microsoft.Windows.AppLifecycle;
+using Microsoft.Windows.AppNotifications;
 
 namespace GMessages.App;
 
@@ -9,7 +11,8 @@ namespace GMessages.App;
 /// </summary>
 /// <remarks>
 /// Ported from the <c>Program.cs</c> of Magic Buds. <c>Messages.exe --quit</c> asks the running copy to quit, as Quit
-/// in the tray menu does. A second launch tells the running copy to open its main window, then exits. The names come
+/// in the tray menu does, and waits up to 10 seconds for it to exit (the MSI uses it before it replaces the files). <c>--unregister-notifications</c> removes the toast
+/// registration (the MSI uses it on uninstall). A second launch tells the running copy to open its main window, then exits. The names come
 /// from <see cref="AppInfo.DisplayName"/>. Test runs add a <c>.Test</c> suffix, so UI test runs never collide with a
 /// real copy.
 /// </remarks>
@@ -95,6 +98,21 @@ public static class Program
             {
                 quit.Set();
                 quit.Dispose();
+                WaitForOtherCopies(TimeSpan.FromSeconds(10));
+            }
+            return;
+        }
+
+        // The MSI uninstall runs this. It removes the toast name, icon and activator of the app from the registry.
+        if (args.Contains("--unregister-notifications", StringComparer.OrdinalIgnoreCase))
+        {
+            try
+            {
+                AppNotificationManager.Default.UnregisterAll();
+            }
+            catch (Exception)
+            {
+                // The uninstall must continue. Only stale registry values stay.
             }
             return;
         }
@@ -128,6 +146,22 @@ public static class Program
         XamlWindow.RunMessageLoop();
         ShowRequest?.Dispose();
         QuitRequest?.Dispose();
+    }
+
+    // Waits for the running copy to exit after a --quit, so the installer can replace its files.
+    private static void WaitForOtherCopies(TimeSpan timeout)
+    {
+        var current = Environment.ProcessId;
+        foreach (var process in Process.GetProcessesByName(Path.GetFileNameWithoutExtension(Environment.ProcessPath)))
+        {
+            using (process)
+            {
+                if (process.Id != current)
+                {
+                    process.WaitForExit(timeout);
+                }
+            }
+        }
     }
 
     // Returns null when another process owns the name, such as an elevated copy. The app then runs without the event.

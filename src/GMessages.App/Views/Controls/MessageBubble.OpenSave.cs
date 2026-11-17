@@ -5,7 +5,7 @@ using Windows.UI.Xaml;
 namespace GMessages.App.Views.Controls;
 
 /// <summary>
-/// Runs Open, Open with, Save as and Download from the bubble menu.
+/// Runs Open, Open with, Save as, Download and Copy image from the bubble menu.
 /// </summary>
 /// <remarks>
 /// This file is a part of <see cref="MessageBubble"/>. The other members are in MessageBubble.xaml.cs.
@@ -48,6 +48,17 @@ public sealed partial class MessageBubble
         if (Bubble?.Media is { IsPending: false, IsWaitingForFile: false } part)
         {
             _ = MediaActions.OpenWithAsync(part, Bubble.Id);
+        }
+    }
+
+    /// <summary>
+    /// Runs Copy image from the bubble menu. The photo goes to the clipboard as a picture.
+    /// </summary>
+    public void CopyImage()
+    {
+        if (Bubble?.Media is { IsPending: false, IsWaitingForFile: false } part)
+        {
+            _ = MediaActions.CopyImageAsync(part, Bubble.Id);
         }
     }
 

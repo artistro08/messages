@@ -15,6 +15,9 @@ public static partial class PointerInput
     private const uint InputMouse     = 0;
     private const uint MouseEventMove = 0x0001;
 
+    // The length of 1 step of a drag, in screen pixels.
+    private const int DragStep = 6;
+
     /// <summary>
     /// Moves the pointer over the middle of an element.
     /// </summary>
@@ -23,6 +26,23 @@ public static partial class PointerInput
     {
         Mouse.MoveTo(over.X + (over.Width / 2) - 1, over.Y + (over.Height / 2));
         MoveBy(1);
+    }
+
+    /// <summary>
+    /// Drags the pointer to a point in small steps, as a hand does. Each step ends with a real move, so the app sees
+    /// the whole path.
+    /// </summary>
+    /// <param name="to">The point in screen pixels.</param>
+    public static void DragTo(System.Drawing.Point to)
+    {
+        System.Drawing.Point from = Mouse.Position;
+        int steps                 = Math.Max(1, Math.Max(Math.Abs(to.X - from.X), Math.Abs(to.Y - from.Y)) / DragStep);
+        for (int i = 1; i <= steps; i++)
+        {
+            Mouse.Position = new System.Drawing.Point(from.X + ((to.X - from.X) * i / steps) - 1, from.Y + ((to.Y - from.Y) * i / steps));
+            MoveBy(1);
+            Thread.Sleep(10);
+        }
     }
 
     /// <summary>
@@ -73,6 +93,12 @@ public static partial class PointerInput
         Assert.IsTrue(GetLastInputInfo(ref info), "Windows didn't say when the last input was.");
         return TimeSpan.FromMilliseconds((uint)Environment.TickCount - info.Time);
     }
+
+    /// <summary>Gets the double-click time of Windows.</summary>
+    public static TimeSpan DoubleClickTime => TimeSpan.FromMilliseconds(GetDoubleClickTime());
+
+    [LibraryImport("user32.dll")]
+    private static partial uint GetDoubleClickTime();
 
     // Resource ID of the system hand cursor (IDC_HAND).
     private const int IdcHand = 32649;
