@@ -5,7 +5,7 @@ using Windows.UI.Xaml;
 namespace GMessages.App.Views.Controls;
 
 /// <summary>
-/// Runs Open, Open with, Save as and Download from the bubble menu.
+/// Runs Open, Open with, Save as, Download and Copy image from the bubble menu.
 /// </summary>
 /// <remarks>
 /// This file is a part of <see cref="MessageBubble"/>. The other members are in MessageBubble.xaml.cs.

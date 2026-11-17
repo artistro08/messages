@@ -10,8 +10,8 @@ using Windows.UI.Xaml;
 namespace GMessages.App.Media;
 
 /// <summary>
-/// Runs the actions on a photo or a file for the bubble menu and the photo viewer: Open, Open with, Save as and
-/// Download.
+/// Runs the actions on a photo or a file for the bubble menu and the photo viewer: Open, Open with, Save as, Download
+/// and Copy image.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -133,9 +133,11 @@ internal static class MediaActions
 
             // The bitmap keeps only the first frame of a GIF. Thus a GIF also goes as its bytes in the GIF format and
             // as a file, so an app that takes either one keeps the animation.
-            if (string.Equals(part.Mime, "image/gif", StringComparison.OrdinalIgnoreCase))
+            // Flush copies the bytes, so the stream closes after it. An open file stops the delete at sign-out.
+            using IRandomAccessStream? gif = string.Equals(part.Mime, "image/gif", StringComparison.OrdinalIgnoreCase) ? await file.OpenReadAsync() : null;
+            if (gif is not null)
             {
-                package.SetData("GIF", await file.OpenReadAsync());
+                package.SetData("GIF", gif);
                 var files = new List<IStorageItem> { await StorageFile.GetFileFromPathAsync(await media.SaveToTempAsync(part, CancellationToken.None)) };
                 package.SetStorageItems(files);
             }

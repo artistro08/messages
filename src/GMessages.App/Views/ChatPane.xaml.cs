@@ -1241,7 +1241,7 @@ public sealed partial class ChatPane : UserControl
 
         BubbleMenuCopy.Visibility      = bubble.HasCopyText ? Visibility.Visible : Visibility.Collapsed;
         BubbleMenuCopyLink.Visibility  = bubble.LinkUrl is not null ? Visibility.Visible : Visibility.Collapsed;
-        BubbleMenuCopyImage.Visibility = hasFile && bubble.HasPhoto ? Visibility.Visible : Visibility.Collapsed;
+        BubbleMenuCopyImage.Visibility = bubble.HasPhoto && !bubble.IsMediaWaiting ?Visibility.Visible : Visibility.Collapsed;
         BubbleMenuOpen.Visibility      = canOpen ? Visibility.Visible : Visibility.Collapsed;
         BubbleMenuOpenWith.Visibility  = hasFile ? Visibility.Visible : Visibility.Collapsed;
         BubbleMenuSaveAs.Visibility    = hasFile ? Visibility.Visible : Visibility.Collapsed;
