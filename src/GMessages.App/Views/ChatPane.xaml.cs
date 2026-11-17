@@ -1239,13 +1239,14 @@ public sealed partial class ChatPane : UserControl
         bool hasFile = bubble.HasMediaFile && !bubble.IsMediaWaiting;
         bool canOpen = !bubble.IsMediaWaiting && (bubble.HasPhoto || bubble.HasVideo || bubble.CanOpenMedia);
 
-        BubbleMenuCopy.Visibility     = bubble.HasCopyText ? Visibility.Visible : Visibility.Collapsed;
-        BubbleMenuCopyLink.Visibility = bubble.LinkUrl is not null ? Visibility.Visible : Visibility.Collapsed;
-        BubbleMenuOpen.Visibility     = canOpen ? Visibility.Visible : Visibility.Collapsed;
-        BubbleMenuOpenWith.Visibility = hasFile ? Visibility.Visible : Visibility.Collapsed;
-        BubbleMenuSaveAs.Visibility   = hasFile ? Visibility.Visible : Visibility.Collapsed;
-        BubbleMenuDownload.Visibility = hasFile ? Visibility.Visible : Visibility.Collapsed;
-        BubbleMenuDelete.Visibility   = bubble.CanAct ? Visibility.Visible : Visibility.Collapsed;
+        BubbleMenuCopy.Visibility      = bubble.HasCopyText ? Visibility.Visible : Visibility.Collapsed;
+        BubbleMenuCopyLink.Visibility  = bubble.LinkUrl is not null ? Visibility.Visible : Visibility.Collapsed;
+        BubbleMenuCopyImage.Visibility = bubble.HasPhoto && !bubble.IsMediaWaiting ?Visibility.Visible : Visibility.Collapsed;
+        BubbleMenuOpen.Visibility      = canOpen ? Visibility.Visible : Visibility.Collapsed;
+        BubbleMenuOpenWith.Visibility  = hasFile ? Visibility.Visible : Visibility.Collapsed;
+        BubbleMenuSaveAs.Visibility    = hasFile ? Visibility.Visible : Visibility.Collapsed;
+        BubbleMenuDownload.Visibility  = hasFile ? Visibility.Visible : Visibility.Collapsed;
+        BubbleMenuDelete.Visibility    = bubble.CanAct ? Visibility.Visible : Visibility.Collapsed;
         ShowMenuAt(BubbleMenu, anchor, at);
     }
 
@@ -1312,6 +1313,8 @@ public sealed partial class ChatPane : UserControl
 
         _menuView?.Open();
     }
+
+    private void OnBubbleMenuCopyImageClick(object sender, RoutedEventArgs e) => _menuView?.CopyImage();
 
     private void OnBubbleMenuOpenWithClick(object sender, RoutedEventArgs e) => _menuView?.OpenWith();
 
