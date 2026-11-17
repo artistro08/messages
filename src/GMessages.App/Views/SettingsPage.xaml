@@ -71,6 +71,7 @@
             <StackPanel
                 MaxWidth="1000"
                 HorizontalAlignment="Stretch"
+                SizeChanged="OnCardsSizeChanged"
                 Spacing="4">
 
                 <TextBlock Style="{StaticResource GroupHeaderStyle}" Text="Appearance" />
@@ -81,12 +82,17 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
                         <FontIcon Glyph="&#xE790;" Style="{StaticResource CardIconStyle}" />
                         <TextBlock
                             Grid.Column="1"
                             VerticalAlignment="Center"
                             Text="Theme" />
                         <ComboBox
+                            x:Name="ThemeBox"
                             Grid.Column="2"
                             MinWidth="220"
                             VerticalAlignment="Center"
@@ -305,6 +311,10 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
                         <FontIcon Glyph="&#xE708;" Style="{StaticResource CardIconStyle}" />
                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
                             <TextBlock x:Name="SnoozeHeader" TextWrapping="Wrap" />
@@ -353,6 +363,10 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
                         <FontIcon Glyph="&#xE720;" Style="{StaticResource CardIconStyle}" />
                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
                             <TextBlock x:Name="MicrophoneHeader" TextWrapping="Wrap" />
@@ -372,19 +386,17 @@
                 <TextBlock Style="{StaticResource GroupHeaderStyle}" Text="Account" />
 
                 <!-- Unpair hides after the unpair and shows a busy ring while it runs. -->
-                <Button
-                    AutomationProperties.AutomationId="Settings.Unpair"
-                    AutomationProperties.Name="Unpair this PC"
-                    Click="OnUnpairClick"
-                    IsEnabled="{x:Bind local:SettingsPage.Not(ViewModel.IsUnpairing), Mode=OneWay}"
-                    Style="{StaticResource SettingsCardButtonStyle}"
-                    Visibility="{x:Bind ViewModel.CanUnpair, Mode=OneWay}">
+                <Border Style="{StaticResource SettingsCardStyle}" Visibility="{x:Bind ViewModel.CanUnpair, Mode=OneWay}">
                     <Grid ColumnSpacing="16">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
                         <!-- The phone with a slash is mobile_off of Material Symbols, Apache 2.0, outlined and drawn on
                              20 px. -->
                         <PathIcon
@@ -395,15 +407,28 @@
                         <TextBlock
                             Grid.Column="1"
                             VerticalAlignment="Center"
-                            Text="Unpair this PC" />
-                        <muxc:ProgressRing
+                            Text="Unpair this PC"
+                            TextWrapping="Wrap" />
+                        <StackPanel
+                            x:Name="UnpairActions"
                             Grid.Column="2"
-                            Width="16"
-                            Height="16"
-                            IsActive="{x:Bind ViewModel.IsUnpairing, Mode=OneWay}"
-                            Visibility="{x:Bind ViewModel.IsUnpairing, Mode=OneWay}" />
+                            VerticalAlignment="Center"
+                            Orientation="Horizontal"
+                            Spacing="8">
+                            <muxc:ProgressRing
+                                Width="16"
+                                Height="16"
+                                IsActive="{x:Bind ViewModel.IsUnpairing, Mode=OneWay}"
+                                Visibility="{x:Bind ViewModel.IsUnpairing, Mode=OneWay}" />
+                            <Button
+                                AutomationProperties.AutomationId="Settings.Unpair"
+                                AutomationProperties.Name="Unpair this PC"
+                                Click="OnUnpairClick"
+                                Content="Unpair"
+                                IsEnabled="{x:Bind local:SettingsPage.Not(ViewModel.IsUnpairing), Mode=OneWay}" />
+                        </StackPanel>
                     </Grid>
-                </Button>
+                </Border>
 
                 <!-- This card opens the logs folder in File Explorer. -->
                 <Button
@@ -440,6 +465,10 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
                         <FontIcon Glyph="&#xE895;" Style="{StaticResource CardIconStyle}" />
                         <TextBlock
                             Grid.Column="1"
@@ -448,6 +477,7 @@
                             Text="{x:Bind ViewModel.Updates.StatusText, Mode=OneWay}"
                             TextWrapping="Wrap" />
                         <StackPanel
+                            x:Name="UpdateActions"
                             Grid.Column="2"
                             VerticalAlignment="Center"
                             Orientation="Horizontal"
@@ -538,6 +568,10 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
                         <FontIcon Glyph="&#xE943;" Style="{StaticResource CardIconStyle}" />
                         <TextBlock
                             Grid.Column="1"
@@ -545,6 +579,7 @@
                             Text="{x:Bind local:SettingsPage.RepositoryText}"
                             TextWrapping="Wrap" />
                         <HyperlinkButton
+                            x:Name="RepositoryLink"
                             Grid.Column="2"
                             VerticalAlignment="Center"
                             AutomationProperties.AutomationId="Settings.Repository"
