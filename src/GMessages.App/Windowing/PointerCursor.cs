@@ -25,6 +25,18 @@ internal static partial class PointerCursor
     public const int Hand = 32649;
 
     /// <summary>
+    /// The text cursor (IDC_IBEAM).
+    /// </summary>
+    public const int IBeam = 32513;
+
+    /// <summary>
+    /// Shows a loaded cursor until the next WM_SETCURSOR. A caller that shows it only over a part of an element calls
+    /// this on each move there.
+    /// </summary>
+    /// <param name="handle">The cursor from LoadCursorW.</param>
+    public static void Show(nint handle) => _ = SetCursor(handle);
+
+    /// <summary>
     /// Shows a cursor while the pointer is over the element.
     /// </summary>
     /// <param name="element">The element.</param>

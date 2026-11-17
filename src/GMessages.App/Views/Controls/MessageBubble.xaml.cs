@@ -6,6 +6,7 @@ using GMessages.App.Windowing;
 using GMessages.Presentation.Main;
 using GMessages.Presentation.Messaging;
 using Windows.ApplicationModel.DataTransfer;
+using Windows.Devices.Input;
 using Windows.Foundation;
 using Windows.System;
 using Windows.UI.Composition;
@@ -28,7 +29,8 @@ namespace GMessages.App.Views.Controls;
 /// </summary>
 /// <remarks>
 /// <para>
-/// A sent RCS bubble has a lighter shade of the accent color. A sent SMS bubble has the accent color.
+/// A sent RCS bubble has the darker shade of the accent color, and a sent SMS bubble has the lighter shade, in the
+/// light and the dark theme.
 /// </para>
 /// <para>
 /// The text carries the AutomationId <c>Bubble.{id}</c>. Until the phone echoes a sent message, it carries
@@ -211,6 +213,9 @@ public sealed partial class MessageBubble : UserControl
     // Reads the animation setting of Windows live: Settings > Accessibility > Visual effects.
     private static readonly UISettings Ui = new();
 
+    // Reads the high contrast setting of Windows live.
+    private static readonly AccessibilitySettings Contrast = new();
+
     // The first flag is true while the pointer is over the bubble. The second flag is true while the picker or the
     // menu from the strip is open. The strip then stays while the pointer is in that popup.
     private bool _pointerOver;
@@ -231,6 +236,13 @@ public sealed partial class MessageBubble : UserControl
     // because a rebuild drops a selection.
     private string? _shownText;
     private string? _shownKey;
+
+    // The highlight on a sent bubble is the fill of the bubble at this share of its brightness.
+    private const double SelectionShade = 0.6;
+
+    // The selected part of the shown text. See SelectText.
+    private int _selectStart;
+    private int _selectEnd;
 
     // The links of the text, kept in the color of the text.
     private readonly List<Hyperlink> _links = [];
@@ -334,9 +346,41 @@ public sealed partial class MessageBubble : UserControl
         // pane, whose bubble menu has Copy.
         Body.ContextFlyout = null;
 
+        // The look of a sent bubble follows the theme. See OnFullAccent. A row can get its message before it is in the
+        // window, where the theme is not yet known.
+        ActualThemeChanged += (_, _) => ShowStates();
+        Loaded             += (_, _) => ShowStates();
+
+        // The chat pane selects with the mouse, so the text selects by itself only for touch and pen. The pointer
+        // enters the text before it presses, and the text takes the kind of that pointer.
+        Body.PointerEntered += (_, e) =>
+        {
+            bool own = e.Pointer.PointerDeviceType != PointerDeviceType.Mouse;
+            if (Body.IsTextSelectionEnabled != own)
+            {
+                Body.IsTextSelectionEnabled = own;
+            }
+        };
+
+        // Text that the mouse can select shows the text cursor. A link keeps its hand.
+        nint beam = WindowInterop.LoadCursorW(0, PointerCursor.IBeam);
+        Body.PointerMoved += (_, e) =>
+        {
+            if (e.Pointer.PointerDeviceType == PointerDeviceType.Mouse && ReferenceEquals(e.OriginalSource, Body))
+            {
+                PointerCursor.Show(beam);
+            }
+        };
+
         // The links follow the color of the text, which the side state and the theme set.
         Body.RegisterPropertyChangedCallback(TextBlock.ForegroundProperty, (_, _) => ColorLinks());
     }
+
+    /// <summary>
+    /// Tells the chat that a tap on the bubble asks for its time. The chat toggles the time when no double-click
+    /// follows. See ChatPane.OnBubbleTimeTapped.
+    /// </summary>
+    public event EventHandler? TimeTapped;
 
     /// <summary>
     /// Asks the chat to send this failed bubble again.
@@ -386,6 +430,9 @@ public sealed partial class MessageBubble : UserControl
 
     /// <summary>Gets the Copy link text of the preview card menu.</summary>
     public static string CopyLinkText => ChatCopy.CopyLink;
+
+    /// <summary>Gets the Copy image text of the menu.</summary>
+    public static string CopyImageText => ChatCopy.CopyImage;
 
     /// <summary>Gets the Open text of the menu.</summary>
     public static string OpenText => ChatCopy.Open;
@@ -880,15 +927,22 @@ public sealed partial class MessageBubble : UserControl
         }
     }
 
-    // Sets the own states of the parts: the on-accent brushes on the parts of a sent SMS bubble, and the fill of my
-    // reaction on the pill. The method sets states only on a loaded part, because the setter of a state would load its
-    // part. With refresh, the method goes to a state again through the plain state. That is for a new part whose group
-    // already sat in the state. A second go to the same state does nothing.
+    // Sent RCS shows on the darker shade of the accent and sent SMS on the lighter shade, in the light and the dark
+    // theme, as in Google Messages. The full accent of Windows is the darker shade in the light theme and the lighter
+    // shade in the dark theme. Thus the bubble on the full accent is RCS in the light theme and SMS in the dark theme.
+    // The other bubble takes the soft shade of the Sent state. High contrast keeps SMS on the full accent.
+    private bool OnFullAccent =>
+        Bubble is { FromMe: true } sent && sent.IsRcs == (ActualTheme == ElementTheme.Light && !Contrast.HighContrast);
+
+    // Sets the own states of the parts: the on-accent brushes on the parts of a sent bubble on the full accent, and the
+    // fill of my reaction on the pill. The method sets states only on a loaded part, because the setter of a state
+    // would load its part. With refresh, the method goes to a state again through the plain state. That is for a new
+    // part whose group already sat in the state. A second go to the same state does nothing.
     private void ShowPartStates(bool refresh)
     {
-        bool sms = Bubble is { FromMe: true, IsRcs: false };
-        GoToPartState(FileCard, sms ? "FileOnAccent" : "FilePlain", "FilePlain", refresh);
-        GoToPartState(Voice, sms ? "VoiceOnAccent" : "VoicePlain", "VoicePlain", refresh);
+        bool onAccent = OnFullAccent;
+        GoToPartState(FileCard, onAccent ? "FileOnAccent" : "FilePlain", "FilePlain", refresh);
+        GoToPartState(Voice, onAccent ? "VoiceOnAccent" : "VoicePlain", "VoicePlain", refresh);
         GoToPartState(PillHost, Bubble?.HasMyReaction == true ? "Mine" : "NotMine", "NotMine", refresh);
     }
 
@@ -1523,13 +1577,13 @@ public sealed partial class MessageBubble : UserControl
 
     private void ShowStates()
     {
-        // Emoji alone have no accent fill behind them. Thus a sent SMS of emoji takes the plain text color of the Sent
-        // state, not the on-accent color.
+        // Emoji alone have no accent fill behind them. Thus sent emoji take the plain text color of the Sent state, not
+        // the on-accent color.
         string side = Bubble switch
         {
-            { FromMe: false } or null                => "Received",
-            { IsRcs: true } or { IsEmojiOnly: true } => "Sent",
-            _                                        => "SentSms",
+            { FromMe: false } or null => "Received",
+            { IsEmojiOnly: true }     => "Sent",
+            _                         => OnFullAccent ? "SentSms" : "Sent",
         };
 
         VisualStateManager.GoToState(this, side, false);
@@ -1553,6 +1607,11 @@ public sealed partial class MessageBubble : UserControl
 
         _shownText = text;
         _shownKey  = key;
+
+        // A selection does not stay on a row that shows another text.
+        _selectStart = 0;
+        _selectEnd   = 0;
+        Body.TextHighlighters.Clear();
         _links.Clear();
         LinkBlockers.Children.Clear();
 
@@ -1727,7 +1786,8 @@ public sealed partial class MessageBubble : UserControl
         }
     }
 
-    // The time toggles a turn later, after the click of a link. That click can come after the tap.
+    // A click with no drag asks the chat for the time. The request goes a turn later, after the click of a link. That
+    // click can come after the tap.
     private void OnBackTapped(object sender, TappedRoutedEventArgs e)
     {
         // The quote, photo, video, file card, voice message and preview card handle their own taps.
@@ -1744,7 +1804,7 @@ public sealed partial class MessageBubble : UserControl
                 return;
             }
 
-            Bubble?.ToggleTime();
+            TimeTapped?.Invoke(this, EventArgs.Empty);
         });
     }
 
@@ -1760,7 +1820,7 @@ public sealed partial class MessageBubble : UserControl
             }
         }
 
-        Bubble?.ToggleTime();
+        TimeTapped?.Invoke(this, EventArgs.Empty);
     }
 
     private void OnPreviewClick(object sender, RoutedEventArgs e)
@@ -1774,6 +1834,187 @@ public sealed partial class MessageBubble : UserControl
     private void OnRetryClick(object sender, RoutedEventArgs e) => RetryRequested?.Invoke(this, EventArgs.Empty);
 
     /// <summary>
+    /// Gets the text that the bubble shows. Its indices are the indices of <see cref="TextHit"/> and
+    /// <see cref="SelectText"/>.
+    /// </summary>
+    internal string ShownText => _shownText ?? string.Empty;
+
+    /// <summary>
+    /// Gets the text element. The chat pane reads pointer positions on it.
+    /// </summary>
+    internal UIElement TextView => Body;
+
+    /// <summary>
+    /// Tells whether the element is the text, or a clear strip over the empty end of a line of the text. See
+    /// <see cref="BlockLinkEnds"/>.
+    /// </summary>
+    internal bool IsText(DependencyObject element) =>
+        ReferenceEquals(element, Body) || ReferenceEquals(VisualTreeHelper.GetParent(element), LinkBlockers);
+
+    /// <summary>
+    /// Gets the part of the shown text that <see cref="SelectText"/> selected.
+    /// </summary>
+    internal string SelectedText
+    {
+        get
+        {
+            string text = ShownText;
+            int start   = Math.Min(_selectStart, text.Length);
+            return text[start..Math.Clamp(_selectEnd, start, text.Length)];
+        }
+    }
+
+    /// <summary>
+    /// Finds the place in the text under a point on <see cref="TextView"/>.
+    /// </summary>
+    /// <remarks>
+    /// A binary search finds the first caret past the point in reading order. Only left-to-right text gives the
+    /// correct result. A point above the text gives the start, and a point below the text gives the end.
+    /// </remarks>
+    /// <returns>The nearest caret, and the character under the point.</returns>
+    internal (int Caret, int Letter) TextHit(Point point)
+    {
+        string text = ShownText;
+        int low     = 0;
+        int high    = text.Length + 1;
+        while (low < high)
+        {
+            int mid = (low + high) / 2;
+            if (mid <= text.Length && !IsPast(CaretRect(mid, LogicalDirection.Forward), point))
+            {
+                low = mid + 1;
+            }
+            else
+            {
+                high = mid;
+            }
+        }
+
+        // The first caret past the point is at low. The character under the point is just before it.
+        int letter = Math.Clamp(low - 1, 0, Math.Max(text.Length - 1, 0));
+        int caret  = low;
+        if (low == 0 || low > text.Length)
+        {
+            caret = Math.Min(low, text.Length);
+        }
+        else
+        {
+            // The caret before low is on the line of the point. Its letter ends at the caret of low, taken backward.
+            Rect before = CaretRect(low - 1, LogicalDirection.Forward);
+            Rect after  = CaretRect(low, LogicalDirection.Backward);
+            if (point.Y < before.Bottom && point.X - before.X < after.X - point.X)
+            {
+                caret = low - 1;
+            }
+        }
+
+        // A caret never falls between the 2 halves of a surrogate pair.
+        if (caret > 0 && caret < text.Length && char.IsLowSurrogate(text[caret]))
+        {
+            caret--;
+        }
+
+        return (caret, letter);
+
+        static bool IsPast(Rect caret, Point point) =>
+            point.Y < caret.Y || (point.Y < caret.Bottom && caret.X > point.X);
+    }
+
+    /// <summary>
+    /// Selects the shown text from start to end. Equal indices clear the selection.
+    /// </summary>
+    /// <remarks>
+    /// The bubble draws the highlight itself, because the text does not select by itself for the mouse. A received
+    /// bubble shows the accent color behind white letters. A sent bubble has an accent fill, so it shows a
+    /// darker shade of its own fill, behind white or black letters, whichever reads better. High contrast shows the
+    /// highlight colors of Windows. The colors are read at each change of the selection.
+    /// </remarks>
+    internal void SelectText(int start, int end)
+    {
+        end = Math.Max(start, end);
+        if (start == _selectStart && end == _selectEnd)
+        {
+            return;
+        }
+
+        _selectStart = start;
+        _selectEnd   = end;
+        Body.TextHighlighters.Clear();
+        if (_selectEnd == _selectStart)
+        {
+            return;
+        }
+
+        Windows.UI.Color back = Ui.GetColorValue(UIColorType.Accent);
+        Windows.UI.Color fore = Windows.UI.Colors.White;
+        if (Contrast.HighContrast)
+        {
+            back = Ui.UIElementColor(UIElementType.Highlight);
+            fore = Ui.UIElementColor(UIElementType.HighlightText);
+        }
+        else if (Bubble?.FromMe == true && BackFill.Background is { } fill)
+        {
+            // The fill of every sent bubble is a solid brush.
+            Windows.UI.Color color = fill.As<SolidColorBrush>().Color;
+            back = Windows.UI.Color.FromArgb(
+                byte.MaxValue,
+                (byte)(color.R * SelectionShade),
+                (byte)(color.G * SelectionShade),
+                (byte)(color.B * SelectionShade));
+
+            // White letters read on a dark shade, and black letters on a light shade. The weights are those of the
+            // Rec. 601 luma of a color.
+            bool dark = (0.299 * back.R) + (0.587 * back.G) + (0.114 * back.B) < 128;
+            fore      = dark ? Windows.UI.Colors.White : Windows.UI.Colors.Black;
+        }
+
+        var highlight = new TextHighlighter
+        {
+            Background = new SolidColorBrush(back),
+            Foreground = new SolidColorBrush(fore),
+        };
+        highlight.Ranges.Add(new TextRange { StartIndex = _selectStart, Length = _selectEnd - _selectStart });
+        Body.TextHighlighters.Add(highlight);
+    }
+
+    private Rect CaretRect(int index, LogicalDirection direction) => PointerAt(index).GetCharacterRect(direction);
+
+    // Gives the text pointer before the character at the index. A text with links has its runs in links.
+    private TextPointer PointerAt(int index)
+    {
+        int at = 0;
+        foreach (Run run in BodyRuns())
+        {
+            if (index <= at + run.Text.Length)
+            {
+                return run.ContentStart.GetPositionAtOffset(Math.Max(index - at, 0), LogicalDirection.Forward);
+            }
+
+            at += run.Text.Length;
+        }
+
+        return Body.ContentEnd;
+    }
+
+    private IEnumerable<Run> BodyRuns()
+    {
+        foreach (Inline inline in Body.Inlines)
+        {
+            if (inline is Run run)
+            {
+                yield return run;
+            }
+            else if (inline is Span span)
+            {
+                foreach (Run inner in span.Inlines.OfType<Run>())
+                {
+                    yield return inner;
+                }
+            }
+        }
+    }
+
+    /// <summary>
     /// Runs Copy from the bubble menu. It copies the selected text, or the whole text when nothing is selected. The own
     /// Copy of the text did the same.
     /// </summary>
@@ -1781,7 +2022,8 @@ public sealed partial class MessageBubble : UserControl
     public void Copy()
     {
         string original = Bubble?.Text ?? string.Empty;
-        string text     = Body.SelectedText.Length > 0 ? ChatFormat.OriginalOf(original, Body.SelectedText) : original;
+        string selected = SelectedText.Length > 0 ? SelectedText : Body.SelectedText;
+        string text     = selected.Length > 0 ? ChatFormat.OriginalOf(original, selected) : original;
         if (text.Length == 0)
         {
             return;
