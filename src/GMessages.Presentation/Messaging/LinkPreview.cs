@@ -7,4 +7,8 @@ namespace GMessages.Presentation.Messaging;
 /// <param name="Title">The title of the page as plain text: its <c>og:title</c>, else its <c>&lt;title&gt;</c>.</param>
 /// <param name="Site">The real host of the page after redirects, without <c>www.</c>.</param>
 /// <param name="Image">The bytes of the card image from its <c>og:image</c>, or null for none.</param>
-public sealed record LinkPreview(Uri Url, string Title, string Site, byte[]? Image);
+/// <param name="Description">The summary of the page as plain text: its <c>og:description</c>, else its
+/// <c>twitter:description</c> or <c>description</c>. Empty for none.</param>
+/// <param name="Icon">The bytes of the site icon: the icon that the page names, else <c>/favicon.ico</c> of the site.
+/// Null when the site has none.</param>
+public sealed record LinkPreview(Uri Url, string Title, string Site, byte[]? Image, string Description = "", byte[]? Icon = null);

@@ -156,6 +156,9 @@ public static class ChatCopy
     public const string TimeDayAgo     = "1 day";
     public const string TimeDaysAgo    = "{0} days";
 
+    // The day of a time stamp between messages, as Google Messages writes it, such as "Yesterday · 7:08 PM".
+    public const string StampYesterday = "Yesterday";
+
     // The controller wrote the settings card of the microphone. The owner approves it.
     public const string Microphone            = "Microphone";
     public const string MicrophoneDescription = "Which microphone records voice messages.";
@@ -209,6 +212,9 @@ public static class ChatCopy
 
     // The owner named Open with on 2026-11-01. The ellipsis matches Save as, because a dialog follows.
     public const string OpenWith = "Open with…";
+
+    // The owner asked for Copy image on 2026-11-17. The controller wrote the label. The owner can edit it.
+    public const string CopyImage = "Copy image";
 
     // The controller wrote the labels of reply quotes for media in Plan 7. The owner approves them at the gate.
     public const string QuoteImage = "Image";

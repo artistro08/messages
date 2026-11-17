@@ -13,10 +13,11 @@
     <AnalysisLevel>10.0-recommended</AnalysisLevel>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <Authors>Devin Green</Authors>
-    <!-- The one place the app display name lives: exe name, MSIX names and AppInfo.DisplayName all read it -->
+    <!-- The one place the app display name lives: exe name, installer names and AppInfo.DisplayName all read it -->
     <AppDisplayName>Messages</AppDisplayName>
-    <!-- App version (AppInfo.Version); keep it in step with Identity Version in src/GMessages.App/Package.appxmanifest -->
-    <Version>0.1.7.74</Version>
+    <!-- App version (AppInfo.Version, the MSI version and the release tag v1.0.0). A fourth part is a build bump
+         (1.0.2.1). Windows Installer ignores it, so Package.wxs allows same-version upgrades to let it install -->
+    <Version>1.0.3.1</Version>
   </PropertyGroup>
 
   <!-- Display Name: stamped into every assembly, read at runtime by AppInfo.DisplayName -->

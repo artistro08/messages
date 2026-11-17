@@ -6,6 +6,7 @@ using GMessages.App.Windowing;
 using GMessages.Presentation.Main;
 using GMessages.Presentation.Messaging;
 using Windows.ApplicationModel.DataTransfer;
+using Windows.Devices.Input;
 using Windows.Foundation;
 using Windows.System;
 using Windows.UI.Composition;
@@ -28,7 +29,8 @@ namespace GMessages.App.Views.Controls;
 /// </summary>
 /// <remarks>
 /// <para>
-/// A sent RCS bubble has a lighter shade of the accent color. A sent SMS bubble has the accent color.
+/// A sent RCS bubble has the darker shade of the accent color, and a sent SMS bubble has the lighter shade, in the
+/// light and the dark theme.
 /// </para>
 /// <para>
 /// The text carries the AutomationId <c>Bubble.{id}</c>. Until the phone echoes a sent message, it carries
@@ -144,14 +146,19 @@ public sealed partial class MessageBubble : UserControl
     // middle 4 px in from the edge.
     private const double PillCornerReach = 8;
 
-    // The preview card in effective pixels: the width of its image on a card alone, the widest the image decodes, the
-    // tallest the image shows, its gap below the text, and its corners under text and alone.
+    // The preview card in effective pixels: the narrowest its image shows, the widest the image decodes, the tallest
+    // the image shows, and its corners alone.
     private const double PreviewImageWidth  = 240;
     private const int PreviewDecodeWidth    = (int)MaxBubbleWidth;
     private const double PreviewImageHeight = 320;
-    private const double PreviewGap         = 8;
-    private const double PreviewCorner      = 8;
     private const double PreviewAloneCorner = 12;
+
+    // The narrowest card. A very thin image shows whole in the middle of it, with space at its sides, so the title and
+    // the site stay readable.
+    private const double PreviewMinWidth = 120;
+
+    // The site icon shows 16 px wide. It decodes at twice that, so it stays sharp at high scale.
+    private const int PreviewIconDecodeWidth = 32;
 
     // The list of who reacted scrolls past this height. The emoji of each row sits this far from the name.
     private const double ReactorsMaxHeight = 320;
@@ -206,6 +213,9 @@ public sealed partial class MessageBubble : UserControl
     // Reads the animation setting of Windows live: Settings > Accessibility > Visual effects.
     private static readonly UISettings Ui = new();
 
+    // Reads the high contrast setting of Windows live.
+    private static readonly AccessibilitySettings Contrast = new();
+
     // The first flag is true while the pointer is over the bubble. The second flag is true while the picker or the
     // menu from the strip is open. The strip then stays while the pointer is in that popup.
     private bool _pointerOver;
@@ -226,6 +236,13 @@ public sealed partial class MessageBubble : UserControl
     // because a rebuild drops a selection.
     private string? _shownText;
     private string? _shownKey;
+
+    // The highlight on a sent bubble is the fill of the bubble at this share of its brightness.
+    private const double SelectionShade = 0.6;
+
+    // The selected part of the shown text. See SelectText.
+    private int _selectStart;
+    private int _selectEnd;
 
     // The links of the text, kept in the color of the text.
     private readonly List<Hyperlink> _links = [];
@@ -320,13 +337,8 @@ public sealed partial class MessageBubble : UserControl
         // A video that plays stops when the bubble leaves the tree.
         Unloaded += (_, _) => ReleaseVideo();
 
-        // The row under the bubble is at least as wide as the back, inside its margins. Thus the pill sits on the
-        // corner of the back.
-        Back.SizeChanged += (_, _) =>
-        {
-            Under.MinWidth = Math.Max(0, Back.ActualWidth - Under.Margin.Left - Under.Margin.Right);
-            LayPill();
-        };
+        // The row under the bubble is at least as wide as the back and the preview card. See FitUnder.
+        Back.SizeChanged += (_, _) => FitUnder();
         Under.SizeChanged    += (_, _) => LayPill();
         Captions.SizeChanged += (_, _) => LayPill();
 
@@ -334,9 +346,41 @@ public sealed partial class MessageBubble : UserControl
         // pane, whose bubble menu has Copy.
         Body.ContextFlyout = null;
 
+        // The look of a sent bubble follows the theme. See OnFullAccent. A row can get its message before it is in the
+        // window, where the theme is not yet known.
+        ActualThemeChanged += (_, _) => ShowStates();
+        Loaded             += (_, _) => ShowStates();
+
+        // The chat pane selects with the mouse, so the text selects by itself only for touch and pen. The pointer
+        // enters the text before it presses, and the text takes the kind of that pointer.
+        Body.PointerEntered += (_, e) =>
+        {
+            bool own = e.Pointer.PointerDeviceType != PointerDeviceType.Mouse;
+            if (Body.IsTextSelectionEnabled != own)
+            {
+                Body.IsTextSelectionEnabled = own;
+            }
+        };
+
+        // Text that the mouse can select shows the text cursor. A link keeps its hand.
+        nint beam = WindowInterop.LoadCursorW(0, PointerCursor.IBeam);
+        Body.PointerMoved += (_, e) =>
+        {
+            if (e.Pointer.PointerDeviceType == PointerDeviceType.Mouse && ReferenceEquals(e.OriginalSource, Body))
+            {
+                PointerCursor.Show(beam);
+            }
+        };
+
         // The links follow the color of the text, which the side state and the theme set.
         Body.RegisterPropertyChangedCallback(TextBlock.ForegroundProperty, (_, _) => ColorLinks());
     }
+
+    /// <summary>
+    /// Tells the chat that a tap on the bubble asks for its time. The chat toggles the time when no double-click
+    /// follows. See ChatPane.OnBubbleTimeTapped.
+    /// </summary>
+    public event EventHandler? TimeTapped;
 
     /// <summary>
     /// Asks the chat to send this failed bubble again.
@@ -386,6 +430,9 @@ public sealed partial class MessageBubble : UserControl
 
     /// <summary>Gets the Copy link text of the preview card menu.</summary>
     public static string CopyLinkText => ChatCopy.CopyLink;
+
+    /// <summary>Gets the Copy image text of the menu.</summary>
+    public static string CopyImageText => ChatCopy.CopyImage;
 
     /// <summary>Gets the Open text of the menu.</summary>
     public static string OpenText => ChatCopy.Open;
@@ -669,12 +716,12 @@ public sealed partial class MessageBubble : UserControl
     }
 
     /// <summary>
-    /// Spaces the preview card from the text above it. A message that was only the link has no text. The card then
-    /// starts at the top of the bubble.
+    /// Spaces the preview card from the bubble above it, as bubbles of a group are spaced. A message that was only the
+    /// link has nothing above the card. The card then starts at the top of the row.
     /// </summary>
-    /// <param name="hasText">True when the bubble shows text.</param>
+    /// <param name="previewAlone">True when the preview card is all that the bubble shows.</param>
     /// <returns>The margin of the card.</returns>
-    public static Thickness PreviewMargin(bool hasText) => new(0, hasText ? PreviewGap : 0, 0, 0);
+    public static Thickness PreviewMargin(bool previewAlone) => new(0, previewAlone ? 0 : 2 * InGroupGap, 0, 0);
 
     /// <summary>
     /// Gives the padding of the back. A photo fills the bubble from edge to edge and gets none. Emoji alone have no
@@ -704,61 +751,113 @@ public sealed partial class MessageBubble : UserControl
     /// <param name="emojiOnly">
     /// True when the message is only emoji. They show big with no bubble around them, as issue #11 asked.
     /// </param>
-    /// <param name="previewAlone">
-    /// True when the preview card is all that the bubble shows. The card then takes the colors of the bubble itself.
-    /// </param>
+    /// <param name="previewAlone">True when the preview card is all that the bubble shows.</param>
     /// <returns>Collapsed for a photo alone, a preview card alone or emoji alone.</returns>
     public static Visibility FillShown(bool hasPhoto, bool hasCaption, bool hasQuote, bool emojiOnly, bool previewAlone) =>
         emojiOnly || previewAlone || (hasPhoto && !hasCaption && !hasQuote) ? Visibility.Collapsed : Visibility.Visible;
 
     /// <summary>
-    /// Rounds the preview card. A card alone in its bubble is the bubble, with the same corners all around, smaller
-    /// than the corners of a text bubble, as the owner asked. A card under text keeps smaller corners inside the bubble.
+    /// Rounds the preview card. A card alone has the same corners all around, smaller than the corners of a text
+    /// bubble, as the owner asked. A card under text is the next bubble of a group, so its top corner on the side of the
+    /// sender is small. See <see cref="CornersOf"/>.
     /// </summary>
     /// <param name="previewAlone">True when the preview card is all that the bubble shows.</param>
+    /// <param name="fromMe">True for a sent bubble.</param>
+    /// <param name="isLast">True for the last bubble of its group.</param>
     /// <returns>The corners.</returns>
-    public static CornerRadius PreviewCorners(bool previewAlone) => new(previewAlone ? PreviewAloneCorner : PreviewCorner);
+    public static CornerRadius PreviewCorners(bool previewAlone, bool fromMe, bool isLast) =>
+        previewAlone ? new(PreviewAloneCorner) : CornersOf(fromMe, false, isLast);
+
+    /// <summary>
+    /// Rounds the text bubble. A preview card under it is the next bubble of a group, so its bottom corner on the side
+    /// of the sender is small. See <see cref="CornersOf"/>.
+    /// </summary>
+    /// <param name="fromMe">True for a sent bubble.</param>
+    /// <param name="isFirst">True for the first bubble of its group.</param>
+    /// <param name="isLast">True for the last bubble of its group.</param>
+    /// <param name="hasPreview">True when a preview card shows under the text.</param>
+    /// <returns>The corners.</returns>
+    public static CornerRadius TextCorners(bool fromMe, bool isFirst, bool isLast, bool hasPreview) => CornersOf(fromMe, isFirst, isLast && !hasPreview);
 
     /// <summary>
     /// Rounds a photo to the exact corners of its bubble, because the photo covers the edge of the bubble. The bottom
-    /// is square when a caption follows.
+    /// is square when a caption follows. The top is square under the quote of a reply, whose frame has a square bottom.
     /// </summary>
     /// <param name="fromMe">True for a sent bubble.</param>
     /// <param name="isFirst">True for the first bubble of its group.</param>
     /// <param name="isLast">True for the last bubble of its group.</param>
     /// <param name="hasCaption">True when a caption shows under the photo.</param>
+    /// <param name="hasQuote">True when the quote of a reply shows over the photo.</param>
     /// <returns>The corners.</returns>
-    public static CornerRadius PhotoCorners(bool fromMe, bool isFirst, bool isLast, bool hasCaption)
+    public static CornerRadius PhotoCorners(bool fromMe, bool isFirst, bool isLast, bool hasCaption, bool hasQuote)
     {
         CornerRadius outer = CornersOf(fromMe, isFirst, isLast);
         return new CornerRadius(
-            outer.TopLeft,
-            outer.TopRight,
+            hasQuote ? 0 : outer.TopLeft,
+            hasQuote ? 0 : outer.TopRight,
             hasCaption ? 0 : outer.BottomRight,
             hasCaption ? 0 : outer.BottomLeft);
     }
 
     /// <summary>
-    /// Gives the weight of the sender line in the quote. It is semibold beside the thumbnail of quoted media, else the
-    /// weight of the caption style.
+    /// Stretches the quote over the top of the bubble. Its negative margins cancel the padding of the back, so its frame
+    /// meets the edges of the bubble. The text of the reply then keeps the usual gap under it. A photo or a video has
+    /// no back padding, so its quote needs no stretch.
     /// </summary>
-    /// <param name="hasMedia">True when the quote shows the thumbnail or the icon of the quoted media.</param>
-    /// <returns>The weight.</returns>
-    public static Windows.UI.Text.FontWeight QuoteSenderWeight(bool hasMedia) => hasMedia ? FontWeights.SemiBold : FontWeights.Normal;
+    /// <param name="hasPhoto">True when the bubble shows a photo or a video, which fills it with no padding.</param>
+    /// <returns>The margin of the quote.</returns>
+    public static Thickness QuoteMargin(bool hasPhoto) =>
+        hasPhoto ? default : new(-TextPadding.Left, -TextPadding.Top, -TextPadding.Right, TextPadding.Top);
 
     /// <summary>
-    /// Sets a media label such as "Image", "Video" or "GIF" in italic. A file name or text stays upright.
+    /// Rounds the fill of the bubble. Under a quote the top is square, because the fill starts where the quote ends.
+    /// See <see cref="OnQuoteSizeChanged"/>. Over a preview card the bottom joins the card. See <see cref="TextCorners"/>.
     /// </summary>
-    /// <param name="isLabel">True for a label.</param>
-    /// <returns>The style.</returns>
-    public static Windows.UI.Text.FontStyle LabelStyle(bool isLabel) => isLabel ? Windows.UI.Text.FontStyle.Italic : Windows.UI.Text.FontStyle.Normal;
+    /// <param name="fromMe">True for a sent bubble.</param>
+    /// <param name="isFirst">True for the first bubble of its group.</param>
+    /// <param name="isLast">True for the last bubble of its group.</param>
+    /// <param name="hasQuote">True when the bubble starts with a quote.</param>
+    /// <param name="hasPreview">True when a preview card shows under the text.</param>
+    /// <returns>The corners.</returns>
+    public static CornerRadius FillCorners(bool fromMe, bool isFirst, bool isLast, bool hasQuote, bool hasPreview)
+    {
+        CornerRadius r = TextCorners(fromMe, isFirst, isLast, hasPreview);
+        return hasQuote ? new CornerRadius(0, 0, r.BottomRight, r.BottomLeft) : r;
+    }
 
     /// <summary>
-    /// Gives the icon of the file card: the video icon for a video, or the document icon for any other file.
+    /// Gives the fill of the bubble its 1 px edge. Under a quote the top edge is gone, so no line runs between the quote
+    /// and the reply. The SMS states still set no edge at all.
+    /// </summary>
+    /// <param name="hasQuote">True when the bubble starts with a quote.</param>
+    /// <returns>The edge widths.</returns>
+    public static Thickness FillStroke(bool hasQuote) => hasQuote ? new(1, 0, 1, 1) : new(1);
+
+    /// <summary>
+    /// Rounds the frame of the quote to the top corners of its bubble. The bottom is square, because the text of the
+    /// reply follows on the color of the bubble.
+    /// </summary>
+    /// <param name="fromMe">True for a sent bubble.</param>
+    /// <param name="isFirst">True for the first bubble of its group.</param>
+    /// <returns>The corners.</returns>
+    public static CornerRadius QuoteCorners(bool fromMe, bool isFirst)
+    {
+        CornerRadius outer = CornersOf(fromMe, isFirst, isLast: true);
+        return new CornerRadius(outer.TopLeft, outer.TopRight, 0, 0);
+    }
+
+    /// <summary>
+    /// Gives the icon of media with no picture, on the file card, the thumbnail of quoted media and the attachment chip:
+    /// the video icon for a video, the microphone for a voice message or audio, or the document icon for any other file.
     /// </summary>
     /// <param name="kind">The kind of the message.</param>
     /// <returns>The Segoe Fluent Icons glyph.</returns>
-    public static string FileGlyph(MessageKind kind) => kind == MessageKind.Video ? "\uE714" : "\uE8A5";
+    public static string FileGlyph(MessageKind kind) => kind switch
+    {
+        MessageKind.Video => "\uE8B2",
+        MessageKind.Audio => "\uE720",
+        _                 => "\uE8A5",
+    };
 
     /// <summary>
     /// Writes a file size as Explorer does, such as "1.20 MB" or "940 bytes", with the formatter of Windows.
@@ -800,6 +899,9 @@ public sealed partial class MessageBubble : UserControl
             // The photo fills the bubble from edge to edge, beside the avatar lane.
             _photoMaxWidth = cap - LaneWidth(Bubble?.HasAvatarLane == true);
             SizePhoto();
+
+            // The card follows the cap of the bubble.
+            FitPreviewToImage();
         }
 
         return base.MeasureOverride(availableSize);
@@ -813,30 +915,36 @@ public sealed partial class MessageBubble : UserControl
     // group.
     private void OnPartLoaded(object sender, RoutedEventArgs e) => ShowPartStates(refresh: true);
 
-    // Sets the own states of the parts: the on-accent brushes on the parts of a sent SMS bubble, and the fill of my
-    // reaction on the pill. The method sets states only on a loaded part, because the setter of a state would load its
-    // part. With refresh, the method goes to a state again through the plain state. That is for a new part whose group
-    // already sat in the state. A second go to the same state does nothing.
-    private void ShowPartStates(bool refresh)
+    // The fill starts under the quote, at its height. The top of the quote is the top of the back in both layouts.
+    private void OnQuoteSizeChanged(object sender, SizeChangedEventArgs e) => BackFill.Margin = new(0, e.NewSize.Height, 0, 0);
+
+    // A bubble with no quote fills from the top again, as a recycled row that showed a quote before.
+    private void UnquoteFill()
     {
-        bool sms = Bubble is { FromMe: true, IsRcs: false };
-        GoToPartState(QuoteButton, sms ? "QuoteOnAccent" : "QuotePlain", "QuotePlain", refresh);
-        GoToPartState(FileCard, sms ? "FileOnAccent" : "FilePlain", "FilePlain", refresh);
-        GoToPartState(Voice, sms ? "VoiceOnAccent" : "VoicePlain", "VoicePlain", refresh);
-        GoToPartState(Preview, PreviewState(), "PreviewPlain", refresh);
-        GoToPartState(PillHost, Bubble?.HasMyReaction == true ? "Mine" : "NotMine", "NotMine", refresh);
+        if (Bubble?.HasQuote != true)
+        {
+            BackFill.Margin = default;
+        }
     }
 
-    // A card alone in its bubble takes the colors of its side: the card color when received, the RCS shade when sent
-    // over RCS, and the accent when sent over SMS. A card under text sits on the fill of the bubble instead.
-    private string PreviewState() => Bubble switch
+    // Sent RCS shows on the darker shade of the accent and sent SMS on the lighter shade, in the light and the dark
+    // theme, as in Google Messages. The full accent of Windows is the darker shade in the light theme and the lighter
+    // shade in the dark theme. Thus the bubble on the full accent is RCS in the light theme and SMS in the dark theme.
+    // The other bubble takes the soft shade of the Sent state. High contrast keeps SMS on the full accent.
+    private bool OnFullAccent =>
+        Bubble is { FromMe: true } sent && sent.IsRcs == (ActualTheme == ElementTheme.Light && !Contrast.HighContrast);
+
+    // Sets the own states of the parts: the on-accent brushes on the parts of a sent bubble on the full accent, and the
+    // fill of my reaction on the pill. The method sets states only on a loaded part, because the setter of a state
+    // would load its part. With refresh, the method goes to a state again through the plain state. That is for a new
+    // part whose group already sat in the state. A second go to the same state does nothing.
+    private void ShowPartStates(bool refresh)
     {
-        { PreviewFillsBubble: true, FromMe: false } => "PreviewAloneReceived",
-        { PreviewFillsBubble: true, IsRcs: true }   => "PreviewAloneRcs",
-        { PreviewFillsBubble: true }                => "PreviewAloneSms",
-        { FromMe: true, IsRcs: false }              => "PreviewOnAccent",
-        _                                           => "PreviewPlain",
-    };
+        bool onAccent = OnFullAccent;
+        GoToPartState(FileCard, onAccent ? "FileOnAccent" : "FilePlain", "FilePlain", refresh);
+        GoToPartState(Voice, onAccent ? "VoiceOnAccent" : "VoicePlain", "VoicePlain", refresh);
+        GoToPartState(PillHost, Bubble?.HasMyReaction == true ? "Mine" : "NotMine", "NotMine", refresh);
+    }
 
     private void GoToPartState(FrameworkElement? part, string state, string plain, bool refresh)
     {
@@ -939,6 +1047,7 @@ public sealed partial class MessageBubble : UserControl
         // passes over fetches no audio.
         view.ShowText();
         view.ShowStates();
+        view.UnquoteFill();
         view.LoadMedia(fetchVoice: false);
 
         // The reactions of another message show as they are, with no pop. A recycled row stops a pop that is half
@@ -1021,10 +1130,12 @@ public sealed partial class MessageBubble : UserControl
                 ShowReactionChange();
                 break;
 
-            // The corners of the photo follow the caption, and the clip of a GIF follows them. The case above handles a
-            // change of the group.
+            // The corners of the photo follow the caption and the quote, and the clip of a GIF follows them. The case
+            // above handles a change of the group.
             case nameof(MessageBubbleViewModel.HasBodyText):
+            case nameof(MessageBubbleViewModel.HasQuote):
                 ClipPhotoFull();
+                UnquoteFill();
                 break;
         }
     }
@@ -1218,7 +1329,14 @@ public sealed partial class MessageBubble : UserControl
     // no preview, the card unloads with its image.
     private async void ShowPreviewImage()
     {
+        // A recycled row that showed a card fits the row under it to a message with no card. Its back may keep its size,
+        // so no size change would fit it.
         LinkPreview? preview = Bubble?.Preview;
+        if (preview is null)
+        {
+            FitUnder();
+        }
+
         if (ReferenceEquals(preview, _previewShown))
         {
             return;
@@ -1231,8 +1349,10 @@ public sealed partial class MessageBubble : UserControl
         }
 
         FindName(nameof(Preview));
-        PreviewImage.Source     = null;
+        PreviewImage.Background = null;
         PreviewImage.Visibility = Visibility.Collapsed;
+        FitPreviewToImage();
+        ShowPreviewIcon(preview);
         if (preview.Image is not { } bytes)
         {
             return;
@@ -1245,26 +1365,89 @@ public sealed partial class MessageBubble : UserControl
             return;
         }
 
-        PreviewImage.Source     = image;
+        // The brush shows the whole image. A brush asks for no width, so the image never widens the card past its least
+        // width. FitPreviewToImage keeps the card no wider than the whole image at its tallest.
+        PreviewImage.Background = new ImageBrush { ImageSource = image, Stretch = Stretch.Uniform };
         PreviewImage.Visibility = Visibility.Visible;
+        FitPreviewToImage();
 
-        // A new image starts at the width of a card alone. A recycled row can keep the width of its card, and then no
-        // size change follows. Thus the card lays out once here, and the image takes the width that the card gets.
-        SizePreviewImage(PreviewImageWidth);
+        // A recycled row can keep the width of its card, and then no size change follows. Thus the card lays out once
+        // here, and the image takes the width that the card gets.
         PreviewCard.UpdateLayout();
         SizePreviewImage(InnerWidth(PreviewCard.ActualWidth));
     }
 
-    // The image runs across the whole card in its own shape. It sets only its height from the width of the card, so the
-    // text and the bubble decide the width. A very tall image stops at its tallest and narrows to keep its shape.
-    private void OnPreviewCardSizeChanged(object sender, SizeChangedEventArgs e) => SizePreviewImage(InnerWidth(e.NewSize.Width));
+    // Decodes the site icon of the card. A site with no icon, or an icon that Windows cannot read, shows only its name.
+    private async void ShowPreviewIcon(LinkPreview preview)
+    {
+        PreviewIcon.Source     = null;
+        PreviewIcon.Visibility = Visibility.Collapsed;
+        if (preview.Icon is not { } bytes)
+        {
+            return;
+        }
+
+        // A recycled container can show another message after the decode.
+        ImageSource? icon = await Avatar.ToImageAsync(bytes, PreviewIconDecodeWidth);
+        if (icon is null || !ReferenceEquals(preview, _previewShown))
+        {
+            return;
+        }
+
+        PreviewIcon.Source     = icon;
+        PreviewIcon.Visibility = Visibility.Visible;
+    }
+
+    // Fits the card to its image, so the whole image always shows. The image is at most 320 px tall, so a tall image
+    // narrows the card to its width at that height, and the title and the summary wrap to it. The card is never
+    // narrower than 120 px, so a very thin image shows whole with space at its sides. The image is at least 240 px wide
+    // when its shape allows, and never wider than the bubble. The card sits on the outer side of its row,
+    // so a narrow card lines up with the text bubble above it. A card with no image follows its text.
+    private void FitPreviewToImage()
+    {
+        if (Preview is null || PreviewImage is null)
+        {
+            return;
+        }
+
+        Preview.HorizontalAlignment = Bubble?.FromMe == true ? HorizontalAlignment.Right : HorizontalAlignment.Left;
+        if ((PreviewImage.Background as ImageBrush)?.ImageSource is not BitmapImage { PixelWidth: > 0, PixelHeight: > 0 } bitmap)
+        {
+            Preview.MaxWidth      = double.PositiveInfinity;
+            PreviewImage.MinWidth = 0;
+            return;
+        }
+
+        double widest         = Math.Max(PreviewMinWidth, PreviewImageHeight * bitmap.PixelWidth / bitmap.PixelHeight);
+        Preview.MaxWidth      = widest + PreviewCard.BorderThickness.Left + PreviewCard.BorderThickness.Right;
+        PreviewImage.MinWidth = Math.Min(Math.Min(PreviewImageWidth, _photoMaxWidth), widest);
+    }
+
+    // The image runs across the whole card. It sets only its height from the width of the card, so the text, the
+    // bubble and the least width of the image decide the width. The card is never wider than the image at its tallest.
+    // See FitPreviewToImage.
+    private void OnPreviewCardSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        SizePreviewImage(InnerWidth(e.NewSize.Width));
+        FitUnder();
+    }
+
+    // The row under the bubble is at least as wide as the back and the preview card, inside its margins. Thus the pill
+    // sits on the corner of the bubble.
+    private void FitUnder()
+    {
+        double card    = Bubble?.HasPreview == true ? Preview?.ActualWidth ?? 0 : 0;
+        double width   = Math.Max(Back.ActualWidth, card);
+        Under.MinWidth = Math.Max(0, width - Under.Margin.Left - Under.Margin.Right);
+        LayPill();
+    }
 
     // The width inside the border of the card.
     private double InnerWidth(double cardWidth) => cardWidth - PreviewCard.BorderThickness.Left - PreviewCard.BorderThickness.Right;
 
     private void SizePreviewImage(double width)
     {
-        if (PreviewImage?.Source is not BitmapImage { PixelWidth: > 0, PixelHeight: > 0 } bitmap || width <= 0)
+        if ((PreviewImage?.Background as ImageBrush)?.ImageSource is not BitmapImage { PixelWidth: > 0, PixelHeight: > 0 } bitmap || width <= 0)
         {
             return;
         }
@@ -1386,20 +1569,21 @@ public sealed partial class MessageBubble : UserControl
         _previewShown = null;
         if (PreviewImage is not null)
         {
-            PreviewImage.Source     = null;
+            PreviewImage.Background = null;
             PreviewImage.Visibility = Visibility.Collapsed;
+            FitPreviewToImage();
         }
     }
 
     private void ShowStates()
     {
-        // Emoji alone have no accent fill behind them. Thus a sent SMS of emoji takes the plain text color of the Sent
-        // state, not the on-accent color.
+        // Emoji alone have no accent fill behind them. Thus sent emoji take the plain text color of the Sent state, not
+        // the on-accent color.
         string side = Bubble switch
         {
-            { FromMe: false } or null                => "Received",
-            { IsRcs: true } or { IsEmojiOnly: true } => "Sent",
-            _                                        => "SentSms",
+            { FromMe: false } or null => "Received",
+            { IsEmojiOnly: true }     => "Sent",
+            _                         => OnFullAccent ? "SentSms" : "Sent",
         };
 
         VisualStateManager.GoToState(this, side, false);
@@ -1423,6 +1607,11 @@ public sealed partial class MessageBubble : UserControl
 
         _shownText = text;
         _shownKey  = key;
+
+        // A selection does not stay on a row that shows another text.
+        _selectStart = 0;
+        _selectEnd   = 0;
+        Body.TextHighlighters.Clear();
         _links.Clear();
         LinkBlockers.Children.Clear();
 
@@ -1597,7 +1786,8 @@ public sealed partial class MessageBubble : UserControl
         }
     }
 
-    // The time toggles a turn later, after the click of a link. That click can come after the tap.
+    // A click with no drag asks the chat for the time. The request goes a turn later, after the click of a link. That
+    // click can come after the tap.
     private void OnBackTapped(object sender, TappedRoutedEventArgs e)
     {
         // The quote, photo, video, file card, voice message and preview card handle their own taps.
@@ -1614,23 +1804,31 @@ public sealed partial class MessageBubble : UserControl
                 return;
             }
 
-            Bubble?.ToggleTime();
+            TimeTapped?.Invoke(this, EventArgs.Empty);
         });
     }
 
     // A tap on the row beside the bubble also toggles the time: on its empty width, the avatar or the time. The bubble
-    // has its own handler above. A button such as the hover strip or the pill handles its own tap.
+    // has its own handler above. A button does not stop the tap, so a tap on a button of the row stops here: react,
+    // reply, the ⋮, the pill, the preview card and the retry link. The empty space around them still toggles the time.
+    // The check names each button, because a type check can fail in the Native AOT build. See UiHelpers.FindScroller.
     private void OnRowTapped(object sender, TappedRoutedEventArgs e)
     {
         for (DependencyObject? at = e.OriginalSource as DependencyObject; at is not null && !ReferenceEquals(at, Row); at = VisualTreeHelper.GetParent(at))
         {
-            if (ReferenceEquals(at, Back))
+            if (ReferenceEquals(at, Back)
+                || ReferenceEquals(at, HoverReact)
+                || ReferenceEquals(at, HoverReply)
+                || ReferenceEquals(at, HoverMore)
+                || ReferenceEquals(at, Pill)
+                || ReferenceEquals(at, Preview)
+                || ReferenceEquals(at, FailedFooter))
             {
                 return;
             }
         }
 
-        Bubble?.ToggleTime();
+        TimeTapped?.Invoke(this, EventArgs.Empty);
     }
 
     private void OnPreviewClick(object sender, RoutedEventArgs e)
@@ -1644,6 +1842,187 @@ public sealed partial class MessageBubble : UserControl
     private void OnRetryClick(object sender, RoutedEventArgs e) => RetryRequested?.Invoke(this, EventArgs.Empty);
 
     /// <summary>
+    /// Gets the text that the bubble shows. Its indices are the indices of <see cref="TextHit"/> and
+    /// <see cref="SelectText"/>.
+    /// </summary>
+    internal string ShownText => _shownText ?? string.Empty;
+
+    /// <summary>
+    /// Gets the text element. The chat pane reads pointer positions on it.
+    /// </summary>
+    internal UIElement TextView => Body;
+
+    /// <summary>
+    /// Tells whether the element is the text, or a clear strip over the empty end of a line of the text. See
+    /// <see cref="BlockLinkEnds"/>.
+    /// </summary>
+    internal bool IsText(DependencyObject element) =>
+        ReferenceEquals(element, Body) || ReferenceEquals(VisualTreeHelper.GetParent(element), LinkBlockers);
+
+    /// <summary>
+    /// Gets the part of the shown text that <see cref="SelectText"/> selected.
+    /// </summary>
+    internal string SelectedText
+    {
+        get
+        {
+            string text = ShownText;
+            int start   = Math.Min(_selectStart, text.Length);
+            return text[start..Math.Clamp(_selectEnd, start, text.Length)];
+        }
+    }
+
+    /// <summary>
+    /// Finds the place in the text under a point on <see cref="TextView"/>.
+    /// </summary>
+    /// <remarks>
+    /// A binary search finds the first caret past the point in reading order. Only left-to-right text gives the
+    /// correct result. A point above the text gives the start, and a point below the text gives the end.
+    /// </remarks>
+    /// <returns>The nearest caret, and the character under the point.</returns>
+    internal (int Caret, int Letter) TextHit(Point point)
+    {
+        string text = ShownText;
+        int low     = 0;
+        int high    = text.Length + 1;
+        while (low < high)
+        {
+            int mid = (low + high) / 2;
+            if (mid <= text.Length && !IsPast(CaretRect(mid, LogicalDirection.Forward), point))
+            {
+                low = mid + 1;
+            }
+            else
+            {
+                high = mid;
+            }
+        }
+
+        // The first caret past the point is at low. The character under the point is just before it.
+        int letter = Math.Clamp(low - 1, 0, Math.Max(text.Length - 1, 0));
+        int caret  = low;
+        if (low == 0 || low > text.Length)
+        {
+            caret = Math.Min(low, text.Length);
+        }
+        else
+        {
+            // The caret before low is on the line of the point. Its letter ends at the caret of low, taken backward.
+            Rect before = CaretRect(low - 1, LogicalDirection.Forward);
+            Rect after  = CaretRect(low, LogicalDirection.Backward);
+            if (point.Y < before.Bottom && point.X - before.X < after.X - point.X)
+            {
+                caret = low - 1;
+            }
+        }
+
+        // A caret never falls between the 2 halves of a surrogate pair.
+        if (caret > 0 && caret < text.Length && char.IsLowSurrogate(text[caret]))
+        {
+            caret--;
+        }
+
+        return (caret, letter);
+
+        static bool IsPast(Rect caret, Point point) =>
+            point.Y < caret.Y || (point.Y < caret.Bottom && caret.X > point.X);
+    }
+
+    /// <summary>
+    /// Selects the shown text from start to end. Equal indices clear the selection.
+    /// </summary>
+    /// <remarks>
+    /// The bubble draws the highlight itself, because the text does not select by itself for the mouse. A received
+    /// bubble shows the accent color behind white letters. A sent bubble has an accent fill, so it shows a
+    /// darker shade of its own fill, behind white or black letters, whichever reads better. High contrast shows the
+    /// highlight colors of Windows. The colors are read at each change of the selection.
+    /// </remarks>
+    internal void SelectText(int start, int end)
+    {
+        end = Math.Max(start, end);
+        if (start == _selectStart && end == _selectEnd)
+        {
+            return;
+        }
+
+        _selectStart = start;
+        _selectEnd   = end;
+        Body.TextHighlighters.Clear();
+        if (_selectEnd == _selectStart)
+        {
+            return;
+        }
+
+        Windows.UI.Color back = Ui.GetColorValue(UIColorType.Accent);
+        Windows.UI.Color fore = Windows.UI.Colors.White;
+        if (Contrast.HighContrast)
+        {
+            back = Ui.UIElementColor(UIElementType.Highlight);
+            fore = Ui.UIElementColor(UIElementType.HighlightText);
+        }
+        else if (Bubble?.FromMe == true && BackFill.Background is { } fill)
+        {
+            // The fill of every sent bubble is a solid brush.
+            Windows.UI.Color color = fill.As<SolidColorBrush>().Color;
+            back = Windows.UI.Color.FromArgb(
+                byte.MaxValue,
+                (byte)(color.R * SelectionShade),
+                (byte)(color.G * SelectionShade),
+                (byte)(color.B * SelectionShade));
+
+            // White letters read on a dark shade, and black letters on a light shade. The weights are those of the
+            // Rec. 601 luma of a color.
+            bool dark = (0.299 * back.R) + (0.587 * back.G) + (0.114 * back.B) < 128;
+            fore      = dark ? Windows.UI.Colors.White : Windows.UI.Colors.Black;
+        }
+
+        var highlight = new TextHighlighter
+        {
+            Background = new SolidColorBrush(back),
+            Foreground = new SolidColorBrush(fore),
+        };
+        highlight.Ranges.Add(new TextRange { StartIndex = _selectStart, Length = _selectEnd - _selectStart });
+        Body.TextHighlighters.Add(highlight);
+    }
+
+    private Rect CaretRect(int index, LogicalDirection direction) => PointerAt(index).GetCharacterRect(direction);
+
+    // Gives the text pointer before the character at the index. A text with links has its runs in links.
+    private TextPointer PointerAt(int index)
+    {
+        int at = 0;
+        foreach (Run run in BodyRuns())
+        {
+            if (index <= at + run.Text.Length)
+            {
+                return run.ContentStart.GetPositionAtOffset(Math.Max(index - at, 0), LogicalDirection.Forward);
+            }
+
+            at += run.Text.Length;
+        }
+
+        return Body.ContentEnd;
+    }
+
+    private IEnumerable<Run> BodyRuns()
+    {
+        foreach (Inline inline in Body.Inlines)
+        {
+            if (inline is Run run)
+            {
+                yield return run;
+            }
+            else if (inline is Span span)
+            {
+                foreach (Run inner in span.Inlines.OfType<Run>())
+                {
+                    yield return inner;
+                }
+            }
+        }
+    }
+
+    /// <summary>
     /// Runs Copy from the bubble menu. It copies the selected text, or the whole text when nothing is selected. The own
     /// Copy of the text did the same.
     /// </summary>
@@ -1651,7 +2030,8 @@ public sealed partial class MessageBubble : UserControl
     public void Copy()
     {
         string original = Bubble?.Text ?? string.Empty;
-        string text     = Body.SelectedText.Length > 0 ? ChatFormat.OriginalOf(original, Body.SelectedText) : original;
+        string selected = SelectedText.Length > 0 ? SelectedText : Body.SelectedText;
+        string text     = selected.Length > 0 ? ChatFormat.OriginalOf(original, selected) : original;
         if (text.Length == 0)
         {
             return;
@@ -1661,7 +2041,8 @@ public sealed partial class MessageBubble : UserControl
     }
 
     /// <summary>
-    /// Runs Copy link from the preview card menu. It copies the whole address as sent, which the text no longer shows.
+    /// Runs Copy link from the bubble menu or the preview card menu. It copies the first link in the text of the message,
+    /// the link of its preview card, as sent in full, which the text no longer shows. A link in its quote never counts.
     /// </summary>
     public void CopyLink()
     {

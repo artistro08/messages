@@ -390,7 +390,37 @@ public sealed partial class ChatsView : UserControl
     // The rows are about to change. The list motion of Windows plays only for a live change, with the animation effects
     // on. A live change is a new message that lifts a row, or a conversation that arrives or leaves. Loads and pages
     // land in place.
-    private void OnRowsChanging(object? sender, bool live) => AnimateRows(live && Ui.AnimationsEnabled);
+    private void OnRowsChanging(object? sender, bool live)
+    {
+        AnimateRows(live && Ui.AnimationsEnabled);
+        HoldTop();
+    }
+
+    // While the pinned grid shows above the rows, the list keeps its first row in place when a row comes above it. A
+    // row that a new message lifts to the top then pushes the grid up, and the list at its top scrolls down by 1 row.
+    // The owner saw this jump. ItemsUpdatingScrollMode does not stop it. Thus the list at its top goes back to its top
+    // in the layout pass that moved it, before Windows draws. Lower in the list, the shown rows stay in place.
+    private void HoldTop()
+    {
+        if (_listScroller is not { VerticalOffset: < 1 })
+        {
+            return;
+        }
+
+        // The collection changes right after this event, on the same thread. Thus the next layout pass is the pass of
+        // the change. The removal first makes sure that the handler is on 1 time only.
+        ConversationList.LayoutUpdated -= OnHeldLayoutUpdated;
+        ConversationList.LayoutUpdated += OnHeldLayoutUpdated;
+    }
+
+    private void OnHeldLayoutUpdated(object? sender, object e)
+    {
+        ConversationList.LayoutUpdated -= OnHeldLayoutUpdated;
+        if (_listScroller is { VerticalOffset: >= 1 } scroller)
+        {
+            _ = scroller.ChangeView(null, 0, null, disableAnimation: true);
+        }
+    }
 
     // Turns the list motion on or off. The inserted row slides and fades in where it lands, and the lifted row lands at
     // the top. A removed row fades out, and the rows between slide aside. The code changes the collection in place, so

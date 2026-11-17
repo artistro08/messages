@@ -255,6 +255,22 @@ public sealed class ChatViewModelTests
     }
 
     /// <summary>
+    /// The Windows text box ends lines with \r. The sent text uses \n, which Android shows as a line break.
+    /// </summary>
+    [TestMethod]
+    public async Task Send_LineBreaks_GoAsNewlines()
+    {
+        using var rig = new MainRig();
+        using ChatViewModel chat = NewChat(rig);
+        await chat.LoadAsync();
+        chat.Draft = "one\rtwo\r\nthree";
+
+        await chat.SendAsync();
+
+        Assert.AreEqual("one\ntwo\nthree", rig.Client.Sent[0].MessagePayload.MessageInfo[0].MessageContent.Content);
+    }
+
+    /// <summary>
     /// The bubbles of the first page do not animate in. A sent bubble and a live arrival animate in, once.
     /// </summary>
     [TestMethod]
@@ -1392,13 +1408,16 @@ public sealed class ChatViewModelTests
 
         chat.StartReply(chat.Messages[0]);
         Assert.IsTrue(chat.IsReplying);
-        chat.Draft = "answer";
+        string chipSender = chat.ReplyingToSender;
+        chat.Draft        = "answer";
         await chat.SendAsync();
 
         Assert.AreEqual("m1", rig.Client.Sent.Single().Reply?.MessageID);
 
         MessageBubbleViewModel sent = chat.Messages[^1];
         Assert.IsTrue(sent.HasQuote);
+        Assert.AreEqual(sent.QuoteSender, chipSender, "the reply chip names the sender as the quote in the chat does");
+        Assert.AreEqual(string.Empty, chat.ReplyingToSender);
         Assert.AreEqual("one", sent.QuoteText);
         Assert.AreEqual("Ann", sent.QuoteSender);
     }
@@ -1480,7 +1499,6 @@ public sealed class ChatViewModelTests
         Assert.AreEqual(ChatCopy.QuoteImage, quoting.QuoteText);
         Assert.AreEqual("Ann", quoting.QuoteSender);
         Assert.IsTrue(quoting.HasQuoteMedia);
-        Assert.IsTrue(quoting.QuoteIsLabel);
         Assert.AreEqual("thumb-1", quoting.QuoteMedia!.ThumbnailId);
         Assert.AreEqual(ChatCopy.QuoteImage, chat.Messages[0].ReplyChipText);
     }
@@ -1780,9 +1798,10 @@ public sealed class ChatViewModelTests
             await Task.Delay(20);
         }
 
+        // The page is fetched once. The site icon requests come after it.
         Assert.IsTrue(bubble.HasPreview);
         Assert.AreEqual("Page Title", bubble.Preview!.Title);
-        Assert.AreEqual(1, handler.Requests.Count);
+        Assert.AreEqual(1, PageRequests(handler));
         Assert.AreEqual("https://www.example.com/a", handler.Requests[0].Url);
     }
 
@@ -1830,7 +1849,7 @@ public sealed class ChatViewModelTests
             await Task.Delay(20);
         }
 
-        Assert.AreEqual(1, handler.Requests.Count);
+        Assert.AreEqual(1, PageRequests(handler));
     }
 
     /// <summary>
@@ -1856,8 +1875,12 @@ public sealed class ChatViewModelTests
         }
 
         Assert.IsTrue(chat.Messages.Single().FromMe);
-        Assert.AreEqual(1, handler.Requests.Count);
+        Assert.AreEqual(1, PageRequests(handler));
     }
+
+    // The requests of a link preview other than its site icon: the page and its image.
+    private static int PageRequests(FakeHttpHandler handler) =>
+        handler.Requests.Count(r => !r.Url.EndsWith("/favicon.ico", StringComparison.Ordinal));
 
     /// <summary>
     /// The app never fetches the links of a spam chat or a blocked chat.

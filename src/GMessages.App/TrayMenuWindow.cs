@@ -67,6 +67,11 @@ internal sealed partial class TrayMenuWindow : XamlWindow
     public event EventHandler? QuitRequested;
 
     /// <summary>
+    /// Raised when the person clicks the install update item.
+    /// </summary>
+    public event EventHandler? UpdateRequested;
+
+    /// <summary>
     /// Raised when the host window hides after the menu closes, so the app can trim memory.
     /// </summary>
     public event EventHandler? Hidden;
@@ -109,6 +114,33 @@ internal sealed partial class TrayMenuWindow : XamlWindow
         AppTheme.Dark  => ElementTheme.Dark,
         _              => ElementTheme.Default,
     };
+
+    // The install update item and its separator, while an update waits
+    private MenuFlyoutItem? _updateItem;
+    private readonly MenuFlyoutSeparator _updateSeparator = new();
+
+    /// <summary>
+    /// Shows the install update item at the top of the menu for a version, or hides it for null.
+    /// </summary>
+    /// <param name="version">The version that waits to install, or null.</param>
+    public void ShowUpdate(string? version)
+    {
+        if (_updateItem is { } old)
+        {
+            _menu.Items.Remove(old);
+            _menu.Items.Remove(_updateSeparator);
+            _updateItem = null;
+        }
+
+        if (version is null)
+        {
+            return;
+        }
+
+        _updateItem = CreateItem($"Install update ({version})", "\uE896", "TrayMenu.Update", () => UpdateRequested?.Invoke(this, EventArgs.Empty));
+        _menu.Items.Insert(0, _updateSeparator);
+        _menu.Items.Insert(0, _updateItem);
+    }
 
     private void BuildItems()
     {
