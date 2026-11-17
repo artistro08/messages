@@ -227,6 +227,10 @@ public sealed partial class MessageBubble : UserControl
     // click. The link click and the tap of the back come in any order, so the tap waits a turn.
     private bool _linkClicked;
 
+    // A click on the text toggles the time after the double-click time, unless a double-click comes first. The time
+    // row moves the text, so the second click of a double-click missed the text.
+    private DispatcherQueueTimer? _textTapTimer;
+
     // The text and the part key that the runs of the text were built for. The runs rebuild only when these change,
     // because a rebuild drops a selection.
     private string? _shownText;
@@ -323,7 +327,11 @@ public sealed partial class MessageBubble : UserControl
         Row.Tapped += OnRowTapped;
 
         // A video that plays stops when the bubble leaves the tree.
-        Unloaded += (_, _) => ReleaseVideo();
+        Unloaded += (_, _) =>
+        {
+            ReleaseVideo();
+            _textTapTimer?.Stop();
+        };
 
         // The row under the bubble is at least as wide as the back and the preview card. See FitUnder.
         Back.SizeChanged += (_, _) => FitUnder();
@@ -1601,6 +1609,7 @@ public sealed partial class MessageBubble : UserControl
         link.Click += (_, _) =>
         {
             _linkClicked = true;
+            _textTapTimer?.Stop();
             XamlHost.Dispatcher.TryEnqueue(DispatcherQueuePriority.Low, () => _linkClicked = false);
             OpenLink(url);
         };
@@ -1736,6 +1745,16 @@ public sealed partial class MessageBubble : UserControl
             return;
         }
 
+        if (ReferenceEquals(e.OriginalSource, Body))
+        {
+            if (!_linkClicked)
+            {
+                WaitForDoubleClick();
+            }
+
+            return;
+        }
+
         XamlHost.Dispatcher.TryEnqueue(() =>
         {
             if (_linkClicked)
@@ -1746,6 +1765,25 @@ public sealed partial class MessageBubble : UserControl
 
             Bubble?.ToggleTime();
         });
+    }
+
+    /// <summary>
+    /// Cancels the time toggle of the last click on the text. The chat pane calls it on a double-click.
+    /// </summary>
+    internal void CancelTextTap() => _textTapTimer?.Stop();
+
+    private void WaitForDoubleClick()
+    {
+        if (_textTapTimer is null)
+        {
+            _textTapTimer             = XamlHost.Dispatcher.CreateTimer();
+            _textTapTimer.IsRepeating = false;
+            _textTapTimer.Tick       += (_, _) => Bubble?.ToggleTime();
+        }
+
+        _textTapTimer.Stop();
+        _textTapTimer.Interval = TimeSpan.FromMilliseconds(Ui.DoubleClickTime);
+        _textTapTimer.Start();
     }
 
     // A tap on the row beside the bubble also toggles the time: on its empty width, the avatar or the time. The bubble
