@@ -220,6 +220,41 @@ public sealed class ChatTests : UiTest
     }
 
     /// <summary>
+    /// A double-click and drag selects whole words, and the drag goes on into the next bubble. Ctrl + C copies both
+    /// parts, 1 message to a line.
+    /// </summary>
+    [TestMethod]
+    public async Task DoubleClickDrag_AcrossBubbles_CopiesWholeWords()
+    {
+        await OpenAnnAsync();
+        Message first  = Server.Phone.PushIncoming("c-ann", "alpha beta");
+        Message second = Server.Phone.PushIncoming("c-ann", "gamma delta");
+        Wait.Until(() => Bubbles().Count == 5, AppDriver.DefaultTimeout, () => $"Bubbles: [{string.Join(" | ", Bubbles().Select(b => b.Text))}].");
+        Thread.Sleep(500);
+
+        // The press is on the right part of "beta", and the release is on the left part of "gamma". Only whole words
+        // select.
+        System.Drawing.Rectangle top    = App.Find("Bubble." + first.MessageID).BoundingRectangle;
+        System.Drawing.Rectangle bottom = App.Find("Bubble." + second.MessageID).BoundingRectangle;
+        var from = new System.Drawing.Point(top.Left + (top.Width * 8 / 10), top.Top + (top.Height / 2));
+        var to   = new System.Drawing.Point(bottom.Left + (bottom.Width * 2 / 10), bottom.Top + (bottom.Height / 2));
+
+        FlaUI.Core.Input.Mouse.MoveTo(from);
+        FlaUI.Core.Input.Mouse.Click();
+        FlaUI.Core.Input.Mouse.Down(FlaUI.Core.Input.MouseButton.Left);
+        FlaUI.Core.Input.Mouse.MoveTo(to);
+        FlaUI.Core.Input.Mouse.Up(FlaUI.Core.Input.MouseButton.Left);
+        Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_C);
+
+        // The paste into the message box shows what the copy holds.
+        App.Find("Chat.Draft").Focus();
+        Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_V);
+        string? last = null;
+        Wait.Until(() => (last = App.Find("Chat.Draft").Patterns.Value.Pattern.Value.ValueOrDefault?.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n')) == "beta\ngamma",
+            AppDriver.DefaultTimeout, () => $"The copy pasted '{last}', not 'beta' and 'gamma' on 2 lines.");
+    }
+
+    /// <summary>
     /// Opening a chat and loading its older pages show the bubbles without the entrance animation. A sent bubble then
     /// animates in.
     /// </summary>
