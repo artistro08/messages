@@ -259,6 +259,47 @@ public static class ChatFormat
     }
 
     /// <summary>
+    /// Gives the word that a double-click selects: the run of letters, spaces, emoji or other signs that holds the
+    /// character at the index.
+    /// </summary>
+    /// <remarks>An apostrophe in a word is part of the word, as in "don't".</remarks>
+    /// <param name="text">The shown text.</param>
+    /// <param name="at">The index of the character under the pointer.</param>
+    /// <returns>The start and the end of the word. An empty text gives (0, 0).</returns>
+    public static (int Start, int End) WordAround(string text, int at)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        if (text.Length == 0)
+        {
+            return (0, 0);
+        }
+
+        at        = Math.Clamp(at, 0, text.Length - 1);
+        int kind  = KindOf(text[at]);
+        int start = at;
+        int end   = at + 1;
+        while (start > 0 && KindOf(text[start - 1]) == kind)
+        {
+            start--;
+        }
+
+        while (end < text.Length && KindOf(text[end]) == kind)
+        {
+            end++;
+        }
+
+        return (start, end);
+
+        static int KindOf(char c) => c switch
+        {
+            _ when char.IsWhiteSpace(c)                                    => 0,
+            _ when char.IsLetterOrDigit(c) || c is '_' or '\'' or '’' => 1,
+            _ when char.IsSurrogate(c) || c is '️' or '‍'        => 2,
+            _                                                              => 3,
+        };
+    }
+
+    /// <summary>
     /// Gives the part of the original text that a selection in the shown text covers. Thus a copy holds none of the
     /// VS16 that <see cref="WithColorEmoji"/> added for display.
     /// </summary>

@@ -280,4 +280,18 @@ public sealed class ChatFormatTests
     [DataRow("I \u2764 it", "it", "it")]
     public void OriginalOf_DropsOnlyTheAddedVs16(string original, string selected, string expected) =>
         Assert.AreEqual(expected, ChatFormat.OriginalOf(original, selected));
+
+    /// <summary>
+    /// A double-click selects the word, the spaces or the emoji under the pointer.
+    /// </summary>
+    [TestMethod]
+    [DataRow("hello world", 2, 0, 5)]
+    [DataRow("hello world", 5, 5, 6)]
+    [DataRow("hello world", 99, 6, 11)]
+    [DataRow("don't go", 1, 0, 5)]
+    [DataRow("hi, you", 2, 2, 3)]
+    [DataRow("ok \U0001F600\U0001F600 yes", 3, 3, 7)]
+    [DataRow("", 0, 0, 0)]
+    public void WordAround_GivesTheRunOfOneKind(string text, int at, int start, int end) =>
+        Assert.AreEqual((start, end), ChatFormat.WordAround(text, at));
 }

@@ -1774,6 +1774,124 @@ public sealed partial class MessageBubble : UserControl
     private void OnRetryClick(object sender, RoutedEventArgs e) => RetryRequested?.Invoke(this, EventArgs.Empty);
 
     /// <summary>
+    /// Gets the text that the bubble shows. Its indices are the indices of <see cref="TextHit"/> and
+    /// <see cref="SelectText"/>.
+    /// </summary>
+    internal string ShownText => string.Concat(BodyRuns().Select(run => run.Text));
+
+    /// <summary>
+    /// Gets the text element. The chat pane reads pointer positions on it.
+    /// </summary>
+    internal UIElement TextView => Body;
+
+    /// <summary>
+    /// Gets the selected part of the shown text.
+    /// </summary>
+    internal string SelectedText => Body.SelectedText;
+
+    /// <summary>
+    /// Finds the place in the text under a point on <see cref="TextView"/>.
+    /// </summary>
+    /// <remarks>
+    /// A binary search finds the first caret past the point in reading order. Only left-to-right text gives the
+    /// correct result. A point above the text gives the start, and a point below the text gives the end.
+    /// </remarks>
+    /// <returns>The nearest caret, and the character under the point.</returns>
+    internal (int Caret, int Letter) TextHit(Point point)
+    {
+        string text = ShownText;
+        int low     = 0;
+        int high    = text.Length + 1;
+        while (low < high)
+        {
+            int mid = (low + high) / 2;
+            if (mid <= text.Length && !IsPast(CaretRect(mid, LogicalDirection.Forward), point))
+            {
+                low = mid + 1;
+            }
+            else
+            {
+                high = mid;
+            }
+        }
+
+        // The first caret past the point is at low. The character under the point is just before it.
+        int letter = Math.Clamp(low - 1, 0, Math.Max(text.Length - 1, 0));
+        int caret  = low;
+        if (low == 0 || low > text.Length)
+        {
+            caret = Math.Min(low, text.Length);
+        }
+        else
+        {
+            // The caret before low is on the line of the point. Its letter ends at the caret of low, taken backward.
+            Rect before = CaretRect(low - 1, LogicalDirection.Forward);
+            Rect after  = CaretRect(low, LogicalDirection.Backward);
+            if (point.Y < before.Bottom && point.X - before.X < after.X - point.X)
+            {
+                caret = low - 1;
+            }
+        }
+
+        // A caret never falls between the 2 halves of a surrogate pair.
+        if (caret > 0 && caret < text.Length && char.IsLowSurrogate(text[caret]))
+        {
+            caret--;
+        }
+
+        return (caret, letter);
+
+        static bool IsPast(Rect caret, Point point) =>
+            point.Y < caret.Y || (point.Y < caret.Bottom && caret.X > point.X);
+    }
+
+    /// <summary>
+    /// Selects the shown text from start to end. Equal indices clear the selection.
+    /// </summary>
+    internal void SelectText(int start, int end)
+    {
+        TextPointer from = PointerAt(start);
+        Body.Select(from, start == end ? from : PointerAt(end));
+    }
+
+    private Rect CaretRect(int index, LogicalDirection direction) => PointerAt(index).GetCharacterRect(direction);
+
+    // Gives the text pointer before the character at the index. A text with links has its runs in links.
+    private TextPointer PointerAt(int index)
+    {
+        int at = 0;
+        foreach (Run run in BodyRuns())
+        {
+            if (index <= at + run.Text.Length)
+            {
+                return run.ContentStart.GetPositionAtOffset(Math.Max(index - at, 0), LogicalDirection.Forward);
+            }
+
+            at += run.Text.Length;
+        }
+
+        return Body.ContentEnd;
+    }
+
+    private IEnumerable<Run> BodyRuns()
+    {
+        foreach (Inline inline in Body.Inlines)
+        {
+            if (inline is Run run)
+            {
+                yield return run;
+            }
+            else if (inline is Span span)
+            {
+                foreach (Run inner in span.Inlines.OfType<Run>())
+                {
+                    yield return inner;
+                }
+            }
+        }
+    }
+
+    /// <summary>
     /// Runs Copy from the bubble menu. It copies the selected text, or the whole text when nothing is selected. The own
     /// Copy of the text did the same.
     /// </summary>

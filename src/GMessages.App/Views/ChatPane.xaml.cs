@@ -321,6 +321,7 @@ public sealed partial class ChatPane : UserControl
         };
 
         MessageList.ContainerContentChanging += OnMessageContainerChanging;
+        HookTextSelection();
 
         // The recording bar shows the time and the input level 20 times a second. The live waveform fills the bar.
         RecordBars.FillsWidth = true;
@@ -622,6 +623,7 @@ public sealed partial class ChatPane : UserControl
         pane.DropRecorder();
         pane._menuView?.KeepShown(false);
         pane._menuView = null;
+        pane.ClearTextSelection(null);
         BindableList.Show(pane.MessageList, chat?.Messages);
         BindableList.Show(pane.AttachmentList, chat?.Attachments);
         if (chat is not null)
@@ -1002,6 +1004,14 @@ public sealed partial class ChatPane : UserControl
     // the Native AOT build the row arrives as a ContentControl, not a ListViewItem. See UiHelpers.FindScroller.
     private void OnMessageListKeyDown(object sender, KeyRoutedEventArgs e)
     {
+        // Ctrl + C copies a selection across bubbles. The text copies a selection inside itself.
+        if (e.Key == VirtualKey.C && UiHelpers.IsDown(VirtualKey.Control) && SelectedChatText(null) is { } selected)
+        {
+            e.Handled = true;
+            UiHelpers.ToClipboard(selected);
+            return;
+        }
+
         if (e.Key is not (VirtualKey.Enter or VirtualKey.Space) || e.OriginalSource is not ContentControl { Content: MessageBubbleViewModel bubble })
         {
             return;
@@ -1271,7 +1281,17 @@ public sealed partial class ChatPane : UserControl
 
     // The menu items act on the bubble that the menu opened on. The bubble stays set after the menu closes, because the
     // click of an item can come after the close.
-    private void OnBubbleMenuCopyClick(object sender, RoutedEventArgs e) => _menuView?.Copy();
+    // On a bubble in a selection across bubbles, Copy copies the whole selection.
+    private void OnBubbleMenuCopyClick(object sender, RoutedEventArgs e)
+    {
+        if (SelectedChatText(_menuView?.Bubble) is { } selected)
+        {
+            UiHelpers.ToClipboard(selected);
+            return;
+        }
+
+        _menuView?.Copy();
+    }
 
     // A voice message opens in an app outside, so the player of the chat stops first. Two players never sound at once.
     private void OnBubbleMenuOpenClick(object sender, RoutedEventArgs e)
