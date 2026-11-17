@@ -45,6 +45,9 @@ internal sealed class NotificationService(ChatStore store, AppSettings settings,
     // The icon of the quick reply button. Without a package only a file path works, so the app uses the 100% file.
     private static readonly string SendIconUri = new Uri(Path.Combine(AppContext.BaseDirectory, "Assets", "Send.scale-100.png")).AbsoluteUri;
 
+    // The icon of the toast header. Without it, the SDK uses the .ico of the Start menu shortcut. Toasts do not show an .ico.
+    private static readonly Uri AppIconUri = new(Path.Combine(AppContext.BaseDirectory, "Assets", "Square44x44Logo.targetsize-256_altform-unplated.png"));
+
     // The number of recent toasts that the person can still snooze. The app keeps their payloads in memory.
     private const int SnoozableToasts = 20;
 
@@ -71,7 +74,7 @@ internal sealed class NotificationService(ChatStore store, AppSettings settings,
         store.ConversationChanged    += OnConversationChanged;
         try
         {
-            _manager.Register();
+            _manager.Register(AppInfo.DisplayName, AppIconUri);
             _registered = true;
             AppLog.NotificationsRegistered(logger);
         }
