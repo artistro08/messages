@@ -212,23 +212,42 @@ public sealed partial class MediaTests : UiTest
         AutomationElement photo = App.Find("Bubble.Photo." + message.MessageID);
         WaitForStatus(photo, Full);
 
+        CopyImageAndPaste(photo, message.MessageID);
+    }
+
+    /// <summary>
+    /// Copy image on a GIF keeps the animation. The paste sends the GIF byte for byte, not the first frame as a PNG.
+    /// </summary>
+    [TestMethod]
+    public async Task CopyImage_Gif_PastesAsTheGif()
+    {
+        await OpenMediaChatAsync();
+        Message message         = Server.Phone.PushIncomingMedia("c-media", "image/gif", TwoFrameGif, "party.gif");
+        AutomationElement photo = App.Find("Bubble.Photo." + message.MessageID);
+        WaitForStatus(photo, Full);
+
+        CopyImageAndPaste(photo, message.MessageID);
+        App.Find("Chat.Send").Patterns.Invoke.Pattern.Invoke();
+        Wait.Until(() => Server.Phone.Sent.Count == 1, AppDriver.DefaultTimeout, () => $"The phone got {Server.Phone.Sent.Count} sends, not the GIF.");
+        MediaContent media = Server.Phone.Sent[0].MessagePayload.MessageInfo.Single().MediaContent;
+        Assert.AreEqual("image/gif", media.MimeType, "The copied GIF went as another type.");
+        Assert.AreEqual(TwoFrameGif.LongLength, media.Size, "The copied GIF wasn't sent byte for byte.");
+    }
+
+    // Runs Copy image in the menu of the photo, then pastes into the message box. The copy ends after the click, so the
+    // paste waits for the note of the test hook.
+    private void CopyImageAndPaste(AutomationElement photo, string messageId)
+    {
         OpenMenu(photo);
         AutomationElement copy = App.Find("Bubble.CopyImage");
         Assert.AreEqual(ChatCopy.CopyImage, AppDriver.SafeName(copy));
         copy.Patterns.Invoke.Pattern.Invoke();
 
-        // The copy ends after the click, so the paste repeats until the chip shows.
+        string copied = Path.Combine(App.DataDir, "copy-image.txt");
+        Wait.Until(() => File.Exists(copied) && File.ReadAllText(copied) == messageId, AppDriver.DefaultTimeout, () => "Copy image never finished.");
         App.Find("Chat.Draft").Focus();
-        Wait.Until(() =>
-        {
-            if (App.TryFind("Chat.Attachment.1") is not null)
-            {
-                return true;
-            }
-
-            Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_V);
-            return false;
-        }, AppDriver.DefaultTimeout, () => "The copied photo didn't paste as a chip.");
+        Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_V);
+        App.Find("Chat.Attachment.1");
     }
 
     /// <summary>
