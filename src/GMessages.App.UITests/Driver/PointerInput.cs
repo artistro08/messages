@@ -94,6 +94,12 @@ public static partial class PointerInput
         return TimeSpan.FromMilliseconds((uint)Environment.TickCount - info.Time);
     }
 
+    /// <summary>Gets the double-click time of Windows.</summary>
+    public static TimeSpan DoubleClickTime => TimeSpan.FromMilliseconds(GetDoubleClickTime());
+
+    [LibraryImport("user32.dll")]
+    private static partial uint GetDoubleClickTime();
+
     // Resource ID of the system hand cursor (IDC_HAND).
     private const int IdcHand = 32649;
 

@@ -231,6 +231,10 @@ public sealed partial class MessageBubble : UserControl
     // click. The link click and the tap of the back come in any order, so the tap waits a turn.
     private bool _linkClicked;
 
+    // The click that waits to toggle the time, and its bubble. See ToggleTimeAfterWait.
+    private static DispatcherQueueTimer? s_tapTimer;
+    private static MessageBubbleViewModel? s_tapBubble;
+
     // The text and the part key that the runs of the text were built for. The runs rebuild only when these change,
     // because a rebuild drops a selection.
     private string? _shownText;
@@ -337,7 +341,14 @@ public sealed partial class MessageBubble : UserControl
         Row.Tapped += OnRowTapped;
 
         // A video that plays stops when the bubble leaves the tree.
-        Unloaded += (_, _) => ReleaseVideo();
+        Unloaded += (_, _) =>
+        {
+            ReleaseVideo();
+            if (Bubble is { } bubble && ReferenceEquals(bubble, s_tapBubble))
+            {
+                CancelTap();
+            }
+        };
 
         // The row under the bubble is at least as wide as the back and the preview card. See FitUnder.
         Back.SizeChanged += (_, _) => FitUnder();
@@ -1642,6 +1653,7 @@ public sealed partial class MessageBubble : UserControl
         link.Click += (_, _) =>
         {
             _linkClicked = true;
+            CancelTap();
             XamlHost.Dispatcher.TryEnqueue(DispatcherQueuePriority.Low, () => _linkClicked = false);
             OpenLink(url);
         };
@@ -1768,8 +1780,8 @@ public sealed partial class MessageBubble : UserControl
         }
     }
 
-    // A click with no drag toggles the time at its release. The time toggles a turn later, after the click of a link.
-    // That click can come after the tap.
+    // A click with no drag starts the wait for the time. The wait starts a turn later, after the click of a link. That
+    // click can come after the tap.
     private void OnBackTapped(object sender, TappedRoutedEventArgs e)
     {
         // The quote, photo, video, file card, voice message and preview card handle their own taps.
@@ -1794,30 +1806,47 @@ public sealed partial class MessageBubble : UserControl
             // The next press can come before this turn.
             if (!SkipTap)
             {
-                ToggleTimeByTap();
+                ToggleTimeAfterWait();
             }
         });
     }
 
-    private void ToggleTimeByTap()
+    // Toggles the time when the double-click time of Windows passes with no other click. The time row moves the
+    // bubbles, so a toggle at once made the second click of a double-click miss the text. Only 1 click waits at a time.
+    private void ToggleTimeAfterWait()
     {
-        Bubble?.ToggleTime();
-        TapToggled = Bubble;
+        if (s_tapTimer is null)
+        {
+            s_tapTimer             = XamlHost.Dispatcher.CreateTimer();
+            s_tapTimer.IsRepeating = false;
+            s_tapTimer.Tick       += (_, _) =>
+            {
+                MessageBubbleViewModel? bubble = s_tapBubble;
+                CancelTap();
+                bubble?.ToggleTime();
+            };
+        }
+
+        s_tapTimer.Stop();
+        s_tapBubble         = Bubble;
+        s_tapTimer.Interval = TimeSpan.FromMilliseconds(Ui.DoubleClickTime);
+        s_tapTimer.Start();
     }
 
     /// <summary>
-    /// Gets or sets the bubble whose time the tap of the last mouse click toggled. The chat pane toggles it back when a
-    /// double-click follows on text, so the text is under the pointer again.
+    /// Stops the wait of the last click, so it does not toggle the time. The chat pane calls it at each press.
     /// </summary>
-    internal static MessageBubbleViewModel? TapToggled { get; set; }
+    internal static void CancelTap()
+    {
+        s_tapTimer?.Stop();
+        s_tapBubble = null;
+    }
 
     /// <summary>
     /// Gets or sets whether the tap of the current mouse click does not toggle the time. The chat pane sets it at each
-    /// press.
+    /// press and at the start of a drag.
     /// </summary>
-    /// <remarks>
-    /// Only the first click of a double-click or triple-click toggles the time, and a drag does not toggle it.
-    /// </remarks>
+    /// <remarks>A double-click, a triple-click and a drag never toggle the time.</remarks>
     internal static bool SkipTap { get; set; }
 
     // A tap on the row beside the bubble also toggles the time: on its empty width, the avatar or the time. The bubble
@@ -1837,7 +1866,7 @@ public sealed partial class MessageBubble : UserControl
             }
         }
 
-        ToggleTimeByTap();
+        ToggleTimeAfterWait();
     }
 
     private void OnPreviewClick(object sender, RoutedEventArgs e)

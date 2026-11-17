@@ -138,39 +138,55 @@ public sealed class ChatTests : UiTest
     }
 
     /// <summary>
-    /// A drag over the text of a bubble does not show its time. A press, a hold and a release with no move shows it at
-    /// once. A double-click then selects a word and leaves the time as it was.
+    /// A drag over the text of a bubble does not show its time. A double-click selects a word, shows no time and does
+    /// not move the bubble. A press, a hold and a release with no move shows the time after the double-click time.
     /// </summary>
     [TestMethod]
-    public async Task HoldAndRelease_ShowsTheTime_DragDoesNot()
+    public async Task HoldAndRelease_ShowsTheTime_DragAndDoubleClickDoNot()
     {
         await OpenAnnAsync();
-        Thread.Sleep(800);
         string id  = Bubbles()[^2].Id;
         string key = id["Bubble.".Length..];
+        WaitForStill(id);
+
+        // A time that does not show has no state to wait for. The test waits 2 double-click times.
+        TimeSpan noTime = PointerInput.DoubleClickTime * 2;
 
         System.Drawing.Rectangle text = App.Find(id).BoundingRectangle;
         FlaUI.Core.Input.Mouse.MoveTo(new System.Drawing.Point(text.Left + 3, text.Top + (text.Height / 2)));
         FlaUI.Core.Input.Mouse.Down(FlaUI.Core.Input.MouseButton.Left);
         PointerInput.DragTo(new System.Drawing.Point(text.Right - 3, text.Top + (text.Height / 2)));
         FlaUI.Core.Input.Mouse.Up(FlaUI.Core.Input.MouseButton.Left);
-        Thread.Sleep(800);
+        AssertHighlighted(key, "Hey", true);
+        Thread.Sleep(noTime);
         Assert.IsNull(App.TryFind(id + ".Time"), "A drag showed the time.");
 
-        FlaUI.Core.Input.Mouse.Down(FlaUI.Core.Input.MouseButton.Left);
-        Thread.Sleep(1000);
-        FlaUI.Core.Input.Mouse.Up(FlaUI.Core.Input.MouseButton.Left);
-        App.Find(id + ".Time", TimeSpan.FromSeconds(2));
-
-        // The first click of the double-click hides the time, and the second click shows it again under the word.
-        Thread.Sleep(800);
         FlaUI.Core.Input.Mouse.MoveTo(Middle(WordBounds(key, "Hey")));
         FlaUI.Core.Input.Mouse.DoubleClick();
         AssertHighlighted(key, "Hey", true);
         AssertHighlighted(key, "Ann", false);
-        Thread.Sleep(800);
-        Assert.IsNotNull(App.TryFind(id + ".Time"), "A double-click changed the time.");
+        Thread.Sleep(noTime);
+        Assert.IsNull(App.TryFind(id + ".Time"), "A double-click showed the time.");
+        System.Drawing.Rectangle after = App.Find(id).BoundingRectangle;
+        Assert.IsTrue(Math.Abs(after.Top - text.Top) <= 1 && Math.Abs(after.Left - text.Left) <= 1, $"The bubble moved from {text} to {after} at a double-click.");
+
+        FlaUI.Core.Input.Mouse.Down(FlaUI.Core.Input.MouseButton.Left);
+        Thread.Sleep(1000);
+        FlaUI.Core.Input.Mouse.Up(FlaUI.Core.Input.MouseButton.Left);
+        App.Find(id + ".Time");
     }
+
+    // Waits until the bubble stays at 1 place, so that a click lands on it.
+    private void WaitForStill(string id) =>
+        Wait.Until(
+            () =>
+            {
+                System.Drawing.Rectangle at = App.Find(id).BoundingRectangle;
+                Thread.Sleep(300);
+                return at == App.Find(id).BoundingRectangle;
+            },
+            AppDriver.DefaultTimeout,
+            () => $"'{id}' kept moving.");
 
     /// <summary>
     /// A typed message, with Shift + Enter for a new line, and a press of Enter show the bubble. The phone gets the
@@ -345,8 +361,8 @@ public sealed class ChatTests : UiTest
     public async Task DoubleClick_SentBubble_HighlightIsDarkerThanTheBubble()
     {
         await OpenAnnAsync();
-        Thread.Sleep(800);
         string sent = Bubbles().First(bubble => bubble.Text == "Hey Ann").Id["Bubble.".Length..];
+        WaitForStill("Bubble." + sent);
 
         FlaUI.Core.Input.Mouse.MoveTo(Middle(WordBounds(sent, "Hey")));
         FlaUI.Core.Input.Mouse.DoubleClick();
@@ -367,8 +383,8 @@ public sealed class ChatTests : UiTest
     public async Task SentRcsBubble_HasTheSameShade_InBothThemes()
     {
         await OpenAnnAsync();
-        Thread.Sleep(800);
         string sent = Bubbles().First(bubble => bubble.Text == "Hey Ann").Id;
+        WaitForStill(sent);
 
         System.Drawing.Color dark  = FillIn(2);
         System.Drawing.Color light = FillIn(1);
@@ -426,7 +442,8 @@ public sealed class ChatTests : UiTest
         Message second = Server.Phone.PushIncoming("c-ann", "delta epsilon zeta");
         Wait.Until(() => ReadLog().Contains($"Bubble animated in ({second.MessageID})", StringComparison.Ordinal), AppDriver.DefaultTimeout,
             () => "The second bubble didn't animate in.");
-        Thread.Sleep(800);
+        WaitForStill("Bubble." + first.MessageID);
+        WaitForStill("Bubble." + second.MessageID);
         return (first.MessageID, second.MessageID);
     }
 

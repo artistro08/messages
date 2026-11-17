@@ -61,10 +61,6 @@ public sealed partial class ChatPane
     private ulong _lastClickTime;
     private Point _lastClickAt;
 
-    // The text that the first click was on, or null off the text. The next clicks of a double-click or triple-click
-    // act on it.
-    private MessageBubble? _clickView;
-
     // The selection across bubbles, from the first bubble to the last. The end texts are the selected parts of the
     // first and the last bubble, as sent. The bubbles between them are selected whole.
     private MessageBubbleViewModel? _fromBubble;
@@ -98,30 +94,12 @@ public sealed partial class ChatPane
         _lastClickTime = point.Timestamp;
         _lastClickAt   = point.Position;
 
-        // Only the first click of a double-click or triple-click toggles the time.
+        // A new press stops the wait of the last click for the time. A double-click or triple-click never toggles the
+        // time.
+        MessageBubble.CancelTap();
         MessageBubble.SkipTap = _clicks > 1;
 
-        MessageBubble? pressed = TextViewOf(e.OriginalSource as DependencyObject);
-        MessageBubble? view    = pressed;
-        if (_clicks == 1)
-        {
-            _clickView               = pressed;
-            MessageBubble.TapToggled = null;
-        }
-        else
-        {
-            // The first click toggled the time at once, and the bubbles moved, so this click is not on the same text.
-            // The time goes back, and the text of the first click is under the pointer again.
-            if (_clickView is not null && MessageBubble.TapToggled is { } toggled)
-            {
-                toggled.ToggleTime();
-                MessageBubble.TapToggled = null;
-                MessageList.UpdateLayout();
-            }
-
-            view = _clickView;
-        }
-
+        MessageBubble? view = TextViewOf(e.OriginalSource as DependencyObject);
         if (view?.Bubble is not { } bubble)
         {
             ClearTextSelection();
@@ -139,7 +117,7 @@ public sealed partial class ChatPane
         (int caret, int letter) = view.TextHit(e.GetCurrentPoint(view.TextView).Position);
         (_anchorStart, _anchorEnd) = UnitAround(view.ShownText, caret, letter, _textUnit);
         _anchorBubble = bubble;
-        _pressedView  = pressed;
+        _pressedView  = view;
         _textPressed  = true;
         _pressAt      = point.Position;
 
@@ -149,26 +127,33 @@ public sealed partial class ChatPane
             return;
         }
 
-        TakePointer(e.Pointer);
+        TakePointer();
         SelectTo(bubble, view, caret, letter);
     }
 
     private void OnTextPointerMoved(object sender, PointerRoutedEventArgs e)
     {
+        PointerPoint point = e.GetCurrentPoint(MessageList);
+        bool pressed       = e.Pointer.PointerDeviceType == PointerDeviceType.Mouse && point.Properties.IsLeftButtonPressed;
+
+        // A press that becomes a drag does not toggle the time, on the text or beside it.
+        if (pressed && !Near(point.Position, _lastClickAt))
+        {
+            MessageBubble.SkipTap = true;
+        }
+
         if (!_textPressed)
         {
             return;
         }
 
-        PointerPoint point = e.GetCurrentPoint(MessageList);
-        if (!point.Properties.IsLeftButtonPressed)
+        if (!pressed)
         {
             EndTextDrag();
             return;
         }
 
-        // The selection of a click does not change until the pointer moves away from the press. After a double-click,
-        // the bubbles can still move back into place under a pointer that does not move.
+        // The selection of a click does not change until the pointer moves away from the press.
         if (!_textMoved)
         {
             if (Near(point.Position, _pressAt))
@@ -179,7 +164,7 @@ public sealed partial class ChatPane
             _textMoved = true;
             if (!_textDragging)
             {
-                TakePointer(e.Pointer);
+                TakePointer();
             }
         }
 
@@ -210,20 +195,14 @@ public sealed partial class ChatPane
     // The text lost the pointer with no release, as when a menu opens. The drag ends there.
     private void OnTextPointerCaptureLost(object sender, PointerRoutedEventArgs e) => EndTextDrag();
 
-    // The pane starts to select, and the click does not toggle the time. The text that got the press keeps the pointer
-    // to the release, so its own drag ends there. The moves and the release come to the list from the text. When no
-    // text got the press, the list takes the pointer.
-    private void TakePointer(Pointer pointer)
+    // The pane starts to select. The text keeps the pointer to the release, so its own drag ends there. The moves and
+    // the release come to the list from the text.
+    private void TakePointer()
     {
-        _textDragging         = true;
-        MessageBubble.SkipTap = true;
+        _textDragging = true;
         if (_pressedView is { } view)
         {
             view.PaneSelects = true;
-        }
-        else
-        {
-            MessageList.CapturePointer(pointer);
         }
     }
 
@@ -232,10 +211,6 @@ public sealed partial class ChatPane
         if (_pressedView is { } view)
         {
             view.PaneSelects = false;
-        }
-        else if (_textDragging)
-        {
-            MessageList.ReleasePointerCaptures();
         }
 
         _pressedView  = null;
