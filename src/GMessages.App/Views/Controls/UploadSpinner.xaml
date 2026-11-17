@@ -3,20 +3,14 @@
     x:Class="GMessages.App.Views.Controls.UploadSpinner"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:muxc="using:Microsoft.UI.Xaml.Controls"
+    xmlns:local="using:GMessages.App.Views.Controls"
     Width="28"
     Height="28"
     IsHitTestVisible="False">
 
-    <Border
-        Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}"
-        CornerRadius="14">
-        <muxc:ProgressRing
-            Width="16"
-            Height="16"
-            MinWidth="16"
-            MinHeight="16"
-            AutomationProperties.AccessibilityView="Raw"
-            IsActive="True" />
-    </Border>
+    <!-- An Ellipse, not a Border with round corners. At 125 % scale the Border drew a jagged edge over a photo. -->
+    <Grid>
+        <Ellipse Fill="{ThemeResource ControlOnImageFillColorDefaultBrush}" />
+        <local:Spinner />
+    </Grid>
 </UserControl>
