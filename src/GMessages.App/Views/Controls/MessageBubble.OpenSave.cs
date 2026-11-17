@@ -52,6 +52,17 @@ public sealed partial class MessageBubble
     }
 
     /// <summary>
+    /// Runs Copy image from the bubble menu. The photo goes to the clipboard as a picture.
+    /// </summary>
+    public void CopyImage()
+    {
+        if (Bubble?.Media is { IsPending: false, IsWaitingForFile: false } part)
+        {
+            _ = MediaActions.CopyImageAsync(part, Bubble.Id);
+        }
+    }
+
+    /// <summary>
     /// Runs Save as from the bubble menu with the Save dialog of Windows.
     /// </summary>
     public void SaveAs()
