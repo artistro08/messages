@@ -113,6 +113,9 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
     /// </summary>
     public ObservableCollection<ConversationRowViewModel> Pinned { get; } = [];
 
+    /// <summary>Gets the rows in the order they show on the screen: <see cref="Pinned"/>, then <see cref="Rows"/>.</summary>
+    public IEnumerable<ConversationRowViewModel> InScreenOrder => Pinned.Concat(Rows);
+
     /// <summary>
     /// Gets or sets whether pinned conversations show in <see cref="Pinned"/> instead of <see cref="Rows"/>.
     /// </summary>
@@ -129,7 +132,7 @@ public sealed class ConversationListViewModel : INotifyPropertyChanged, IDisposa
 
             // Place moves rows between the 2 collections, so the loop runs on a copy.
             _pinnedApart                        = value;
-            List<ConversationRowViewModel> rows = [.. Pinned, .. Rows];
+            List<ConversationRowViewModel> rows = [.. InScreenOrder];
             foreach (ConversationRowViewModel row in rows)
             {
                 Place(row, live: false);
