@@ -303,7 +303,6 @@ public sealed partial class MessageBubble
         VideoNote.Text                  = text ?? string.Empty;
         VideoNoteBack.Visibility        = text is null ? Visibility.Collapsed : Visibility.Visible;
         VideoNoteBack.VerticalAlignment = centered ? VerticalAlignment.Center : VerticalAlignment.Bottom;
-        VideoNoteRing.IsActive          = busy;
         VideoNoteRing.Visibility        = busy ? Visibility.Visible : Visibility.Collapsed;
         TestHooks.ShowState(VideoFrame, StateOf(note));
     }
