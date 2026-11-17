@@ -239,6 +239,9 @@ public sealed partial class MessageBubble : UserControl
     private string? _shownText;
     private string? _shownKey;
 
+    // The highlight on a sent bubble is the fill of the bubble at this share of its brightness.
+    private const double SelectionShade = 0.6;
+
     // The selected part of the shown text. See SelectText.
     private int _selectStart;
     private int _selectEnd;
@@ -348,6 +351,16 @@ public sealed partial class MessageBubble : UserControl
         // The own menu of the text would win a right-click on it, so the text has no menu. The request goes to the chat
         // pane, whose bubble menu has Copy.
         Body.ContextFlyout = null;
+
+        // After a double-click, the text selects the word itself and shows its own highlight over the highlight of the
+        // bubble. The bubble removes that selection.
+        Body.SelectionChanged += (_, _) =>
+        {
+            if (_selectEnd > _selectStart && Body.SelectedText.Length > 0)
+            {
+                Body.Select(Body.ContentStart, Body.ContentStart);
+            }
+        };
 
         // The links follow the color of the text, which the side state and the theme set.
         Body.RegisterPropertyChangedCallback(TextBlock.ForegroundProperty, (_, _) => ColorLinks());
@@ -1908,8 +1921,9 @@ public sealed partial class MessageBubble : UserControl
     /// </summary>
     /// <remarks>
     /// The bubble draws the highlight itself, because the text shows its own selection only while it has focus. A
-    /// received bubble shows the accent color behind white letters. A sent bubble has an accent fill, so it swaps the
-    /// colors of its text and its fill. High contrast does the same on every bubble.
+    /// received bubble shows the accent color behind white letters. A sent bubble has an accent fill, so it shows a
+    /// darker shade of its own fill, behind white or black letters, whichever reads better. High contrast shows the
+    /// highlight colors of Windows. The colors are read at each change of the selection.
     /// </remarks>
     internal void SelectText(int start, int end)
     {
@@ -1924,11 +1938,32 @@ public sealed partial class MessageBubble : UserControl
             return;
         }
 
-        bool swap     = Bubble?.FromMe == true || Contrast.HighContrast;
+        Windows.UI.Color back = Ui.GetColorValue(UIColorType.Accent);
+        Windows.UI.Color fore = Windows.UI.Colors.White;
+        if (Contrast.HighContrast)
+        {
+            back = Ui.UIElementColor(UIElementType.Highlight);
+            fore = Ui.UIElementColor(UIElementType.HighlightText);
+        }
+        else if (Bubble?.FromMe == true && BackFill.Background is { } fill)
+        {
+            // The fill of every sent bubble is a solid brush.
+            Windows.UI.Color color = fill.As<SolidColorBrush>().Color;
+            back = Windows.UI.Color.FromArgb(
+                byte.MaxValue,
+                (byte)(color.R * SelectionShade),
+                (byte)(color.G * SelectionShade),
+                (byte)(color.B * SelectionShade));
+
+            // White letters read on a dark shade, and black letters on a light shade.
+            bool dark = (0.299 * back.R) + (0.587 * back.G) + (0.114 * back.B) < 128;
+            fore      = dark ? Windows.UI.Colors.White : Windows.UI.Colors.Black;
+        }
+
         var highlight = new TextHighlighter
         {
-            Background = swap ? Body.Foreground : new SolidColorBrush(Ui.GetColorValue(UIColorType.Accent)),
-            Foreground = swap ? BackFill.Background ?? Body.Foreground : new SolidColorBrush(Windows.UI.Colors.White),
+            Background = new SolidColorBrush(back),
+            Foreground = new SolidColorBrush(fore),
         };
         highlight.Ranges.Add(new TextRange { StartIndex = _selectStart, Length = _selectEnd - _selectStart });
         Body.TextHighlighters.Add(highlight);

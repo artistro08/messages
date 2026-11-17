@@ -303,6 +303,27 @@ public sealed class ChatTests : UiTest
         AssertPastes("beta");
     }
 
+    /// <summary>
+    /// On a sent bubble, the highlight is a darker shade of the fill of the bubble.
+    /// </summary>
+    [TestMethod]
+    public async Task DoubleClick_SentBubble_HighlightIsDarkerThanTheBubble()
+    {
+        await OpenAnnAsync();
+        Thread.Sleep(800);
+        string sent = Bubbles().First(bubble => bubble.Text == "Hey Ann").Id["Bubble.".Length..];
+
+        FlaUI.Core.Input.Mouse.MoveTo(Middle(WordBounds(sent, "Hey")));
+        FlaUI.Core.Input.Mouse.DoubleClick();
+        AssertHighlighted(sent, "Hey", true);
+        AssertHighlighted(sent, "Ann", false);
+
+        System.Drawing.Rectangle text = App.Find("Bubble." + sent).BoundingRectangle;
+        System.Drawing.Rectangle word = WordBounds(sent, "Hey");
+        System.Drawing.Color fill     = PixelAt(text.Left - 4, text.Top + (text.Height / 2));
+        System.Drawing.Color shade    = PixelAt(word.Left + (word.Width / 2), word.Top + 2);        Assert.IsTrue(shade.R <= fill.R && shade.G <= fill.G && shade.B <= fill.B, $"The highlight {shade} was not a darker shade of the bubble {fill}.");
+    }
+
     // Opens the chat with Ann and waits for 2 new texts, one above the other. Returns their message IDs.
     private async Task<(string First, string Second)> OpenTwoTextsAsync()
     {
@@ -345,16 +366,19 @@ public sealed class ChatTests : UiTest
                 System.Drawing.Rectangle at   = WordBounds(id, word);
                 back = PixelAt(text.Left - 4, text.Top + (text.Height / 2));
                 top  = PixelAt(at.Left + (at.Width / 2), at.Top + 2);
-                return (top != back) == highlighted;
+
+                // The plain bubble is not exactly 1 color, so a small difference is not a highlight.
+                int difference = Math.Abs(top.R - back.R) + Math.Abs(top.G - back.G) + Math.Abs(top.B - back.B);
+                return (difference > 24) == highlighted;
             },
             AppDriver.DefaultTimeout,
             () => $"'{word}' showed {top} on a bubble of {back}, so it was {(highlighted ? "not " : string.Empty)}highlighted.");
+    }
 
-        static System.Drawing.Color PixelAt(int x, int y)
-        {
-            using FlaUI.Core.Capturing.CaptureImage capture = FlaUI.Core.Capturing.Capture.Rectangle(new System.Drawing.Rectangle(x, y, 1, 1));
-            return capture.Bitmap.GetPixel(0, 0);
-        }
+    private static System.Drawing.Color PixelAt(int x, int y)
+    {
+        using FlaUI.Core.Capturing.CaptureImage capture = FlaUI.Core.Capturing.Capture.Rectangle(new System.Drawing.Rectangle(x, y, 1, 1));
+        return capture.Bitmap.GetPixel(0, 0);
     }
 
     // The paste into the message box shows what the copy holds.
