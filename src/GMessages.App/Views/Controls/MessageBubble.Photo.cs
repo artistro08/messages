@@ -417,7 +417,6 @@ public sealed partial class MessageBubble
         bool busy                = note == MediaNote.Pending;
         PhotoNote.Text           = text ?? string.Empty;
         PhotoNoteBack.Visibility = text is null ? Visibility.Collapsed : Visibility.Visible;
-        PhotoNoteRing.IsActive   = busy;
         PhotoNoteRing.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
         TestHooks.ShowState(Photo, StateOf(note));
     }

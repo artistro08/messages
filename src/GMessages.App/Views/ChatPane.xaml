@@ -37,6 +37,15 @@
                 </MenuFlyoutItem.Icon>
             </MenuFlyoutItem>
             <MenuFlyoutItem
+                x:Name="BubbleMenuCopyImage"
+                AutomationProperties.AutomationId="Bubble.CopyImage"
+                Click="OnBubbleMenuCopyImageClick"
+                Text="{x:Bind controls:MessageBubble.CopyImageText}">
+                <MenuFlyoutItem.Icon>
+                    <FontIcon Glyph="&#xE91B;" />
+                </MenuFlyoutItem.Icon>
+            </MenuFlyoutItem>
+            <MenuFlyoutItem
                 x:Name="BubbleMenuOpen"
                 AutomationProperties.AutomationId="Bubble.Open"
                 Click="OnBubbleMenuOpenClick"
@@ -305,6 +314,7 @@
                         QuoteRequested="OnQuoteRequested"
                         ReplyRequested="OnReplyRequested"
                         RetryRequested="OnRetryRequested"
+                        TimeTapped="OnBubbleTimeTapped"
                         VoiceRequested="OnVoiceRequested" />
                 </DataTemplate>
             </ListView.ItemTemplate>
