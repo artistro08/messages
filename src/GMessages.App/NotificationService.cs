@@ -42,11 +42,12 @@ namespace GMessages.App;
 /// <seealso href="https://learn.microsoft.com/windows/apps/develop/notifications/app-notifications/app-notifications-quickstart"/>
 internal sealed class NotificationService(ChatStore store, AppSettings settings, AvatarCache avatars, Func<MainViewModel?> mainView, DispatcherQueue dispatcher, ILogger logger) : IDisposable
 {
-    // The icon of the quick reply button. Without a package only a file path works, so the app uses the 100% file.
-    private static readonly string SendIconUri = new Uri(Path.Combine(AppContext.BaseDirectory, "Assets", "Send.scale-100.png")).AbsoluteUri;
+    // The icon of the quick reply button. A file path has no scale, so the app uses the 100% file.
+    private static readonly string SendIconUri = AssetUri("Send.scale-100.png").AbsoluteUri;
 
-    // The icon of the toast header. Without it, the SDK uses the .ico of the Start menu shortcut. Toasts do not show an .ico.
-    private static readonly Uri AppIconUri = new(Path.Combine(AppContext.BaseDirectory, "Assets", "Square44x44Logo.targetsize-256_altform-unplated.png"));
+    // The icon of the toast header. Its path must stay the same in each version. While the app has toasts in the
+    // notification center, Windows keeps the first icon path. Thus a moved file removes the icon.
+    private static readonly Uri AppIconUri = AssetUri("Square44x44Logo.targetsize-256_altform-unplated.png");
 
     // The number of recent toasts that the person can still snooze. The app keeps their payloads in memory.
     private const int SnoozableToasts = 20;
@@ -65,7 +66,7 @@ internal sealed class NotificationService(ChatStore store, AppSettings settings,
     /// Starts to receive toast clicks and replies.
     /// </summary>
     /// <remarks>
-    /// The handler goes on before <see cref="AppNotificationManager.Register()"/>, as the Windows App SDK requires.
+    /// The handler goes on before <see cref="AppNotificationManager.Register(string, Uri)"/>, as the Windows App SDK requires.
     /// Thus clicks come to this process, and Windows starts no new process.
     /// </remarks>
     public void Register()
@@ -74,7 +75,16 @@ internal sealed class NotificationService(ChatStore store, AppSettings settings,
         store.ConversationChanged    += OnConversationChanged;
         try
         {
-            _manager.Register(AppInfo.DisplayName, AppIconUri);
+            try
+            {
+                _manager.Register(AppInfo.DisplayName, AppIconUri);
+            }
+            catch (Exception ex)
+            {
+                // Toasts with no icon are better than no toasts.
+                AppLog.NotificationFailed(logger, "register icon", ex.GetType().Name, ex.HResult);
+                _manager.Register();
+            }
             _registered = true;
             AppLog.NotificationsRegistered(logger);
         }
@@ -293,4 +303,7 @@ internal sealed class NotificationService(ChatStore store, AppSettings settings,
             AppLog.NotificationFailed(logger, action, ex.GetType().Name, ex.HResult);
         }
     }
+
+    // Without a package, toasts take only a file path to an asset.
+    private static Uri AssetUri(string file) => new(Path.Combine(AppContext.BaseDirectory, "Assets", file));
 }
