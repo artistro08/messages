@@ -585,8 +585,9 @@ public sealed partial class ChatPane : UserControl
 
     // A row in the recycle queue goes back below its neighbors, because a focused row rises for its ring. It also
     // releases its media. A row that gets a message loads its media in phase 1, after x:Bind gives it the message. A
-    // row that gets the same message back sees no bubble change, so its released media loads here.
-    private static void OnMessageContainerChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
+    // row that gets the same message back sees no bubble change, so its released media loads here. The row also shows
+    // its part of the text selection there.
+    private void OnMessageContainerChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
     {
         Canvas.SetZIndex(args.ItemContainer, 0);
         if (args.ItemContainer.ContentTemplateRoot is not MessageBubble view)
@@ -603,8 +604,14 @@ public sealed partial class ChatPane : UserControl
         args.RegisterUpdateCallback(1, OnMessageContainerPhase);
     }
 
-    private static void OnMessageContainerPhase(ListViewBase sender, ContainerContentChangingEventArgs args) =>
-        (args.ItemContainer.ContentTemplateRoot as MessageBubble)?.LoadMedia();
+    private void OnMessageContainerPhase(ListViewBase sender, ContainerContentChangingEventArgs args)
+    {
+        if (args.ItemContainer.ContentTemplateRoot is MessageBubble view)
+        {
+            view.LoadMedia();
+            ShowTextSelection(args.ItemIndex, view);
+        }
+    }
 
     // Shows the bubbles of the new chat and follows their changes.
     private static void OnChatChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -624,6 +631,7 @@ public sealed partial class ChatPane : UserControl
         pane._menuView?.KeepShown(false);
         pane._menuView = null;
         pane.ClearTextSelection();
+        pane.DropTaps();
         BindableList.Show(pane.MessageList, chat?.Messages);
         BindableList.Show(pane.AttachmentList, chat?.Attachments);
         if (chat is not null)
@@ -1018,6 +1026,7 @@ public sealed partial class ChatPane : UserControl
         }
 
         e.Handled = true;
+        DropTaps(bubble);
         bubble.ToggleTime();
     }
 

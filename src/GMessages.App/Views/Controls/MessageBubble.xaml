@@ -662,7 +662,7 @@
                                         x:Name="Body"
                                         AutomationProperties.AutomationId="{x:Bind local:MessageBubble.AutomationIdOf(Bubble.PartKey), Mode=OneWay}"
                                         AutomationProperties.ItemType="{x:Bind Bubble.ItemTypeName, Mode=OneWay, FallbackValue=''}"
-                                        IsTextSelectionEnabled="True"
+                                        IsTextSelectionEnabled="False"
                                         IsColorFontEnabled="True"
                                         SizeChanged="OnBodySizeChanged"
                                         TextWrapping="Wrap" />

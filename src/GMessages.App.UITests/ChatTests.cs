@@ -434,6 +434,146 @@ public sealed class ChatTests : UiTest
         AssertHighlighted(first, "beta", false);
     }
 
+    /// <summary>
+    /// A selection stays through a scroll that takes its rows out of the list. The rows show the highlight when they
+    /// come back, and Copy in the bubble menu copies the selection.
+    /// </summary>
+    [TestMethod]
+    public async Task Selection_ScrolledOutAndBack_CopiesAndShowsAgain()
+    {
+        (string first, string second) = await OpenLongChatAsync();
+
+        System.Drawing.Rectangle to = WordBounds(second, "epsilon");
+        FlaUI.Core.Input.Mouse.MoveTo(Start(WordBounds(first, "beta")));
+        FlaUI.Core.Input.Mouse.Down(FlaUI.Core.Input.MouseButton.Left);
+        PointerInput.DragTo(new System.Drawing.Point(to.Right - 1, to.Top + (to.Height / 2)));
+        FlaUI.Core.Input.Mouse.Up(FlaUI.Core.Input.MouseButton.Left);
+        AssertHighlighted(first, "beta", true);
+
+        ScrollUntil(8, () => App.TryFind("Bubble." + first) is not { IsOffscreen: false }, "The selected bubbles stayed in view.");
+        ScrollUntil(-8, () => App.TryFind("Bubble." + second) is { IsOffscreen: false }, "The selected bubbles didn't come back.");
+        WaitForStill("Bubble." + second);
+        AssertHighlighted(first, "alpha", false);
+        AssertHighlighted(first, "beta", true);
+        AssertHighlighted(second, "epsilon", true);
+        AssertHighlighted(second, "zeta", false);
+
+        FlaUI.Core.Input.Mouse.RightClick(Middle(WordBounds(second, "delta")));
+        App.Find("Bubble.Copy").Patterns.Invoke.Pattern.Invoke();
+        AssertPastes("beta gamma\ndelta epsilon");
+    }
+
+    /// <summary>
+    /// A double-click drag keeps its start when the bubble of the start scrolls out of the list. The drag then ends
+    /// above the start, and Copy in the bubble menu copies from the word under the pointer to the word of the start.
+    /// </summary>
+    [TestMethod]
+    public async Task Drag_StartScrollsOut_ThenGoesAbove_CopiesToTheStart()
+    {
+        (string first, _) = await OpenLongChatAsync();
+
+        FlaUI.Core.Input.Mouse.MoveTo(Middle(WordBounds(first, "beta")));
+        FlaUI.Core.Input.Mouse.Click();
+        FlaUI.Core.Input.Mouse.Down(FlaUI.Core.Input.MouseButton.Left);
+        AssertHighlighted(first, "beta", true);
+        ScrollUntil(8, () => App.TryFind("Bubble." + first) is not { IsOffscreen: false }, "The bubble of the start stayed in view.");
+
+        // The pointer goes to a filler bubble that shows now. Each filler is 1 word, so the drag selects it whole.
+        System.Drawing.Rectangle list = App.Find("Chat.Messages").BoundingRectangle;
+        (string Id, string Text) filler = Bubbles().First(bubble =>
+            bubble.Text.StartsWith("word", StringComparison.Ordinal) && App.TryFind(bubble.Id) is { IsOffscreen: false } shown
+            && shown.BoundingRectangle.Top > list.Top + 80 && shown.BoundingRectangle.Bottom < list.Bottom - 160);
+        PointerInput.DragTo(Middle(App.Find(filler.Id).BoundingRectangle));
+        FlaUI.Core.Input.Mouse.Up(FlaUI.Core.Input.MouseButton.Left);
+        FlaUI.Core.Input.Mouse.Click(FlaUI.Core.Input.MouseButton.Right);
+        App.Find("Bubble.Copy").Patterns.Invoke.Pattern.Invoke();
+
+        int number     = int.Parse(filler.Text["word".Length..], System.Globalization.CultureInfo.InvariantCulture);
+        string fillers = string.Join('\n', Enumerable.Range(number, LongChatFillers - number + 1).Select(n => "word" + n));
+        AssertPastes(fillers + "\nalpha beta");
+    }
+
+    /// <summary>
+    /// A press on the ⋮ of the hover strip keeps the selection, and Copy in its menu copies the selection.
+    /// </summary>
+    [TestMethod]
+    public async Task HoverMore_KeepsTheSelection_MenuCopiesIt()
+    {
+        (string first, _) = await OpenTwoTextsAsync();
+
+        FlaUI.Core.Input.Mouse.MoveTo(Middle(WordBounds(first, "beta")));
+        FlaUI.Core.Input.Mouse.DoubleClick();
+        AssertHighlighted(first, "beta", true);
+
+        App.Find("HoverMore." + first).Click();
+        App.Find("Bubble.Copy").Patterns.Invoke.Pattern.Invoke();
+        AssertHighlighted(first, "beta", true);
+        AssertPastes("beta");
+    }
+
+    /// <summary>
+    /// A click on a bubble and then a click on another bubble, within the double-click time, show the time of both.
+    /// </summary>
+    [TestMethod]
+    public async Task TwoBubbles_ClickedFast_BothShowTheTime()
+    {
+        await OpenAnnAsync();
+        string one = Bubbles()[0].Id;
+        string two = Bubbles()[1].Id;
+        WaitForStill(two);
+
+        // The pointer jumps to the second bubble, so both clicks come within the double-click time.
+        System.Drawing.Point onOne = Middle(App.Find(one).BoundingRectangle);
+        System.Drawing.Point onTwo = Middle(App.Find(two).BoundingRectangle);
+        FlaUI.Core.Input.Mouse.MoveTo(onOne);
+        FlaUI.Core.Input.Mouse.Click();
+        FlaUI.Core.Input.Mouse.Position = onTwo;
+        FlaUI.Core.Input.Mouse.Click();
+
+        App.Find(one + ".Time");
+        App.Find(two + ".Time");
+    }
+
+    // The number of filler messages of the long chat. Each one is "word" and its number.
+    private const int LongChatFillers = 40;
+
+    // Opens the chat with Ann with enough new messages to scroll, and then 2 texts, one above the other. Returns the
+    // message IDs of the 2 texts.
+    private async Task<(string First, string Second)> OpenLongChatAsync()
+    {
+        await OpenAnnAsync();
+        for (int n = 1; n <= LongChatFillers; n++)
+        {
+            Server.Phone.PushIncoming("c-ann", "word" + n);
+        }
+
+        Message first  = Server.Phone.PushIncoming("c-ann", "alpha beta gamma");
+        Message second = Server.Phone.PushIncoming("c-ann", "delta epsilon zeta");
+        Wait.Until(() => App.TryFind("Bubble." + second.MessageID) is { IsOffscreen: false }, AppDriver.DefaultTimeout, () => "The last text didn't show.");
+        WaitForStill("Bubble." + first.MessageID);
+        WaitForStill("Bubble." + second.MessageID);
+        return (first.MessageID, second.MessageID);
+    }
+
+    // Turns the mouse wheel over the list, a few notches at a time, until the condition is true.
+    private static void ScrollUntil(int notches, Func<bool> done, string failure)
+    {
+        Wait.Until(
+            () =>
+            {
+                if (done())
+                {
+                    return true;
+                }
+
+                FlaUI.Core.Input.Mouse.Scroll(notches);
+                Thread.Sleep(200);
+                return false;
+            },
+            AppDriver.DefaultTimeout,
+            () => failure);
+    }
+
     // Opens the chat with Ann and waits for 2 new texts, one above the other. Returns their message IDs.
     private async Task<(string First, string Second)> OpenTwoTextsAsync()
     {
