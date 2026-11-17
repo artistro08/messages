@@ -43,6 +43,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
     private ConnectionState _state;
     private bool _phoneSilent;
+
+    // The start of the current connection trouble, and the timer that shows the banner after BannerDelay. See
+    // StatusBanner.
+    private DateTimeOffset? _troubleSince;
+    private ITimer? _bannerWait;
     private bool _batteryLow;
     private bool _batteryDismissed;
 
@@ -79,6 +84,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _showReceivedPreviews = showReceivedPreviews;
         _state                = connection.State;
         Inbox                 = new ConversationListViewModel(store, ConversationFolder.Inbox, time, post);
+        HoldBanner();
 
         _connection.StateChanged += OnStateChanged;
         _connection.ClientEvent  += OnClientEvent;
@@ -187,8 +193,20 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     /// </summary>
     public bool HasStatusBanner => StatusBanner is not null;
 
+    /// <summary>
+    /// Gets the time that a connection trouble must last before the banner shows. See <see cref="StatusBanner"/>.
+    /// </summary>
+    public static TimeSpan BannerDelay { get; } = TimeSpan.FromSeconds(15);
+
     /// <summary>Gets the connection banner text, or null when the app is connected and the phone answers.</summary>
-    public string? StatusBanner => _state switch
+    /// <remarks>
+    /// The banner shows only after the trouble lasts <see cref="BannerDelay"/>, and hides at once when it ends. The
+    /// banner pushes the list down. The long poll of an idle app reconnects every hour or two for 6 to 11 s. The owner
+    /// saw the list jump at each reconnect. The first connect at start also waits, so a fast start shows no banner.
+    /// </remarks>
+    public string? StatusBanner => _troubleSince is { } since && _time.GetUtcNow() - since >= BannerDelay ? Trouble : null;
+
+    private string? Trouble => _state switch
     {
         ConnectionState.Connecting or ConnectionState.Reconnecting => ChatCopy.Connecting,
         ConnectionState.Connected when _phoneSilent                => ChatCopy.WaitingForPhone,
@@ -373,6 +391,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     {
         _disposed = true;
         _undoTimer?.Dispose();
+        _bannerWait?.Dispose();
         _connection.StateChanged -= OnStateChanged;
         _connection.ClientEvent  -= OnClientEvent;
         _store.PhoneBatteryChanged    -= OnPhoneBatteryChanged;
@@ -689,5 +708,39 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
-    private void Changed() => PropertyChanged?.Invoke(this, AllChanged);
+    // Notes the start of a trouble, and starts the timer that tells the view to show the banner. The end of the trouble
+    // stops the timer and hides the banner. A change from 1 trouble to the other keeps the start. A tick of a stopped
+    // timer only makes the view read the banner again.
+    private void HoldBanner()
+    {
+        if (_disposed || Trouble is null)
+        {
+            _bannerWait?.Dispose();
+            _bannerWait   = null;
+            _troubleSince = null;
+            return;
+        }
+
+        if (_troubleSince is not null)
+        {
+            return;
+        }
+
+        _troubleSince = _time.GetUtcNow();
+        _bannerWait   = _time.CreateTimer(_ => _post(OnBannerDue), null, BannerDelay, Timeout.InfiniteTimeSpan);
+    }
+
+    private void OnBannerDue()
+    {
+        if (!_disposed)
+        {
+            Changed();
+        }
+    }
+
+    private void Changed()
+    {
+        HoldBanner();
+        PropertyChanged?.Invoke(this, AllChanged);
+    }
 }
