@@ -259,6 +259,64 @@ public static class ChatFormat
     }
 
     /// <summary>
+    /// Gives the word that a double-click selects: the run of letters, spaces, emoji or other signs that holds the
+    /// character at the index.
+    /// </summary>
+    /// <remarks>
+    /// The method works on text elements, so a letter keeps its combining marks and an emoji keeps its VS16 and its
+    /// joined parts. An apostrophe in a word is part of the word, as in "don't".
+    /// </remarks>
+    /// <param name="text">The shown text.</param>
+    /// <param name="at">The index of the character under the pointer.</param>
+    /// <returns>The start and the end of the word. An empty text gives (0, 0).</returns>
+    public static (int Start, int End) WordAround(string text, int at)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        if (text.Length == 0)
+        {
+            return (0, 0);
+        }
+
+        // The element that holds the index is the last one that starts at or before it.
+        int[] starts = StringInfo.ParseCombiningCharacters(text);
+        int found    = Array.BinarySearch(starts, Math.Clamp(at, 0, text.Length - 1));
+        int first    = found >= 0 ? found : ~found - 1;
+        int last     = first;
+        int kind     = KindOf(first);
+        while (first > 0 && KindOf(first - 1) == kind)
+        {
+            first--;
+        }
+
+        while (last + 1 < starts.Length && KindOf(last + 1) == kind)
+        {
+            last++;
+        }
+
+        return (starts[first], EndOf(last));
+
+        int EndOf(int element) => element + 1 < starts.Length ? starts[element + 1] : text.Length;
+
+        // 0 is space, 1 is a letter or digit, 2 is an emoji and 3 is any other sign.
+        int KindOf(int element)
+        {
+            string part = text[starts[element]..EndOf(element)];
+            if (string.IsNullOrWhiteSpace(part))
+            {
+                return 0;
+            }
+
+            if (IsEmoji(part))
+            {
+                return 2;
+            }
+
+            Rune.DecodeFromUtf16(part, out Rune rune, out _);
+            return Rune.IsLetterOrDigit(rune) || rune.Value is '_' or '\'' or '’' ? 1 : 3;
+        }
+    }
+
+    /// <summary>
     /// Gives the part of the original text that a selection in the shown text covers. Thus a copy holds none of the
     /// VS16 that <see cref="WithColorEmoji"/> added for display.
     /// </summary>
