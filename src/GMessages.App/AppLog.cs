@@ -1,4 +1,5 @@
 using GMessages.Presentation.Connection;
+using GMessages.Presentation.Shortcuts;
 using Microsoft.Extensions.Logging;
 
 namespace GMessages.App;
@@ -83,6 +84,9 @@ internal static partial class AppLog
 
     [LoggerMessage(EventId = 937, Level = LogLevel.Information, Message = "Row faded in ({ConversationId})")]
     public static partial void RowFadedIn(ILogger logger, string conversationId);
+
+    [LoggerMessage(EventId = 938, Level = LogLevel.Information, Message = "Shortcut {Command} stopped by an open popup")]
+    public static partial void ShortcutStopped(ILogger logger, ShortcutCommand command);
 
     [LoggerMessage(EventId = 925, Level = LogLevel.Information, Message = "Taskbar badge set to {Count}")]
     public static partial void BadgeSet(ILogger logger, int count);
