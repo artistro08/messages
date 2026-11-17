@@ -138,6 +138,41 @@ public sealed class ChatTests : UiTest
     }
 
     /// <summary>
+    /// A drag over the text of a bubble does not show its time. A press, a hold and a release with no move shows it at
+    /// once. A double-click then selects a word and leaves the time as it was.
+    /// </summary>
+    [TestMethod]
+    public async Task HoldAndRelease_ShowsTheTime_DragDoesNot()
+    {
+        await OpenAnnAsync();
+        Thread.Sleep(800);
+        string id  = Bubbles()[^2].Id;
+        string key = id["Bubble.".Length..];
+
+        System.Drawing.Rectangle text = App.Find(id).BoundingRectangle;
+        FlaUI.Core.Input.Mouse.MoveTo(new System.Drawing.Point(text.Left + 3, text.Top + (text.Height / 2)));
+        FlaUI.Core.Input.Mouse.Down(FlaUI.Core.Input.MouseButton.Left);
+        PointerInput.DragTo(new System.Drawing.Point(text.Right - 3, text.Top + (text.Height / 2)));
+        FlaUI.Core.Input.Mouse.Up(FlaUI.Core.Input.MouseButton.Left);
+        Thread.Sleep(800);
+        Assert.IsNull(App.TryFind(id + ".Time"), "A drag showed the time.");
+
+        FlaUI.Core.Input.Mouse.Down(FlaUI.Core.Input.MouseButton.Left);
+        Thread.Sleep(1000);
+        FlaUI.Core.Input.Mouse.Up(FlaUI.Core.Input.MouseButton.Left);
+        App.Find(id + ".Time", TimeSpan.FromSeconds(2));
+
+        // The first click of the double-click hides the time, and the second click shows it again under the word.
+        Thread.Sleep(800);
+        FlaUI.Core.Input.Mouse.MoveTo(Middle(WordBounds(key, "Hey")));
+        FlaUI.Core.Input.Mouse.DoubleClick();
+        AssertHighlighted(key, "Hey", true);
+        AssertHighlighted(key, "Ann", false);
+        Thread.Sleep(800);
+        Assert.IsNotNull(App.TryFind(id + ".Time"), "A double-click changed the time.");
+    }
+
+    /// <summary>
     /// A typed message, with Shift + Enter for a new line, and a press of Enter show the bubble. The phone gets the
     /// text. The echo of the phone turns the same bubble into the sent message, with no second bubble.
     /// </summary>
