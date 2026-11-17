@@ -232,24 +232,32 @@ public sealed class ChatTests : UiTest
         FlaUI.Core.Input.Mouse.MoveTo(Middle(WordBounds(first, "alpha")));
         FlaUI.Core.Input.Mouse.Click();
         FlaUI.Core.Input.Mouse.Down(FlaUI.Core.Input.MouseButton.Left);
-        AssertSelected(first, "alpha", second, string.Empty);
+        AssertHighlighted(first, "alpha", true);
+        AssertHighlighted(first, "beta", false);
 
         // The pointer stops on the first letter of each word, and the whole word selects.
         PointerInput.DragTo(Start(WordBounds(first, "beta")));
-        AssertSelected(first, "alpha beta", second, string.Empty);
+        AssertHighlighted(first, "beta", true);
+        AssertHighlighted(first, "gamma", false);
 
+        // Both bubbles show their part at the same time.
         PointerInput.DragTo(Start(WordBounds(second, "epsilon")));
         FlaUI.Core.Input.Mouse.Up(FlaUI.Core.Input.MouseButton.Left);
-        AssertSelected(first, "alpha beta gamma", second, "delta epsilon");
-        AssertCopies("alpha beta gamma\ndelta epsilon");
+        AssertHighlighted(first, "gamma", true);
+        AssertHighlighted(second, "epsilon", true);
+        AssertHighlighted(second, "zeta", false);
+
+        Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_C);
+        AssertPastes("alpha beta gamma\ndelta epsilon");
     }
 
     /// <summary>
-    /// A plain drag from the middle of 1 bubble into the next selects letter by letter across both. Ctrl + C copies
-    /// both parts, 1 message to a line.
+    /// A plain drag from the middle of 1 bubble into the next selects letter by letter across both, and both show the
+    /// highlight. A right-click on the selection keeps it, and Copy in the bubble menu copies both parts, 1 message to
+    /// a line.
     /// </summary>
     [TestMethod]
-    public async Task Drag_AcrossBubbles_SelectsFromPressToRelease()
+    public async Task Drag_AcrossBubbles_RightClickKeepsIt_MenuCopiesIt()
     {
         (string first, string second) = await OpenTwoTextsAsync();
 
@@ -259,9 +267,40 @@ public sealed class ChatTests : UiTest
         FlaUI.Core.Input.Mouse.Down(FlaUI.Core.Input.MouseButton.Left);
         PointerInput.DragTo(new System.Drawing.Point(to.Right - 1, to.Top + (to.Height / 2)));
         FlaUI.Core.Input.Mouse.Up(FlaUI.Core.Input.MouseButton.Left);
+        AssertHighlighted(first, "alpha", false);
+        AssertHighlighted(first, "beta", true);
+        AssertHighlighted(second, "epsilon", true);
+        AssertHighlighted(second, "zeta", false);
 
-        AssertSelected(first, "beta gamma", second, "delta epsilon");
-        AssertCopies("beta gamma\ndelta epsilon");
+        FlaUI.Core.Input.Mouse.RightClick(Middle(WordBounds(second, "delta")));
+        App.Find("Bubble.Copy").Patterns.Invoke.Pattern.Invoke();
+
+        // The menu is closed, so nothing covers the text.
+        AssertHighlighted(first, "beta", true);
+        AssertHighlighted(second, "epsilon", true);
+        AssertPastes("beta gamma\ndelta epsilon");
+    }
+
+    /// <summary>
+    /// A double-click selects 1 word. A right-click on the word keeps the selection and its highlight, and Copy in the
+    /// bubble menu copies the word.
+    /// </summary>
+    [TestMethod]
+    public async Task DoubleClick_RightClickKeepsTheWord_MenuCopiesIt()
+    {
+        (string first, _) = await OpenTwoTextsAsync();
+
+        FlaUI.Core.Input.Mouse.MoveTo(Middle(WordBounds(first, "beta")));
+        FlaUI.Core.Input.Mouse.DoubleClick();
+        AssertHighlighted(first, "beta", true);
+
+        FlaUI.Core.Input.Mouse.RightClick(Middle(WordBounds(first, "beta")));
+        App.Find("Bubble.Copy").Patterns.Invoke.Pattern.Invoke();
+
+        // The menu is closed, so nothing covers the text.
+        AssertHighlighted(first, "beta", true);
+        AssertHighlighted(first, "gamma", false);
+        AssertPastes("beta");
     }
 
     // Opens the chat with Ann and waits for 2 new texts, one above the other. Returns their message IDs.
@@ -293,20 +332,34 @@ public sealed class ChatTests : UiTest
     // A point on the first letter of the word.
     private static System.Drawing.Point Start(System.Drawing.Rectangle word) => new(word.Left + 2, word.Top + (word.Height / 2));
 
-    private void AssertSelected(string first, string top, string second, string bottom)
+    // The pixel row near the top of a word is above its letters, so it shows the highlight or the plain bubble. The
+    // padding to the left of the text always shows the plain bubble.
+    private void AssertHighlighted(string id, string word, bool highlighted)
     {
-        string? topSelection    = null;
-        string? bottomSelection = null;
-        Wait.Until(() => (topSelection = Selected(first)) == top && (bottomSelection = Selected(second)) == bottom,
-            AppDriver.DefaultTimeout, () => $"The bubbles selected '{topSelection}' and '{bottomSelection}', not '{top}' and '{bottom}'.");
+        System.Drawing.Color back = default;
+        System.Drawing.Color top  = default;
+        Wait.Until(
+            () =>
+            {
+                System.Drawing.Rectangle text = App.Find("Bubble." + id).BoundingRectangle;
+                System.Drawing.Rectangle at   = WordBounds(id, word);
+                back = PixelAt(text.Left - 4, text.Top + (text.Height / 2));
+                top  = PixelAt(at.Left + (at.Width / 2), at.Top + 2);
+                return (top != back) == highlighted;
+            },
+            AppDriver.DefaultTimeout,
+            () => $"'{word}' showed {top} on a bubble of {back}, so it was {(highlighted ? "not " : string.Empty)}highlighted.");
 
-        string Selected(string id) => string.Concat(App.Find("Bubble." + id).Patterns.Text.Pattern.GetSelection().Select(range => range.GetText(-1)));
+        static System.Drawing.Color PixelAt(int x, int y)
+        {
+            using FlaUI.Core.Capturing.CaptureImage capture = FlaUI.Core.Capturing.Capture.Rectangle(new System.Drawing.Rectangle(x, y, 1, 1));
+            return capture.Bitmap.GetPixel(0, 0);
+        }
     }
 
-    // Copies the selection with Ctrl + C. The paste into the message box shows what the copy holds.
-    private void AssertCopies(string text)
+    // The paste into the message box shows what the copy holds.
+    private void AssertPastes(string text)
     {
-        Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_C);
         App.Find("Chat.Draft").Focus();
         Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_V);
         string? last = null;
