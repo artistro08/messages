@@ -1,7 +1,9 @@
 using GMessages.App.Windowing;
 using GMessages.Presentation.Messaging;
+using Windows.ApplicationModel.DataTransfer;
 using Windows.Storage;
 using Windows.Storage.Pickers;
+using Windows.Storage.Streams;
 using Windows.System;
 using Windows.UI.Xaml;
 
@@ -103,6 +105,36 @@ internal static class MediaActions
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             AppLog.MediaFailed(App.ShellLog, "openwith", messageId, ex.GetType().Name);
+        }
+    }
+
+    /// <summary>
+    /// Puts the photo on the clipboard as a picture, so it pastes into other apps.
+    /// </summary>
+    /// <remarks>
+    /// Flush makes Windows keep the picture after the app closes, because the kept file is in the temp folder.
+    /// </remarks>
+    /// <param name="part">The media part of the photo.</param>
+    /// <param name="messageId">The ID of the message, for the log.</param>
+    /// <returns>A task that ends when the picture is on the clipboard.</returns>
+    public static async Task CopyImageAsync(MediaPart part, string messageId)
+    {
+        if ((Application.Current as App)?.Media is not { } media)
+        {
+            return;
+        }
+
+        try
+        {
+            StorageFile file = await StorageFile.GetFileFromPathAsync(await media.GetFileAsync(part, CancellationToken.None));
+            var package      = new DataPackage();
+            package.SetBitmap(RandomAccessStreamReference.CreateFromFile(file));
+            Clipboard.SetContent(package);
+            Clipboard.Flush();
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            AppLog.MediaFailed(App.ShellLog, "copy", messageId, ex.GetType().Name);
         }
     }
 

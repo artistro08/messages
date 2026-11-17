@@ -201,6 +201,37 @@ public sealed partial class MediaTests : UiTest
     }
 
     /// <summary>
+    /// Copy image in the photo menu puts the photo on the clipboard as a picture. A paste into the message box makes
+    /// a photo chip.
+    /// </summary>
+    [TestMethod]
+    public async Task CopyImage_PastesAsPhoto()
+    {
+        await OpenMediaChatAsync();
+        Message message         = Server.Phone.PushIncomingMedia("c-media", "image/png", Png(64, 64, SplitColors), "copy.png");
+        AutomationElement photo = App.Find("Bubble.Photo." + message.MessageID);
+        WaitForStatus(photo, Full);
+
+        OpenMenu(photo);
+        AutomationElement copy = App.Find("Bubble.CopyImage");
+        Assert.AreEqual(ChatCopy.CopyImage, AppDriver.SafeName(copy));
+        copy.Patterns.Invoke.Pattern.Invoke();
+
+        // The copy ends after the click, so the paste repeats until the chip shows.
+        App.Find("Chat.Draft").Focus();
+        Wait.Until(() =>
+        {
+            if (App.TryFind("Chat.Attachment.1") is not null)
+            {
+                return true;
+            }
+
+            Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_V);
+            return false;
+        }, AppDriver.DefaultTimeout, () => "The copied photo didn't paste as a chip.");
+    }
+
+    /// <summary>
     /// Phones often name a photo without an extension. Save as offers that name with the extension of the mime type,
     /// not a <c>.bin</c> extension.
     /// </summary>
