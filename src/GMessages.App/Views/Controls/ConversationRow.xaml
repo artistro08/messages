@@ -7,6 +7,21 @@
     PointerEntered="OnPointerEntered"
     PointerExited="OnPointerLeft">
 
+    <!-- The fill of a row with keyboard focus. High contrast has no fill, because the focus ring of Windows shows
+         there. -->
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Default">
+                    <SolidColorBrush x:Key="RowFocusFillBrush" Color="{ThemeResource SubtleFillColorSecondary}" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="HighContrast">
+                    <SolidColorBrush x:Key="RowFocusFillBrush" Color="Transparent" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
     <!-- The row shows the avatar, the name and snippet, the time with the pin and muted icons, then the ⋮. The ⋮ takes
          no space until a hover. The transparent background lets the full row take the pointer, not only its text. -->
     <Grid
@@ -112,6 +127,17 @@
                 </VisualState>
             </VisualStateGroup>
         </VisualStateManager.VisualStateGroups>
+
+        <!-- The fill of a row with keyboard focus. The list shows it. See ShowFocusFill in ChatsView.xaml.cs. The
+             margin takes the fill out to the hover fill of the list item, past the padding of the row and the item. -->
+        <Border
+            x:Name="FocusFill"
+            Grid.ColumnSpan="4"
+            Margin="-12,-8,-8,-8"
+            Background="{ThemeResource RowFocusFillBrush}"
+            CornerRadius="{ThemeResource ControlCornerRadius}"
+            IsHitTestVisible="False"
+            Opacity="0" />
 
         <local:Avatar
             VerticalAlignment="Center"

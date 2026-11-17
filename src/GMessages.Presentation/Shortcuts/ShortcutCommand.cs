@@ -63,4 +63,31 @@ public enum ShortcutCommand
     /// Collapses the conversation list to avatars, or expands it again, as the ☰ of the title bar does.
     /// </summary>
     ToggleSidebar,
+
+    /// <summary>Opens the 1st conversation in the list. Ctrl + 2 to Ctrl + 9 follow in order.</summary>
+    OpenConversation1,
+
+    /// <summary>Opens the 2nd conversation in the list.</summary>
+    OpenConversation2,
+
+    /// <summary>Opens the 3rd conversation in the list.</summary>
+    OpenConversation3,
+
+    /// <summary>Opens the 4th conversation in the list.</summary>
+    OpenConversation4,
+
+    /// <summary>Opens the 5th conversation in the list.</summary>
+    OpenConversation5,
+
+    /// <summary>Opens the 6th conversation in the list.</summary>
+    OpenConversation6,
+
+    /// <summary>Opens the 7th conversation in the list.</summary>
+    OpenConversation7,
+
+    /// <summary>Opens the 8th conversation in the list.</summary>
+    OpenConversation8,
+
+    /// <summary>Opens the 9th conversation in the list.</summary>
+    OpenConversation9,
 }
