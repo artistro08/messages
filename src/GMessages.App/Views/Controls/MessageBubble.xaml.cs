@@ -431,6 +431,9 @@ public sealed partial class MessageBubble : UserControl
     /// <summary>Gets the Copy link text of the preview card menu.</summary>
     public static string CopyLinkText => ChatCopy.CopyLink;
 
+    /// <summary>Gets the Copy image text of the menu.</summary>
+    public static string CopyImageText => ChatCopy.CopyImage;
+
     /// <summary>Gets the Open text of the menu.</summary>
     public static string OpenText => ChatCopy.Open;
 

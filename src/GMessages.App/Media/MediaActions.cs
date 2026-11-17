@@ -1,15 +1,17 @@
 using GMessages.App.Windowing;
 using GMessages.Presentation.Messaging;
+using Windows.ApplicationModel.DataTransfer;
 using Windows.Storage;
 using Windows.Storage.Pickers;
+using Windows.Storage.Streams;
 using Windows.System;
 using Windows.UI.Xaml;
 
 namespace GMessages.App.Media;
 
 /// <summary>
-/// Runs the actions on a photo or a file for the bubble menu and the photo viewer: Open, Open with, Save as and
-/// Download.
+/// Runs the actions on a photo or a file for the bubble menu and the photo viewer: Open, Open with, Save as, Download
+/// and Copy image.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -103,6 +105,50 @@ internal static class MediaActions
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             AppLog.MediaFailed(App.ShellLog, "openwith", messageId, ex.GetType().Name);
+        }
+    }
+
+    /// <summary>
+    /// Puts the photo on the clipboard as a picture, so it pastes into other apps.
+    /// </summary>
+    /// <remarks>
+    /// Flush makes Windows keep the picture after the app closes, because the kept file is in the temp folder. A GIF
+    /// also goes as its bytes and as a file, so it stays animated where it pastes.
+    /// </remarks>
+    /// <param name="part">The media part of the photo.</param>
+    /// <param name="messageId">The ID of the message, for the log.</param>
+    /// <returns>A task that ends when the picture is on the clipboard.</returns>
+    public static async Task CopyImageAsync(MediaPart part, string messageId)
+    {
+        if ((Application.Current as App)?.Media is not { } media)
+        {
+            return;
+        }
+
+        try
+        {
+            StorageFile file = await StorageFile.GetFileFromPathAsync(await media.GetFileAsync(part, CancellationToken.None));
+            var package      = new DataPackage();
+            package.SetBitmap(RandomAccessStreamReference.CreateFromFile(file));
+
+            // The bitmap keeps only the first frame of a GIF. Thus a GIF also goes as its bytes in the GIF format and
+            // as a file, so an app that takes either one keeps the animation.
+            // Flush copies the bytes, so the stream closes after it. An open file stops the delete at sign-out.
+            using IRandomAccessStream? gif = string.Equals(part.Mime, "image/gif", StringComparison.OrdinalIgnoreCase) ? await file.OpenReadAsync() : null;
+            if (gif is not null)
+            {
+                package.SetData("GIF", gif);
+                var files = new List<IStorageItem> { await StorageFile.GetFileFromPathAsync(await media.SaveToTempAsync(part, CancellationToken.None)) };
+                package.SetStorageItems(files);
+            }
+
+            Clipboard.SetContent(package);
+            Clipboard.Flush();
+            TestHooks.NoteState("copy-image", messageId);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            AppLog.MediaFailed(App.ShellLog, "copy", messageId, ex.GetType().Name);
         }
     }
 
