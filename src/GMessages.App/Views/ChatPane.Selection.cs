@@ -18,7 +18,7 @@ namespace GMessages.App.Views;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The text of each bubble selects only inside itself, and a double-click and drag selects letter by letter there. This
+/// The text of each bubble selects only inside itself, and a drag after a double-click selected nothing more. This
 /// part of <see cref="ChatPane"/> takes the drag from the text. A drag from 1 click selects letters. A drag from a
 /// double-click selects whole words, and a drag from a triple-click selects whole messages. The drag continues into
 /// the bubbles above and below.
@@ -51,6 +51,7 @@ public sealed partial class ChatPane
     private bool _textPressed;
     private bool _textDragging;
     private Point _pressAt;
+    private UIElement? _pressedText;
 
     // The clicks so far: 1, 2 or 3. Each click within the double-click time of the last one adds 1.
     private int _clicks;
@@ -97,19 +98,27 @@ public sealed partial class ChatPane
         }
 
         _textUnit     = _clicks switch { 1 => TextUnit.Letter, 2 => TextUnit.Word, _ => TextUnit.Message };
+
+        // A new single click drops the old selection. The clear also ends the press, so it comes before the press.
+        if (_textUnit == TextUnit.Letter)
+        {
+            ClearTextSelection(view);
+        }
+
         (int caret, int letter) = view.TextHit(e.GetCurrentPoint(view.TextView).Position);
         (_anchorStart, _anchorEnd) = UnitAround(view.ShownText, caret, letter, _textUnit);
         _anchorBubble = bubble;
+        _pressedText  = view.TextView;
         _textPressed  = true;
         _pressAt      = point.Position;
 
         // A single click stays with the text until the pointer moves. A double-click or triple-click selects at once.
         if (_textUnit == TextUnit.Letter)
         {
-            ClearTextSelection(view);
             return;
         }
 
+        view.CancelTextTap();
         TakePointer(e.Pointer);
         SelectTo(bubble, view, caret, letter);
     }
@@ -156,8 +165,13 @@ public sealed partial class ChatPane
         }
     }
 
-    // The pane takes the pointer from the text. The text then stops its own drag.
-    private void TakePointer(Pointer pointer) => _textDragging = MessageList.CapturePointer(pointer);
+    // The pane takes the pointer from the text. The text then stops its own drag. The list cannot capture the pointer
+    // while the text holds it.
+    private void TakePointer(Pointer pointer)
+    {
+        _pressedText?.ReleasePointerCaptures();
+        _textDragging = MessageList.CapturePointer(pointer);
+    }
 
     private void EndTextDrag(Pointer pointer)
     {

@@ -220,38 +220,98 @@ public sealed class ChatTests : UiTest
     }
 
     /// <summary>
-    /// A double-click and drag selects whole words, and the drag goes on into the next bubble. Ctrl + C copies both
-    /// parts, 1 message to a line.
+    /// A double-click, hold and drag to the right selects word by word in the bubble. The drag then goes on into the
+    /// next bubble. Ctrl + C copies both parts, 1 message to a line.
     /// </summary>
     [TestMethod]
-    public async Task DoubleClickDrag_AcrossBubbles_CopiesWholeWords()
+    public async Task DoubleClickDrag_SelectsWholeWords_AcrossBubbles()
     {
-        await OpenAnnAsync();
-        Message first  = Server.Phone.PushIncoming("c-ann", "alpha beta");
-        Message second = Server.Phone.PushIncoming("c-ann", "gamma delta");
-        Wait.Until(() => Bubbles().Count == 5, AppDriver.DefaultTimeout, () => $"Bubbles: [{string.Join(" | ", Bubbles().Select(b => b.Text))}].");
-        Thread.Sleep(500);
+        (string first, string second) = await OpenTwoTextsAsync();
 
-        // The press is on the right part of "beta", and the release is on the left part of "gamma". Only whole words
-        // select.
-        System.Drawing.Rectangle top    = App.Find("Bubble." + first.MessageID).BoundingRectangle;
-        System.Drawing.Rectangle bottom = App.Find("Bubble." + second.MessageID).BoundingRectangle;
-        var from = new System.Drawing.Point(top.Left + (top.Width * 8 / 10), top.Top + (top.Height / 2));
-        var to   = new System.Drawing.Point(bottom.Left + (bottom.Width * 2 / 10), bottom.Top + (bottom.Height / 2));
-
-        FlaUI.Core.Input.Mouse.MoveTo(from);
+        // The second press of the double-click stays down on "alpha".
+        FlaUI.Core.Input.Mouse.MoveTo(Middle(WordBounds(first, "alpha")));
         FlaUI.Core.Input.Mouse.Click();
         FlaUI.Core.Input.Mouse.Down(FlaUI.Core.Input.MouseButton.Left);
-        FlaUI.Core.Input.Mouse.MoveTo(to);
-        FlaUI.Core.Input.Mouse.Up(FlaUI.Core.Input.MouseButton.Left);
-        Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_C);
+        AssertSelected(first, "alpha", second, string.Empty);
 
-        // The paste into the message box shows what the copy holds.
+        // The pointer stops on the first letter of each word, and the whole word selects.
+        PointerInput.DragTo(Start(WordBounds(first, "beta")));
+        AssertSelected(first, "alpha beta", second, string.Empty);
+
+        PointerInput.DragTo(Start(WordBounds(second, "epsilon")));
+        FlaUI.Core.Input.Mouse.Up(FlaUI.Core.Input.MouseButton.Left);
+        AssertSelected(first, "alpha beta gamma", second, "delta epsilon");
+        AssertCopies("alpha beta gamma\ndelta epsilon");
+    }
+
+    /// <summary>
+    /// A plain drag from the middle of 1 bubble into the next selects letter by letter across both. Ctrl + C copies
+    /// both parts, 1 message to a line.
+    /// </summary>
+    [TestMethod]
+    public async Task Drag_AcrossBubbles_SelectsFromPressToRelease()
+    {
+        (string first, string second) = await OpenTwoTextsAsync();
+
+        // The press is before "beta", and the release is after "epsilon".
+        System.Drawing.Rectangle to = WordBounds(second, "epsilon");
+        FlaUI.Core.Input.Mouse.MoveTo(Start(WordBounds(first, "beta")));
+        FlaUI.Core.Input.Mouse.Down(FlaUI.Core.Input.MouseButton.Left);
+        PointerInput.DragTo(new System.Drawing.Point(to.Right - 1, to.Top + (to.Height / 2)));
+        FlaUI.Core.Input.Mouse.Up(FlaUI.Core.Input.MouseButton.Left);
+
+        AssertSelected(first, "beta gamma", second, "delta epsilon");
+        AssertCopies("beta gamma\ndelta epsilon");
+    }
+
+    // Opens the chat with Ann and waits for 2 new texts, one above the other. Returns their message IDs.
+    private async Task<(string First, string Second)> OpenTwoTextsAsync()
+    {
+        await OpenAnnAsync();
+        Message first  = Server.Phone.PushIncoming("c-ann", "alpha beta gamma");
+        Message second = Server.Phone.PushIncoming("c-ann", "delta epsilon zeta");
+        Wait.Until(() => ReadLog().Contains($"Bubble animated in ({second.MessageID})", StringComparison.Ordinal), AppDriver.DefaultTimeout,
+            () => "The second bubble didn't animate in.");
+        Thread.Sleep(800);
+        return (first.MessageID, second.MessageID);
+    }
+
+    // Gives the bounds of a word in the text of a bubble, in screen pixels.
+    // The text of a bubble does not support FindText, so the ends of the range move by letters.
+    private System.Drawing.Rectangle WordBounds(string id, string word)
+    {
+        FlaUI.Core.ITextRange range = App.Find("Bubble." + id).Patterns.Text.Pattern.DocumentRange;
+        string text                 = range.GetText(-1);
+        int at                      = text.IndexOf(word, StringComparison.Ordinal);
+        range.MoveEndpointByUnit(FlaUI.Core.Definitions.TextPatternRangeEndpoint.End, FlaUI.Core.Definitions.TextUnit.Character, at + word.Length - text.Length);
+        range.MoveEndpointByUnit(FlaUI.Core.Definitions.TextPatternRangeEndpoint.Start, FlaUI.Core.Definitions.TextUnit.Character, at);
+        return range.GetBoundingRectangles()[0];
+    }
+
+    private static System.Drawing.Point Middle(System.Drawing.Rectangle word) => new(word.Left + (word.Width / 2), word.Top + (word.Height / 2));
+
+    // A point on the first letter of the word.
+    private static System.Drawing.Point Start(System.Drawing.Rectangle word) => new(word.Left + 2, word.Top + (word.Height / 2));
+
+    private void AssertSelected(string first, string top, string second, string bottom)
+    {
+        string? topSelection    = null;
+        string? bottomSelection = null;
+        Wait.Until(() => (topSelection = Selected(first)) == top && (bottomSelection = Selected(second)) == bottom,
+            AppDriver.DefaultTimeout, () => $"The bubbles selected '{topSelection}' and '{bottomSelection}', not '{top}' and '{bottom}'.");
+
+        string Selected(string id) => string.Concat(App.Find("Bubble." + id).Patterns.Text.Pattern.GetSelection().Select(range => range.GetText(-1)));
+    }
+
+    // Copies the selection with Ctrl + C. The paste into the message box shows what the copy holds.
+    private void AssertCopies(string text)
+    {
+        Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_C);
         App.Find("Chat.Draft").Focus();
         Keyboard.TypeSimultaneously(VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_V);
         string? last = null;
-        Wait.Until(() => (last = App.Find("Chat.Draft").Patterns.Value.Pattern.Value.ValueOrDefault?.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n')) == "beta\ngamma",
-            AppDriver.DefaultTimeout, () => $"The copy pasted '{last}', not 'beta' and 'gamma' on 2 lines.");
+        Wait.Until(() => (last = App.Find("Chat.Draft").Patterns.Value.Pattern.Value.ValueOrDefault?.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n')) == text,
+            AppDriver.DefaultTimeout, () => $"The copy pasted '{last}', not '{text}'.");
     }
 
     /// <summary>
