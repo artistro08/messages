@@ -65,9 +65,10 @@
                 </ResourceDictionary>
             </ResourceDictionary.MergedDictionaries>
 
-            <!-- A sent RCS bubble takes a lighter shade of the accent in Light and a darker shade in Dark. The text
-                 keeps the regular text color. Sent SMS and MMS take the full accent. The border of the bubble matches
-                 the fill. In high contrast the fill is the window color, so the border takes the text color to keep
+            <!-- RcsBubbleBrush is the soft shade of the accent: lighter in Light and darker in Dark. The text on it
+                 keeps the regular text color. Sent RCS takes it in Dark, and sent SMS and MMS take it in Light. The
+                 other sent bubble takes the full accent. Thus RCS is the darker bubble in both themes. See
+                 MessageBubble.OnFullAccent. The border of the bubble matches the fill. In high contrast the fill is the window color, so the border takes the text color to keep
                  the edge.
                  A reply quote in a bubble sits on a neutral frame across the top of the bubble, with a card inside
                  it, as Google Messages on the phone shows it. The card is darker than the frame in Dark and lighter in
