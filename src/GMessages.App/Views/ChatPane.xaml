@@ -305,6 +305,7 @@
                         QuoteRequested="OnQuoteRequested"
                         ReplyRequested="OnReplyRequested"
                         RetryRequested="OnRetryRequested"
+                        TimeTapped="OnBubbleTimeTapped"
                         VoiceRequested="OnVoiceRequested" />
                 </DataTemplate>
             </ListView.ItemTemplate>

@@ -282,15 +282,24 @@ public sealed class ChatFormatTests
         Assert.AreEqual(expected, ChatFormat.OriginalOf(original, selected));
 
     /// <summary>
-    /// A double-click selects the word, the spaces or the emoji under the pointer.
+    /// A double-click selects the word, the spaces or the emoji under the pointer. An emoji of 1 character keeps its
+    /// VS16, a letter keeps its combining marks, and a letter outside the first plane is a letter.
     /// </summary>
     [TestMethod]
     [DataRow("hello world", 2, 0, 5)]
     [DataRow("hello world", 5, 5, 6)]
     [DataRow("hello world", 99, 6, 11)]
     [DataRow("don't go", 1, 0, 5)]
+    [DataRow("don’t go", 3, 0, 5)]
     [DataRow("hi, you", 2, 2, 3)]
     [DataRow("ok \U0001F600\U0001F600 yes", 3, 3, 7)]
+    [DataRow("I ❤ it", 2, 2, 3)]
+    [DataRow("I ❤️ it", 3, 2, 4)]
+    [DataRow("ok ✅ yes", 3, 3, 4)]
+    [DataRow("a ☺️⭐ b", 2, 2, 5)]
+    [DataRow("café au", 4, 0, 5)]
+    [DataRow("नमस्ते x", 3, 0, 6)]
+    [DataRow("\U00020000\U00020001 x", 2, 0, 4)]
     [DataRow("", 0, 0, 0)]
     public void WordAround_GivesTheRunOfOneKind(string text, int at, int start, int end) =>
         Assert.AreEqual((start, end), ChatFormat.WordAround(text, at));

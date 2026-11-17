@@ -1,4 +1,5 @@
 using GMessages.App.Views.Controls;
+using GMessages.App.Windowing;
 using GMessages.Presentation.Main;
 using GMessages.Presentation.Messaging;
 using Windows.Devices.Input;
@@ -9,24 +10,31 @@ using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Documents;
 using Windows.UI.Xaml.Input;
+using Windows.UI.Xaml.Media;
 using WinRT;
 
 namespace GMessages.App.Views;
 
 /// <summary>
-/// Selects text with the mouse across the bubbles of the chat, as a page in a browser does.
+/// Selects text with the mouse across the bubbles of the chat, as a page in a browser does. It also toggles the time
+/// of a bubble after a click.
 /// </summary>
 /// <remarks>
 /// <para>
-/// The text of each bubble selects only inside itself, and a drag after a double-click selected nothing more. This
-/// part of <see cref="ChatPane"/> takes the drag from the text. A drag from 1 click selects letters. A drag from a
-/// double-click selects whole words, and a drag from a triple-click selects whole messages. The drag continues into
-/// the bubbles above and below.
+/// The text of a bubble does not select by itself for the mouse. This part of <see cref="ChatPane"/> selects. A drag
+/// from 1 click selects letters. A drag from a double-click selects whole words, and a drag from a triple-click
+/// selects whole messages. The drag continues into the bubbles above and below.
 /// </para>
 /// <para>
-/// A single click without a drag stays with the text, so a click on a link still opens it. Each bubble draws its own
-/// highlight, so the selection shows in every bubble at once and stays through a right-click. Ctrl + C and Copy in the
-/// bubble menu copy the selection, 1 message to a line. ChatPane.xaml.cs holds the other members.
+/// The pane keeps the selection as 2 places in the texts of 2 messages, not in the rows of the list. Each row that
+/// shows a message in the selection draws its part of the highlight, also a row that scrolls into view later. Ctrl + C
+/// and Copy in the bubble menu copy the selection, 1 message to a line. Touch and pen select with the own selection of
+/// the text.
+/// </para>
+/// <para>
+/// A click with no drag toggles the time of its bubble when the double-click time of Windows passes with no second
+/// click. A toggle at once moved the bubbles, and the second click of a double-click missed the text. ChatPane.xaml.cs
+/// holds the other members.
 /// </para>
 /// </remarks>
 public sealed partial class ChatPane
@@ -48,28 +56,31 @@ public sealed partial class ChatPane
     private int _anchorStart;
     private int _anchorEnd;
 
-    // The press is in text and the button is down. The pane selects after the drag starts. The last flag is true after
-    // the pointer moves away from the press.
+    // The first flag is true while the press of the mouse is on text and the button is down. The second flag is true
+    // after the pointer moves away from the press.
     private bool _textPressed;
-    private bool _textDragging;
     private bool _textMoved;
     private Point _pressAt;
-    private MessageBubble? _pressedView;
 
     // The clicks so far: 1, 2 or 3. Each click within the double-click time of the last one adds 1.
     private int _clicks;
     private ulong _lastClickTime;
     private Point _lastClickAt;
 
-    // The selection across bubbles, from the first bubble to the last. The end texts are the selected parts of the
-    // first and the last bubble, as sent. The bubbles between them are selected whole.
+    // The selection: from a place in the shown text of the first message to a place in the shown text of the last
+    // message. The messages between them are selected whole.
     private MessageBubbleViewModel? _fromBubble;
     private MessageBubbleViewModel? _toBubble;
-    private string _fromText = string.Empty;
-    private string _toText   = string.Empty;
+    private int _fromAt;
+    private int _toAt;
 
-    // The bubbles that show a selection of the pane.
-    private HashSet<MessageBubble> _textShown = [];
+    // The bubbles whose taps wait to toggle the time, and the timer of the wait. The first flag is true when the
+    // current click does not toggle the time: a double-click, a triple-click or a drag. The last field is the bubble
+    // that the tap of the current click added.
+    private readonly List<MessageBubbleViewModel> _tapBubbles = [];
+    private DispatcherQueueTimer? _tapTimer;
+    private bool _skipTap;
+    private MessageBubbleViewModel? _clickTap;
 
     private void HookTextSelection()
     {
@@ -79,12 +90,15 @@ public sealed partial class ChatPane
         MessageList.AddHandler(PointerCaptureLostEvent, new PointerEventHandler(OnTextPointerCaptureLost), handledEventsToo: true);
     }
 
-    // The text handled the press first. A press off the text clears the selection.
+    // =========================================================================
+    // POINTER
+    // =========================================================================
+
     private void OnTextPointerPressed(object sender, PointerRoutedEventArgs e)
     {
         PointerPoint point = e.GetCurrentPoint(MessageList);
-        MessageBubble.SkipTap = false;
-        if (e.Pointer.PointerDeviceType != PointerDeviceType.Mouse || !point.Properties.IsLeftButtonPressed)
+        bool mouse         = e.Pointer.PointerDeviceType == PointerDeviceType.Mouse;
+        if (mouse && !point.Properties.IsLeftButtonPressed)
         {
             return;
         }
@@ -94,19 +108,38 @@ public sealed partial class ChatPane
         _lastClickTime = point.Timestamp;
         _lastClickAt   = point.Position;
 
-        // A new press stops the wait of the last click for the time. A double-click or triple-click never toggles the
-        // time.
-        MessageBubble.CancelTap();
-        MessageBubble.SkipTap = _clicks > 1;
-
-        MessageBubble? view = TextViewOf(e.OriginalSource as DependencyObject);
-        if (view?.Bubble is not { } bubble)
+        // A double-click or triple-click never toggles the time, so the tap of its first click stops its wait. The
+        // taps of other clicks wait until the release.
+        _skipTap = _clicks > 1;
+        if (_clicks > 1 && _clickTap is { } first && _tapBubbles.LastIndexOf(first) is >= 0 and var last)
         {
-            ClearTextSelection();
+            _tapBubbles.RemoveAt(last);
+        }
+
+        _clickTap = null;
+        _tapTimer?.Stop();
+
+        // Touch and pen select with the own selection of the text.
+        if (!mouse)
+        {
             return;
         }
 
-        _textUnit     = _clicks switch { 1 => TextUnit.Letter, 2 => TextUnit.Word, _ => TextUnit.Message };
+        DependencyObject? source = e.OriginalSource is TextElement inline ? inline.ContentStart.VisualParent : e.OriginalSource as DependencyObject;
+        MessageBubble? view      = TextViewOf(source);
+        if (view?.Bubble is not { } bubble)
+        {
+            // A press on the buttons of a bubble or on the scroll bar keeps the selection, so the menu of the ⋮ can
+            // copy it.
+            if (!IsOnControl(source))
+            {
+                ClearTextSelection();
+            }
+
+            return;
+        }
+
+        _textUnit = _clicks switch { 1 => TextUnit.Letter, 2 => TextUnit.Word, _ => TextUnit.Message };
 
         // A new single click drops the old selection. The clear also ends the press, so it comes before the press.
         if (_textUnit == TextUnit.Letter)
@@ -115,20 +148,19 @@ public sealed partial class ChatPane
         }
 
         (int caret, int letter) = view.TextHit(e.GetCurrentPoint(view.TextView).Position);
-        (_anchorStart, _anchorEnd) = UnitAround(view.ShownText, caret, letter, _textUnit);
+        (_anchorStart, _anchorEnd) = UnitAround(bubble.BodyText, caret, letter, _textUnit);
         _anchorBubble = bubble;
-        _pressedView  = view;
         _textPressed  = true;
         _pressAt      = point.Position;
 
-        // A single click stays with the text until the pointer moves. A double-click or triple-click selects at once.
+        // A single click selects nothing until the pointer moves. A double-click or triple-click selects at once.
         if (_textUnit == TextUnit.Letter)
         {
             return;
         }
 
-        TakePointer();
-        SelectTo(bubble, view, caret, letter);
+        TakePointer(e.Pointer);
+        SelectTo(bubble, caret, letter);
     }
 
     private void OnTextPointerMoved(object sender, PointerRoutedEventArgs e)
@@ -139,17 +171,19 @@ public sealed partial class ChatPane
         // A press that becomes a drag does not toggle the time, on the text or beside it.
         if (pressed && !Near(point.Position, _lastClickAt))
         {
-            MessageBubble.SkipTap = true;
+            _skipTap = true;
+        }
+
+        // The release can be outside the list, where the pane does not get it.
+        if (!pressed)
+        {
+            WaitForTaps();
+            EndTextDrag();
+            return;
         }
 
         if (!_textPressed)
         {
-            return;
-        }
-
-        if (!pressed)
-        {
-            EndTextDrag();
             return;
         }
 
@@ -162,10 +196,7 @@ public sealed partial class ChatPane
             }
 
             _textMoved = true;
-            if (!_textDragging)
-            {
-                TakePointer();
-            }
+            TakePointer(e.Pointer);
         }
 
         SelectToPointer(e);
@@ -181,6 +212,7 @@ public sealed partial class ChatPane
         }
 
         EndTextDrag();
+        WaitForTaps();
     }
 
     private void SelectToPointer(PointerRoutedEventArgs e)
@@ -188,38 +220,91 @@ public sealed partial class ChatPane
         if (TextViewNear(e.GetCurrentPoint(MessageList).Position.Y) is { Bubble: { } bubble } view)
         {
             (int caret, int letter) = view.TextHit(e.GetCurrentPoint(view.TextView).Position);
-            SelectTo(bubble, view, caret, letter);
+            SelectTo(bubble, caret, letter);
         }
     }
 
-    // The text lost the pointer with no release, as when a menu opens. The drag ends there.
+    // The panel lost the pointer with no release, as when a menu opens. The drag ends there.
     private void OnTextPointerCaptureLost(object sender, PointerRoutedEventArgs e) => EndTextDrag();
 
-    // The pane starts to select. The text keeps the pointer to the release, so its own drag ends there. The moves and
-    // the release come to the list from the text.
-    private void TakePointer()
-    {
-        _textDragging = true;
-        if (_pressedView is { } view)
-        {
-            view.PaneSelects = true;
-        }
-    }
+    // The panel of the rows takes the pointer, so the drag continues outside the list. The panel stays when rows
+    // scroll out, and it is inside the scroll viewer, so the mouse wheel still scrolls during the drag.
+    private void TakePointer(Pointer pointer) => MessageList.ItemsPanelRoot?.CapturePointer(pointer);
 
     private void EndTextDrag()
     {
-        if (_pressedView is { } view)
+        if (!_textPressed)
         {
-            view.PaneSelects = false;
+            return;
         }
 
-        _pressedView  = null;
-        _textPressed  = false;
-        _textDragging = false;
-        _textMoved    = false;
+        _textPressed = false;
+        _textMoved   = false;
+        MessageList.ItemsPanelRoot?.ReleasePointerCaptures();
     }
 
     private static bool Near(Point a, Point b) => Math.Abs(a.X - b.X) <= DragStart && Math.Abs(a.Y - b.Y) <= DragStart;
+
+    // =========================================================================
+    // TIME OF A BUBBLE
+    // =========================================================================
+
+    // A tap on a bubble with no drag. The time toggles when the double-click time passes after the release with no
+    // other click. The tap of a click on another bubble waits with it and does not drop it.
+    private void OnBubbleTimeTapped(object? sender, EventArgs e)
+    {
+        if (_skipTap || sender is not MessageBubble { Bubble: { } bubble })
+        {
+            return;
+        }
+
+        _tapBubbles.Add(bubble);
+        _clickTap = bubble;
+        WaitForTaps();
+    }
+
+    // Starts the wait of the taps again, when taps wait and no button is down.
+    private void WaitForTaps()
+    {
+        if (_tapBubbles.Count == 0 || _tapTimer?.IsRunning == true)
+        {
+            return;
+        }
+
+        if (_tapTimer is null)
+        {
+            _tapTimer             = XamlHost.Dispatcher.CreateTimer();
+            _tapTimer.IsRepeating = false;
+            _tapTimer.Tick       += (_, _) =>
+            {
+                _tapTimer.Stop();
+                MessageBubbleViewModel[] bubbles = [.. _tapBubbles];
+                _tapBubbles.Clear();
+                _clickTap = null;
+                foreach (MessageBubbleViewModel bubble in bubbles)
+                {
+                    bubble.ToggleTime();
+                }
+            };
+        }
+
+        _tapTimer.Interval = TimeSpan.FromMilliseconds(Ui.DoubleClickTime);
+        _tapTimer.Start();
+    }
+
+    // Enter or Space toggles the time at once. A tap of the same bubble that waits must not toggle it a second time.
+    private void DropTaps(MessageBubbleViewModel bubble) => _tapBubbles.RemoveAll(waiting => ReferenceEquals(waiting, bubble));
+
+    private void DropTaps()
+    {
+        _tapTimer?.Stop();
+        _tapBubbles.Clear();
+        _clickTap = null;
+    }
+
+    // =========================================================================
+    // SELECTION
+    // =========================================================================
 
     // A letter drag goes from caret to caret. A word or message drag covers the whole unit under the pointer.
     private static (int Start, int End) UnitAround(string text, int caret, int letter, TextUnit unit) => unit switch
@@ -230,7 +315,7 @@ public sealed partial class ChatPane
     };
 
     // Selects from the unit of the press to the unit of the pointer, in the order of the chat.
-    private void SelectTo(MessageBubbleViewModel bubble, MessageBubble view, int caret, int letter)
+    private void SelectTo(MessageBubbleViewModel bubble, int caret, int letter)
     {
         if (Chat is not { } chat || _anchorBubble is not { } anchor)
         {
@@ -244,82 +329,91 @@ public sealed partial class ChatPane
             return;
         }
 
-        (int headStart, int headEnd) = UnitAround(view.ShownText, caret, letter, _textUnit);
+        (int headStart, int headEnd) = UnitAround(bubble.BodyText, caret, letter, _textUnit);
         bool forward = headIndex > anchorIndex || (headIndex == anchorIndex && headStart >= _anchorStart);
-        (int fromIndex, int fromAt) = forward ? (anchorIndex, _anchorStart) : (headIndex, headStart);
-        (int toIndex, int toAt)     = forward ? (headIndex, headEnd) : (anchorIndex, _anchorEnd);
-        if (fromIndex == toIndex)
+        (_fromBubble, _fromAt) = forward ? (anchor, _anchorStart) : (bubble, headStart);
+        (_toBubble, _toAt)     = forward ? (bubble, headEnd) : (anchor, _anchorEnd);
+        if (anchorIndex == headIndex)
         {
-            toAt = Math.Max(toAt, forward ? _anchorEnd : headEnd);
+            _toAt = Math.Max(_toAt, forward ? _anchorEnd : headEnd);
         }
 
-        _fromBubble = chat.Messages[fromIndex];
-        _toBubble   = chat.Messages[toIndex];
-
-        // Each shown bubble in the range shows its part. The end texts come from the first and the last bubble while
-        // they show.
-        HashSet<MessageBubble> shown = [];
-        for (int i = fromIndex; i <= toIndex; i++)
-        {
-            if (BubbleViewAt(i) is not { Bubble: { HasBodyText: true } message } part)
-            {
-                continue;
-            }
-
-            string text = part.ShownText;
-            int start   = Math.Min(i == fromIndex ? fromAt : 0, text.Length);
-            int end     = Math.Min(i == toIndex ? toAt : text.Length, text.Length);
-            part.SelectText(start, Math.Max(start, end));
-            shown.Add(part);
-
-            if (i == fromIndex)
-            {
-                _fromText = ChatFormat.OriginalOf(message.Text, part.SelectedText);
-            }
-
-            if (i == toIndex)
-            {
-                _toText = ChatFormat.OriginalOf(message.Text, part.SelectedText);
-            }
-        }
-
-        foreach (MessageBubble old in _textShown.Where(old => !shown.Contains(old)))
-        {
-            old.SelectText(0, 0);
-        }
-
-        _textShown = shown;
+        ShowTextSelection();
     }
 
     // Clears the selection of the pane.
     private void ClearTextSelection()
     {
-        foreach (MessageBubble view in _textShown)
-        {
-            view.SelectText(0, 0);
-        }
-
-        _textShown    = [];
         _fromBubble   = null;
         _toBubble     = null;
         _anchorBubble = null;
+        ShowTextSelection();
         EndTextDrag();
+    }
+
+    // Finds the first and the last message of the selection in the chat. False with no selection.
+    private bool TryFindSelection(out int fromIndex, out int toIndex)
+    {
+        fromIndex = Chat is { } chat && _fromBubble is { } from ? chat.Messages.IndexOf(from) : -1;
+        toIndex   = Chat is { } open && _toBubble is { } to ? open.Messages.IndexOf(to) : -1;
+        return fromIndex >= 0 && toIndex >= fromIndex;
+    }
+
+    // Gives the selected part of the shown text of the message at the index. The part is empty off the selection.
+    private (int Start, int End) SelectedPart(int index, MessageBubbleViewModel bubble, int fromIndex, int toIndex)
+    {
+        if (index < fromIndex || index > toIndex)
+        {
+            return (0, 0);
+        }
+
+        int length = bubble.BodyText.Length;
+        int start  = Math.Min(index == fromIndex ? _fromAt : 0, length);
+        return (start, Math.Clamp(index == toIndex ? _toAt : length, start, length));
+    }
+
+    // Each row that the list holds shows its part of the selection.
+    private void ShowTextSelection()
+    {
+        if (MessageList.ItemsPanelRoot?.As<ItemsStackPanel>() is not { } panel)
+        {
+            return;
+        }
+
+        bool selected = TryFindSelection(out int fromIndex, out int toIndex);
+        for (int i = Math.Max(panel.FirstCacheIndex, 0); i <= panel.LastCacheIndex; i++)
+        {
+            if (BubbleViewAt(i) is { Bubble: { } bubble } view)
+            {
+                (int start, int end) = selected ? SelectedPart(i, bubble, fromIndex, toIndex) : (0, 0);
+                view.SelectText(start, end);
+            }
+        }
+    }
+
+    // A row that comes into view, or that the list uses again for another message, shows its part of the selection.
+    private void ShowTextSelection(int index, MessageBubble view)
+    {
+        if (view.Bubble is not { } bubble)
+        {
+            return;
+        }
+
+        (int start, int end) = TryFindSelection(out int fromIndex, out int toIndex) ? SelectedPart(index, bubble, fromIndex, toIndex) : (0, 0);
+        view.SelectText(start, end);
     }
 
     /// <summary>
     /// Gives the selected text, as sent, 1 message to a line. It gives null with no selection, and when the bubble is
     /// given but not in the selection.
     /// </summary>
+    /// <remarks>
+    /// A message that is selected whole gives its text as sent, with the link that its preview card took out of the
+    /// bubble. A message that is selected in part gives that part of the shown text.
+    /// </remarks>
     private string? SelectedChatText(MessageBubbleViewModel? within)
     {
-        if (Chat is not { } chat || _fromBubble is not { } from || _toBubble is not { } to)
-        {
-            return null;
-        }
-
-        int fromIndex = chat.Messages.IndexOf(from);
-        int toIndex   = chat.Messages.IndexOf(to);
-        if (fromIndex < 0 || toIndex < 0)
+        if (Chat is not { } chat || !TryFindSelection(out int fromIndex, out int toIndex))
         {
             return null;
         }
@@ -329,31 +423,42 @@ public sealed partial class ChatPane
             return null;
         }
 
-        List<string> lines = [_fromText];
-        for (int i = fromIndex + 1; i < toIndex; i++)
+        List<string> lines = [];
+        for (int i = fromIndex; i <= toIndex; i++)
         {
-            if (chat.Messages[i] is { HasBodyText: true } message)
+            MessageBubbleViewModel bubble = chat.Messages[i];
+            (int start, int end)          = SelectedPart(i, bubble, fromIndex, toIndex);
+            if (end > start)
             {
-                lines.Add(message.Text);
+                bool whole = start == 0 && end == bubble.BodyText.Length;
+                lines.Add(whole ? bubble.Text : ChatFormat.OriginalOf(bubble.Text, bubble.BodyText[start..end]));
             }
         }
 
-        if (toIndex > fromIndex)
-        {
-            lines.Add(_toText);
-        }
-
-        string text = string.Join(Environment.NewLine, lines);
-        return text.Length > 0 ? text : null;
+        return lines.Count > 0 ? string.Join(Environment.NewLine, lines) : null;
     }
 
-    // Finds the bubble whose text the element is in, or null off the text of a bubble. A link is in the text.
-    private static MessageBubble? TextViewOf(DependencyObject? element)
+    // =========================================================================
+    // ROWS
+    // =========================================================================
+
+    // Finds the bubble whose text the element is, or null off the text of a bubble.
+    private static MessageBubble? TextViewOf(DependencyObject? element) =>
+        element is not null && BubbleViewAround(element).View is { Bubble.HasBodyText: true } view && view.IsText(element) ? view : null;
+
+    // Tells whether the element is in the hover strip or the reaction pill of a bubble, or in the scroll bar of the
+    // list. The names are those in MessageBubble.xaml and in the template of the scroll viewer.
+    private bool IsOnControl(DependencyObject? element)
     {
-        DependencyObject? text = element is TextElement inline ? inline.ContentStart.VisualParent : element;
-        return text is not null && BubbleViewAround(text).View is { Bubble.HasBodyText: true } view && ReferenceEquals(text, view.TextView)
-            ? view
-            : null;
+        for (DependencyObject? at = element; at is not null && !ReferenceEquals(at, MessageList); at = VisualTreeHelper.GetParent(at))
+        {
+            if (at is FrameworkElement { Name: "HoverStrip" or "PillHost" or "VerticalScrollBar" })
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     // Finds the shown bubble with text nearest the height on the list: the last one whose text starts above it, or the

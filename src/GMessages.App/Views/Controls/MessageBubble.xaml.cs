@@ -6,6 +6,7 @@ using GMessages.App.Windowing;
 using GMessages.Presentation.Main;
 using GMessages.Presentation.Messaging;
 using Windows.ApplicationModel.DataTransfer;
+using Windows.Devices.Input;
 using Windows.Foundation;
 using Windows.System;
 using Windows.UI.Composition;
@@ -231,10 +232,6 @@ public sealed partial class MessageBubble : UserControl
     // click. The link click and the tap of the back come in any order, so the tap waits a turn.
     private bool _linkClicked;
 
-    // The click that waits to toggle the time, and its bubble. See ToggleTimeAfterWait.
-    private static DispatcherQueueTimer? s_tapTimer;
-    private static MessageBubbleViewModel? s_tapBubble;
-
     // The text and the part key that the runs of the text were built for. The runs rebuild only when these change,
     // because a rebuild drops a selection.
     private string? _shownText;
@@ -242,9 +239,6 @@ public sealed partial class MessageBubble : UserControl
 
     // The highlight on a sent bubble is the fill of the bubble at this share of its brightness.
     private const double SelectionShade = 0.6;
-
-    // See PaneSelects.
-    private bool _paneSelects;
 
     // The selected part of the shown text. See SelectText.
     private int _selectStart;
@@ -341,14 +335,7 @@ public sealed partial class MessageBubble : UserControl
         Row.Tapped += OnRowTapped;
 
         // A video that plays stops when the bubble leaves the tree.
-        Unloaded += (_, _) =>
-        {
-            ReleaseVideo();
-            if (Bubble is { } bubble && ReferenceEquals(bubble, s_tapBubble))
-            {
-                CancelTap();
-            }
-        };
+        Unloaded += (_, _) => ReleaseVideo();
 
         // The row under the bubble is at least as wide as the back and the preview card. See FitUnder.
         Back.SizeChanged += (_, _) => FitUnder();
@@ -364,19 +351,36 @@ public sealed partial class MessageBubble : UserControl
         ActualThemeChanged += (_, _) => ShowStates();
         Loaded             += (_, _) => ShowStates();
 
-        // After a double-click and during a drag of the pane, the text selects by itself and shows its own highlight
-        // over the highlight of the bubble. The bubble removes that selection.
-        Body.SelectionChanged += (_, _) =>
+        // The chat pane selects with the mouse, so the text selects by itself only for touch and pen. The pointer
+        // enters the text before it presses, and the text takes the kind of that pointer.
+        Body.PointerEntered += (_, e) =>
         {
-            if ((PaneSelects || _selectEnd > _selectStart) && Body.SelectedText.Length > 0)
+            bool own = e.Pointer.PointerDeviceType != PointerDeviceType.Mouse;
+            if (Body.IsTextSelectionEnabled != own)
             {
-                Body.Select(Body.ContentStart, Body.ContentStart);
+                Body.IsTextSelectionEnabled = own;
+            }
+        };
+
+        // Text that the mouse can select shows the text cursor. A link keeps its hand.
+        nint beam = WindowInterop.LoadCursorW(0, PointerCursor.IBeam);
+        Body.PointerMoved += (_, e) =>
+        {
+            if (e.Pointer.PointerDeviceType == PointerDeviceType.Mouse && ReferenceEquals(e.OriginalSource, Body))
+            {
+                PointerCursor.Show(beam);
             }
         };
 
         // The links follow the color of the text, which the side state and the theme set.
         Body.RegisterPropertyChangedCallback(TextBlock.ForegroundProperty, (_, _) => ColorLinks());
     }
+
+    /// <summary>
+    /// Tells the chat that a tap on the bubble asks for its time. The chat toggles the time when no double-click
+    /// follows. See ChatPane.OnBubbleTimeTapped.
+    /// </summary>
+    public event EventHandler? TimeTapped;
 
     /// <summary>
     /// Asks the chat to send this failed bubble again.
@@ -1653,7 +1657,6 @@ public sealed partial class MessageBubble : UserControl
         link.Click += (_, _) =>
         {
             _linkClicked = true;
-            CancelTap();
             XamlHost.Dispatcher.TryEnqueue(DispatcherQueuePriority.Low, () => _linkClicked = false);
             OpenLink(url);
         };
@@ -1780,17 +1783,12 @@ public sealed partial class MessageBubble : UserControl
         }
     }
 
-    // A click with no drag starts the wait for the time. The wait starts a turn later, after the click of a link. That
+    // A click with no drag asks the chat for the time. The request goes a turn later, after the click of a link. That
     // click can come after the tap.
     private void OnBackTapped(object sender, TappedRoutedEventArgs e)
     {
         // The quote, photo, video, file card, voice message and preview card handle their own taps.
         if (InPart(e.OriginalSource as DependencyObject))
-        {
-            return;
-        }
-
-        if (SkipTap)
         {
             return;
         }
@@ -1803,61 +1801,14 @@ public sealed partial class MessageBubble : UserControl
                 return;
             }
 
-            // The next press can come before this turn.
-            if (!SkipTap)
-            {
-                ToggleTimeAfterWait();
-            }
+            TimeTapped?.Invoke(this, EventArgs.Empty);
         });
     }
-
-    // Toggles the time when the double-click time of Windows passes with no other click. The time row moves the
-    // bubbles, so a toggle at once made the second click of a double-click miss the text. Only 1 click waits at a time.
-    private void ToggleTimeAfterWait()
-    {
-        if (s_tapTimer is null)
-        {
-            s_tapTimer             = XamlHost.Dispatcher.CreateTimer();
-            s_tapTimer.IsRepeating = false;
-            s_tapTimer.Tick       += (_, _) =>
-            {
-                MessageBubbleViewModel? bubble = s_tapBubble;
-                CancelTap();
-                bubble?.ToggleTime();
-            };
-        }
-
-        s_tapTimer.Stop();
-        s_tapBubble         = Bubble;
-        s_tapTimer.Interval = TimeSpan.FromMilliseconds(Ui.DoubleClickTime);
-        s_tapTimer.Start();
-    }
-
-    /// <summary>
-    /// Stops the wait of the last click, so it does not toggle the time. The chat pane calls it at each press.
-    /// </summary>
-    internal static void CancelTap()
-    {
-        s_tapTimer?.Stop();
-        s_tapBubble = null;
-    }
-
-    /// <summary>
-    /// Gets or sets whether the tap of the current mouse click does not toggle the time. The chat pane sets it at each
-    /// press and at the start of a drag.
-    /// </summary>
-    /// <remarks>A double-click, a triple-click and a drag never toggle the time.</remarks>
-    internal static bool SkipTap { get; set; }
 
     // A tap on the row beside the bubble also toggles the time: on its empty width, the avatar or the time. The bubble
     // has its own handler above. A button such as the hover strip or the pill handles its own tap.
     private void OnRowTapped(object sender, TappedRoutedEventArgs e)
     {
-        if (SkipTap)
-        {
-            return;
-        }
-
         for (DependencyObject? at = e.OriginalSource as DependencyObject; at is not null && !ReferenceEquals(at, Row); at = VisualTreeHelper.GetParent(at))
         {
             if (ReferenceEquals(at, Back))
@@ -1866,7 +1817,7 @@ public sealed partial class MessageBubble : UserControl
             }
         }
 
-        ToggleTimeAfterWait();
+        TimeTapped?.Invoke(this, EventArgs.Empty);
     }
 
     private void OnPreviewClick(object sender, RoutedEventArgs e)
@@ -1883,12 +1834,19 @@ public sealed partial class MessageBubble : UserControl
     /// Gets the text that the bubble shows. Its indices are the indices of <see cref="TextHit"/> and
     /// <see cref="SelectText"/>.
     /// </summary>
-    internal string ShownText => string.Concat(BodyRuns().Select(run => run.Text));
+    internal string ShownText => _shownText ?? string.Empty;
 
     /// <summary>
     /// Gets the text element. The chat pane reads pointer positions on it.
     /// </summary>
     internal UIElement TextView => Body;
+
+    /// <summary>
+    /// Tells whether the element is the text, or a clear strip over the empty end of a line of the text. See
+    /// <see cref="BlockLinkEnds"/>.
+    /// </summary>
+    internal bool IsText(DependencyObject element) =>
+        ReferenceEquals(element, Body) || ReferenceEquals(VisualTreeHelper.GetParent(element), LinkBlockers);
 
     /// <summary>
     /// Gets the part of the shown text that <see cref="SelectText"/> selected.
@@ -1900,26 +1858,6 @@ public sealed partial class MessageBubble : UserControl
             string text = ShownText;
             int start   = Math.Min(_selectStart, text.Length);
             return text[start..Math.Clamp(_selectEnd, start, text.Length)];
-        }
-    }
-
-    /// <summary>
-    /// Gets or sets whether the chat pane selects with a drag that started on this text.
-    /// </summary>
-    /// <remarks>
-    /// The text keeps the pointer and does its own drag to the release. Without the release, the text selected under the
-    /// pointer with no button down. While the value is true, the bubble removes each selection that the text makes.
-    /// </remarks>
-    internal bool PaneSelects
-    {
-        get => _paneSelects;
-        set
-        {
-            _paneSelects = value;
-            if (value)
-            {
-                Body.Select(Body.ContentStart, Body.ContentStart);
-            }
         }
     }
 
@@ -1983,18 +1921,21 @@ public sealed partial class MessageBubble : UserControl
     /// Selects the shown text from start to end. Equal indices clear the selection.
     /// </summary>
     /// <remarks>
-    /// The bubble draws the highlight itself, because the text shows its own selection only while it has focus. A
-    /// received bubble shows the accent color behind white letters. A sent bubble has an accent fill, so it shows a
+    /// The bubble draws the highlight itself, because the text does not select by itself for the mouse. A received
+    /// bubble shows the accent color behind white letters. A sent bubble has an accent fill, so it shows a
     /// darker shade of its own fill, behind white or black letters, whichever reads better. High contrast shows the
     /// highlight colors of Windows. The colors are read at each change of the selection.
     /// </remarks>
     internal void SelectText(int start, int end)
     {
-        _selectStart = start;
-        _selectEnd   = Math.Max(start, end);
+        end = Math.Max(start, end);
+        if (start == _selectStart && end == _selectEnd)
+        {
+            return;
+        }
 
-        // The own selection of the text must not show a second highlight.
-        Body.Select(Body.ContentStart, Body.ContentStart);
+        _selectStart = start;
+        _selectEnd   = end;
         Body.TextHighlighters.Clear();
         if (_selectEnd == _selectStart)
         {
@@ -2018,7 +1959,8 @@ public sealed partial class MessageBubble : UserControl
                 (byte)(color.G * SelectionShade),
                 (byte)(color.B * SelectionShade));
 
-            // White letters read on a dark shade, and black letters on a light shade.
+            // White letters read on a dark shade, and black letters on a light shade. The weights are those of the
+            // Rec. 601 luma of a color.
             bool dark = (0.299 * back.R) + (0.587 * back.G) + (0.114 * back.B) < 128;
             fore      = dark ? Windows.UI.Colors.White : Windows.UI.Colors.Black;
         }
