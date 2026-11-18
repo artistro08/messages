@@ -86,9 +86,10 @@ internal unsafe class XamlWindow
     private static readonly Guid IidFrameworkApplicationPrivate = new("b3ab45d8-6a4e-4e76-a00d-32d4643a9f1a");
     private const int SlotSetSynchronizationWindow = 11;
 
-    private const string ClassName  = "GMessages.XamlWindow";
-    private const int WaInactive    = 0;
-    private const int SizeMinimized = 1;
+    private const string ClassName      = "GMessages.XamlWindow";
+    private const int WaInactive        = 0;
+    private const int SizeMinimized     = 1;
+    private const uint MsgFilterAllow   = 1;
 
     // Every open window, by handle for the static window procedure, and in order for the message loop.
     private static readonly Dictionary<nint, XamlWindow> ByHandle = [];
@@ -97,6 +98,9 @@ internal unsafe class XamlWindow
     private static bool s_transparent;
     private static nint s_bigIcon;
     private static nint s_smallIcon;
+
+    // Windows sends this message each time it makes the taskbar button of a window.
+    private static readonly uint TaskbarButtonCreatedMessage = NativeMethods.RegisterWindowMessageW("TaskbarButtonCreated");
 
     private readonly XamlWindowKind _kind;
     private readonly DesktopWindowXamlSource _source;
@@ -136,9 +140,11 @@ internal unsafe class XamlWindow
         ByHandle[Hwnd] = this;
         Open.Add(this);
 
+        // An elevated run blocks messages from Explorer, which runs at a lower level. The taskbar message must pass.
         if (kind == XamlWindowKind.Main)
         {
             ApplyMica();
+            _ = ChangeWindowMessageFilterEx(Hwnd, TaskbarButtonCreatedMessage, MsgFilterAllow, 0);
         }
         else
         {
@@ -204,6 +210,12 @@ internal unsafe class XamlWindow
     /// <see cref="WindowInterop.HTMAXBUTTON"/>, <see cref="WindowInterop.HTCLOSE"/> or 0.
     /// </summary>
     public event EventHandler<(int Hovered, int Pressed)>? CaptionButtonsChanged;
+
+    /// <summary>
+    /// Raised when Windows makes the taskbar button of the window: at each show after a hide, and after Explorer
+    /// restarts. The overlay icon of the button must then be set again.
+    /// </summary>
+    public event EventHandler? TaskbarButtonCreated;
 
     /// <summary>
     /// Gets the window's handle.
@@ -606,6 +618,12 @@ internal unsafe class XamlWindow
 
     private nint OnMessage(uint msg, nint wParam, nint lParam)
     {
+        if (msg == TaskbarButtonCreatedMessage)
+        {
+            TaskbarButtonCreated?.Invoke(this, EventArgs.Empty);
+            return 0;
+        }
+
         switch (msg)
         {
             // The island and Mica cover the client area, so the window never paints a GDI background under them.
