@@ -27,10 +27,9 @@ public sealed partial class SettingsPage : UserControl
     // This is the card width of the Windows Community Toolkit SettingsCard at which the control goes below the header.
     private const double CardWrapWidth = 476;
 
-    // Microphone names are long. Beside the header, the box stops at this width.
-    private const double MicrophoneMaxWidth = 320;
-
-    private static readonly string[] ThemeChoices = ["Use system setting", "Light", "Dark"];
+    // Microphone names are long. Beside the header, the box has this width. It is also the MaxWidth of its items in
+    // SettingsPage.xaml, so the list is not wider than the box.
+    private const double MicrophoneWidth = 320;
 
     private bool _closed;
     private bool? _wrapped;
@@ -64,7 +63,7 @@ public sealed partial class SettingsPage : UserControl
         MicrophoneDescription.Text = ChatCopy.MicrophoneDescription;
         AutomationProperties.SetName(MicrophoneBox, ChatCopy.Microphone);
 
-        AddChoices(ThemeBox, ThemeChoices);
+        AddChoices(ThemeBox, ViewModel.ThemeChoices);
         AddChoices(SnoozeBox, ViewModel.SnoozeChoices);
         AddHandler(PointerPressedEvent, new PointerEventHandler(OnPagePressed), true);
 
@@ -164,8 +163,16 @@ public sealed partial class SettingsPage : UserControl
         {
             box.Loaded -= FitToWidestChoice;
             box.Measure(new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
-            string selected = box.SelectedIndex >= 0 ? choices[box.SelectedIndex] : string.Empty;
+            string selected = choices.ElementAtOrDefault(box.SelectedIndex) ?? string.Empty;
             box.MinWidth    = box.DesiredSize.Width - TextWidth(selected) + choices.Max(TextWidth);
+        }
+
+        // The text is measured in the font of the box, so the widths match the text in the box.
+        double TextWidth(string text)
+        {
+            var block = new TextBlock { Text = text, FontFamily = box.FontFamily, FontSize = box.FontSize, FontWeight = box.FontWeight };
+            block.Measure(new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
+            return block.DesiredSize.Width;
         }
 
         box.Loaded += FitToWidestChoice;
@@ -176,6 +183,12 @@ public sealed partial class SettingsPage : UserControl
     // box.
     private void OnPagePressed(object sender, PointerRoutedEventArgs e)
     {
+        ComboBox[] open = [.. new[] { ThemeBox, SnoozeBox, MicrophoneBox }.Where(box => box.IsDropDownOpen)];
+        if (open.Length == 0)
+        {
+            return;
+        }
+
         var path = new List<DependencyObject>();
         for (DependencyObject? at = e.OriginalSource?.As<DependencyObject>(); at is not null; at = VisualTreeHelper.GetParent(at))
         {
@@ -187,20 +200,10 @@ public sealed partial class SettingsPage : UserControl
             return;
         }
 
-        foreach (ComboBox box in new[] { ThemeBox, SnoozeBox, MicrophoneBox })
+        foreach (ComboBox box in open.Where(box => !path.Contains(box)))
         {
-            if (box.IsDropDownOpen && !path.Contains(box))
-            {
-                box.IsDropDownOpen = false;
-            }
+            box.IsDropDownOpen = false;
         }
-    }
-
-    private static double TextWidth(string text)
-    {
-        var block = new TextBlock { Text = text };
-        block.Measure(new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
-        return block.DesiredSize.Width;
     }
 
     // On a narrow page, the wide dropdowns and buttons go below the icon and the header and fill the card, as in Windows
@@ -223,7 +226,8 @@ public sealed partial class SettingsPage : UserControl
             control.HorizontalAlignment = wrap ? HorizontalAlignment.Stretch : HorizontalAlignment.Left;
         }
 
-        MicrophoneBox.MaxWidth = wrap ? double.PositiveInfinity : MicrophoneMaxWidth;
+        MicrophoneBox.MinWidth = wrap ? 0 : MicrophoneWidth;
+        MicrophoneBox.MaxWidth = wrap ? double.PositiveInfinity : MicrophoneWidth;
     }
 
     private void OnUnpairClick(object sender, RoutedEventArgs e) => UnpairRequested?.Invoke(this, EventArgs.Empty);

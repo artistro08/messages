@@ -365,10 +365,15 @@
                         <ComboBox
                             x:Name="MicrophoneBox"
                             Grid.Column="2"
-                            MinWidth="220"
                             VerticalAlignment="Center"
                             AutomationProperties.AutomationId="Settings.Microphone"
-                            SelectedIndex="{x:Bind ViewModel.MicrophoneIndex, Mode=TwoWay}" />
+                            SelectedIndex="{x:Bind ViewModel.MicrophoneIndex, Mode=TwoWay}">
+                            <ComboBox.ItemContainerStyle>
+                                <Style BasedOn="{StaticResource DefaultComboBoxItemStyle}" TargetType="ComboBoxItem">
+                                    <Setter Property="MaxWidth" Value="320" />
+                                </Style>
+                            </ComboBox.ItemContainerStyle>
+                        </ComboBox>
                     </Grid>
                 </Border>
 
