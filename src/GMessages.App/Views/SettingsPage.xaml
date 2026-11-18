@@ -88,15 +88,12 @@
                             VerticalAlignment="Center"
                             Text="Theme" />
                         <ComboBox
+                            x:Name="ThemeBox"
                             Grid.Column="2"
                             VerticalAlignment="Center"
                             AutomationProperties.AutomationId="Settings.Theme"
                             AutomationProperties.Name="Theme"
-                            SelectedIndex="{x:Bind ViewModel.ThemeIndex, Mode=TwoWay}">
-                            <ComboBoxItem Content="Use system setting" />
-                            <ComboBoxItem Content="Light" />
-                            <ComboBoxItem Content="Dark" />
-                        </ComboBox>
+                            SelectedIndex="{x:Bind ViewModel.ThemeIndex, Mode=TwoWay}" />
                     </Grid>
                 </Border>
 
