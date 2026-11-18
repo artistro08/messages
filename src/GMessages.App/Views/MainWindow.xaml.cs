@@ -162,6 +162,15 @@ public sealed partial class MainWindow : UserControl
     public event EventHandler? Closed;
 
     /// <summary>
+    /// Occurs when Windows makes the taskbar button of the window. See <see cref="XamlWindow.TaskbarButtonCreated"/>.
+    /// </summary>
+    public event EventHandler? TaskbarButtonCreated
+    {
+        add => _window.TaskbarButtonCreated += value;
+        remove => _window.TaskbarButtonCreated -= value;
+    }
+
+    /// <summary>
     /// Gets the handle of the window.
     /// </summary>
     public nint Hwnd => _window.Hwnd;
