@@ -7,6 +7,9 @@ using Windows.Media.Devices;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Automation;
 using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml.Input;
+using Windows.UI.Xaml.Media;
+using WinRT;
 
 namespace GMessages.App.Views;
 
@@ -26,6 +29,8 @@ public sealed partial class SettingsPage : UserControl
 
     // Microphone names are long. Beside the header, the box stops at this width.
     private const double MicrophoneMaxWidth = 320;
+
+    private static readonly string[] ThemeChoices = ["Use system setting", "Light", "Dark"];
 
     private bool _closed;
     private bool? _wrapped;
@@ -59,12 +64,9 @@ public sealed partial class SettingsPage : UserControl
         MicrophoneDescription.Text = ChatCopy.MicrophoneDescription;
         AutomationProperties.SetName(MicrophoneBox, ChatCopy.Microphone);
 
-        // The page adds the snooze choices here, before the bindings select one. Under AOT a .NET list is not a XAML
-        // ItemsSource.
-        foreach (string choice in ViewModel.SnoozeChoices)
-        {
-            SnoozeBox.Items.Add(choice);
-        }
+        AddChoices(ThemeBox, ThemeChoices);
+        AddChoices(SnoozeBox, ViewModel.SnoozeChoices);
+        AddHandler(PointerPressedEvent, new PointerEventHandler(OnPagePressed), true);
 
         // The box holds "Windows default" now, and the active microphones of Windows after the search.
         MicrophoneBox.Items.Add(ChatCopy.WindowsDefault);
@@ -145,6 +147,60 @@ public sealed partial class SettingsPage : UserControl
         }
 
         ViewModel.SetMicrophones(microphones);
+    }
+
+    // The page adds the choices before the bindings select one. Under AOT a .NET list is not a XAML ItemsSource.
+    // A box takes the width of its selected choice, but its list takes the width of its widest choice. A list wider
+    // than its box opens past the edge of the window, and then a click outside does not close it. Thus the box gets the
+    // width of its widest choice.
+    private static void AddChoices(ComboBox box, IReadOnlyList<string> choices)
+    {
+        foreach (string choice in choices)
+        {
+            box.Items.Add(choice);
+        }
+
+        void FitToWidestChoice(object sender, RoutedEventArgs e)
+        {
+            box.Loaded -= FitToWidestChoice;
+            box.Measure(new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
+            string selected = box.SelectedIndex >= 0 ? choices[box.SelectedIndex] : string.Empty;
+            box.MinWidth    = box.DesiredSize.Width - TextWidth(selected) + choices.Max(TextWidth);
+        }
+
+        box.Loaded += FitToWidestChoice;
+    }
+
+    // In the island, a press outside an open dropdown list does not close the list, so the page closes it. The parents
+    // of an item in a list do not include the page, or they include the box. A press on the box itself stays with the
+    // box.
+    private void OnPagePressed(object sender, PointerRoutedEventArgs e)
+    {
+        var path = new List<DependencyObject>();
+        for (DependencyObject? at = e.OriginalSource?.As<DependencyObject>(); at is not null; at = VisualTreeHelper.GetParent(at))
+        {
+            path.Add(at);
+        }
+
+        if (!path.Contains(this))
+        {
+            return;
+        }
+
+        foreach (ComboBox box in new[] { ThemeBox, SnoozeBox, MicrophoneBox })
+        {
+            if (box.IsDropDownOpen && !path.Contains(box))
+            {
+                box.IsDropDownOpen = false;
+            }
+        }
+    }
+
+    private static double TextWidth(string text)
+    {
+        var block = new TextBlock { Text = text };
+        block.Measure(new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
+        return block.DesiredSize.Width;
     }
 
     // On a narrow page, the wide dropdowns and buttons go below the icon and the header and fill the card, as in Windows
