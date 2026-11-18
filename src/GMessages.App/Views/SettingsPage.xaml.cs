@@ -21,7 +21,11 @@ namespace GMessages.App.Views;
 /// </remarks>
 public sealed partial class SettingsPage : UserControl
 {
+    // This is the card width of the Windows Community Toolkit SettingsCard at which the control goes below the header.
+    private const double CardWrapWidth = 476;
+
     private bool _closed;
+    private bool _wrapped;
 
     /// <summary>
     /// Creates the page and reads the Start with Windows state.
@@ -138,6 +142,26 @@ public sealed partial class SettingsPage : UserControl
         }
 
         ViewModel.SetMicrophones(microphones);
+    }
+
+    // On a narrow page, the dropdowns and the buttons go below the icon and the header, as in Windows Settings. On the
+    // right they make the card too tall. The width is the width of the cards, not of the window.
+    private void OnCardsSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        bool wrap = e.NewSize.Width < CardWrapWidth;
+        if (wrap == _wrapped)
+        {
+            return;
+        }
+
+        _wrapped = wrap;
+        foreach (FrameworkElement control in new FrameworkElement[] { ThemeBox, SnoozeBox, MicrophoneBox, UnpairActions, UpdateActions, RepositoryLink })
+        {
+            Grid.SetRow(control, wrap ? 1 : 0);
+            Grid.SetColumn(control, wrap ? 0 : 2);
+            Grid.SetColumnSpan(control, wrap ? 3 : 1);
+            control.Margin = wrap ? new Thickness(0, 8, 0, 0) : default;
+        }
     }
 
     private void OnUnpairClick(object sender, RoutedEventArgs e) => UnpairRequested?.Invoke(this, EventArgs.Empty);
