@@ -17,7 +17,7 @@
     <AppDisplayName>Messages</AppDisplayName>
     <!-- App version (AppInfo.Version, the MSI version and the release tag v1.0.0). A fourth part is a build bump
          (1.0.2.1). Windows Installer ignores it, so Package.wxs allows same-version upgrades to let it install -->
-    <Version>1.0.3.2</Version>
+    <Version>1.0.3.3</Version>
   </PropertyGroup>
 
   <!-- Display Name: stamped into every assembly, read at runtime by AppInfo.DisplayName -->
