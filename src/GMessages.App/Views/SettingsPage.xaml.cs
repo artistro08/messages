@@ -7,6 +7,9 @@ using Windows.Media.Devices;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Automation;
 using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml.Input;
+using Windows.UI.Xaml.Media;
+using WinRT;
 
 namespace GMessages.App.Views;
 
@@ -24,8 +27,12 @@ public sealed partial class SettingsPage : UserControl
     // This is the card width of the Windows Community Toolkit SettingsCard at which the control goes below the header.
     private const double CardWrapWidth = 476;
 
+    // Microphone names are long. Beside the header, the box has this width. It is also the MaxWidth of its items in
+    // SettingsPage.xaml, so the list is not wider than the box.
+    private const double MicrophoneWidth = 320;
+
     private bool _closed;
-    private bool _wrapped;
+    private bool? _wrapped;
 
     /// <summary>
     /// Creates the page and reads the Start with Windows state.
@@ -56,12 +63,9 @@ public sealed partial class SettingsPage : UserControl
         MicrophoneDescription.Text = ChatCopy.MicrophoneDescription;
         AutomationProperties.SetName(MicrophoneBox, ChatCopy.Microphone);
 
-        // The page adds the snooze choices here, before the bindings select one. Under AOT a .NET list is not a XAML
-        // ItemsSource.
-        foreach (string choice in ViewModel.SnoozeChoices)
-        {
-            SnoozeBox.Items.Add(choice);
-        }
+        AddChoices(ThemeBox, ViewModel.ThemeChoices);
+        AddChoices(SnoozeBox, ViewModel.SnoozeChoices);
+        AddHandler(PointerPressedEvent, new PointerEventHandler(OnPagePressed), true);
 
         // The box holds "Windows default" now, and the active microphones of Windows after the search.
         MicrophoneBox.Items.Add(ChatCopy.WindowsDefault);
@@ -144,8 +148,66 @@ public sealed partial class SettingsPage : UserControl
         ViewModel.SetMicrophones(microphones);
     }
 
-    // On a narrow page, the dropdowns and the buttons go below the icon and the header, as in Windows Settings. On the
-    // right they make the card too tall. The width is the width of the cards, not of the window.
+    // The page adds the choices before the bindings select one. Under AOT a .NET list is not a XAML ItemsSource.
+    // A box takes the width of its selected choice, but its list takes the width of its widest choice. A list wider
+    // than its box opens past the edge of the window, and then a click outside does not close it. Thus the box gets the
+    // width of its widest choice.
+    private static void AddChoices(ComboBox box, IReadOnlyList<string> choices)
+    {
+        foreach (string choice in choices)
+        {
+            box.Items.Add(choice);
+        }
+
+        void FitToWidestChoice(object sender, RoutedEventArgs e)
+        {
+            box.Loaded -= FitToWidestChoice;
+            box.Measure(new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
+            string selected = choices.ElementAtOrDefault(box.SelectedIndex) ?? string.Empty;
+            box.MinWidth    = box.DesiredSize.Width - TextWidth(selected) + choices.Max(TextWidth);
+        }
+
+        // The text is measured in the font of the box, so the widths match the text in the box.
+        double TextWidth(string text)
+        {
+            var block = new TextBlock { Text = text, FontFamily = box.FontFamily, FontSize = box.FontSize, FontWeight = box.FontWeight };
+            block.Measure(new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
+            return block.DesiredSize.Width;
+        }
+
+        box.Loaded += FitToWidestChoice;
+    }
+
+    // In the island, a press outside an open dropdown list does not close the list, so the page closes it. The parents
+    // of an item in a list do not include the page, or they include the box. A press on the box itself stays with the
+    // box.
+    private void OnPagePressed(object sender, PointerRoutedEventArgs e)
+    {
+        ComboBox[] open = [.. new[] { ThemeBox, SnoozeBox, MicrophoneBox }.Where(box => box.IsDropDownOpen)];
+        if (open.Length == 0)
+        {
+            return;
+        }
+
+        var path = new List<DependencyObject>();
+        for (DependencyObject? at = e.OriginalSource?.As<DependencyObject>(); at is not null; at = VisualTreeHelper.GetParent(at))
+        {
+            path.Add(at);
+        }
+
+        if (!path.Contains(this))
+        {
+            return;
+        }
+
+        foreach (ComboBox box in open.Where(box => !path.Contains(box)))
+        {
+            box.IsDropDownOpen = false;
+        }
+    }
+
+    // On a narrow page, the wide dropdowns and buttons go below the icon and the header and fill the card, as in Windows
+    // Settings. On the right they make the card too tall. The width is the width of the cards, not of the window.
     private void OnCardsSizeChanged(object sender, SizeChangedEventArgs e)
     {
         bool wrap = e.NewSize.Width < CardWrapWidth;
@@ -155,13 +217,17 @@ public sealed partial class SettingsPage : UserControl
         }
 
         _wrapped = wrap;
-        foreach (FrameworkElement control in new FrameworkElement[] { ThemeBox, SnoozeBox, MicrophoneBox, UnpairActions, UpdateActions, RepositoryLink })
+        foreach (FrameworkElement control in new FrameworkElement[] { SnoozeBox, MicrophoneBox, UpdateActions, RepositoryLink })
         {
             Grid.SetRow(control, wrap ? 1 : 0);
             Grid.SetColumn(control, wrap ? 0 : 2);
             Grid.SetColumnSpan(control, wrap ? 3 : 1);
-            control.Margin = wrap ? new Thickness(0, 8, 0, 0) : default;
+            control.Margin              = wrap ? new Thickness(0, 12, 0, 0) : default;
+            control.HorizontalAlignment = wrap ? HorizontalAlignment.Stretch : HorizontalAlignment.Left;
         }
+
+        MicrophoneBox.MinWidth = wrap ? 0 : MicrophoneWidth;
+        MicrophoneBox.MaxWidth = wrap ? double.PositiveInfinity : MicrophoneWidth;
     }
 
     private void OnUnpairClick(object sender, RoutedEventArgs e) => UnpairRequested?.Invoke(this, EventArgs.Empty);
