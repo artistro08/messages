@@ -109,6 +109,11 @@ public sealed partial class SettingsViewModel : INotifyPropertyChanged, IDisposa
     }
 
     /// <summary>
+    /// Gets the items of the theme dropdown, in <see cref="AppTheme"/> order.
+    /// </summary>
+    public IReadOnlyList<string> ThemeChoices { get; } = ["Use system setting", "Light", "Dark"];
+
+    /// <summary>
     /// Gets or sets the selection of the theme dropdown. The items are in <see cref="AppTheme"/> order. The setter
     /// ignores any other index.
     /// </summary>
