@@ -24,8 +24,11 @@ public sealed partial class SettingsPage : UserControl
     // This is the card width of the Windows Community Toolkit SettingsCard at which the control goes below the header.
     private const double CardWrapWidth = 476;
 
+    // Microphone names are long. Beside the header, the box stops at this width.
+    private const double MicrophoneMaxWidth = 320;
+
     private bool _closed;
-    private bool _wrapped;
+    private bool? _wrapped;
 
     /// <summary>
     /// Creates the page and reads the Start with Windows state.
@@ -144,8 +147,8 @@ public sealed partial class SettingsPage : UserControl
         ViewModel.SetMicrophones(microphones);
     }
 
-    // On a narrow page, the dropdowns and the buttons go below the icon and the header, as in Windows Settings. On the
-    // right they make the card too tall. The width is the width of the cards, not of the window.
+    // On a narrow page, the wide dropdowns and buttons go below the icon and the header and fill the card, as in Windows
+    // Settings. On the right they make the card too tall. The width is the width of the cards, not of the window.
     private void OnCardsSizeChanged(object sender, SizeChangedEventArgs e)
     {
         bool wrap = e.NewSize.Width < CardWrapWidth;
@@ -155,13 +158,16 @@ public sealed partial class SettingsPage : UserControl
         }
 
         _wrapped = wrap;
-        foreach (FrameworkElement control in new FrameworkElement[] { ThemeBox, SnoozeBox, MicrophoneBox, UnpairActions, UpdateActions, RepositoryLink })
+        foreach (FrameworkElement control in new FrameworkElement[] { SnoozeBox, MicrophoneBox, UpdateActions, RepositoryLink })
         {
             Grid.SetRow(control, wrap ? 1 : 0);
             Grid.SetColumn(control, wrap ? 0 : 2);
             Grid.SetColumnSpan(control, wrap ? 3 : 1);
-            control.Margin = wrap ? new Thickness(0, 8, 0, 0) : default;
+            control.Margin              = wrap ? new Thickness(0, 12, 0, 0) : default;
+            control.HorizontalAlignment = wrap ? HorizontalAlignment.Stretch : HorizontalAlignment.Left;
         }
+
+        MicrophoneBox.MaxWidth = wrap ? double.PositiveInfinity : MicrophoneMaxWidth;
     }
 
     private void OnUnpairClick(object sender, RoutedEventArgs e) => UnpairRequested?.Invoke(this, EventArgs.Empty);
