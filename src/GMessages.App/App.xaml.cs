@@ -67,6 +67,7 @@ public sealed partial class App : Application, IDisposable
     private MediaStore? _media;
     private NotificationService? _notifications;
     private UnreadBadge? _badge;
+    private TaskbarBadge? _taskbarBadge;
     private AppNotificationActivatedEventArgs? _launchNotification;
     private DispatcherQueueTimer? _launchNotificationTimeout;
     private MainWindow? _mainWindow;
@@ -206,8 +207,9 @@ public sealed partial class App : Application, IDisposable
         _notifications.Register();
 
         // The taskbar badge counts the unread main-view chats again on each conversation change.
-        ILogger badgeLog           = _logProvider.CreateLogger("GMessages.Badge");
-        var badge                  = new UnreadBadge(store.CachedConversations, count => TaskbarBadge.Show(count, badgeLog), TimeProvider.System);
+        var taskbarBadge           = new TaskbarBadge(dispatcher, _logProvider.CreateLogger("GMessages.Badge"));
+        _taskbarBadge              = taskbarBadge;
+        var badge                  = new UnreadBadge(store.CachedConversations, taskbarBadge.Show, TimeProvider.System);
         _badge                     = badge;
         store.ConversationChanged += (_, _) =>
         {
@@ -481,11 +483,15 @@ public sealed partial class App : Application, IDisposable
             _mainWindow    = new MainWindow(settings, new AvatarCache(_store, _paths.AvatarsFolder), _settings);
             _linkPreviewer = new LinkPreviewer(TestHooks.AllowLoopbackPreviews, _logger);
             _mainWindow.ApplyTheme(_settings.Theme);
-            _mainWindow.SettingsRequested += (_, _) => ShowSettings();
-            _mainWindow.QuitRequested     += (_, _) => Quit();
-            _mainWindow.Closing           += OnMainWindowClosing;
-            _mainWindow.Closed            += (_, _) =>
+            _mainWindow.SettingsRequested    += (_, _) => ShowSettings();
+            _mainWindow.QuitRequested        += (_, _) => Quit();
+            _mainWindow.Closing              += OnMainWindowClosing;
+            nint hwnd                         = _mainWindow.Hwnd;
+            _mainWindow.TaskbarButtonCreated += (_, _) => _taskbarBadge?.Attach(hwnd);
+            _mainWindow.Closed               += (_, _) =>
             {
+                _taskbarBadge?.Attach(0);
+
                 // The app forgets a toast conversation that the window did not show yet. Thus a later open does not
                 // jump to that chat. The app remembers the open chat for the next window.
                 _lastConversationId    = _mainWindow?.LastConversationId;
