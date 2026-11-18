@@ -82,10 +82,6 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <Grid.RowDefinitions>
-                            <RowDefinition />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
                         <FontIcon Glyph="&#xE790;" Style="{StaticResource CardIconStyle}" />
                         <TextBlock
                             Grid.Column="1"
@@ -94,15 +90,10 @@
                         <ComboBox
                             x:Name="ThemeBox"
                             Grid.Column="2"
-                            MinWidth="220"
                             VerticalAlignment="Center"
                             AutomationProperties.AutomationId="Settings.Theme"
                             AutomationProperties.Name="Theme"
-                            SelectedIndex="{x:Bind ViewModel.ThemeIndex, Mode=TwoWay}">
-                            <ComboBoxItem Content="Use system setting" />
-                            <ComboBoxItem Content="Light" />
-                            <ComboBoxItem Content="Dark" />
-                        </ComboBox>
+                            SelectedIndex="{x:Bind ViewModel.ThemeIndex, Mode=TwoWay}" />
                     </Grid>
                 </Border>
 
@@ -323,7 +314,6 @@
                         <ComboBox
                             x:Name="SnoozeBox"
                             Grid.Column="2"
-                            MinWidth="220"
                             VerticalAlignment="Center"
                             AutomationProperties.AutomationId="Settings.SnoozeLength"
                             SelectedIndex="{x:Bind ViewModel.SnoozeIndex, Mode=TwoWay}" />
@@ -375,11 +365,15 @@
                         <ComboBox
                             x:Name="MicrophoneBox"
                             Grid.Column="2"
-                            MinWidth="220"
-                            MaxWidth="320"
                             VerticalAlignment="Center"
                             AutomationProperties.AutomationId="Settings.Microphone"
-                            SelectedIndex="{x:Bind ViewModel.MicrophoneIndex, Mode=TwoWay}" />
+                            SelectedIndex="{x:Bind ViewModel.MicrophoneIndex, Mode=TwoWay}">
+                            <ComboBox.ItemContainerStyle>
+                                <Style BasedOn="{StaticResource DefaultComboBoxItemStyle}" TargetType="ComboBoxItem">
+                                    <Setter Property="MaxWidth" Value="320" />
+                                </Style>
+                            </ComboBox.ItemContainerStyle>
+                        </ComboBox>
                     </Grid>
                 </Border>
 
@@ -393,10 +387,6 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <Grid.RowDefinitions>
-                            <RowDefinition />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
                         <!-- The phone with a slash is mobile_off of Material Symbols, Apache 2.0, outlined and drawn on
                              20 px. -->
                         <PathIcon
@@ -410,7 +400,6 @@
                             Text="Unpair this PC"
                             TextWrapping="Wrap" />
                         <StackPanel
-                            x:Name="UnpairActions"
                             Grid.Column="2"
                             VerticalAlignment="Center"
                             Orientation="Horizontal"
@@ -476,30 +465,38 @@
                             AutomationProperties.AutomationId="Settings.UpdateStatus"
                             Text="{x:Bind ViewModel.Updates.StatusText, Mode=OneWay}"
                             TextWrapping="Wrap" />
-                        <StackPanel
+                        <!-- Only one of the two buttons shows at a time. They stretch when the card wraps. -->
+                        <Grid
                             x:Name="UpdateActions"
                             Grid.Column="2"
-                            VerticalAlignment="Center"
-                            Orientation="Horizontal"
-                            Spacing="8">
+                            VerticalAlignment="Center">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
                             <muxc:ProgressRing
                                 Width="16"
                                 Height="16"
+                                Margin="0,0,8,0"
                                 IsActive="{x:Bind ViewModel.Updates.IsBusy, Mode=OneWay}"
                                 Visibility="{x:Bind ViewModel.Updates.IsBusy, Mode=OneWay}" />
                             <Button
+                                Grid.Column="1"
+                                HorizontalAlignment="Stretch"
                                 AutomationProperties.AutomationId="Settings.CheckForUpdates"
                                 Click="OnCheckForUpdatesClick"
                                 Content="Check for updates"
                                 IsEnabled="{x:Bind ViewModel.Updates.CanCheck, Mode=OneWay}"
                                 Visibility="{x:Bind ViewModel.Updates.ShowsCheck, Mode=OneWay}" />
                             <Button
+                                Grid.Column="1"
+                                HorizontalAlignment="Stretch"
                                 AutomationProperties.AutomationId="Settings.InstallUpdate"
                                 Click="OnInstallUpdateClick"
                                 Content="Install and restart"
                                 Style="{StaticResource AccentButtonStyle}"
                                 Visibility="{x:Bind ViewModel.Updates.IsAvailable, Mode=OneWay}" />
-                        </StackPanel>
+                        </Grid>
                     </Grid>
                 </Border>
 

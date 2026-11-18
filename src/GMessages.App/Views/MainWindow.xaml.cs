@@ -66,7 +66,7 @@ public sealed partial class MainWindow : UserControl
 
     // The least window size, in effective pixels. The owner chose the width. The height holds the title bar, a few rows
     // and the message box.
-    private const double MinWindowWidth  = 352;
+    private const double MinWindowWidth  = 371;
     private const double MinWindowHeight = 500;
 
     // The file of the last download for Show in folder, and the timer that closes its confirmation.
