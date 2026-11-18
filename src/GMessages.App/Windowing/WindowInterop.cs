@@ -306,6 +306,10 @@ internal static unsafe partial class WindowInterop
     public static partial bool SetWindowTextW(nint hwnd, string text);
 
     [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool ChangeWindowMessageFilterEx(nint hwnd, uint message, uint action, nint filterStatus);
+
+    [LibraryImport("user32.dll")]
     public static partial nint LoadCursorW(nint instance, nint name);
 
     [LibraryImport("user32.dll", StringMarshalling = StringMarshalling.Utf16)]
